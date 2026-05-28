@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+out
+.plasmo
+.turbo
+.vite
+.cache
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage
+*.tsbuildinfo

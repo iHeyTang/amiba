@@ -1,0 +1,163 @@
+/*
+ * Hermes shadcn HSL token palette + base layer + Radix ScrollArea fixes.
+ *
+ * Cascade order:
+ *   1. `:root` defines the light palette (also the SSR-time fallback).
+ *   2. `@media (prefers-color-scheme: dark)` rewrites the tokens to the dark
+ *      palette unless the document explicitly opted into light via `.light`.
+ *   3. The explicit `.dark` / `.light` classes (set by @hermes-x/theme's
+ *      `useResolvedTheme`) always win — lets the user pin a theme regardless
+ *      of OS preference.
+ *
+ * Consumers must `@tailwind base` themselves and import this CSS after,
+ * because the `@layer base` rules below rely on Tailwind's base layer
+ * already being declared.
+ */
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --radius: 0.5rem;
+    /*
+     * Streamdown ships with hard-coded Tailwind utilities like `bg-sidebar`
+     * for code blocks and table wrappers. The token isn't part of our shadcn
+     * palette, so without an alias they render with no fill and look broken.
+     * We map it to a soft surface that sits between background and muted.
+     */
+    --sidebar: 240 5% 97.5%;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      color-scheme: dark;
+      --background: 240 10% 3.9%;
+      --foreground: 0 0% 98%;
+      --card: 240 10% 3.9%;
+      --card-foreground: 0 0% 98%;
+      --popover: 240 10% 3.9%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 0 0% 98%;
+      --primary-foreground: 240 5.9% 10%;
+      --secondary: 240 3.7% 15.9%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 240 3.7% 15.9%;
+      --muted-foreground: 240 5% 64.9%;
+      --accent: 240 3.7% 15.9%;
+      --accent-foreground: 0 0% 98%;
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 240 3.7% 15.9%;
+      --input: 240 3.7% 15.9%;
+      --ring: 240 4.9% 83.9%;
+      --success: 142 71% 45%;
+      --warning: 38 92% 50%;
+      --sidebar: 240 6% 10%;
+    }
+  }
+
+  .dark,
+  :root.dark {
+    color-scheme: dark;
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --sidebar: 240 6% 10%;
+  }
+
+  .light,
+  :root.light {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --sidebar: 240 5% 97.5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    @apply bg-background text-foreground;
+    overscroll-behavior: none;
+  }
+}
+
+/*
+ * Radix ScrollArea fixes — shared by every consumer of @hermes-x/ui because
+ * they ship with the ScrollArea primitive.
+ *
+ * - Stop scroll chaining at the viewport so wheel-at-edge doesn't bounce
+ *   the parent surface.
+ * - Override Radix's inline `display: table` + `min-width: 100%` on the
+ *   viewport's content wrapper so intrinsic content (long URLs, markdown)
+ *   respects the viewport width instead of expanding past the panel edge.
+ */
+[data-radix-scroll-area-viewport] {
+  overscroll-behavior: contain;
+}
+
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100%;
+}

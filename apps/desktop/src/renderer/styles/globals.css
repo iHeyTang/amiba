@@ -1,0 +1,41 @@
+@import "@hermes-x/ui/styles/tokens.css";
+@import "@hermes-x/chat-ui/styles/chat.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+ * Immersive title bar — main BrowserWindow runs with `titleBarStyle:
+ * "hiddenInset"` (macOS) / `"hidden"` + titleBarOverlay (Win/Linux), so
+ * the OS strip is gone. We expose two helpers to the renderer:
+ *
+ *   `.app-drag-region` — make a strip draggable so the user can still
+ *                        grab the window (Electron uses the WebKit
+ *                        `-webkit-app-region: drag` property).
+ *   `.app-no-drag`     — opt-out: buttons, inputs, anything clickable
+ *                        inside a drag region must declare this or
+ *                        clicks register as window drags.
+ *
+ * The body itself doesn't drag by default — only explicit
+ * `.app-drag-region` elements do.
+ */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+.app-no-drag,
+.app-drag-region button,
+.app-drag-region a,
+.app-drag-region input,
+.app-drag-region textarea,
+.app-drag-region [role="button"],
+.app-drag-region [role="tab"],
+.app-drag-region [role="menuitem"] {
+  -webkit-app-region: no-drag;
+}

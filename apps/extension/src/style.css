@@ -1,0 +1,47 @@
+/*
+ * Shared shadcn HSL palette + base layer + Radix ScrollArea fixes — sourced
+ * from the workspace package so the extension and the desktop app stay in
+ * lockstep on tokens. `@import` must precede all other statements per CSS
+ * spec, so it lives above the `@tailwind` directives even though Tailwind
+ * is what makes the `@apply` rules inside tokens.css resolvable.
+ */
+@import "@hermes-x/ui/styles/tokens.css";
+@import "@hermes-x/chat-ui/styles/chat.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Plasmo mounts every surface inside a `#__plasmo` root. The shared base layer
+ * already kills overscroll on html/body; we just extend the height + chain-stop
+ * behaviour to the Plasmo root so a self-contained side panel doesn't bounce.
+ */
+html,
+body,
+#__plasmo {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+/*
+ * Tab strip horizontal scroller (Cursor-style).
+ *
+ * We deliberately render NO scrollbar on the tab strip — even a thin 4px
+ * rail eats into the bottom of an already-cramped 28px-tall bar and
+ * visually competes with the tabs. Cursor / VSCode hide theirs the same
+ * way. Scrolling stays usable via:
+ *   - The vertical-wheel-pans-horizontally handler in `TabBar.tsx`.
+ *   - Trackpad horizontal pans (untouched, native).
+ *   - Auto `scrollIntoView` of the active tab when it changes.
+ *
+ * Firefox uses `scrollbar-width: none`; Chromium / WebKit honour the
+ * `::-webkit-scrollbar { display: none }` below.
+ */
+.tabbar-scroller {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tabbar-scroller::-webkit-scrollbar {
+  display: none;
+}

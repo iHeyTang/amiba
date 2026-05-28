@@ -1,0 +1,547 @@
+/**
+ * English message catalog.
+ *
+ * Keys use dot-notation grouped by surface (options.*, sidepanel.*, etc.).
+ * Use `{name}` placeholders for interpolation — see `t()` in `./index.ts`.
+ *
+ * To add a string:
+ *   1. Add the key here.
+ *   2. Add the same key to `zh-CN.ts` (TypeScript enforces this).
+ *   3. Use `t("your.key")` in components via `useT()`.
+ */
+export const en = {
+  // Generic
+  "common.cancel": "Cancel",
+  "common.save": "Save",
+  "common.delete": "Delete",
+  "common.edit": "Edit",
+  "common.close": "Close",
+  "common.refresh": "Refresh",
+  "common.confirm": "Confirm",
+  "common.loading": "Loading…",
+  "common.saving": "Saving…",
+  "common.installing": "Installing…",
+  "common.error": "Error",
+  "common.enabled": "Enabled",
+  "common.disabled": "Disabled",
+  "common.on": "On",
+  "common.off": "Off",
+  "common.copy": "Copy",
+  "common.copied": "Copied",
+  "common.retry": "Retry",
+  "common.untitled": "Untitled",
+
+  // App shell
+  "app.title": "Hermes",
+  "app.subtitle": "Extension console",
+
+  // Options nav
+  "options.nav.preference": "Preference",
+  "options.nav.scripts": "Userscripts",
+  "options.nav.gateway": "Gateway",
+  "options.nav.models": "Models",
+  "options.nav.skills": "Skills",
+  "options.nav.memory": "Memory",
+  "options.nav.cron": "Cron",
+  "options.nav.status": "Status",
+  "options.nav.logs": "Logs",
+
+  // Preference page
+  "options.preference.title": "Preference",
+  "options.preference.subtitle": "Extension UI and behavior",
+  "options.preference.section.appearance": "Appearance",
+  "options.preference.section.newtab": "New tab",
+  "options.preference.section.chat": "Chat",
+  "options.preference.section.desktop": "Desktop",
+  "options.preference.hotkey.label": "Summon hotkey",
+  "options.preference.hotkey.desc":
+    "Bring Hermes to the front from any app when this binding fires.",
+  "options.preference.hotkey.mode.disabled": "Off",
+  "options.preference.hotkey.mode.doubleTap": "Double-tap modifier",
+  "options.preference.hotkey.mode.accelerator": "Key combo",
+  "options.preference.hotkey.modifier.label": "Modifier",
+  "options.preference.hotkey.modifier.Meta": "Cmd / Win",
+  "options.preference.hotkey.modifier.Control": "Ctrl",
+  "options.preference.hotkey.modifier.Alt": "Alt / Option",
+  "options.preference.hotkey.modifier.Shift": "Shift",
+  "options.preference.hotkey.accelerator.label": "Key combo",
+  "options.preference.hotkey.accelerator.placeholder":
+    "e.g. CommandOrControl+Shift+H",
+  "options.preference.hotkey.accelerator.hint":
+    "Electron accelerator syntax — write modifiers as Cmd / Ctrl / Alt / Shift / CommandOrControl.",
+  "options.preference.hotkey.macHint":
+    "First time you turn double-tap on, macOS asks for Accessibility access; the hook can only see global key presses after you grant it.",
+  "options.preference.theme": "Theme",
+  "options.preference.theme.auto": "Auto",
+  "options.preference.theme.light": "Light",
+  "options.preference.theme.dark": "Dark",
+  "options.preference.language": "Language",
+  "options.preference.language.auto": "Auto",
+  "options.preference.language.en": "English",
+  "options.preference.language.zh-CN": "简体中文",
+  "options.preference.stream.label": "Show stream details",
+  "options.preference.stream.desc":
+    "Reveal tool calls and reasoning while the model streams.",
+  "options.preference.newtab.wallpaper.label": "Daily wallpaper",
+
+  // Composer quick actions — Settings UI
+  "options.preference.quickActions.label": "Quick actions",
+  "options.preference.quickActions.desc":
+    "Chips next to the chat input that wrap your text in a preset prompt.",
+  "options.preference.quickActions.builtins": "Built-in actions",
+  "options.preference.quickActions.custom": "Your actions",
+  "options.preference.quickActions.add": "Add action",
+  "options.preference.quickActions.reset": "Reset to defaults",
+  "options.preference.quickActions.empty":
+    "No custom actions yet. Add one to fire your own prompt template from the composer.",
+  "options.preference.quickActions.field.label": "Label",
+  "options.preference.quickActions.field.label.placeholder": "Polish (formal)",
+  "options.preference.quickActions.field.tooltip": "Tooltip (optional)",
+  "options.preference.quickActions.field.tooltip.placeholder":
+    "Shown on hover; defaults to the label.",
+  "options.preference.quickActions.field.template": "Prompt template",
+  "options.preference.quickActions.field.template.placeholder":
+    "Rewrite the following in a formal tone:\n\n{input}",
+  "options.preference.quickActions.field.template.help":
+    "Use {input} as the placeholder for the user's typed text. If omitted, the user's text is appended on a new line.",
+  "options.preference.quickActions.action.save": "Save",
+  "options.preference.quickActions.action.cancel": "Cancel",
+  "options.preference.quickActions.action.edit": "Edit",
+  "options.preference.quickActions.action.delete": "Delete",
+  "options.preference.quickActions.delete.confirm":
+    "Delete this quick action?",
+
+  // Userscripts
+  "options.scripts.title": "Userscripts",
+  "options.scripts.subtitle": "Create, install, and manage userscripts",
+  "options.scripts.new": "New script",
+  "options.scripts.installFromUrl": "Install from URL",
+  "options.scripts.installDialog.title": "Install userscript from URL",
+  "options.scripts.installDialog.label": "Script URL",
+  "options.scripts.installDialog.install": "Install",
+  "options.scripts.empty":
+    "No userscripts installed yet. Use the buttons above to create or import one.",
+  "options.scripts.removeConfirm":
+    "Remove this userscript? This action can't be undone.",
+  "options.scripts.editor.newTitle": "New userscript",
+  "options.scripts.editor.editTitle": "Edit: {name}",
+  "options.scripts.runAt": "Run at: {runAt}",
+  "options.scripts.match": "Match: {match}",
+  "options.scripts.version": "v{version}",
+  "options.scripts.updatedAt": "Updated {time}",
+  "options.scripts.lastError": "Last error",
+  "options.scripts.errorBadge": "error",
+  "options.scripts.noMatch": "(no @match)",
+  "options.scripts.action.edit": "Edit",
+  "options.scripts.action.remove": "Remove",
+  "options.scripts.editor.save": "Save",
+  "options.scripts.editor.cancel": "Cancel",
+  "options.scripts.editor.placeholder":
+    "// ==UserScript==\n// @name        My script\n// @match       https://example.com/*\n// @run-at      document-end\n// ==/UserScript==\n",
+
+  // Gateway settings
+  "options.gateway.title": "Gateway",
+  "options.gateway.subtitle":
+    "Side panel chat → hermes-agent-gateway",
+  "options.gateway.subtitle.tooltip":
+    "Side panel chat → hermes-agent-gateway (OpenAI-compatible HTTP)",
+  "options.gateway.baseUrl": "Gateway base URL",
+  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8765",
+  "options.gateway.baseUrl.desc":
+    "The bridge listens on this URL. Override it if you ran hermes-bridge on a different port or host.",
+  "options.gateway.test": "Test connection",
+  "options.gateway.testing": "Testing…",
+  "options.gateway.test.ok": "Connected. Bridge is reachable.",
+  "options.gateway.test.fail": "Could not reach the bridge: {error}",
+  "options.gateway.startHint":
+    "Bridge not running? Start it with `hermes-bridge` from the Hermes CLI.",
+  "options.gateway.section.chat": "Side panel chat",
+  "options.gateway.model.label": "Chat model id",
+  "options.gateway.model.fromGateway": "From gateway",
+  "options.gateway.model.fromGateway.tooltip":
+    "List models the gateway currently exposes",
+  "options.gateway.model.noModels": "Gateway returned no models.",
+  "options.gateway.save": "Save",
+  "options.gateway.saved": "Saved.",
+  "options.gateway.backplaneKey.title": "Backplane access",
+  "options.gateway.backplaneKey.label": "Access key (optional)",
+  "options.gateway.backplaneKey.placeholder":
+    "leave empty unless you've set HERMES_BACKPLANE_KEY",
+  "options.gateway.backplaneKey.help":
+    "Usually leave empty. If you want to require auth, set HERMES_BACKPLANE_KEY in ~/.hermes/.env, restart Hermes, then paste the same value here.",
+  "options.gateway.bridge.title": "Bridge",
+  "options.gateway.bridge.url.label": "Bridge URL",
+  "options.gateway.bridge.url.help":
+    "Leave as default. Only change this if you've moved the bridge to a different port on the Hermes side.",
+
+  // Memory settings
+  "options.memory.title": "Memory",
+  "options.memory.subtitle":
+    "Hermes Agent's persistent memory (read-only view)",
+  "options.memory.subtitle.tooltip":
+    "$HERMES_HOME/memories/{MEMORY,USER}.md",
+  "options.memory.empty": "(No memory entries yet)",
+  "options.memory.refresh": "Refresh",
+  "options.memory.failedToLoad": "Failed to load",
+  "options.memory.chars": "{count} / {limit} chars",
+  "options.memory.entries": "{count} entries",
+  "options.memory.charsLen": "{count} chars",
+  "options.memory.target.memory": "MEMORY.md",
+  "options.memory.target.user": "USER.md",
+  "options.memory.desc.memory":
+    "Hermes Agent's own observations (environment facts, project conventions, tool quirks, etc.).",
+  "options.memory.desc.user":
+    "User preferences and collaboration habits noted by Hermes Agent.",
+  "options.memory.flagTooltip":
+    "Hermes safety-scan flag: {flag}\nThe same rules block entries before MEMORY.md is injected into the system prompt",
+
+  // Models / Hermes model config
+  "options.models.title": "Models",
+  "options.models.subtitle":
+    "Which providers and models Hermes uses for chat, embedding, and tool calls.",
+  "options.models.catalog.loading": "Loading…",
+  "options.models.catalog.ready": "Catalog ready",
+  "options.models.catalog.unavailable": "Catalog unavailable",
+  "options.models.catalog.updatedAt": "Catalog {time}",
+  "options.models.refreshCatalog": "Refresh catalog",
+  "options.models.loadingSettings": "Loading settings…",
+
+  // Skills
+  "options.skills.title": "Skills",
+  "options.skills.subtitle":
+    "Skill packs Hermes can load on demand. Toggle to enable per session.",
+  "options.skills.subtitle.summary":
+    "Skills available to the current agent ({enabled} / {total})",
+  "options.skills.subtitle.platform": "  ·  platform={platform}",
+  "options.skills.refresh": "Refresh",
+
+  // Cron
+  "options.cron.title": "Cron",
+  "options.cron.subtitle":
+    "Hermes Agent scheduled jobs ({count} total)",
+  "options.cron.refresh": "Refresh",
+  "options.cron.newJob": "New job",
+
+  // Logs — tail of Hermes Agent log files
+  "options.logs.title": "Logs",
+  "options.logs.subtitle":
+    "Tail Hermes Agent log files (agent / errors / gateway)",
+  "options.logs.refresh": "Refresh",
+  "options.logs.autoRefresh": "Auto",
+  "options.logs.live": "live",
+  "options.logs.empty": "No matching log lines.",
+  "options.logs.failedToLoad": "Failed to load logs",
+  "options.logs.lineCount": "{count} lines",
+  "options.logs.file.label": "File",
+  "options.logs.file.agent": "agent",
+  "options.logs.file.errors": "errors",
+  "options.logs.file.gateway": "gateway",
+  "options.logs.level.label": "Level",
+  "options.logs.component.label": "Component",
+  "options.logs.component.all": "all",
+  "options.logs.component.gateway": "gateway",
+  "options.logs.component.agent": "agent",
+  "options.logs.component.tools": "tools",
+  "options.logs.component.cli": "cli",
+  "options.logs.component.cron": "cron",
+  "options.logs.lines.label": "Lines",
+  "options.logs.search.label": "Search",
+  "options.logs.search.placeholder": "Substring filter (case-insensitive)",
+
+  // Sidepanel
+  "sidepanel.newChat": "Start a new chat",
+  "sidepanel.tabbar.empty.before": "No open sessions — tap",
+  "sidepanel.tabbar.empty.after": "or pick one from History",
+  "sidepanel.tabbar.button.new": "New chat",
+  "sidepanel.tabbar.button.history": "History",
+  "sidepanel.tabbar.button.settings": "Settings",
+  "sidepanel.tabbar.tab.close": "Close tab (session is kept in History)",
+  "sidepanel.tabbar.tab.closeAria": "Close tab",
+  "sidepanel.tabbar.menu.close": "Close",
+  "sidepanel.tabbar.menu.closeOthers": "Close others",
+  "sidepanel.tabbar.menu.closeRight": "Close to the right",
+  "sidepanel.tabbar.menu.closeAll": "Close all",
+  "sidepanel.placeholder": "Message Hermes…",
+  "sidepanel.placeholder.uploading":
+    "Waiting for attachment upload to finish…",
+  "sidepanel.placeholder.withAttachments": "Add a question about your file(s)…",
+  "sidepanel.placeholder.withPinned": "Ask about the attached page(s)…",
+  "sidepanel.send": "Send",
+  "sidepanel.send.tooltip": "Send (⌘/Ctrl+Enter)",
+  "sidepanel.queue.tooltip": "Queue: send after the current turn finishes",
+  "sidepanel.stop": "Stop generation",
+  "sidepanel.regenerate": "Regenerate",
+  "sidepanel.sessions": "Sessions",
+  "sidepanel.tabs": "Tabs",
+  "sidepanel.streamDetails": "Thoughts",
+  "sidepanel.streamDetails.tooltip":
+    "Show the agent's reasoning and tool-call trace in assistant bubbles (when the model doesn't emit reasoning, only tool calls are shown)",
+  "sidepanel.attach": "Attach files",
+  "sidepanel.attach.tooltip": "Attach files (multi-select supported)",
+  "sidepanel.openOptions": "Open options",
+  "sidepanel.pin": "Pin",
+  "sidepanel.pin.pinAria": "Attach current page to next message",
+  "sidepanel.pin.unpinAria": "Unpin current page",
+  "sidepanel.pin.pinTooltip":
+    "Attach the current page to the next message (one-shot snapshot)",
+  "sidepanel.pin.unpinTooltip": "Detach this page from the next message",
+  "sidepanel.learn.record": "Record actions",
+  "sidepanel.learn.recording": "Recording · {count} steps",
+  "sidepanel.learn.stop": "Stop and attach",
+  "sidepanel.learn.processing": "Processing…",
+  "sidepanel.learn.tooltip":
+    "Record clicks and input on the active tab; the trace JSON will be attached to the conversation when you stop. Write your prompt yourself.",
+  "sidepanel.queue.sendNow": "Send now: jump this message to the front of the queue",
+  "sidepanel.queue.sendNow.aria": "Send now",
+  "sidepanel.queue.edit":
+    "Edit: load this message into the composer (keeps queue position, pauses the queue)",
+  "sidepanel.queue.edit.aria": "Edit",
+  "sidepanel.queue.delete": "Delete",
+  "sidepanel.queue.editing": "This message is being edited in the composer",
+  "sidepanel.composer.cancelEdit":
+    "Cancel edit (discards composer changes; the queued item is unchanged)",
+  "sidepanel.composer.cancelEdit.aria": "Cancel edit",
+  "sidepanel.permission.allowOnce": "Allow once",
+  "sidepanel.permission.allowOnce.desc":
+    "Allow this time only; ask again next time",
+  "sidepanel.permission.allowSession": "Allow this session",
+  "sidepanel.permission.allowSession.desc":
+    "Don't ask again for the rest of this chat",
+  "sidepanel.permission.allowAlways": "Always allow",
+  "sidepanel.permission.allowAlways.desc":
+    "Remember this command; don't ask again",
+  "sidepanel.permission.deny": "Deny",
+  "sidepanel.permission.deny.desc": "Refuse; the agent receives an error",
+  "sidepanel.permission.approvalNeeded": "Approval needed",
+  "sidepanel.permission.allowedOnce": "Allowed once",
+  "sidepanel.permission.allowedOnce.tooltip":
+    "Approved for this execution only",
+  "sidepanel.permission.allowedSession": "Allowed this session",
+  "sidepanel.permission.allowedSession.tooltip":
+    "Won't ask again for the rest of this session",
+  "sidepanel.permission.allowedAlways": "Always allowed",
+  "sidepanel.permission.allowedAlways.tooltip":
+    "Added to the permanent allowlist (command_allowlist)",
+  "sidepanel.permission.denied": "Denied",
+  "sidepanel.permission.denied.tooltip": "User denied this command",
+  "sidepanel.permission.expired": "Expired",
+  "sidepanel.permission.expired.tooltip":
+    "No response before gateway_timeout; the server auto-denied and unblocked",
+  "sidepanel.permission.submitFailed": "Submit failed",
+  "sidepanel.permission.submitFailed.tooltip":
+    "POST /v1/runs/{runId}/approval request failed",
+  "sidepanel.permission.waiting": "Waiting",
+  "sidepanel.permission.chip.tool": "Tool: {tool}",
+  "sidepanel.permission.chip.command": "Command: {command}",
+  "sidepanel.permission.chip.reason": "Reason: {reason}",
+  "sidepanel.permission.chip.requested": "Requested: {time}",
+  "sidepanel.permission.chip.decided": "Decided: {time}",
+  "sidepanel.permission.failedRecordStart": "Failed to start recording",
+  "sidepanel.permission.failedRecordStop": "Failed to stop recording",
+  "sidepanel.permission.dismissError": "Dismiss error",
+  "sidepanel.attachment.uploading": "Uploading",
+  "sidepanel.attachment.removeAria": "Remove {name}",
+  "sidepanel.attachment.removePage": "Remove attached page",
+  "sidepanel.attachment.autoFrom":
+    "Auto-attached from {source}",
+  "sidepanel.attachment.autoFrom.fallback": "current tab",
+  "sidepanel.attachment.openInBrowser": "Open {name} in your browser",
+  "sidepanel.attachment.remove": "Remove",
+  "sidepanel.empty.title": "No conversation open",
+  "sidepanel.empty.withHistory":
+    "Start a new chat or pick one up from History.",
+  "sidepanel.empty.firstChat": "Start your first chat with Hermes.",
+  "sidepanel.empty.newChat": "New chat",
+  "sidepanel.empty.openHistory": "Open from History",
+  "sidepanel.empty.settings": "Settings",
+
+  // Bridge status bar
+  "sidepanel.status.connecting": "Connecting…",
+  "sidepanel.status.online": "Online",
+  "sidepanel.status.offline": "Offline",
+  "sidepanel.status.bridgeUrl": "Bridge: {url}",
+  "sidepanel.status.tooltip.online":
+    "Hermes bridge is reachable. Click to open Gateway settings.",
+  "sidepanel.status.tooltip.offline":
+    "Hermes bridge is not reachable. Start `hermes-bridge` and check the Gateway URL.",
+  "sidepanel.status.tooltip.connecting":
+    "Connecting to the Hermes bridge…",
+  "sidepanel.status.tooltipBase": "Hermes Browser Extension · {state}",
+  "sidepanel.status.tooltip.agentRunning":
+    "Agent window: #{windowId} · tab {tabId}",
+  "sidepanel.status.tooltip.agentDown": "Agent window: not running",
+  "sidepanel.status.tooltip.clickConnect": "Click to connect",
+  "sidepanel.status.tooltip.clickDisconnect": "Click to disconnect",
+  "sidepanel.status.aria.bar":
+    "Hermes Browser Extension {label}. {action}.",
+  "sidepanel.status.showAgentWindow": "Show agent window",
+  "sidepanel.status.showAgentWindow.disabled":
+    "Agent window not running — connect first",
+  "sidepanel.status.dismiss": "Dismiss",
+
+  // Navigate open policy toggle
+  "sidepanel.navPolicy.label": "Open links",
+  "sidepanel.navPolicy.background": "In background tab",
+  "sidepanel.navPolicy.foreground": "In foreground tab",
+  "sidepanel.navPolicy.sameTab": "Replace current tab",
+  "sidepanel.navPolicy.tooltip":
+    "Where to open links the agent navigates to.",
+  "sidepanel.navPolicy.listAria": "Navigate opens",
+  "sidepanel.navPolicy.auto.label": "Auto",
+  "sidepanel.navPolicy.auto.desc":
+    "Model picks via open_in on each navigate; other tools follow the active run surface (updated by navigate + this menu when not Auto).",
+  "sidepanel.navPolicy.agent.label": "Agent",
+  "sidepanel.navPolicy.agent.desc":
+    "Dedicated agent window — all browser tools and in-place navigations.",
+  "sidepanel.navPolicy.userNewTab.label": "New tab",
+  "sidepanel.navPolicy.userNewTab.desc":
+    "Your Chrome window — each navigate opens a new tab; other tools follow that tab.",
+  "sidepanel.navPolicy.userSameTab.label": "Same tab",
+  "sidepanel.navPolicy.userSameTab.desc":
+    "Your Chrome window — navigations and tools use the current tab.",
+
+  // Session drawer
+  "sidepanel.sessions.title": "History",
+  "sidepanel.sessions.empty": "No sessions yet. Send a message to start one.",
+  "sidepanel.sessions.dialogAria": "Session history",
+  "sidepanel.sessions.close": "Close",
+  "sidepanel.sessions.openAsTab": "Open as tab",
+  "sidepanel.sessions.rename": "Rename",
+  "sidepanel.sessions.deletePermanently": "Delete permanently",
+  "sidepanel.sessions.save": "Save",
+  "sidepanel.sessions.cancel": "Cancel",
+  "sidepanel.sessions.newChatTitle": "New chat",
+  "sidepanel.sessions.deleteConfirm":
+    "Permanently delete \"{title}\"? This drops the session and its messages from History — closing the tab from the top bar would have just hidden it.",
+  "sidepanel.sessions.group.pinned": "Pinned",
+  "sidepanel.sessions.group.today": "Today",
+  "sidepanel.sessions.group.yesterday": "Yesterday",
+  "sidepanel.sessions.group.earlierWeek": "Earlier this week",
+  "sidepanel.sessions.group.thisMonth": "This month",
+  "sidepanel.sessions.group.older": "Older",
+
+  // New tab
+  "newtab.greeting": "What can I help with?",
+  "newtab.subtitle":
+    "Look something up, read a page, handle Feishu, run a script — just tell me what you need.",
+  // Typewriter cycle in the new-tab composer — keep each line short
+  // enough to fit on one line at the default composer width (~640px)
+  // and concrete enough to suggest a real capability rather than just
+  // "ask me anything".
+  "newtab.placeholder.example.1": "What's on my calendar today?",
+  "newtab.placeholder.example.2": "Translate this paragraph to Chinese…",
+  "newtab.placeholder.example.3": "Summarise this web page",
+  "newtab.placeholder.example.4": "Latest AI news from the Valley",
+  "newtab.placeholder.example.5": "Implement quicksort in Python",
+  "newtab.send": "Send",
+  "newtab.send.tooltip": "Send (Enter)",
+  "newtab.openOptions": "Open Hermes options",
+  "newtab.history": "History",
+  "newtab.latest": "Latest",
+  "newtab.recentChats": "Recent chats",
+  "newtab.clickToResume": "Click to resume",
+  "newtab.row.failed": "— failed",
+  "newtab.row.silent": "— nothing new",
+  "newtab.row.msgs": "{count} msgs",
+  "newtab.content.empty": "No cron run output yet.",
+  "newtab.content.empty.row": "No output recorded for this run.",
+  "newtab.content.truncated":
+    "Output file exceeded the bridge's in-memory cap — only the head of the run is shown above.",
+  "newtab.continueInChat": "Continue in chat",
+  "newtab.continueInChat.prompt":
+    "Below is the output from cron job \"{name}\" at {time}. Help me read it: what's worth handling right away, what can wait, and is there anything I need to follow up on?\n\n---\n\n{content}",
+  "newtab.empty.installed": "Routine enabled",
+  "newtab.empty.headline": "Get Hermes working for you",
+  "newtab.empty.installedDesc":
+    "It'll show up here after its next run. Add more, or wait for the first output.",
+  "newtab.empty.headlineDesc":
+    "Pick a routine — Hermes runs it on a schedule and the output lands here.",
+  "newtab.empty.customCron": "Set up a custom cron job →",
+  "newtab.install.failed": "Failed to install",
+  "newtab.relative.justNow": "just now",
+  "newtab.relative.mAgo": "{n}m ago",
+  "newtab.relative.hAgo": "{n}h ago",
+  "newtab.relative.dAgo": "{n}d ago",
+
+  // Home shortcuts strip
+  "newtab.shortcuts.title": "Shortcuts",
+  "newtab.shortcuts.add": "Add",
+  "newtab.shortcuts.add.tooltip": "Add a shortcut",
+  "newtab.shortcuts.remove": "Remove",
+  "newtab.shortcuts.rename": "Rename",
+  "newtab.shortcuts.manage": "Manage",
+  "newtab.shortcuts.manage.tooltip": "Manage shortcuts",
+  "newtab.shortcuts.manage.title": "Manage shortcuts",
+  "newtab.shortcuts.manage.close": "Close",
+  "newtab.shortcuts.manage.moveUp": "Move up",
+  "newtab.shortcuts.manage.moveDown": "Move down",
+  "newtab.shortcuts.manage.listEmpty":
+    "No shortcuts yet. Add your first one above.",
+  "newtab.shortcuts.add.dialog.title": "Add a shortcut",
+  "newtab.shortcuts.add.dialog.urlLabel": "URL",
+  "newtab.shortcuts.add.dialog.urlPlaceholder": "https://example.com",
+  "newtab.shortcuts.add.dialog.titleLabel": "Name",
+  "newtab.shortcuts.add.dialog.titlePlaceholder":
+    "Leave empty to use the page title",
+  "newtab.shortcuts.add.dialog.useCurrentTab": "Use current active tab",
+  "newtab.shortcuts.add.dialog.confirm": "Add",
+  "newtab.shortcuts.add.dialog.cancel": "Cancel",
+  "newtab.shortcuts.add.invalidUrl":
+    "Enter a valid URL including http:// or https://.",
+  "newtab.shortcuts.empty":
+    "No shortcuts yet — click ⚙ Manage on the right to add your first one.",
+
+  // Wallpaper
+  "newtab.wallpaper.cycle": "Next wallpaper",
+
+  // Chat tab
+  "chat.title": "Hermes chat",
+  "chat.goHome": "Back to home",
+  "chat.newChat": "Start a new chat",
+  "chat.placeholder": "Send a message…",
+  "chat.openOptions": "Open Hermes options",
+  "chat.searchPlaceholder": "Search sessions…",
+  "chat.searchClear": "Clear search",
+  "chat.untitled": "Untitled chat",
+  "chat.rename": "Rename",
+  "chat.delete": "Delete",
+  "chat.width.label": "Message column width",
+  "chat.width.narrow": "Narrow",
+  "chat.width.narrow.tooltip": "Narrow message column (same as input)",
+  "chat.width.medium": "Medium",
+  "chat.width.medium.tooltip": "Medium message column",
+  "chat.width.full": "Full",
+  "chat.width.full.tooltip": "Full-width messages",
+  "chat.group.today": "Today",
+  "chat.group.yesterday": "Yesterday",
+  "chat.group.older": "Older",
+  "chat.loadingSessions": "Loading sessions…",
+  "chat.noMatches": "No matches.",
+  "chat.noSessions": "No saved sessions yet.",
+
+  // Composer quick actions — chip strip
+  "composer.quick.empty.tooltip":
+    "Type something first, then tap a quick action to wrap it in a preset prompt.",
+  "composer.quick.translate.label": "Translate",
+  "composer.quick.translate.tooltip":
+    "Translate between Chinese and English (auto-detect)",
+  "composer.quick.translate.template":
+    "Translate the following text. If it is in English, translate to Simplified Chinese; otherwise translate to English. Preserve the original tone and any code blocks unchanged. Reply with only the translation, no preamble.\n\n{input}",
+  "composer.quick.summarize.label": "Summarize",
+  "composer.quick.summarize.tooltip": "Summarize the text concisely",
+  "composer.quick.summarize.template":
+    "Summarize the following concisely. Lead with the single most important point, then 3–5 short bullet points if appropriate. Reply in the same language as the input.\n\n{input}",
+  "composer.quick.polish.label": "Polish",
+  "composer.quick.polish.tooltip":
+    "Polish the text for clarity and tone (same language)",
+  "composer.quick.polish.template":
+    "Polish the following text to be clearer, more natural, and grammatically correct. Keep the original language and meaning; do not add new information. Reply with only the polished text.\n\n{input}",
+  "composer.quick.explain.label": "Explain",
+  "composer.quick.explain.tooltip":
+    "Explain what this means / what this code does",
+  "composer.quick.explain.template":
+    "Explain the following clearly. If it is code, describe what it does step by step and call out any non-obvious behavior. If it is prose or a concept, define the key terms first, then walk through the idea. Reply in the same language as the input.\n\n{input}",
+} as const;
+
+export type MessageKey = keyof typeof en;
+export type Messages = Record<MessageKey, string>;
