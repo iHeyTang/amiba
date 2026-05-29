@@ -8,6 +8,7 @@ import { Loader2, Settings as SettingsIcon } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { ElectronChatEngineClient } from "./chat/electron-engine-client"
+import { desktopCapabilities } from "./chat/desktop-capabilities"
 import { OnboardingWizard } from "./onboarding/OnboardingWizard"
 
 type View = "home" | "chat" | "settings"
@@ -155,7 +156,11 @@ export default function App() {
     return (
       <FullScreenChatView
         client={client}
-        capabilities={{}}
+        // Hand the chat view the pending-prompt drain so HomeView's
+        // "type here then hit send" hand-off actually fires; otherwise
+        // navigating from Home created an empty session and the typed
+        // message was left orphaned in storage.
+        capabilities={desktopCapabilities}
         openSettings={() => setView("settings")}
         openAgentDestination={openAgentDestination}
         onGoHome={() => setView("home")}
