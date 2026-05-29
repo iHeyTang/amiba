@@ -234,7 +234,13 @@ if (!gotSingleInstanceLock) {
     // current text selection. Protocol / socket / second-instance paths
     // keep using raw `summonWindow` — they either carry their own
     // prompt already or aren't text-selection-driven.
-    void startHotkeyManager(summonWithSelection)
+    //
+    // The snip hotkey (⌘⇧.) also takes the raw `summonWindow`: by the
+    // time we raise the window the snip flow has already written its
+    // own pendingPrompt, so re-running the selection-capture
+    // AppleScript on top of it would only risk clobbering that prompt
+    // with a stale clipboard read.
+    void startHotkeyManager(summonWithSelection, summonWindow)
 
     // External entry points: OS-level `hermes-x://` URLs and the local
     // Unix socket inbox. Both write `home.pendingPrompt` and summon the

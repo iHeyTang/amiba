@@ -1,5 +1,7 @@
 import { globalShortcut, systemPreferences } from "electron"
 
+import { deliverPrompt } from "./external-inbox"
+import { startScreenCapture } from "./screen-capture"
 import { mainStore, type StorageChangeMap } from "./storage"
 
 const IS_MAC = process.platform === "darwin"
@@ -42,8 +44,21 @@ export const DEFAULT_SUMMON_HOTKEY: SummonHotkey = {
 
 const DOUBLE_TAP_MAX_MS = 400
 
+/**
+ * Snip-region accelerator. Fixed for now (the summon hotkey carries
+ * all the customizability budget) and identical across platforms —
+ * `CommandOrControl+Shift+Period` is rarely claimed by other apps and
+ * mirrors macOS's own ⌘⇧4 muscle memory while staying off the system's
+ * built-in shortcut. On non-mac platforms the registered shortcut still
+ * fires, but `startScreenCapture` is a no-op there for now (Windows
+ * stub) so it's effectively dormant.
+ */
+const SNIP_ACCELERATOR = "CommandOrControl+Shift+Period"
+
 let summonCallback: () => void = () => {}
+let snipSummonCallback: () => void = () => {}
 let currentHotkey: SummonHotkey | null = null
+let snipRegistered = false
 
 // uiohook-napi is lazily required so a packaging failure (missing
 // prebuilt for the user's platform, denied Accessibility permission,
@@ -201,9 +216,11 @@ function detachDoubleTap() {
 
 function applyHotkey(next: SummonHotkey) {
   // Always tear down the previous binding so flipping modes never leaves
-  // a stale accelerator or hook around.
+  // a stale accelerator or hook around. We unregister the specific
+  // summon accelerator (rather than `unregisterAll`) so the separately
+  // managed snip shortcut survives a summon-hotkey config change.
   if (currentHotkey?.kind === "accelerator") {
-    globalShortcut.unregisterAll()
+    globalShortcut.unregister(currentHotkey.accelerator)
   }
   if (currentHotkey?.kind === "doubleTap") {
     detachDoubleTap()
@@ -233,6 +250,50 @@ function applyHotkey(next: SummonHotkey) {
   }
 }
 
+/**
+ * Fire the snip flow: drop the region selector, then hand whatever we
+ * captured to the chat composer through the same `pendingPrompt`
+ * channel HomeView already watches. We always deliver when we got a
+ * result so the image path is at least visible to the user even when
+ * OCR came back empty.
+ */
+function handleSnipHotkey(): void {
+  void (async () => {
+    try {
+      const result = await startScreenCapture()
+      if (!result) return
+      const parts = [`[Screenshot] ${result.imagePath}`]
+      if (result.ocrText) parts.push(result.ocrText)
+      await deliverPrompt(parts.join("\n\n"), snipSummonCallback)
+    } catch (err) {
+      console.error("[hermes-x] snip hotkey failed:", err)
+    }
+  })()
+}
+
+function registerSnip(): void {
+  if (snipRegistered) return
+  const ok = globalShortcut.register(SNIP_ACCELERATOR, handleSnipHotkey)
+  if (!ok) {
+    console.warn(
+      `[hermes-x] Failed to register snip accelerator '${SNIP_ACCELERATOR}'. ` +
+        "It's likely already claimed by another app or the OS.",
+    )
+    return
+  }
+  snipRegistered = true
+}
+
+function unregisterSnip(): void {
+  if (!snipRegistered) return
+  try {
+    globalShortcut.unregister(SNIP_ACCELERATOR)
+  } catch (err) {
+    console.warn("[hermes-x] unregister snip failed:", err)
+  }
+  snipRegistered = false
+}
+
 function readStoredHotkey(value: unknown): SummonHotkey {
   // Accept anything that round-trips through the discriminated union.
   // Anything else (corrupt store, schema drift) falls back to the
@@ -256,13 +317,25 @@ function readStoredHotkey(value: unknown): SummonHotkey {
  * Load the persisted hotkey config, apply it, and subscribe to renderer
  * writes so changes from the Preferences UI take effect immediately
  * without a restart.
+ *
+ * `onSummon` runs for the user-configurable summon hotkey (which may
+ * pre-fill the composer with the current text selection).
+ * `onSnipSummon` runs after a screen-region capture has already
+ * produced its own pending prompt — typically the plain raise-window
+ * path, since we don't want to clobber the prompt by re-running
+ * selection capture on top of it.
  */
-export async function startHotkeyManager(onSummon: () => void) {
+export async function startHotkeyManager(
+  onSummon: () => void,
+  onSnipSummon: () => void = onSummon,
+) {
   summonCallback = onSummon
+  snipSummonCallback = onSnipSummon
   const { [SUMMON_HOTKEY_STORE_KEY]: stored } = await mainStore.get(
     SUMMON_HOTKEY_STORE_KEY,
   )
   applyHotkey(readStoredHotkey(stored))
+  registerSnip()
 
   mainStore.watch((changes: StorageChangeMap) => {
     if (!(SUMMON_HOTKEY_STORE_KEY in changes)) return
@@ -272,7 +345,10 @@ export async function startHotkeyManager(onSummon: () => void) {
 
 /** Release native + Electron handles before the process exits. */
 export function stopHotkeyManager() {
-  if (currentHotkey?.kind === "accelerator") globalShortcut.unregisterAll()
+  if (currentHotkey?.kind === "accelerator") {
+    globalShortcut.unregister(currentHotkey.accelerator)
+  }
+  unregisterSnip()
   detachDoubleTap()
   if (uiohookStarted) {
     const uio = loadUiohook()
