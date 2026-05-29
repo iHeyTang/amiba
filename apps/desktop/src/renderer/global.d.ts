@@ -47,6 +47,12 @@ interface HermesBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>
   }
+  notifier: {
+    onMessage(cb: (msg: unknown) => void): () => void
+    activateMain(): Promise<void>
+    approve(approvalId: string): Promise<void>
+    deny(approvalId: string): Promise<void>
+  }
   hermesRuntime: {
     detect(): Promise<HermesDetectionResult>
     install(): Promise<{ id: string; pid: number | undefined }>

@@ -48,7 +48,10 @@ export default defineConfig({
     build: {
       outDir: "out/renderer",
       rollupOptions: {
-        input: resolve(__dirname, "src/renderer/index.html")
+        input: {
+          index: resolve(__dirname, "src/renderer/index.html"),
+          notifier: resolve(__dirname, "src/renderer/notifier/index.html")
+        }
       }
     },
     server: { port: 5173 }

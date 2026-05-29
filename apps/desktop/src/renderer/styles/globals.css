@@ -39,3 +39,22 @@ body,
 .app-drag-region [role="menuitem"] {
   -webkit-app-region: no-drag;
 }
+
+/*
+ * Heads-up Notifier fade-in. Plays once when a card mounts; the React
+ * tree re-mounts on every new payload so there's no need for an exit
+ * animation — the unmount is the dismissal.
+ */
+@keyframes notifier-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-notifier-in {
+  animation: notifier-in 160ms ease-out both;
+}

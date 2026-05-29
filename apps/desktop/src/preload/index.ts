@@ -37,6 +37,23 @@ const api = {
   },
 
   /**
+   * Heads-up Notifier bridge. The notifier renderer (bottom-right floating
+   * window) listens for `notifier:message` pushes from main and sends
+   * approve/deny/activate-main back over their own channels.
+   */
+  notifier: {
+    onMessage: (cb: (msg: unknown) => void) => {
+      const handler = (_e: unknown, msg: unknown) => cb(msg)
+      ipcRenderer.on("notifier:message", handler)
+      return () => ipcRenderer.off("notifier:message", handler)
+    },
+    activateMain: () => ipcRenderer.invoke("notifier:activate-main"),
+    approve: (approvalId: string) =>
+      ipcRenderer.invoke("notifier:approve", approvalId),
+    deny: (approvalId: string) => ipcRenderer.invoke("notifier:deny", approvalId),
+  },
+
+  /**
    * Hermes-agent lifecycle bridge — drives the first-run install wizard
    * and the supervised backplane subprocess. Logs from long-running
    * spawns stream back via `onJobLog`; completion lands in `onJobEnd`.

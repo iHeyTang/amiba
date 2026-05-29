@@ -1,4 +1,5 @@
 import {
+  postHermesApprovalDecision,
   streamChat,
   type AssistantTimelineItem,
   type ChatRuntimeError,
@@ -14,6 +15,8 @@ import {
 } from "@hermes-x/core"
 import { BrowserWindow, ipcMain } from "electron"
 
+import { sendToNotifier } from "../notifier-window"
+
 /**
  * Per-session running state. Mirrors the renderer's `ChatRuntimeState` so
  * a snapshot frame can rehydrate the UI without translation.
@@ -24,6 +27,38 @@ interface SessionState extends ChatRuntimeState {
 
 const sessions = new Map<string, SessionState>()
 const subscribers = new Set<string>() // sessionIds the engine is currently streaming to
+
+/**
+ * Pending approvals indexed by approvalId so the Heads-up Notifier can
+ * resolve them without knowing which session they came from. Cleared on
+ * `approvalResolved` (gateway-initiated) or after the local POST settles.
+ */
+const pendingApprovalsById = new Map<
+  string,
+  { runId: string; sessionId: string }
+>()
+
+export async function resolveApproval(
+  approvalId: string,
+  verdict: "approve" | "deny"
+): Promise<void> {
+  const ref = pendingApprovalsById.get(approvalId)
+  if (!ref) return
+  pendingApprovalsById.delete(approvalId)
+  const decision = verdict === "approve" ? "once" : "deny"
+  const res = await postHermesApprovalDecision({
+    runId: ref.runId,
+    approvalId,
+    decision
+  })
+  if (!res.ok) {
+    console.warn("[notifier] approval decision POST failed:", res.error)
+  }
+  // Optimistically drop the card; the gateway will also emit
+  // `approvalResolved` shortly, which is a safe no-op once the renderer
+  // already cleared.
+  sendToNotifier({ type: "dismiss", id: approvalId })
+}
 
 function broadcast(msg: EngineToClientMessage) {
   for (const win of BrowserWindow.getAllWindows()) {

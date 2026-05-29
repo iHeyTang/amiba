@@ -1,10 +1,11 @@
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import type net from "node:net"
-import { BrowserWindow, app, nativeImage, session, shell } from "electron"
+import { BrowserWindow, app, ipcMain, nativeImage, session, shell } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 
-import { registerChatHandlers } from "./chat/engine"
+import { registerChatHandlers, resolveApproval } from "./chat/engine"
+import { createNotifierWindow } from "./notifier-window"
 import {
   attachSecondInstanceHandler,
   deliverPrompt,
@@ -133,6 +134,26 @@ function summonWithSelection(): void {
   })()
 }
 
+/**
+ * Wire the renderer-side actions from the Heads-up Notifier back to main:
+ *
+ *   - `notifier:activate-main` — clicking the cron-completed card raises
+ *     the primary window via the same `summon` flow the hotkey uses.
+ *   - `notifier:approve` / `notifier:deny` — forward the verdict to the
+ *     chat engine so the gateway's pending approval resolves.
+ */
+function registerNotifierIpcHandlers(summon: () => void): void {
+  ipcMain.handle("notifier:activate-main", () => {
+    summon()
+  })
+  ipcMain.handle("notifier:approve", (_e, approvalId: string) => {
+    resolveApproval(approvalId, "approve")
+  })
+  ipcMain.handle("notifier:deny", (_e, approvalId: string) => {
+    resolveApproval(approvalId, "deny")
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -224,6 +245,8 @@ if (!gotSingleInstanceLock) {
     registerChatHandlers()
     registerHermesRuntimeHandlers()
     createWindow()
+    createNotifierWindow()
+    registerNotifierIpcHandlers(summonWindow)
 
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the
