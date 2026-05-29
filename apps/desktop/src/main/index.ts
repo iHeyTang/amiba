@@ -1,9 +1,16 @@
 import { fileURLToPath } from "node:url"
 import path from "node:path"
+import type net from "node:net"
 import { BrowserWindow, app, nativeImage, session, shell } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 
 import { registerChatHandlers } from "./chat/engine"
+import {
+  attachSecondInstanceHandler,
+  registerProtocolHandler,
+  startUnixSocketInbox,
+  stopUnixSocketInbox,
+} from "./external-inbox"
 import {
   registerHermesRuntimeHandlers,
   stopAllHermesJobs,
@@ -149,36 +156,69 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  // Install the main-process PlatformAdapter BEFORE registering any handler
-  // that imports backplaneFetch / HermesClient — those call getPlatform() at
-  // request time and need the adapter wired up first.
-  setPlatform(createMainPlatformAdapter())
-  installCorsBypass()
-  // macOS: dock icon (window icon is set per-BrowserWindow above for
-  // Windows/Linux; macOS reads it from the .icns inside the .app bundle
-  // when packaged, and from `app.dock.setIcon` at runtime when dev'ing).
-  if (IS_MAC && app.dock) {
-    try {
-      app.dock.setIcon(nativeImage.createFromPath(iconPath()))
-    } catch {
-      // best-effort — file may not exist in some packaged layouts
+// Single-instance lock. Without this, win/linux protocol launches
+// (`hermes-x://...` from the OS) spawn a fresh Electron process every
+// time — the second copy has no hotkey, no chat engine, no shared
+// store. With the lock held, every retry funnels through the
+// `second-instance` event on the original process, which is exactly
+// where we want the URL to land.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  // Another Hermes instance already owns this user's session — its
+  // `second-instance` handler will pick up our argv (including any
+  // hermes-x:// URL) and surface the prompt over there. Bail.
+  app.quit()
+} else {
+  attachSecondInstanceHandler(summonWindow)
+
+  let inboxServer: net.Server | null = null
+
+  app.whenReady().then(async () => {
+    // Install the main-process PlatformAdapter BEFORE registering any handler
+    // that imports backplaneFetch / HermesClient — those call getPlatform() at
+    // request time and need the adapter wired up first.
+    setPlatform(createMainPlatformAdapter())
+    installCorsBypass()
+    // macOS: dock icon (window icon is set per-BrowserWindow above for
+    // Windows/Linux; macOS reads it from the .icns inside the .app bundle
+    // when packaged, and from `app.dock.setIcon` at runtime when dev'ing).
+    if (IS_MAC && app.dock) {
+      try {
+        app.dock.setIcon(nativeImage.createFromPath(iconPath()))
+      } catch {
+        // best-effort — file may not exist in some packaged layouts
+      }
     }
-  }
-  registerIpcHandlers()
-  registerChatHandlers()
-  registerHermesRuntimeHandlers()
-  createWindow()
+    registerIpcHandlers()
+    registerChatHandlers()
+    registerHermesRuntimeHandlers()
+    createWindow()
 
-  // Load the persisted summon-hotkey config and start listening. The
-  // manager subscribes to renderer writes too, so changes from the
-  // Preferences panel take effect without a restart.
-  void startHotkeyManager(summonWindow)
+    // Load the persisted summon-hotkey config and start listening. The
+    // manager subscribes to renderer writes too, so changes from the
+    // Preferences panel take effect without a restart.
+    void startHotkeyManager(summonWindow)
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // External entry points: OS-level `hermes-x://` URLs and the local
+    // Unix socket inbox. Both write `home.pendingPrompt` and summon the
+    // window; the renderer's existing watcher routes to chat.
+    registerProtocolHandler(summonWindow)
+    try {
+      inboxServer = await startUnixSocketInbox(summonWindow)
+    } catch (err) {
+      console.error("[main] failed to start inbox socket:", err)
+    }
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
+
+  app.on("will-quit", () => {
+    void stopUnixSocketInbox(inboxServer)
+    inboxServer = null
+  })
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
