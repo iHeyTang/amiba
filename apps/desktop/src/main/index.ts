@@ -7,6 +7,7 @@ import { setPlatform } from "@hermes-x/platform"
 import { registerChatHandlers } from "./chat/engine"
 import {
   attachSecondInstanceHandler,
+  deliverPrompt,
   registerProtocolHandler,
   startUnixSocketInbox,
   stopUnixSocketInbox,
@@ -18,6 +19,7 @@ import {
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
+import { captureSelection } from "./selection"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -100,6 +102,35 @@ function summonWindow() {
   if (live.isMinimized()) live.restore()
   if (!live.isVisible()) live.show()
   if (!live.isFocused()) live.focus()
+}
+
+/**
+ * Quick-Ask Spotlight summon: try to grab whatever text the user has
+ * selected in their frontmost app first, then summon. If we got text,
+ * route through `deliverPrompt` so the composer pre-fills via the same
+ * channel HomeView's pendingPrompt watcher already drains. If we got
+ * nothing (no selection, missing Accessibility grant, scripting timeout,
+ * Windows / Linux), fall back to a plain summon.
+ *
+ * Must stay async-but-fire-and-forget for the hotkey manager, which
+ * invokes its callback synchronously. The 120ms AppleScript delay means
+ * users see a noticeable lag before the window appears when they DO
+ * have a selection — that's intrinsic to the "synthesize ⌘C then read
+ * the pasteboard" approach and acceptable for the first iteration.
+ */
+function summonWithSelection(): void {
+  void (async () => {
+    try {
+      const sel = await captureSelection()
+      if (sel) {
+        await deliverPrompt(sel.text, summonWindow)
+        return
+      }
+    } catch (err) {
+      console.warn("[hermes-x] quick-ask capture failed; plain summon:", err)
+    }
+    summonWindow()
+  })()
 }
 
 function createWindow() {
@@ -197,7 +228,13 @@ if (!gotSingleInstanceLock) {
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the
     // Preferences panel take effect without a restart.
-    void startHotkeyManager(summonWindow)
+    //
+    // Hotkey path uses `summonWithSelection` so the Quick-Ask Spotlight
+    // flow gets a chance to pre-fill the composer with the user's
+    // current text selection. Protocol / socket / second-instance paths
+    // keep using raw `summonWindow` — they either carry their own
+    // prompt already or aren't text-selection-driven.
+    void startHotkeyManager(summonWithSelection)
 
     // External entry points: OS-level `hermes-x://` URLs and the local
     // Unix socket inbox. Both write `home.pendingPrompt` and summon the
