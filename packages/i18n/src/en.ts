@@ -71,6 +71,37 @@ export const en = {
     "Electron accelerator syntax — write modifiers as Cmd / Ctrl / Alt / Shift / CommandOrControl.",
   "options.preference.hotkey.macHint":
     "First time you turn double-tap on, macOS asks for Accessibility access; the hook can only see global key presses after you grant it.",
+
+  // First-run onboarding wizard
+  "onboarding.title": "Hermes X",
+  "onboarding.tagline":
+    "A native desktop client for Hermes Agent.\nDouble-tap ⌘ from anywhere to summon a chat — Hermes stays within reach.",
+  "onboarding.subtitle":
+    "We'll install Hermes, load the plugins it needs, and boot the local service for you.\nAbout 5–10 minutes from here — nothing to prepare on your end.",
+  "onboarding.step.install": "Install core",
+  "onboarding.step.plugins": "Load plugins",
+  "onboarding.step.backplane": "Start service",
+  "onboarding.step.ready": "Ready",
+  "onboarding.detect.checking": "Checking your environment…",
+  "onboarding.install.manualTitle": "Rather run it yourself in a terminal?",
+  "onboarding.install.manualHint":
+    "Run these commands in your terminal one by one, then come back and tap Re-check.",
+  "onboarding.install.manualStep.install": "1. Install Hermes core",
+  "onboarding.install.manualStep.plugin": "{n}. Load plugin {id}",
+  "onboarding.ready.title": "You're all set",
+  "onboarding.ready.subtitle": "Heading into Hermes…",
+  "onboarding.error.install":
+    "Install failed — the terminal below has the details.",
+  "onboarding.error.plugin": "Failed to load a plugin",
+  "onboarding.error.backplane": "Local service didn't come up in time",
+  "onboarding.action.copy": "Copy command",
+  "onboarding.action.copied": "Copied",
+  "onboarding.log.title": "Live progress",
+  "onboarding.log.empty": "(no output yet)",
+  "onboarding.summary.action.install": "One-click install",
+  "onboarding.summary.action.recheck": "Re-check",
+  "onboarding.running.caption":
+    "Working on {step}. The terminal below shows live progress — some prompts (e.g. API keys) need you to type a reply right there.",
   "options.preference.theme": "Theme",
   "options.preference.theme.auto": "Auto",
   "options.preference.theme.light": "Light",

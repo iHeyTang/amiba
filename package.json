@@ -11,6 +11,9 @@
   "scripts": {
     "dev:extension": "pnpm --filter @hermes-x/extension dev",
     "dev:desktop": "pnpm --filter @hermes-x/desktop dev",
+    "dev:desktop:fresh": "bash scripts/fresh-desktop.sh",
+    "dev:desktop:fresh:keep": "bash scripts/fresh-desktop.sh --keep",
+    "dev:desktop:fresh:reset": "bash scripts/fresh-desktop-reset.sh",
     "build:extension": "pnpm --filter @hermes-x/extension build",
     "build:desktop": "pnpm --filter @hermes-x/desktop build",
     "clean": "pnpm -r exec rm -rf node_modules dist build .plasmo .turbo .vite"

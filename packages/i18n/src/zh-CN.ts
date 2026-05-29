@@ -64,6 +64,36 @@ export const zhCN: Messages = {
     "支持 Electron accelerator 语法。修饰键写 Cmd / Ctrl / Alt / Shift / CommandOrControl 等。",
   "options.preference.hotkey.macHint":
     "首次启用双击模式时，macOS 会弹窗请求「辅助功能」权限，授权后才能监听全局按键。",
+
+  // 首次启动 onboarding 向导
+  "onboarding.title": "Hermes X",
+  "onboarding.tagline":
+    "Hermes Agent 的原生桌面客户端。\n随时双击 Command 键唤起对话，让 Hermes 始终在你触手可及处。",
+  "onboarding.subtitle":
+    "我们会一步步帮你装好 Hermes、加载所需插件、启动本地服务。\n整个过程大约 5–10 分钟，你不需要预先准备任何东西。",
+  "onboarding.step.install": "安装核心",
+  "onboarding.step.plugins": "加载插件",
+  "onboarding.step.backplane": "启动服务",
+  "onboarding.step.ready": "就绪",
+  "onboarding.detect.checking": "正在检查你的环境…",
+  "onboarding.install.manualTitle": "想自己用命令行安装？",
+  "onboarding.install.manualHint":
+    "依次把下面的命令贴到终端运行，全部跑完后点「重新检查」。",
+  "onboarding.install.manualStep.install": "1. 安装 Hermes 核心",
+  "onboarding.install.manualStep.plugin": "{n}. 加载插件 {id}",
+  "onboarding.ready.title": "一切就绪",
+  "onboarding.ready.subtitle": "马上进入 Hermes。",
+  "onboarding.error.install": "安装失败，下方终端有详细日志。",
+  "onboarding.error.plugin": "插件加载失败",
+  "onboarding.error.backplane": "本地服务启动超时",
+  "onboarding.action.copy": "复制命令",
+  "onboarding.action.copied": "已复制",
+  "onboarding.log.title": "实时进度",
+  "onboarding.log.empty": "（暂时还没有输出）",
+  "onboarding.summary.action.install": "一键安装",
+  "onboarding.summary.action.recheck": "重新检查",
+  "onboarding.running.caption":
+    "正在 {step}。下方终端会显示进度，部分步骤（如填写 API Key）需要你在终端里直接回答提示。",
   "options.preference.theme": "主题",
   "options.preference.theme.auto": "自动",
   "options.preference.theme.light": "浅色",

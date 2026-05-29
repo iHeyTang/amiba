@@ -1,13 +1,14 @@
-import { useWallpaper } from "@hermes-x/core"
+import { getHermesStatus, useWallpaper } from "@hermes-x/core"
 import { FullScreenChatView } from "@hermes-x/chat-ui"
 import { HomeView, WallpaperCredit } from "@hermes-x/home-ui"
 import { getPlatform } from "@hermes-x/platform"
 import { SettingsView } from "@hermes-x/settings-ui"
 import { useResolvedTheme } from "@hermes-x/theme"
-import { Settings as SettingsIcon } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Loader2, Settings as SettingsIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
 import { ElectronChatEngineClient } from "./chat/electron-engine-client"
+import { OnboardingWizard } from "./onboarding/OnboardingWizard"
 
 type View = "home" | "chat" | "settings"
 
@@ -99,12 +100,42 @@ function HomeTitleBar({ onOpenSettings }: { onOpenSettings: () => void }) {
  * bookmarks, favicon) are intentionally absent here so the corresponding
  * UI sections hide.
  */
+type Phase = "loading" | "onboarding" | "ready"
+
 export default function App() {
   useResolvedTheme()
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("home")
+  const [phase, setPhase] = useState<Phase>("loading")
+
+  // Boot probe: is the Hermes backplane already reachable? If yes we go
+  // straight to Home; otherwise we fall into the onboarding wizard, which
+  // walks the user through install + plugins + gateway and signals
+  // `onReady` when the HTTP probe finally answers.
+  useEffect(() => {
+    let cancelled = false
+    void getHermesStatus().then((s) => {
+      if (cancelled) return
+      setPhase(s.ok ? "ready" : "onboarding")
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const openAgentDestination = (url: string) => getPlatform().shell.openExternal(url)
+
+  if (phase === "loading") {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (phase === "onboarding") {
+    return <OnboardingWizard onReady={() => setPhase("ready")} />
+  }
 
   if (view === "settings") {
     return (

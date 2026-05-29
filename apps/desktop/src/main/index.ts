@@ -4,6 +4,10 @@ import { BrowserWindow, app, nativeImage, session, shell } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 
 import { registerChatHandlers } from "./chat/engine"
+import {
+  registerHermesRuntimeHandlers,
+  stopAllHermesJobs,
+} from "./hermes-runtime"
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
@@ -96,7 +100,14 @@ function createWindow() {
     width: 1280,
     height: 800,
     minWidth: 960,
-    minHeight: 600,
+    // Onboarding sets the floor here. With the hero (logo + 2-line
+    // tagline + 2-line subtitle) and CTA visible plus a comfortable
+    // gap to the collapsed manual disclosure at the bottom, the page
+    // sits around 560px of content; 800 gives generous breathing room.
+    // Expanded manual recipes overflow the page-level scroll cleanly
+    // (see SummaryBlock — `overflow-y-auto` + `mt-auto`), so this
+    // doesn't need to inflate to fit the worst case.
+    minHeight: 800,
     title: "Hermes",
     backgroundColor: "#0b0b0b",
     icon: IS_MAC ? undefined : iconPath(),
@@ -156,6 +167,7 @@ app.whenReady().then(() => {
   }
   registerIpcHandlers()
   registerChatHandlers()
+  registerHermesRuntimeHandlers()
   createWindow()
 
   // Load the persisted summon-hotkey config and start listening. The
@@ -178,4 +190,5 @@ app.on("window-all-closed", () => {
 // the uiohook hook used by double-tap mode.
 app.on("will-quit", () => {
   stopHotkeyManager()
+  stopAllHermesJobs()
 })
