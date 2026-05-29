@@ -5,6 +5,8 @@ import {
   ChevronDown,
   ChevronUp,
   Disc,
+  Folder,
+  FolderOpen,
   Globe,
   History,
   Loader2,
@@ -339,6 +341,15 @@ export default function SidePanelView({
   const [learnEventCount, setLearnEventCount] = useState(0);
   const [learnStopBusy, setLearnStopBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * Workspace binding for this surface. `null` when no directory is bound
+   * or the platform doesn't expose a WorkspaceAdapter (extension). The chat
+   * area renders a folder-drop overlay when `folderDragOver` is true; the
+   * composer toolbar shows a path chip when `workspacePath` is non-null.
+   */
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [folderDragOver, setFolderDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** Composer textarea: grows with content up to max, then scrolls inside. */
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1236,6 +1247,96 @@ export default function SidePanelView({
   useEffect(() => {
     showStreamDetailsRef.current = showStreamDetails;
   }, [showStreamDetails]);
+
+  // -------------------------------------------------------------------------
+  // Workspace binding: load the current bound path from the platform adapter
+  // and stay in sync with bind/unbind events. Extension lacks the workspaces
+  // sub-API entirely — the chip/drop overlay stays hidden in that case.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const ws = getPlatform().workspaces;
+    if (!ws) return;
+    let cancelled = false;
+    void ws.getCurrent().then((p) => {
+      if (!cancelled) setWorkspacePath(p);
+    });
+    const unsub = ws.onChange((change) => {
+      if (change.kind === "bound") setWorkspacePath(change.path);
+      else if (change.kind === "unbound") setWorkspacePath(null);
+      // `file` events don't change the binding itself, so the chip text
+      // stays put. We deliberately don't re-render on every file event —
+      // it would be a busy no-op for this surface.
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  /**
+   * Resolve a dropped folder's absolute path. Electron 33 removed the
+   * legacy `File.path` field; the preload bridge exposes
+   * `webUtils.getPathForFile()` under `window.hermes.workspaces.getPathForFile`.
+   * Returns null when the bridge isn't present (extension / web).
+   */
+  function resolveDroppedFolderPath(file: File): string | null {
+    const bridge = (window as unknown as { hermes?: { workspaces?: { getPathForFile?: (f: File) => string } } })
+      .hermes?.workspaces?.getPathForFile;
+    if (!bridge) return null;
+    try {
+      const p = bridge(file);
+      return p && p.length > 0 ? p : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * True iff the active drag carries at least one filesystem directory.
+   * Used to gate the folder-drop overlay so file drops on the composer
+   * (which the composer's own handler owns) don't accidentally trigger
+   * workspace binding.
+   */
+  function dragHasDirectory(dt: DataTransfer): boolean {
+    const items = dt.items;
+    if (!items) return false;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind !== "file") continue;
+      const entry = (
+        it as DataTransferItem & {
+          webkitGetAsEntry?: () => { isDirectory?: boolean } | null;
+        }
+      ).webkitGetAsEntry?.();
+      if (entry && entry.isDirectory) return true;
+    }
+    return false;
+  }
+
+  async function handleFolderDrop(files: File[]): Promise<void> {
+    const ws = getPlatform().workspaces;
+    if (!ws) return;
+    // First folder wins. Mixed selections (folder + files) pick the folder
+    // and ignore the rest — the file drop happens on the composer, not here.
+    let chosen: string | null = null;
+    for (const f of files) {
+      const p = resolveDroppedFolderPath(f);
+      if (p) {
+        chosen = p;
+        break;
+      }
+    }
+    if (!chosen) {
+      setWorkspaceError("Could not resolve the dropped folder's path.");
+      return;
+    }
+    try {
+      await ws.bind(chosen);
+      setWorkspaceError(null);
+    } catch (e) {
+      setWorkspaceError(String((e as Error)?.message || e));
+    }
+  }
 
   useEffect(() => {
     if (!showStreamDetailsLoadedRef.current) return;
@@ -2192,8 +2293,34 @@ export default function SidePanelView({
           // capped further. `full` evaluates to "" so messages span the
           // entire pane.
           variant === "fullscreen" && MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
+          folderDragOver && "ring-2 ring-primary/40",
         )}
         ref={scrollRef}
+        onDragOver={(e) => {
+          // Workspace binding is a desktop-only capability — bail early on
+          // the extension surface so the composer's file-drop handler keeps
+          // owning the chat-area drop without competition.
+          if (!getPlatform().workspaces) return;
+          const dt = e.dataTransfer;
+          if (!dt) return;
+          if (!Array.from(dt.types || []).includes("Files")) return;
+          if (!dragHasDirectory(dt)) return;
+          e.preventDefault();
+          if (!folderDragOver) setFolderDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setFolderDragOver(false);
+        }}
+        onDrop={(e) => {
+          if (!getPlatform().workspaces) return;
+          const dt = e.dataTransfer;
+          if (!dt || !dragHasDirectory(dt)) return;
+          e.preventDefault();
+          setFolderDragOver(false);
+          const files = Array.from(dt.files || []);
+          if (files.length > 0) void handleFolderDrop(files);
+        }}
       >
         {hasActive && messages.length === 0 ? (
           // Borderless empty-conversation hint, anchored to a stable
@@ -2247,6 +2374,14 @@ export default function SidePanelView({
               )}
             </div>
           </ScrollArea>
+        )}
+        {folderDragOver && (
+          <div className="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-primary/10 text-[12px] font-medium text-primary">
+            <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-background/95 px-3 py-2 shadow-sm">
+              <FolderOpen className="h-4 w-4" />
+              <span>Drop folder to bind workspace</span>
+            </div>
+          </div>
         )}
       </div>
 

@@ -1,7 +1,12 @@
-import { contextBridge, ipcRenderer } from "electron"
+import { contextBridge, ipcRenderer, webUtils } from "electron"
 
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
+
+type WorkspaceChange =
+  | { kind: "bound"; path: string }
+  | { kind: "unbound" }
+  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
 
 // Mirrors @hermes-x/core protocol types — kept loose here so preload
 // stays runtime-only without pulling the core package into the browser
@@ -34,6 +39,27 @@ const api = {
 
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url)
+  },
+
+  /**
+   * Workspace binding bridge. A bound directory gives the chat session
+   * filesystem context; changes inside that tree are pushed back via
+   * `onChanged` so the renderer can re-render the indicator and (later)
+   * surface a "files changed" cue. `getPathForFile` exposes Electron 33's
+   * webUtils so the renderer can resolve a dropped folder's absolute path
+   * (the legacy `File.path` field is gone).
+   */
+  workspaces: {
+    bind: (p: string): Promise<void> => ipcRenderer.invoke("workspace:bind", p),
+    unbind: (): Promise<void> => ipcRenderer.invoke("workspace:unbind"),
+    getCurrent: (): Promise<string | null> =>
+      ipcRenderer.invoke("workspace:get-current"),
+    onChanged: (cb: (change: WorkspaceChange) => void) => {
+      const handler = (_e: unknown, change: WorkspaceChange) => cb(change)
+      ipcRenderer.on("workspace:changed", handler)
+      return () => ipcRenderer.off("workspace:changed", handler)
+    },
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file)
   },
 
   /**

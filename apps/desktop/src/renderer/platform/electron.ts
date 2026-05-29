@@ -56,6 +56,13 @@ export function createElectronAdapter(): PlatformAdapter {
 
     notifications: { notify: notImpl("notifications.notify") as never },
 
-    shell: { openExternal: (url) => bridge.shell.openExternal(url) }
+    shell: { openExternal: (url) => bridge.shell.openExternal(url) },
+
+    workspaces: {
+      bind: (p) => bridge.workspaces.bind(p),
+      unbind: () => bridge.workspaces.unbind(),
+      getCurrent: () => bridge.workspaces.getCurrent(),
+      onChange: (cb) => bridge.workspaces.onChanged(cb)
+    }
   }
 }

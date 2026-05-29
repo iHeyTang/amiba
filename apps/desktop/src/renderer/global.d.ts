@@ -13,6 +13,11 @@ import type {
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
 
+type WorkspaceChange =
+  | { kind: "bound"; path: string }
+  | { kind: "unbound" }
+  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
+
 interface HermesJobLogMsg {
   jobId: string
   stream: "stdout" | "stderr"
@@ -46,6 +51,13 @@ interface HermesBridgeApi {
   }
   shell: {
     openExternal(url: string): Promise<void>
+  }
+  workspaces: {
+    bind(path: string): Promise<void>
+    unbind(): Promise<void>
+    getCurrent(): Promise<string | null>
+    onChanged(cb: (change: WorkspaceChange) => void): () => void
+    getPathForFile(file: File): string
   }
   notifier: {
     onMessage(cb: (msg: unknown) => void): () => void

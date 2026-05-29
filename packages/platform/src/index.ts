@@ -75,6 +75,27 @@ export interface ShellAdapter {
   openExternal(url: string): Promise<void>
 }
 
+/**
+ * A workspace change event. Either the bound directory itself changed
+ * (bind/unbind) or a file inside the bound directory changed.
+ */
+export type WorkspaceChange =
+  | { kind: "bound"; path: string }
+  | { kind: "unbound" }
+  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
+
+/**
+ * Workspace binding — a single chat-session-scoped directory that gives
+ * the agent file-system context. Desktop only; the extension surface
+ * leaves this undefined.
+ */
+export interface WorkspaceAdapter {
+  bind(path: string): Promise<void>
+  unbind(): Promise<void>
+  getCurrent(): Promise<string | null>
+  onChange(cb: (change: WorkspaceChange) => void): () => void
+}
+
 export interface PlatformAdapter {
   kind: "extension" | "desktop"
   storage: StorageAdapter
@@ -86,6 +107,8 @@ export interface PlatformAdapter {
   windows: WindowsAdapter
   notifications: NotificationsAdapter
   shell: ShellAdapter
+  /** Desktop-only. The extension leaves this undefined. */
+  workspaces?: WorkspaceAdapter
 }
 
 let current: PlatformAdapter | null = null

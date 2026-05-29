@@ -21,6 +21,7 @@ import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
 import { captureSelection } from "./selection"
+import { startWorkspaceManager, stopWorkspaceManager } from "./workspace"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -230,6 +231,7 @@ if (!gotSingleInstanceLock) {
     // that imports backplaneFetch / HermesClient — those call getPlatform() at
     // request time and need the adapter wired up first.
     setPlatform(createMainPlatformAdapter())
+    await startWorkspaceManager()
     installCorsBypass()
     // macOS: dock icon (window icon is set per-BrowserWindow above for
     // Windows/Linux; macOS reads it from the .icns inside the .app bundle
@@ -297,4 +299,5 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   stopHotkeyManager()
   stopAllHermesJobs()
+  void stopWorkspaceManager()
 })

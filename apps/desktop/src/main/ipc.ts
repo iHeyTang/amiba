@@ -1,12 +1,21 @@
 import { BrowserWindow, ipcMain, shell } from "electron"
+import type { WorkspaceChange } from "@hermes-x/platform"
 
 import { mainStore, type StorageChangeMap } from "./storage"
+import { workspaceManager } from "./workspace"
 
 function broadcastChange(changes: StorageChangeMap) {
   if (Object.keys(changes).length === 0) return
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.webContents.isDestroyed()) continue
     win.webContents.send("storage:changed", changes)
+  }
+}
+
+function broadcastWorkspaceChange(change: WorkspaceChange) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.webContents.isDestroyed()) continue
+    win.webContents.send("workspace:changed", change)
   }
 }
 
@@ -25,4 +34,9 @@ export function registerIpcHandlers() {
   mainStore.watch(broadcastChange)
 
   ipcMain.handle("shell:open-external", (_e, url: string) => shell.openExternal(url))
+
+  ipcMain.handle("workspace:bind", (_e, p: string) => workspaceManager.bind(p))
+  ipcMain.handle("workspace:unbind", () => workspaceManager.unbind())
+  ipcMain.handle("workspace:get-current", () => workspaceManager.getCurrent())
+  workspaceManager.onChange(broadcastWorkspaceChange)
 }

@@ -2,6 +2,7 @@ import { shell } from "electron"
 import type { PlatformAdapter, StorageChangeMap } from "@hermes-x/platform"
 
 import { mainStore } from "./storage"
+import { workspaceManager } from "./workspace"
 
 const notImpl = (name: string) => () =>
   Promise.reject(new Error(`[MainPlatformAdapter] ${name} not implemented (main process)`))
@@ -63,6 +64,13 @@ export function createMainPlatformAdapter(): PlatformAdapter {
     },
     notifications: { notify: notImpl("notifications.notify") as never },
 
-    shell: { openExternal: (url) => shell.openExternal(url) }
+    shell: { openExternal: (url) => shell.openExternal(url) },
+
+    workspaces: {
+      bind: (path) => workspaceManager.bind(path),
+      unbind: () => workspaceManager.unbind(),
+      getCurrent: () => Promise.resolve(workspaceManager.getCurrent()),
+      onChange: (cb) => workspaceManager.onChange(cb)
+    }
   }
 }
