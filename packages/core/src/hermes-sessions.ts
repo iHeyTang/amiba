@@ -323,6 +323,30 @@ export async function appendHermesMessage(
   };
 }
 
+/** Response from `triggerHermesAutoTitle`. */
+export interface TriggerAutoTitleResponse {
+  ok: true;
+  /** Generated (or pre-existing, on skipped=true) title. Undefined when
+   *  backend declined to generate (e.g. no first exchange yet). */
+  title?: string;
+  /** True when backend short-circuited — title already set, conversation
+   *  beyond the first-exchange window, or LLM failed. */
+  skipped?: boolean;
+  reason?: string;
+  detail?: string;
+}
+
+export async function triggerHermesAutoTitle(
+  sessionId: string,
+): Promise<TriggerAutoTitleResponse | HermesError> {
+  const r = await request<TriggerAutoTitleResponse>(
+    `/hermes/sessions/${encodeURIComponent(sessionId)}/auto-title`,
+    jsonInit("POST", {}),
+  );
+  if (isReqErr(r)) return r;
+  return { ok: true, title: r.value.title, skipped: r.value.skipped, reason: r.value.reason, detail: r.value.detail };
+}
+
 export interface UpdateSessionInput {
   /** Empty / whitespace-only string clears the title (Hermes semantics). */
   title?: string;

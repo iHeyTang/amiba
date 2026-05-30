@@ -1,5 +1,5 @@
 /**
- * Screen region capture → temp PNG (+ best-effort OCR text on macOS).
+ * Screen region capture → PNG on disk.
  *
  * Flow:
  *
@@ -15,25 +15,25 @@
  *      the target display.
  *
  *   3. On mouseup the renderer ships the chosen rect back over IPC; main
- *      crops the cached snapshot, writes the result to a second temp PNG
- *      (under `app.getPath("temp")`), and resolves with the path.
+ *      crops the cached snapshot, writes the result to a PNG under
+ *      `userData/snips/`, and resolves with the path + a 256px thumb
+ *      data URL for the composer chip preview.
  *
- *   4. macOS only: try to extract OCR text from the cropped PNG by
- *      invoking the `shortcuts` CLI against a user-installed shortcut
- *      named "Hermes OCR". This is best-effort — if the shortcut is
- *      missing, errors, or times out we return an empty string and let
- *      callers fall back to image-only.
+ * We deliberately do NOT run local OCR on the cropped PNG. The agent
+ * already has a `vision_analyze` tool that reads images on demand via a
+ * modern multimodal model — it produces better text than any
+ * on-device OCR (Apple Shortcuts / Tesseract), with no setup friction
+ * and no per-snip latency. The composer stays empty after a snip; the
+ * user types their question and the agent decides whether to call
+ * vision on the attachment.
  *
  * Cancellation: pressing Escape (or releasing without dragging at least
  * a 4x4 region) closes the overlay and resolves with null. Windows is
  * stubbed today — desktopCapturer works there but the overlay alpha
- * behavior and OCR pathway differ enough that we leave that to a
- * follow-up.
+ * behaviour differs enough that we leave that to a follow-up.
  */
-import { execFile } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { promisify } from "node:util"
 import {
   BrowserWindow,
   app,
@@ -43,14 +43,59 @@ import {
 } from "electron"
 import type { IpcMainEvent } from "electron"
 
-const execFileAsync = promisify(execFile)
 const IS_MAC = process.platform === "darwin"
 
 export interface ScreenCaptureResult {
-  /** Absolute path to the cropped PNG under `app.getPath("temp")`. */
+  /** Absolute path to the cropped PNG on disk. */
   imagePath: string
-  /** OCR-extracted text from the crop. Empty string when unavailable. */
-  ocrText: string
+  /** PNG byte size on disk, for the attachment chip metadata. */
+  sizeBytes: number
+  /**
+   * 256px-longest-edge thumbnail as a data URL, suitable for the
+   * composer chip preview. Empty string when the resize failed.
+   */
+  thumbDataUrl: string
+}
+
+/** Filename prefix shared by every snip artefact so the startup sweep can find them. */
+const SNIP_PREFIX = "hermes-x-snip-"
+
+/**
+ * Directory under `userData` where snip PNGs land. We move them out of
+ * the OS temp dir so (a) the user can find them via the path the agent
+ * was given even after a reboot wipes /tmp, and (b) the startup sweep
+ * has a stable, hermes-owned scope to clean.
+ */
+function snipDir(): string {
+  return path.join(app.getPath("userData"), "snips")
+}
+
+/**
+ * Delete snip PNGs older than 24 hours on app startup so the snip
+ * directory doesn't grow without bound. Called once at boot; safe to
+ * call without awaiting.
+ */
+export async function cleanupOldSnips(): Promise<void> {
+  const dir = snipDir()
+  let entries: string[]
+  try {
+    entries = await fs.readdir(dir)
+  } catch {
+    return // dir doesn't exist yet — nothing to clean
+  }
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  await Promise.all(
+    entries.map(async (name) => {
+      if (!name.startsWith(SNIP_PREFIX)) return
+      const full = path.join(dir, name)
+      try {
+        const st = await fs.stat(full)
+        if (st.mtimeMs < cutoff) await fs.unlink(full)
+      } catch {
+        // best-effort
+      }
+    }),
+  )
 }
 
 interface SelectionRect {
@@ -69,11 +114,6 @@ const CANCEL_CHANNEL = "hermes-x:screen-capture:cancel"
 // stray click and we treat it as a cancel rather than producing a 1px
 // PNG.
 const MIN_RECT_PX = 4
-
-// Name of the macOS Shortcut we look up for OCR. Users (and our
-// onboarding flow, eventually) install a shortcut by this name that
-// takes an image input and returns recognized text.
-const OCR_SHORTCUT_NAME = "Hermes OCR"
 
 /**
  * Drop an interactive screen-region selector over the display under the
@@ -111,13 +151,19 @@ export async function startScreenCapture(): Promise<ScreenCaptureResult | null> 
   const fullImage = source.thumbnail
   if (fullImage.isEmpty()) return null
 
-  // Persist the snapshot + overlay HTML to disk. We avoid inlining the
-  // PNG as a data URL because a 4K retina screenshot can comfortably
-  // exceed Electron's data-URL ceiling for `loadURL`.
+  // Persist the snapshot + overlay HTML to disk. The overlay backdrop is
+  // short-lived (deleted in `finally`) so it lives in OS temp; the
+  // cropped result lives in `snipDir()` so the user-visible path stays
+  // stable across reboots and the startup sweep has a hermes-owned dir
+  // to clean. We avoid inlining the PNG as a data URL because a 4K
+  // retina screenshot can comfortably exceed Electron's data-URL ceiling
+  // for `loadURL`.
   const tempDir = app.getPath("temp")
+  const outputDir = snipDir()
+  await fs.mkdir(outputDir, { recursive: true })
   const stamp = Date.now()
-  const fullPngPath = path.join(tempDir, `hermes-x-snip-full-${stamp}.png`)
-  const htmlPath = path.join(tempDir, `hermes-x-snip-overlay-${stamp}.html`)
+  const fullPngPath = path.join(tempDir, `${SNIP_PREFIX}full-${stamp}.png`)
+  const htmlPath = path.join(tempDir, `${SNIP_PREFIX}overlay-${stamp}.html`)
   await fs.writeFile(fullPngPath, fullImage.toPNG())
   await fs.writeFile(
     htmlPath,
@@ -239,12 +285,36 @@ export async function startScreenCapture(): Promise<ScreenCaptureResult | null> 
   })
   if (cropped.isEmpty()) return null
 
-  const imagePath = path.join(tempDir, `hermes-x-snip-${stamp}.png`)
-  await fs.writeFile(imagePath, cropped.toPNG())
+  const imagePath = path.join(outputDir, `${SNIP_PREFIX}${stamp}.png`)
+  const pngBytes = cropped.toPNG()
+  await fs.writeFile(imagePath, pngBytes)
 
-  const ocrText = IS_MAC ? await runOcrShortcut(imagePath) : ""
+  // 256px-longest-edge PNG thumb for the composer chip. We downscale
+  // the in-memory `nativeImage` rather than re-reading the file from
+  // disk; for a typical screenshot region that lands the data URL well
+  // under 50KB, which is fine for chip preview rendering and for
+  // round-tripping through storage on the way to the renderer.
+  let thumbDataUrl = ""
+  try {
+    const sz = cropped.getSize()
+    const longest = Math.max(sz.width, sz.height)
+    if (longest > 0) {
+      const opts = sz.width >= sz.height
+        ? { width: Math.min(256, sz.width) }
+        : { height: Math.min(256, sz.height) }
+      const resized =
+        longest > 256 ? cropped.resize({ ...opts, quality: "best" }) : cropped
+      thumbDataUrl = resized.toDataURL()
+    }
+  } catch {
+    thumbDataUrl = ""
+  }
 
-  return { imagePath, ocrText }
+  return {
+    imagePath,
+    sizeBytes: pngBytes.byteLength,
+    thumbDataUrl,
+  }
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -401,32 +471,3 @@ function renderOverlayHtml(
 </html>`
 }
 
-/**
- * Best-effort macOS OCR via the `shortcuts` CLI. We invoke a
- * user-installed shortcut named "Hermes OCR" with the cropped PNG as
- * input and capture whatever text it prints to stdout. Any failure
- * (shortcut not installed, timeout, non-zero exit) collapses to an
- * empty string so the caller can carry on with image-only.
- */
-async function runOcrShortcut(imagePath: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync(
-      "shortcuts",
-      [
-        "run",
-        OCR_SHORTCUT_NAME,
-        "--input-path",
-        imagePath,
-        "--output-path",
-        "-",
-      ],
-      {
-        timeout: 5000,
-        maxBuffer: 4 * 1024 * 1024,
-      },
-    )
-    return stdout.trim()
-  } catch {
-    return ""
-  }
-}

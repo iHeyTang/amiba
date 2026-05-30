@@ -70,7 +70,7 @@ import {
 // Hermes uses ``source`` to disambiguate "where did this conversation
 // originate" — CLI / gateway / messaging platform / etc. Picking a clear
 // constant lets us filter or attribute extension-born sessions later.
-const SOURCE_BROWSER_EXTENSION = "browser-extension";
+export const SOURCE_BROWSER_EXTENSION = "browser-extension";
 
 // Page size for the initial list fetch. SessionDB scales to thousands; if
 // a user actually has more than this they'll have to wait while we

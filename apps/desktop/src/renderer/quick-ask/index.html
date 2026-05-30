@@ -7,13 +7,11 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self'"
     />
-    <title>Hermes Notifier</title>
+    <title>Hermes Quick Ask</title>
     <!--
-      Inline style with !important so the global `@layer base { html, body
-      { @apply bg-background } }` in tokens.css can't repaint the window
-      opaque. Without this the notifier was a solid white rectangle in
-      light mode — the transparent: true BrowserWindow flag works, but
-      the renderer was actively drawing a white fill on top.
+      Same inline transparent override as the notifier window — the
+      shared @layer base rule in tokens.css would otherwise repaint the
+      popup background opaque white in light mode.
     -->
     <style>
       html, body {

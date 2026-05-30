@@ -76,23 +76,28 @@ export interface ShellAdapter {
 }
 
 /**
- * A workspace change event. Either the bound directory itself changed
- * (bind/unbind) or a file inside the bound directory changed.
+ * A workspace change event. Always carries the `sessionId` the binding
+ * belongs to so a single renderer subscriber can route events across
+ * multiple chat surfaces. File-change events are NOT broadcast over this
+ * channel — the watcher consumes them in main for fs-scoped tooling but
+ * doesn't fan them out to renderers (they were a no-op at every
+ * subscriber and easy to flood under noisy trees like `node_modules`).
  */
 export type WorkspaceChange =
-  | { kind: "bound"; path: string }
-  | { kind: "unbound" }
-  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
+  | { kind: "bound"; sessionId: string; path: string }
+  | { kind: "unbound"; sessionId: string }
 
 /**
- * Workspace binding — a single chat-session-scoped directory that gives
- * the agent file-system context. Desktop only; the extension surface
- * leaves this undefined.
+ * Workspace binding — per chat session. Each session can pin a different
+ * directory; the agent receives the bound path as a `<workspace>`
+ * context block on every turn for that session.
+ *
+ * Desktop only; the extension surface leaves this undefined.
  */
 export interface WorkspaceAdapter {
-  bind(path: string): Promise<void>
-  unbind(): Promise<void>
-  getCurrent(): Promise<string | null>
+  bind(sessionId: string, path: string): Promise<void>
+  unbind(sessionId: string): Promise<void>
+  getCurrent(sessionId: string): Promise<string | null>
   onChange(cb: (change: WorkspaceChange) => void): () => void
 }
 

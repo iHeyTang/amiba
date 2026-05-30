@@ -67,9 +67,10 @@ export function createMainPlatformAdapter(): PlatformAdapter {
     shell: { openExternal: (url) => shell.openExternal(url) },
 
     workspaces: {
-      bind: (path) => workspaceManager.bind(path),
-      unbind: () => workspaceManager.unbind(),
-      getCurrent: () => Promise.resolve(workspaceManager.getCurrent()),
+      bind: (sessionId, path) => workspaceManager.bind(sessionId, path),
+      unbind: (sessionId) => workspaceManager.unbind(sessionId),
+      getCurrent: (sessionId) =>
+        Promise.resolve(workspaceManager.getForSession(sessionId)),
       onChange: (cb) => workspaceManager.onChange(cb)
     }
   }

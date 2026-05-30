@@ -1,3 +1,4 @@
+import path from "node:path"
 import { globalShortcut, systemPreferences } from "electron"
 
 import { deliverPrompt } from "./external-inbox"
@@ -46,14 +47,21 @@ const DOUBLE_TAP_MAX_MS = 400
 
 /**
  * Snip-region accelerator. Fixed for now (the summon hotkey carries
- * all the customizability budget) and identical across platforms —
- * `CommandOrControl+Shift+Period` is rarely claimed by other apps and
- * mirrors macOS's own ⌘⇧4 muscle memory while staying off the system's
- * built-in shortcut. On non-mac platforms the registered shortcut still
- * fires, but `startScreenCapture` is a no-op there for now (Windows
- * stub) so it's effectively dormant.
+ * all the customizability budget) and identical across platforms.
+ *
+ * NOTE on the key literal: Electron 33's accelerator parser rejects
+ * `"Period"` as a key name on macOS with a conversion-failure throw
+ * (the registration call fails with `Error processing argument at
+ * index 0`). The literal `"."` character is the documented
+ * cross-version-stable form and parses cleanly on every supported
+ * platform. We keep the chord identical to what `Period` would mean
+ * (⌘⇧.) — only the spelling changed.
+ *
+ * On non-mac platforms the shortcut still registers, but
+ * `startScreenCapture` is a no-op there for now (Windows stub) so the
+ * binding is effectively dormant.
  */
-const SNIP_ACCELERATOR = "CommandOrControl+Shift+Period"
+const SNIP_ACCELERATOR = "CommandOrControl+Shift+."
 
 let summonCallback: () => void = () => {}
 let snipSummonCallback: () => void = () => {}
@@ -230,7 +238,18 @@ function applyHotkey(next: SummonHotkey) {
   if (next.kind === "disabled") return
 
   if (next.kind === "accelerator") {
-    const ok = globalShortcut.register(next.accelerator, summonCallback)
+    // Electron 33 throws (rather than returning false) when the
+    // accelerator string can't be parsed. Wrap so an invalid
+    // user-configured chord never wedges the whole hotkey manager.
+    let ok = false
+    try {
+      ok = globalShortcut.register(next.accelerator, summonCallback)
+    } catch (err) {
+      console.warn(
+        `[hermes-x] Accelerator '${next.accelerator}' rejected by Electron:`,
+        (err as Error)?.message,
+      )
+    }
     if (!ok) {
       console.warn(
         `[hermes-x] Failed to register accelerator '${next.accelerator}'. ` +
@@ -251,29 +270,68 @@ function applyHotkey(next: SummonHotkey) {
 }
 
 /**
- * Fire the snip flow: drop the region selector, then hand whatever we
- * captured to the chat composer through the same `pendingPrompt`
- * channel HomeView already watches. We always deliver when we got a
- * result so the image path is at least visible to the user even when
- * OCR came back empty.
+ * Fire the snip flow: drop the region selector, then promote the
+ * captured PNG into the chat composer as a real image attachment (via
+ * the same `pendingPrompt` channel HomeView already watches). We do NOT
+ * extract text from the image locally — the agent's vision tool reads
+ * the PNG on demand using a multimodal model, which is both more
+ * accurate than any on-device OCR and needs zero setup. The composer
+ * stays empty so the user can type their actual question.
+ *
+ * In-flight guard: a stray double-press of ⌘⇧. while the selector
+ * overlay is up would otherwise spawn a second full-screen overlay on
+ * top of the first; we short-circuit until the prior snip resolves.
  */
+let snipInFlight = false
+
 function handleSnipHotkey(): void {
+  if (snipInFlight) return
+  snipInFlight = true
   void (async () => {
     try {
       const result = await startScreenCapture()
       if (!result) return
-      const parts = [`[Screenshot] ${result.imagePath}`]
-      if (result.ocrText) parts.push(result.ocrText)
-      await deliverPrompt(parts.join("\n\n"), snipSummonCallback)
+      const name = path.basename(result.imagePath)
+      await deliverPrompt(
+        {
+          attachments: [
+            {
+              uiId: `snip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              name,
+              mime: "image/png",
+              size: result.sizeBytes,
+              kind: "image",
+              path: result.imagePath,
+              thumbDataUrl: result.thumbDataUrl || undefined,
+            },
+          ],
+          sourceApp: "Screen Snip",
+        },
+        snipSummonCallback,
+      )
     } catch (err) {
       console.error("[hermes-x] snip hotkey failed:", err)
+    } finally {
+      snipInFlight = false
     }
   })()
 }
 
 function registerSnip(): void {
   if (snipRegistered) return
-  const ok = globalShortcut.register(SNIP_ACCELERATOR, handleSnipHotkey)
+  // Same try/catch wrap as the configurable summon accelerator above —
+  // Electron 33 throws on rejected key names instead of returning
+  // false, and an unhandled throw here used to leave the app booting
+  // with no IPC handlers attached.
+  let ok = false
+  try {
+    ok = globalShortcut.register(SNIP_ACCELERATOR, handleSnipHotkey)
+  } catch (err) {
+    console.warn(
+      `[hermes-x] Snip accelerator '${SNIP_ACCELERATOR}' rejected by Electron:`,
+      (err as Error)?.message,
+    )
+  }
   if (!ok) {
     console.warn(
       `[hermes-x] Failed to register snip accelerator '${SNIP_ACCELERATOR}'. ` +

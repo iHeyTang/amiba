@@ -219,7 +219,7 @@ export function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
   }
   return (
     <div
-      className="group inline-flex h-6 max-w-[220px] items-center gap-1 rounded-full border border-border bg-muted/40 pl-0.5 pr-1 text-[11px] text-muted-foreground"
+      className="group inline-flex h-6 max-w-[80px] items-center gap-1 rounded-full border border-border bg-muted/40 pl-0.5 pr-1 text-[11px] text-muted-foreground"
       title={titleLines.join("\n")}
       aria-busy={attachment.uploading || undefined}>
       {attachment.uploading ? (

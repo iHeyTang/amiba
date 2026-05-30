@@ -1,5 +1,4 @@
 import {
-  ArrowUp,
   Bot,
   Brain,
   ChevronDown,
@@ -11,7 +10,6 @@ import {
   History,
   Loader2,
   MousePointerClick,
-  Paperclip,
   Pencil,
   Pin,
   Plus,
@@ -20,18 +18,17 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useT, type TranslateFn } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
-import { Button, HermesLogo, ScrollArea, Textarea } from "@hermes-x/ui";
+import { Button, HermesLogo, ScrollArea } from "@hermes-x/ui";
 import { cn, shortId } from "@hermes-x/utils";
 
 // Wire-protocol types + engine + helpers — everything that was previously
 // imported from extension-local paths now lives in @hermes-x/core.
 import {
-  ATTACHMENT_INPUT_ACCEPT,
   attachmentToBadge,
   classify,
   deleteAttachmentFile,
@@ -40,7 +37,7 @@ import {
   isAttachmentReadOk,
   postHermesApprovalDecision,
   readBlobAsAttachment,
-  readFileAsAttachment,
+  triggerHermesAutoTitle,
   useSessions,
   DEFAULT_HERMES_MODEL,
   HERMES_APPROVAL_GATEWAY_TIMEOUT_MS,
@@ -53,9 +50,13 @@ import {
   type ChatEngineClient,
   type ChatMessage,
   type ChatRuntimeState,
+  type CronRun,
   type HermesApprovalDecision,
   type HermesApprovalRequest,
+  type HermesCronJob,
   type HermesToolProgress,
+  type SessionMessage,
+  type SessionMeta,
   type SnapshotFrame,
   type StreamEvent,
   type StreamedToolCall,
@@ -63,8 +64,10 @@ import {
 
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
-import { AttachmentChip, EmptyState, ErrorBlock, PageChip } from "./bubble/chips";
+import { ErrorBlock, PageChip } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
+import { Composer, type ComposerHandle } from "./Composer";
+import { useComposerAttachments } from "./useComposerAttachments";
 import { SessionDrawer } from "./SessionDrawer";
 import { TabBar } from "./TabBar";
 import {
@@ -74,7 +77,6 @@ import {
   splitThinkingFromBody,
 } from "./internal/helpers";
 import {
-  COMPOSER_TEXTAREA_MAX_PX,
   type AssistantTimelineItem,
   type ChatError,
   type MessagesMaxWidth,
@@ -88,6 +90,7 @@ import type {
   NavigateOpenPolicy,
   PageContextCapability,
   PageContextSnapshot,
+  PendingPromptResult,
   SidePanelCapabilities,
 } from "./internal/capabilities";
 
@@ -250,6 +253,14 @@ export interface SidePanelViewProps {
       policy: NavigateOpenPolicy;
       onChange: (next: NavigateOpenPolicy) => void;
     }) => ReactNode;
+    /**
+     * Rendered when there's no active session. Desktop passes
+     * ``<HomeView panelMode />`` here so the empty state looks and
+     * behaves like the standalone home page. When omitted, the panel
+     * falls back to a built-in greeting + the canonical chat composer
+     * centred in the main area.
+     */
+    emptyState?: ReactNode;
   };
 
   /**
@@ -286,15 +297,65 @@ export default function SidePanelView({
   const sessions = useSessions();
 
   const [input, setInput] = useState("");
+  // Bumped by the pendingPrompt subscription so the drain effect
+  // re-fires on push notifications even when the session id hasn't
+  // changed (e.g. the empty-state home composer submitting into an
+  // already-active empty session).
+  const [pendingPromptTick, setPendingPromptTick] = useState(0);
   // Set when the new-tab Home launcher hands off a prompt via
   // `chrome.storage.local.home.pendingPrompt`. We populate the composer
   // with the text and then auto-fire `send()` once the panel is ready —
   // the user already pressed Enter on Home, so an extra Send click here
   // would be friction.
   const [pendingAutosend, setPendingAutosend] = useState(false);
+  // Origin hint for a hand-off prompt (e.g. "Safari" from Quick-Ask
+  // Spotlight). Rendered as a chip above the composer; cleared once the
+  // user starts typing or sends, so it doesn't follow them around past
+  // the turn it belongs to.
+  const [pendingSourceApp, setPendingSourceApp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Cron run → chat session bridge. The drawer's Scheduled-tasks section
+  // surfaces past cron runs (markdown files, no session backing); the
+  // user expects to click one and land in the chat UI with the run
+  // already in context, then optionally continue chatting against the
+  // same agent. We synthesize a session id from ``cron_{jobId}_{runId}``
+  // so re-clicks are idempotent — ``importSession`` short-circuits to
+  // ``openTab`` when the local index already knows the id.
+  const onOpenCronRun = useCallback(
+    async (job: HermesCronJob, run: CronRun): Promise<void> => {
+      const id = `cron_${job.id}_${run.runId}`;
+      const runStamp = new Date(run.runAtMs).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const meta: SessionMeta = {
+        id,
+        title: `${job.name || job.id} · ${runStamp}`,
+        createdAt: run.runAtMs,
+        updatedAt: run.runAtMs,
+        messageCount: 2,
+        titleManual: true,
+      };
+      // Seed the conversation with the cron prompt as the user turn and
+      // the run's markdown body as the assistant reply. Empty prompts
+      // (e.g. ``no_agent`` jobs) get a placeholder so the message log
+      // still alternates user→assistant cleanly.
+      const messages: SessionMessage[] = [
+        {
+          role: "user",
+          content: (job.prompt || "").trim() || "(scheduled run)",
+        },
+        { role: "assistant", content: run.content || "" },
+      ];
+      await sessions.importSession(meta, messages);
+    },
+    [sessions],
+  );
   const [config, setConfig] = useState({
     model: DEFAULT_HERMES_MODEL,
   });
@@ -327,20 +388,36 @@ export default function SidePanelView({
   const [pinnedPages, setPinnedPages] = useState<PinnedPage[]>([]);
   const [pinning, setPinning] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  // Composer-time uploads — files the user dropped, pasted or picked
-  // before sending the next turn. Like `pinnedPages`, these are
-  // intentionally NOT persisted across panel reloads: the data URLs can
-  // be sizeable and "what's in my composer" is a session-volatile
-  // concept. After send we lift only a lightweight `AttachmentBadge`
-  // onto the user message so the chip survives reloads.
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const attachmentUploading = attachments.some((a) => !!a.uploading);
-  const [attachmentBusy, setAttachmentBusy] = useState(false);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  // Composer-time uploads — owned by the shared `useComposerAttachments`
+  // hook so this surface, HomeView, and the Quick-Ask popup all share
+  // one implementation. The hook owns picker / paste / upload state +
+  // the hidden file-input wiring; the destructuring below keeps the
+  // existing variable names so the rest of the component (queue editor,
+  // session-switch GC, drain effect, …) is untouched.
+  // The whole hook result is passed to Composer via the `attachments`
+  // prop — Composer wires the paperclip / chip row / paste / drop /
+  // hidden file input internally. The destructure below preserves the
+  // local variable names so the rest of the component (queue editor,
+  // session-switch GC, drain effect, …) compiles untouched.
+  const att = useComposerAttachments({
+    getSessionId: () =>
+      sessions.ready ? sessions.ensureActive() : "default",
+  });
+  const {
+    attachments,
+    setAttachments,
+    attachmentUploading,
+    attachmentBusy,
+    setAttachmentBusy,
+    attachmentError,
+    setAttachmentError,
+    addFiles,
+  } = att;
   const [learnRecording, setLearnRecording] = useState(false);
   const [learnEventCount, setLearnEventCount] = useState(0);
   const [learnStopBusy, setLearnStopBusy] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  // `dragOver` + `dropHandlers` are owned by `useComposerAttachments`
+  // — see destructure above. The local state used to live here.
   /**
    * Workspace binding for this surface. `null` when no directory is bound
    * or the platform doesn't expose a WorkspaceAdapter (extension). The chat
@@ -350,9 +427,11 @@ export default function SidePanelView({
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [folderDragOver, setFolderDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  /** Composer textarea: grows with content up to max, then scrolls inside. */
-  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Hidden file-input ref + onChange handler are owned by
+  // `useComposerAttachments` — see `fileInputProps` below.
+  /** Composer instance — exposes focus/select via ComposerHandle.
+   *  Auto-grow is owned by the Composer component itself. */
+  const composerRef = useRef<ComposerHandle | null>(null);
   // Active tab tracking — only meaningful in extension. Capability must
   // provide a stable hook reference; desktop falls back to a no-op default
   // so rules-of-hooks ordering stays consistent across renders.
@@ -475,25 +554,74 @@ export default function SidePanelView({
     };
   }, []);
 
-  // Pick up a prompt handed off from the new-tab Home launcher. The Home
-  // page stores `{ text }` under `home.pendingPrompt` and opens the side
-  // panel; we drain that key here, prefill the composer, and flag the
-  // turn for auto-send once `sessions.ready` resolves. We clear the
-  // storage key immediately so re-mounts (SW restart, panel reopen) don't
-  // resubmit the same prompt.
+  // Pick up a prompt handed off from the new-tab Home launcher or from
+  // an external surface (Quick-Ask Spotlight selection, Region Snip
+  // screenshot, `hermes-x://...` URL, Unix socket inbox). Each surface
+  // writes `{ text?, attachments?, sourceApp? }` into storage and opens
+  // the chat view; we drain that key here, prefill the composer with
+  // whichever fields are populated, and flag the turn for auto-send.
+  // We clear the storage key immediately so re-mounts (SW restart,
+  // panel reopen) don't resubmit the same prompt.
   useEffect(() => {
     let cancelled = false;
     const drain = capabilities.pendingPrompt?.drain;
     if (!drain) return;
-    void drain().then((text) => {
-      if (cancelled || !text || !text.trim()) return;
-      setInput(text);
-      setPendingAutosend(true);
+    // Re-runs whenever the active session id flips. Critical for the
+    // home-composer hand-off: when the user submits from
+    // ``<HomeView panelMode />`` in the empty state, that surface
+    // calls ``sessions.createNew()`` and writes the typed text to
+    // ``home.pendingPrompt``. The new active id propagates here via
+    // storage sync; without this dep, the once-on-mount drain would
+    // miss the freshly-written payload and the message would never
+    // auto-send.
+    void drain().then((raw) => {
+      if (cancelled || raw == null) return;
+      const payload: PendingPromptResult =
+        typeof raw === "string" ? { text: raw } : raw;
+      const text = payload.text?.trim() ?? "";
+      const incoming = payload.attachments ?? [];
+      const promotedAttachments: Attachment[] = incoming.map((a) => ({
+        uiId: a.uiId,
+        name: a.name,
+        mime: a.mime,
+        size: a.size,
+        kind: a.kind,
+        path: a.path,
+        thumbDataUrl: a.thumbDataUrl,
+        textPreview: a.textPreview,
+        // External hand-offs have already settled their bytes on disk —
+        // never mark them as uploading; the composer formatter requires
+        // `path && !uploading` to include them in the next turn.
+      }));
+      if (!text && promotedAttachments.length === 0) return;
+      // Tag the composer with "from <App>" when the snip/quick-ask
+      // hand-off named one. Visually a one-liner above the textarea —
+      // dropped on next composer edit so it doesn't follow the user
+      // around across unrelated turns.
+      if (payload.sourceApp) setPendingSourceApp(payload.sourceApp);
+      if (text) setInput(text);
+      if (promotedAttachments.length > 0) {
+        setAttachments((prev) => [...prev, ...promotedAttachments]);
+      }
+      // Auto-send only when there's actual text to anchor the turn.
+      // Attachment-only hand-offs (a snip with no OCR) need user input
+      // — auto-sending an empty user message is a footgun.
+      if (text) setPendingAutosend(true);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessions.activeId, capabilities.pendingPrompt, pendingPromptTick]);
+
+  // Subscribe to pending-prompt push events so the drain re-fires when
+  // a new payload lands mid-session — covers the case where the
+  // empty-state home composer submits into an already-active session
+  // (activeId doesn't flip, so the activeId-based drain miss it).
+  useEffect(() => {
+    const sub = capabilities.pendingPrompt?.subscribe;
+    if (!sub) return;
+    return sub(() => setPendingPromptTick((t) => t + 1));
+  }, [capabilities.pendingPrompt]);
 
   // `send` is defined later in this component (it depends on many
   // closures); keep a ref so the auto-send effect can fire the latest
@@ -790,6 +918,18 @@ export default function SidePanelView({
     // memory only. Without this, the conversation looks empty when the
     // session is re-opened from another surface.
     void sessions.flushPersist();
+    // Fire-and-forget LLM-generated title via the backplane. The endpoint
+    // short-circuits when the session is already titled or beyond the
+    // first-exchange window, so it's safe to call after every stream end.
+    void triggerHermesAutoTitle(sessionId)
+      .then((res) => {
+        if (res && "ok" in res && res.ok && res.title) {
+          void sessions.applyAutoTitle(sessionId, res.title);
+        }
+      })
+      .catch((e) => {
+        console.warn("[sidepanel] auto-title trigger failed:", e);
+      });
     setBusy(false);
     resolvePendingTurn(sessionId);
   }
@@ -1031,15 +1171,10 @@ export default function SidePanelView({
     client.subscribe(sessions.activeId);
   }, [client, sessions.ready, sessions.activeId]);
 
-  useLayoutEffect(() => {
-    const el = composerTextareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const sh = el.scrollHeight;
-    const next = Math.min(sh, COMPOSER_TEXTAREA_MAX_PX);
-    el.style.height = `${next}px`;
-    el.style.overflowY = sh > COMPOSER_TEXTAREA_MAX_PX ? "auto" : "hidden";
-  }, [input, pendingQueue.length]);
+  // Auto-grow for the textarea now lives inside <Composer />. The
+  // local effect that used to run here was duplicated logic — the
+  // shared component takes care of it on every value/maxTextareaPx
+  // change.
 
   async function refreshLearnStatus() {
     if (!capabilities.learn) return;
@@ -1249,29 +1384,37 @@ export default function SidePanelView({
   }, [showStreamDetails]);
 
   // -------------------------------------------------------------------------
-  // Workspace binding: load the current bound path from the platform adapter
-  // and stay in sync with bind/unbind events. Extension lacks the workspaces
-  // sub-API entirely — the chip/drop overlay stays hidden in that case.
+  // Workspace binding: per-session. Each chat session can pin its own
+  // directory; the chip + drop overlay reflect whichever session is
+  // currently active. We re-read on activeId change so switching
+  // sessions flips the chip to the new session's binding (or hides it
+  // if that session has none). Extension lacks the workspaces sub-API
+  // entirely — the chip/drop overlay stays hidden in that case.
   // -------------------------------------------------------------------------
   useEffect(() => {
     const ws = getPlatform().workspaces;
     if (!ws) return;
+    const activeId = sessions.activeId;
+    if (!activeId) {
+      setWorkspacePath(null);
+      return;
+    }
     let cancelled = false;
-    void ws.getCurrent().then((p) => {
+    void ws.getCurrent(activeId).then((p) => {
       if (!cancelled) setWorkspacePath(p);
     });
     const unsub = ws.onChange((change) => {
+      // Only react to changes for the session this surface is showing —
+      // a bind on session B should not move session A's chip.
+      if (change.sessionId !== activeId) return;
       if (change.kind === "bound") setWorkspacePath(change.path);
       else if (change.kind === "unbound") setWorkspacePath(null);
-      // `file` events don't change the binding itself, so the chip text
-      // stays put. We deliberately don't re-render on every file event —
-      // it would be a busy no-op for this surface.
     });
     return () => {
       cancelled = true;
       unsub();
     };
-  }, []);
+  }, [sessions.activeId]);
 
   /**
    * Resolve a dropped folder's absolute path. Electron 33 removed the
@@ -1331,7 +1474,19 @@ export default function SidePanelView({
       return;
     }
     try {
-      await ws.bind(chosen);
+      // Bindings are session-scoped: ensure an active session exists so a
+      // drop on a brand-new app launch (no chat yet) still pins to a real
+      // session id rather than failing silently.
+      const sessionId = sessions.ready
+        ? await sessions.ensureActive()
+        : null;
+      if (!sessionId) {
+        setWorkspaceError(
+          "Open or start a chat session before binding a workspace.",
+        );
+        return;
+      }
+      await ws.bind(sessionId, chosen);
       setWorkspaceError(null);
     } catch (e) {
       setWorkspaceError(String((e as Error)?.message || e));
@@ -1396,13 +1551,14 @@ export default function SidePanelView({
         for (const a of attachments) void deleteAttachmentFile(a);
         setAttachments([]);
         setAttachmentError(null);
+        // The "from <App>" source hint belongs to the hand-off prompt
+        // for THIS session; dropping it on switch keeps it from
+        // bleeding into an unrelated chat.
+        setPendingSourceApp(null);
+        setWorkspaceError(null);
       }
     }
   }, [sessions.activeId]);
-
-  const composerHasSendablePayload =
-    !!input.trim() ||
-    attachments.some((a) => a.path && !a.uploading);
 
   async function runChatTurn(args: {
     text: string;
@@ -1641,6 +1797,9 @@ export default function SidePanelView({
     const attachedPagesForSend = pinnedPages.map((p) => ({ ...p }));
     setPinnedPages([]);
     setAttachmentError(null);
+    // The "from <App>" chip belongs to a single hand-off turn — clear
+    // it on send so it doesn't trail the user into their next prompt.
+    setPendingSourceApp(null);
 
     // Not busy. If the queue was paused (i.e., user hit Stop and left items
     // queued), unpause first so the runChatTurn's finally-drain fires the
@@ -2122,135 +2281,144 @@ export default function SidePanelView({
     }
   }
 
-  /**
-   * Read a batch of files into composer-time `Attachment`s. Used by the
-   * file picker, drag-and-drop, and clipboard-paste paths so they share
-   * one error-handling pipeline. Errors are concatenated into a single
-   * banner string so the user sees one chip-row of bad files instead of
-   * a stack of disposable toasts.
-   *
-   * We materialise the active session id up-front (so Python can group
-   * uploads under that id) — adding files implicitly creates a session
-   * the same way clicking Send does. Anything unsupported on the agent
-   * side is still accepted: identifying / parsing the file is the
-   * agent's job, not the picker's.
-   */
-  async function addFiles(files: File[]) {
-    if (files.length === 0) return;
-    setAttachmentBusy(true);
-    setAttachmentError(null);
-    const pendingUiIds: string[] = [];
-    try {
-      const sessionId = sessions.ready
-        ? await sessions.ensureActive()
-        : "default";
-      const errors: string[] = [];
-      const pending: Attachment[] = files.map((f) => ({
-        uiId: shortId("att"),
-        name: f.name || "file",
-        mime: f.type || "",
-        size: f.size,
-        kind: classify(f.name || "file", (f.type || "").toLowerCase()),
-        uploading: true,
-      }));
-      pendingUiIds.push(...pending.map((p) => p.uiId));
-      setAttachments((prev) => [...prev, ...pending]);
-      for (let i = 0; i < files.length; i += 1) {
-        const f = files[i];
-        const uiId = pending[i].uiId;
-        const r = await readFileAsAttachment(f, { sessionId, uiId });
-        if (isAttachmentReadOk(r)) {
-          setAttachments((prev) => {
-            if (!prev.some((a) => a.uiId === uiId)) {
-              if (r.attachment.path) void deleteAttachmentFile(r.attachment.path);
-              return prev;
-            }
-            return prev.map((a) => (a.uiId === uiId ? r.attachment : a));
-          });
-        } else {
-          errors.push(`${r.name}: ${r.error}`);
-          setAttachments((prev) => prev.filter((a) => a.uiId !== uiId));
-        }
-      }
-      if (errors.length > 0) {
-        setAttachmentError(errors.join("\n"));
-      }
-    } catch (e) {
-      const msg = String((e as Error)?.message || e);
-      setAttachmentError(`Attachment processing error: ${msg}`);
-      setAttachments((prev) => prev.filter((a) => !pendingUiIds.includes(a.uiId)));
-    } finally {
-      setAttachmentBusy(false);
-    }
-  }
-
-  function removeAttachment(uiId: string) {
-    setAttachments((prev) => {
-      const target = prev.find((a) => a.uiId === uiId);
-      if (target?.path) {
-        // Best-effort delete of the on-disk file — fire-and-forget so
-        // the chip drops instantly without waiting on the bridge.
-        void deleteAttachmentFile(target);
-      }
-      return prev.filter((a) => a.uiId !== uiId);
-    });
-  }
-
-  /**
-   * Open a multi-select file picker. Prefer `showOpenFilePicker({ multiple })`
-   * so Chromium shows a native multi-file dialog; fall back to a hidden
-   * `<input type="file" multiple>` when the API is missing or errors
-   * (e.g. some extension contexts). Re-set `value=""` on the fallback
-   * input so picking the same file twice still fires `onChange`.
-   */
-  async function openFilePicker() {
-    const w = window as Window & {
-      showOpenFilePicker?: (opts?: {
-        multiple?: boolean;
-      }) => Promise<FileSystemFileHandle[]>;
-    };
-    if (typeof w.showOpenFilePicker === "function") {
-      try {
-        const handles = await w.showOpenFilePicker({ multiple: true });
-        if (handles.length === 0) return;
-        const files = await Promise.all(handles.map((h) => h.getFile()));
-        if (files.length > 0) void addFiles(files);
-        return;
-      } catch (e) {
-        if ((e as DOMException)?.name === "AbortError") return;
-        console.warn("[sidepanel] showOpenFilePicker failed, using fallback:", e);
-      }
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-      fileInputRef.current.click();
-    }
-  }
-
-  /**
-   * Capture pasted images from the clipboard so users can Cmd+V a
-   * screenshot straight into the composer. We deliberately don't
-   * preventDefault on paste events that contain only text — that would
-   * break the normal text-paste behaviour of the textarea.
-   */
-  async function handleComposerPaste(e: React.ClipboardEvent) {
-    const items = e.clipboardData?.items;
-    if (!items || items.length === 0) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i += 1) {
-      const it = items[i];
-      if (it.kind === "file") {
-        const f = it.getAsFile();
-        if (f) files.push(f);
-      }
-    }
-    if (files.length === 0) return;
-    e.preventDefault();
-    await addFiles(files);
-  }
+  // `addFiles`, `removeAttachment`, `openFilePicker`, `handleComposerPaste`
+  // all live in `useComposerAttachments` — destructured up-top. The
+  // shared hook is the single source of truth for attachment ingestion
+  // across SidePanelView, HomeView, and the Quick-Ask popup; touching
+  // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
   const hasActive = !!sessions.activeId;
+
+  // Composer JSX captured once so we can mount it either in the bottom
+  // footer (active chat) or in the centred empty state (no session yet).
+  // React reconciles by position, so swapping branches remounts the
+  // Composer — its input value lives in `input` (parent state) so the
+  // user doesn't lose what they were typing across the transition.
+  const composerNode = (
+    <Composer
+      ref={composerRef}
+      value={input}
+      onChange={setInput}
+      onSubmit={() => void send()}
+      busy={busy}
+      onAbort={stop}
+      canSubmit={
+        (input.trim().length > 0 ||
+          attachments.some((a) => a.path && !a.uploading)) &&
+        !attachmentUploading &&
+        !attachmentBusy
+      }
+      busyQueueable
+      quickActions={false}
+      flatTop={pendingQueue.length > 0 || pendingApprovals.length > 0}
+      placeholder={
+        attachmentUploading
+          ? t("sidepanel.placeholder.uploading")
+          : attachments.length > 0
+            ? t("sidepanel.placeholder.withAttachments")
+            : pinnedPages.length > 0
+              ? t("sidepanel.placeholder.withPinned")
+              : t("sidepanel.placeholder")
+      }
+      sendTitle={t("sidepanel.send.tooltip")}
+      sendQueueTitle={t("sidepanel.queue.tooltip")}
+      stopTitle={t("sidepanel.stop")}
+      kbdHints={[
+        { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
+        { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
+      ]}
+      topAffordance={
+        editingQueueId != null ? (
+          <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
+            <Pencil className="h-2.5 w-2.5" />
+            <span>{t("sidepanel.queue.edit.aria")}</span>
+            <button
+              type="button"
+              onClick={cancelQueueEdit}
+              title={t("sidepanel.composer.cancelEdit")}
+              className="rounded p-0.5 transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={t("sidepanel.composer.cancelEdit.aria")}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        ) : undefined
+      }
+      attachments={att}
+      chipRow={
+        pinnedPages.length > 0 ? (
+          <>
+            {pinnedPages.map((p) => (
+              <PageChip
+                key={p.uiId}
+                title={p.title}
+                url={p.url}
+                favIconUrl={(p as { favicon?: string }).favicon}
+                onRemove={() => dismissPageChip({ uiId: p.uiId })}
+              />
+            ))}
+          </>
+        ) : undefined
+      }
+      actionsLeft={
+        hasActive ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void toggleCurrentPagePin()}
+              disabled={pinDisabled}
+              aria-pressed={isCurrentPagePinned}
+              aria-label={
+                isCurrentPagePinned
+                  ? t("sidepanel.pin.unpinAria")
+                  : t("sidepanel.pin.pinAria")
+              }
+              title={
+                pageRestrictedReason && !isCurrentPagePinned
+                  ? pageRestrictedReason
+                  : isCurrentPagePinned
+                    ? t("sidepanel.pin.unpinTooltip")
+                    : t("sidepanel.pin.pinTooltip")
+              }
+              className={cn(
+                "inline-flex h-6 cursor-pointer select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                isCurrentPagePinned
+                  ? "border-foreground/20 bg-foreground/10 text-foreground hover:bg-foreground/15"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                pinDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+              )}
+            >
+              <Pin
+                className="h-3 w-3"
+                fill={isCurrentPagePinned ? "currentColor" : "none"}
+              />
+              <span>{t("sidepanel.pin")}</span>
+            </button>
+            {slots?.navigateOpenPolicyToggle?.({
+              policy: navigateOpenPolicy,
+              onChange: (next) => void handleNavigateOpenPolicyChange(next),
+            })}
+            <button
+              type="button"
+              onClick={() => setShowStreamDetails((v) => !v)}
+              aria-pressed={showStreamDetails}
+              title={t("sidepanel.streamDetails.tooltip")}
+              className={cn(
+                "inline-flex h-6 cursor-pointer select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                showStreamDetails
+                  ? "border-foreground/20 bg-foreground/10 text-foreground hover:bg-foreground/15"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              )}
+            >
+              <Brain className="h-3 w-3" />
+              <span>{t("sidepanel.streamDetails")}</span>
+            </button>
+          </>
+        ) : undefined
+      }
+    />
+  );
 
   return (
     <div
@@ -2322,49 +2490,57 @@ export default function SidePanelView({
           if (files.length > 0) void handleFolderDrop(files);
         }}
       >
-        {hasActive && messages.length === 0 ? (
-          // Borderless empty-conversation hint, anchored to a stable
-          // viewport-relative offset rather than `justify-center`. The
-          // chat area is `flex-1`, so centring against it would cause
-          // the content to creep upward whenever the composer grew
-          // (chip row, error banners, …) — the chat area shrinks to
-          // compensate, and `justify-center` follows the new midpoint.
-          // The chat area's TOP edge is stable (it sits right under the
-          // TabBar), so `absolute top-[40vh] -translate-y-1/2` pins the
-          // hint at a fixed point regardless of footer height. We skip
-          // the ScrollArea entirely here because there is nothing to
-          // scroll; companion blocks (api-key warning, first-request
-          // error) stack in the same centred column so the layout stays
-          // cohesive.
-          <div className="absolute inset-x-0 top-[40vh] flex -translate-y-1/2 flex-col items-center gap-3 px-6 text-center text-xs text-muted-foreground">
-            <HermesLogo size={72} />
-            <p className="max-w-[28ch] leading-relaxed">
-              Ask Hermes anything. Messages stay on this device; history
-              persists in extension storage.
-            </p>
-            {error && (
-              <ErrorBlock
-                error={error}
-                onOpenSettings={() => openSettings()}
-              />
-            )}
-          </div>
+        {!hasActive || messages.length === 0 ? (
+          slots?.emptyState ? (
+            // Host-provided empty state (desktop hands in
+            // ``<HomeView panelMode />`` so the home composer surface
+            // becomes the "no chat selected" view verbatim). Rendered
+            // in both the "no session" case AND the "session exists
+            // but no messages yet" case — the user gets the same
+            // home-style composer regardless of whether they clicked
+            // "new chat" first or just landed on the empty surface.
+            // The slot owns its own layout; we just hand it a sized
+            // parent.
+            <div className="absolute inset-0">{slots.emptyState}</div>
+          ) : (
+            // Built-in fallback: home-style centred composer with a
+            // greeting above, reusing the chat ``composerNode`` so
+            // submission creates a session via ``ensureActive`` and
+            // the conversation continues seamlessly.
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
+              <div className="space-y-1 text-center">
+                <HermesLogo size={56} />
+                <p className="pt-2 text-sm font-semibold">
+                  {t("newtab.greeting")}
+                </p>
+                <p className="max-w-[40ch] text-xs text-muted-foreground">
+                  {t("newtab.subtitle")}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "w-full",
+                  variant === "fullscreen" ? "max-w-2xl" : "max-w-md",
+                )}
+              >
+                {composerNode}
+              </div>
+              {error && (
+                <ErrorBlock
+                  error={error}
+                  onOpenSettings={() => openSettings()}
+                />
+              )}
+            </div>
+          )
         ) : (
           <ScrollArea className="h-full min-w-0">
             <div className="min-w-0 space-y-2 p-3">
-              {!hasActive ? (
-                <EmptyState
-                  onNew={() => void newChat()}
-                  onOpenHistory={() => setHistoryOpen(true)}
-                  hasHistory={sessions.sessions.length > 0}
-                />
-              ) : (
-                <MessageTurns
-                  messages={messages}
-                  showStreamDetails={showStreamDetails}
-                  onOpenAgentDestination={openAgentDestination}
-                />
-              )}
+              <MessageTurns
+                messages={messages}
+                showStreamDetails={showStreamDetails}
+                onOpenAgentDestination={openAgentDestination}
+              />
 
               {error && (
                 <ErrorBlock
@@ -2385,6 +2561,15 @@ export default function SidePanelView({
         )}
       </div>
 
+      {/*
+        Footer is skipped whenever the empty-state surface is showing
+        (no session, or session with no messages yet) — the composer
+        in that mode renders centred inside the empty-state block
+        above, and the chat-only extras (errors, workspace chips,
+        queue list, approvals) are irrelevant until the first turn
+        lands.
+      */}
+      {hasActive && messages.length > 0 && (
       <footer
         className={cn(
           "p-2",
@@ -2399,7 +2584,7 @@ export default function SidePanelView({
           `bridgeBar` slot. Desktop omits and the row is hidden.
         */}
         {slots?.bridgeBar}
-        {(pageError || attachmentError) && (
+        {(pageError || attachmentError || workspaceError) && (
           <div className="mb-1 flex flex-col gap-1">
             {pageError && (
               <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
@@ -2424,6 +2609,62 @@ export default function SidePanelView({
                   <X className="h-3 w-3" />
                 </button>
               </div>
+            )}
+            {workspaceError && (
+              <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+                <span className="min-w-0 flex-1 break-words">{workspaceError}</span>
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceError(null)}
+                  className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
+                  aria-label="Dismiss">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {(workspacePath || pendingSourceApp) && (
+          <div className="mb-1 flex flex-wrap items-center gap-1">
+            {workspacePath && (
+              <span
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
+                title={`Bound workspace for this session: ${workspacePath}`}>
+                <FolderOpen className="h-3 w-3 shrink-0" />
+                <span className="min-w-0 truncate" dir="rtl">
+                  {workspacePath}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ws = getPlatform().workspaces;
+                    if (!ws) return;
+                    const sid = sessions.activeId;
+                    if (!sid) return;
+                    void ws.unbind(sid).catch((e) => {
+                      setWorkspaceError(String((e as Error)?.message || e));
+                    });
+                  }}
+                  className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Unbind workspace">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {pendingSourceApp && (
+              <span
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
+                title={`Selection captured from ${pendingSourceApp}`}>
+                <span className="text-muted-foreground">from</span>
+                <span className="min-w-0 truncate">{pendingSourceApp}</span>
+                <button
+                  type="button"
+                  onClick={() => setPendingSourceApp(null)}
+                  className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Dismiss source hint">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
             )}
           </div>
         )}
@@ -2460,54 +2701,18 @@ export default function SidePanelView({
             )}
           </div>
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple={true}
-          accept={ATTACHMENT_INPUT_ACCEPT}
-          className="hidden"
-          onChange={(e) => {
-            const list = e.target.files;
-            if (!list || list.length === 0) return;
-            const files = Array.from(list);
-            void addFiles(files);
-          }}
-        />
         {/*
           Cursor-style composer: optional queued turns render in a slim strip
           *above* the bordered box (popup stack). The textarea + action row
           stay inside the rounded frame; focus-within still targets that box.
+          The hidden file input + drop handlers + drop overlay live INSIDE
+          Composer (via `attachments={att}`) — no need to render them here.
         */}
         <div
           className={cn(
             "relative flex w-full flex-col",
-            dragOver && "rounded-lg ring-2 ring-primary/30",
+            att.dragOver && "rounded-lg ring-2 ring-primary/30",
           )}
-          onDragOver={(e) => {
-            if (
-              e.dataTransfer &&
-              Array.from(e.dataTransfer.types || []).includes("Files")
-            ) {
-              e.preventDefault();
-              if (!dragOver) setDragOver(true);
-            }
-          }}
-          onDragLeave={(e) => {
-            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-            setDragOver(false);
-          }}
-          onDrop={(e) => {
-            if (
-              !e.dataTransfer ||
-              !Array.from(e.dataTransfer.types || []).includes("Files")
-            ) {
-              return;
-            }
-            e.preventDefault();
-            setDragOver(false);
-            const files = Array.from(e.dataTransfer.files || []);
-            if (files.length > 0) void addFiles(files);
-          }}
         >
           {pendingApprovals.length > 0 && (
             <ApprovalBanner
@@ -2522,7 +2727,7 @@ export default function SidePanelView({
             <div
               className={cn(
                 "relative z-[1] overflow-hidden rounded-t-lg border border-input border-b-0 bg-muted/50 shadow-[0_-2px_10px_-2px_rgba(0,0,0,0.12)] dark:bg-muted/35 dark:shadow-[0_-2px_14px_-2px_rgba(0,0,0,0.45)]",
-                dragOver && "border-primary/50",
+                att.dragOver && "border-primary/50",
               )}
             >
               <ul className="max-h-[7rem] divide-y divide-border/60 overflow-y-auto">
@@ -2589,227 +2794,12 @@ export default function SidePanelView({
               </ul>
             </div>
           )}
-        <div
-          className={cn(
-            "relative flex flex-col rounded-lg border border-input bg-background shadow-sm transition-colors focus-within:border-ring/60",
-            (pendingQueue.length > 0 || pendingApprovals.length > 0) &&
-              "rounded-t-none",
-          )}
-        >
-          {editingQueueId != null && (
-            // Minimal inline hint — just enough to remember the composer
-            // is bound to a queue item. Tooltip carries the longer
-            // explanation; cancel button is the small ✕.
-            <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
-              <Pencil className="h-2.5 w-2.5" />
-              <span>{t("sidepanel.queue.edit.aria")}</span>
-              <button
-                type="button"
-                onClick={cancelQueueEdit}
-                title={t("sidepanel.composer.cancelEdit")}
-                className="rounded p-0.5 transition-colors hover:bg-muted hover:text-foreground"
-                aria-label={t("sidepanel.composer.cancelEdit.aria")}
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </div>
-          )}
-          {(() => {
-            // The live current chip is suppressed when:
-            // The pending-page list is now strictly opt-in (click Pin to add
-            // a one-shot snapshot of the current tab). No more "live current
-            // tab" chip — the agent reads the user's tab on demand via
-            // my_browser_active_tab.
-            const anyChips =
-              pinnedPages.length > 0 || attachments.length > 0;
-            if (!anyChips) return null;
-            return (
-              <div className="flex flex-wrap items-center gap-1 border-b border-border/50 px-2 py-1.5">
-                {pinnedPages.map((p) => (
-                  <PageChip
-                    key={p.uiId}
-                    title={p.title}
-                    url={p.url}
-                    favIconUrl={(p as { favicon?: string }).favicon}
-                    onRemove={() => dismissPageChip({ uiId: p.uiId })}
-                  />
-                ))}
-                {attachments.map((a) => (
-                  <AttachmentChip
-                    key={a.uiId}
-                    attachment={a}
-                    onRemove={() => removeAttachment(a.uiId)}
-                  />
-                ))}
-              </div>
-            );
-          })()}
-          <Textarea
-            ref={composerTextareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              attachmentUploading
-                ? t("sidepanel.placeholder.uploading")
-                : attachments.length > 0
-                  ? t("sidepanel.placeholder.withAttachments")
-                  : pinnedPages.length > 0
-                    ? t("sidepanel.placeholder.withPinned")
-                    : t("sidepanel.placeholder")
-            }
-            rows={2}
-            style={{ maxHeight: COMPOSER_TEXTAREA_MAX_PX }}
-            className="min-h-9 resize-none overflow-hidden border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            onPaste={handleComposerPaste}
-            onKeyDown={(e) => {
-              // Ignore Enter while an IME (e.g. Chinese) is composing — the
-              // user may press Enter to commit Latin/pinyin, not to send.
-              const ne = e.nativeEvent;
-              if (ne.isComposing || e.key === "Process") {
-                return;
-              }
-              if (
-                (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ||
-                (e.key === "Enter" && !e.shiftKey && !e.altKey)
-              ) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-          />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => void openFilePicker()}
-                disabled={attachmentBusy || attachmentUploading}
-                title={t("sidepanel.attach.tooltip")}
-                aria-label={t("sidepanel.attach")}
-                className={cn(
-                  "inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  (attachmentBusy || attachmentUploading) &&
-                    "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground",
-                )}
-              >
-                <Paperclip className="h-3 w-3" />
-              </button>
-              {/*
-                Pin: attach the user's current tab as a one-shot snapshot for
-                the next message. Cleared after send (the agent reads live
-                pages on demand via `my_browser_active_tab` / `read_tab`).
-                Re-clicking before send toggles the pin off.
-              */}
-              <button
-                type="button"
-                onClick={() => void toggleCurrentPagePin()}
-                disabled={pinDisabled}
-                aria-pressed={isCurrentPagePinned}
-                aria-label={
-                  isCurrentPagePinned
-                    ? t("sidepanel.pin.unpinAria")
-                    : t("sidepanel.pin.pinAria")
-                }
-                title={
-                  pageRestrictedReason && !isCurrentPagePinned
-                    ? pageRestrictedReason
-                    : isCurrentPagePinned
-                      ? t("sidepanel.pin.unpinTooltip")
-                      : t("sidepanel.pin.pinTooltip")
-                }
-                className={cn(
-                  "inline-flex h-6 cursor-pointer select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  isCurrentPagePinned
-                    // Lightweight "active" state: a translucent foreground
-                    // wash instead of the loud primary fill. Reads clearly
-                    // as selected without dominating the toolbar.
-                    ? "border-foreground/20 bg-foreground/10 text-foreground hover:bg-foreground/15"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  pinDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                )}
-              >
-                <Pin
-                  className="h-3 w-3"
-                  fill={isCurrentPagePinned ? "currentColor" : "none"}
-                />
-                <span>{t("sidepanel.pin")}</span>
-              </button>
-              {slots?.navigateOpenPolicyToggle?.({
-                policy: navigateOpenPolicy,
-                onChange: (next) => void handleNavigateOpenPolicyChange(next),
-              })}
-              <button
-                type="button"
-                onClick={() => setShowStreamDetails((v) => !v)}
-                aria-pressed={showStreamDetails}
-                title={t("sidepanel.streamDetails.tooltip")}
-                className={cn(
-                  // Mirror Pin's pattern (and its lightweight active
-                  // styling): outlined when off, translucent foreground
-                  // wash when on. The earlier loud primary fill was too
-                  // shouty for a composer-level toggle.
-                  "inline-flex h-6 cursor-pointer select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  showStreamDetails
-                    ? "border-foreground/20 bg-foreground/10 text-foreground hover:bg-foreground/15"
-                    : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                <Brain className="h-3 w-3" />
-                <span>{t("sidepanel.streamDetails")}</span>
-              </button>
-              </div>
-            </div>
-            {busy ? (
-              composerHasSendablePayload ? (
-                <Button
-                  size="icon"
-                  onClick={() => void send()}
-                  disabled={attachmentUploading || attachmentBusy}
-                  title={t("sidepanel.queue.tooltip")}
-                  className="h-6 w-6 shrink-0 rounded-full [&_svg]:size-3"
-                >
-                  <ArrowUp strokeWidth={3} />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="icon"
-                  onClick={stop}
-                  title={t("sidepanel.stop")}
-                  aria-label={t("sidepanel.stop")}
-                  className="h-6 w-6 shrink-0 rounded-full"
-                >
-                  <span
-                    aria-hidden
-                    className="block h-2 w-2 rounded-[1.5px] bg-current"
-                  />
-                </Button>
-              )
-            ) : (
-              <Button
-                size="icon"
-                onClick={() => void send()}
-                disabled={
-                  (!input.trim() &&
-                    !attachments.some((a) => a.path && !a.uploading)) ||
-                  attachmentUploading ||
-                  attachmentBusy
-                }
-                title={t("sidepanel.send.tooltip")}
-                className="h-6 w-6 shrink-0 rounded-full [&_svg]:size-3"
-              >
-                <ArrowUp strokeWidth={3} />
-              </Button>
-            )}
-          </div>
-        </div>
-        {dragOver && (
-          <div className="pointer-events-none absolute inset-0 z-[8] flex items-center justify-center rounded-lg bg-primary/5 text-[12px] font-medium text-primary">
-            Drop files to attach
-          </div>
-        )}
+        {composerNode}
+        {/* Drop overlay is rendered by Composer (via attachments
+            prop) — no need to duplicate it here. */}
         </div>
       </footer>
+      )}
 
       <SessionDrawer
         open={historyOpen}
@@ -2820,6 +2810,7 @@ export default function SidePanelView({
         onOpen={(id) => void sessions.openTab(id)}
         onRename={(id, title) => void sessions.rename(id, title)}
         onDelete={(id) => void sessions.remove(id)}
+        onOpenCronRun={onOpenCronRun}
       />
     </div>
   );

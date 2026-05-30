@@ -14,9 +14,8 @@ type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
 
 type WorkspaceChange =
-  | { kind: "bound"; path: string }
-  | { kind: "unbound" }
-  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
+  | { kind: "bound"; sessionId: string; path: string }
+  | { kind: "unbound"; sessionId: string }
 
 interface HermesJobLogMsg {
   jobId: string
@@ -53,9 +52,9 @@ interface HermesBridgeApi {
     openExternal(url: string): Promise<void>
   }
   workspaces: {
-    bind(path: string): Promise<void>
-    unbind(): Promise<void>
-    getCurrent(): Promise<string | null>
+    bind(sessionId: string, path: string): Promise<void>
+    unbind(sessionId: string): Promise<void>
+    getCurrent(sessionId: string): Promise<string | null>
     onChanged(cb: (change: WorkspaceChange) => void): () => void
     getPathForFile(file: File): string
   }
@@ -64,6 +63,14 @@ interface HermesBridgeApi {
     activateMain(): Promise<void>
     approve(approvalId: string): Promise<void>
     deny(approvalId: string): Promise<void>
+    demo(kind?: "cron-completed" | "approval-pending"): Promise<void>
+  }
+  quickAsk: {
+    onPrefill(
+      cb: (payload: { text: string; sourceApp: string }) => void,
+    ): () => void
+    dismiss(): Promise<void>
+    resize(contentHeightPx: number): Promise<void>
   }
   hermesRuntime: {
     detect(): Promise<HermesDetectionResult>

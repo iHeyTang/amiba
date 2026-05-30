@@ -133,15 +133,15 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
       const runningTool = toolProgress.find((e) => e.status === "running")
       const hasFinishedTool = toolProgress.some((e) => e.status === "completed")
       const placeholder = runningTool
-        ? `Running ${runningTool.label || runningTool.tool}…`
+        ? `Running ${runningTool.tool}…`
         : hasFinishedTool
           ? "Generating answer…"
           : "Thinking…"
       return (
         <div className="px-1 py-1 text-sm" aria-live="polite">
-          <div className="inline-flex items-center gap-2 text-muted-foreground">
-            <span className="hermes-thinking-dot" aria-hidden="true" />
-            <span>{placeholder}</span>
+          <div className="inline-flex max-w-full items-center gap-2 text-muted-foreground">
+            <span className="hermes-thinking-dot shrink-0" aria-hidden="true" />
+            <span className="truncate">{placeholder}</span>
           </div>
         </div>
       )

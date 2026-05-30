@@ -113,9 +113,59 @@ export interface NavigateOpenPolicyCapability {
 // pending prompt
 // ---------------------------------------------------------------------------
 
+/**
+ * Lightweight attachment descriptor for a queued hand-off. Mirrors the
+ * core `FileAttachment` shape closely enough that the side panel can
+ * promote one straight into the live composer attachment list, but
+ * without the heavy `File` reference or `uploading` flag — anything
+ * that's parked in storage is already settled.
+ */
+export interface PendingPromptAttachment {
+  uiId: string
+  name: string
+  mime: string
+  size: number
+  kind: "image" | "text" | "pdf" | "binary"
+  /** Absolute path to a file the agent can read from. */
+  path: string
+  thumbDataUrl?: string
+  textPreview?: string
+}
+
+export interface PendingPromptResult {
+  /** Prefill text for the composer. Optional — a snip-only hand-off has none. */
+  text?: string
+  /** Attachments to pre-populate alongside the text. */
+  attachments?: PendingPromptAttachment[]
+  /**
+   * Human-readable origin hint (e.g. "Safari", "VS Code") shown in the
+   * composer header. Only set by Quick-Ask Spotlight on macOS today.
+   */
+  sourceApp?: string
+}
+
 export interface PendingPromptCapability {
-  /** Drain a queued home-launcher prompt, if any, and return it for autosend. */
-  drain(): Promise<string | null>
+  /**
+   * Drain a queued home-launcher / external-inbox prompt and return its
+   * payload for autosend.
+   *
+   * Returning a plain string is still supported for backward-compat with
+   * older surfaces that haven't migrated; callers should treat that as
+   * `{ text }` with no attachments.
+   */
+  drain(): Promise<PendingPromptResult | string | null>
+  /**
+   * Optional subscription so the chat surface can re-drain when a NEW
+   * payload lands while it's already mounted. Without this the
+   * once-on-mount + once-per-activeId drain misses the case where the
+   * embedded ``<HomeView panelMode />`` empty-state composer submits
+   * into an already-active empty session — activeId doesn't flip, so
+   * the autosend wouldn't fire.
+   *
+   * Returns an unsubscribe callback. Hosts that don't implement push
+   * notifications can simply omit this.
+   */
+  subscribe?(onChanged: () => void): () => void
 }
 
 // ---------------------------------------------------------------------------

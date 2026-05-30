@@ -32,7 +32,9 @@ import {
   saveIndex,
   saveMessages,
   saveOpenTabIds,
+  SOURCE_BROWSER_EXTENSION,
 } from "./store";
+import { appendHermesMessage, createHermesSession } from "../hermes-sessions";
 import { SESSION_KEYS, type SessionMessage, type SessionMeta } from "../sessions";
 
 export interface SessionsController {
@@ -85,6 +87,17 @@ export interface SessionsController {
   /** Create a fresh session, open it as a tab, and activate it. */
   createNew: () => Promise<string>;
 
+  /**
+   * Bring an externally-shaped session into the panel: insert ``meta``
+   * into the index (if absent), seed its message log in Hermes
+   * SessionDB, then open it as a tab. Idempotent — if a session with
+   * the same id is already known locally, falls back to ``openTab``
+   * without re-appending the seed messages. Used by surfaces that
+   * synthesise a chat from a non-chat artefact (e.g. a cron-run reader
+   * row → a read-only conversation the user can continue from).
+   */
+  importSession: (meta: SessionMeta, messages: SessionMessage[]) => Promise<void>;
+
   rename: (id: string, title: string) => Promise<void>;
 
   /**
@@ -101,6 +114,14 @@ export interface SessionsController {
    * current messages.
    */
   touchSession: (id: string, messages: SessionMessage[]) => Promise<void>;
+
+  /**
+   * Apply a backend-generated auto-title to a session. No-op when the
+   * session already has a non-empty title (auto or manual) — the backend
+   * is the source of truth on collision, so we trust the user-set value
+   * over a fresh LLM run.
+   */
+  applyAutoTitle: (id: string, title: string) => Promise<void>;
 
   /**
    * Immediately persist the active session's messages, skipping the
@@ -185,7 +206,18 @@ export function useSessions(): SessionsController {
         await saveOpenTabIds(tabs);
       }
 
-      const effectiveActive = tabs.includes(aid) ? aid : tabs[0] ?? "";
+      // Startup intentionally lands on the home / empty-state surface
+      // instead of auto-restoring the last active session. Two reasons:
+      //   1. The chat surface uses the home composer as its "no session
+      //      selected" view; auto-selecting a session at boot would
+      //      hide the home view from the user every time they relaunch.
+      //   2. Previously we fell back to ``tabs[0]`` whenever the
+      //      persisted activeId was missing, which forced the
+      //      first-opened tab into focus and confused users who'd
+      //      explicitly closed/cleared their selection before quitting.
+      // Open tabs themselves are still restored (the rail still shows
+      // them) — the user clicks one to activate it.
+      const effectiveActive = "";
       if (effectiveActive !== aid) {
         markSelfWriteActiveId(effectiveActive);
         await saveActiveId(effectiveActive);
@@ -206,14 +238,31 @@ export function useSessions(): SessionsController {
   }, []);
 
   // Persist the index whenever it changes (cheap; only metadata).
+  // Track the last serialised payload so cross-instance storage
+  // broadcasts — which always arrive as fresh references — don't
+  // trigger redundant write-back IPC calls. Without this guard,
+  // ``setSessions`` from the storage listener immediately fires this
+  // effect, which fires another storage write, which fires another
+  // broadcast: a self-sustaining loop that costs an IPC round-trip
+  // and a React re-render per iteration even when the content is
+  // identical.
+  const lastPersistedIndexRef = useRef<string>("");
   useEffect(() => {
     if (!ready) return;
+    const snapshot = JSON.stringify(sessions);
+    if (snapshot === lastPersistedIndexRef.current) return;
+    lastPersistedIndexRef.current = snapshot;
     void saveIndex(sessions);
   }, [sessions, ready]);
 
-  // Persist openTabIds independently (also cheap).
+  // Persist openTabIds independently (also cheap). Same content-dedupe
+  // guard as the sessions index above, for the same reason.
+  const lastPersistedTabsRef = useRef<string>("");
   useEffect(() => {
     if (!ready) return;
+    const snapshot = JSON.stringify(openTabIds);
+    if (snapshot === lastPersistedTabsRef.current) return;
+    lastPersistedTabsRef.current = snapshot;
     void saveOpenTabIds(openTabIds);
   }, [openTabIds, ready]);
 
@@ -465,6 +514,45 @@ export function useSessions(): SessionsController {
     return meta.id;
   }, [flushCurrentMessages]);
 
+  const importSession = useCallback(
+    async (meta: SessionMeta, messages: SessionMessage[]): Promise<void> => {
+      // Already in the local index → trust storage as source of truth
+      // and just bring the tab to front. Re-appending the seed messages
+      // would duplicate every row in SessionDB on the second click.
+      if (sessionsRef.current.some((s) => s.id === meta.id)) {
+        await openTab(meta.id);
+        return;
+      }
+      // Hermes SessionDB is the message store. Create the row so the
+      // append calls below have somewhere to land, then seed the
+      // synthesised exchange. ``createHermesSession`` is INSERT OR
+      // IGNORE so a stray cross-surface race here is harmless.
+      const created = await createHermesSession({
+        id: meta.id,
+        source: SOURCE_BROWSER_EXTENSION,
+        title: meta.title || undefined,
+      });
+      if (!("ok" in created) || !created.ok) {
+        console.warn("[hermes-sessions] importSession createHermesSession failed:", created);
+        return;
+      }
+      for (const m of messages) {
+        const r = await appendHermesMessage(meta.id, {
+          role: m.role,
+          content: m.content,
+        });
+        if (!("ok" in r) || !r.ok) {
+          console.warn("[hermes-sessions] importSession appendHermesMessage failed:", r);
+        }
+      }
+      const nextSessions = [meta, ...sessionsRef.current];
+      setSessions(nextSessions);
+      await saveIndex(nextSessions);
+      await openTab(meta.id);
+    },
+    [openTab],
+  );
+
   const ensureActive = useCallback(async (): Promise<string> => {
     if (activeIdRef.current) return activeIdRef.current;
     return createNew();
@@ -569,6 +657,45 @@ export function useSessions(): SessionsController {
     [],
   );
 
+  const applyAutoTitle = useCallback(
+    async (id: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      let broadcastNext: SessionMeta[] | null = null;
+      setSessions((prev) => {
+        const i = prev.findIndex((s) => s.id === id);
+        if (i < 0) return prev;
+        const cur = prev[i];
+        // Respect user-set titles. Also short-circuit when the local title
+        // already matches what we'd write — avoids a no-op re-render that
+        // would fire the persist effect for nothing.
+        if (cur.titleManual) return prev;
+        if ((cur.title || "").trim() === trimmed) return prev;
+        const next = prev.slice();
+        next[i] = { ...cur, title: trimmed, updatedAt: Date.now() };
+        broadcastNext = next;
+        return next;
+      });
+      // Cross-instance broadcast: a single page can have multiple
+      // useSessions consumers (e.g. FullScreenChatView's SessionsRail +
+      // SidePanelView's internal hook). saveIndex only PATCHes Hermes —
+      // it doesn't write to chrome.storage, so the other instances never
+      // hear about the title change until they reload. Posting the
+      // updated index to SESSION_KEYS.index makes the existing watcher
+      // wake the other consumers and re-sync their `sessions` state.
+      if (broadcastNext) {
+        try {
+          await getPlatform().storage.set({
+            [SESSION_KEYS.index]: broadcastNext,
+          });
+        } catch (e) {
+          console.warn("[hermes-sessions] applyAutoTitle broadcast failed:", e);
+        }
+      }
+    },
+    [],
+  );
+
   // Force-flush the currently active session's messages to storage,
   // bypassing the 250ms debounce. Used by callers that know the
   // current state is "final" for this moment in time and shouldn't
@@ -599,10 +726,12 @@ export function useSessions(): SessionsController {
     closeTabs,
     switchToTab,
     createNew,
+    importSession,
     rename,
     remove,
     clearActiveMessages,
     touchSession,
+    applyAutoTitle,
     flushPersist,
   };
 }

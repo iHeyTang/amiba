@@ -1,11 +1,19 @@
-import { Check, Pencil, Trash2, X, type LucideIcon } from "lucide-react";
+import {
+  Check,
+  Pencil,
+  Trash2,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@hermes-x/ui";
 import { ScrollArea } from "@hermes-x/ui";
 import { useT, type TranslateFn } from "@hermes-x/i18n";
-import type { SessionMeta } from "@hermes-x/core";
+import type { CronRun, HermesCronJob, SessionMeta } from "@hermes-x/core";
 import { cn } from "@hermes-x/utils";
+
+import { ScheduledSection, TopSection } from "./SessionGroups";
 
 interface Props {
   open: boolean;
@@ -19,19 +27,32 @@ interface Props {
   onRename: (id: string, title: string) => void;
   /** Permanent delete: drops the session from history + closes its tab. */
   onDelete: (id: string) => void;
+  /**
+   * Materialise a cron run as a chat session and open it as a tab. The
+   * drawer surfaces cron jobs/runs alongside chats but the actual
+   * session synthesis lives in the parent — keeps this component
+   * pure-ish and lets the parent decide on idempotency vs. duplication.
+   * Optional: surfaces that don't expose cron tasks (e.g. the slim
+   * ChatView) can omit this and the Scheduled section stays hidden.
+   */
+  onOpenCronRun?: (job: HermesCronJob, run: CronRun) => void;
 }
 
-interface Group {
+interface DateBucket {
   label: string;
   items: SessionMeta[];
 }
 
 /**
- * Bins sessions by `updatedAt` into Today / Yesterday / Earlier this week /
- * This month / Older. Mirrors the grouping the Hermes WebUI uses; gives the
- * sidebar a familiar structure even when there are dozens of sessions.
+ * Bins sessions by `updatedAt` into Pinned + Today / Yesterday /
+ * Earlier this week / This month / Older. Mirrors the grouping the
+ * Hermes WebUI uses; gives the sidebar a familiar structure even when
+ * there are dozens of sessions.
  */
-function groupSessions(sessions: SessionMeta[], t: TranslateFn): Group[] {
+function groupSessionsByDate(
+  sessions: SessionMeta[],
+  t: TranslateFn,
+): DateBucket[] {
   const now = new Date();
   const startOfDay = (d: Date) => {
     const x = new Date(d);
@@ -43,7 +64,7 @@ function groupSessions(sessions: SessionMeta[], t: TranslateFn): Group[] {
   const sevenDays = today - 7 * 24 * 60 * 60 * 1000;
   const thirtyDays = today - 30 * 24 * 60 * 60 * 1000;
 
-  const buckets: Group[] = [
+  const buckets: DateBucket[] = [
     { label: t("sidepanel.sessions.group.today"), items: [] },
     { label: t("sidepanel.sessions.group.yesterday"), items: [] },
     { label: t("sidepanel.sessions.group.earlierWeek"), items: [] },
@@ -56,6 +77,9 @@ function groupSessions(sessions: SessionMeta[], t: TranslateFn): Group[] {
   const rest: SessionMeta[] = [];
   for (const s of sessions) {
     if (s.archived) continue;
+    // Cron-run sessions belong only in the Scheduled-tasks group;
+    // skip them here so they don't double-appear in the chat history.
+    if (s.id.startsWith("cron_")) continue;
     if (s.pinned) pinned.push(s);
     else rest.push(s);
   }
@@ -73,12 +97,15 @@ function groupSessions(sessions: SessionMeta[], t: TranslateFn): Group[] {
     else buckets[4].items.push(s);
   }
 
-  const out: Group[] = [];
+  const out: DateBucket[] = [];
   if (pinned.length)
     out.push({ label: t("sidepanel.sessions.group.pinned"), items: pinned });
   for (const b of buckets) if (b.items.length) out.push(b);
   return out;
 }
+
+/** Top-level section ids — used to key per-section collapse state. */
+type TopGroupId = "chats" | "scheduled";
 
 export function SessionDrawer({
   open,
@@ -89,10 +116,20 @@ export function SessionDrawer({
   onOpen,
   onRename,
   onDelete,
+  onOpenCronRun,
 }: Props) {
   const { t } = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+
+  // Top-level (Chats / Scheduled) collapse state. Default both expanded
+  // so first-open users discover both sections without hunting.
+  const [topCollapsed, setTopCollapsed] = useState<Record<TopGroupId, boolean>>({
+    chats: false,
+    scheduled: false,
+  });
+  const toggleTop = (id: TopGroupId) =>
+    setTopCollapsed((p) => ({ ...p, [id]: !p[id] }));
 
   // Drop the editing state when the drawer closes; otherwise reopening
   // would land us in stale rename mode.
@@ -103,12 +140,18 @@ export function SessionDrawer({
     }
   }, [open]);
 
-  const groups = useMemo(() => groupSessions(sessions, t), [sessions, t]);
+  const dateBuckets = useMemo(
+    () => groupSessionsByDate(sessions, t),
+    [sessions, t],
+  );
   const openSet = useMemo(() => new Set(openTabIds), [openTabIds]);
+  const visibleCount = useMemo(
+    () =>
+      sessions.filter((s) => !s.archived && !s.id.startsWith("cron_")).length,
+    [sessions],
+  );
 
   if (!open) return null;
-
-  const visibleCount = sessions.filter((s) => !s.archived).length;
 
   return (
     <div
@@ -120,7 +163,6 @@ export function SessionDrawer({
         <h2 className="text-sm font-semibold">
           {t("sidepanel.sessions.title")}
         </h2>
-        <span className="text-xs text-muted-foreground">{visibleCount}</span>
         <div className="ml-auto">
           <Button
             size="icon"
@@ -135,53 +177,76 @@ export function SessionDrawer({
 
       <div className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-2">
-            {groups.length === 0 && (
-              <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
-                {t("sidepanel.sessions.empty")}
-              </div>
-            )}
-            {groups.map((g) => (
-              <div key={g.label} className="mb-3">
-                <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {g.label}
+          <div className="p-2 space-y-2">
+            <TopSection
+              label={t("sidepanel.sessions.group.chats")}
+              count={visibleCount}
+              collapsed={topCollapsed.chats}
+              onToggle={() => toggleTop("chats")}
+            >
+              {dateBuckets.length === 0 ? (
+                <div className="mx-2 rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                  {t("sidepanel.sessions.empty")}
                 </div>
-                <ul className="space-y-0.5">
-                  {g.items.map((s) => (
-                    <SessionRow
-                      key={s.id}
-                      session={s}
-                      active={s.id === activeId}
-                      isOpen={openSet.has(s.id)}
-                      editing={editingId === s.id}
-                      editingValue={editingValue}
-                      onEditingValueChange={setEditingValue}
-                      onOpen={() => {
-                        onOpen(s.id);
-                        onClose();
-                      }}
-                      onStartEdit={() => {
-                        setEditingId(s.id);
-                        setEditingValue(s.title || "");
-                      }}
-                      onCommitEdit={() => {
-                        const trimmed = editingValue.trim();
-                        if (trimmed) onRename(s.id, trimmed);
-                        setEditingId(null);
-                      }}
-                      onCancelEdit={() => setEditingId(null)}
-                      onDelete={() => onDelete(s.id)}
-                    />
-                  ))}
-                </ul>
-              </div>
-            ))}
+              ) : (
+                dateBuckets.map((g) => (
+                  <div key={g.label} className="mb-2">
+                    <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {g.label}
+                    </div>
+                    <ul className="space-y-0.5">
+                      {g.items.map((s) => (
+                        <SessionRow
+                          key={s.id}
+                          session={s}
+                          active={s.id === activeId}
+                          isOpen={openSet.has(s.id)}
+                          editing={editingId === s.id}
+                          editingValue={editingValue}
+                          onEditingValueChange={setEditingValue}
+                          onOpen={() => {
+                            onOpen(s.id);
+                            onClose();
+                          }}
+                          onStartEdit={() => {
+                            setEditingId(s.id);
+                            setEditingValue(s.title || "");
+                          }}
+                          onCommitEdit={() => {
+                            const trimmed = editingValue.trim();
+                            if (trimmed) onRename(s.id, trimmed);
+                            setEditingId(null);
+                          }}
+                          onCancelEdit={() => setEditingId(null)}
+                          onDelete={() => onDelete(s.id)}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </TopSection>
+
+            {onOpenCronRun && (
+              <ScheduledSection
+                open={open && !topCollapsed.scheduled}
+                collapsed={topCollapsed.scheduled}
+                onToggle={() => toggleTop("scheduled")}
+                activeId={activeId}
+                onOpenCronRun={(job, run) => {
+                  onOpenCronRun(job, run);
+                  onClose();
+                }}
+              />
+            )}
           </div>
         </ScrollArea>
       </div>
     </div>
   );
 }
+
+/* ─────────────────────────── Chat session row (unchanged structure) */
 
 interface RowProps {
   session: SessionMeta;
@@ -232,9 +297,6 @@ function SessionRow({
           : "hover:bg-accent/60 hover:text-accent-foreground",
       )}
     >
-      {/* Open indicator: a small dot in the gutter for sessions whose tab
-          is currently visible. Lets the user tell at a glance which History
-          entries are also pinned in the working set. */}
       <span
         aria-hidden
         className={cn(
@@ -262,8 +324,6 @@ function SessionRow({
               onCancelEdit();
             }
           }}
-          // Don't auto-commit on blur — that would race with the Cancel
-          // button, which blurs the input before its onClick fires.
           className="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
         />
       ) : (

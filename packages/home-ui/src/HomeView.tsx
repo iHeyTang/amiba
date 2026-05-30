@@ -16,7 +16,6 @@ import {
   ChevronDown,
   ChevronUp,
   Globe,
-  ImageIcon as ImageBadgeIcon,
   Inbox as InboxIcon,
   MessageSquare,
   Moon,
@@ -24,7 +23,6 @@ import {
   RefreshCw,
   Settings,
   Settings2,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -37,7 +35,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEventHandler,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import {
@@ -56,13 +56,29 @@ import {
   type ResolvedQuickAction,
   type ResumeItem,
   type RoutineTemplate,
-  type Wallpaper,
   type WallpaperController,
 } from "@hermes-x/core";
+import {
+  AttachmentButton,
+  AttachmentChip,
+  ComposerKbdHints,
+  QuickActionChips,
+  useComposerAttachments,
+  WallpaperBackdrop,
+  WallpaperCredit,
+} from "@hermes-x/chat-ui";
+import { shortId } from "@hermes-x/utils";
 import { useT } from "@hermes-x/i18n";
 import { getPlatform } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
-import { HermesLogo, Textarea } from "@hermes-x/ui";
+import {
+  HermesLogo,
+  Textarea,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@hermes-x/ui";
 import { cn } from "@hermes-x/utils";
 
 import type {
@@ -115,6 +131,16 @@ export interface HomeViewProps {
    * outside of HomeView, hosting the wallpaper + settings actions.
    */
   hideInternalHeader?: boolean;
+  /**
+   * Embedded "panel" rendering: drop the full-screen chrome so HomeView
+   * can be mounted inside another container (e.g. the chat surface's
+   * empty state). Skips the wallpaper backdrop, TopBar, BottomPeek
+   * dashboard + its global wheel listener; the outer wrapper grows to
+   * its parent's height instead of `h-screen`. The composer card
+   * itself remains the centre-piece. Use this when the chat view
+   * wants to show "the home-page composer" while nothing's selected.
+   */
+  panelMode?: boolean;
 }
 
 export default function HomeView(props: HomeViewProps) {
@@ -133,6 +159,7 @@ function Home({
   headerLeftInset,
   headerClassName,
   hideInternalHeader,
+  panelMode,
 }: HomeViewProps) {
   const { t } = useT();
   const sessions = useSessions();
@@ -144,6 +171,14 @@ function Home({
   const shortcuts = useShortcutsHook();
   const wallpaper = useWallpaper();
   const { actions: quickActions } = useQuickActions(t);
+  // Composer attachments — same hook the main panel and Quick-Ask use.
+  // The session id is just a folder name for the backplane upload path;
+  // we use a stable HomeView-scoped one so re-uploads land in the same
+  // bucket and clean up cleanly on chat hand-off.
+  const homeUploadSessionRef = useRef<string>(shortId("home"));
+  const att = useComposerAttachments({
+    getSessionId: () => homeUploadSessionRef.current,
+  });
 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,6 +199,11 @@ function Home({
     peekExpandedRef.current = peekExpanded;
   }, [peekExpanded]);
   useEffect(() => {
+    // Embedded panel mode skips the bottom-peek dashboard entirely, so
+    // the window-wide wheel-toggle listener is dead weight there — and
+    // worse, it would `preventDefault` wheel events inside the chat
+    // surface and break legitimate scrolling.
+    if (panelMode) return;
     function onWheel(e: WheelEvent) {
       const target = e.target as HTMLElement | null;
       // Self-scrolling form controls (the composer textarea above
@@ -202,7 +242,7 @@ function Home({
     // already short-circuited it via `overflow-hidden`.
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => window.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [panelMode]);
 
   // On mount: focus composer; on focus re-pull runs so a long-open tab
   // catches up. Initial fetch is fired by the hook itself.
@@ -237,13 +277,54 @@ function Home({
 
   async function submitToChat(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy || !sessions.ready) return;
+    const readyAttachments = att.attachments.filter(
+      (a) => a.path && !a.uploading,
+    );
+    if (att.attachmentUploading) return;
+    if (!trimmed && readyAttachments.length === 0) return;
+    if (busy || !sessions.ready) return;
     setBusy(true);
     try {
-      await sessions.createNew();
+      // Panel mode embeds HomeView as the chat surface's empty state.
+      // If a session is already active but has no messages (user
+      // clicked "+ new chat" but hasn't typed anything yet), reuse it
+      // instead of minting a fresh one and leaving the previous one
+      // as an empty orphan in the rail. ``activeMessages.length === 0``
+      // is the same gate the empty-state surface uses, so the two
+      // stay in lockstep.
+      const reuseExistingEmpty =
+        !!sessions.activeId && sessions.activeMessages.length === 0;
+      if (!reuseExistingEmpty) {
+        await sessions.createNew();
+      }
       await getPlatform().storage.set({
-        [HOME_PENDING_PROMPT_KEY]: { text: trimmed, ts: Date.now() },
+        [HOME_PENDING_PROMPT_KEY]: {
+          text: trimmed || undefined,
+          // Strip volatile / heavy fields (`uploading`, `thumbDataUrl`
+          // can be re-derived) — the chat surface's `drainPendingPrompt`
+          // expects the same `PendingPromptAttachment` shape every
+          // other hand-off surface produces.
+          attachments:
+            readyAttachments.length > 0
+              ? readyAttachments.map((a) => ({
+                  uiId: a.uiId,
+                  name: a.name,
+                  mime: a.mime,
+                  size: a.size,
+                  kind: a.kind,
+                  path: a.path,
+                  thumbDataUrl: a.thumbDataUrl,
+                  textPreview: a.textPreview,
+                }))
+              : undefined,
+          ts: Date.now(),
+        },
       });
+      // Hand-off done — drop them from the composer state without
+      // deleting the files (the chat surface now owns them). Mint a
+      // new staging session for the next round.
+      att.setAttachments([]);
+      homeUploadSessionRef.current = shortId("home");
       goToChatTab();
     } finally {
       setBusy(false);
@@ -298,7 +379,12 @@ function Home({
     }
   }
 
-  const canSend = input.trim().length > 0 && !busy && sessions.ready;
+  const canSend =
+    (input.trim().length > 0 || att.hasReadyAttachment()) &&
+    !busy &&
+    !att.attachmentUploading &&
+    !att.attachmentBusy &&
+    sessions.ready;
 
   return (
     <div
@@ -313,11 +399,20 @@ function Home({
         // this, the off-screen 60vh of panel would extend the document
         // height and let the user scroll into a "ghost" area below the
         // wallpaper.
-        "relative isolate flex h-screen w-full flex-col overflow-hidden text-foreground",
+        //
+        // Panel mode (embedded in another container, e.g. the chat
+        // surface's empty state) fills its parent instead — h-screen
+        // would force the outer chrome to scroll. The chat surface
+        // hosts its own background, so the wallpaper layer is skipped.
+        panelMode
+          ? "relative flex h-full w-full flex-col overflow-hidden text-foreground"
+          : "relative isolate flex h-screen w-full flex-col overflow-hidden text-foreground",
       )}
     >
-      <WallpaperBackdrop controller={wallpaper} dim={peekExpanded} />
-      {!hideInternalHeader && (
+      {!panelMode && (
+        <WallpaperBackdrop controller={wallpaper} dim={peekExpanded} />
+      )}
+      {!hideInternalHeader && !panelMode && (
         <TopBar
           wallpaperController={wallpaper.enabled ? wallpaper : null}
           onOpenSettings={() => onOpenSettings()}
@@ -337,10 +432,15 @@ function Home({
           // `transform: translate`, which would visually overlap the
           // TopBar and steal pointer events from its icons.
           "justify-center",
-          "transition-[padding-bottom] duration-500 ease-out",
-          peekExpanded
-            ? "pb-[min(70vh,calc(100vh_-_280px))]"
-            : "pb-[6vh]",
+          // Peek-pad transition is only meaningful when the BottomPeek
+          // exists; in panel mode there's no peek so we leave a fixed
+          // breathing space instead.
+          !panelMode && "transition-[padding-bottom] duration-500 ease-out",
+          panelMode
+            ? "pb-[6vh]"
+            : peekExpanded
+              ? "pb-[min(70vh,calc(100vh_-_280px))]"
+              : "pb-[6vh]",
         )}
       >
         <section className="mx-auto w-full max-w-2xl shrink-0 space-y-2">
@@ -354,36 +454,53 @@ function Home({
               The previous "always-white-when-wallpaper-enabled"
               fallback failed on blank/light backgrounds in light
               theme. */}
-          {(() => {
-            const ambient =
-              wallpaper.enabled &&
-              wallpaper.wallpaper &&
-              wallpaper.mode !== null;
-            const className = cn(
-              "space-y-0.5 px-0.5",
-              // No colour transition: the wallpaper-driven palette swap
-              // pairs with an instant logo-asset swap; a fading text
-              // beside an already-snapped logo reads as out-of-sync.
-              !ambient
-                ? "text-foreground"
-                : wallpaper.mode === "light"
-                  ? "text-neutral-900 [&_p]:drop-shadow-[0_1px_1px_rgba(255,255,255,0.4)]"
-                  : "text-white [&_p]:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]",
-            );
-            return (
-              <div className={className}>
-                <p className="text-sm font-semibold">
-                  {t("newtab.greeting")}
-                </p>
-                <p className="text-xs opacity-80">{t("newtab.subtitle")}</p>
-              </div>
-            );
-          })()}
+          {panelMode ? (
+            // Panel mode (embedded in the chat surface's empty state):
+            // a centred Hermes mark over a single-line description.
+            // Matches the look the SidePanelView fallback used to
+            // render, so the home composer reads as "Hermes here, type
+            // below" instead of an out-of-context wordmark + tagline.
+            <div className="flex flex-col items-center gap-2 text-center">
+              <HermesLogo size={56} />
+              <p className="max-w-[40ch] text-xs text-muted-foreground">
+                {t("newtab.subtitle")}
+              </p>
+            </div>
+          ) : (
+            (() => {
+              const ambient =
+                wallpaper.enabled &&
+                wallpaper.wallpaper &&
+                wallpaper.mode !== null;
+              const className = cn(
+                "space-y-0.5 px-0.5",
+                // No colour transition: the wallpaper-driven palette swap
+                // pairs with an instant logo-asset swap; a fading text
+                // beside an already-snapped logo reads as out-of-sync.
+                !ambient
+                  ? "text-foreground"
+                  : wallpaper.mode === "light"
+                    ? "text-neutral-900 [&_p]:drop-shadow-[0_1px_1px_rgba(255,255,255,0.4)]"
+                    : "text-white [&_p]:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]",
+              );
+              return (
+                <div className={className}>
+                  <p className="text-sm font-semibold">
+                    {t("newtab.greeting")}
+                  </p>
+                  <p className="text-xs opacity-80">{t("newtab.subtitle")}</p>
+                </div>
+              );
+            })()
+          )}
           <ComposerCard
             ref={inputRef}
             value={input}
             onChange={setInput}
             onKeyDown={onKeyDown}
+            onPaste={att.handlePaste}
+            dropHandlers={att.dropHandlers}
+            dragOver={att.dragOver}
             onSend={() => void submitToChat(input)}
             canSend={canSend}
             busy={busy}
@@ -398,8 +515,30 @@ function Home({
                 renderQuickActionPrompt(action.template, userText),
               );
             }}
+            chipRow={
+              att.attachments.length > 0 ? (
+                <>
+                  {att.attachments.map((a) => (
+                    <AttachmentChip
+                      key={a.uiId}
+                      attachment={a}
+                      onRemove={() => att.removeAttachment(a.uiId)}
+                    />
+                  ))}
+                </>
+              ) : undefined
+            }
+            actionsLeft={
+              <AttachmentButton
+                onClick={() => void att.openFilePicker()}
+                disabled={att.attachmentBusy || att.attachmentUploading}
+              />
+            }
             peekExpanded={peekExpanded}
           />
+          {/* Hidden fallback file input — the hook owns the ref +
+              onChange wiring. */}
+          <input {...att.fileInputProps} />
         </section>
 
         {/*
@@ -416,18 +555,20 @@ function Home({
         )}
       </main>
 
-      <BottomPeek
-        expanded={peekExpanded}
-        onToggle={() => setPeekExpanded((prev) => !prev)}
-        cronRuns={cronRuns}
-        selectedRun={selectedRun}
-        onSelectRun={(r) => setSelectedKey(cronRunKey(r))}
-        onContinueInChat={(r) => void continueRunInChat(r)}
-        resume={resume}
-        busy={busy}
-        onOpenSession={(id) => void openSession(id)}
-        onOpenSettings={onOpenSettings}
-      />
+      {!panelMode && (
+        <BottomPeek
+          expanded={peekExpanded}
+          onToggle={() => setPeekExpanded((prev) => !prev)}
+          cronRuns={cronRuns}
+          selectedRun={selectedRun}
+          onSelectRun={(r) => setSelectedKey(cronRunKey(r))}
+          onContinueInChat={(r) => void continueRunInChat(r)}
+          resume={resume}
+          busy={busy}
+          onOpenSession={(id) => void openSession(id)}
+          onOpenSettings={onOpenSettings}
+        />
+      )}
     </div>
   );
 }
@@ -1093,172 +1234,6 @@ function ManagerRow({
 }
 
 // ---------------------------------------------------------------------------
-// Wallpaper backdrop — daily photo from Bing, dimmed for legibility, with
-// a small attribution chip in the corner. All layers live at `-z-10` so
-// the page's flow content (composer, dashboard cards) paints above them
-// without further z-index management. The parent must have `isolate`.
-// ---------------------------------------------------------------------------
-
-function WallpaperBackdrop({
-  controller,
-  dim,
-}: {
-  controller: WallpaperController;
-  /**
-   * Whether to paint the page-wide tint overlay over the wallpaper.
-   * Off when the peek panel is collapsed (wallpaper shines through
-   * cleanly), on when the panel is expanded (overlay tones the photo
-   * down so the dashboard cards above it have a calmer backdrop to
-   * read against). Toggling is animated.
-   */
-  dim: boolean;
-}) {
-  const { wallpaper, enabled } = controller;
-  return (
-    <>
-      {/* Solid base color, always present. Keeps the page from going
-          transparent while the wallpaper is loading, missing, or
-          disabled. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-background"
-      />
-      {enabled && wallpaper ? <WallpaperImage wallpaper={wallpaper} /> : null}
-      {/* Conditional dim — fades in/out in lockstep with the bottom
-          peek's translate animation (same 500ms ease-out). Heavy at
-          top + bottom, lightest in the middle so the dashboard cards
-          (bottom-most when expanded) sit on the most uniform tone. */}
-      <div
-        aria-hidden
-        className={cn(
-          "absolute inset-0 -z-10",
-          "bg-gradient-to-b from-background/70 via-background/25 to-background/75",
-          "transition-opacity duration-500 ease-out",
-          dim ? "opacity-100" : "opacity-0",
-        )}
-      />
-    </>
-  );
-}
-
-function WallpaperImage({ wallpaper }: { wallpaper: Wallpaper }) {
-  // Fade in only after the image actually finishes loading; before that
-  // the base background shows through.
-  const [loaded, setLoaded] = useState(false);
-  return (
-    <img
-      src={wallpaper.url}
-      alt=""
-      aria-hidden
-      onLoad={() => setLoaded(true)}
-      className={cn(
-        "absolute inset-0 -z-10 h-full w-full object-cover",
-        "transition-opacity duration-700 ease-out",
-        loaded ? "opacity-100" : "opacity-0",
-      )}
-    />
-  );
-}
-
-export function WallpaperCredit({
-  controller,
-  ambientClass,
-}: {
-  controller: WallpaperController;
-  /**
-   * Pre-computed text/hover colour class that adapts to the wallpaper
-   * mode; supplied by the parent so the credit chip shares its tonal
-   * adaptation logic with the rest of the TopBar action group.
-   */
-  ambientClass: string;
-}) {
-  const { t } = useT();
-  const { wallpaper, cycle, cycling } = controller;
-  if (!wallpaper) return null;
-  const text = wallpaper.title || wallpaper.copyright;
-  if (!text) return null;
-  // Lives inline inside the TopBar action group (see `TopBar`). Default
-  // state matches the other TopBar buttons in size (h-8) and shape, so
-  // it disappears into the row when you're not interested in it. Hover
-  // slides out the full `{title} · Bing` link plus a small "next image"
-  // button via an animated `max-width`, so both the attribution and the
-  // "cycle wallpaper" action cost zero permanent real estate.
-  //
-  // Structure: outer div is the hover target (`group/credit`); inside
-  // sit (1) the always-visible icon, (2) an expandable area that hides
-  // a credit link + a cycle button behind a `max-w-0 → max-w-[X]`
-  // transition. Link and button are siblings (not nested), so each
-  // gets its own click semantics — nested <a><button> is invalid HTML.
-  return (
-    <div
-      title={wallpaper.copyright || text}
-      className={cn(
-        "group/credit inline-flex h-8 items-center overflow-hidden rounded-full",
-        "text-[11px] transition-colors duration-200 hover:bg-white/10",
-        ambientClass,
-      )}
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-        <ImageBadgeIcon className="h-4 w-4" />
-      </span>
-      {/*
-       * Animate to content's natural width via the grid 0fr → 1fr trick.
-       * `max-width` transitions look instant here because the target
-       * (45vw) is far larger than the actual text width, so the visible
-       * portion (clamped by content) finishes in the first ~30% of the
-       * duration. Grid 1fr resolves to content size, so the transition
-       * runs over its full duration regardless of how wide the text is.
-       */}
-      <div
-        className={cn(
-          "grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out",
-          "group-hover/credit:grid-cols-[1fr]",
-          "group-focus-within/credit:grid-cols-[1fr]",
-        )}
-      >
-        <div className="flex items-center overflow-hidden">
-        {wallpaper.copyrightLink ? (
-          <a
-            href={wallpaper.copyrightLink}
-            target="_blank"
-            rel="noreferrer"
-            className="whitespace-nowrap px-1 hover:underline"
-          >
-            {text} · Bing
-          </a>
-        ) : (
-          <span className="whitespace-nowrap px-1">{text} · Bing</span>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            void cycle();
-          }}
-          disabled={cycling}
-          aria-label={t("newtab.wallpaper.cycle")}
-          title={t("newtab.wallpaper.cycle")}
-          className={cn(
-            "ml-0.5 mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-            "transition-colors hover:bg-white/15",
-            // Inherit colour from the parent chip (which already
-            // ran the ambient adaptation), so the cycle button
-            // stays in sync with the credit text it lives in.
-            "text-inherit",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          <RefreshCw
-            className={cn("h-3 w-3", cycling && "animate-spin")}
-          />
-        </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Top bar
 // ---------------------------------------------------------------------------
 
@@ -1777,6 +1752,30 @@ interface ComposerCardProps {
   /** Click handler for a chip — caller wraps the input with `renderQuickActionPrompt`. */
   onQuickAction: (action: ResolvedQuickAction) => void;
   /**
+   * Slot rendered between the textarea and the bottom action row —
+   * caller fills with attachment chips. `undefined` hides the row.
+   */
+  chipRow?: ReactNode;
+  /**
+   * Slot rendered before the quick-action toolbar in the bottom action
+   * row. Caller drops the `<AttachmentButton>` here.
+   */
+  actionsLeft?: ReactNode;
+  /** Forwarded onto the textarea so callers can capture pasted files. */
+  onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
+  /**
+   * Drag-and-drop handlers from `useComposerAttachments().dropHandlers`.
+   * When provided, the glass card becomes a file drop zone — drop the
+   * usual `dragOver` cue overlay via the `dragOver` flag below.
+   */
+  dropHandlers?: {
+    onDragOver: (e: import("react").DragEvent<HTMLElement>) => void;
+    onDragLeave: (e: import("react").DragEvent<HTMLElement>) => void;
+    onDrop: (e: import("react").DragEvent<HTMLElement>) => void;
+  };
+  /** Whether a file payload is hovering — used to draw the drop overlay. */
+  dragOver?: boolean;
+  /**
    * When the bottom dashboard peek is open, the available area above it
    * is small; we lower the textarea's auto-grow cap so it scrolls
    * internally instead of being hidden behind the peek panel. Collapsing
@@ -1906,6 +1905,11 @@ const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
       busy,
       quickActions,
       onQuickAction,
+      chipRow,
+      actionsLeft,
+      onPaste,
+      dropHandlers,
+      dragOver,
       peekExpanded,
     },
     ref,
@@ -1991,9 +1995,17 @@ const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
       el.style.overflowY = sh > maxHeight ? "auto" : "hidden";
     }, [maxHeight]);
 
+    // Outer wrapper stacks two siblings: the glass card with the
+    // textarea + action row, and the keyboard hint row that sits
+    // OUTSIDE the card so it doesn't pick up the card's backdrop blur.
     return (
-      <div
-        className={cn(
+      <div className="flex flex-col">
+        <div
+          {...dropHandlers}
+          className={cn(
+          // `relative` so the drag-over overlay can position itself
+          // absolutely inside the card.
+          "relative",
           // `rounded-2xl` (16px) sits in the same "card" family as the
           // dashboard cards (`rounded-xl`) instead of drifting into
           // pill territory. Inner flex column splits the textarea from
@@ -2012,13 +2024,25 @@ const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
           "dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]",
           "transition-colors duration-200",
           "focus-within:bg-card/85",
+          dragOver && "ring-2 ring-primary/40",
         )}
       >
+        {dragOver && (
+          <div className="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center rounded-2xl bg-primary/5 text-sm font-medium text-primary">
+            Drop files to attach
+          </div>
+        )}
+        {chipRow ? (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-foreground/5 px-3 py-1.5">
+            {chipRow}
+          </div>
+        ) : null}
         <Textarea
           ref={setTextareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder={placeholder}
           rows={2}
           disabled={busy}
@@ -2031,57 +2055,65 @@ const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
           className="min-h-[3.5rem] resize-none border-0 bg-transparent px-5 pb-1 pt-3.5 text-sm shadow-none transition-[height] duration-500 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-0.5">
-          {hasQuickActions ? (
-            <div
-              role="toolbar"
-              aria-label={t("composer.quick.empty.tooltip")}
-              className="flex min-w-0 flex-1 gap-1 overflow-x-auto"
-            >
-              {quickActions.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={() => onQuickAction(action)}
-                  disabled={chipsDisabled}
-                  title={
-                    chipsDisabled && !busy
-                      ? t("composer.quick.empty.tooltip")
-                      : action.tooltip
-                  }
-                  className={cn(
-                    "inline-flex h-6 shrink-0 select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                    chipsDisabled
-                      ? "cursor-not-allowed border-foreground/10 bg-transparent text-foreground/35"
-                      : "cursor-pointer border-foreground/15 bg-background/60 text-foreground/80 hover:bg-foreground/10 hover:text-foreground",
-                  )}
-                >
-                  <Sparkles className="h-3 w-3" />
-                  <span className="max-w-[10rem] truncate">{action.label}</span>
-                </button>
-              ))}
+          {actionsLeft ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {actionsLeft}
             </div>
+          ) : null}
+          {hasQuickActions ? (
+            <QuickActionChips
+              actions={quickActions}
+              canApply={!chipsDisabled}
+              onApply={onQuickAction}
+              className="flex-1"
+            />
           ) : (
             // Empty growable spacer keeps the Send button anchored to the
             // right when there are no chips to push it there.
             <div className="flex-1" />
           )}
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={!canSend}
-            title={t("newtab.send.tooltip")}
-            aria-label={t("newtab.send")}
-            className={cn(
-              "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-              "transition-colors duration-200",
-              canSend
-                ? "bg-foreground text-background hover:bg-foreground/85"
-                : "bg-foreground/10 text-foreground/30",
-            )}
-          >
-            <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-          </button>
+          <TooltipProvider delayDuration={250}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onSend}
+                  disabled={!canSend}
+                  aria-label={t("newtab.send")}
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                    "transition-colors duration-200",
+                    canSend
+                      ? "bg-foreground text-background hover:bg-foreground/85"
+                      : "bg-foreground/10 text-foreground/30",
+                  )}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="end"
+                className="flex flex-col gap-1"
+              >
+                <span className="font-medium">
+                  {t("newtab.send.tooltip")}
+                </span>
+                <ComposerKbdHints
+                  className="text-popover-foreground/70"
+                  hints={[
+                    { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
+                    {
+                      keys: "⇧⏎",
+                      label: t("sidepanel.composer.kbd.newline"),
+                    },
+                  ]}
+                />
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
+      </div>
       </div>
     );
   },

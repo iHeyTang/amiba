@@ -50,7 +50,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, "src/renderer/index.html"),
-          notifier: resolve(__dirname, "src/renderer/notifier/index.html")
+          notifier: resolve(__dirname, "src/renderer/notifier/index.html"),
+          "quick-ask": resolve(__dirname, "src/renderer/quick-ask/index.html")
         }
       }
     },

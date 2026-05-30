@@ -167,6 +167,7 @@ export function ChatView({
         busy={busy}
         onAbort={handleAbort}
         extrasAbove={composerExtrasAbove}
+        quickActions={false}
       />
 
       <SessionDrawer

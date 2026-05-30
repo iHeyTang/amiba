@@ -72,10 +72,19 @@ export function createNotifierWindow(): BrowserWindow {
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    focusable: false,
+    // Focusable so the Approve/Deny/Dismiss buttons receive clicks
+    // reliably across platforms — Electron's `focusable: false` blocks
+    // mouse focus on Linux and is finicky on macOS for buttons inside
+    // the window. We still raise the window with `showInactive()` so
+    // it doesn't steal focus from the user's frontmost app on arrival;
+    // focus only transfers when the user actually clicks.
+    focusable: true,
     transparent: true,
     resizable: false,
-    movable: false,
+    // Movable so users can drag the card out of the way when it's
+    // covering something. Drag handle is the small strip at the top of
+    // the card (CSS `-webkit-app-region: drag`).
+    movable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -111,18 +120,35 @@ export function createNotifierWindow(): BrowserWindow {
 }
 
 /**
- * Push a payload to the notifier renderer. No-ops if the window is gone
- * — callers don't need to track lifecycle. Auto-shows the window on
- * non-dismiss messages so the renderer can render fresh content
- * immediately.
+ * Push a payload to the notifier renderer. Auto-recreates the window if
+ * a previous instance was destroyed (e.g. user manually closed it via
+ * Activity Monitor / Cmd+W), so missing the window is never a permanent
+ * dead-end. `dismiss` is the one exception: there's nothing to render so
+ * there's no point spawning a brand-new window just to immediately
+ * dismiss something that isn't displayed anyway.
  */
 export function sendToNotifier(msg: NotifierMessage): void {
-  const win = notifierWindow
+  let win = notifierWindow
+  const liveAndUsable = win && !win.isDestroyed()
+  if (!liveAndUsable) {
+    if (msg.type === "dismiss") return
+    win = createNotifierWindow()
+  }
   if (!win || win.isDestroyed()) return
   if (msg.type !== "dismiss" && !win.isVisible()) {
     win.showInactive()
   }
-  win.webContents.send("notifier:message", msg)
+  // Deferred until `did-finish-load` if the renderer is still booting,
+  // otherwise the first message lands before NotifierView's mount effect
+  // attaches its IPC listener and gets dropped on the floor.
+  const wc = win.webContents
+  if (wc.isLoading()) {
+    wc.once("did-finish-load", () => {
+      if (!win!.isDestroyed()) wc.send("notifier:message", msg)
+    })
+  } else {
+    wc.send("notifier:message", msg)
+  }
 }
 
 export function showNotifier(): void {
@@ -143,4 +169,57 @@ export function hideNotifier(): void {
 
 export function getNotifierWindow(): BrowserWindow | null {
   return notifierWindow
+}
+
+/**
+ * Tear down the notifier window before app quit. macOS does not auto-
+ * close non-main windows on `app.quit()`, so without this the floating
+ * card can linger as a transparent ghost until the parent process is
+ * fully gone. Idempotent.
+ */
+export function destroyNotifierWindow(): void {
+  const win = notifierWindow
+  notifierWindow = null
+  if (!win || win.isDestroyed()) return
+  try {
+    win.destroy()
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Fire a fake card so users (and dev) can confirm the notifier pipeline
+ * works end-to-end without having to trigger a real approval or wait
+ * for a real cron run. `kind` picks between the two card shapes; both
+ * dismiss with the buttons (the cron variant's "click to open" raises
+ * the main window, but here we just rely on the dismiss action).
+ */
+export function showDemoNotifier(
+  kind: "cron-completed" | "approval-pending" = "cron-completed",
+): void {
+  const stamp = Date.now()
+  if (kind === "cron-completed") {
+    sendToNotifier({
+      type: "cron-completed",
+      id: `demo_${stamp}`,
+      title: "Demo cron job",
+      summary:
+        "This is a demo notifier card — wired plumbing confirmed. " +
+        "Real cards appear when a cron job finishes or the agent " +
+        "requests approval.",
+      timestamp: stamp,
+    })
+  } else {
+    sendToNotifier({
+      type: "approval-pending",
+      approvalId: `demo_${stamp}`,
+      tool: "Demo tool",
+      command: "rm -rf demo",
+      message:
+        "This is a demo approval card. Allow/Deny do nothing here — " +
+        "real cards POST a decision to the gateway.",
+      timestamp: stamp,
+    })
+  }
 }

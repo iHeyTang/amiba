@@ -4,11 +4,34 @@ import type net from "node:net"
 import { BrowserWindow, app, ipcMain, nativeImage, session, shell } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 
+// Process-level safety nets. Without these, an unhandled rejection inside
+// any async path (storage I/O, cron-watcher tick, IPC handler) can leave
+// the process in "deprecated future-throw" mode where Node may terminate
+// or behave inconsistently across versions. We log + continue so the
+// user's main window stays alive while we surface the bug.
+process.on("unhandledRejection", (reason) => {
+  console.error("[main] unhandledRejection:", reason)
+})
+process.on("uncaughtException", (err) => {
+  console.error("[main] uncaughtException:", err)
+})
+
 import { registerChatHandlers, resolveApproval } from "./chat/engine"
-import { createNotifierWindow } from "./notifier-window"
+import { startCronWatcher, stopCronWatcher } from "./cron-watcher"
+import {
+  createNotifierWindow,
+  destroyNotifierWindow,
+  showDemoNotifier,
+} from "./notifier-window"
+import {
+  createQuickAskWindow,
+  destroyQuickAskWindow,
+  hideQuickAsk,
+  resizeQuickAsk,
+  summonQuickAsk,
+} from "./quick-ask-window"
 import {
   attachSecondInstanceHandler,
-  deliverPrompt,
   registerProtocolHandler,
   startUnixSocketInbox,
   stopUnixSocketInbox,
@@ -20,7 +43,7 @@ import {
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
-import { captureSelection } from "./selection"
+import { cleanupOldSnips } from "./screen-capture"
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -107,32 +130,19 @@ function summonWindow() {
 }
 
 /**
- * Quick-Ask Spotlight summon: try to grab whatever text the user has
- * selected in their frontmost app first, then summon. If we got text,
- * route through `deliverPrompt` so the composer pre-fills via the same
- * channel HomeView's pendingPrompt watcher already drains. If we got
- * nothing (no selection, missing Accessibility grant, scripting timeout,
- * Windows / Linux), fall back to a plain summon.
+ * Quick-Ask Spotlight summon. We deliberately do NOT try to capture the
+ * user's current text selection or clipboard image — the synthesized
+ * ⌘C / pasteboard snapshot dance was fragile (NSPanel focus quirks,
+ * clipboard clobber, ~150ms latency on every hotkey press) and ended
+ * up costing more in surprise than it bought in convenience. The popup
+ * just opens; the user pastes whatever they want with ⌘V.
  *
- * Must stay async-but-fire-and-forget for the hotkey manager, which
- * invokes its callback synchronously. The 120ms AppleScript delay means
- * users see a noticeable lag before the window appears when they DO
- * have a selection — that's intrinsic to the "synthesize ⌘C then read
- * the pasteboard" approach and acceptable for the first iteration.
+ * The popup window is positioned on the display under the cursor (see
+ * `quick-ask-window.ts` → `computeBounds`) so multi-monitor users get
+ * it on the screen they were just typing on, not the primary one.
  */
-function summonWithSelection(): void {
-  void (async () => {
-    try {
-      const sel = await captureSelection()
-      if (sel) {
-        await deliverPrompt(sel.text, summonWindow)
-        return
-      }
-    } catch (err) {
-      console.warn("[hermes-x] quick-ask capture failed; plain summon:", err)
-    }
-    summonWindow()
-  })()
+function summonQuickAskFromHotkey(): void {
+  summonQuickAsk({})
 }
 
 /**
@@ -147,11 +157,38 @@ function registerNotifierIpcHandlers(summon: () => void): void {
   ipcMain.handle("notifier:activate-main", () => {
     summon()
   })
+  // Manual demo trigger so users can confirm the notifier window
+  // appears + clicks register without having to provoke a real
+  // approval or wait for a cron run. Exposed via the preload bridge as
+  // `window.hermes.notifier.demo(kind?)`.
+  ipcMain.handle(
+    "notifier:demo",
+    (_e, kind?: "cron-completed" | "approval-pending") => {
+      showDemoNotifier(kind ?? "cron-completed")
+    },
+  )
   ipcMain.handle("notifier:approve", (_e, approvalId: string) => {
     resolveApproval(approvalId, "approve")
   })
   ipcMain.handle("notifier:deny", (_e, approvalId: string) => {
     resolveApproval(approvalId, "deny")
+  })
+}
+
+/**
+ * Quick-Ask Spotlight popup back-channels: dismiss + dynamic resize.
+ * The popup gets streaming chat via the existing `chat:client-to-engine`
+ * IPC like any other surface, so we only need to expose the window-
+ * level ops here.
+ */
+function registerQuickAskIpcHandlers(): void {
+  ipcMain.handle("quick-ask:dismiss", () => {
+    hideQuickAsk()
+  })
+  ipcMain.handle("quick-ask:resize", (_e, contentHeightPx: number) => {
+    if (typeof contentHeightPx === "number" && Number.isFinite(contentHeightPx)) {
+      resizeQuickAsk(contentHeightPx)
+    }
   })
 }
 
@@ -203,7 +240,13 @@ function createWindow() {
 
   if (isDev && RENDERER_DEV_URL) {
     win.loadURL(RENDERER_DEV_URL)
-    win.webContents.openDevTools({ mode: "detach" })
+    // DevTools auto-open is opt-in via env so it stays out of the
+    // user's face by default. Set `HERMES_DEVTOOLS=1` in the env to
+    // reopen them automatically; otherwise pop them with
+    // ⌘⌥I / Ctrl+Shift+I when you actually need them.
+    if (process.env.HERMES_DEVTOOLS === "1") {
+      win.webContents.openDevTools({ mode: "detach" })
+    }
   } else {
     win.loadFile(path.join(__dirname, "../renderer/index.html"))
   }
@@ -231,41 +274,72 @@ if (!gotSingleInstanceLock) {
     // that imports backplaneFetch / HermesClient — those call getPlatform() at
     // request time and need the adapter wired up first.
     setPlatform(createMainPlatformAdapter())
-    await startWorkspaceManager()
-    installCorsBypass()
-    // macOS: dock icon (window icon is set per-BrowserWindow above for
-    // Windows/Linux; macOS reads it from the .icns inside the .app bundle
-    // when packaged, and from `app.dock.setIcon` at runtime when dev'ing).
-    if (IS_MAC && app.dock) {
-      try {
-        app.dock.setIcon(nativeImage.createFromPath(iconPath()))
-      } catch {
-        // best-effort — file may not exist in some packaged layouts
-      }
+    // Workspace restore reads `mainStore` which can fail (corrupted
+    // hermes-store.json, permission denied, etc). DO NOT let that take
+    // the whole app down: a failed restore should still leave the user
+    // with a working main window. They can re-bind a workspace by
+    // dragging a folder into the chat panel later.
+    try {
+      await startWorkspaceManager()
+    } catch (err) {
+      console.error("[main] workspace init failed; continuing without restore:", err)
     }
+    // Best-effort cleanup of stale snip PNGs from previous runs. Fire-
+    // and-forget so a slow disk doesn't delay the window appearing.
+    void cleanupOldSnips()
+    installCorsBypass()
     registerIpcHandlers()
     registerChatHandlers()
     registerHermesRuntimeHandlers()
     createWindow()
     createNotifierWindow()
+    // Pre-create the Quick-Ask popup so the first double-tap doesn't
+    // pay BrowserWindow construction + renderer boot latency (~400ms
+    // cold). Hidden by default; surfaces via `summonQuickAsk` on
+    // hotkey.
+    createQuickAskWindow()
+    // macOS dock icon. We pin it twice:
+    //   1. NOW — after panel + main + notifier windows have all been
+    //      created and any activation-policy transitions have flushed.
+    //   2. On `app.on("activate", …)` and again on a short timeout —
+    //      macOS sometimes refreshes the dock from the bundle's .icns
+    //      after window state settles, undoing our runtime override.
+    //      Re-applying covers those resets.
+    if (IS_MAC && app.dock) {
+      const pinDockIcon = () => {
+        try {
+          const img = nativeImage.createFromPath(iconPath())
+          if (!img.isEmpty()) app.dock!.setIcon(img)
+        } catch (err) {
+          console.warn("[hermes-x] dock icon load failed:", err)
+        }
+      }
+      pinDockIcon()
+      // Belt-and-braces re-pin after the first event loop tick — covers
+      // the case where macOS resets the dock icon as part of finishing
+      // the panel window's setup (which we observed: setIcon succeeds
+      // synchronously but the dock still shows the Electron default).
+      setTimeout(pinDockIcon, 200)
+      app.on("activate", pinDockIcon)
+    }
     registerNotifierIpcHandlers(summonWindow)
+    registerQuickAskIpcHandlers()
+    // Poll the gateway for new cron-run completions and push them to
+    // the Heads-up Notifier. The watcher tolerates a not-yet-ready
+    // backplane (silent retry every 30s) so it's safe to start before
+    // the onboarding wizard has actually launched `hermes gateway`.
+    startCronWatcher()
 
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the
     // Preferences panel take effect without a restart.
     //
-    // Hotkey path uses `summonWithSelection` so the Quick-Ask Spotlight
-    // flow gets a chance to pre-fill the composer with the user's
-    // current text selection. Protocol / socket / second-instance paths
-    // keep using raw `summonWindow` — they either carry their own
-    // prompt already or aren't text-selection-driven.
-    //
-    // The snip hotkey (⌘⇧.) also takes the raw `summonWindow`: by the
-    // time we raise the window the snip flow has already written its
-    // own pendingPrompt, so re-running the selection-capture
-    // AppleScript on top of it would only risk clobbering that prompt
-    // with a stale clipboard read.
-    void startHotkeyManager(summonWithSelection, summonWindow)
+    // Quick-Ask hotkey just opens the popup — no selection capture, no
+    // clipboard reads. Users paste their own context with ⌘V. The snip
+    // hotkey (⌘⇧.) takes the raw `summonWindow` because by the time we
+    // raise the main window the snip flow has already written its own
+    // pendingPrompt.
+    void startHotkeyManager(summonQuickAskFromHotkey, summonWindow)
 
     // External entry points: OS-level `hermes-x://` URLs and the local
     // Unix socket inbox. Both write `home.pendingPrompt` and summon the
@@ -298,6 +372,9 @@ app.on("window-all-closed", () => {
 // the uiohook hook used by double-tap mode.
 app.on("will-quit", () => {
   stopHotkeyManager()
+  stopCronWatcher()
+  destroyNotifierWindow()
+  destroyQuickAskWindow()
   stopAllHermesJobs()
   void stopWorkspaceManager()
 })

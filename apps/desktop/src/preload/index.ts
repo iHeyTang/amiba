@@ -1,12 +1,23 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 
+// Node EventEmitter defaults `maxListeners` to 10. Each Hermes window
+// stacks more than that on a few high-fan-out IPC channels (storage,
+// workspace, chat, notifier, quick-ask) because every React hook that
+// observes state — `useQuickActions`, `useCronRuns`, `useWallpaper`,
+// `useResume`, the platform adapter's `storage.watch`, … — adds its
+// own listener on top of the shared `ipcRenderer`. Without bumping
+// the cap Electron logs "MaxListenersExceededWarning" on every fresh
+// mount of the main window, and the warnings drown out real bugs.
+// `0` = unlimited; we'd rather chase real leaks via the cleanup
+// effects than treat the 10-listener line as load-bearing.
+ipcRenderer.setMaxListeners(0)
+
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
 
 type WorkspaceChange =
-  | { kind: "bound"; path: string }
-  | { kind: "unbound" }
-  | { kind: "file"; event: "add" | "change" | "unlink"; path: string }
+  | { kind: "bound"; sessionId: string; path: string }
+  | { kind: "unbound"; sessionId: string }
 
 // Mirrors @hermes-x/core protocol types — kept loose here so preload
 // stays runtime-only without pulling the core package into the browser
@@ -50,10 +61,12 @@ const api = {
    * (the legacy `File.path` field is gone).
    */
   workspaces: {
-    bind: (p: string): Promise<void> => ipcRenderer.invoke("workspace:bind", p),
-    unbind: (): Promise<void> => ipcRenderer.invoke("workspace:unbind"),
-    getCurrent: (): Promise<string | null> =>
-      ipcRenderer.invoke("workspace:get-current"),
+    bind: (sessionId: string, p: string): Promise<void> =>
+      ipcRenderer.invoke("workspace:bind", { sessionId, path: p }),
+    unbind: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke("workspace:unbind", sessionId),
+    getCurrent: (sessionId: string): Promise<string | null> =>
+      ipcRenderer.invoke("workspace:get-current", sessionId),
     onChanged: (cb: (change: WorkspaceChange) => void) => {
       const handler = (_e: unknown, change: WorkspaceChange) => cb(change)
       ipcRenderer.on("workspace:changed", handler)
@@ -67,6 +80,29 @@ const api = {
    * window) listens for `notifier:message` pushes from main and sends
    * approve/deny/activate-main back over their own channels.
    */
+  /**
+   * Spotlight-style Quick-Ask popup bridge. Main fires `prefill` after
+   * summon (with the captured selection + source app name); renderer
+   * sends `dismiss` / `resize` back. `submit` / `abort` go through the
+   * existing `chat.*` channel — the popup uses the same chat engine as
+   * the main window, just with its own session id.
+   */
+  quickAsk: {
+    onPrefill: (
+      cb: (payload: { text: string; sourceApp: string }) => void,
+    ) => {
+      const handler = (
+        _e: unknown,
+        payload: { text: string; sourceApp: string },
+      ) => cb(payload)
+      ipcRenderer.on("quick-ask:prefill", handler)
+      return () => ipcRenderer.off("quick-ask:prefill", handler)
+    },
+    dismiss: () => ipcRenderer.invoke("quick-ask:dismiss"),
+    resize: (contentHeightPx: number) =>
+      ipcRenderer.invoke("quick-ask:resize", contentHeightPx),
+  },
+
   notifier: {
     onMessage: (cb: (msg: unknown) => void) => {
       const handler = (_e: unknown, msg: unknown) => cb(msg)
@@ -77,6 +113,15 @@ const api = {
     approve: (approvalId: string) =>
       ipcRenderer.invoke("notifier:approve", approvalId),
     deny: (approvalId: string) => ipcRenderer.invoke("notifier:deny", approvalId),
+    /**
+     * Fire a demo notifier card so the user can confirm the floating
+     * window appears and clicks register. Call from the main window's
+     * devtools console:
+     *   window.hermes.notifier.demo()                  // cron card
+     *   window.hermes.notifier.demo("approval-pending") // approval card
+     */
+    demo: (kind?: "cron-completed" | "approval-pending") =>
+      ipcRenderer.invoke("notifier:demo", kind),
   },
 
   /**

@@ -35,8 +35,16 @@ export function registerIpcHandlers() {
 
   ipcMain.handle("shell:open-external", (_e, url: string) => shell.openExternal(url))
 
-  ipcMain.handle("workspace:bind", (_e, p: string) => workspaceManager.bind(p))
-  ipcMain.handle("workspace:unbind", () => workspaceManager.unbind())
-  ipcMain.handle("workspace:get-current", () => workspaceManager.getCurrent())
+  ipcMain.handle(
+    "workspace:bind",
+    (_e, args: { sessionId: string; path: string }) =>
+      workspaceManager.bind(args.sessionId, args.path),
+  )
+  ipcMain.handle("workspace:unbind", (_e, sessionId: string) =>
+    workspaceManager.unbind(sessionId),
+  )
+  ipcMain.handle("workspace:get-current", (_e, sessionId: string) =>
+    workspaceManager.getForSession(sessionId),
+  )
   workspaceManager.onChange(broadcastWorkspaceChange)
 }

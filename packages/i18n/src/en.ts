@@ -332,6 +332,13 @@ export const en = {
   "sidepanel.composer.cancelEdit":
     "Cancel edit (discards composer changes; the queued item is unchanged)",
   "sidepanel.composer.cancelEdit.aria": "Cancel edit",
+  "sidepanel.composer.kbd.send": "send",
+  "sidepanel.composer.kbd.newline": "newline",
+  "quickAsk.selectionFrom": "Selection from",
+  "quickAsk.kbd.ask": "ask",
+  "quickAsk.kbd.newline": "newline",
+  "quickAsk.kbd.new": "new",
+  "quickAsk.kbd.dismiss": "dismiss",
   "sidepanel.permission.allowOnce": "Allow once",
   "sidepanel.permission.allowOnce.desc":
     "Allow this time only; ask again next time",
@@ -450,6 +457,12 @@ export const en = {
   "sidepanel.sessions.group.earlierWeek": "Earlier this week",
   "sidepanel.sessions.group.thisMonth": "This month",
   "sidepanel.sessions.group.older": "Older",
+  "sidepanel.sessions.group.chats": "Chats",
+  "sidepanel.sessions.group.scheduled": "Scheduled tasks",
+  "sidepanel.sessions.scheduled.loading": "Loading…",
+  "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
+  "sidepanel.sessions.scheduled.error": "Couldn't load scheduled tasks. Check that the backplane is running.",
+  "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
 
   // New tab
   "newtab.greeting": "What can I help with?",

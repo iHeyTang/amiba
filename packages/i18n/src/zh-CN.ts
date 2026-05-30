@@ -309,6 +309,13 @@ export const zhCN: Messages = {
   "sidepanel.composer.cancelEdit":
     "取消编辑（丢弃输入框的修改；队列项保持不变）",
   "sidepanel.composer.cancelEdit.aria": "取消编辑",
+  "sidepanel.composer.kbd.send": "发送",
+  "sidepanel.composer.kbd.newline": "换行",
+  "quickAsk.selectionFrom": "选自",
+  "quickAsk.kbd.ask": "提问",
+  "quickAsk.kbd.newline": "换行",
+  "quickAsk.kbd.new": "新对话",
+  "quickAsk.kbd.dismiss": "关闭",
   "sidepanel.permission.allowOnce": "仅本次允许",
   "sidepanel.permission.allowOnce.desc": "仅此次允许；下次仍会询问",
   "sidepanel.permission.allowSession": "本会话允许",
@@ -417,6 +424,12 @@ export const zhCN: Messages = {
   "sidepanel.sessions.group.earlierWeek": "本周早些时候",
   "sidepanel.sessions.group.thisMonth": "本月",
   "sidepanel.sessions.group.older": "更早",
+  "sidepanel.sessions.group.chats": "对话历史",
+  "sidepanel.sessions.group.scheduled": "定时任务",
+  "sidepanel.sessions.scheduled.loading": "加载中…",
+  "sidepanel.sessions.scheduled.empty": "暂无定时任务。在聊天中创建一个试试。",
+  "sidepanel.sessions.scheduled.error": "无法加载定时任务，请检查后台服务。",
+  "sidepanel.sessions.scheduled.noRuns": "暂无运行记录。",
 
   // New tab
   "newtab.greeting": "我可以帮你做什么？",

@@ -106,11 +106,21 @@ export function NotifierView() {
 }
 
 function CardShell({ children }: { children: React.ReactNode }) {
+  // The outer box is the only thing the user sees — the window itself
+  // is fully transparent everywhere else, so this card has to be
+  // explicitly opaque (rounded, bordered, with a real shadow). The
+  // 3px top strip is a `-webkit-app-region: drag` handle so the user
+  // can move the card out of the way without losing interactivity on
+  // the body (buttons inside are explicitly `app-no-drag`).
   return (
     <div
       className="animate-notifier-in flex h-screen w-screen items-stretch p-2"
       role="alert">
-      <div className="flex w-full flex-col gap-2 rounded-xl border border-border bg-background/95 px-4 py-3 text-foreground shadow-2xl backdrop-blur-sm">
+      <div className="relative flex w-full flex-col gap-2 rounded-xl border border-border bg-background px-4 py-3 pt-4 text-foreground shadow-2xl">
+        <div
+          className="app-drag-region absolute inset-x-0 top-0 h-2 rounded-t-xl"
+          title="Drag to reposition"
+        />
         {children}
       </div>
     </div>

@@ -16,13 +16,37 @@ export type {
   NavigateOpenPolicyCapability,
   PageContextCapability,
   PageContextSnapshot,
+  PendingPromptAttachment,
   PendingPromptCapability,
+  PendingPromptResult,
   SidePanelCapabilities,
 } from "./internal/capabilities"
 export { TabBar } from "./TabBar"
 export { SessionDrawer } from "./SessionDrawer"
+export {
+  WallpaperBackdrop,
+  WallpaperCredit,
+  wallpaperAmbientTextClass,
+} from "./Wallpaper"
 export { MessageList } from "./MessageList"
-export { Composer } from "./Composer"
+export { Composer, type ComposerHandle, type ComposerProps } from "./Composer"
+export {
+  ComposerKbdHints,
+  Kbd,
+  type ComposerKbdHint,
+} from "./Kbd"
+export {
+  QuickActionChips,
+  type QuickActionChipsProps,
+} from "./QuickActionChips"
+export {
+  AttachmentButton,
+  ATTACHMENT_INPUT_ACCEPT,
+  useComposerAttachments,
+  type AttachmentButtonProps,
+  type UseComposerAttachmentsOptions,
+  type UseComposerAttachmentsResult,
+} from "./useComposerAttachments"
 
 // Bubble + helpers (the visual identity of the chat surface).
 export { Bubble, MessageTurns, UserStickyBubble, type BubbleProps } from "./bubble/Bubble"

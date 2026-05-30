@@ -13,7 +13,7 @@
  * uses it as the chat view inside the main BrowserWindow.
  */
 
-import { Home, MessageSquare, Pencil, Plus, Search, Settings, Trash2, X } from "lucide-react";
+import { Home, MessageSquare, Pencil, Plus, Search, Settings, SquarePen, Trash2, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -26,16 +26,20 @@ import {
 import {
   useSessions,
   type ChatEngineClient,
+  type CronRun,
+  type HermesCronJob,
+  type SessionMessage,
   type SessionMeta,
 } from "@hermes-x/core";
 import { useT, type TranslateFn } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
-import { Input, ScrollArea } from "@hermes-x/ui";
+import { Input } from "@hermes-x/ui";
 import { cn } from "@hermes-x/utils";
 
 import type { SidePanelCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
+import { ScheduledSection, TopSection } from "./SessionGroups";
 import SidePanelView from "./SidePanelView";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
@@ -72,13 +76,19 @@ export interface FullScreenChatViewProps {
   client: ChatEngineClient;
   /** Optional extension-only capabilities (page-context, learn, etc.). */
   capabilities?: SidePanelCapabilities;
-  /** Slots forwarded to SidePanelView (BridgeStatusBar / NavigateOpenPolicyToggle). */
+  /** Slots forwarded to SidePanelView (BridgeStatusBar / NavigateOpenPolicyToggle / empty-state). */
   slots?: {
     bridgeBar?: ReactNode;
     navigateOpenPolicyToggle?: (ctx: {
       policy: import("./internal/capabilities").NavigateOpenPolicy;
       onChange: (next: import("./internal/capabilities").NavigateOpenPolicy) => void;
     }) => ReactNode;
+    /**
+     * Rendered in the main pane when no session is active. Desktop hands
+     * in ``<HomeView panelMode />`` so the home composer doubles as the
+     * empty state instead of a separate route.
+     */
+    emptyState?: ReactNode;
   };
   /** TabBar gear / top-bar gear → open Settings. */
   openSettings: () => void;
@@ -128,6 +138,15 @@ export default function FullScreenChatView({
     DEFAULT_MESSAGES_WIDTH,
   );
 
+  // Active session title for the top-bar centre. Empty when no session
+  // is active; the MainActionsBar uses that as a "no chat yet" signal
+  // and renders the wordmark instead.
+  const activeTitle = useMemo(() => {
+    if (!sessions.activeId) return "";
+    const found = sessions.sessions.find((s) => s.id === sessions.activeId);
+    return found?.title?.trim() || "";
+  }, [sessions.activeId, sessions.sessions]);
+
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
@@ -164,6 +183,43 @@ export default function FullScreenChatView({
     [sessions],
   );
 
+  // Cron run → chat session. The rail's Scheduled-tasks section lists
+  // past cron runs (markdown files without a Hermes session backing).
+  // Clicking one synthesises an id-stable session whose first user turn
+  // is the job prompt and first assistant turn is the run body, then
+  // opens it as a normal tab. Re-clicks are idempotent because
+  // ``importSession`` short-circuits to ``openTab`` when the local
+  // index already knows the id.
+  const onOpenCronRun = useCallback(
+    async (job: HermesCronJob, run: CronRun): Promise<void> => {
+      if (!sessions.ready) return;
+      const id = `cron_${job.id}_${run.runId}`;
+      const runStamp = new Date(run.runAtMs).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const meta: SessionMeta = {
+        id,
+        title: `${job.name || job.id} · ${runStamp}`,
+        createdAt: run.runAtMs,
+        updatedAt: run.runAtMs,
+        messageCount: 2,
+        titleManual: true,
+      };
+      const messages: SessionMessage[] = [
+        {
+          role: "user",
+          content: (job.prompt || "").trim() || "(scheduled run)",
+        },
+        { role: "assistant", content: run.content || "" },
+      ];
+      await sessions.importSession(meta, messages);
+    },
+    [sessions],
+  );
+
   return (
     <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
       <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/60 bg-muted/15">
@@ -182,14 +238,16 @@ export default function FullScreenChatView({
           onOpen={(id) => void onOpenSession(id)}
           onRename={(id, title) => void sessions.rename(id, title)}
           onDelete={(id) => void sessions.remove(id)}
+          onNewChat={() => void onNewChat()}
+          onOpenCronRun={onOpenCronRun}
         />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <MainActionsBar
           messagesWidth={messagesWidth}
           onMessagesWidthChange={onWidthChange}
-          onNewChat={() => void onNewChat()}
           onOpenSettings={openSettings}
+          activeTitle={activeTitle}
           heightPx={topBarHeightPx}
           className={topBarClassName}
         />
@@ -262,8 +320,9 @@ function SidebarHeader({
 interface MainActionsBarProps {
   messagesWidth: MessagesMaxWidth;
   onMessagesWidthChange: (next: MessagesMaxWidth) => void;
-  onNewChat: () => void;
   onOpenSettings: () => void;
+  /** Title of the currently active session, empty when none. */
+  activeTitle: string;
   /** Row height in px. Default 24 (compact). Desktop passes 44 to match
    *  the sidebar header so both rows form a single horizontal chrome line. */
   heightPx?: number;
@@ -272,43 +331,61 @@ interface MainActionsBarProps {
 }
 
 /**
- * Right-side actions strip above the chat pane: new chat / width toggle /
- * Settings gear. Same row height as the sidebar header so they read as
- * one continuous title-bar line across the window.
+ * Top bar across the main pane: drag-region left, centred session title,
+ * right-aligned actions cluster (width toggle, Settings). Same row
+ * height as the sidebar header so both read as one continuous chrome
+ * line across the window.
  */
 function MainActionsBar({
   messagesWidth,
   onMessagesWidthChange,
-  onNewChat,
   onOpenSettings,
+  activeTitle,
   heightPx = 24,
   className,
 }: MainActionsBarProps) {
   const { t } = useT();
   return (
     <header
-      className={cn("flex shrink-0 items-center justify-end gap-1 px-2", className)}
+      className={cn(
+        "relative flex shrink-0 items-center gap-1 px-2",
+        className,
+      )}
       style={{ height: heightPx }}
     >
-      <button
-        type="button"
-        onClick={onNewChat}
-        className="inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        title={t("chat.newChat")}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {t("sidepanel.tabbar.button.new")}
-      </button>
-      <WidthToggle value={messagesWidth} onChange={onMessagesWidthChange} />
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label={t("chat.openOptions")}
-        title={t("chat.openOptions")}
-      >
-        <Settings className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex-1" />
+
+      {/* Centre: active session title. Absolutely positioned so it
+          stays mid-row regardless of how wide the right-hand action
+          cluster grows. `pointer-events-none` on the wrapper means
+          window-dragging still works through it; the title itself
+          re-enables events for tooltips. */}
+      {activeTitle && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 flex h-full items-center justify-center"
+          style={{ height: heightPx }}
+        >
+          <span
+            className="pointer-events-auto max-w-[60%] truncate text-[12px] font-medium text-foreground"
+            title={activeTitle}
+          >
+            {activeTitle}
+          </span>
+        </div>
+      )}
+
+      <div className="app-no-drag flex items-center gap-1">
+        <WidthToggle value={messagesWidth} onChange={onMessagesWidthChange} />
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={t("chat.openOptions")}
+          title={t("chat.openOptions")}
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </header>
   );
 }
@@ -387,13 +464,18 @@ interface SessionsRailProps {
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  /** Create a fresh session (button next to the search input). */
+  onNewChat: () => void;
+  onOpenCronRun: (job: HermesCronJob, run: CronRun) => void;
 }
 
 /**
- * Vertical session list grouped by recency (Today / Yesterday / Older).
- * Selecting an entry hands the click off to the SidePanel via shared
- * session state (storage-backed) — there is no direct cross-component
- * messaging here, just side-effects through ``chrome.storage``.
+ * Two-section sidebar (Cursor/VSCode-style): a "Chats" group with the
+ * existing recency-bucketed sessions on top, a "Scheduled tasks" group
+ * with cron jobs + runs below. Both sections are collapsible
+ * independently; the search box at the top filters chat titles only
+ * (cron rows are short-list and ordered by run time, no point
+ * search-filtering them in the same control).
  */
 function SessionsRail({
   sessions,
@@ -404,11 +486,20 @@ function SessionsRail({
   onOpen,
   onRename,
   onDelete,
+  onNewChat,
+  onOpenCronRun,
 }: SessionsRailProps) {
   const { t } = useT();
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const live = sessions.filter((s) => !s.archived);
+    // Cron-run sessions live in the "Scheduled tasks" group only. Their
+    // ids have a stable ``cron_${jobId}_${runId}`` shape minted by
+    // ``onOpenCronRun`` / ``syntheticIdForRun`` — filter them out of
+    // the chat list so the same conversation doesn't surface in both
+    // groups.
+    const live = sessions.filter(
+      (s) => !s.archived && !s.id.startsWith("cron_"),
+    );
     if (!q) return live;
     return live.filter((s) =>
       (s.title || t("chat.untitled")).toLowerCase().includes(q),
@@ -417,9 +508,18 @@ function SessionsRail({
 
   const groups = useMemo(() => groupByRecency(filtered, t), [filtered, t]);
 
+  // Top-level collapse state — default both expanded so first-open users
+  // discover the Scheduled-tasks section without hunting.
+  const [topCollapsed, setTopCollapsed] = useState<{
+    chats: boolean;
+    scheduled: boolean;
+  }>({ chats: false, scheduled: false });
+  const toggleTop = (k: "chats" | "scheduled") =>
+    setTopCollapsed((p) => ({ ...p, [k]: !p[k] }));
+
   return (
     <>
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-2">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border/60 px-3 py-2">
         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <input
           type="text"
@@ -438,41 +538,84 @@ function SessionsRail({
             <X className="h-3 w-3" />
           </button>
         )}
+        {/* New-chat button — moved here from the main top bar so the
+            cluster "filter + start" lives in one place. Square icon
+            (lucide ``SquarePen``) reads as "compose" without needing
+            text accompaniment. */}
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={t("chat.newChat")}
+          aria-label={t("chat.newChat")}
+        >
+          <SquarePen className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        {!ready ? (
-          <p className="px-3 py-4 text-[11px] text-muted-foreground">
-            {t("chat.loadingSessions")}
-          </p>
-        ) : filtered.length === 0 ? (
-          <p className="px-3 py-4 text-[11px] text-muted-foreground">
-            {query ? t("chat.noMatches") : t("chat.noSessions")}
-          </p>
-        ) : (
-          <nav className="flex flex-col py-1">
-            {groups.map((g) =>
-              g.items.length === 0 ? null : (
-                <div key={g.key} className="flex flex-col">
-                  <p className="px-3 pt-2.5 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    {g.label}
-                  </p>
-                  {g.items.map((s) => (
-                    <SessionRow
-                      key={s.id}
-                      session={s}
-                      active={s.id === activeId}
-                      onOpen={() => onOpen(s.id)}
-                      onRename={(title) => onRename(s.id, title)}
-                      onDelete={() => onDelete(s.id)}
-                    />
-                  ))}
-                </div>
-              ),
-            )}
-          </nav>
-        )}
-      </ScrollArea>
+      {/*
+        Flex column with two TopSections in flex mode: collapsed sections
+        shrink to their header (pinned at top/bottom of their slot) and
+        expanded ones share the remaining height with internal scroll.
+        When the upper "Chats" section overflows, the "Scheduled tasks"
+        header stays anchored at the bottom — matches VSCode's
+        explorer-style group behaviour.
+        Container has ``border-t`` so the first section gets a top
+        border; each section then carries its own ``border-b``, so
+        adjacent sections share a single hairline divider with no gap.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
+        <TopSection
+          label={t("sidepanel.sessions.group.chats")}
+          count={filtered.length}
+          collapsed={topCollapsed.chats}
+          onToggle={() => toggleTop("chats")}
+          variant="rail"
+          flex
+        >
+          {!ready ? (
+            <p className="px-3 py-3 text-[11px] text-muted-foreground">
+              {t("chat.loadingSessions")}
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="px-3 py-3 text-[11px] text-muted-foreground">
+              {query ? t("chat.noMatches") : t("chat.noSessions")}
+            </p>
+          ) : (
+            <nav className="flex flex-col">
+              {groups.map((g) =>
+                g.items.length === 0 ? null : (
+                  <div key={g.key} className="flex flex-col">
+                    <p className="px-3 pb-0.5 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                      {g.label}
+                    </p>
+                    {g.items.map((s) => (
+                      <SessionRow
+                        key={s.id}
+                        session={s}
+                        active={s.id === activeId}
+                        onOpen={() => onOpen(s.id)}
+                        onRename={(title) => onRename(s.id, title)}
+                        onDelete={() => onDelete(s.id)}
+                      />
+                    ))}
+                  </div>
+                ),
+              )}
+            </nav>
+          )}
+        </TopSection>
+
+        <ScheduledSection
+          open={!topCollapsed.scheduled}
+          collapsed={topCollapsed.scheduled}
+          onToggle={() => toggleTop("scheduled")}
+          activeId={activeId}
+          onOpenCronRun={onOpenCronRun}
+          variant="rail"
+          flex
+        />
+      </div>
     </>
   );
 }
