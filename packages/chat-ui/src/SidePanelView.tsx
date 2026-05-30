@@ -50,13 +50,9 @@ import {
   type ChatEngineClient,
   type ChatMessage,
   type ChatRuntimeState,
-  type CronRun,
   type HermesApprovalDecision,
   type HermesApprovalRequest,
-  type HermesCronJob,
   type HermesToolProgress,
-  type SessionMessage,
-  type SessionMeta,
   type SnapshotFrame,
   type StreamEvent,
   type StreamedToolCall,
@@ -317,42 +313,13 @@ export default function SidePanelView({
   const [error, setError] = useState<ChatError | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Cron run → chat session bridge. The drawer's Scheduled-tasks section
-  // surfaces past cron runs (markdown files, no session backing); the
-  // user expects to click one and land in the chat UI with the run
-  // already in context, then optionally continue chatting against the
-  // same agent. We synthesize a session id from ``cron_{jobId}_{runId}``
-  // so re-clicks are idempotent — ``importSession`` short-circuits to
-  // ``openTab`` when the local index already knows the id.
-  const onOpenCronRun = useCallback(
-    async (job: HermesCronJob, run: CronRun): Promise<void> => {
-      const id = `cron_${job.id}_${run.runId}`;
-      const runStamp = new Date(run.runAtMs).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const meta: SessionMeta = {
-        id,
-        title: `${job.name || job.id} · ${runStamp}`,
-        createdAt: run.runAtMs,
-        updatedAt: run.runAtMs,
-        messageCount: 2,
-        titleManual: true,
-      };
-      // Seed the conversation with the cron prompt as the user turn and
-      // the run's markdown body as the assistant reply. Empty prompts
-      // (e.g. ``no_agent`` jobs) get a placeholder so the message log
-      // still alternates user→assistant cleanly.
-      const messages: SessionMessage[] = [
-        {
-          role: "user",
-          content: (job.prompt || "").trim() || "(scheduled run)",
-        },
-        { role: "assistant", content: run.content || "" },
-      ];
-      await sessions.importSession(meta, messages);
+  // Cron session click → open the existing SessionDB row as a tab. The
+  // drawer's Scheduled-tasks group now lists cron-source sessions from
+  // SessionDB directly (matches ``hermes sessions list --source cron``),
+  // so the row already exists and we just need to bring it to front.
+  const onOpenCronSession = useCallback(
+    async (sessionId: string): Promise<void> => {
+      await sessions.openTab(sessionId);
     },
     [sessions],
   );
@@ -2810,7 +2777,7 @@ export default function SidePanelView({
         onOpen={(id) => void sessions.openTab(id)}
         onRename={(id, title) => void sessions.rename(id, title)}
         onDelete={(id) => void sessions.remove(id)}
-        onOpenCronRun={onOpenCronRun}
+        onOpenCronSession={onOpenCronSession}
       />
     </div>
   );

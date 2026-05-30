@@ -12,11 +12,11 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useT } from "@hermes-x/i18n";
 import {
-  cronRunKey,
   getHermesCronJobs,
-  useCronRuns,
-  type CronRun,
+  parseCronSessionJobId,
+  useCronSessions,
   type HermesCronJob,
+  type HermesSession,
 } from "@hermes-x/core";
 import { cn } from "@hermes-x/utils";
 
@@ -116,7 +116,12 @@ export interface ScheduledSectionProps {
   collapsed: boolean;
   onToggle: () => void;
   activeId: string;
-  onOpenCronRun: (job: HermesCronJob, run: CronRun) => void;
+  /**
+   * Open a cron-source session as a tab in the chat surface. The session
+   * row already exists in SessionDB (we list them directly), so the
+   * caller just needs to ``sessions.openTab(id)`` — no synthesis needed.
+   */
+  onOpenCronSession: (sessionId: string) => void;
   variant?: "drawer" | "rail";
   /** Forwarded to the inner `TopSection`. See its prop for semantics. */
   flex?: boolean;
@@ -127,7 +132,7 @@ export function ScheduledSection({
   collapsed,
   onToggle,
   activeId,
-  onOpenCronRun,
+  onOpenCronSession,
   variant = "drawer",
   flex = false,
 }: ScheduledSectionProps) {
@@ -158,22 +163,27 @@ export function ScheduledSection({
     };
   }, [open]);
 
-  const cronRuns = useCronRuns();
+  // Pull cron-source sessions straight from SessionDB. Equivalent to
+  // ``hermes sessions list --source cron`` in the CLI — single canonical
+  // dataset, no parallel md-file index.
+  const cronSessions = useCronSessions();
 
-  const runsByJob = useMemo(() => {
-    const m = new Map<string, CronRun[]>();
-    for (const r of cronRuns.runs) {
-      const arr = m.get(r.jobId) ?? [];
-      arr.push(r);
-      m.set(r.jobId, arr);
+  const sessionsByJob = useMemo(() => {
+    const m = new Map<string, HermesSession[]>();
+    for (const s of cronSessions.sessions) {
+      const jobId = parseCronSessionJobId(s.id);
+      if (!jobId) continue;
+      const arr = m.get(jobId) ?? [];
+      arr.push(s);
+      m.set(jobId, arr);
     }
     return m;
-  }, [cronRuns.runs]);
+  }, [cronSessions.sessions]);
 
   // Show all jobs that EITHER are configured (in the jobs list) OR have
-  // emitted runs in the recent window. The runs feed survives even after
-  // a job has been deleted from cron config — letting the user reopen a
-  // historical run as a chat is the whole point of this section.
+  // emitted sessions in SessionDB. The session feed survives even after
+  // a job has been deleted from cron config — letting the user reopen
+  // historical runs is the whole point of this section.
   const orderedJobIds = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -181,14 +191,14 @@ export function ScheduledSection({
       out.push(j.id);
       seen.add(j.id);
     }
-    for (const r of cronRuns.runs) {
-      if (!seen.has(r.jobId)) {
-        out.push(r.jobId);
-        seen.add(r.jobId);
+    for (const jobId of sessionsByJob.keys()) {
+      if (!seen.has(jobId)) {
+        out.push(jobId);
+        seen.add(jobId);
       }
     }
     return out;
-  }, [jobs, cronRuns.runs]);
+  }, [jobs, sessionsByJob]);
 
   const visibleCount = orderedJobIds.length;
 
@@ -206,7 +216,7 @@ export function ScheduledSection({
       variant={variant}
       flex={flex}
     >
-      {!jobsLoaded && !cronRuns.ready ? (
+      {!jobsLoaded && !cronSessions.ready ? (
         <div className="mx-3 my-2 rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
           {t("sidepanel.sessions.scheduled.loading")}
         </div>
@@ -225,27 +235,24 @@ export function ScheduledSection({
         <ul>
           {orderedJobIds.map((jobId) => {
             const job =
-              jobs.find((j) => j.id === jobId) ??
-              jobFromRuns(jobId, runsByJob.get(jobId) ?? []);
-            const runs = runsByJob.get(jobId) ?? [];
+              jobs.find((j) => j.id === jobId) ?? jobStubFromId(jobId);
+            const jobSessions = sessionsByJob.get(jobId) ?? [];
             const expanded = !!jobExpanded[jobId];
             return (
               <Fragment key={jobId}>
                 <CronJobRow
                   job={job}
-                  runCount={runs.length}
+                  runCount={jobSessions.length}
                   expanded={expanded}
                   onToggle={() => toggleJob(jobId)}
                 />
                 {expanded &&
-                  runs.map((r) => (
+                  jobSessions.map((s) => (
                     <CronRunRow
-                      key={cronRunKey(r)}
-                      run={r}
-                      active={
-                        syntheticIdForRun(job.id, r.runId) === activeId
-                      }
-                      onClick={() => onOpenCronRun(job, r)}
+                      key={s.id}
+                      session={s}
+                      active={s.id === activeId}
+                      onClick={() => onOpenCronSession(s.id)}
                     />
                   ))}
               </Fragment>
@@ -257,12 +264,15 @@ export function ScheduledSection({
   );
 }
 
-/** Synthesize a minimal job stub when only runs (no live config) are known. */
-function jobFromRuns(jobId: string, runs: CronRun[]): HermesCronJob {
-  const name = runs[0]?.jobName || jobId;
+/**
+ * Stub job descriptor for jobs that have sessions in SessionDB but no
+ * matching live config (deleted ``cron remove``-style or pre-migration
+ * holdovers). Just enough fields so ``CronJobRow`` can render.
+ */
+function jobStubFromId(jobId: string): HermesCronJob {
   return {
     id: jobId,
-    name,
+    name: jobId,
     prompt: "",
     skills: [],
     skill: null,
@@ -274,7 +284,7 @@ function jobFromRuns(jobId: string, runs: CronRun[]): HermesCronJob {
     context_from: null,
     schedule: { kind: "cron" },
     schedule_display: "",
-    repeat: { times: null, completed: runs.length },
+    repeat: { times: null, completed: 0 },
     enabled: false,
     state: "completed",
     paused_at: null,
@@ -282,12 +292,7 @@ function jobFromRuns(jobId: string, runs: CronRun[]): HermesCronJob {
     created_at: "",
     next_run_at: null,
     last_run_at: null,
-    last_status:
-      runs[0]?.status === "error"
-        ? "error"
-        : runs[0]?.status === "ok"
-          ? "ok"
-          : null,
+    last_status: null,
     last_error: null,
     last_delivery_error: null,
     deliver: "local",
@@ -348,28 +353,20 @@ function CronJobRow({ job, runCount, expanded, onToggle }: CronJobRowProps) {
   );
 }
 
-/** Mirrors `SidePanelView.onOpenCronRun`'s id format. Kept in sync there. */
-export function syntheticIdForRun(jobId: string, runId: string): string {
-  return `cron_${jobId}_${runId}`;
-}
-
 interface CronRunRowProps {
-  run: CronRun;
+  session: HermesSession;
   active: boolean;
   onClick: () => void;
 }
 
-function CronRunRow({ run, active, onClick }: CronRunRowProps) {
-  // Status collapses onto a single coloured dot in the gutter — that
-  // dot doubles as the icon since the parent row already conveys the
-  // "this is a cron run" context. ``Clock`` would be a tautology here.
-  const stateDot =
-    run.status === "error"
-      ? "bg-destructive"
-      : run.status === "ok"
-        ? "bg-emerald-500"
-        : "bg-muted-foreground/40";
-  const stamp = new Date(run.runAtMs).toLocaleString(undefined, {
+function CronRunRow({ session, active, onClick }: CronRunRowProps) {
+  // SessionDB doesn't carry an explicit "ok/error" verdict per row, so
+  // the dot is just a neutral marker here. Real status info — when
+  // present — lives at the job level (``last_status`` on
+  // ``HermesCronJob``), so the parent ``CronJobRow``'s coloured dot
+  // already conveys the canonical "last run succeeded / failed" hint.
+  const startedAtMs = (session.last_active ?? session.started_at) * 1000;
+  const stamp = new Date(startedAtMs).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -383,9 +380,8 @@ function CronRunRow({ run, active, onClick }: CronRunRowProps) {
         className={cn(
           // Same ``px-3 + gap-1.5`` outer geometry as ``CronJobRow``
           // so the status dot column lines up exactly under the parent
-          // job's dot. The invisible chevron-sized spacer below
-          // replaces the parent's ChevronRight glyph — it preserves
-          // the column without drawing anything, giving the row a
+          // job's dot. The invisible chevron-sized spacer replaces
+          // the parent's ChevronRight glyph, giving the row a
           // "tucked under the parent" feel rather than its own deeper
           // indent.
           "flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs",
@@ -398,7 +394,7 @@ function CronRunRow({ run, active, onClick }: CronRunRowProps) {
         <span aria-hidden className="h-3 w-3 shrink-0" />
         <span
           aria-hidden
-          className={cn("h-1.5 w-1.5 shrink-0 rounded-full", stateDot)}
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
         />
         <span className="min-w-0 flex-1 truncate">{stamp}</span>
       </button>

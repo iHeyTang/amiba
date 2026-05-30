@@ -26,9 +26,6 @@ import {
 import {
   useSessions,
   type ChatEngineClient,
-  type CronRun,
-  type HermesCronJob,
-  type SessionMessage,
   type SessionMeta,
 } from "@hermes-x/core";
 import { useT, type TranslateFn } from "@hermes-x/i18n";
@@ -183,39 +180,14 @@ export default function FullScreenChatView({
     [sessions],
   );
 
-  // Cron run → chat session. The rail's Scheduled-tasks section lists
-  // past cron runs (markdown files without a Hermes session backing).
-  // Clicking one synthesises an id-stable session whose first user turn
-  // is the job prompt and first assistant turn is the run body, then
-  // opens it as a normal tab. Re-clicks are idempotent because
-  // ``importSession`` short-circuits to ``openTab`` when the local
-  // index already knows the id.
-  const onOpenCronRun = useCallback(
-    async (job: HermesCronJob, run: CronRun): Promise<void> => {
+  // Cron session click → just open the existing SessionDB row as a
+  // tab. The rail now lists cron sessions straight from SessionDB
+  // (``listHermesSessions({ source: "cron" })``), so the session row
+  // already exists; no synthesis or pending-prompt hand-off needed.
+  const onOpenCronSession = useCallback(
+    async (sessionId: string): Promise<void> => {
       if (!sessions.ready) return;
-      const id = `cron_${job.id}_${run.runId}`;
-      const runStamp = new Date(run.runAtMs).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const meta: SessionMeta = {
-        id,
-        title: `${job.name || job.id} · ${runStamp}`,
-        createdAt: run.runAtMs,
-        updatedAt: run.runAtMs,
-        messageCount: 2,
-        titleManual: true,
-      };
-      const messages: SessionMessage[] = [
-        {
-          role: "user",
-          content: (job.prompt || "").trim() || "(scheduled run)",
-        },
-        { role: "assistant", content: run.content || "" },
-      ];
-      await sessions.importSession(meta, messages);
+      await sessions.openTab(sessionId);
     },
     [sessions],
   );
@@ -239,7 +211,7 @@ export default function FullScreenChatView({
           onRename={(id, title) => void sessions.rename(id, title)}
           onDelete={(id) => void sessions.remove(id)}
           onNewChat={() => void onNewChat()}
-          onOpenCronRun={onOpenCronRun}
+          onOpenCronSession={onOpenCronSession}
         />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -466,7 +438,7 @@ interface SessionsRailProps {
   onDelete: (id: string) => void;
   /** Create a fresh session (button next to the search input). */
   onNewChat: () => void;
-  onOpenCronRun: (job: HermesCronJob, run: CronRun) => void;
+  onOpenCronSession: (sessionId: string) => void;
 }
 
 /**
@@ -487,16 +459,15 @@ function SessionsRail({
   onRename,
   onDelete,
   onNewChat,
-  onOpenCronRun,
+  onOpenCronSession,
 }: SessionsRailProps) {
   const { t } = useT();
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    // Cron-run sessions live in the "Scheduled tasks" group only. Their
-    // ids have a stable ``cron_${jobId}_${runId}`` shape minted by
-    // ``onOpenCronRun`` / ``syntheticIdForRun`` — filter them out of
-    // the chat list so the same conversation doesn't surface in both
-    // groups.
+    // Cron-source sessions live in the "Scheduled tasks" group only;
+    // upstream Hermes names them ``cron_{job_id}_{stamp}``. Filter them
+    // out of the chat list so the same conversation doesn't surface
+    // in both groups.
     const live = sessions.filter(
       (s) => !s.archived && !s.id.startsWith("cron_"),
     );
@@ -611,7 +582,7 @@ function SessionsRail({
           collapsed={topCollapsed.scheduled}
           onToggle={() => toggleTop("scheduled")}
           activeId={activeId}
-          onOpenCronRun={onOpenCronRun}
+          onOpenCronSession={onOpenCronSession}
           variant="rail"
           flex
         />

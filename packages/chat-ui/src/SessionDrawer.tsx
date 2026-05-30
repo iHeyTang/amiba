@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@hermes-x/ui";
 import { ScrollArea } from "@hermes-x/ui";
 import { useT, type TranslateFn } from "@hermes-x/i18n";
-import type { CronRun, HermesCronJob, SessionMeta } from "@hermes-x/core";
+import type { SessionMeta } from "@hermes-x/core";
 import { cn } from "@hermes-x/utils";
 
 import { ScheduledSection, TopSection } from "./SessionGroups";
@@ -28,14 +28,14 @@ interface Props {
   /** Permanent delete: drops the session from history + closes its tab. */
   onDelete: (id: string) => void;
   /**
-   * Materialise a cron run as a chat session and open it as a tab. The
-   * drawer surfaces cron jobs/runs alongside chats but the actual
-   * session synthesis lives in the parent — keeps this component
-   * pure-ish and lets the parent decide on idempotency vs. duplication.
-   * Optional: surfaces that don't expose cron tasks (e.g. the slim
-   * ChatView) can omit this and the Scheduled section stays hidden.
+   * Open a cron-source session as a tab. The drawer queries SessionDB
+   * directly for cron sessions (one canonical source, matches
+   * ``hermes sessions list --source cron``), so the caller just needs
+   * to ``sessions.openTab(id)``. Optional: surfaces that don't expose
+   * cron tasks (e.g. the slim ChatView) can omit this and the
+   * Scheduled section stays hidden.
    */
-  onOpenCronRun?: (job: HermesCronJob, run: CronRun) => void;
+  onOpenCronSession?: (sessionId: string) => void;
 }
 
 interface DateBucket {
@@ -116,7 +116,7 @@ export function SessionDrawer({
   onOpen,
   onRename,
   onDelete,
-  onOpenCronRun,
+  onOpenCronSession,
 }: Props) {
   const { t } = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -227,14 +227,14 @@ export function SessionDrawer({
               )}
             </TopSection>
 
-            {onOpenCronRun && (
+            {onOpenCronSession && (
               <ScheduledSection
                 open={open && !topCollapsed.scheduled}
                 collapsed={topCollapsed.scheduled}
                 onToggle={() => toggleTop("scheduled")}
                 activeId={activeId}
-                onOpenCronRun={(job, run) => {
-                  onOpenCronRun(job, run);
+                onOpenCronSession={(id) => {
+                  onOpenCronSession(id);
                   onClose();
                 }}
               />

@@ -9,24 +9,15 @@
  */
 
 import {
-  AlertTriangle,
   ArrowUp,
-  Check,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Globe,
-  Inbox as InboxIcon,
-  MessageSquare,
-  Moon,
-  Plus,
-  RefreshCw,
   Settings,
   Settings2,
   Trash2,
   X,
 } from "lucide-react";
-import { Streamdown } from "streamdown";
 import {
   forwardRef,
   useCallback,
@@ -41,21 +32,11 @@ import {
 } from "react";
 
 import {
-  cronRunKey,
-  DEFAULT_ROUTINES,
-  getInstalledRoutineIds,
-  installRoutine,
   renderQuickActionPrompt,
-  useCronRuns,
   useQuickActions,
-  useResume,
   useSessions,
   useWallpaper,
-  type CronRun,
-  type CronRunStatus,
   type ResolvedQuickAction,
-  type ResumeItem,
-  type RoutineTemplate,
   type WallpaperController,
 } from "@hermes-x/core";
 import {
@@ -163,8 +144,6 @@ function Home({
 }: HomeViewProps) {
   const { t } = useT();
   const sessions = useSessions();
-  const cronRuns = useCronRuns();
-  const resume = useResume(sessions.sessions);
   // Shortcuts hook is capability-provided — stable across renders. Falls
   // back to a no-op so the rules-of-hooks order stays consistent.
   const useShortcutsHook = capabilities?.shortcuts?.useController ?? useNoShortcuts;
@@ -182,91 +161,12 @@ function Home({
 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  // Bottom peek dashboard. Off-screen at rest; wheel-down anywhere on
-  // the page slides it up, wheel-up (outside the panel's own scrollable
-  // area) slides it back down. There's no auto-collapse on mouse-leave
-  // — once raised the panel stays put until the user explicitly wheels
-  // it away.
-  const [peekExpanded, setPeekExpanded] = useState(false);
-  // The cooldown keeps continuous trackpad wheel events from instantly
-  // toggling on/off — without it a single fast scroll gesture would
-  // fire ~30 wheel events and the panel would oscillate.
-  const peekExpandedRef = useRef(peekExpanded);
-  const wheelCooldownUntilRef = useRef<number>(0);
-  useEffect(() => {
-    peekExpandedRef.current = peekExpanded;
-  }, [peekExpanded]);
-  useEffect(() => {
-    // Embedded panel mode skips the bottom-peek dashboard entirely, so
-    // the window-wide wheel-toggle listener is dead weight there — and
-    // worse, it would `preventDefault` wheel events inside the chat
-    // surface and break legitimate scrolling.
-    if (panelMode) return;
-    function onWheel(e: WheelEvent) {
-      const target = e.target as HTMLElement | null;
-      // Self-scrolling form controls (the composer textarea above
-      // all) must keep their own scroll behaviour — a long prompt
-      // that overflows the composer should scroll the composer,
-      // not bounce the peek panel up/down. `closest()` so the check
-      // survives any wrapper element that might sit between the
-      // event target and the actual textarea.
-      if (target?.closest("textarea, input")) return;
 
-      // When the panel is expanded AND the wheel originates inside the
-      // peek's content area (e.g. scrollable markdown in the CronContent
-      // column), let the browser scroll the inner element normally —
-      // don't hijack it.
-      const inPeek = target?.closest("[data-bottom-peek-scroll]");
-      if (peekExpandedRef.current && inPeek) return;
-
-      // Outside the scrollable peek area (or panel is collapsed): the
-      // page itself has nothing to scroll (root is `overflow-hidden`),
-      // so a wheel gesture is unambiguously a peek-toggle intent.
-      e.preventDefault();
-
-      const now = Date.now();
-      if (now < wheelCooldownUntilRef.current) return;
-
-      if (e.deltaY > 0 && !peekExpandedRef.current) {
-        setPeekExpanded(true);
-        wheelCooldownUntilRef.current = now + 600;
-      } else if (e.deltaY < 0 && peekExpandedRef.current) {
-        setPeekExpanded(false);
-        wheelCooldownUntilRef.current = now + 600;
-      }
-    }
-    // `passive: false` is required so `preventDefault` actually
-    // suppresses any latent page-level scroll on browsers that haven't
-    // already short-circuited it via `overflow-hidden`.
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => window.removeEventListener("wheel", onWheel);
-  }, [panelMode]);
-
-  // On mount: focus composer; on focus re-pull runs so a long-open tab
-  // catches up. Initial fetch is fired by the hook itself.
+  // On mount: focus the composer textarea.
   useEffect(() => {
     inputRef.current?.focus();
-    const onFocus = () => {
-      void cronRuns.refresh();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Selection rule: the user's explicit pick if it's still in the list;
-  // otherwise the newest run. Keeps "latest by default" without stomping
-  // a deliberate selection that survives a refresh.
-  const selectedRun = useMemo<CronRun | null>(() => {
-    if (cronRuns.runs.length === 0) return null;
-    if (selectedKey) {
-      const found = cronRuns.runs.find((r) => cronRunKey(r) === selectedKey);
-      if (found) return found;
-    }
-    return cronRuns.runs[0];
-  }, [cronRuns.runs, selectedKey]);
 
   // Navigate to the chat view. Extension does an in-page redirect to
   // `tabs/chat.html`; desktop just switches a state variable in App.
@@ -331,42 +231,6 @@ function Home({
     }
   }
 
-  async function openSession(id: string) {
-    if (!sessions.ready) return;
-    setBusy(true);
-    try {
-      await sessions.openTab(id);
-      goToChatTab();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /**
-   * "Continue in chat": seed a fresh session with the selected run's
-   * full markdown so the assistant has context without a round-trip
-   * through memory.
-   */
-  async function continueRunInChat(run: CronRun) {
-    if (!sessions.ready) return;
-    setBusy(true);
-    try {
-      await sessions.createNew();
-      const stamp = new Date(run.runAtMs).toLocaleString();
-      const prompt = t("newtab.continueInChat.prompt", {
-        name: run.jobName,
-        time: stamp,
-        content: run.content,
-      });
-      await getPlatform().storage.set({
-        [HOME_PENDING_PROMPT_KEY]: { text: prompt, ts: Date.now() },
-      });
-      goToChatTab();
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     const ne = e.nativeEvent;
     if (ne.isComposing || e.key === "Process") return;
@@ -409,9 +273,7 @@ function Home({
           : "relative isolate flex h-screen w-full flex-col overflow-hidden text-foreground",
       )}
     >
-      {!panelMode && (
-        <WallpaperBackdrop controller={wallpaper} dim={peekExpanded} />
-      )}
+      {!panelMode && <WallpaperBackdrop controller={wallpaper} />}
       {!hideInternalHeader && !panelMode && (
         <TopBar
           wallpaperController={wallpaper.enabled ? wallpaper : null}
@@ -428,19 +290,8 @@ function Home({
           // composer feels more at home around the upper third than
           // dead-centre). Achieved via `padding-bottom` — shrinks the
           // available area from below so `justify-center` re-centres
-          // the content in the smaller space. Layout-native: no
-          // `transform: translate`, which would visually overlap the
-          // TopBar and steal pointer events from its icons.
-          "justify-center",
-          // Peek-pad transition is only meaningful when the BottomPeek
-          // exists; in panel mode there's no peek so we leave a fixed
-          // breathing space instead.
-          !panelMode && "transition-[padding-bottom] duration-500 ease-out",
-          panelMode
-            ? "pb-[6vh]"
-            : peekExpanded
-              ? "pb-[min(70vh,calc(100vh_-_280px))]"
-              : "pb-[6vh]",
+          // the content in the smaller space.
+          "justify-center pb-[6vh]",
         )}
       >
         <section className="mx-auto w-full max-w-2xl shrink-0 space-y-2">
@@ -534,7 +385,7 @@ function Home({
                 disabled={att.attachmentBusy || att.attachmentUploading}
               />
             }
-            peekExpanded={peekExpanded}
+            peekExpanded={false}
           />
           {/* Hidden fallback file input — the hook owns the ref +
               onChange wiring. */}
@@ -555,133 +406,6 @@ function Home({
         )}
       </main>
 
-      {!panelMode && (
-        <BottomPeek
-          expanded={peekExpanded}
-          onToggle={() => setPeekExpanded((prev) => !prev)}
-          cronRuns={cronRuns}
-          selectedRun={selectedRun}
-          onSelectRun={(r) => setSelectedKey(cronRunKey(r))}
-          onContinueInChat={(r) => void continueRunInChat(r)}
-          resume={resume}
-          busy={busy}
-          onOpenSession={(id) => void openSession(id)}
-          onOpenSettings={onOpenSettings}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Bottom peek dashboard
-//
-// Lives entirely off-screen at rest (`translate-y-full` parks it below
-// the viewport). A scroll-wheel-down anywhere on the page slides the
-// whole panel up by translating it back to `translate-y-0`; a wheel-up
-// (outside the panel's own scrollable region) slides it back down.
-// No handle, no affordance — the wallpaper has the full bottom of the
-// screen until the user explicitly wheels for it. The wheel logic
-// itself is owned by `Home`; this component just renders.
-//
-// Panel height is 70vh, fixed. Main content slides up by -15vh in
-// concert (animated on `main` in the same 500ms ease-out) so the
-// composer block stays clear of the panel.
-// ---------------------------------------------------------------------------
-
-function BottomPeek({
-  expanded,
-  onToggle,
-  cronRuns,
-  selectedRun,
-  onSelectRun,
-  onContinueInChat,
-  resume,
-  busy,
-  onOpenSession,
-  onOpenSettings,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-  cronRuns: ReturnType<typeof useCronRuns>;
-  selectedRun: CronRun | null;
-  onSelectRun: (r: CronRun) => void;
-  onContinueInChat: (r: CronRun) => void;
-  resume: ReturnType<typeof useResume>;
-  busy: boolean;
-  onOpenSettings: () => void;
-  onOpenSession: (id: string) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "absolute inset-x-0 bottom-0 z-10 flex flex-col",
-        // Panel height is clamped so it never eats below the
-        // 280px we need above for TopBar + composer + shortcuts.
-        // On tall screens this resolves to 70vh; on short screens
-        // (laptops, tablets in landscape) it shrinks to whatever
-        // leaves 280px above instead of bulldozing the main content.
-        // Main's matching `pb-[…]` in `Home` uses the identical
-        // expression so the layout stays in sync.
-        "h-[min(70vh,calc(100vh_-_280px))]",
-        "transition-transform duration-500 ease-out",
-        // Collapsed state leaves the 1.75rem (28px) grab handle
-        // peeking up from the bottom of the viewport — the
-        // "something more is here" affordance. When fully expanded
-        // the panel sits flush at translate-y-0.
-        expanded ? "translate-y-0" : "translate-y-[calc(100%-1.75rem)]",
-        // No panel-level border, gradient, or shadow — those collapsed
-        // the three floating cards into one continuous block. Each
-        // card carries its own glass recipe (bg + blur + shadow +
-        // catch-light) and is what should define its own top edge.
-      )}
-    >
-      {/* Grab handle — iOS bottom-sheet bar. Wrapped in a full-width
-          button so clicking anywhere along the bottom edge toggles
-          the panel even if the cursor isn't precisely on the bar.
-          Hover widens + brightens to confirm it's interactive. */}
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        aria-label={expanded ? "Collapse panel" : "Expand panel"}
-        className={cn(
-          "group/handle flex h-7 w-full shrink-0 cursor-pointer items-center justify-center",
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "rounded-full bg-foreground/45",
-            "transition-all duration-200 ease-out",
-            "h-1 w-14",
-            "group-hover/handle:w-20 group-hover/handle:bg-foreground/70",
-          )}
-        />
-      </button>
-      <div
-        data-bottom-peek-scroll
-        className="flex min-h-0 flex-1 flex-col gap-5 px-8 pb-6 lg:flex-row"
-      >
-        <CronHistorySection
-          ready={cronRuns.ready}
-          runs={cronRuns.runs}
-          selectedKey={selectedRun ? cronRunKey(selectedRun) : null}
-          onSelect={onSelectRun}
-          onOpenSettings={onOpenSettings}
-        />
-        <CronContentSection
-          ready={cronRuns.ready}
-          run={selectedRun}
-          onContinueInChat={onContinueInChat}
-        />
-        <ResumeSection
-          ready={resume.ready}
-          items={resume.items}
-          busy={busy}
-          onOpenSession={onOpenSession}
-        />
-      </div>
     </div>
   );
 }
@@ -1334,409 +1058,6 @@ function TopBar({
 }
 
 // ---------------------------------------------------------------------------
-// Module wrapper — shared visual container for every dashboard column.
-// ---------------------------------------------------------------------------
-
-function ModuleCard({
-  title,
-  meta,
-  sizeClass,
-  bodyClassName,
-  children,
-}: {
-  title: string;
-  meta?: React.ReactNode;
-  sizeClass: string;
-  bodyClassName?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={cn(
-        // `relative` is required so the `before:` specular highlight can
-        // position itself; `overflow-hidden` clips the highlight to the
-        // rounded corners.
-        "relative flex flex-col overflow-hidden rounded-xl",
-        // Surface + blur + brightness are tuned as one unit:
-        //   - Low tint opacity (`/22` → `/8`) lets the wallpaper's
-        //     colour-field show through — the "transparent glass"
-        //     feel.
-        //   - High blur radius (`-3xl` = 64px) destroys underlying
-        //     detail so text isn't fighting against tree branches /
-        //     cloud edges.
-        //   - `backdrop-brightness-115` (light) lifts dark wallpaper
-        //     regions toward neutral so `text-foreground` (dark)
-        //     keeps contrast; in dark mode we *darken* instead
-        //     (`brightness-85`) so light text still has contrast on
-        //     bright wallpapers. This is what fixes "图片本身比较
-        //     暗就看不清" without forcing a thicker white wash.
-        "bg-gradient-to-b from-card/22 to-card/8",
-        "backdrop-blur-3xl backdrop-saturate-110",
-        "backdrop-brightness-115 dark:backdrop-brightness-85",
-        // No ring, no border. Any stroked edge — even at 12% opacity —
-        // reads as a drawn outline against a varying wallpaper and
-        // kills the glass illusion. The card defines its rectangle
-        // purely through (a) the bg-gradient tint, (b) layered
-        // shadow, and (c) the top `before:` catch-light below.
-        //
-        // Two-layer shadow: a soft *upward*-cast layer plus the
-        // standard downward drop. The upward layer is what gives each
-        // card its own top-edge against the wallpaper above — without
-        // it the cards visually melt into the surrounding panel area.
-        // Kept subtle so it reads as "this thing is floating slightly",
-        // not as a heavy halo.
-        "shadow-[0_-2px_6px_-2px_rgba(0,0,0,0.1),0_8px_24px_-4px_rgba(0,0,0,0.12)]",
-        "dark:shadow-[0_-2px_6px_-2px_rgba(0,0,0,0.35),0_8px_24px_-4px_rgba(0,0,0,0.45)]",
-        // Top specular highlight — the catch-light along the curved
-        // upper edge of real glass. Bumped a notch over the previous
-        // `/45` so it actually carries the top edge on darker
-        // wallpapers without sliding into "drawn line" territory.
-        "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px",
-        "before:bg-gradient-to-r before:from-transparent before:via-white/55 before:to-transparent",
-        "dark:before:via-white/30",
-        sizeClass,
-      )}
-    >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-foreground/[0.04] px-4 py-2.5">
-        {/* `text-muted-foreground` was tuned for opaque card backgrounds.
-            Over a translucent glass surface the wallpaper bleeds into
-            the effective background and the muted grey loses contrast.
-            Switching to `text-foreground/70` keeps the visual hierarchy
-            (still dimmer than body text) while staying legible. */}
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-foreground/70">
-          {title}
-        </h2>
-        {meta}
-      </header>
-      <div className={cn("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>
-        {children}
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Cron history — left column
-// ---------------------------------------------------------------------------
-
-function CronHistorySection({
-  ready,
-  runs,
-  selectedKey,
-  onSelect,
-  onOpenSettings,
-}: {
-  ready: boolean;
-  runs: CronRun[];
-  selectedKey: string | null;
-  onSelect: (run: CronRun) => void;
-  onOpenSettings: () => void;
-}) {
-  const { t } = useT();
-  const isEmpty = ready && runs.length === 0;
-  return (
-    <ModuleCard
-      title={t("newtab.history")}
-      sizeClass="min-h-0 min-w-0 flex-1 lg:flex-1"
-    >
-      {!ready ? (
-        <HistorySkeleton />
-      ) : isEmpty ? (
-        <EmptyState onOpenSettings={onOpenSettings} />
-      ) : (
-        <ul className="divide-y divide-foreground/[0.04]">
-          {runs.map((r) => {
-            const key = cronRunKey(r);
-            return (
-              <li key={key}>
-                <CronHistoryRow
-                  run={r}
-                  selected={key === selectedKey}
-                  onSelect={onSelect}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </ModuleCard>
-  );
-}
-
-function CronHistoryRow({
-  run,
-  selected,
-  onSelect,
-}: {
-  run: CronRun;
-  selected: boolean;
-  onSelect: (r: CronRun) => void;
-}) {
-  const { t } = useT();
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(run)}
-      className={cn(
-        "flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors",
-        selected ? "bg-muted/60" : "hover:bg-muted/50",
-        "focus:outline-none focus-visible:bg-muted/50",
-      )}
-    >
-      <StatusIcon status={run.status} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs text-foreground">
-          {run.jobName}
-          {run.status === "error" && (
-            <span className="ml-1 text-foreground/60">
-              {t("newtab.row.failed")}
-            </span>
-          )}
-          {run.status === "silent" && (
-            <span className="ml-1 text-foreground/60">
-              {t("newtab.row.silent")}
-            </span>
-          )}
-        </span>
-      </span>
-      <span className="shrink-0 tabular-nums text-[10px] text-foreground/60">
-        {formatRelative(run.runAtMs, t)}
-      </span>
-    </button>
-  );
-}
-
-function HistorySkeleton() {
-  return (
-    <div className="divide-y divide-foreground/[0.04]">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex items-center gap-2.5 px-4 py-2">
-          <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded-full bg-muted/40" />
-          <div className="h-3 flex-1 animate-pulse rounded bg-muted/40" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatusIcon({ status }: { status: CronRunStatus }) {
-  if (status === "error") {
-    return (
-      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-    );
-  }
-  if (status === "silent") {
-    return (
-      <Moon className="h-3.5 w-3.5 shrink-0 text-foreground/50" />
-    );
-  }
-  return (
-    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-  );
-}
-
-/**
- * Cold-start state for the history column — no cron jobs installed yet,
- * so offer one-click installs of the default routines instead of
- * dead-ending the user.
- */
-function EmptyState({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const { t } = useT();
-  const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
-  const [ready, setReady] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getInstalledRoutineIds().then((s) => {
-      if (cancelled) return;
-      setInstalledIds(s);
-      setReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function onInstall(routine: RoutineTemplate) {
-    setBusyId(routine.id);
-    setError(null);
-    const res = await installRoutine(routine);
-    setBusyId(null);
-    if (res.ok) {
-      setInstalledIds((prev) => new Set(prev).add(routine.id));
-    } else {
-      setError(res.error ?? t("newtab.install.failed"));
-    }
-  }
-
-  const anyInstalled = installedIds.size > 0;
-
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-      <div className="text-center">
-        <h3 className="text-sm font-semibold">
-          {anyInstalled
-            ? t("newtab.empty.installed")
-            : t("newtab.empty.headline")}
-        </h3>
-        <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-          {anyInstalled
-            ? t("newtab.empty.installedDesc")
-            : t("newtab.empty.headlineDesc")}
-        </p>
-      </div>
-
-      <div className="flex w-full max-w-md flex-col gap-1.5">
-        {DEFAULT_ROUTINES.map((routine) => {
-          const installed = installedIds.has(routine.id);
-          const rowBusy = busyId === routine.id;
-          return (
-            <button
-              key={routine.id}
-              type="button"
-              disabled={!ready || installed || rowBusy}
-              onClick={() => void onInstall(routine)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-                installed
-                  ? "border-border/50 bg-muted/20"
-                  : "border-border bg-background hover:border-foreground/30 hover:bg-muted/40",
-                "disabled:cursor-default",
-              )}
-            >
-              <span className="text-base leading-none">{routine.emoji}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium text-foreground">
-                  {routine.name}
-                </span>
-                <span className="block truncate text-[10px] text-muted-foreground">
-                  {routine.description} · {routine.scheduleLabel}
-                </span>
-              </span>
-              <span className="shrink-0 text-muted-foreground">
-                {installed ? (
-                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                ) : rowBusy ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {error && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5 text-[11px] text-destructive">
-          {error}
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={() => onOpenSettings()}
-        className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/80 transition-colors hover:text-foreground"
-      >
-        <InboxIcon className="h-3.5 w-3.5" />
-        {t("newtab.empty.customCron")}
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Cron content — centre column
-// ---------------------------------------------------------------------------
-
-function CronContentSection({
-  ready,
-  run,
-  onContinueInChat,
-}: {
-  ready: boolean;
-  run: CronRun | null;
-  onContinueInChat: (run: CronRun) => void;
-}) {
-  const { t } = useT();
-  const meta = run ? (
-    <span className="truncate text-[10px] tabular-nums text-foreground/60">
-      {run.jobName} · {new Date(run.runAtMs).toLocaleString()}
-    </span>
-  ) : null;
-
-  return (
-    <ModuleCard
-      title={t("newtab.latest")}
-      meta={meta}
-      sizeClass="min-h-0 min-w-0 flex-1 lg:flex-[2]"
-      bodyClassName={!run ? "" : "flex flex-col"}
-    >
-      {!ready ? (
-        <ContentSkeleton />
-      ) : !run ? (
-        <div className="flex h-full items-center justify-center p-6">
-          <p className="text-xs text-foreground/65">
-            {t("newtab.content.empty")}
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-            {run.content ? (
-              <Streamdown
-                mode="static"
-                className="chat-md chat-md--glass break-words text-sm text-foreground/90"
-              >
-                {run.content}
-              </Streamdown>
-            ) : (
-              <p className="text-xs text-foreground/65">
-                {t("newtab.content.empty.row")}
-              </p>
-            )}
-            {run.truncatedBySize && (
-              <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                {t("newtab.content.truncated")}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-foreground/[0.04] px-4 py-2">
-            <button
-              type="button"
-              onClick={() => onContinueInChat(run)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                "bg-foreground text-background hover:bg-foreground/85",
-              )}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              {t("newtab.continueInChat")}
-            </button>
-          </div>
-        </>
-      )}
-    </ModuleCard>
-  );
-}
-
-function ContentSkeleton() {
-  return (
-    <div className="space-y-3 px-6 py-5">
-      {[0, 1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="h-4 animate-pulse rounded bg-muted/40"
-          style={{ width: `${[88, 72, 95, 60][i]}%` }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Composer
 // ---------------------------------------------------------------------------
 
@@ -2119,103 +1440,3 @@ const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
   },
 );
 
-// ---------------------------------------------------------------------------
-// Resume section — right column
-// ---------------------------------------------------------------------------
-
-function ResumeSection({
-  ready,
-  items,
-  busy,
-  onOpenSession,
-}: {
-  ready: boolean;
-  items: ResumeItem[];
-  busy: boolean;
-  onOpenSession: (id: string) => void;
-}) {
-  const { t } = useT();
-  if (!ready || items.length === 0) return null;
-
-  return (
-    <ModuleCard
-      title={t("newtab.recentChats")}
-      meta={
-        <span className="text-[10px] text-foreground/60">
-          {t("newtab.clickToResume")}
-        </span>
-      }
-      sizeClass="min-h-0 min-w-0 flex-1 lg:flex-1"
-    >
-      <ul className="divide-y divide-foreground/[0.04]">
-        {items.map((item) => (
-          <li key={item.id}>
-            <ResumeRow item={item} busy={busy} onOpenSession={onOpenSession} />
-          </li>
-        ))}
-      </ul>
-    </ModuleCard>
-  );
-}
-
-function ResumeRow({
-  item,
-  busy,
-  onOpenSession,
-}: {
-  item: ResumeItem;
-  busy: boolean;
-  onOpenSession: (id: string) => void;
-}) {
-  const { t } = useT();
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={() => onOpenSession(item.id)}
-      className={cn(
-        "flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors",
-        "hover:bg-muted/50",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-      )}
-    >
-      <MessageSquare className="h-3.5 w-3.5 shrink-0 text-foreground/55" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs text-foreground">
-          {item.title}
-        </span>
-      </span>
-      {item.messageCount > 0 && (
-        <span className="shrink-0 tabular-nums text-[10px] text-foreground/55">
-          {t("newtab.row.msgs", { count: item.messageCount })}
-        </span>
-      )}
-      <span className="shrink-0 tabular-nums text-[10px] text-foreground/60">
-        {formatRelative(item.ts, t)}
-      </span>
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatRelative(
-  ms: number | undefined,
-  t: ReturnType<typeof useT>["t"],
-): string {
-  if (!ms) return "";
-  const diffSec = Math.round((Date.now() - ms) / 1000);
-  if (diffSec < 60) return t("newtab.relative.justNow");
-  if (diffSec < 3600) {
-    return t("newtab.relative.mAgo", { n: Math.floor(diffSec / 60) });
-  }
-  if (diffSec < 86400) {
-    return t("newtab.relative.hAgo", { n: Math.floor(diffSec / 3600) });
-  }
-  if (diffSec < 86400 * 7) {
-    return t("newtab.relative.dAgo", { n: Math.floor(diffSec / 86400) });
-  }
-  return new Date(ms).toLocaleDateString();
-}
