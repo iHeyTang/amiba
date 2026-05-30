@@ -181,7 +181,7 @@ export function isAttachmentReadOk(
 export interface AttachmentReadOptions {
   /**
    * UUID of the side-panel chat session this attachment belongs to. Used
-   * by Python to group uploads in `~/.hermes/plugins/.../attachments/<id>/`
+   * by Python to group uploads in `~/.hermes/hermes-x/inbox/<id>/`
    * so we can GC them when the chat is deleted. Pass `"default"` (or
    * anything stable) if you don't have a session id yet.
    */

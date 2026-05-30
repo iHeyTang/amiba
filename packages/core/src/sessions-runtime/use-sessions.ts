@@ -580,9 +580,9 @@ export function useSessions(): SessionsController {
       await dropMessages(id);
 
       // Reap any side-panel attachment files that lived under this session
-      // on disk (`~/.hermes/plugins/<plugin>/attachments/<id>/`). Best-
-      // effort: silently no-ops when the bridge is disconnected, and
-      // Python ignores the call when the directory doesn't exist.
+      // on disk (`~/.hermes/hermes-x/inbox/<id>/`). Best-effort: silently
+      // no-ops when the bridge is disconnected, and Python ignores the
+      // call when the directory doesn't exist.
       try {
         await getPlatform().runtime.sendMessage({
           action: "attachment.deleteSession",
@@ -590,7 +590,7 @@ export function useSessions(): SessionsController {
         });
       } catch {
         // Ignore — orphaned files cost only disk and the user can clear
-        // ~/.hermes/.../attachments/ manually if they ever care.
+        // ~/.hermes/hermes-x/inbox/ manually if they ever care.
       }
 
       // Also drop any tab pointing at the now-deleted session and reflow

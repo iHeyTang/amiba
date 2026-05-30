@@ -105,6 +105,14 @@ function installCorsBypass() {
   )
 }
 
+// Track the main window explicitly. The notifier + quick-ask windows
+// are persistent (hidden on dismiss, not destroyed), so any "find the
+// main window" lookup via BrowserWindow.getAllWindows() would happily
+// return one of them after the user closed the real main window via
+// the red traffic light — breaking dock-icon reopen, hotkey summon,
+// and protocol-URL handling.
+let mainWindow: BrowserWindow | null = null
+
 /**
  * Bring the main window forward when the user hits the global shortcut.
  *
@@ -119,14 +127,13 @@ function installCorsBypass() {
  *   - already focused    → no-op (avoids stealing focus from itself)
  */
 function summonWindow() {
-  const live = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
-  if (!live) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow()
     return
   }
-  if (live.isMinimized()) live.restore()
-  if (!live.isVisible()) live.show()
-  if (!live.isFocused()) live.focus()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  if (!mainWindow.isVisible()) mainWindow.show()
+  if (!mainWindow.isFocused()) mainWindow.focus()
 }
 
 /**
@@ -231,6 +238,11 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false
     }
+  })
+
+  mainWindow = win
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -351,8 +363,14 @@ if (!gotSingleInstanceLock) {
       console.error("[main] failed to start inbox socket:", err)
     }
 
+    // macOS dock-icon click after the user closed the main window. We
+    // route through summonWindow so closed → recreate, hidden/minimized
+    // → restore, background → focus all work the same as the hotkey.
+    // Checking `getAllWindows().length === 0` here would be wrong: the
+    // notifier + quick-ask windows are persistent (hidden, not destroyed),
+    // so that length is never 0 and the dock click would no-op.
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      summonWindow()
     })
   })
 
