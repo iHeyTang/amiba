@@ -6,6 +6,8 @@ import { useT } from "@hermes-x/i18n";
 import type { SessionMeta } from "@hermes-x/core";
 import { cn } from "@hermes-x/utils";
 
+import { ChannelChip } from "./internal/ChannelChip";
+
 interface Props {
   tabs: SessionMeta[];
   activeId: string;
@@ -114,11 +116,14 @@ export function TabBar({
           className="tabbar-scroller flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden"
         >
           {tabs.length === 0 ? (
-            <div className="flex flex-1 items-center px-3 text-xs italic text-muted-foreground">
-              {t("sidepanel.tabbar.empty.before")}{" "}
-              <Plus className="mx-1 inline h-3 w-3" />
-              {t("sidepanel.tabbar.empty.after")}
-            </div>
+            // Plain block-level text — flex layout would treat each fragment
+            // (before / "+" / after) as a separate flex item, so the icon
+            // ended up as a giant gap in the middle and the text wrapped
+            // unnaturally around it. Keep "+" as a textual hint instead of
+            // an SVG icon so the whole sentence flows like one line.
+            <p className="flex-1 self-center truncate px-3 text-xs italic text-muted-foreground">
+              {t("sidepanel.tabbar.empty.before")} <kbd className="rounded border border-border bg-background px-1 font-mono not-italic">+</kbd> {t("sidepanel.tabbar.empty.after")}
+            </p>
           ) : (
             tabs.map((tab) => (
               <Tab
@@ -239,6 +244,11 @@ function Tab({
       )}
       title={title}
     >
+      <ChannelChip
+        source={session.source}
+        variant="compact"
+        className="mr-0.5"
+      />
       <span className="max-w-[140px] truncate">{title}</span>
       <button
         type="button"

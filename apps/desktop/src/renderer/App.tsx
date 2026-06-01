@@ -1,11 +1,11 @@
-import { getHermesStatus } from "@hermes-x/core"
+import { getHermesStatus, SessionsProvider } from "@hermes-x/core"
 import { FullScreenChatView } from "@hermes-x/chat-ui"
 import { HomeView } from "@hermes-x/home-ui"
 import { getPlatform } from "@hermes-x/platform"
 import { SettingsView } from "@hermes-x/settings-ui"
 import { useResolvedTheme } from "@hermes-x/theme"
 import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactElement } from "react"
 
 import { ElectronChatEngineClient } from "./chat/electron-engine-client"
 import { desktopCapabilities } from "./chat/desktop-capabilities"
@@ -16,14 +16,17 @@ type View = "chat" | "settings"
 const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
-// 44px tall row anchors the custom affordances to the macOS traffic
-// lights' true vertical centre. An h-6 (24px) button vertically centred
-// in this 44px row lands on y=22, on the traffic-light baseline pixel-
-// for-pixel.
+// 32px compact title bar. With an h-6 (24px) button centred in the row
+// its centre lands at y=16; ``trafficLightPosition`` in main/index.ts
+// pins the dot cluster's top at y=10 so the 12px dot's centre also
+// lands at y=16 — buttons + traffic lights share the same baseline.
+// (Previous value was 44px, an over-generous row from before the
+// alignment math was rechecked.)
+//
 // Reserve = 20 (left inset) + 3*12 (dots) + 2*8 (gaps) + 24 (breathing
 //           room before the first custom icon)
 //         = 96
-const TITLE_BAR_HEIGHT = 44
+const TITLE_BAR_HEIGHT = 32
 const MAC_TRAFFIC_LIGHT_RESERVE = 96
 
 /**
@@ -48,6 +51,14 @@ const MAC_TRAFFIC_LIGHT_RESERVE = 96
 type Phase = "loading" | "onboarding" | "ready"
 
 export default function App() {
+  return (
+    <SessionsProvider>
+      <AppInner />
+    </SessionsProvider>
+  )
+}
+
+function AppInner(): ReactElement {
   useResolvedTheme()
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("chat")

@@ -7,7 +7,9 @@ import type {
   NavigateOpenPolicyCapability,
   PageContextCapability,
   PageContextSnapshot,
+  PendingPromptAttachment,
   PendingPromptCapability,
+  PendingPromptResult,
   SidePanelCapabilities,
 } from "@hermes-x/chat-ui";
 
@@ -166,19 +168,108 @@ export const chromeNavigateOpenPolicy: NavigateOpenPolicyCapability = {
 // pending prompt (home-launcher hand-off)
 // ---------------------------------------------------------------------------
 
+const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
+
+function coerceAttachmentKind(value: unknown): PendingPromptAttachment["kind"] {
+  if (value === "image" || value === "text" || value === "pdf") return value;
+  return "binary";
+}
+
+function normalizePendingAttachment(raw: unknown): PendingPromptAttachment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const path = typeof r.path === "string" ? r.path : "";
+  if (!path) return null;
+  const name =
+    typeof r.name === "string" && r.name
+      ? r.name
+      : path.split(/[\\/]/).pop() || "file";
+  return {
+    uiId:
+      typeof r.uiId === "string" && r.uiId
+        ? r.uiId
+        : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
+    size:
+      typeof r.size === "number" && Number.isFinite(r.size) ? r.size : 0,
+    kind: coerceAttachmentKind(r.kind),
+    path,
+    thumbDataUrl:
+      typeof r.thumbDataUrl === "string" ? r.thumbDataUrl : undefined,
+    textPreview:
+      typeof r.textPreview === "string" ? r.textPreview : undefined,
+  };
+}
+
 export const chromePendingPrompt: PendingPromptCapability = {
-  async drain(): Promise<string | null> {
-    const KEY = "home.pendingPrompt";
+  /**
+   * Read + clear the pending-prompt payload that a hand-off surface
+   * (HomeView panel-mode composer, Quick-Ask Spotlight, snip, etc.)
+   * stored before the chat surface mounted or before the user activated
+   * a fresh session. Returns the full `{ text, attachments, sourceApp }`
+   * shape — mirroring desktop — so attachments and source chips survive
+   * the round-trip. Returning `null` means there was nothing pending.
+   */
+  async drain(): Promise<PendingPromptResult | null> {
     try {
-      const r = await chrome.storage.local.get(KEY);
-      const raw = r[KEY];
-      await chrome.storage.local.remove(KEY);
+      const r = await chrome.storage.local.get(HOME_PENDING_PROMPT_KEY);
+      const raw = r[HOME_PENDING_PROMPT_KEY];
+      await chrome.storage.local.remove(HOME_PENDING_PROMPT_KEY);
       if (!raw || typeof raw !== "object") return null;
-      const text = (raw as { text?: unknown }).text;
-      return typeof text === "string" && text.trim() ? text : null;
+      const obj = raw as {
+        text?: unknown;
+        attachments?: unknown;
+        sourceApp?: unknown;
+      };
+      const text =
+        typeof obj.text === "string" && obj.text.trim()
+          ? obj.text
+          : undefined;
+      const sourceApp =
+        typeof obj.sourceApp === "string" && obj.sourceApp.trim()
+          ? obj.sourceApp
+          : undefined;
+      let attachments: PendingPromptAttachment[] | undefined;
+      if (Array.isArray(obj.attachments)) {
+        const out: PendingPromptAttachment[] = [];
+        for (const item of obj.attachments) {
+          const norm = normalizePendingAttachment(item);
+          if (norm) out.push(norm);
+        }
+        if (out.length > 0) attachments = out;
+      }
+      if (!text && !attachments) return null;
+      return { text, attachments, sourceApp };
     } catch {
       return null;
     }
+  },
+  /**
+   * Push-subscribe to chrome.storage.local writes against the pending-
+   * prompt key. Critical for the in-window HomeView hand-off: when the
+   * empty-state composer submits into an already-active empty session,
+   * `sessions.activeId` doesn't change, so the once-per-id drain effect
+   * would otherwise miss the freshly-written payload. The chat surface
+   * uses this signal to re-drain.
+   *
+   * Fires only when the key gains a value — chrome.storage.onChanged
+   * also emits for the `remove` step inside `drain()`, and re-draining
+   * on that echo would noisily clear an empty key on every consumption.
+   */
+  subscribe(onChanged: () => void): () => void {
+    const handler = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      if (areaName !== "local") return;
+      const ch = changes[HOME_PENDING_PROMPT_KEY];
+      if (!ch) return;
+      if (ch.newValue == null) return;
+      onChanged();
+    };
+    chrome.storage.onChanged.addListener(handler);
+    return () => chrome.storage.onChanged.removeListener(handler);
   },
 };
 

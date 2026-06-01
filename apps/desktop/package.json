@@ -41,7 +41,11 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input to the chat composer.",
+        "NSCameraUsageDescription": "Hermes does not use the camera; this entry exists only to satisfy Electron's permission probe."
+      }
     },
     "win": {
       "icon": "resources/icon.png",

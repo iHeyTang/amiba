@@ -2,6 +2,7 @@ import "~lib/platform/init";
 
 import "~style.css";
 
+import { SessionsProvider } from "@hermes-x/core";
 import { FullScreenChatView } from "@hermes-x/chat-ui";
 import { useMemo } from "react";
 
@@ -25,6 +26,14 @@ import { NavigateOpenPolicyToggle } from "../sidepanel/NavigateOpenPolicyToggle"
  * that does an in-page redirect to `newtab.html`.
  */
 export default function ChatTab() {
+  return (
+    <SessionsProvider>
+      <ChatTabInner />
+    </SessionsProvider>
+  );
+}
+
+function ChatTabInner() {
   const client = useMemo(() => new ChromeChatEngineClient(), []);
   return (
     <FullScreenChatView

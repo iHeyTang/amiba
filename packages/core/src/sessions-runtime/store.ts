@@ -158,6 +158,7 @@ function hermesSessionToMeta(
     pinned: local?.pinned,
     archived: local?.archived,
     titleManual: local?.titleManual,
+    source: s.source,
   };
 }
 
@@ -478,43 +479,6 @@ export async function dropMessages(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Active id + open tab ids (stay on chrome.storage.local)
-// ---------------------------------------------------------------------------
-
-
-export async function loadActiveId(): Promise<string> {
-  const r = await getPlatform().storage.get([
-    SESSION_KEYS.activeId,
-    SESSION_KEYS.legacyActiveId,
-  ]);
-  const modern = r[SESSION_KEYS.activeId];
-  if (typeof modern === "string" && modern) return modern;
-  const legacy = r[SESSION_KEYS.legacyActiveId];
-  return typeof legacy === "string" ? legacy : "";
-}
-
-export async function saveActiveId(id: string): Promise<void> {
-  // Mirror to ``settings.chat.sessionId`` so existing readers (Options
-  // page, chat-cors helper) stay in sync.
-  await getPlatform().storage.set({
-    [SESSION_KEYS.activeId]: id,
-    [SESSION_KEYS.legacyActiveId]: id,
-  });
-}
-
-export async function loadOpenTabIds(): Promise<string[]> {
-  const r = await getPlatform().storage.get([SESSION_KEYS.openTabIds]);
-  const v = r[SESSION_KEYS.openTabIds];
-  return Array.isArray(v)
-    ? (v as string[]).filter((x) => typeof x === "string")
-    : [];
-}
-
-export async function saveOpenTabIds(ids: string[]): Promise<void> {
-  await getPlatform().storage.set({ [SESSION_KEYS.openTabIds]: ids });
-}
-
-// ---------------------------------------------------------------------------
 // Factory helpers (signatures retained verbatim from the old store)
 // ---------------------------------------------------------------------------
 
@@ -530,6 +494,7 @@ export function newSessionMeta(
     createdAt: now,
     updatedAt: now,
     messageCount: 0,
+    source: SOURCE_BROWSER_EXTENSION,
   };
 }
 

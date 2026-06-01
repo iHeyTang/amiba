@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   Disc,
+  Eye,
   Folder,
   FolderOpen,
   Globe,
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { useT, type TranslateFn } from "@hermes-x/i18n";
+import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
 import { Button, HermesLogo, ScrollArea } from "@hermes-x/ui";
@@ -35,10 +36,14 @@ import {
   formatBytesShort,
   formatFileAttachmentsForPrompt,
   isAttachmentReadOk,
+  isLocalChannel,
   postHermesApprovalDecision,
   readBlobAsAttachment,
+  resolveChannel,
+  transcribeAudio,
   triggerHermesAutoTitle,
   useSessions,
+  useVoicePrefs,
   DEFAULT_HERMES_MODEL,
   HERMES_APPROVAL_GATEWAY_TIMEOUT_MS,
   type ApprovalOutcome,
@@ -64,6 +69,7 @@ import { ErrorBlock, PageChip } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
 import { Composer, type ComposerHandle } from "./Composer";
 import { useComposerAttachments } from "./useComposerAttachments";
+import { useVoiceRecorder } from "./useVoiceRecorder";
 import { SessionDrawer } from "./SessionDrawer";
 import { TabBar } from "./TabBar";
 import {
@@ -319,6 +325,10 @@ export default function SidePanelView({
   // so the row already exists and we just need to bring it to front.
   const onOpenCronSession = useCallback(
     async (sessionId: string): Promise<void> => {
+      if (sessionId === sessions.activeId) {
+        await sessions.deselect();
+        return;
+      }
       await sessions.openTab(sessionId);
     },
     [sessions],
@@ -530,7 +540,6 @@ export default function SidePanelView({
   // We clear the storage key immediately so re-mounts (SW restart,
   // panel reopen) don't resubmit the same prompt.
   useEffect(() => {
-    let cancelled = false;
     const drain = capabilities.pendingPrompt?.drain;
     if (!drain) return;
     // Re-runs whenever the active session id flips. Critical for the
@@ -541,8 +550,17 @@ export default function SidePanelView({
     // storage sync; without this dep, the once-on-mount drain would
     // miss the freshly-written payload and the message would never
     // auto-send.
+    //
+    // No `cancelled` cleanup flag: `drain()` is destructive (read +
+    // remove), so a value returned from an in-flight drain that races
+    // with a deps change (typical of the home hand-off, where activeId
+    // flips while the storage write for pendingPrompt is still in
+    // flight) is *already gone from storage* — bailing here on
+    // cancellation would silently drop the user's prompt. The payload
+    // is session-agnostic; whichever effect run wins should still seed
+    // the composer.
     void drain().then((raw) => {
-      if (cancelled || raw == null) return;
+      if (raw == null) return;
       const payload: PendingPromptResult =
         typeof raw === "string" ? { text: raw } : raw;
       const text = payload.text?.trim() ?? "";
@@ -575,9 +593,6 @@ export default function SidePanelView({
       // — auto-sending an empty user message is a footgun.
       if (text) setPendingAutosend(true);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [sessions.activeId, capabilities.pendingPrompt, pendingPromptTick]);
 
   // Subscribe to pending-prompt push events so the drain re-fires when
@@ -768,14 +783,71 @@ export default function SidePanelView({
       return;
     }
 
-    // Live / interrupted / completed — SW state is authoritative.
-    // Rebuild local accumulators from the snapshot, then overlay
-    // accumulated content onto the matching assistant bubble.
+    // Live / interrupted / completed — SW state carries information
+    // the panel may not yet have in ``prev`` (the messages loaded from
+    // SessionDB). The three kinds have different invariants:
+    //
+    //   - "completed": SessionDB has the FULL final assistant turn
+    //     (api_server commits before the stream resolves). ``prev``
+    //     already contains it. The engine's in-memory runtime
+    //     ``assistantUiId`` is its own ephemeral id (``shortId("a")``)
+    //     which never matches the ``hermes:<row>`` ids ``loadMessages``
+    //     produces — synthesizing would APPEND a duplicate bubble
+    //     ("agent 回复重复一次" report). The only thing we still need
+    //     from the snapshot is panel-only UI metadata
+    //     (``agentFinalUrl`` / ``agentFinalTitle``) that doesn't
+    //     round-trip through SessionDB — overlay onto the last
+    //     assistant message instead.
+    //   - "live": stream is still in flight. Panel may have closed
+    //     before api_server committed the assistant placeholder, so
+    //     synthesis IS the right thing — there's nothing in ``prev``
+    //     to update yet.
+    //   - "interrupted": engine crashed mid-stream. SessionDB has
+    //     whatever api_server managed to write before the failure;
+    //     the engine's state has the (potentially longer) text it had
+    //     accumulated locally. Overlay onto the matching bubble if
+    //     present, else synthesize so the [interrupted] tail still
+    //     reaches the user.
     const { state } = frame;
     hydrateLocalFromSnapshot(state);
     setBusy(state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
     setActiveRunId(state.runId ?? null);
+
+    if (kind === "completed") {
+      // No content rewrite — SessionDB is authoritative for completed
+      // turns. Only re-attach the chip metadata that lives outside
+      // SessionDB onto the last assistant message.
+      if (state.agentFinalUrl) {
+        sessions.setActiveMessages((prev) => {
+          const arr = prev as UiMessage[];
+          let lastAssistantIdx = -1;
+          for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i].role === "assistant") {
+              lastAssistantIdx = i;
+              break;
+            }
+          }
+          if (lastAssistantIdx < 0) return arr;
+          const cur = arr[lastAssistantIdx];
+          if (
+            cur.agentFinalUrl === state.agentFinalUrl &&
+            cur.agentFinalTitle === (state.agentFinalTitle ?? undefined)
+          ) {
+            return arr;
+          }
+          const next = arr.slice();
+          next[lastAssistantIdx] = {
+            ...cur,
+            agentFinalUrl: state.agentFinalUrl ?? undefined,
+            agentFinalTitle: state.agentFinalTitle ?? undefined,
+          };
+          return next;
+        });
+      }
+      return;
+    }
+
     sessions.setActiveMessages((prev) => {
       const arr = prev as UiMessage[];
       const suffix = kind === "interrupted" ? "\n\n[interrupted]" : "";
@@ -2257,6 +2329,90 @@ export default function SidePanelView({
   const messages = sessions.activeMessages as UiMessage[];
   const hasActive = !!sessions.activeId;
 
+  // Read-only mode: the active session originates from another channel
+  // (Feishu, Telegram, …) that owns the writing engine. We render the
+  // history but replace the composer with a notice; sending here would
+  // race that engine because hermes-x has no outbound delivery path
+  // back to those platforms.
+  const activeSession = hasActive
+    ? sessions.sessions.find((s) => s.id === sessions.activeId)
+    : undefined;
+  const readOnlyRemote =
+    !!activeSession && !isLocalChannel(activeSession.source);
+  const remoteChannelLabel = (() => {
+    if (!readOnlyRemote || !activeSession) return "";
+    const d = resolveChannel(activeSession.source);
+    const translated = t(d.labelKey as MessageKey);
+    return translated === d.labelKey ? d.fallbackLabel : translated;
+  })();
+
+  // Voice input — wired into Composer's `microphone` prop. The recorder
+  // hook owns the MediaRecorder lifecycle; once the user toggles stop we
+  // POST the blob to /v1/stt and either append the transcript to `input`
+  // (default) or fire `send()` immediately (`autoSend` pref).
+  const voicePrefs = useVoicePrefs();
+  const voiceRecorder = useVoiceRecorder({
+    deviceId: voicePrefs.deviceId || undefined,
+  });
+  const [voiceTranscribing, setVoiceTranscribing] = useState(false);
+  const handleVoiceToggle = useCallback(() => {
+    if (voiceTranscribing) return;
+    if (!voiceRecorder.recording) {
+      void voiceRecorder.start().catch((e) => {
+        const message = String((e as Error)?.message || e);
+        setError({
+          message:
+            message === "Permission denied"
+              ? t("composer.voice.permissionDenied")
+              : t("composer.voice.transcribeFailed", { error: message }),
+        });
+      });
+      return;
+    }
+    setVoiceTranscribing(true);
+    void (async () => {
+      try {
+        const blob = await voiceRecorder.stop();
+        if (!blob || blob.size === 0) return;
+        const result = await transcribeAudio(blob);
+        if (result.ok !== true) {
+          // ``in`` narrows reliably even under the extension app's
+          // non-strict tsconfig where discriminated unions don't.
+          const message = "error" in result ? result.error : "unknown";
+          setError({
+            message: t("composer.voice.transcribeFailed", { error: message }),
+          });
+          return;
+        }
+        const transcript = result.text.trim();
+        if (!transcript) return;
+        setInput((prev) => {
+          if (!prev) return transcript;
+          // Add a space only when the existing buffer doesn't already
+          // end with whitespace, so users who appended mid-edit don't
+          // get double spaces.
+          return /\s$/.test(prev) ? prev + transcript : prev + " " + transcript;
+        });
+        if (voicePrefs.autoSend) {
+          // Defer one tick so the setInput state lands before send reads it.
+          setTimeout(() => {
+            sendRef.current?.().catch(() => {
+              /* surfaced via the normal send error path */
+            });
+          }, 0);
+        }
+      } catch (e) {
+        setError({
+          message: t("composer.voice.transcribeFailed", {
+            error: String((e as Error)?.message || e),
+          }),
+        });
+      } finally {
+        setVoiceTranscribing(false);
+      }
+    })();
+  }, [voiceRecorder, voiceTranscribing, voicePrefs.autoSend, t]);
+
   // Composer JSX captured once so we can mount it either in the bottom
   // footer (active chat) or in the centred empty state (no session yet).
   // React reconciles by position, so swapping branches remounts the
@@ -2313,6 +2469,15 @@ export default function SidePanelView({
         ) : undefined
       }
       attachments={att}
+      microphone={
+        voicePrefs.enabled
+          ? {
+              recording: voiceRecorder.recording,
+              transcribing: voiceTranscribing,
+              onToggle: handleVoiceToggle,
+            }
+          : undefined
+      }
       chipRow={
         pinnedPages.length > 0 ? (
           <>
@@ -2386,6 +2551,21 @@ export default function SidePanelView({
       }
     />
   );
+
+  // Read-only notice — shown instead of ``composerNode`` when the
+  // active session originates from a non-local channel. Single-line,
+  // no actions: hermes-x has no outbound path to deliver a reply back
+  // to Feishu / Telegram / etc., so we don't pretend the composer is
+  // safe to use here. Users continue the conversation on the
+  // originating platform.
+  const readOnlyNoticeNode = readOnlyRemote ? (
+    <div className="flex items-start gap-2 rounded-md border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+      <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        {t("sidepanel.sessions.readOnlyNotice", { name: remoteChannelLabel })}
+      </span>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -2490,7 +2670,7 @@ export default function SidePanelView({
                   variant === "fullscreen" ? "max-w-2xl" : "max-w-md",
                 )}
               >
-                {composerNode}
+                {readOnlyNoticeNode ?? composerNode}
               </div>
               {error && (
                 <ErrorBlock
@@ -2761,7 +2941,7 @@ export default function SidePanelView({
               </ul>
             </div>
           )}
-        {composerNode}
+        {readOnlyNoticeNode ?? composerNode}
         {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
         </div>
@@ -2774,10 +2954,20 @@ export default function SidePanelView({
         openTabIds={sessions.openTabIds}
         activeId={sessions.activeId}
         onClose={() => setHistoryOpen(false)}
-        onOpen={(id) => void sessions.openTab(id)}
+        onOpen={(id) => {
+          // Toggle: picking the already-active row deselects, landing
+          // the chat surface on the empty/home state. Same semantics
+          // as ``FullScreenChatView``'s rail rows.
+          if (id === sessions.activeId) {
+            void sessions.deselect();
+          } else {
+            void sessions.openTab(id);
+          }
+        }}
         onRename={(id, title) => void sessions.rename(id, title)}
         onDelete={(id) => void sessions.remove(id)}
         onOpenCronSession={onOpenCronSession}
+        onRefresh={() => void sessions.refresh()}
       />
     </div>
   );

@@ -20,6 +20,14 @@ export interface SessionMeta {
   messageCount?: number
   /** Set once the user manually renames; suppresses auto-title regeneration. */
   titleManual?: boolean
+  /**
+   * Originating channel for this session. Mirror of SessionDB's
+   * ``source`` column — used by the drawer / tab strip / read-only
+   * banner to render channel badges and gate the composer. Optional
+   * because legacy rows and locally-minted unflushed sessions may have
+   * none; ``resolveChannel`` treats nullish as local.
+   */
+  source?: string
 }
 
 import type { ChatMessage } from "./chat-messages"

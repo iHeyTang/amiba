@@ -13,7 +13,7 @@
  * uses it as the chat view inside the main BrowserWindow.
  */
 
-import { Home, MessageSquare, Pencil, Plus, Search, Settings, SquarePen, Trash2, X } from "lucide-react";
+import { Home, MessageSquare, Pencil, Plus, Search, Settings, Trash2, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -24,17 +24,22 @@ import {
 } from "react";
 
 import {
+  resolveChannel,
   useSessions,
   type ChatEngineClient,
   type SessionMeta,
 } from "@hermes-x/core";
-import { useT, type TranslateFn } from "@hermes-x/i18n";
+import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
 import { Input } from "@hermes-x/ui";
 import { cn } from "@hermes-x/utils";
 
 import type { SidePanelCapabilities } from "./internal/capabilities";
+import {
+  ResizableSectionList,
+  type ResizableItem,
+} from "./internal/ResizableSectionList";
 import type { MessagesMaxWidth } from "./internal/types";
 import { ScheduledSection, TopSection } from "./SessionGroups";
 import SidePanelView from "./SidePanelView";
@@ -172,108 +177,158 @@ export default function FullScreenChatView({
     await sessions.createNew();
   }, [sessions]);
 
+  // Rail row click: toggle. Picking an already-active row deselects
+  // it and lands the right pane on the home / empty-state surface —
+  // symmetrical with picking a row to select. Picking a different row
+  // (or an unopened one) opens + activates as usual.
   const onOpenSession = useCallback(
     async (id: string) => {
       if (!sessions.ready) return;
+      if (id === sessions.activeId) {
+        await sessions.deselect();
+        return;
+      }
       await sessions.openTab(id);
     },
     [sessions],
   );
 
-  // Cron session click → just open the existing SessionDB row as a
-  // tab. The rail now lists cron sessions straight from SessionDB
+  // Cron session click → same toggle semantics as a regular row. The
+  // rail lists cron sessions straight from SessionDB
   // (``listHermesSessions({ source: "cron" })``), so the session row
   // already exists; no synthesis or pending-prompt hand-off needed.
   const onOpenCronSession = useCallback(
     async (sessionId: string): Promise<void> => {
       if (!sessions.ready) return;
+      if (sessionId === sessions.activeId) {
+        await sessions.deselect();
+        return;
+      }
       await sessions.openTab(sessionId);
     },
     [sessions],
   );
 
+  // Layout: a single top bar spans the full window width, with the
+  // body row (sidebar | main) sitting below it. Previously the sidebar
+  // had its own header strip and the main pane had a separate top bar,
+  // producing an L-shaped chrome split at the sidebar/main boundary —
+  // the unified bar reads as one continuous OS-chrome row, which is
+  // what the desktop window actually wants (macOS traffic lights
+  // overlay the top-left corner; the row containing them naturally
+  // spans the whole window above the body content).
+  // Visual layering uses background tints, not dividers:
+  //   • top bar + sidebar share ``bg-muted/40`` (one continuous chrome
+  //     surface wrapping the top-left of the window)
+  //   • main pane stays on ``bg-background`` (lighter content area)
+  //   • selected session row inside the sidebar bumps to ``bg-muted/70``
+  //     so the highlight still pops against the new sidebar fill
+  // Picked /40 because it's the lowest opacity that registers as a
+  // visible step away from ``bg-background`` in both light and dark
+  // themes while still letting the /70 active-row highlight stand out.
   return (
-    <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
-      <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/60 bg-muted/15">
-        <SidebarHeader
-          onGoHome={onGoHome}
-          leftInset={topBarLeftInset}
-          heightPx={topBarHeightPx}
-          className={topBarClassName}
-        />
-        <SessionsRail
-          sessions={sessions.sessions}
-          activeId={sessions.activeId}
-          ready={sessions.ready}
-          query={query}
-          onQuery={setQuery}
-          onOpen={(id) => void onOpenSession(id)}
-          onRename={(id, title) => void sessions.rename(id, title)}
-          onDelete={(id) => void sessions.remove(id)}
-          onNewChat={() => void onNewChat()}
-          onOpenCronSession={onOpenCronSession}
-        />
-      </aside>
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <MainActionsBar
-          messagesWidth={messagesWidth}
-          onMessagesWidthChange={onWidthChange}
-          onOpenSettings={openSettings}
-          activeTitle={activeTitle}
-          heightPx={topBarHeightPx}
-          className={topBarClassName}
-        />
-        <SidePanelView
-          variant="fullscreen"
-          messagesMaxWidth={messagesWidth}
-          client={client}
-          capabilities={capabilities}
-          slots={slots}
-          openSettings={openSettings}
-          openAgentDestination={openAgentDestination}
-        />
-      </main>
+    <div className="flex h-screen min-h-0 w-full flex-col bg-background text-foreground">
+      <UnifiedTopBar
+        onGoHome={onGoHome}
+        activeTitle={activeTitle}
+        messagesWidth={messagesWidth}
+        onMessagesWidthChange={onWidthChange}
+        onOpenSettings={openSettings}
+        leftInset={topBarLeftInset}
+        heightPx={topBarHeightPx}
+        className={topBarClassName}
+      />
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <aside className="flex min-h-0 w-72 shrink-0 flex-col bg-muted/40">
+          <SessionsRail
+            sessions={sessions.sessions}
+            activeId={sessions.activeId}
+            ready={sessions.ready}
+            query={query}
+            onQuery={setQuery}
+            onOpen={(id) => void onOpenSession(id)}
+            onRename={(id, title) => void sessions.rename(id, title)}
+            onDelete={(id) => void sessions.remove(id)}
+            onNewChat={() => void onNewChat()}
+            onOpenCronSession={onOpenCronSession}
+            onRefresh={() => void sessions.refresh()}
+          />
+        </aside>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <SidePanelView
+            variant="fullscreen"
+            messagesMaxWidth={messagesWidth}
+            client={client}
+            capabilities={capabilities}
+            slots={slots}
+            openSettings={openSettings}
+            openAgentDestination={openAgentDestination}
+          />
+        </main>
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Top bars — sidebar header (Home / drag region) + main actions strip
+// Unified top bar — spans the full window width above sidebar + main
 // ---------------------------------------------------------------------------
 
-interface SidebarHeaderProps {
-  /** Optional — when present, renders a Home button pinned to the right. */
+interface UnifiedTopBarProps {
+  /** Optional — when present, renders a Home button on the left. */
   onGoHome?: () => void;
-  /** Extra left padding so the row clears desktop OS chrome (mac traffic lights). */
+  /** Active session title for the centre slot. Empty when no chat is selected. */
+  activeTitle: string;
+  /** Width preset for the messages column. */
+  messagesWidth: MessagesMaxWidth;
+  onMessagesWidthChange: (next: MessagesMaxWidth) => void;
+  onOpenSettings: () => void;
+  /** Reserve on the left edge so OS chrome (mac traffic lights) clears. */
   leftInset?: number;
-  /** Row height in px. Default 24 (compact). Desktop passes 44 so the
-   *  centred h-6 Home button (centre y=22) lines up with the macOS
-   *  traffic-light cluster pinned at (20, 14). */
+  /** Row height in px. Default 24 (compact). Desktop passes 44. */
   heightPx?: number;
   /** Extra className (desktop passes `app-drag-region`). */
   className?: string;
 }
 
 /**
- * Sidebar header — mirrors `SettingsView`'s sidebar header so the chat
- * and settings views feel identical: a passive drag strip on the left
- * (where macOS overlays the traffic lights), Home button on the right.
+ * Single chrome strip across the whole window. Three slots:
+ *
+ *   - left:   traffic-light reserve (transparent, drag region) + Home button
+ *   - centre: active session title (absolute-positioned, drag through)
+ *   - right:  width toggle + Settings gear
+ *
+ * Replaces the previous split where the sidebar and main pane each had
+ * their own header — the new flat row reads as one continuous OS-chrome
+ * line and lines up with the macOS traffic-light cluster on the left.
  */
-function SidebarHeader({
+function UnifiedTopBar({
   onGoHome,
+  activeTitle,
+  messagesWidth,
+  onMessagesWidthChange,
+  onOpenSettings,
   leftInset = 0,
   heightPx = 24,
   className,
-}: SidebarHeaderProps) {
+}: UnifiedTopBarProps) {
   const { t } = useT();
   return (
-    <div
-      className={cn("flex shrink-0 items-center justify-end pr-2", className)}
+    <header
+      className={cn(
+        // Background matches the sidebar so the two read as one
+        // continuous chrome surface; no border — the contrast against
+        // ``bg-background`` in the body carries the boundary.
+        "relative flex shrink-0 items-center gap-1 bg-muted/40 pr-2",
+        className,
+      )}
       style={{
         height: heightPx,
         paddingLeft: Math.max(leftInset, 12),
       }}
     >
+      {/* Left cluster: Home button (when provided). The traffic-light
+          reserve is provided by ``paddingLeft`` above. */}
       {onGoHome && (
         <button
           type="button"
@@ -285,53 +340,14 @@ function SidebarHeader({
           <Home className="h-3.5 w-3.5" />
         </button>
       )}
-    </div>
-  );
-}
 
-interface MainActionsBarProps {
-  messagesWidth: MessagesMaxWidth;
-  onMessagesWidthChange: (next: MessagesMaxWidth) => void;
-  onOpenSettings: () => void;
-  /** Title of the currently active session, empty when none. */
-  activeTitle: string;
-  /** Row height in px. Default 24 (compact). Desktop passes 44 to match
-   *  the sidebar header so both rows form a single horizontal chrome line. */
-  heightPx?: number;
-  /** Extra className (desktop passes `app-drag-region`). */
-  className?: string;
-}
-
-/**
- * Top bar across the main pane: drag-region left, centred session title,
- * right-aligned actions cluster (width toggle, Settings). Same row
- * height as the sidebar header so both read as one continuous chrome
- * line across the window.
- */
-function MainActionsBar({
-  messagesWidth,
-  onMessagesWidthChange,
-  onOpenSettings,
-  activeTitle,
-  heightPx = 24,
-  className,
-}: MainActionsBarProps) {
-  const { t } = useT();
-  return (
-    <header
-      className={cn(
-        "relative flex shrink-0 items-center gap-1 px-2",
-        className,
-      )}
-      style={{ height: heightPx }}
-    >
       <div className="flex-1" />
 
       {/* Centre: active session title. Absolutely positioned so it
-          stays mid-row regardless of how wide the right-hand action
-          cluster grows. `pointer-events-none` on the wrapper means
-          window-dragging still works through it; the title itself
-          re-enables events for tooltips. */}
+          stays mid-row regardless of how wide the surrounding clusters
+          grow. ``pointer-events-none`` on the wrapper lets window
+          dragging pass through; the title itself re-enables events
+          for its tooltip. */}
       {activeTitle && (
         <div
           className="pointer-events-none absolute inset-x-0 top-0 flex h-full items-center justify-center"
@@ -346,6 +362,7 @@ function MainActionsBar({
         </div>
       )}
 
+      {/* Right cluster: width toggle + Settings gear. */}
       <div className="app-no-drag flex items-center gap-1">
         <WidthToggle value={messagesWidth} onChange={onMessagesWidthChange} />
         <button
@@ -439,6 +456,12 @@ interface SessionsRailProps {
   /** Create a fresh session (button next to the search input). */
   onNewChat: () => void;
   onOpenCronSession: (sessionId: string) => void;
+  /**
+   * Re-fetch the session index. Fires once on mount so multi-channel
+   * rows authored elsewhere (gateway / CLI / cron) appear without
+   * waiting for the next storage-watch broadcast.
+   */
+  onRefresh?: () => void | Promise<void>;
 }
 
 /**
@@ -460,9 +483,30 @@ function SessionsRail({
   onDelete,
   onNewChat,
   onOpenCronSession,
+  onRefresh,
 }: SessionsRailProps) {
   const { t } = useT();
-  const filtered = useMemo(() => {
+
+  // Refresh the index once when the rail mounts so multi-channel rows
+  // authored elsewhere (gateway / CLI / cron) appear without waiting
+  // for the next storage-watch broadcast. The rail is mounted for the
+  // lifetime of the chat view, so this fires once per view-open.
+  useEffect(() => {
+    if (onRefresh) void onRefresh();
+    // We only want to refresh on mount — re-running on every onRefresh
+    // identity change would chatter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Sessions split by originating channel. Each channel becomes its own
+   * top-level section; date-bucket grouping (Today / Yesterday / …) lives
+   * inside each section. Local sessions (``browser-extension``) keep the
+   * existing "Chats" label so single-channel users see the same UI they
+   * always had; remote channels render as additional sections labelled
+   * with the channel name.
+   */
+  const channelSections = useMemo(() => {
     const q = query.trim().toLowerCase();
     // Cron-source sessions live in the "Scheduled tasks" group only;
     // upstream Hermes names them ``cron_{job_id}_{stamp}``. Filter them
@@ -471,26 +515,72 @@ function SessionsRail({
     const live = sessions.filter(
       (s) => !s.archived && !s.id.startsWith("cron_"),
     );
-    if (!q) return live;
-    return live.filter((s) =>
-      (s.title || t("chat.untitled")).toLowerCase().includes(q),
-    );
+    const matching = q
+      ? live.filter((s) =>
+          (s.title || t("chat.untitled")).toLowerCase().includes(q),
+        )
+      : live;
+
+    const bySource = new Map<string, SessionMeta[]>();
+    for (const s of matching) {
+      const src = s.source ?? "browser-extension";
+      const arr = bySource.get(src) ?? [];
+      arr.push(s);
+      bySource.set(src, arr);
+    }
+
+    // Section ordering: local first (it's the user's home), then remote
+    // channels by count desc — frequently-used remote surfaces (e.g. a
+    // busy Feishu chat) bubble up.
+    const localSources = ["browser-extension", "desktop"];
+    const sections: {
+      source: string;
+      label: string;
+      items: SessionMeta[];
+      isLocal: boolean;
+    }[] = [];
+    const labelFor = (src: string): string => {
+      const descriptor = resolveChannel(src);
+      const channelTranslated = t(descriptor.labelKey as MessageKey);
+      const channelName =
+        channelTranslated === descriptor.labelKey
+          ? descriptor.fallbackLabel
+          : channelTranslated;
+      return t("sidepanel.sessions.group.channelChats", { name: channelName });
+    };
+    for (const src of localSources) {
+      const items = bySource.get(src);
+      if (!items) continue;
+      sections.push({ source: src, label: labelFor(src), items, isLocal: true });
+    }
+    const remote = Array.from(bySource.entries())
+      .filter(([src]) => !localSources.includes(src))
+      .sort((a, b) => b[1].length - a[1].length);
+    for (const [src, items] of remote) {
+      sections.push({ source: src, label: labelFor(src), items, isLocal: false });
+    }
+    return sections;
   }, [sessions, query, t]);
 
-  const groups = useMemo(() => groupByRecency(filtered, t), [filtered, t]);
+  // Total matching count — for the "no matches" empty state when query
+  // filters everything out (regardless of which channel they came from).
+  const totalMatching = useMemo(
+    () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
+    [channelSections],
+  );
 
-  // Top-level collapse state — default both expanded so first-open users
-  // discover the Scheduled-tasks section without hunting.
-  const [topCollapsed, setTopCollapsed] = useState<{
-    chats: boolean;
-    scheduled: boolean;
-  }>({ chats: false, scheduled: false });
-  const toggleTop = (k: "chats" | "scheduled") =>
+  // Per-section collapse state. Keyed by SessionDB source so adding a
+  // new channel surface doesn't clobber the user's collapse choices for
+  // the existing ones. ``scheduled`` is the only fixed key.
+  const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({
+    scheduled: false,
+  });
+  const toggleTop = (k: string) =>
     setTopCollapsed((p) => ({ ...p, [k]: !p[k] }));
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-border/60 px-3 py-2">
+      <div className="flex shrink-0 items-center gap-1.5 px-3 py-2">
         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <input
           type="text"
@@ -509,10 +599,15 @@ function SessionsRail({
             <X className="h-3 w-3" />
           </button>
         )}
-        {/* New-chat button — moved here from the main top bar so the
-            cluster "filter + start" lives in one place. Square icon
-            (lucide ``SquarePen``) reads as "compose" without needing
-            text accompaniment. */}
+        {/* New-chat button — h-6 w-6 click target with centred icon so
+            the hover background stays visually balanced around the
+            glyph (right-aligning the icon inside the box made the
+            hover fill look "歪/skewed" — extended too far left of the
+            icon). Visual rail alignment is achieved by giving the
+            section count badges below an identical w-6 slot with the
+            number right-aligned inside it — both items share the same
+            right-edge column. ``Plus`` reads as "new" universally;
+            the previous ``SquarePen`` was unclear. */}
         <button
           type="button"
           onClick={onNewChat}
@@ -520,73 +615,116 @@ function SessionsRail({
           title={t("chat.newChat")}
           aria-label={t("chat.newChat")}
         >
-          <SquarePen className="h-3.5 w-3.5" />
+          <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/*
-        Flex column with two TopSections in flex mode: collapsed sections
-        shrink to their header (pinned at top/bottom of their slot) and
-        expanded ones share the remaining height with internal scroll.
-        When the upper "Chats" section overflows, the "Scheduled tasks"
-        header stays anchored at the bottom — matches VSCode's
-        explorer-style group behaviour.
-        Container has ``border-t`` so the first section gets a top
-        border; each section then carries its own ``border-b``, so
-        adjacent sections share a single hairline divider with no gap.
+        Resizable section list: each TopSection sits in a flex item
+        with an adjustable weight; 4px drag handles between adjacent
+        expanded sections let the user redistribute heights VSCode-
+        style. Collapsed sections shrink to their header and don't
+        participate in the resize pool. No top border on the container:
+        the search row above and this list share the sidebar's
+        ``bg-muted/40`` fill, and the search row's vertical padding
+        alone is enough breathing space.
       */}
-      <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
-        <TopSection
-          label={t("sidepanel.sessions.group.chats")}
-          count={filtered.length}
-          collapsed={topCollapsed.chats}
-          onToggle={() => toggleTop("chats")}
-          variant="rail"
-          flex
-        >
-          {!ready ? (
-            <p className="px-3 py-3 text-[11px] text-muted-foreground">
-              {t("chat.loadingSessions")}
-            </p>
-          ) : filtered.length === 0 ? (
-            <p className="px-3 py-3 text-[11px] text-muted-foreground">
-              {query ? t("chat.noMatches") : t("chat.noSessions")}
-            </p>
-          ) : (
-            <nav className="flex flex-col">
-              {groups.map((g) =>
-                g.items.length === 0 ? null : (
-                  <div key={g.key} className="flex flex-col">
-                    <p className="px-3 pb-0.5 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                      {g.label}
+      {!ready ? (
+        <div className="px-3 py-3 text-[11px] text-muted-foreground">
+          {t("chat.loadingSessions")}
+        </div>
+      ) : (
+        <ResizableSectionList
+          items={(() => {
+            const items: ResizableItem[] = [];
+            if (totalMatching === 0) {
+              // Single placeholder section — the local channel header
+              // with an empty body so the user has a visible anchor.
+              const localName = (() => {
+                const d = resolveChannel("browser-extension");
+                const tr = t(d.labelKey as MessageKey);
+                return tr === d.labelKey ? d.fallbackLabel : tr;
+              })();
+              items.push({
+                id: "browser-extension",
+                collapsed: !!topCollapsed["browser-extension"],
+                render: () => (
+                  <TopSection
+                    label={t("sidepanel.sessions.group.channelChats", {
+                      name: localName,
+                    })}
+                    count={0}
+                    collapsed={!!topCollapsed["browser-extension"]}
+                    onToggle={() => toggleTop("browser-extension")}
+                    variant="rail"
+                    flex
+                  >
+                    <p className="px-3 py-3 text-[11px] text-muted-foreground">
+                      {query ? t("chat.noMatches") : t("chat.noSessions")}
                     </p>
-                    {g.items.map((s) => (
-                      <SessionRow
-                        key={s.id}
-                        session={s}
-                        active={s.id === activeId}
-                        onOpen={() => onOpen(s.id)}
-                        onRename={(title) => onRename(s.id, title)}
-                        onDelete={() => onDelete(s.id)}
-                      />
-                    ))}
-                  </div>
+                  </TopSection>
                 ),
-              )}
-            </nav>
-          )}
-        </TopSection>
-
-        <ScheduledSection
-          open={!topCollapsed.scheduled}
-          collapsed={topCollapsed.scheduled}
-          onToggle={() => toggleTop("scheduled")}
-          activeId={activeId}
-          onOpenCronSession={onOpenCronSession}
-          variant="rail"
-          flex
+              });
+            } else {
+              for (const sec of channelSections) {
+                const dateGroups = groupByRecency(sec.items, t);
+                items.push({
+                  id: sec.source,
+                  collapsed: !!topCollapsed[sec.source],
+                  render: () => (
+                    <TopSection
+                      label={sec.label}
+                      count={sec.items.length}
+                      collapsed={!!topCollapsed[sec.source]}
+                      onToggle={() => toggleTop(sec.source)}
+                      variant="rail"
+                      flex
+                    >
+                      <nav className="flex flex-col">
+                        {dateGroups.map((g) =>
+                          g.items.length === 0 ? null : (
+                            <div key={g.key} className="flex flex-col">
+                              <p className="px-3 pb-0.5 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                                {g.label}
+                              </p>
+                              {g.items.map((s) => (
+                                <SessionRow
+                                  key={s.id}
+                                  session={s}
+                                  active={s.id === activeId}
+                                  onOpen={() => onOpen(s.id)}
+                                  onRename={(title) => onRename(s.id, title)}
+                                  onDelete={() => onDelete(s.id)}
+                                />
+                              ))}
+                            </div>
+                          ),
+                        )}
+                      </nav>
+                    </TopSection>
+                  ),
+                });
+              }
+            }
+            items.push({
+              id: "scheduled",
+              collapsed: !!topCollapsed.scheduled,
+              render: () => (
+                <ScheduledSection
+                  open={!topCollapsed.scheduled}
+                  collapsed={!!topCollapsed.scheduled}
+                  onToggle={() => toggleTop("scheduled")}
+                  activeId={activeId}
+                  onOpenCronSession={onOpenCronSession}
+                  variant="rail"
+                  flex
+                />
+              ),
+            });
+            return items;
+          })()}
         />
-      </div>
+      )}
     </>
   );
 }
@@ -659,10 +797,15 @@ function SessionRow({
       type="button"
       onClick={onOpen}
       className={cn(
+        // Hover only changes the background tint; text colour stays
+        // ``text-muted-foreground`` so unselected rows don't appear to
+        // "bold up" when hovered. The active row keeps full-strength
+        // ``text-foreground`` as the canonical "this is the selected
+        // chat" cue.
         "group flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
         active
           ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/60",
       )}
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
@@ -701,7 +844,14 @@ function SessionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground/70 group-hover:hidden">
+      {/* Relative-time badge — fixed 24px-wide right-edge slot so it
+          shares a visual column with the "+ new chat" button and the
+          section count badges. NO ``h-6`` here so the slot's height
+          tracks the row's natural content; otherwise the row would
+          be 24px tall when the time badge is showing and shrink to
+          the action cluster's height on hover, producing a visible
+          row-height jitter every time the cursor enters/leaves. */}
+      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[9px] tabular-nums text-muted-foreground/70 group-hover:hidden">
         {formatRelativeShort(session.updatedAt)}
       </span>
     </button>

@@ -45,3 +45,30 @@ export const ATTACHMENT_HTTP_BASE = BACKPLANE_HTTP_BASE
 export const DEFAULT_HERMES_API_BASE = "http://127.0.0.1:8642/v1"
 
 export const DEFAULT_HERMES_MODEL = "hermes-agent"
+
+/**
+ * Storage keys for the voice-input affordance. The Voice settings page
+ * writes here; the chat composer reads them to decide whether to show
+ * the microphone button and how to behave once a recording finishes.
+ *
+ * Provider / model / API keys are NOT mirrored into platform.storage.
+ * They live in the user's existing ``~/.hermes/config.yaml`` (``stt.*``)
+ * and ``~/.hermes/.env`` exactly as they do for the CLI. The Voice
+ * settings page reads them back via ``GET /hermes/stt/status`` to
+ * display what's effective — that's a read-only view, not a writer.
+ */
+export const VOICE_ENABLED_STORAGE_KEY = "settings.voice.enabled"
+export const VOICE_AUTO_SEND_STORAGE_KEY = "settings.voice.autoSend"
+export const VOICE_DEVICE_ID_STORAGE_KEY = "settings.voice.deviceId"
+
+export interface VoicePrefs {
+  enabled: boolean
+  autoSend: boolean
+  deviceId: string
+}
+
+export const DEFAULT_VOICE_PREFS: VoicePrefs = {
+  enabled: false,
+  autoSend: false,
+  deviceId: "",
+}

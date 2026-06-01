@@ -45,6 +45,77 @@ export const en = {
   "options.nav.cron": "Cron",
   "options.nav.status": "Status",
   "options.nav.logs": "Logs",
+  "options.nav.voice": "Voice",
+
+  // Composer voice input
+  "composer.voice.startRecording": "Record voice message",
+  "composer.voice.stopRecording": "Stop recording",
+  "composer.voice.transcribing": "Transcribing…",
+  "composer.voice.permissionDenied":
+    "Microphone access was denied. Allow it in your OS settings to use voice input.",
+  "composer.voice.unsupported":
+    "Voice input is not supported in this environment.",
+  "composer.voice.transcribeFailed": "Voice transcription failed: {error}",
+
+  // Voice settings page
+  "options.voice.title": "Voice input",
+  "options.voice.description":
+    "Configure the composer microphone button and the speech-to-text engine.",
+  "options.voice.enable.label": "Enable voice input",
+  "options.voice.enable.help":
+    "Show the microphone button in the chat composer.",
+  "options.voice.autoSend.label": "Auto-send after transcribe",
+  "options.voice.autoSend.help":
+    "If off, the transcript lands in the composer and waits for you to hit send.",
+  "options.voice.device.label": "Microphone device",
+  "options.voice.device.system": "System default",
+  "options.voice.device.refresh": "Refresh devices",
+  "options.voice.test.label": "Test microphone",
+  "options.voice.test.start": "Record 2-second test",
+  "options.voice.test.recording": "Listening…",
+  "options.voice.test.transcribing": "Transcribing test clip…",
+  "options.voice.test.loadingModel":
+    "First run — downloading the local model (~150 MB), please hang on…",
+  "options.voice.test.timeout":
+    "Request timed out. The model may still be downloading or loading — try again in a moment.",
+  "options.voice.test.success": "Recognised: {text}",
+  "options.voice.test.empty": "Recording captured, but no speech was recognised.",
+  "options.voice.test.failed": "Test failed: {error}",
+
+  // Provider picker
+  "options.voice.provider.label": "Provider",
+  "options.voice.provider.local": "Local (faster-whisper, free)",
+  "options.voice.provider.groq": "Groq",
+  "options.voice.provider.openai": "OpenAI",
+  "options.voice.provider.mistral": "Mistral Voxtral",
+  "options.voice.provider.elevenlabs": "ElevenLabs Scribe",
+  "newtab.dropOverlay": "Drop files to attach",
+  "options.voice.localModel.label": "Local model size",
+  "options.voice.localModel.notDownloaded":
+    "{model} model isn't downloaded yet (~{size})",
+  "options.voice.localModel.ready": "{model} model is ready",
+  "options.voice.localModel.download": "Download",
+  "options.voice.localModel.downloading": "Downloading {model} model…",
+  "options.voice.localModel.downloadFailed": "Download failed: {error}",
+  "options.voice.localModel.retry": "Retry",
+  "options.voice.localModel.help":
+    "Larger models are more accurate but slower. Recommended: base.",
+
+  // API-key editor
+  "options.voice.apiKey.label": "API key",
+  "options.voice.apiKey.placeholder": "Paste your provider API key",
+  "options.voice.apiKey.placeholderReplace": "Enter a new key to replace the saved one",
+  "options.voice.apiKey.set": "Key is set",
+  "options.voice.apiKey.unset": "Not set",
+  "options.voice.apiKey.clear": "Clear",
+  "options.voice.apiKey.confirmClear": "Confirm clear",
+  "options.voice.apiKey.help":
+    "Stored in ~/.hermes/.env. Empty input is ignored; use Clear to remove a saved key.",
+
+  // Status (loading / error)
+  "options.voice.status.loading": "Reading STT config…",
+  "options.voice.status.error": "Couldn't reach the backplane: {error}",
+  "options.voice.status.retry": "Retry",
 
   // Preference page
   "options.preference.title": "Preference",
@@ -392,6 +463,13 @@ export const en = {
   "sidepanel.empty.newChat": "New chat",
   "sidepanel.empty.openHistory": "Open from History",
   "sidepanel.empty.settings": "Settings",
+  // Empty-state connect prompt — shown in place of the composer when
+  // the bridge isn't reachable. Submitting a prompt would just error.
+  "sidepanel.empty.notConnected.title": "Not connected to Hermes",
+  "sidepanel.empty.notConnected.description":
+    "Connect to the Hermes bridge first to start chatting.",
+  "sidepanel.empty.notConnected.button": "Connect",
+  "sidepanel.empty.notConnected.connecting": "Connecting…",
 
   // Bridge status bar
   "sidepanel.status.connecting": "Connecting…",
@@ -458,6 +536,11 @@ export const en = {
   "sidepanel.sessions.group.thisMonth": "This month",
   "sidepanel.sessions.group.older": "Older",
   "sidepanel.sessions.group.chats": "Chats",
+  // Channel-scoped section label: ``{name} chats`` — used for both the
+  // local "Local chats" section and remote channel sections ("Feishu
+  // chats", "Telegram chats", …). Single template keeps section
+  // labels uniform across origins.
+  "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Scheduled tasks",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
@@ -585,6 +668,42 @@ export const en = {
     "Explain what this means / what this code does",
   "composer.quick.explain.template":
     "Explain the following clearly. If it is code, describe what it does step by step and call out any non-obvious behavior. If it is prose or a concept, define the key terms first, then walk through the idea. Reply in the same language as the input.\n\n{input}",
+
+  // ── Channels (multi-platform sessions) ──
+  "channels.desktop": "Desktop",
+  // Sessions tagged ``browser-extension`` in SessionDB are created by
+  // *any* local hermes-x app (extension or desktop) — the tag is a
+  // historical leftover from before the desktop variant existed.
+  // "Local" reflects the real semantics; the underlying tag is fixed.
+  "channels.extension": "Local",
+  "channels.cli": "CLI",
+  "channels.tui": "TUI",
+  "channels.cron": "Scheduled",
+  "channels.feishu": "Feishu",
+  "channels.telegram": "Telegram",
+  "channels.slack": "Slack",
+  "channels.discord": "Discord",
+  "channels.wecom": "WeCom",
+  "channels.weixin": "WeChat",
+  "channels.dingtalk": "DingTalk",
+  "channels.whatsapp": "WhatsApp",
+  "channels.signal": "Signal",
+  "channels.matrix": "Matrix",
+  "channels.email": "Email",
+  "channels.sms": "SMS",
+  "channels.webhook": "Webhook",
+  "channels.homeassistant": "Home Assistant",
+  "channels.bluebubbles": "iMessage",
+  "channels.qqbot": "QQ",
+  "channels.yuanbao": "Yuanbao",
+  "channels.gateway": "Gateway",
+  "channels.api": "API",
+  "channels.local": "Local",
+  "channels.unknown": "Other",
+  "channels.remoteTitle": "From {name}",
+  "sidepanel.sessions.readOnlyBadge": "Read-only",
+  "sidepanel.sessions.readOnlyNotice":
+    "This conversation lives on {name}. Continue there to send a new message.",
 } as const;
 
 export type MessageKey = keyof typeof en;

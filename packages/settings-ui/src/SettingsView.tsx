@@ -8,6 +8,7 @@ import {
   FileText,
   Globe,
   Home,
+  Mic,
   Palette,
   RadioTower,
   RefreshCw,
@@ -44,6 +45,7 @@ import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { SettingsPreferences } from "./SettingsPreferences";
 import { SettingsSkills } from "./SettingsSkills";
 import { SettingsStatus } from "./SettingsStatus";
+import { SettingsVoice } from "./SettingsVoice";
 
 /**
  * Sidebar order (two groups):
@@ -62,6 +64,7 @@ const ALL_TABS = [
   "models",
   "skills",
   "memory",
+  "voice",
   "cron",
   "logs",
 ] as const;
@@ -320,6 +323,7 @@ export function SettingsView({
             <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
             <NavBtn icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.skills")} active={mainTab === "skills"} onClick={() => onMainTabChange("skills")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
+            <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
           </nav>
@@ -336,6 +340,18 @@ export function SettingsView({
           <SettingsMemory />
         ) : mainTab === "skills" ? (
           <SettingsSkills />
+        ) : mainTab === "voice" ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <SettingsPaneHeader
+              title={t("options.voice.title")}
+              subtitle={t("options.voice.description")}
+            />
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="p-6">
+                <SettingsVoice />
+              </div>
+            </ScrollArea>
+          </div>
         ) : mainTab === "cron" ? (
           <SettingsCron />
         ) : mainTab === "status" ? (

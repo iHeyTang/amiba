@@ -40,6 +40,69 @@ export const zhCN: Messages = {
   "options.nav.cron": "定时任务",
   "options.nav.status": "运行状态",
   "options.nav.logs": "日志",
+  "options.nav.voice": "语音",
+
+  // Composer voice input
+  "composer.voice.startRecording": "录制语音消息",
+  "composer.voice.stopRecording": "停止录音",
+  "composer.voice.transcribing": "转写中…",
+  "composer.voice.permissionDenied": "麦克风权限被拒绝。请在系统设置中允许后再使用语音输入。",
+  "composer.voice.unsupported": "当前环境不支持语音输入。",
+  "composer.voice.transcribeFailed": "语音转写失败：{error}",
+
+  // Voice settings page
+  "options.voice.title": "语音输入",
+  "options.voice.description": "配置输入框的麦克风按钮与语音转写引擎。",
+  "options.voice.enable.label": "启用语音输入",
+  "options.voice.enable.help": "在对话输入框中显示麦克风按钮。",
+  "options.voice.autoSend.label": "转写完自动发送",
+  "options.voice.autoSend.help": "关闭时转写结果会先填到输入框，等你确认再发送。",
+  "options.voice.device.label": "麦克风设备",
+  "options.voice.device.system": "系统默认",
+  "options.voice.device.refresh": "刷新设备列表",
+  "options.voice.test.label": "测试麦克风",
+  "options.voice.test.start": "录制 2 秒测试",
+  "options.voice.test.recording": "听取中…",
+  "options.voice.test.transcribing": "正在转写测试片段…",
+  "options.voice.test.loadingModel":
+    "首次使用本地模型，正在下载 ~150 MB，请耐心等待…",
+  "options.voice.test.timeout": "请求超时，模型可能仍在下载或加载，请稍后重试。",
+  "options.voice.test.success": "识别结果：{text}",
+  "options.voice.test.empty": "录音成功，但没有识别到语音内容。",
+  "options.voice.test.failed": "测试失败：{error}",
+
+  // Provider picker
+  "options.voice.provider.label": "Provider",
+  "options.voice.provider.local": "本地（faster-whisper，免费）",
+  "options.voice.provider.groq": "Groq",
+  "options.voice.provider.openai": "OpenAI",
+  "options.voice.provider.mistral": "Mistral Voxtral",
+  "options.voice.provider.elevenlabs": "ElevenLabs Scribe",
+  "newtab.dropOverlay": "拖入文件以附加",
+  "options.voice.localModel.label": "本地模型大小",
+  "options.voice.localModel.help": "模型越大越准但越慢，推荐 base。",
+  "options.voice.localModel.notDownloaded": "{model} 模型尚未下载（约 {size}）",
+  "options.voice.localModel.ready": "{model} 模型已就绪",
+  "options.voice.localModel.download": "下载",
+  "options.voice.localModel.downloading": "正在下载 {model} 模型…",
+  "options.voice.localModel.downloadFailed": "下载失败：{error}",
+  "options.voice.localModel.retry": "重试",
+
+  // API-key editor
+  "options.voice.apiKey.label": "API Key",
+  "options.voice.apiKey.placeholder": "粘贴所选 provider 的 API key",
+  "options.voice.apiKey.placeholderReplace": "输入新 key 以替换已保存的",
+  "options.voice.apiKey.set": "已配置",
+  "options.voice.apiKey.unset": "未配置",
+  "options.voice.apiKey.clear": "清除",
+  "options.voice.apiKey.confirmClear": "确认清除",
+  "options.voice.apiKey.help":
+    "保存到 ~/.hermes/.env。空输入会被忽略；如需删除已存的 key 请点击「清除」。",
+
+  // Status (loading / error)
+  "options.voice.status.loading": "读取 STT 配置中…",
+  "options.voice.status.error": "无法连接 backplane：{error}",
+  "options.voice.status.retry": "重试",
 
   // Preference page
   "options.preference.title": "偏好设置",
@@ -363,6 +426,13 @@ export const zhCN: Messages = {
   "sidepanel.empty.newChat": "新建对话",
   "sidepanel.empty.openHistory": "从历史打开",
   "sidepanel.empty.settings": "设置",
+  // Empty-state connect prompt — shown in place of the composer when
+  // the bridge isn't reachable. Submitting a prompt would just error.
+  "sidepanel.empty.notConnected.title": "未连接到 Hermes",
+  "sidepanel.empty.notConnected.description":
+    "需要先连接 Hermes 桥接服务才能开始对话。",
+  "sidepanel.empty.notConnected.button": "连接",
+  "sidepanel.empty.notConnected.connecting": "连接中…",
 
   // Bridge status bar
   "sidepanel.status.connecting": "连接中…",
@@ -425,6 +495,7 @@ export const zhCN: Messages = {
   "sidepanel.sessions.group.thisMonth": "本月",
   "sidepanel.sessions.group.older": "更早",
   "sidepanel.sessions.group.chats": "对话历史",
+  "sidepanel.sessions.group.channelChats": "{name}对话",
   "sidepanel.sessions.group.scheduled": "定时任务",
   "sidepanel.sessions.scheduled.loading": "加载中…",
   "sidepanel.sessions.scheduled.empty": "暂无定时任务。在聊天中创建一个试试。",
@@ -546,4 +617,35 @@ export const zhCN: Messages = {
   "composer.quick.explain.tooltip": "解释这段内容/这段代码的含义",
   "composer.quick.explain.template":
     "请清晰地解释以下内容。如果是代码，请逐步说明它在做什么，并指出任何不直观的行为；如果是文字或概念，先解释关键术语，再讲清楚整体含义。使用与原文相同的语言回复。\n\n{input}",
+
+  // ── 渠道（多平台会话） ──
+  "channels.desktop": "桌面",
+  "channels.extension": "本地",
+  "channels.cli": "CLI",
+  "channels.tui": "TUI",
+  "channels.cron": "定时任务",
+  "channels.feishu": "飞书",
+  "channels.telegram": "Telegram",
+  "channels.slack": "Slack",
+  "channels.discord": "Discord",
+  "channels.wecom": "企业微信",
+  "channels.weixin": "微信",
+  "channels.dingtalk": "钉钉",
+  "channels.whatsapp": "WhatsApp",
+  "channels.signal": "Signal",
+  "channels.matrix": "Matrix",
+  "channels.email": "邮件",
+  "channels.sms": "短信",
+  "channels.webhook": "Webhook",
+  "channels.homeassistant": "Home Assistant",
+  "channels.bluebubbles": "iMessage",
+  "channels.qqbot": "QQ",
+  "channels.yuanbao": "元宝",
+  "channels.gateway": "网关",
+  "channels.api": "API",
+  "channels.local": "本地",
+  "channels.unknown": "其他",
+  "channels.remoteTitle": "来自 {name}",
+  "sidepanel.sessions.readOnlyBadge": "只读",
+  "sidepanel.sessions.readOnlyNotice": "此会话来自 {name}，请在 {name} 继续对话。",
 };

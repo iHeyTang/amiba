@@ -2,6 +2,7 @@ import "~lib/platform/init";
 
 import "~style.css";
 
+import { SessionsProvider } from "@hermes-x/core";
 import { HomeView } from "@hermes-x/home-ui";
 
 import { chromeHomeCapabilities } from "~lib/home/chrome-capabilities";
@@ -28,10 +29,12 @@ export default function NewTab() {
     }
   }
   return (
-    <HomeView
-      onOpenChat={openChatTab}
-      onOpenSettings={() => chrome.runtime.openOptionsPage()}
-      capabilities={chromeHomeCapabilities}
-    />
+    <SessionsProvider>
+      <HomeView
+        onOpenChat={openChatTab}
+        onOpenSettings={() => chrome.runtime.openOptionsPage()}
+        capabilities={chromeHomeCapabilities}
+      />
+    </SessionsProvider>
   );
 }

@@ -1,7 +1,15 @@
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import type net from "node:net"
-import { BrowserWindow, app, ipcMain, nativeImage, session, shell } from "electron"
+import {
+  BrowserWindow,
+  app,
+  ipcMain,
+  nativeImage,
+  session,
+  shell,
+  systemPreferences,
+} from "electron"
 import { setPlatform } from "@hermes-x/platform"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
@@ -102,6 +110,76 @@ function installCorsBypass() {
       headers["Access-Control-Allow-Origin"] = ["*"]
       callback({ responseHeaders: headers })
     }
+  )
+}
+
+/**
+ * Permit ``media`` permission requests from the renderer so
+ * ``navigator.mediaDevices.getUserMedia({ audio: true })`` reaches the
+ * OS layer instead of being rejected at the Electron boundary.
+ *
+ * On macOS, the OS-level decision is still gated by
+ * ``NSMicrophoneUsageDescription`` in Info.plist (declared via
+ * ``build.mac.extendInfo`` in ``package.json`` for packaged builds,
+ * Electron.app's own Info.plist in dev) AND the user's choice in
+ * Privacy & Security → Microphone. Without this handler, Electron
+ * defaults to silently denying media requests for navigated content
+ * (file:// + dev http://), surfacing in the renderer as a
+ * ``NotAllowedError: Permission denied`` — the exact failure the Voice
+ * settings test was hitting.
+ *
+ * Other request kinds (notifications, geolocation, MIDI, …) fall
+ * through to Electron's default handler.
+ */
+function installPermissionRequestHandler(): void {
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback) => {
+      if (permission === "media") {
+        callback(true)
+        return
+      }
+      callback(false)
+    },
+  )
+}
+
+/**
+ * Renderer-facing IPC: ``voice:ensure-microphone-access`` triggers the
+ * native permission flow without yet starting a recording. The renderer
+ * calls this immediately before ``getUserMedia`` so that on macOS the
+ * "Hermes wants to use the microphone" dialog appears (first call) or
+ * the stored decision is returned (subsequent calls), and the renderer
+ * can present a friendly hint when access is denied at the OS level
+ * instead of the generic ``Permission denied`` string.
+ *
+ * Returns one of macOS's media-access-status strings:
+ *   - ``"granted"`` — proceed with getUserMedia
+ *   - ``"denied"`` / ``"restricted"`` — the user must flip the toggle
+ *     in System Settings → Privacy & Security → Microphone
+ *   - ``"not-determined"`` — only seen if the OS dialog was suppressed
+ *     (very rare; treat as denied)
+ *   - ``"unknown"`` — non-macOS platforms (Windows / Linux) where the
+ *     check is a no-op; renderer should proceed and let getUserMedia
+ *     report any failure.
+ */
+function registerVoicePermissionHandler(): void {
+  ipcMain.handle(
+    "voice:ensure-microphone-access",
+    async (): Promise<"granted" | "denied" | "restricted" | "not-determined" | "unknown"> => {
+      if (process.platform !== "darwin") return "unknown"
+      const current = systemPreferences.getMediaAccessStatus("microphone")
+      if (current === "granted") return "granted"
+      if (current === "not-determined") {
+        try {
+          const ok = await systemPreferences.askForMediaAccess("microphone")
+          return ok ? "granted" : "denied"
+        } catch (err) {
+          console.warn("[main] askForMediaAccess(microphone) failed:", err)
+          return "denied"
+        }
+      }
+      return current
+    },
   )
 }
 
@@ -219,19 +297,18 @@ function createWindow() {
     // can drive the traffic-light position ourselves via
     // `trafficLightPosition` — `hiddenInset` silently ignores it.
     //
-    // 40px title-bar row with traffic lights pinned at (20, 14): the
-    // 12-14px dot cluster sits with its vertical centre on y=20, and
-    // an h-6 button centred in the 40px row also lands on y=20, so
-    // every custom affordance shares the lights' baseline pixel-for-
-    // pixel. Earlier attempts (24/36px rows with smaller y) consistently
-    // floated the custom buttons above the lights because AppKit clamps
-    // small y values and the dots themselves render slightly taller than
-    // their nominal 12px on retina.
+    // 32px title-bar row with traffic lights pinned at (20, 10): the
+    // ~12px dot cluster's vertical centre sits at y=16, and an h-6
+    // button centred in the 32px row also lands at y=16, so every
+    // custom affordance shares the lights' baseline pixel-for-pixel.
+    // Keep ``TITLE_BAR_HEIGHT`` in App.tsx in sync with the height
+    // value here and with the ``y`` here (``y = TITLE_BAR_HEIGHT/2 -
+    // dotHeight/2``).
     titleBarStyle: "hidden",
-    trafficLightPosition: IS_MAC ? { x: 20, y: 14 } : undefined,
+    trafficLightPosition: IS_MAC ? { x: 20, y: 10 } : undefined,
     titleBarOverlay: IS_MAC
       ? false
-      : { color: "#0b0b0b", symbolColor: "#e7e7e7", height: 44 },
+      : { color: "#0b0b0b", symbolColor: "#e7e7e7", height: 32 },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -300,6 +377,8 @@ if (!gotSingleInstanceLock) {
     // and-forget so a slow disk doesn't delay the window appearing.
     void cleanupOldSnips()
     installCorsBypass()
+    installPermissionRequestHandler()
+    registerVoicePermissionHandler()
     registerIpcHandlers()
     registerChatHandlers()
     registerHermesRuntimeHandlers()

@@ -9,7 +9,6 @@
  */
 
 import {
-  ArrowUp,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -19,47 +18,33 @@ import {
   X,
 } from "lucide-react";
 import {
-  forwardRef,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ClipboardEventHandler,
-  type KeyboardEvent,
-  type ReactNode,
 } from "react";
 
 import {
-  renderQuickActionPrompt,
-  useQuickActions,
+  transcribeAudio,
   useSessions,
+  useVoicePrefs,
   useWallpaper,
-  type ResolvedQuickAction,
   type WallpaperController,
 } from "@hermes-x/core";
 import {
-  AttachmentButton,
-  AttachmentChip,
-  ComposerKbdHints,
-  QuickActionChips,
+  Composer,
   useComposerAttachments,
+  useVoiceRecorder,
   WallpaperBackdrop,
   WallpaperCredit,
+  type ComposerHandle,
 } from "@hermes-x/chat-ui";
 import { shortId } from "@hermes-x/utils";
 import { useT } from "@hermes-x/i18n";
 import { getPlatform } from "@hermes-x/platform";
 import { useResolvedTheme } from "@hermes-x/theme";
-import {
-  HermesLogo,
-  Textarea,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@hermes-x/ui";
+import { HermesLogo } from "@hermes-x/ui";
 import { cn } from "@hermes-x/utils";
 
 import type {
@@ -149,7 +134,6 @@ function Home({
   const useShortcutsHook = capabilities?.shortcuts?.useController ?? useNoShortcuts;
   const shortcuts = useShortcutsHook();
   const wallpaper = useWallpaper();
-  const { actions: quickActions } = useQuickActions(t);
   // Composer attachments — same hook the main panel and Quick-Ask use.
   // The session id is just a folder name for the backplane upload path;
   // we use a stable HomeView-scoped one so re-uploads land in the same
@@ -159,9 +143,34 @@ function Home({
     getSessionId: () => homeUploadSessionRef.current,
   });
 
+  // Typewriter placeholder examples — memoised so the cycling effect
+  // doesn't restart on every render. Re-derived only when the locale
+  // changes (which itself re-binds ``t``).
+  const placeholderExamples = useMemo(
+    () => [
+      t("newtab.placeholder.example.1"),
+      t("newtab.placeholder.example.2"),
+      t("newtab.placeholder.example.3"),
+      t("newtab.placeholder.example.4"),
+      t("newtab.placeholder.example.5"),
+    ],
+    [t],
+  );
+
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<ComposerHandle | null>(null);
+
+  // Voice input — same pipeline as the chat composer. The recorder hook
+  // owns the MediaRecorder lifecycle; once the user stops we POST the
+  // blob to /hermes/stt and append the transcript to ``input``. ``enabled``
+  // gates the button on/off so the prefs page can hide voice entirely.
+  const voicePrefs = useVoicePrefs();
+  const voiceRecorder = useVoiceRecorder({
+    deviceId: voicePrefs.deviceId || undefined,
+  });
+  const [voiceTranscribing, setVoiceTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   // On mount: focus the composer textarea.
   useEffect(() => {
@@ -185,18 +194,29 @@ function Home({
     if (busy || !sessions.ready) return;
     setBusy(true);
     try {
-      // Panel mode embeds HomeView as the chat surface's empty state.
-      // If a session is already active but has no messages (user
-      // clicked "+ new chat" but hasn't typed anything yet), reuse it
-      // instead of minting a fresh one and leaving the previous one
-      // as an empty orphan in the rail. ``activeMessages.length === 0``
-      // is the same gate the empty-state surface uses, so the two
-      // stay in lockstep.
-      const reuseExistingEmpty =
-        !!sessions.activeId && sessions.activeMessages.length === 0;
-      if (!reuseExistingEmpty) {
-        await sessions.createNew();
-      }
+      // HomeView only carries the *intent* to start a chat — the
+      // receiving surface (``SidePanelView`` in panelMode, or
+      // ``tabs/chat.html``'s ``FullScreenChatView`` after navigation)
+      // is what actually creates the session via ``ensureActive``
+      // inside its autosend chain.
+      //
+      // Previously HomeView called ``sessions.createNew()`` itself
+      // before writing the pending prompt. That worked in panel mode
+      // (same Store → the new session id propagates immediately) but
+      // produced an orphan unnamed conversation in the cross-window
+      // case: newtab's local Store minted session A; navigating to
+      // ``tabs/chat.html`` mounts a fresh per-window Store whose
+      // ``activeId`` starts empty (per-window selection — see
+      // ``SessionsStore``); chat.html's autosend then calls
+      // ``ensureActive`` which mints session B. Session A is left
+      // dangling in the rail as an unnamed empty row.
+      //
+      // Letting only the receiving surface create the session avoids
+      // that fork entirely. ``ensureActive`` short-circuits to the
+      // local active id when one exists (panelMode with a selected
+      // empty session — "scenario 2") and creates a fresh session
+      // when there isn't (newtab → chat hand-off or panelMode empty
+      // activeId — "scenario 1"). One session in either case.
       await getPlatform().storage.set({
         [HOME_PENDING_PROMPT_KEY]: {
           text: trimmed || undefined,
@@ -231,17 +251,55 @@ function Home({
     }
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    const ne = e.nativeEvent;
-    if (ne.isComposing || e.key === "Process") return;
-    if (
-      (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ||
-      (e.key === "Enter" && !e.shiftKey && !e.altKey)
-    ) {
-      e.preventDefault();
-      void submitToChat(input);
+  const handleVoiceToggle = useCallback(() => {
+    if (voiceTranscribing) return;
+    setVoiceError(null);
+    if (!voiceRecorder.recording) {
+      void voiceRecorder.start().catch((e) => {
+        const message = String((e as Error)?.message || e);
+        setVoiceError(
+          message === "Permission denied"
+            ? t("composer.voice.permissionDenied")
+            : t("composer.voice.transcribeFailed", { error: message }),
+        );
+      });
+      return;
     }
-  }
+    setVoiceTranscribing(true);
+    void (async () => {
+      try {
+        const blob = await voiceRecorder.stop();
+        if (!blob || blob.size === 0) return;
+        const result = await transcribeAudio(blob);
+        if (result.ok !== true) {
+          // ``in`` narrows under both strict and non-strict tsconfigs
+          // (the workspace ships both via different apps).
+          const message = "error" in result ? result.error : "unknown";
+          setVoiceError(
+            t("composer.voice.transcribeFailed", { error: message }),
+          );
+          return;
+        }
+        const transcript = result.text.trim();
+        if (!transcript) return;
+        setInput((prev) => {
+          if (!prev) return transcript;
+          // Avoid double-space when the buffer already ends in whitespace
+          // (mid-edit append from a paused dictation).
+          return /\s$/.test(prev) ? prev + transcript : prev + " " + transcript;
+        });
+        inputRef.current?.focus();
+      } catch (e) {
+        setVoiceError(
+          t("composer.voice.transcribeFailed", {
+            error: String((e as Error)?.message || e),
+          }),
+        );
+      } finally {
+        setVoiceTranscribing(false);
+      }
+    })();
+  }, [voiceRecorder, voiceTranscribing, t]);
 
   const canSend =
     (input.trim().length > 0 || att.hasReadyAttachment()) &&
@@ -344,52 +402,40 @@ function Home({
               );
             })()
           )}
-          <ComposerCard
+          <Composer
             ref={inputRef}
             value={input}
             onChange={setInput}
-            onKeyDown={onKeyDown}
-            onPaste={att.handlePaste}
-            dropHandlers={att.dropHandlers}
-            dragOver={att.dragOver}
-            onSend={() => void submitToChat(input)}
-            canSend={canSend}
+            onSubmit={(override) => void submitToChat(override ?? input)}
             busy={busy}
-            quickActions={quickActions}
-            onQuickAction={(action) => {
-              const userText = input;
-              if (!userText.trim()) {
-                inputRef.current?.focus();
-                return;
-              }
-              void submitToChat(
-                renderQuickActionPrompt(action.template, userText),
-              );
-            }}
-            chipRow={
-              att.attachments.length > 0 ? (
-                <>
-                  {att.attachments.map((a) => (
-                    <AttachmentChip
-                      key={a.uiId}
-                      attachment={a}
-                      onRemove={() => att.removeAttachment(a.uiId)}
-                    />
-                  ))}
-                </>
+            canSubmit={canSend}
+            frameVariant="hero"
+            maxTextareaPx={280}
+            placeholder={{ typewriter: placeholderExamples }}
+            attachments={att}
+            microphone={
+              voicePrefs.enabled
+                ? {
+                    recording: voiceRecorder.recording,
+                    transcribing: voiceTranscribing,
+                    onToggle: handleVoiceToggle,
+                  }
+                : undefined
+            }
+            dropOverlay={t("newtab.dropOverlay")}
+            sendTitle={t("newtab.send.tooltip")}
+            kbdHints={[
+              { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
+              { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
+            ]}
+            extrasBelow={
+              voiceError ? (
+                <p role="alert" className="text-[11px] text-destructive">
+                  {voiceError}
+                </p>
               ) : undefined
             }
-            actionsLeft={
-              <AttachmentButton
-                onClick={() => void att.openFilePicker()}
-                disabled={att.attachmentBusy || att.attachmentUploading}
-              />
-            }
-            peekExpanded={false}
           />
-          {/* Hidden fallback file input — the hook owns the ref +
-              onChange wiring. */}
-          <input {...att.fileInputProps} />
         </section>
 
         {/*
@@ -1056,387 +1102,4 @@ function TopBar({
     </header>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Composer
-// ---------------------------------------------------------------------------
-
-interface ComposerCardProps {
-  value: string;
-  onChange: (v: string) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onSend: () => void;
-  canSend: boolean;
-  busy: boolean;
-  /** Quick-action chips rendered below the textarea. Empty list = no strip. */
-  quickActions: ResolvedQuickAction[];
-  /** Click handler for a chip — caller wraps the input with `renderQuickActionPrompt`. */
-  onQuickAction: (action: ResolvedQuickAction) => void;
-  /**
-   * Slot rendered between the textarea and the bottom action row —
-   * caller fills with attachment chips. `undefined` hides the row.
-   */
-  chipRow?: ReactNode;
-  /**
-   * Slot rendered before the quick-action toolbar in the bottom action
-   * row. Caller drops the `<AttachmentButton>` here.
-   */
-  actionsLeft?: ReactNode;
-  /** Forwarded onto the textarea so callers can capture pasted files. */
-  onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
-  /**
-   * Drag-and-drop handlers from `useComposerAttachments().dropHandlers`.
-   * When provided, the glass card becomes a file drop zone — drop the
-   * usual `dragOver` cue overlay via the `dragOver` flag below.
-   */
-  dropHandlers?: {
-    onDragOver: (e: import("react").DragEvent<HTMLElement>) => void;
-    onDragLeave: (e: import("react").DragEvent<HTMLElement>) => void;
-    onDrop: (e: import("react").DragEvent<HTMLElement>) => void;
-  };
-  /** Whether a file payload is hovering — used to draw the drop overlay. */
-  dragOver?: boolean;
-  /**
-   * When the bottom dashboard peek is open, the available area above it
-   * is small; we lower the textarea's auto-grow cap so it scrolls
-   * internally instead of being hidden behind the peek panel. Collapsing
-   * the peek restores the full cap. The composer never resizes the user's
-   * typed text — it just changes when the internal scrollbar takes over.
-   */
-  peekExpanded: boolean;
-}
-
-/**
- * Rotating placeholder typewriter for the composer. Cycles through a
- * list of example prompts, typing each one out one character at a
- * time, holding for a beat, then deleting and moving to the next. The
- * effect pauses while `active` is false (passed in as
- * `!value && !busy` so it stops as soon as the user starts typing or
- * a send is in flight).
- *
- * Implementation notes:
- *   - State machine (`typing` / `holding` / `deleting`) lives in a
- *     ref so the single `useEffect` doesn't need to re-run on every
- *     character. `setOutput` triggers the re-render, the loop schedules
- *     the next step via `setTimeout` recursively.
- *   - `prefers-reduced-motion: reduce` short-circuits to the first
- *     example shown statically — same affordance, no animation cost.
- *   - Per-char typing speed jitters by ±40ms so the cadence reads as
- *     "someone is typing" rather than "a CSS animation is running".
- */
-function useTypewriterPlaceholder(
-  active: boolean,
-  examples: readonly string[],
-): string {
-  const [output, setOutput] = useState("");
-  const stateRef = useRef<{
-    idx: number;
-    charIdx: number;
-    phase: "typing" | "holding" | "deleting";
-  }>({ idx: 0, charIdx: 0, phase: "typing" });
-
-  useEffect(() => {
-    if (examples.length === 0) return;
-
-    // Respect users who've opted out of motion: show the first
-    // example statically and skip the animation loop entirely.
-    const reducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
-      setOutput(examples[0] ?? "");
-      return;
-    }
-
-    if (!active) return;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    function tick() {
-      if (cancelled) return;
-      const { idx, charIdx, phase } = stateRef.current;
-      const current = examples[idx] ?? "";
-
-      if (phase === "typing") {
-        if (charIdx < current.length) {
-          stateRef.current = { idx, charIdx: charIdx + 1, phase };
-          setOutput(current.slice(0, charIdx + 1));
-          timer = setTimeout(tick, 55 + Math.random() * 50);
-        } else {
-          stateRef.current = { idx, charIdx, phase: "holding" };
-          timer = setTimeout(tick, 1800);
-        }
-      } else if (phase === "holding") {
-        stateRef.current = { idx, charIdx, phase: "deleting" };
-        timer = setTimeout(tick, 0);
-      } else {
-        // deleting
-        if (charIdx > 0) {
-          stateRef.current = { idx, charIdx: charIdx - 1, phase };
-          setOutput(current.slice(0, charIdx - 1));
-          timer = setTimeout(tick, 22);
-        } else {
-          stateRef.current = {
-            idx: (idx + 1) % examples.length,
-            charIdx: 0,
-            phase: "typing",
-          };
-          timer = setTimeout(tick, 250);
-        }
-      }
-    }
-
-    tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [active, examples]);
-
-  return output;
-}
-
-/**
- * Cap on auto-grown composer height when the bottom peek panel is
- * collapsed (the normal case). Above this, the textarea grows an
- * internal scrollbar instead of pushing the rest of the page down.
- * Tuned so the homepage shortcuts strip remains visible on a 720px
- * viewport even with a wall-of-text draft open.
- */
-const COMPOSER_MAX_HEIGHT_PX = 280;
-
-/**
- * Reduced cap when the bottom peek panel is expanded. With peek open, the
- * `main` area shrinks to ~280px minimum (see `Home`'s pb expression), and
- * that 280px is shared with the greeting + shortcuts strip. Capping the
- * textarea here at ~160px keeps composer + neighbours inside the visible
- * area instead of letting the textarea grow under the peek panel.
- */
-const COMPOSER_MAX_HEIGHT_PEEKED_PX = 160;
-
-const ComposerCard = forwardRef<HTMLTextAreaElement, ComposerCardProps>(
-  function ComposerCard(
-    {
-      value,
-      onChange,
-      onKeyDown,
-      onSend,
-      canSend,
-      busy,
-      quickActions,
-      onQuickAction,
-      chipRow,
-      actionsLeft,
-      onPaste,
-      dropHandlers,
-      dragOver,
-      peekExpanded,
-    },
-    ref,
-  ) {
-    const { t } = useT();
-    // Memoise so the typewriter effect doesn't restart on every render.
-    // Re-derived only when the locale changes.
-    const placeholderExamples = useMemo(
-      () => [
-        t("newtab.placeholder.example.1"),
-        t("newtab.placeholder.example.2"),
-        t("newtab.placeholder.example.3"),
-        t("newtab.placeholder.example.4"),
-        t("newtab.placeholder.example.5"),
-      ],
-      [t],
-    );
-    const placeholder = useTypewriterPlaceholder(
-      !value && !busy,
-      placeholderExamples,
-    );
-    const hasQuickActions = quickActions.length > 0;
-    const chipsDisabled = busy || !value.trim();
-
-    // Auto-grow: HTML <textarea> respects `rows` for initial height and
-    // shows an internal scrollbar past it. To grow with content we
-    // measure scrollHeight on each value change and set explicit height,
-    // capped by COMPOSER_MAX_HEIGHT_PX (overflow flips back to scrollbar
-    // once we hit the cap).
-    const internalRef = useRef<HTMLTextAreaElement | null>(null);
-    const setTextareaRef = useCallback(
-      (el: HTMLTextAreaElement | null) => {
-        internalRef.current = el;
-        if (typeof ref === "function") ref(el);
-        else if (ref) ref.current = el;
-      },
-      [ref],
-    );
-    const maxHeight = peekExpanded
-      ? COMPOSER_MAX_HEIGHT_PEEKED_PX
-      : COMPOSER_MAX_HEIGHT_PX;
-    // Last measured natural content height (via the `height = "auto"`
-    // trick). Cached so the peek-toggle path can re-clamp without
-    // re-measuring — measuring forces an intermediate `auto` style write
-    // that breaks CSS height transitions.
-    const measuredHeightRef = useRef(0);
-
-    // Keystroke path: re-measure with the auto-trick and apply
-    // instantly. CSS transition is suppressed for this write so the
-    // per-line growth reads as direct typing feedback, not a draggy
-    // animation. We restore the inline transition (back to the CSS
-    // class) right after so the peek-toggle path below keeps its
-    // animation.
-    useLayoutEffect(() => {
-      const el = internalRef.current;
-      if (!el) return;
-      const prevTransition = el.style.transition;
-      el.style.transition = "none";
-      el.style.height = "auto";
-      const sh = el.scrollHeight;
-      measuredHeightRef.current = sh;
-      const next = Math.min(sh, maxHeight);
-      el.style.height = `${next}px`;
-      el.style.overflowY = sh > maxHeight ? "auto" : "hidden";
-      // Force the no-transition write to commit before restoring the
-      // transition for subsequent (peek-driven) writes.
-      void el.offsetHeight;
-      el.style.transition = prevTransition;
-      // Intentionally deps on `value` only — peek changes are handled
-      // by the effect below, which animates the clamp.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [value]);
-
-    // Peek-toggle path: clamp the cached scrollHeight against the new
-    // cap. Pure pixel-to-pixel write, so the CSS `transition-[height]`
-    // on the Textarea handles the animation.
-    useLayoutEffect(() => {
-      const el = internalRef.current;
-      if (!el) return;
-      const sh = measuredHeightRef.current;
-      const next = Math.min(sh, maxHeight);
-      el.style.height = `${next}px`;
-      el.style.overflowY = sh > maxHeight ? "auto" : "hidden";
-    }, [maxHeight]);
-
-    // Outer wrapper stacks two siblings: the glass card with the
-    // textarea + action row, and the keyboard hint row that sits
-    // OUTSIDE the card so it doesn't pick up the card's backdrop blur.
-    return (
-      <div className="flex flex-col">
-        <div
-          {...dropHandlers}
-          className={cn(
-          // `relative` so the drag-over overlay can position itself
-          // absolutely inside the card.
-          "relative",
-          // `rounded-2xl` (16px) sits in the same "card" family as the
-          // dashboard cards (`rounded-xl`) instead of drifting into
-          // pill territory. Inner flex column splits the textarea from
-          // the action row so typed text never flows under controls.
-          "flex flex-col rounded-2xl",
-          // Single flat-ish glass surface — no gradient, no saturate,
-          // no brightness adjustment. Just a clean translucent panel
-          // over `backdrop-blur`. Cleanliness was suffering from too
-          // many overlapping tone-shifts.
-          "bg-card/70 backdrop-blur-2xl",
-          // One outer drop shadow. That's it — no inset highlight,
-          // no tight middle layer. The composer is the focal point
-          // of the page; it doesn't need to "sell glass" with stacked
-          // shadow tricks the way the smaller pills do.
-          "shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.18)]",
-          "dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]",
-          "transition-colors duration-200",
-          "focus-within:bg-card/85",
-          dragOver && "ring-2 ring-primary/40",
-        )}
-      >
-        {dragOver && (
-          <div className="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center rounded-2xl bg-primary/5 text-sm font-medium text-primary">
-            Drop files to attach
-          </div>
-        )}
-        {chipRow ? (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-foreground/5 px-3 py-1.5">
-            {chipRow}
-          </div>
-        ) : null}
-        <Textarea
-          ref={setTextareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder={placeholder}
-          rows={2}
-          disabled={busy}
-          // `transition-[height]` animates the peek-toggle clamp
-          // (full cap ↔ peeked cap). Keystroke growth is intentionally
-          // NOT animated — the value-driven effect above suppresses
-          // this transition so per-line growth feels like direct typing
-          // feedback, not a slow ramp. Duration loosely matches the
-          // peek panel's 500ms so they read as one coordinated motion.
-          className="min-h-[3.5rem] resize-none border-0 bg-transparent px-5 pb-1 pt-3.5 text-sm shadow-none transition-[height] duration-500 ease-out focus-visible:ring-0 focus-visible:ring-offset-0"
-        />
-        <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-0.5">
-          {actionsLeft ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              {actionsLeft}
-            </div>
-          ) : null}
-          {hasQuickActions ? (
-            <QuickActionChips
-              actions={quickActions}
-              canApply={!chipsDisabled}
-              onApply={onQuickAction}
-              className="flex-1"
-            />
-          ) : (
-            // Empty growable spacer keeps the Send button anchored to the
-            // right when there are no chips to push it there.
-            <div className="flex-1" />
-          )}
-          <TooltipProvider delayDuration={250}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onSend}
-                  disabled={!canSend}
-                  aria-label={t("newtab.send")}
-                  className={cn(
-                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                    "transition-colors duration-200",
-                    canSend
-                      ? "bg-foreground text-background hover:bg-foreground/85"
-                      : "bg-foreground/10 text-foreground/30",
-                  )}
-                >
-                  <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                align="end"
-                className="flex flex-col gap-1"
-              >
-                <span className="font-medium">
-                  {t("newtab.send.tooltip")}
-                </span>
-                <ComposerKbdHints
-                  className="text-popover-foreground/70"
-                  hints={[
-                    { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
-                    {
-                      keys: "⇧⏎",
-                      label: t("sidepanel.composer.kbd.newline"),
-                    },
-                  ]}
-                />
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
-      </div>
-    );
-  },
-);
 

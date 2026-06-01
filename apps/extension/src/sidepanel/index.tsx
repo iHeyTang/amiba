@@ -2,7 +2,9 @@ import "~lib/platform/init";
 
 import "~style.css";
 
+import { SessionsProvider } from "@hermes-x/core";
 import { SidePanelView } from "@hermes-x/chat-ui";
+import { HomeView } from "@hermes-x/home-ui";
 import { useMemo } from "react";
 
 import { ChromeChatEngineClient } from "~lib/chat/chrome-engine-client";
@@ -12,6 +14,7 @@ import {
 } from "~lib/chat/chrome-capabilities";
 
 import { BridgeStatusBar } from "./BridgeStatusBar";
+import { EmptyStateBridgeGate } from "./EmptyStateBridgeGate";
 import { NavigateOpenPolicyToggle } from "./NavigateOpenPolicyToggle";
 
 export type { MessagesMaxWidth, SidePanelViewProps as SidePanelProps } from "@hermes-x/chat-ui";
@@ -35,6 +38,17 @@ export default function SidePanel(props: {
   variant?: "sidebar" | "fullscreen";
   messagesMaxWidth?: "narrow" | "comfortable" | "full";
 } = {}) {
+  return (
+    <SessionsProvider>
+      <SidePanelInner {...props} />
+    </SessionsProvider>
+  );
+}
+
+function SidePanelInner(props: {
+  variant?: "sidebar" | "fullscreen";
+  messagesMaxWidth?: "narrow" | "comfortable" | "full";
+}) {
   // Single client instance per panel mount; `useMemo` keeps it stable
   // across renders so the SidePanelView's subscription effect doesn't
   // re-bind on every state tick.
@@ -50,6 +64,27 @@ export default function SidePanel(props: {
         bridgeBar: <BridgeStatusBar messages={[]} />,
         navigateOpenPolicyToggle: ({ policy, onChange }) => (
           <NavigateOpenPolicyToggle policy={policy} onChange={onChange} />
+        ),
+        // Mirrors desktop: the empty state IS the home composer. HomeView
+        // in panelMode drops its full-screen chrome and keeps just the
+        // centred composer card. Submit calls `sessions.createNew()` and
+        // writes the text to `home.pendingPrompt`; SidePanelView's drain
+        // effect auto-sends inside the freshly-active session, so
+        // `onOpenChat` is a no-op (we're already in the chat surface).
+        // Capabilities are intentionally empty — the bookmark-shortcuts
+        // strip belongs on the new-tab Home, not the narrow sidebar.
+        // Wrapped in EmptyStateBridgeGate so the composer is replaced by
+        // a Connect CTA whenever the bridge isn't reachable — submitting
+        // a prompt would just error in that state.
+        emptyState: (
+          <EmptyStateBridgeGate>
+            <HomeView
+              onOpenChat={() => {}}
+              onOpenSettings={() => chrome.runtime.openOptionsPage()}
+              capabilities={{}}
+              panelMode
+            />
+          </EmptyStateBridgeGate>
         ),
       }}
       openSettings={() => chrome.runtime.openOptionsPage()}

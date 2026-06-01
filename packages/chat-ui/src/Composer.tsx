@@ -22,11 +22,14 @@ import {
   AttachmentButton,
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments"
+import { MicrophoneButton } from "./useVoiceRecorder"
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useState,
   type ClipboardEventHandler,
   type CSSProperties,
   type KeyboardEvent,
@@ -125,7 +128,15 @@ export interface ComposerProps {
   disabled?: boolean
 
   // Textarea
-  placeholder?: string
+  /**
+   * Static text, or a typewriter cycle. When the `typewriter` array is
+   * passed, the placeholder cycles through the entries by typing them
+   * out one character at a time, holding, deleting, advancing. Set
+   * `active: false` (or let it default — Composer pauses automatically
+   * when the user has typed anything or while `busy`) to freeze the
+   * animation. Respects `prefers-reduced-motion`.
+   */
+  placeholder?: string | { typewriter: string[]; active?: boolean }
   /** Initial rows. Default 2 — matches the main panel composer. */
   rows?: number
   autoFocus?: boolean
@@ -155,6 +166,24 @@ export interface ComposerProps {
    * any of those pieces render.
    */
   attachments?: UseComposerAttachmentsResult
+  /**
+   * Voice input affordance. When set, a microphone button renders next
+   * to the paperclip; click toggles record/stop. The Composer owns
+   * nothing else — the surface drives MediaRecorder + STT, then writes
+   * the transcript back via `onChange`. Leave undefined to hide.
+   */
+  microphone?: {
+    recording: boolean
+    onToggle: () => void
+    /**
+     * Audio capture has stopped and we're round-tripping to STT. The
+     * button swaps the mic glyph for a spinner so the wait reads as
+     * deliberate work rather than a frozen control.
+     */
+    transcribing?: boolean
+    /** Force-disable independent of transcribing (rare). */
+    disabled?: boolean
+  }
   /**
    * Quick-action chips (translate / summarize / polish / explain +
    * customs) rendered in the bottom action row between the attachment
@@ -192,6 +221,16 @@ export interface ComposerProps {
   extrasBelow?: ReactNode
 
   // Frame
+  /**
+   * Visual identity of the frame:
+   *   - "default" (the chat surface, Quick-Ask, ChatView): tight bordered
+   *     rounded-lg over solid bg-background.
+   *   - "hero" (homepage empty state): a glass card — rounded-2xl,
+   *     translucent bg-card, backdrop-blur, big drop shadow, larger
+   *     textarea padding. Use when the composer is the focal point of
+   *     the page rather than a tool bar at the bottom.
+   */
+  frameVariant?: "default" | "hero"
   /** Remove the frame's top-left/right radius. Use when a sibling above
    *  (queue stack, banner) needs to visually merge with the frame. */
   flatTop?: boolean
@@ -199,6 +238,14 @@ export interface ComposerProps {
   className?: string
   /** Frame className override (rare; for unusual surfaces). */
   frameClassName?: string
+  /**
+   * Custom node rendered as a full-cover overlay while a file is being
+   * dragged over the wrapper (only fires when `attachments` is set, so
+   * the wrapper actually listens for drops). Default: nothing — the
+   * wrapper just grows a primary-tinted ring. Pass a string or rich
+   * node for surfaces that want explicit "Drop files to attach" copy.
+   */
+  dropOverlay?: ReactNode
 
   // Send-button customization
   /** Tooltip heading + aria for idle send. */
@@ -244,15 +291,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onKeyDownExtra,
       onPaste,
       attachments,
+      microphone,
       quickActions = true,
       extrasAbove,
       topAffordance,
       chipRow,
       actionsLeft,
       extrasBelow,
+      frameVariant = "default",
       flatTop = false,
       className,
       frameClassName,
+      dropOverlay,
       sendTitle,
       sendQueueTitle,
       stopTitle = "Stop",
@@ -277,6 +327,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
       canSubmit !== undefined ? canSubmit : !!value.trim()
+
+    // Resolve placeholder. String form is verbatim; typewriter form runs
+    // the cycling effect (pausing automatically as soon as the user types
+    // or while ``busy``, so the animation doesn't fight live input).
+    // Narrow via a typed alias so the field reads below survive the
+    // less-aggressive narrowing under non-strict tsconfigs (extension app).
+    const placeholderObj =
+      typeof placeholder === "object" && placeholder !== null
+        ? placeholder
+        : null
+    const typewriterExamples = placeholderObj?.typewriter ?? null
+    const typewriterActive = placeholderObj
+      ? (placeholderObj.active ?? (!value && !busy))
+      : false
+    const typewriterText = useTypewriterPlaceholder(
+      typewriterExamples,
+      typewriterActive,
+    )
+    const resolvedPlaceholder: string =
+      typeof placeholder === "string" ? placeholder : typewriterText
 
     // Auto-grow up to `maxTextareaPx`; switch to scroll past that.
     useLayoutEffect(() => {
@@ -358,7 +428,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         // wraps this button (i.e. `kbdHints` is unset).
         title={kbdHints ? undefined : buttonHeading}
         aria-label={buttonHeading}
-        className="h-6 w-6 shrink-0 rounded-full"
+        className={cn(
+          "shrink-0 rounded-full",
+          frameVariant === "hero" ? "h-7 w-7" : "h-6 w-6",
+        )}
       >
         <span
           aria-hidden
@@ -373,9 +446,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         disabled={disabled || !effectiveCanSubmit}
         title={kbdHints ? undefined : buttonHeading}
         aria-label={buttonHeading}
-        className="h-6 w-6 shrink-0 rounded-full [&_svg]:size-3"
+        className={cn(
+          "shrink-0 rounded-full",
+          frameVariant === "hero"
+            ? "h-7 w-7 [&_svg]:size-3.5"
+            : "h-6 w-6 [&_svg]:size-3",
+        )}
       >
-        <ArrowUp strokeWidth={3} />
+        <ArrowUp strokeWidth={frameVariant === "hero" ? 2.5 : 3} />
       </Button>
     )
 
@@ -422,7 +500,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const attachmentChips = attachments?.attachments ?? []
     const renderedChipRow =
       attachmentChips.length > 0 || chipRow ? (
-        <div className="flex flex-wrap items-center gap-1 border-b border-border/50 px-2 py-1.5">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-1 border-b py-1.5",
+            frameVariant === "hero"
+              ? "border-foreground/5 px-3"
+              : "border-border/50 px-2",
+          )}
+        >
           {attachmentChips.map((a) => (
             <AttachmentChip
               key={a.uiId}
@@ -463,11 +548,29 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         {extrasAbove}
         <div
           className={cn(
-            "relative flex flex-col rounded-lg border border-input bg-background shadow-sm transition-colors focus-within:border-ring/25",
+            "relative flex flex-col transition-colors",
+            frameVariant === "hero"
+              ? // Hero: glass card. rounded-2xl, translucent bg, backdrop
+                // blur, big drop shadow, soft focus tint. Used by the
+                // homepage empty state where the composer is THE focal
+                // point of the page.
+                "rounded-2xl bg-card/70 shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.18)] backdrop-blur-2xl duration-200 focus-within:bg-card/85 dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]"
+              : // Default: solid bordered surface for chat/quick-ask.
+                "rounded-lg border border-input bg-background shadow-sm focus-within:border-ring/25",
             flatTop && "rounded-t-none",
             frameClassName,
           )}
         >
+          {attachments?.dragOver && dropOverlay ? (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-primary/5 text-sm font-medium text-primary",
+                frameVariant === "hero" ? "rounded-2xl" : "rounded-lg",
+              )}
+            >
+              {dropOverlay}
+            </div>
+          ) : null}
           {topAffordance}
           {renderedChipRow}
           <Textarea
@@ -476,15 +579,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             rows={rows}
             autoFocus={autoFocus}
             disabled={disabled}
             style={{ maxHeight: maxTextareaPx, ...textareaStyle }}
-            className="min-h-9 resize-none overflow-hidden border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className={cn(
+              "resize-none overflow-hidden border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+              frameVariant === "hero"
+                ? "min-h-[3.5rem] px-5 pb-1 pt-3.5 text-sm"
+                : "min-h-9 px-3 py-2",
+            )}
           />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center justify-between gap-2 pb-2",
+              frameVariant === "hero" ? "px-3 pt-0.5" : "px-2",
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 items-center text-muted-foreground",
+                frameVariant === "hero"
+                  ? "gap-1.5"
+                  : "flex-wrap gap-x-1.5 gap-y-1 text-[11px]",
+              )}
+            >
               {/*
                 Order of items in the bottom action row — same on EVERY
                 surface that uses Composer:
@@ -508,9 +628,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   busy={busy}
                   disabled={disabled}
                   onSubmit={onSubmit}
+                  // Hero mode lets the chip row absorb the leftover space
+                  // so the send button hugs the right edge; default mode
+                  // sits inline next to actionsLeft.
+                  className={frameVariant === "hero" ? "flex-1" : "ml-0.5"}
                 />
               ) : null}
             </div>
+            {/* Mic sits next to the send button — speech-to-text is the
+                output-side affordance, not an attachment. Grouping it on
+                the right keeps the left rail consistent across surfaces. */}
+            {microphone ? (
+              <MicrophoneButton
+                recording={microphone.recording}
+                transcribing={microphone.transcribing}
+                onClick={microphone.onToggle}
+                disabled={microphone.disabled}
+              />
+            ) : null}
             {sendButtonNode}
           </div>
         </div>
@@ -540,11 +675,13 @@ function ComposerQuickActions({
   busy,
   disabled,
   onSubmit,
+  className,
 }: {
   value: string
   busy?: boolean
   disabled?: boolean
   onSubmit: (overrideText?: string) => void
+  className?: string
 }) {
   const { t } = useT()
   const { actions } = useQuickActions(t)
@@ -560,7 +697,89 @@ function ComposerQuickActions({
       actions={actions}
       canApply={canApply}
       onApply={handle}
-      className="ml-0.5"
+      className={className ?? "ml-0.5"}
     />
   )
+}
+
+/**
+ * Cycles through `examples`, typing each one character-by-character,
+ * holding for a beat, then deleting and advancing to the next. Pauses
+ * when `active` is false; respects `prefers-reduced-motion` by showing
+ * the first example statically and skipping the animation loop.
+ *
+ * Ported from the homepage's bespoke ComposerCard so every Composer
+ * surface can opt in via `placeholder={{ typewriter: [...] }}`.
+ */
+function useTypewriterPlaceholder(
+  examples: string[] | null,
+  active: boolean,
+): string {
+  const [output, setOutput] = useState("")
+  const stateRef = useRef<{
+    idx: number
+    charIdx: number
+    phase: "typing" | "holding" | "deleting"
+  }>({ idx: 0, charIdx: 0, phase: "typing" })
+
+  useEffect(() => {
+    if (!examples || examples.length === 0) {
+      setOutput("")
+      return
+    }
+
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    if (reducedMotion) {
+      setOutput(examples[0] ?? "")
+      return
+    }
+
+    if (!active) return
+
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    function tick() {
+      if (cancelled || !examples) return
+      const { idx, charIdx, phase } = stateRef.current
+      const current = examples[idx] ?? ""
+
+      if (phase === "typing") {
+        if (charIdx < current.length) {
+          stateRef.current = { idx, charIdx: charIdx + 1, phase }
+          setOutput(current.slice(0, charIdx + 1))
+          timer = setTimeout(tick, 55 + Math.random() * 50)
+        } else {
+          stateRef.current = { idx, charIdx, phase: "holding" }
+          timer = setTimeout(tick, 1800)
+        }
+      } else if (phase === "holding") {
+        stateRef.current = { idx, charIdx, phase: "deleting" }
+        timer = setTimeout(tick, 0)
+      } else {
+        if (charIdx > 0) {
+          stateRef.current = { idx, charIdx: charIdx - 1, phase }
+          setOutput(current.slice(0, charIdx - 1))
+          timer = setTimeout(tick, 22)
+        } else {
+          stateRef.current = {
+            idx: (idx + 1) % examples.length,
+            charIdx: 0,
+            phase: "typing",
+          }
+          timer = setTimeout(tick, 250)
+        }
+      }
+    }
+
+    tick()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [active, examples])
+
+  return output
 }

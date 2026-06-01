@@ -78,7 +78,13 @@ export function TopSection({
       )}
       <span className="flex-1 truncate">{label}</span>
       {typeof count === "number" && count > 0 && (
-        <span className="text-[10px] font-normal normal-case text-muted-foreground/70">
+        // 24×24 right-edge slot with the number CENTRED inside —
+        // identical wrapper to the "+ new chat" button above the
+        // rail. Both items live in the same visual column at the
+        // rail's right margin; centring within that column keeps the
+        // icon glyph and number glyph at the same horizontal position
+        // (slot centre), so the two read as one tidy aligned column.
+        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-[10px] font-normal normal-case text-muted-foreground/70">
           {count}
         </span>
       )}
@@ -345,7 +351,10 @@ function CronJobRow({ job, runCount, expanded, onToggle }: CronJobRowProps) {
             {job.schedule_display}
           </span>
         )}
-        <span className="ml-1 shrink-0 text-[10px] text-muted-foreground/70">
+        {/* Run-count badge — same 24×24 right-edge slot as every
+            other count/time/icon along the rail's right margin so the
+            entire right column stays visually aligned. */}
+        <span className="ml-1 inline-flex h-6 w-6 shrink-0 items-center justify-center text-[10px] text-muted-foreground/70">
           {runCount}
         </span>
       </button>

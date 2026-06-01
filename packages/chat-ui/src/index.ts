@@ -22,6 +22,7 @@ export type {
   SidePanelCapabilities,
 } from "./internal/capabilities"
 export { TabBar } from "./TabBar"
+export { ChannelChip } from "./internal/ChannelChip"
 export { SessionDrawer } from "./SessionDrawer"
 export {
   WallpaperBackdrop,
@@ -47,6 +48,13 @@ export {
   type UseComposerAttachmentsOptions,
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments"
+export {
+  useVoiceRecorder,
+  MicrophoneButton,
+  type UseVoiceRecorderOptions,
+  type VoiceRecorder,
+  type MicrophoneButtonProps,
+} from "./useVoiceRecorder"
 
 // Bubble + helpers (the visual identity of the chat surface).
 export { Bubble, MessageTurns, UserStickyBubble, type BubbleProps } from "./bubble/Bubble"

@@ -9,8 +9,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@hermes-x/ui";
 import { ScrollArea } from "@hermes-x/ui";
-import { useT, type TranslateFn } from "@hermes-x/i18n";
-import type { SessionMeta } from "@hermes-x/core";
+import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
+import {
+  resolveChannel,
+  type SessionMeta,
+} from "@hermes-x/core";
 import { cn } from "@hermes-x/utils";
 
 import { ScheduledSection, TopSection } from "./SessionGroups";
@@ -36,6 +39,14 @@ interface Props {
    * Scheduled section stays hidden.
    */
   onOpenCronSession?: (sessionId: string) => void;
+  /**
+   * Re-fetch the session index. Fires once each time the drawer opens
+   * so multi-channel rows authored elsewhere (gateway / CLI / cron)
+   * appear without waiting for the next storage-watch broadcast. Wired
+   * by the host to ``sessions.refresh``; omit when the host doesn't
+   * want a refresh on open.
+   */
+  onRefresh?: () => void | Promise<void>;
 }
 
 interface DateBucket {
@@ -104,9 +115,6 @@ function groupSessionsByDate(
   return out;
 }
 
-/** Top-level section ids — used to key per-section collapse state. */
-type TopGroupId = "chats" | "scheduled";
-
 export function SessionDrawer({
   open,
   sessions,
@@ -117,18 +125,21 @@ export function SessionDrawer({
   onRename,
   onDelete,
   onOpenCronSession,
+  onRefresh,
 }: Props) {
   const { t } = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
 
-  // Top-level (Chats / Scheduled) collapse state. Default both expanded
-  // so first-open users discover both sections without hunting.
-  const [topCollapsed, setTopCollapsed] = useState<Record<TopGroupId, boolean>>({
-    chats: false,
+  /**
+   * Per-section collapse state. Keyed by SessionDB source so adding a
+   * new channel surface doesn't clobber the user's collapse choices for
+   * existing ones. ``scheduled`` is the only fixed key.
+   */
+  const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({
     scheduled: false,
   });
-  const toggleTop = (id: TopGroupId) =>
+  const toggleTop = (id: string) =>
     setTopCollapsed((p) => ({ ...p, [id]: !p[id] }));
 
   // Drop the editing state when the drawer closes; otherwise reopening
@@ -140,15 +151,68 @@ export function SessionDrawer({
     }
   }, [open]);
 
-  const dateBuckets = useMemo(
-    () => groupSessionsByDate(sessions, t),
-    [sessions, t],
-  );
+  // Refresh the index once per drawer-open so multi-channel rows
+  // authored elsewhere (gateway / CLI / cron) appear immediately —
+  // sessions-runtime only fetches on initial mount otherwise.
+  useEffect(() => {
+    if (!open || !onRefresh) return;
+    void onRefresh();
+  }, [open, onRefresh]);
+
+  /**
+   * Sessions split by originating channel. Each channel becomes its own
+   * top-level section; date-bucket grouping (Today / Yesterday / …) lives
+   * inside each section. Local sessions (``browser-extension`` /
+   * ``desktop``) keep the existing "Chats" label so single-channel users
+   * see the same UI they always had; remote channels render as
+   * additional sections labelled with the channel name.
+   */
+  const channelSections = useMemo(() => {
+    const live = sessions.filter(
+      (s) => !s.archived && !s.id.startsWith("cron_"),
+    );
+
+    const bySource = new Map<string, SessionMeta[]>();
+    for (const s of live) {
+      const src = s.source ?? "browser-extension";
+      const arr = bySource.get(src) ?? [];
+      arr.push(s);
+      bySource.set(src, arr);
+    }
+
+    const localSources = ["browser-extension", "desktop"];
+    const sections: {
+      source: string;
+      label: string;
+      items: SessionMeta[];
+    }[] = [];
+    const labelFor = (src: string): string => {
+      const descriptor = resolveChannel(src);
+      const channelTranslated = t(descriptor.labelKey as MessageKey);
+      const channelName =
+        channelTranslated === descriptor.labelKey
+          ? descriptor.fallbackLabel
+          : channelTranslated;
+      return t("sidepanel.sessions.group.channelChats", { name: channelName });
+    };
+    for (const src of localSources) {
+      const items = bySource.get(src);
+      if (!items) continue;
+      sections.push({ source: src, label: labelFor(src), items });
+    }
+    const remote = Array.from(bySource.entries())
+      .filter(([src]) => !localSources.includes(src))
+      .sort((a, b) => b[1].length - a[1].length);
+    for (const [src, items] of remote) {
+      sections.push({ source: src, label: labelFor(src), items });
+    }
+    return sections;
+  }, [sessions, t]);
+
   const openSet = useMemo(() => new Set(openTabIds), [openTabIds]);
-  const visibleCount = useMemo(
-    () =>
-      sessions.filter((s) => !s.archived && !s.id.startsWith("cron_")).length,
-    [sessions],
+  const totalCount = useMemo(
+    () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
+    [channelSections],
   );
 
   if (!open) return null;
@@ -178,59 +242,78 @@ export function SessionDrawer({
       <div className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-2 space-y-2">
-            <TopSection
-              label={t("sidepanel.sessions.group.chats")}
-              count={visibleCount}
-              collapsed={topCollapsed.chats}
-              onToggle={() => toggleTop("chats")}
-            >
-              {dateBuckets.length === 0 ? (
+            {totalCount === 0 ? (
+              <TopSection
+                label={t("sidepanel.sessions.group.channelChats", {
+                  name: (() => {
+                    const d = resolveChannel("browser-extension");
+                    const tr = t(d.labelKey as MessageKey);
+                    return tr === d.labelKey ? d.fallbackLabel : tr;
+                  })(),
+                })}
+                count={0}
+                collapsed={!!topCollapsed["browser-extension"]}
+                onToggle={() => toggleTop("browser-extension")}
+              >
                 <div className="mx-2 rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
                   {t("sidepanel.sessions.empty")}
                 </div>
-              ) : (
-                dateBuckets.map((g) => (
-                  <div key={g.label} className="mb-2">
-                    <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {g.label}
-                    </div>
-                    <ul className="space-y-0.5">
-                      {g.items.map((s) => (
-                        <SessionRow
-                          key={s.id}
-                          session={s}
-                          active={s.id === activeId}
-                          isOpen={openSet.has(s.id)}
-                          editing={editingId === s.id}
-                          editingValue={editingValue}
-                          onEditingValueChange={setEditingValue}
-                          onOpen={() => {
-                            onOpen(s.id);
-                            onClose();
-                          }}
-                          onStartEdit={() => {
-                            setEditingId(s.id);
-                            setEditingValue(s.title || "");
-                          }}
-                          onCommitEdit={() => {
-                            const trimmed = editingValue.trim();
-                            if (trimmed) onRename(s.id, trimmed);
-                            setEditingId(null);
-                          }}
-                          onCancelEdit={() => setEditingId(null)}
-                          onDelete={() => onDelete(s.id)}
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </TopSection>
+              </TopSection>
+            ) : (
+              channelSections.map((sec) => {
+                const dateBuckets = groupSessionsByDate(sec.items, t);
+                return (
+                  <TopSection
+                    key={sec.source}
+                    label={sec.label}
+                    count={sec.items.length}
+                    collapsed={!!topCollapsed[sec.source]}
+                    onToggle={() => toggleTop(sec.source)}
+                  >
+                    {dateBuckets.map((g) => (
+                      <div key={g.label} className="mb-2">
+                        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {g.label}
+                        </div>
+                        <ul className="space-y-0.5">
+                          {g.items.map((s) => (
+                            <SessionRow
+                              key={s.id}
+                              session={s}
+                              active={s.id === activeId}
+                              isOpen={openSet.has(s.id)}
+                              editing={editingId === s.id}
+                              editingValue={editingValue}
+                              onEditingValueChange={setEditingValue}
+                              onOpen={() => {
+                                onOpen(s.id);
+                                onClose();
+                              }}
+                              onStartEdit={() => {
+                                setEditingId(s.id);
+                                setEditingValue(s.title || "");
+                              }}
+                              onCommitEdit={() => {
+                                const trimmed = editingValue.trim();
+                                if (trimmed) onRename(s.id, trimmed);
+                                setEditingId(null);
+                              }}
+                              onCancelEdit={() => setEditingId(null)}
+                              onDelete={() => onDelete(s.id)}
+                            />
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </TopSection>
+                );
+              })
+            )}
 
             {onOpenCronSession && (
               <ScheduledSection
                 open={open && !topCollapsed.scheduled}
-                collapsed={topCollapsed.scheduled}
+                collapsed={!!topCollapsed.scheduled}
                 onToggle={() => toggleTop("scheduled")}
                 activeId={activeId}
                 onOpenCronSession={(id) => {
@@ -407,3 +490,4 @@ function RowAction({
     </button>
   );
 }
+

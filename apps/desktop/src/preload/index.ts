@@ -103,6 +103,18 @@ const api = {
       ipcRenderer.invoke("quick-ask:resize", contentHeightPx),
   },
 
+  /**
+   * Microphone access helpers. ``ensureAccess()`` is a thin wrapper
+   * around ``systemPreferences.askForMediaAccess`` in main — call it
+   * before ``getUserMedia`` so on macOS the OS dialog fires the first
+   * time and the cached decision is returned afterwards.
+   */
+  voice: {
+    ensureMicrophoneAccess: (): Promise<
+      "granted" | "denied" | "restricted" | "not-determined" | "unknown"
+    > => ipcRenderer.invoke("voice:ensure-microphone-access"),
+  },
+
   notifier: {
     onMessage: (cb: (msg: unknown) => void) => {
       const handler = (_e: unknown, msg: unknown) => cb(msg)
