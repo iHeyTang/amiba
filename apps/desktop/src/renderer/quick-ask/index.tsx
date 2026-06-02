@@ -1,3 +1,4 @@
+import { SessionsProvider } from "@hermes-x/core"
 import { setPlatform } from "@hermes-x/platform"
 import React from "react"
 import { createRoot } from "react-dom/client"
@@ -17,8 +18,16 @@ setPlatform(createElectronAdapter())
 const root = document.getElementById("root")
 if (!root) throw new Error("root element missing")
 
+// SessionsProvider drives ``useSessions()`` inside SidePanelView — Quick-
+// Ask reuses the same multi-session runtime as the main window. The two
+// renderers each instantiate their own provider, but they share the
+// underlying SessionDB index via the platform-storage broadcast, so a
+// session created in Quick-Ask propagates into the main window's history
+// drawer the next refresh tick.
 createRoot(root).render(
   <React.StrictMode>
-    <QuickAskView />
+    <SessionsProvider>
+      <QuickAskView />
+    </SessionsProvider>
   </React.StrictMode>,
 )

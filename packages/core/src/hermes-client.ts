@@ -460,6 +460,14 @@ export interface RunAgentOptions {
    * routing before any event has been delivered.
    */
   onRun?: (runId: string) => void;
+  /**
+   * Per-turn read-only context for tool handlers (e.g. frozen browser-tab
+   * snapshot). Forwarded as ``turn_metadata`` in the POST /v1/runs body;
+   * the gateway stashes it on a thread-local that ``registry.dispatch``
+   * reads to inject into tool kwargs. Never lands in the prompt — purely
+   * a tool-side concern. Optional; older surfaces omit.
+   */
+  turnMetadata?: import("./chat-engine-protocol").TurnMetadata;
 }
 
 /**
@@ -507,6 +515,7 @@ export async function runHermesAgent(
   if (opts.instructions) startBody.instructions = opts.instructions;
   if (opts.model) startBody.model = opts.model;
   if (opts.sessionId) startBody.session_id = opts.sessionId;
+  if (opts.turnMetadata) startBody.turn_metadata = opts.turnMetadata;
 
   const startRes = await backplaneFetch("/v1/runs", {
     method: "POST",

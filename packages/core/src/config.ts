@@ -72,3 +72,10 @@ export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   autoSend: false,
   deviceId: "",
 }
+
+// ---------------------------------------------------------------------------
+// GBrain (knowledge base) connection
+// ---------------------------------------------------------------------------
+export const BRAIN_URL_STORAGE_KEY = "settings.brain.url"
+export const BRAIN_TOKEN_STORAGE_KEY = "settings.brain.token"
+export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3000"

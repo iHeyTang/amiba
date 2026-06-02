@@ -280,6 +280,44 @@ export async function createHermesSession(
   return { ok: true, session: r.value.session, title_error: r.value.title_error };
 }
 
+// ---------------------------------------------------------------------------
+// ensureHermesSession — idempotent "row exists with this source" helper
+// ---------------------------------------------------------------------------
+//
+// Used by every surface that needs to guarantee a SessionDB row exists
+// before the first /v1/chat/completions hits the gateway — otherwise
+// api_server auto-creates the row with ``source="api_server"`` and the
+// session shows up in the wrong channel.
+//
+// SessionDB.create_session is INSERT-OR-IGNORE so calling more than once
+// for the same id is safe; the process-local Set is just a fastpath to
+// skip the round-trip after the first success. The cache is intentionally
+// process-local: main and renderer each keep their own (they live in
+// different JS realms anyway), and ``dropHermesSession`` below evicts on
+// delete so a re-created id with the same string re-ensures correctly.
+
+const _ensuredSessions = new Set<string>();
+
+export async function ensureHermesSession(
+  id: string,
+  source: string,
+  title?: string,
+): Promise<void> {
+  if (!id) return;
+  if (_ensuredSessions.has(id)) return;
+  const res = await createHermesSession({ id, source, title });
+  if (res.ok) {
+    _ensuredSessions.add(id);
+  } else {
+    console.warn("[hermes-sessions] ensureHermesSession failed:", res);
+  }
+}
+
+/** Evict an id from the ensure cache — call from session-delete paths. */
+export function forgetEnsuredHermesSession(id: string): void {
+  _ensuredSessions.delete(id);
+}
+
 /**
  * Input shape for `appendHermesMessage`. Only `role` is required; every
  * other field maps directly to SessionDB.append_message kwargs. Unknown

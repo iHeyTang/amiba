@@ -51,6 +51,8 @@ import { shortId } from "@hermes-x/utils";
 import {
   createHermesSession,
   deleteHermesSession,
+  ensureHermesSession,
+  forgetEnsuredHermesSession,
   getHermesMessages,
   type HermesMessage,
   type HermesSession,
@@ -58,6 +60,7 @@ import {
   secToMs,
   updateHermesSession,
 } from "../hermes-sessions";
+import { getLocalSource, SOURCE_LOCAL } from "../channels";
 import {
   LOCAL_META_KEY,
   SESSION_KEYS,
@@ -66,11 +69,10 @@ import {
   type SessionMeta,
 } from "../sessions";
 
-// Source tag passed when creating new Hermes session rows from the panel.
-// Hermes uses ``source`` to disambiguate "where did this conversation
-// originate" — CLI / gateway / messaging platform / etc. Picking a clear
-// constant lets us filter or attribute extension-born sessions later.
-export const SOURCE_BROWSER_EXTENSION = "browser-extension";
+// Re-exported for callers that imported it from here historically. The
+// canonical definition lives in ``../channels.ts`` alongside the rest of
+// the source-tag constants and the descriptor registry.
+export { SOURCE_LOCAL };
 
 // Page size for the initial list fetch. SessionDB scales to thousands; if
 // a user actually has more than this they'll have to wait while we
@@ -321,7 +323,7 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       // titles are unique).
       const create = await createHermesSession({
         id: cur.id,
-        source: SOURCE_BROWSER_EXTENSION,
+        source: getLocalSource(),
         title: cur.title?.trim() ? cur.title : undefined,
       });
       if (create.ok) {
@@ -418,20 +420,13 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
 
 async function ensureSessionRowExists(id: string): Promise<void> {
   // Idempotent: SessionDB's INSERT OR IGNORE makes re-creates safe.
-  // We still skip when we've already paid the cost this lifetime.
+  // We still keep the local ``_ensuredSessions`` Set as a fastpath (it
+  // gates other store internals like ``loadMessages``); the shared
+  // ``ensureHermesSession`` has its own process-local cache too, but
+  // they cover different scopes so we maintain both.
   if (_ensuredSessions.has(id)) return;
-  const create = await createHermesSession({
-    id,
-    source: SOURCE_BROWSER_EXTENSION,
-  });
-  if (create.ok) {
-    _ensuredSessions.add(id);
-  } else {
-    console.warn(
-      "[hermes-sessions] createHermesSession (ensure) failed:",
-      create,
-    );
-  }
+  await ensureHermesSession(id, getLocalSource());
+  _ensuredSessions.add(id);
 }
 
 export async function saveMessages(
@@ -468,6 +463,7 @@ export async function dropMessages(id: string): Promise<void> {
     console.warn("[hermes-sessions] deleteHermesSession failed:", res);
   }
   _ensuredSessions.delete(id);
+  forgetEnsuredHermesSession(id);
 
   // Clean up the sidecar entry too.
   const local = await readLocalMeta();
@@ -494,7 +490,7 @@ export function newSessionMeta(
     createdAt: now,
     updatedAt: now,
     messageCount: 0,
-    source: SOURCE_BROWSER_EXTENSION,
+    source: getLocalSource(),
   };
 }
 

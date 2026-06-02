@@ -24,7 +24,7 @@
  */
 import { getHermesStatus } from "@hermes-x/core"
 import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n"
-import { useDocumentTheme } from "@hermes-x/theme"
+import { useDocumentTheme } from "@hermes-x/ui"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, Copy, Loader2, RefreshCw, Sparkles } from "lucide-react"
 import { Terminal } from "@xterm/xterm"

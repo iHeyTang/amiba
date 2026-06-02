@@ -136,6 +136,13 @@ const api = {
       ipcRenderer.invoke("notifier:demo", kind),
   },
 
+  gbrain: {
+    health: (): Promise<{ status: string; version?: string } | null> =>
+      ipcRenderer.invoke("gbrain:health"),
+    call: <T = unknown>(tool: string, args?: Record<string, unknown>): Promise<T> =>
+      ipcRenderer.invoke("gbrain:call", { tool, args }),
+  },
+
   /**
    * Hermes-agent lifecycle bridge — drives the first-run install wizard
    * and the supervised backplane subprocess. Logs from long-running

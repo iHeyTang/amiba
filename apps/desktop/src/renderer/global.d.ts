@@ -94,6 +94,10 @@ interface HermesBridgeApi {
     onJobEnd(cb: (msg: HermesJobEndMsg) => void): () => void
     onPtyData(cb: (msg: HermesPtyDataMsg) => void): () => void
   }
+  gbrain: {
+    health(): Promise<{ status: string; version?: string } | null>
+    call<T = unknown>(tool: string, args?: Record<string, unknown>): Promise<T>
+  }
 }
 
 declare global {

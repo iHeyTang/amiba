@@ -3,8 +3,8 @@ import "~lib/platform/init";
 import "~style.css";
 
 import { SessionsProvider } from "@hermes-x/core";
-import { SidePanelView } from "@hermes-x/chat-ui";
-import { HomeView } from "@hermes-x/home-ui";
+import { SidePanelView } from "@hermes-x/ui";
+import { HomeView } from "@hermes-x/ui";
 import { useMemo } from "react";
 
 import { ChromeChatEngineClient } from "~lib/chat/chrome-engine-client";
@@ -17,7 +17,7 @@ import { BridgeStatusBar } from "./BridgeStatusBar";
 import { EmptyStateBridgeGate } from "./EmptyStateBridgeGate";
 import { NavigateOpenPolicyToggle } from "./NavigateOpenPolicyToggle";
 
-export type { MessagesMaxWidth, SidePanelViewProps as SidePanelProps } from "@hermes-x/chat-ui";
+export type { MessagesMaxWidth, SidePanelViewProps as SidePanelProps } from "@hermes-x/ui";
 
 /**
  * Extension side-panel entry.

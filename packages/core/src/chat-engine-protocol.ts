@@ -17,6 +17,40 @@ import type {
   StreamedToolCall
 } from "./hermes-gateway-types"
 
+/**
+ * Per-turn read-only context shipped alongside the messages — purely for
+ * tool handlers on the agent side, never inlined into the prompt.
+ *
+ * The flagship use case is ``browser_tab_snapshot``: the chat surface
+ * captures the user's current tab at the moment they hit send, and the
+ * agent's ``my_browser_active_tab`` tool returns that snapshot for the
+ * entire turn — so multi-step tool calls don't drift when the user
+ * switches tabs mid-stream.
+ *
+ * Add new fields here as turn-scoped context surfaces emerge (e.g. focused
+ * file in an IDE surface). Anything optional; older clients omit.
+ */
+export interface TurnMetadata {
+  browser_tab_snapshot?: BrowserTabSnapshot
+}
+
+/**
+ * Frozen view of "the page the user was looking at when they sent". Shape
+ * mirrors the live ``my_browser_active_tab`` response so the tool handler
+ * can substitute it verbatim. ``captured_at`` is an ms-epoch timestamp.
+ */
+export interface BrowserTabSnapshot {
+  tab_id?: number
+  window_id?: number
+  url?: string
+  title?: string
+  favicon?: string
+  text?: string
+  truncated?: boolean
+  full_length?: number
+  captured_at: number
+}
+
 /** Payload the UI sends on `submit` to start one assistant turn. */
 export interface SubmitPayload {
   sessionId: string
@@ -24,6 +58,29 @@ export interface SubmitPayload {
   assistantUiId: string
   model: string
   history: ChatMessage[]
+  /**
+   * SessionDB ``source`` tag for first-time creation of this session.
+   * The engine ensures the row exists with this tag before issuing the
+   * chat request, so api_server's fallback "auto-create with
+   * source=api_server" path never triggers. Optional: when unset the
+   * engine falls back to the single canonical local source
+   * (``SOURCE_LOCAL``). Provided as a future-proofing hook
+   * for surfaces that genuinely need a distinct channel — every
+   * existing local surface (extension + desktop main window +
+   * Quick-Ask) inherits the default.
+   *
+   * Only honoured on the FIRST submit per sessionId; later turns
+   * re-using the same id see the row already in place and the value
+   * is a no-op.
+   */
+  source?: string
+  /**
+   * Turn-scoped read-only context for tool handlers (e.g. frozen browser
+   * tab snapshot). Never inlined into the prompt; only reaches the agent
+   * through the registry's per-turn thread-local. Optional — desktop
+   * surfaces and history-replay paths leave it unset.
+   */
+  turnMetadata?: TurnMetadata
 }
 
 /**

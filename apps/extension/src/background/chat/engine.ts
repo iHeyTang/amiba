@@ -110,7 +110,7 @@ function appendApprovalToTimeline(
 }
 
 export async function startStream(payload: SubmitPayload): Promise<void> {
-  const { sessionId, assistantUiId, model, history } = payload;
+  const { sessionId, assistantUiId, model, history, turnMetadata } = payload;
 
   if (controllers.has(sessionId)) {
     emit(sessionId, {
@@ -215,6 +215,7 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
         model,
         sessionId,
         signal: ctrl.signal,
+        turnMetadata,
         onRun: (runId) => {
           mutateState(sessionId, () => ({ runId }));
           emit(sessionId, { kind: "run", runId });

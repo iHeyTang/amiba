@@ -48,6 +48,7 @@ import {
   registerHermesRuntimeHandlers,
   stopAllHermesJobs,
 } from "./hermes-runtime"
+import { registerGBrainHandlers } from "./gbrain/ipc"
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
@@ -382,6 +383,7 @@ if (!gotSingleInstanceLock) {
     registerIpcHandlers()
     registerChatHandlers()
     registerHermesRuntimeHandlers()
+    registerGBrainHandlers()
     createWindow()
     createNotifierWindow()
     // Pre-create the Quick-Ask popup so the first double-tap doesn't

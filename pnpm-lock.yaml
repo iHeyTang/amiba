@@ -17,27 +17,15 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@hermes-x/chat-ui':
-        specifier: workspace:*
-        version: link:../../packages/chat-ui
       '@hermes-x/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@hermes-x/home-ui':
-        specifier: workspace:*
-        version: link:../../packages/home-ui
       '@hermes-x/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
       '@hermes-x/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@hermes-x/settings-ui':
-        specifier: workspace:*
-        version: link:../../packages/settings-ui
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../../packages/theme
       '@hermes-x/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -171,27 +159,15 @@ importers:
       '@codemirror/view':
         specifier: ^6.34.1
         version: 6.43.0
-      '@hermes-x/chat-ui':
-        specifier: workspace:*
-        version: link:../../packages/chat-ui
       '@hermes-x/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@hermes-x/home-ui':
-        specifier: workspace:*
-        version: link:../../packages/home-ui
       '@hermes-x/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
       '@hermes-x/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@hermes-x/settings-ui':
-        specifier: workspace:*
-        version: link:../../packages/settings-ui
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../../packages/theme
       '@hermes-x/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -290,49 +266,6 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
-  packages/chat-ui:
-    dependencies:
-      '@hermes-x/core':
-        specifier: workspace:*
-        version: link:../core
-      '@hermes-x/i18n':
-        specifier: workspace:*
-        version: link:../i18n
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../platform
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../theme
-      '@hermes-x/ui':
-        specifier: workspace:*
-        version: link:../ui
-      '@hermes-x/utils':
-        specifier: workspace:*
-        version: link:../utils
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.0.0
-        version: 18.3.1(react@18.3.1)
-      streamdown:
-        specifier: ^2.5.0
-        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    devDependencies:
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: 18.3.1
-        version: 18.3.1
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
   packages/core:
     dependencies:
       '@hermes-x/i18n':
@@ -351,52 +284,6 @@ importers:
       '@types/react':
         specifier: 18.3.12
         version: 18.3.12
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
-  packages/home-ui:
-    dependencies:
-      '@hermes-x/chat-ui':
-        specifier: workspace:*
-        version: link:../chat-ui
-      '@hermes-x/core':
-        specifier: workspace:*
-        version: link:../core
-      '@hermes-x/i18n':
-        specifier: workspace:*
-        version: link:../i18n
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../platform
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../theme
-      '@hermes-x/ui':
-        specifier: workspace:*
-        version: link:../ui
-      '@hermes-x/utils':
-        specifier: workspace:*
-        version: link:../utils
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.0.0
-        version: 18.3.1(react@18.3.1)
-      streamdown:
-        specifier: ^2.5.0
-        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    devDependencies:
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: 18.3.1
-        version: 18.3.1
       typescript:
         specifier: 5.6.3
         version: 5.6.3
@@ -423,7 +310,9 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
-  packages/settings-ui:
+  packages/tailwind-preset: {}
+
+  packages/ui:
     dependencies:
       '@codemirror/commands':
         specifier: ^6.10.3
@@ -440,9 +329,6 @@ importers:
       '@codemirror/view':
         specifier: ^6.34.1
         version: 6.43.0
-      '@hermes-x/chat-ui':
-        specifier: workspace:*
-        version: link:../chat-ui
       '@hermes-x/core':
         specifier: workspace:*
         version: link:../core
@@ -452,58 +338,6 @@ importers:
       '@hermes-x/platform':
         specifier: workspace:*
         version: link:../platform
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../theme
-      '@hermes-x/ui':
-        specifier: workspace:*
-        version: link:../ui
-      '@hermes-x/utils':
-        specifier: workspace:*
-        version: link:../utils
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.0.0
-        version: 18.3.1(react@18.3.1)
-    devDependencies:
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: 18.3.1
-        version: 18.3.1
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
-  packages/tailwind-preset: {}
-
-  packages/theme:
-    dependencies:
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../platform
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-    devDependencies:
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
-  packages/ui:
-    dependencies:
-      '@hermes-x/theme':
-        specifier: workspace:*
-        version: link:../theme
       '@hermes-x/utils':
         specifier: workspace:*
         version: link:../utils
@@ -540,6 +374,9 @@ importers:
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       lucide-react:
         specifier: ^0.460.0
         version: 0.460.0(react@18.3.1)
@@ -549,6 +386,12 @@ importers:
       react-dom:
         specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
+      streamdown:
+        specifier: ^2.5.0
+        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      tailwind-merge:
+        specifier: ^2.5.4
+        version: 2.6.1
     devDependencies:
       '@types/react':
         specifier: 18.3.12
@@ -561,13 +404,6 @@ importers:
         version: 5.6.3
 
   packages/utils:
-    dependencies:
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      tailwind-merge:
-        specifier: ^2.5.4
-        version: 2.6.1
     devDependencies:
       typescript:
         specifier: 5.6.3

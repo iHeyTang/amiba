@@ -77,6 +77,16 @@ export interface FileAttachment extends AttachmentBase {
    */
   thumbDataUrl?: string;
   /**
+   * Larger downscaled JPEG/PNG data URL (≤ 1024px longest edge) used as
+   * the click-to-zoom preview source for image attachments in the
+   * composer. Only set when ``kind === "image"`` and kept only in
+   * compose-time state — ``attachmentToBadge`` deliberately drops it so
+   * the persisted bubble's storage footprint stays small (chrome.storage
+   * has a 5MB per-key limit and 256px thumbs are enough to recognise the
+   * sent file in history).
+   */
+  previewDataUrl?: string;
+  /**
    * First few hundred characters of decoded text — for chip tooltips and
    * the bubble preview on text/pdf attachments. Never sent to the model;
    * the agent reads the full file from `path` if it cares.

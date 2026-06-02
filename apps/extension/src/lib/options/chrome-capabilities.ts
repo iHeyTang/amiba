@@ -2,7 +2,7 @@ import type {
   BridgeCapability,
   OptionsCapabilities,
   UserScriptCapability,
-} from "@hermes-x/settings-ui";
+} from "@hermes-x/ui";
 
 export const chromeBridgeCapability: BridgeCapability = {
   async refresh(): Promise<void> {

@@ -10,14 +10,14 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite"
  * here so Vite inlines their source through esbuild.
  */
 const WORKSPACE_PKGS = [
-  "@hermes-x/chat-ui",
+  "@hermes-x/ui",
   "@hermes-x/core",
-  "@hermes-x/home-ui",
+  "@hermes-x/ui",
   "@hermes-x/i18n",
   "@hermes-x/platform",
-  "@hermes-x/settings-ui",
+  "@hermes-x/ui",
   "@hermes-x/tailwind-preset",
-  "@hermes-x/theme",
+  "@hermes-x/ui",
   "@hermes-x/ui",
   "@hermes-x/utils",
 ]

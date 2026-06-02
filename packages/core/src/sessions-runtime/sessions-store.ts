@@ -46,6 +46,7 @@
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 
 import { appendHermesMessage, createHermesSession } from "../hermes-sessions";
+import { getLocalSource } from "../channels";
 import { SESSION_KEYS, type SessionMessage, type SessionMeta } from "../sessions";
 import { migrateLegacyChatHistory } from "./migrate";
 import {
@@ -56,7 +57,6 @@ import {
   newSessionMeta,
   saveIndex,
   saveMessages,
-  SOURCE_BROWSER_EXTENSION,
 } from "./store";
 import type { SessionsState } from "./types";
 
@@ -512,7 +512,7 @@ export class SessionsStore {
     }
     const created = await createHermesSession({
       id: meta.id,
-      source: SOURCE_BROWSER_EXTENSION,
+      source: getLocalSource(),
       title: meta.title || undefined,
     });
     if (!("ok" in created) || !created.ok) {

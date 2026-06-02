@@ -3,7 +3,7 @@ import "~lib/platform/init";
 import "~style.css";
 
 import { SessionsProvider } from "@hermes-x/core";
-import { FullScreenChatView } from "@hermes-x/chat-ui";
+import { FullScreenChatView } from "@hermes-x/ui";
 import { useMemo } from "react";
 
 import { ChromeChatEngineClient } from "~lib/chat/chrome-engine-client";

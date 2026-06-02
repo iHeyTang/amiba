@@ -21,7 +21,7 @@ import type {
   PendingPromptAttachment,
   PendingPromptResult,
   SidePanelCapabilities,
-} from "@hermes-x/chat-ui"
+} from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
 
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"

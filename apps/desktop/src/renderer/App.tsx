@@ -1,9 +1,9 @@
 import { getHermesStatus, SessionsProvider } from "@hermes-x/core"
-import { FullScreenChatView } from "@hermes-x/chat-ui"
-import { HomeView } from "@hermes-x/home-ui"
+import { FullScreenChatView } from "@hermes-x/ui"
+import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
-import { SettingsView } from "@hermes-x/settings-ui"
-import { useResolvedTheme } from "@hermes-x/theme"
+import { SettingsView } from "@hermes-x/ui"
+import { useResolvedTheme } from "@hermes-x/ui"
 import { Loader2 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactElement } from "react"
 

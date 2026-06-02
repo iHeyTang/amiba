@@ -1,5 +1,6 @@
 import type {
   ActiveTabInfo,
+  BrowserTabSnapshot,
   LearnCapability,
   LearnStatus,
   LearnTraceResult,
@@ -11,7 +12,7 @@ import type {
   PendingPromptCapability,
   PendingPromptResult,
   SidePanelCapabilities,
-} from "@hermes-x/chat-ui";
+} from "@hermes-x/ui";
 
 import {
   capturePageContext,
@@ -41,6 +42,50 @@ export const chromePageContext: PageContextCapability = {
       title: tab.title,
       favIconUrl: tab.favIconUrl,
     };
+  },
+
+  async captureBrowserTabSnapshot(): Promise<BrowserTabSnapshot | null> {
+    // Identify the tab first so the snapshot always carries tab_id /
+    // window_id, even on restricted URLs where we skip the DOM extract.
+    const tab = await getActiveBrowserTab();
+    if (!tab || !tab.url) return null;
+
+    const captured_at = Date.now();
+    const base: BrowserTabSnapshot = {
+      tab_id: tab.id,
+      window_id: tab.windowId,
+      url: tab.url,
+      title: tab.title,
+      favicon: tab.favIconUrl,
+      captured_at,
+    };
+
+    // Skip the scripting injection on restricted pages (chrome://, the
+    // Web Store, etc.) — capturePageContext would error out anyway. The
+    // metadata-only snapshot is still useful: the agent at least knows
+    // which page the user meant to ask about, even if it can't see the
+    // body.
+    if (getPageRestrictedReason(tab.url)) return base;
+
+    try {
+      const result = await capturePageContext();
+      if (result.kind !== "page") return base;
+      const page = result.page;
+      return {
+        ...base,
+        url: page.url || base.url,
+        title: page.title || base.title,
+        favicon: page.favicon ?? base.favicon,
+        text: page.content,
+        truncated: page.truncated,
+        full_length: page.originalLength,
+      };
+    } catch {
+      // Extraction failure → still ship metadata; the agent's reply might
+      // not need the body, and reaching for a stale-snapshot fallback is
+      // better than blocking send on a flaky page.
+      return base;
+    }
   },
 
   formatPageContextsForPrompt: (snapshots) =>

@@ -47,6 +47,12 @@ const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024; // 50 MB
 const TEXT_PREVIEW_CHARS = 500;
 /** Longest edge for the chip-side image thumbnail. */
 const THUMB_LONG_EDGE = 256;
+/** Longest edge for the click-to-zoom preview source. Bigger than the
+ *  chip thumb so a modal-sized render stays crisp (256px scaled up to a
+ *  ~70vw modal would look noticeably soft), small enough that 5–10
+ *  in-flight images don't strain renderer memory. Stays compose-time
+ *  only — see ``attachmentToBadge``. */
+const PREVIEW_LONG_EDGE = 1024;
 const IMAGE_REENCODE_QUALITY = 0.85;
 
 /** Previews are best-effort; never block the bridge upload on them. */
@@ -263,17 +269,35 @@ export async function readBlobAsAttachment(args: {
 
   // Preview side-channel — failures and slow paths are non-fatal.
   let thumbDataUrl: string | undefined;
+  let previewDataUrl: string | undefined;
   let textPreview: string | undefined;
   try {
     if (kind === "image") {
-      const r = await withBudget(
-        buildImageThumbnail(blob, mime || "image/png"),
+      const sourceMime = mime || "image/png";
+      // Build the larger click-to-zoom preview first; the chip thumbnail
+      // is then a cheap re-downscale off the same data URL. Two passes
+      // sound wasteful but they share the most expensive step (decoding
+      // the source blob) — the downstream ``downscaleImageDataUrl`` calls
+      // operate on an already-decoded `<img>` and only differ in target
+      // edge length.
+      const previewRes = await withBudget(
+        buildImageThumbnail(blob, sourceMime, PREVIEW_LONG_EDGE),
         PREVIEW_BUDGET_MS,
       );
-      if (r === PREVIEW_TIMED_OUT) {
-        console.warn("[attachments] thumbnail timed out; continuing without preview");
-      } else {
-        thumbDataUrl = r;
+      if (previewRes === PREVIEW_TIMED_OUT) {
+        console.warn("[attachments] preview timed out; continuing without preview");
+      } else if (previewRes) {
+        previewDataUrl = previewRes;
+        const thumbRes = await withBudget(
+          downscaleImageDataUrl(previewRes, THUMB_LONG_EDGE, sourceMime),
+          PREVIEW_BUDGET_MS,
+        );
+        if (thumbRes === PREVIEW_TIMED_OUT) {
+          console.warn("[attachments] thumb timed out; falling back to preview");
+          thumbDataUrl = previewRes;
+        } else {
+          thumbDataUrl = thumbRes;
+        }
       }
     } else if (kind === "text") {
       const r = await withBudget(buildTextPreview(blob), PREVIEW_BUDGET_MS);
@@ -299,6 +323,7 @@ export async function readBlobAsAttachment(args: {
     path,
     uploading: false,
     ...(thumbDataUrl ? { thumbDataUrl } : {}),
+    ...(previewDataUrl ? { previewDataUrl } : {}),
     ...(textPreview ? { textPreview } : {}),
     ...(options.fromPageContext ? { fromPageContext: true } : {}),
     ...(options.sourceUrl ? { sourceUrl: options.sourceUrl } : {}),
@@ -489,6 +514,7 @@ async function buildTextPreview(blob: Blob): Promise<string | undefined> {
 async function buildImageThumbnail(
   blob: Blob,
   mime: string,
+  longEdge: number = THUMB_LONG_EDGE,
 ): Promise<string | undefined> {
   // GIFs would freeze on the first frame after canvas re-encode, so we
   // pass them through untouched if they're already small enough; otherwise
@@ -499,7 +525,7 @@ async function buildImageThumbnail(
     // SVGs scale natively; just return the data URL as the preview.
     return dataUrl;
   }
-  return downscaleImageDataUrl(dataUrl, THUMB_LONG_EDGE, sourceMime);
+  return downscaleImageDataUrl(dataUrl, longEdge, sourceMime);
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

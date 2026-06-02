@@ -2,20 +2,50 @@
  * Channel registry.
  *
  * A "channel" is the surface a conversation originated from — feishu,
- * telegram, the desktop app itself, the CLI, etc. SessionDB tags each
- * session with a ``source`` string (the gateway's ``Platform`` enum
- * value, or one of a few internal tags like ``browser-extension``,
- * ``cli``, ``tui``, ``cron``). This module is the single source of
+ * telegram, this machine, the CLI, etc. SessionDB tags each session
+ * with a ``source`` string (the gateway's ``Platform`` enum value, or
+ * one of a few internal tags: ``local``, ``cli``, ``tui``, ``cron``).
+ * This module is the single source of
  * truth for "what do we know about that source string" — display label
  * (i18n key), an icon hint that chat-ui maps to a Lucide component, and
  * whether hermes-x considers it a *local* channel (i.e. one we own and
  * may write into) versus a *remote* channel (read-only window onto
  * someone else's engine).
  *
+ * All hermes-x surfaces (extension + desktop main window + Quick-Ask)
+ * share a single ``source="local"`` tag — the backplane folds legacy
+ * ``"browser-extension"`` / ``"desktop"`` values onto it on boot.
+ *
  * The registry is intentionally renderer-free: descriptors carry only
  * data (strings). The visual mapping (icon component, badge colours)
  * lives in chat-ui so this package keeps zero React/UI deps.
  */
+
+// ---------------------------------------------------------------------------
+// Source string constants
+// ---------------------------------------------------------------------------
+//
+// SessionDB ``source`` values that hermes-x itself writes. Kept here next
+// to the registry so any consumer (renderer, main process, tooling) can
+// import the canonical strings instead of hand-typing them. Only one
+// value today; if a future surface earns its own channel, add the
+// constant, a descriptor below, and an entry in
+// ``LOCAL_CHANNEL_SOURCES`` if it's locally writable.
+
+/**
+ * Canonical "this machine" source tag, written by every local hermes-x
+ * surface (browser extension sidepanel/options/newtab, desktop main
+ * window, and Quick-Ask). One value across the board — the surface
+ * that wrote a row isn't a user-visible distinction and so doesn't
+ * earn its own source string.
+ *
+ * Pre-unification rows tagged ``"browser-extension"`` /
+ * ``"desktop"`` are normalised to this value on backplane boot (see
+ * ``hermes-plugin-http-backplane/.../sessions/migrations.py``), so the
+ * client doesn't carry back-compat aliases — by the time the renderer
+ * reads the SessionDB, legacy values are already gone.
+ */
+export const SOURCE_LOCAL = "local";
 
 /**
  * Icon hint — chat-ui's ChannelChip maps each tag to a concrete Lucide
@@ -23,8 +53,7 @@
  * ``ChannelChip.tsx``.
  */
 export type ChannelIconTag =
-  | "desktop"
-  | "extension"
+  | "local"
   | "cli"
   | "tui"
   | "cron"
@@ -74,35 +103,20 @@ export interface ChannelDescriptor {
 }
 
 /**
- * Sources hermes-x itself writes today. Kept here (not in
- * sessions-runtime) so non-runtime consumers can reuse without dragging
- * the store along.
+ * Sources hermes-x itself classifies as local. Single canonical value
+ * — the backplane migration folds legacy hermes-x source tags onto
+ * this one before the renderer ever sees them.
  */
-export const LOCAL_CHANNEL_SOURCES = new Set<string>([
-  // sessions-runtime tags every session it creates with this, regardless
-  // of whether it's the extension or the desktop app — see
-  // ``SOURCE_BROWSER_EXTENSION`` in ``sessions-runtime/store.ts``.
-  "browser-extension",
-  // Reserved for a future desktop-specific source tag; treat as local
-  // so we don't accidentally lock out our own sessions if the tag is
-  // ever introduced.
-  "desktop",
-]);
+export const LOCAL_CHANNEL_SOURCES = new Set<string>([SOURCE_LOCAL]);
 
 const REGISTRY: ChannelDescriptor[] = [
   // ── Local ──
+  // Single descriptor for every "this machine" surface.
   {
-    id: "browser-extension",
-    labelKey: "channels.extension",
-    fallbackLabel: "Extension",
-    icon: "extension",
-    isLocal: true,
-  },
-  {
-    id: "desktop",
-    labelKey: "channels.desktop",
-    fallbackLabel: "Desktop",
-    icon: "desktop",
+    id: SOURCE_LOCAL,
+    labelKey: "channels.local",
+    fallbackLabel: "Local",
+    icon: "local",
     isLocal: true,
   },
 
@@ -283,13 +297,6 @@ const REGISTRY: ChannelDescriptor[] = [
     icon: "webhook",
     isLocal: false,
   },
-  {
-    id: "local",
-    labelKey: "channels.local",
-    fallbackLabel: "Local",
-    icon: "generic",
-    isLocal: false,
-  },
 ];
 
 const REGISTRY_BY_ID = new Map<string, ChannelDescriptor>(
@@ -313,14 +320,14 @@ export const UNKNOWN_CHANNEL: ChannelDescriptor = {
  * Look up a descriptor for a SessionDB ``source`` value. Returns
  * ``UNKNOWN_CHANNEL`` for unknown sources rather than throwing — UI
  * must be tolerant of plugin platforms we haven't catalogued yet.
- * ``source=null`` (legacy / migrated rows with no tag) is treated as
- * local so users aren't locked out of their own historical sessions.
+ * ``source=null`` / ``""`` (rows that pre-date the source field, or
+ * arrived without one) collapse onto the canonical local descriptor.
  */
 export function resolveChannel(
   source: string | null | undefined,
 ): ChannelDescriptor {
   if (source == null || source === "") {
-    return REGISTRY_BY_ID.get("browser-extension")!;
+    return REGISTRY_BY_ID.get(SOURCE_LOCAL)!;
   }
   return REGISTRY_BY_ID.get(source) ?? {
     ...UNKNOWN_CHANNEL,
@@ -341,4 +348,17 @@ export function isLocalChannel(source: string | null | undefined): boolean {
 /** Read-only registry snapshot for consumers that need to enumerate. */
 export function listChannels(): readonly ChannelDescriptor[] {
   return REGISTRY;
+}
+
+/**
+ * Resolve the SessionDB ``source`` tag for the current hermes-x surface.
+ * Returns the single canonical local source for every hermes-x app
+ * (extension + desktop main window + Quick-Ask) — they're all just
+ * "this machine" from the user's perspective, so the on-disk tag is
+ * uniform. Legacy ``"browser-extension"`` / ``"desktop"`` rows are
+ * normalised to this value by the backplane on boot, so the renderer
+ * never needs to special-case them.
+ */
+export function getLocalSource(): string {
+  return SOURCE_LOCAL;
 }

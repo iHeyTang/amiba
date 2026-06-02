@@ -6,7 +6,7 @@
  * is what makes the `@apply` rules inside tokens.css resolvable.
  */
 @import "@hermes-x/ui/styles/tokens.css";
-@import "@hermes-x/chat-ui/styles/chat.css";
+@import "@hermes-x/ui/styles/chat.css";
 
 @tailwind base;
 @tailwind components;

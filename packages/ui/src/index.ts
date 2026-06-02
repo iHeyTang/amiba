@@ -1,15 +1,21 @@
-export * from "./HermesLogo"
-export * from "./ui/badge"
-export * from "./ui/button"
-export * from "./ui/card"
-export * from "./ui/checkbox"
-export * from "./ui/dialog"
-export * from "./ui/input"
-export * from "./ui/label"
-export * from "./ui/scroll-area"
-export * from "./ui/select"
-export * from "./ui/separator"
-export * from "./ui/switch"
-export * from "./ui/tabs"
-export * from "./ui/textarea"
-export * from "./ui/tooltip"
+/**
+ * Hermes UI — single barrel for every renderer-side concern.
+ *
+ * Organised into domain folders under ``src/``:
+ *   - ``primitives/`` — shadcn-style atoms (Button, Input, Select, …) +
+ *                       the Hermes-branded logo
+ *   - ``theme/``      — theme preference + resolution hooks (light/dark/auto)
+ *   - ``chat/``       — chat surface (Composer, MessageList, SidePanelView, …)
+ *   - ``home/``       — Home page (composer hand-off, recents, shortcuts)
+ *   - ``settings/``   — settings panes (gateway, voice, skills, memory, …)
+ *
+ * Internally each folder owns a barrel (``./<folder>/index.ts``); this
+ * root re-exports the lot so consumers always say
+ * ``import { … } from "@hermes-x/ui"`` regardless of which domain a
+ * symbol comes from. Tree-shaking handles the unused branches.
+ */
+export * from "./primitives"
+export * from "./theme"
+export * from "./chat"
+export * from "./home"
+export * from "./settings"

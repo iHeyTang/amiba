@@ -46,6 +46,34 @@ export const en = {
   "options.nav.status": "Status",
   "options.nav.logs": "Logs",
   "options.nav.voice": "Voice",
+  "options.nav.brain": "Brain",
+
+  // Brain (GBrain knowledge base)
+  "options.brain.title": "Knowledge Base",
+  "options.brain.subtitle": "Connect to a GBrain instance to browse, search, and manage your knowledge.",
+  "options.brain.connected": "Connected",
+  "options.brain.settings": "Connection settings",
+  "options.brain.connection.title": "GBrain Connection",
+  "options.brain.connection.url": "Server URL",
+  "options.brain.connection.token": "Access Token",
+  "options.brain.connection.token.placeholder": "Bearer token from gbrain auth",
+  "options.brain.connection.test": "Test Connection",
+  "options.brain.connection.failed": "Could not reach gbrain. Is it running?",
+  "options.brain.connection.error": "Connection error: {error}",
+  "options.brain.tabs.search": "Search",
+  "options.brain.tabs.putPage": "New Page",
+  "options.brain.tabs.pages": "Pages",
+  "options.brain.search.placeholder": "Search your knowledge base…",
+  "options.brain.search.results": "{count} results found",
+  "options.brain.putPage.slug": "Slug (page path)",
+  "options.brain.putPage.slug.placeholder": "e.g. people/alice or notes/2026-06-01",
+  "options.brain.putPage.content": "Content (Markdown)",
+  "options.brain.putPage.content.placeholder": "# Page Title\n\nYour content here…",
+  "options.brain.putPage.save": "Save Page",
+  "options.brain.putPage.success": "Page saved",
+  "options.brain.pages.load": "Load Pages",
+  "options.brain.pages.count": "{count} pages",
+  "options.brain.pages.empty": "No pages yet. Use the \"New Page\" tab to create your first page.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
@@ -410,6 +438,9 @@ export const en = {
   "quickAsk.kbd.newline": "newline",
   "quickAsk.kbd.new": "new",
   "quickAsk.kbd.dismiss": "dismiss",
+  "quickAsk.continuation.label": "Continuing chat from {time}",
+  "quickAsk.continuation.new": "⌘K new",
+  "quickAsk.continuation.dismiss": "Dismiss",
   "sidepanel.permission.allowOnce": "Allow once",
   "sidepanel.permission.allowOnce.desc":
     "Allow this time only; ask again next time",
@@ -456,6 +487,8 @@ export const en = {
   "sidepanel.attachment.autoFrom.fallback": "current tab",
   "sidepanel.attachment.openInBrowser": "Open {name} in your browser",
   "sidepanel.attachment.remove": "Remove",
+  "sidepanel.attachment.previewTooltip": "Click to preview",
+  "sidepanel.attachment.previewAria": "Open larger preview of {name}",
   "sidepanel.empty.title": "No conversation open",
   "sidepanel.empty.withHistory":
     "Start a new chat or pick one up from History.",
@@ -670,12 +703,11 @@ export const en = {
     "Explain the following clearly. If it is code, describe what it does step by step and call out any non-obvious behavior. If it is prose or a concept, define the key terms first, then walk through the idea. Reply in the same language as the input.\n\n{input}",
 
   // ── Channels (multi-platform sessions) ──
-  "channels.desktop": "Desktop",
-  // Sessions tagged ``browser-extension`` in SessionDB are created by
-  // *any* local hermes-x app (extension or desktop) — the tag is a
-  // historical leftover from before the desktop variant existed.
-  // "Local" reflects the real semantics; the underlying tag is fixed.
-  "channels.extension": "Local",
+  // ``channels.local`` is the label for every "this machine" session
+  // — extension, desktop main window, Quick-Ask. The backplane
+  // migrates legacy ``source="browser-extension"`` / ``"desktop"``
+  // rows to the unified ``"local"`` value on boot, so the renderer
+  // only ever sees one local source.
   "channels.cli": "CLI",
   "channels.tui": "TUI",
   "channels.cron": "Scheduled",

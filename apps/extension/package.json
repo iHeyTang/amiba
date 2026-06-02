@@ -16,13 +16,9 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
-    "@hermes-x/chat-ui": "workspace:*",
     "@hermes-x/core": "workspace:*",
-    "@hermes-x/home-ui": "workspace:*",
     "@hermes-x/i18n": "workspace:*",
     "@hermes-x/platform": "workspace:*",
-    "@hermes-x/settings-ui": "workspace:*",
-    "@hermes-x/theme": "workspace:*",
     "@hermes-x/ui": "workspace:*",
     "@hermes-x/utils": "workspace:*",
     "@codemirror/lang-javascript": "^6.2.2",

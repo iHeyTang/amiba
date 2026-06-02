@@ -30,8 +30,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@hermes-x/ui";
 import { useT } from "@hermes-x/i18n";
 import type { ConnectionState } from "~lib/types";
-import { cn } from "@hermes-x/utils";
-
+import { cn } from "@hermes-x/ui";
 interface StatusResponse {
   state?: ConnectionState;
   agentAlive?: boolean;

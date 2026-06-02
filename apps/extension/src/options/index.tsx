@@ -2,7 +2,7 @@ import "~lib/platform/init";
 
 import "~style.css";
 
-import { SettingsView } from "@hermes-x/settings-ui";
+import { SettingsView } from "@hermes-x/ui";
 
 import { chromeOptionsCapabilities } from "~lib/options/chrome-capabilities";
 

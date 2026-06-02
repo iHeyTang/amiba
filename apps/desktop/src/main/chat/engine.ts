@@ -1,5 +1,7 @@
 import {
+  ensureHermesSession,
   postHermesApprovalDecision,
+  SOURCE_LOCAL,
   streamChat,
   type AssistantTimelineItem,
   type ChatRuntimeError,
@@ -146,6 +148,21 @@ function snapshotFor(sessionId: string): SnapshotFrame {
 
 async function handleSubmit(payload: SubmitPayload) {
   const { sessionId, assistantUiId, model, history } = payload
+
+  // Make sure the SessionDB row exists with the correct ``source`` BEFORE
+  // ``streamChat`` opens the SSE stream. Otherwise the first
+  // ``/v1/chat/completions`` for a never-seen sessionId triggers
+  // api_server's fallback path which auto-creates the row tagged
+  // ``source="api_server"`` — that's how Quick-Ask sessions ended up in
+  // the wrong channel before this fix. ``ensureHermesSession`` is
+  // INSERT-OR-IGNORE and caches per-process so the cost is one round-trip
+  // per new id over the lifetime of the main process.
+  //
+  // Every local hermes-x submit — main window, Quick-Ask, and the
+  // extension — writes the same canonical "local" source; the optional
+  // ``source`` on SubmitPayload is a future-proofing hook for surfaces
+  // that genuinely warrant their own channel, not used today.
+  await ensureHermesSession(sessionId, payload.source ?? SOURCE_LOCAL)
 
   // Cancel any in-flight stream on this session before starting the new one.
   const prev = sessions.get(sessionId)

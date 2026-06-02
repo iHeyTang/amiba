@@ -42,6 +42,7 @@ import {
   createHermesSession,
   getHermesMessages,
 } from "../hermes-sessions";
+import { SOURCE_LOCAL } from "../channels";
 import { deriveTitleFromMessages } from "./store";
 import {
   LOCAL_META_KEY,
@@ -51,7 +52,12 @@ import {
   type SessionMeta,
 } from "../sessions";
 
-const SOURCE_TAG = "browser-extension";
+// Legacy ``chrome.storage.local`` data only ever existed inside the
+// browser extension — migrated rows are tagged with the unified
+// ``local`` source like everything else hermes-x writes. (In practice
+// the desktop app never has this data; the migration is a no-op
+// there.)
+const SOURCE_TAG = SOURCE_LOCAL;
 
 /**
  * Map a SessionMessage (= ChatMessage) into the AppendMessageInput shape.
