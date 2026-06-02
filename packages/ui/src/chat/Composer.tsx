@@ -64,14 +64,16 @@ import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
  * Composer doesn't try to be a chat-panel-in-a-box; it's the typing
  * affordance, full stop.
  *
- * Send-button modes:
- *   - idle      → Send (default ArrowUp, disabled when `!canSubmit`)
- *   - busy      → Stop  (custom rounded-square glyph)
- *   - busy+can  → Send  (queue / send-after-current; same ArrowUp, but
- *                       calls `onSubmit` not `onAbort`).
- * The "send while busy" path is what SidePanelView uses for its queue
- * feature; surfaces that don't queue (Quick-Ask, ChatView) just leave
- * `canSubmit` false while busy and the button becomes Stop naturally.
+ * Send-button modes (driven entirely by `busy` + `canSubmit` — no surface
+ * needs to opt into queue behaviour explicitly):
+ *   - !busy + !canSubmit → ArrowUp, disabled.
+ *   - !busy +  canSubmit → ArrowUp, click sends (`onSubmit`).
+ *   -  busy + !canSubmit → Stop glyph, click aborts (`onAbort`).
+ *   -  busy +  canSubmit → ArrowUp, click queues (`onSubmit`; the parent
+ *                          decides whether to enqueue or no-op).
+ * Surfaces without a queue concept just early-return inside their
+ * `onSubmit` when `busy` is true (HomeView, ChatView do this implicitly);
+ * surfaces with a queue (SidePanelView) push to their FIFO.
  */
 export interface ComposerHandle {
   focus(): void
@@ -88,7 +90,6 @@ interface SendButtonRenderCtx {
   onAbort(): void
   busy: boolean
   canSubmit: boolean
-  busyQueueable: boolean
   disabled: boolean
 }
 
@@ -115,14 +116,6 @@ export interface ComposerProps {
    * override (e.g. `value.trim() || hasReadyAttachments`).
    */
   canSubmit?: boolean
-
-  /**
-   * When true AND `busy`, the send button stays in "Send" mode and a
-   * click queues the next turn instead of aborting. SidePanelView uses
-   * this for its multi-turn queue; surfaces without a queue concept
-   * leave this false (default) so busy state always means "Stop".
-   */
-  busyQueueable?: boolean
 
   /** Disable the whole composer (textarea + buttons). */
   disabled?: boolean
@@ -281,7 +274,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       busy = false,
       onAbort,
       canSubmit,
-      busyQueueable = false,
       disabled = false,
       placeholder = "Send a message…",
       rows = 2,
@@ -377,7 +369,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (!isSendChord) return
       e.preventDefault()
       if (disabled) return
-      if (busy && !busyQueueable) return
+      // Enter never aborts — it's a typing chord. Stop is mouse-only.
       if (!effectiveCanSubmit) return
       onSubmit()
     }
@@ -385,8 +377,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     function handleSendClick() {
       if (disabled) return
       if (busy) {
-        if (busyQueueable) {
-          if (!effectiveCanSubmit) return
+        if (effectiveCanSubmit) {
           onSubmit()
           return
         }
@@ -398,9 +389,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     }
 
     // Resolve which heading the tooltip / aria should use given the
-    // current send-button state. `busy + !busyQueueable` is the stop
+    // current send-button state. `busy + !canSubmit` is the stop
     // variant; everything else is the send / queue variant.
-    const isStopState = busy && !busyQueueable
+    const isStopState = busy && !effectiveCanSubmit
     const buttonHeading = isStopState
       ? stopTitle
       : busy
@@ -413,7 +404,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         onAbort: () => onAbort?.(),
         busy,
         canSubmit: effectiveCanSubmit,
-        busyQueueable,
         disabled,
       })
     ) : isStopState ? (

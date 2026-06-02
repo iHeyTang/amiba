@@ -2367,7 +2367,6 @@ export default function SidePanelView({
         !attachmentUploading &&
         !attachmentBusy
       }
-      busyQueueable
       // Quick-action chips are kept hidden in the normal sidebar/
       // fullscreen layouts (the composer footer is meant to be a
       // narrow input row). Quick-Ask's ``composer-only`` empty state

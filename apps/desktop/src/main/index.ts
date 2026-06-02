@@ -117,7 +117,11 @@ function installCorsBypass() {
 /**
  * Permit ``media`` permission requests from the renderer so
  * ``navigator.mediaDevices.getUserMedia({ audio: true })`` reaches the
- * OS layer instead of being rejected at the Electron boundary.
+ * OS layer instead of being rejected at the Electron boundary. Also
+ * permit ``clipboard-sanitized-write`` so the chat bubble's copy-code
+ * button (Streamdown calls ``navigator.clipboard.writeText``) doesn't
+ * silently reject — Streamdown swallows the rejection with no onError
+ * handler, so denial here looks like a dead button in the UI.
  *
  * On macOS, the OS-level decision is still gated by
  * ``NSMicrophoneUsageDescription`` in Info.plist (declared via
@@ -133,14 +137,18 @@ function installCorsBypass() {
  * through to Electron's default handler.
  */
 function installPermissionRequestHandler(): void {
+  const allowed = new Set(["media", "clipboard-sanitized-write"])
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, permission, callback) => {
-      if (permission === "media") {
-        callback(true)
-        return
-      }
-      callback(false)
+      callback(allowed.has(permission))
     },
+  )
+  // Some Chromium APIs (clipboard.writeText among them) gate on the
+  // synchronous check handler rather than the async request handler.
+  // Mirror the same allowlist here so writeText doesn't get denied
+  // before the request handler is ever consulted.
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission) => allowed.has(permission),
   )
 }
 
