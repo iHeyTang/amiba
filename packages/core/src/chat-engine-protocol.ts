@@ -76,9 +76,11 @@ export interface SubmitPayload {
   source?: string
   /**
    * Turn-scoped read-only context for tool handlers (e.g. frozen browser
-   * tab snapshot). Never inlined into the prompt; only reaches the agent
-   * through the registry's per-turn thread-local. Optional — desktop
-   * surfaces and history-replay paths leave it unset.
+   * tab snapshot). Never inlined into the prompt; reaches the agent
+   * via the backplane's ``/hermes/turn-metadata`` side channel — the
+   * client PUTs it before the ``/v1/runs`` POST and the agent's tool
+   * handlers fetch it over loopback keyed by ``approval_session_key``.
+   * Optional — desktop surfaces and history-replay paths leave it unset.
    */
   turnMetadata?: TurnMetadata
 }

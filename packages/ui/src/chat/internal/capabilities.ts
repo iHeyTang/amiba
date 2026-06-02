@@ -44,11 +44,13 @@ export interface ActiveTabInfo {
 }
 
 /**
- * Frozen view of "the page the user was looking at when they sent". Sent
- * to the agent as ``turn_metadata.browser_tab_snapshot`` so the
- * ``my_browser_active_tab`` tool returns this for the entire turn — even
- * if the user has since switched tabs. Shape mirrors the live
- * ``my_browser_active_tab`` response so the handler substitutes verbatim.
+ * Frozen view of "the page the user was looking at when they sent". The
+ * client PUTs this into the backplane's ``/hermes/turn-metadata`` side
+ * channel under ``browser_tab_snapshot``; the agent's
+ * ``my_browser_active_tab`` tool fetches it back over loopback and
+ * returns it for the entire turn — even if the user has since switched
+ * tabs. Shape mirrors the live ``my_browser_active_tab`` response so
+ * the handler substitutes verbatim.
  */
 export interface BrowserTabSnapshot {
   tab_id?: number

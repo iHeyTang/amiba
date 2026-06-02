@@ -462,10 +462,17 @@ export interface RunAgentOptions {
   onRun?: (runId: string) => void;
   /**
    * Per-turn read-only context for tool handlers (e.g. frozen browser-tab
-   * snapshot). Forwarded as ``turn_metadata`` in the POST /v1/runs body;
-   * the gateway stashes it on a thread-local that ``registry.dispatch``
-   * reads to inject into tool kwargs. Never lands in the prompt — purely
-   * a tool-side concern. Optional; older surfaces omit.
+   * snapshot). PUT to the backplane's ``/hermes/turn-metadata`` side
+   * channel BEFORE the ``/v1/runs`` POST and looked up by tool handlers
+   * over loopback (see ``hermes-plugin-browser-tools`` →
+   * ``_fetch_turn_metadata``). The lookup key is the same session key
+   * api_server resolves as its ``approval_session_key``:
+   * ``sessionKey`` header > ``sessionId`` body. Never lands in the
+   * prompt — purely a tool-side concern. Optional; older surfaces omit.
+   *
+   * No ``sessionKey``/``sessionId`` → the side-channel PUT is skipped
+   * silently (the run_id-derived fallback isn't knowable client-side),
+   * and tools fall back to live behaviour.
    */
   turnMetadata?: import("./chat-engine-protocol").TurnMetadata;
 }
@@ -515,7 +522,42 @@ export async function runHermesAgent(
   if (opts.instructions) startBody.instructions = opts.instructions;
   if (opts.model) startBody.model = opts.model;
   if (opts.sessionId) startBody.session_id = opts.sessionId;
-  if (opts.turnMetadata) startBody.turn_metadata = opts.turnMetadata;
+
+  // Turn metadata travels OUT OF BAND so it never enters the prompt
+  // path. The backplane side-channel must hold the snapshot before
+  // ``/v1/runs`` returns — otherwise a fast tool dispatch could fire
+  // its GET before our PUT lands. await before kicking off the run.
+  if (opts.turnMetadata) {
+    const metadataKey = opts.sessionKey || opts.sessionId;
+    if (metadataKey) {
+      try {
+        const metaRes = await backplaneFetch("/hermes/turn-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_key: metadataKey,
+            metadata: opts.turnMetadata,
+          }),
+        });
+        if (!metaRes.ok) {
+          console.warn(
+            "[hermes] turn-metadata PUT returned",
+            metaRes.status,
+            "— tools will fall back to live state",
+          );
+        }
+      } catch (err) {
+        // Network failure on the loopback PUT — log and proceed. The
+        // run still works; tool handlers just lose the snapshot.
+        console.warn("[hermes] turn-metadata PUT failed:", err);
+      }
+    } else {
+      console.warn(
+        "[hermes] turnMetadata supplied without sessionKey/sessionId — " +
+          "no addressable side-channel key, snapshot dropped",
+      );
+    }
+  }
 
   const startRes = await backplaneFetch("/v1/runs", {
     method: "POST",
