@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
+import { createExtensionsBridge } from "@hermes-x/extension-host/preload"
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Hermes window
 // stacks more than that on a few high-fan-out IPC channels (storage,
@@ -135,6 +136,8 @@ const api = {
     demo: (kind?: "cron-completed" | "approval-pending") =>
       ipcRenderer.invoke("notifier:demo", kind),
   },
+
+  extensions: createExtensionsBridge(),
 
   gbrain: {
     health: (): Promise<{ status: string; version?: string } | null> =>

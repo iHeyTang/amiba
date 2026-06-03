@@ -98,6 +98,15 @@ interface HermesBridgeApi {
     health(): Promise<{ status: string; version?: string } | null>
     call<T = unknown>(tool: string, args?: Record<string, unknown>): Promise<T>
   }
+  extensions: {
+    listManifests(): Promise<import("@hermes-x/extension-api").ExtensionManifest[]>
+    invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
+    rendererBundleUrl(extensionId: string): Promise<string | null>
+    i18nResources(
+      extensionId: string,
+      locale: "en" | "zh-CN",
+    ): Promise<Record<string, string>>
+  }
 }
 
 declare global {
