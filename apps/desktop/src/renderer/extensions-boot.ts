@@ -152,8 +152,18 @@ export async function syncExtensions(extensionId?: string | null): Promise<void>
     const manifest = manifests.find((m) => m.id === extensionId)
     if (!manifest) return
     const ext = await buildDiscoveredExt(manifest)
+    const before = bootResult.failed.length
     await bootResult.reloadExtension(extensionId, ext)
-    activatedIds.add(extensionId)
+    const newFailures = bootResult.failed.slice(before).filter((f) => f.id === extensionId)
+    if (newFailures.length) {
+      console.error(
+        `[extensions] activate failed for ${extensionId}:`,
+        newFailures[0]!.error,
+      )
+    } else {
+      activatedIds.add(extensionId)
+      console.info(`[extensions] (re)activated ${extensionId}`)
+    }
     return
   }
 
