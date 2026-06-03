@@ -50,15 +50,10 @@ import { SettingsVoice } from "./SettingsVoice";
 /**
  * Sidebar order (two groups):
  *   Extension:  Preference → Userscripts (hidden when userscripts capability absent)
- *   Hermes:     Gateway → Models → Memory → Brain → Voice → Cron → Logs
+ *   Hermes:     Gateway → Models → Memory → Voice → Cron → Logs
  *
- * The knowledge workspace (Brain) still lives on the chat surface's
- * activity bar — that's the daily-use surface. The "brain" tab here
- * owns the configuration only (URL / Token / runtime status), so admin
- * tweaks don't clutter the workspace.
- *
- * Skills used to live here too but has been fully promoted to a
- * top-level destination on the chat surface's activity bar.
+ * Skills and extension-provided features have been promoted to extensions —
+ * top-level destinations on the chat surface's activity bar.
  */
 const ALL_TABS = [
   "status",

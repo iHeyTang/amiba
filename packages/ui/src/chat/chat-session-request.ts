@@ -12,11 +12,9 @@
  * -------------
  *
  *   - **Single transactional write.** Some surfaces also need to push
- *     defaults into companion settings (e.g. the brain-install flow
- *     pre-seeds `BRAIN_URL_STORAGE_KEY` so the post-install health poll
- *     has a target). Combining them into one `storage.set()` avoids the
- *     half-state where autosend fires before the companion key has
- *     landed.
+ *     defaults into companion settings alongside the pending prompt.
+ *     Combining them into one `storage.set()` avoids the half-state
+ *     where autosend fires before the companion key has landed.
  *
  *   - **Mode: "current" | "new".** "current" preserves the long-standing
  *     HomeView behavior — let `ensureActive()` in send() reuse the
@@ -79,7 +77,7 @@ export interface ChatSessionRequest {
   /**
    * Extra storage keys to write in the same atomic patch as the pending
    * prompt. Use for "set this companion setting only when the user
-   * hasn't customized it" type defaults (e.g. brain URL). Resolve any
+   * hasn't customized it" type defaults. Resolve any
    * conditional logic at the caller before passing in — this layer
    * doesn't reason about defaults, it just merges.
    */

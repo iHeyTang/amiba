@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import path from "node:path"
 import type net from "node:net"
 import {
@@ -50,10 +52,6 @@ import {
   registerHermesRuntimeHandlers,
   stopAllHermesJobs,
 } from "./hermes-runtime"
-import {
-  autoStartGBrainServeHttp,
-  registerGBrainHandlers,
-} from "./gbrain/ipc"
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
@@ -67,6 +65,30 @@ const __dirname = path.dirname(__filename)
 const isDev = !app.isPackaged
 const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL
 const IS_MAC = process.platform === "darwin"
+
+/**
+ * Discover built-in extensions by resolving their manifest.json paths from
+ * the workspace packages. Extensions are loaded at compile-time via
+ * require.resolve so they ship inside the desktop bundle.
+ */
+function discoverBuiltinExtensions(): Array<{
+  manifest: ExtensionManifest
+  rootDir: string
+}> {
+  const result: Array<{ manifest: ExtensionManifest; rootDir: string }> = []
+  const ids = ["knowledge-base"] // explicit list — phase 3 only has one
+  for (const id of ids) {
+    try {
+      const manifestPath = require.resolve(`@hermes-x/ext-${id}/manifest.json`)
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ExtensionManifest
+      const rootDir = join(manifestPath, "..")
+      result.push({ manifest, rootDir })
+    } catch (e) {
+      console.warn(`[extensions] failed to discover ${id}:`, e)
+    }
+  }
+  return result
+}
 
 /**
  * Resolve the app icon shipped under `apps/desktop/resources/icon.png`.
@@ -397,16 +419,9 @@ if (!gotSingleInstanceLock) {
     registerIpcHandlers()
     registerChatHandlers()
     registerHermesRuntimeHandlers()
-    registerGBrainHandlers()
-    // Background auto-start of `gbrain serve --http`. Detached + unref'd
-    // so the server outlives the desktop process; failures (gbrain not
-    // installed, port in use) are silent here and surfaced in the UI
-    // when the user opens Brain. Lazy = run it AFTER window creation so
-    // we don't block first paint on a subprocess probe.
-    autoStartGBrainServeHttp()
 
     const extensionHost = await bootMainExtensionHost({
-      manifests: [],
+      manifests: discoverBuiltinExtensions(),
       settingsStore: {
         get: async (key, fallback) => {
           const r = await mainStore.get([key])

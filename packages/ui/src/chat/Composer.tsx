@@ -53,7 +53,7 @@ import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
  *   - `chipRow`       — inside the frame, between top affordance and
  *                       textarea (e.g. pinned-page + attachment chips).
  *   - `actionsLeft`   — inside the frame's bottom action row, left side
- *                       (paperclip, pin, brain-toggle, etc).
+ *                       (paperclip, pin, etc).
  *   - `extrasBelow`   — below the frame (keyboard hints, status pills).
  *   - `flatTop`       — remove the frame's top corner radius so a
  *                       sibling element rendered just above (a pending-
@@ -205,8 +205,8 @@ export interface ComposerProps {
   /**
    * Extra buttons appended to the bottom action row, between the
    * built-in attachment button and the quick-action chips. Used for
-   * surface-specific toggles (pin current tab, brain / stream-details
-   * toggle, navigate-open-policy toggle). Common affordances should
+   * surface-specific toggles (pin current tab, stream-details toggle,
+   * navigate-open-policy toggle). Common affordances should
    * NEVER live here — they belong in the built-in section above.
    */
   actionsLeft?: ReactNode

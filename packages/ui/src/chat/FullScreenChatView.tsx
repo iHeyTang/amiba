@@ -124,8 +124,8 @@ export interface FullScreenChatViewProps {
   /**
    * TabBar gear / top-bar gear → open Settings. The optional ``tab``
    * argument names the Settings sub-pane to land on (matches the
-   * SettingsView hash routing — e.g. ``"brain"``); when omitted, the
-   * host opens the user's last-active pane.
+   * SettingsView hash routing); when omitted, the host opens the
+   * user's last-active pane.
    */
   openSettings: (tab?: string) => void;
   /** AgentDestinationChip — open URL in user's primary browser. */

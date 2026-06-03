@@ -1,4 +1,3 @@
-export { SettingsBrain } from "./SettingsBrain"
 export { HermesModelConfigTab } from "./HermesModelConfigTab"
 export { ScriptEditor } from "./ScriptEditor"
 export { ScriptList } from "./ScriptList"

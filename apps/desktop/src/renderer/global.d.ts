@@ -94,10 +94,6 @@ interface HermesBridgeApi {
     onJobEnd(cb: (msg: HermesJobEndMsg) => void): () => void
     onPtyData(cb: (msg: HermesPtyDataMsg) => void): () => void
   }
-  gbrain: {
-    health(): Promise<{ status: string; version?: string } | null>
-    call<T = unknown>(tool: string, args?: Record<string, unknown>): Promise<T>
-  }
   extensions: {
     listManifests(): Promise<import("@hermes-x/extension-api").ExtensionManifest[]>
     invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>

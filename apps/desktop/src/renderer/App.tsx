@@ -125,8 +125,7 @@ function AppInner(): ReactElement {
       capabilities={desktopCapabilities}
       openSettings={(tab) => {
         // Optional `tab` arg lands the user on a specific Settings
-        // sub-pane (the gear in the Knowledge workspace passes
-        // "brain"). SettingsView reads `window.location.hash` on
+        // sub-pane. SettingsView reads `window.location.hash` on
         // mount and on `hashchange`, so writing it before the view
         // switch makes the pane render immediately on first paint.
         if (tab) {
