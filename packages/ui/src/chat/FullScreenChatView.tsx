@@ -39,7 +39,7 @@ import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
-import { ActivityBar, type ActivityViewId } from "./ActivityBar";
+import { ActivityBar, resolveExtensionIcon, type ActivityViewId } from "./ActivityBar";
 import { SessionsListView } from "./SessionsListView";
 import {
   SessionTitleProvider,
@@ -414,6 +414,7 @@ function FullScreenChatViewInner({
           active={sidebarView}
           onSelect={onSidebarViewChange}
           extensionItems={extensionActivityItems}
+          resolveIcon={resolveExtensionIcon}
         />
         {/* Inner session-list aside — only when a session-driven view
             (chats / scheduled) is active. Skills and Knowledge are

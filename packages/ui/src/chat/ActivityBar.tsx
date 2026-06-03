@@ -19,11 +19,20 @@
  * when unresolved, BookOpen is used as a neutral fallback.
  */
 
-import { BookOpen, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
+import { BookOpen, Brain, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useT } from "@hermes-x/i18n";
 import { cn } from "../primitives";
+
+const ICON_MAP: Record<string, ReactNode> = {
+  "book-open": <BookOpen className="h-4 w-4" />,
+  "brain": <Brain className="h-4 w-4" />,
+};
+
+export function resolveExtensionIcon(name: string): ReactNode | null {
+  return ICON_MAP[name] ?? null;
+}
 
 /**
  * Widened to `string` so extension-contributed ids (arbitrary strings)
