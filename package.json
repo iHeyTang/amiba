@@ -10,13 +10,13 @@
   },
   "scripts": {
     "dev:browser-extension": "pnpm --filter @hermes-x/browser-extension dev",
-    "dev:desktop": "pnpm build:extensions && HERMES_X_DEV_EXTENSIONS_PATH=\"$(pwd)/extensions\" pnpm --filter @hermes-x/desktop dev",
+    "dev:desktop": "pnpm --filter @hermes-x/desktop dev",
     "dev:desktop:fresh": "bash scripts/fresh-desktop.sh",
     "dev:desktop:fresh:keep": "bash scripts/fresh-desktop.sh --keep",
     "dev:desktop:fresh:reset": "bash scripts/fresh-desktop-reset.sh",
     "build:browser-extension": "pnpm --filter @hermes-x/browser-extension build",
     "build:extensions": "pnpm --filter \"./extensions/*\" build",
-    "build:desktop": "pnpm build:extensions && pnpm --filter @hermes-x/desktop build",
+    "build:desktop": "pnpm --filter @hermes-x/desktop build",
     "clean": "pnpm -r exec rm -rf node_modules dist build .plasmo .turbo .vite",
     "lint:no-extension-leak": "bash scripts/check-no-knowledge-in-core.sh"
   },
