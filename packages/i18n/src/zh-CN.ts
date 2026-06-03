@@ -51,6 +51,14 @@ export const zhCN: Messages = {
   "options.extensions.status.loaded": "已加载",
   "options.extensions.status.failed": "加载失败",
   "options.extensions.showError": "查看错误信息",
+  "options.extensions.sideload": "从文件夹加载…",
+  "options.extensions.refresh": "刷新",
+  "options.extensions.reload": "重载",
+  "options.extensions.uninstall": "卸载",
+  "options.extensions.uninstall.confirm.title": "卸载扩展？",
+  "options.extensions.uninstall.confirm.body": "{name} 将从应用中移除。<userData>/extensions/{id}/ 目录会被删除。",
+  "options.extensions.sideload.error": "侧载失败：{error}",
+  "options.extensions.empty": "暂无已安装扩展。点击「从文件夹加载…」开始。",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",

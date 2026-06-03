@@ -56,6 +56,14 @@ export const en = {
   "options.extensions.status.loaded": "Loaded",
   "options.extensions.status.failed": "Failed",
   "options.extensions.showError": "Show error",
+  "options.extensions.sideload": "Sideload from folder…",
+  "options.extensions.refresh": "Refresh",
+  "options.extensions.reload": "Reload",
+  "options.extensions.uninstall": "Uninstall",
+  "options.extensions.uninstall.confirm.title": "Uninstall extension?",
+  "options.extensions.uninstall.confirm.body": "{name} will be removed from this app. The folder at <userData>/extensions/{id}/ will be deleted.",
+  "options.extensions.sideload.error": "Could not sideload: {error}",
+  "options.extensions.empty": "No extensions installed yet. Sideload one to get started.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
