@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, utimesSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, utimesSync, watch as fsWatch } from "node:fs"
 import { join } from "node:path"
 import kleur from "kleur"
 import { readExtensionManifest } from "../lib/manifest.js"
@@ -48,20 +48,55 @@ export async function devCommand(opts: DevOptions) {
     { cwd },
   )
 
-  // TODO(v2): Replace this polling approach with a proper file-watcher on dist/
-  // that touches manifest.json only when dist files actually change.
-  // For v1 we touch every 2 s — the desktop's reload handler is idempotent.
   const manifestPath = join(cwd, "manifest.json")
-  const touchInterval = setInterval(() => {
-    try {
-      utimesSync(manifestPath, new Date(), new Date())
-    } catch {
-      // ignore — manifest might not exist yet if first build hasn't completed
+
+  // Watch the build outputs; when either changes, touch manifest.json so the
+  // desktop's manifest-watcher fires reloadExtension(id) for us. fsWatch fires
+  // fast and idempotent, so debouncing isn't strictly needed for correctness,
+  // but we coalesce rapid back-to-back events within 200 ms to avoid touching
+  // the manifest several times in a row when vite emits both bundles around
+  // the same instant.
+  const distDir = join(cwd, "dist")
+  const watchTargets = ["main.cjs", "renderer.js"]
+  let touchTimer: NodeJS.Timeout | null = null
+  const scheduleTouch = () => {
+    if (touchTimer) return
+    touchTimer = setTimeout(() => {
+      touchTimer = null
+      try {
+        const now = new Date()
+        utimesSync(manifestPath, now, now)
+        console.log(kleur.dim(`[hermes-x-ext] manifest touched → desktop reload`))
+      } catch { /* manifest may not exist yet on first build */ }
+    }, 200)
+  }
+  const distWatchers: ReturnType<typeof fsWatch>[] = []
+  const armDistWatchers = () => {
+    for (const w of distWatchers.splice(0)) w.close()
+    for (const file of watchTargets) {
+      try {
+        const w = fsWatch(join(distDir, file), () => scheduleTouch())
+        distWatchers.push(w)
+      } catch {
+        // file may not exist yet; will be re-armed on next dir change
+      }
     }
-  }, 2000)
+  }
+  // Watch the dist dir itself so we re-arm when files first appear after the
+  // initial build.
+  mkdirSync(distDir, { recursive: true })  // make the watch target exist
+  let dirWatcher: ReturnType<typeof fsWatch> | null = null
+  try {
+    dirWatcher = fsWatch(distDir, () => armDistWatchers())
+    armDistWatchers()
+  } catch (e) {
+    console.warn(kleur.yellow("⚠"), `Could not watch ${distDir}; manifest hot-reload disabled:`, e)
+  }
 
   const cleanup = () => {
-    clearInterval(touchInterval)
+    if (touchTimer) clearTimeout(touchTimer)
+    if (dirWatcher) dirWatcher.close()
+    for (const w of distWatchers) w.close()
     mainProc.kill()
     rendererProc.kill()
   }
