@@ -1,6 +1,6 @@
 // packages/extension-host/src/main/index.ts
 import { join } from "node:path"
-import { readFileSync, readdirSync, existsSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import type { Disposable, ExtensionManifest } from "@hermes-x/extension-api"
 import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry } from "./registry"
@@ -16,21 +16,20 @@ import { makeMainHost } from "./make-main-host"
 import { createExtensionStorage } from "./storage-fs"
 import { validateManifest } from "./discover"
 import { watchManifests } from "./manifest-watcher"
+import { discoverFromRegistry } from "./discover-registry"
+import { findEntry } from "./registry-store"
 
 export interface MainBootOptions {
-  /** All discovered manifests with their resolved file paths. */
-  manifests: Array<{
-    manifest: ExtensionManifest
-    /** Absolute path of the manifest dir, used to resolve `entries.main`. */
-    rootDir: string
-  }>
   /**
-   * Absolute path to the extensions directory (e.g. `<userData>/extensions/`).
-   * Used by the manifest mtime watcher and to compute renderer bundle URLs.
-   * Optional for backward compatibility — if omitted, watching is disabled
-   * and getRendererBundleUrl falls back to the legacy callback.
+   * Absolute path to the extensions registry JSON file.
+   * (e.g. `<userData>/extensions-registry.json`)
    */
-  extensionsDir?: string
+  registryPath: string
+  /**
+   * Absolute path to the root directory where marketplace installs land.
+   * (e.g. `<userData>/extensions/`)
+   */
+  extensionsRoot: string
   /** Reads/writes the shared settings store (re-uses desktop's mainStore). */
   settingsStore: {
     get<T>(key: string, fallback: T): Promise<T>
@@ -45,9 +44,9 @@ export interface MainBootOptions {
   ) => Promise<Record<string, string>>
   /**
    * Returns a `file://` or `app://` URL the renderer can `import()`.
-   * When `extensionsDir` is provided, the URL is computed automatically
+   * When `registryPath` is provided, the URL is computed automatically
    * from `rootDir + manifest.entries.renderer` and this callback is ignored.
-   * Keep it for backward compat with callers that do not set extensionsDir.
+   * Keep it for backward compat with callers that do not set registryPath.
    */
   getRendererBundleUrl?: (extensionId: string) => Promise<string | null>
 }
@@ -70,8 +69,16 @@ export async function bootMainExtensionHost(
   const bootBackground = new Set<() => Promise<void> | void>()
   const shutdown = new Set<() => Promise<void> | void>()
 
+  // Discover extensions from registry.
+  const { entries: discovered, failed: discoveryFailed } = discoverFromRegistry(opts.registryPath)
+  if (discoveryFailed.length) {
+    console.warn("[extensions] registry discovery failures:", discoveryFailed)
+  }
+
   // Mutable manifests list — mutated on reload.
-  const manifestEntries = [...opts.manifests]
+  const manifestEntries: Array<{ manifest: ExtensionManifest; rootDir: string; source: "marketplace" | "local" }> = discovered.map(
+    (e) => ({ manifest: e.manifest, rootDir: e.rootDir, source: e.source }),
+  )
   const getManifests = () => manifestEntries.map((m) => m.manifest)
 
   // Per-extension disposable tracking: extensionId → Disposable[]
@@ -79,8 +86,8 @@ export async function bootMainExtensionHost(
 
   /**
    * Compute the renderer bundle URL for an extension.
-   * When extensionsDir is set, the absolute path is derived from rootDir + entries.renderer.
-   * Falls back to the legacy callback when extensionsDir is not set.
+   * The absolute path is derived from rootDir + entries.renderer.
+   * Falls back to the legacy callback when neither rootDir nor entry is found.
    */
   const resolveRendererBundleUrl = async (extensionId: string): Promise<string | null> => {
     const entry = manifestEntries.find((m) => m.manifest.id === extensionId)
@@ -100,7 +107,12 @@ export async function bootMainExtensionHost(
     getRendererBundleUrl: resolveRendererBundleUrl,
   })
   registerStatusChannel(() =>
-    registry.list().map((e) => ({ id: e.id, status: e.status, error: e.error })),
+    registry.list().map((e) => ({
+      id: e.id,
+      status: e.status,
+      error: e.error,
+      source: manifestEntries.find((m) => m.manifest.id === e.id)?.source,
+    })),
   )
 
   async function activateOne(entry: { manifest: ExtensionManifest; rootDir: string }): Promise<void> {
@@ -179,11 +191,33 @@ export async function bootMainExtensionHost(
     // Find the entry before unloading (we need rootDir to re-activate).
     const existingEntry = manifestEntries.find((m) => m.manifest.id === id)
     if (!existingEntry) {
-      console.warn(`[extension-host] reloadExtension: unknown id ${id}`)
+      // If not in manifestEntries, try to find path from registry.
+      const regEntry = findEntry(opts.registryPath, id)
+      if (!regEntry) {
+        console.warn(`[extension-host] reloadExtension: unknown id ${id}`)
+        return
+      }
+      // Re-read the manifest from the registry-recorded path.
+      try {
+        const raw = JSON.parse(readFileSync(join(regEntry.path, "manifest.json"), "utf8"))
+        const v = validateManifest(raw)
+        if (!v.ok) {
+          console.error(`[extension-host] reloadExtension: invalid manifest for ${id}: ${v.error}`)
+          return
+        }
+        const newEntry = { manifest: v.manifest, rootDir: regEntry.path, source: regEntry.source }
+        manifestEntries.push(newEntry)
+        await activateOne(newEntry)
+        if (watcher) {
+          watcher.setExtensionPaths(buildPathMap())
+        }
+      } catch (e) {
+        console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
+      }
       return
     }
-    // Snapshot rootDir before unload removes it from manifestEntries.
-    const { rootDir } = existingEntry
+    // Snapshot rootDir and source before unload removes it from manifestEntries.
+    const { rootDir, source } = existingEntry
     await unloadExtension(id)
 
     // Re-read the manifest from disk (it may have changed).
@@ -194,12 +228,14 @@ export async function bootMainExtensionHost(
         console.error(`[extension-host] reloadExtension: invalid manifest for ${id}: ${v.error}`)
         return
       }
-      const newEntry = { manifest: v.manifest, rootDir }
+      // Re-check source from registry in case it changed.
+      const regEntry2 = findEntry(opts.registryPath, id)
+      const newEntry = { manifest: v.manifest, rootDir, source: regEntry2?.source ?? source }
       manifestEntries.push(newEntry)
       await activateOne(newEntry)
-      // Re-arm the watcher with the updated id set.
+      // Re-arm the watcher with the updated path map.
       if (watcher) {
-        watcher.setExtensionIds(manifestEntries.map((m) => m.manifest.id))
+        watcher.setExtensionPaths(buildPathMap())
       }
     } catch (e) {
       console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
@@ -207,70 +243,68 @@ export async function bootMainExtensionHost(
   }
 
   /**
-   * Re-scan extensionsDir and activate any newly installed extensions that are
+   * Re-read the registry and activate any newly registered extensions that are
    * not yet in manifestEntries. Called after a marketplace install completes.
    */
   async function reloadExtensions(): Promise<void> {
-    if (!opts.extensionsDir) return
-    const extensionsDir = opts.extensionsDir
-    if (!existsSync(extensionsDir)) return
+    const { entries: fresh } = discoverFromRegistry(opts.registryPath)
     const knownIds = new Set(manifestEntries.map((m) => m.manifest.id))
-    for (const name of readdirSync(extensionsDir)) {
-      const rootDir = join(extensionsDir, name)
-      try {
-        const st = statSync(rootDir)
-        if (!st.isDirectory()) continue
-        const manifestPath = join(rootDir, "manifest.json")
-        if (!existsSync(manifestPath)) continue
-        const raw = JSON.parse(readFileSync(manifestPath, "utf8"))
-        const v = validateManifest(raw)
-        if (!v.ok) continue
-        if (knownIds.has(v.manifest.id)) continue
-        // New extension: register and activate.
-        const entry = { manifest: v.manifest, rootDir }
-        manifestEntries.push(entry)
-        await activateOne(entry)
-        if (watcher) {
-          watcher.setExtensionIds(manifestEntries.map((m) => m.manifest.id))
-        }
-      } catch (e) {
-        console.error(`[extension-host] reloadExtensions: failed to load ${name}:`, e)
+    for (const e of fresh) {
+      if (knownIds.has(e.manifest.id)) continue
+      // New extension: register and activate.
+      const entry = { manifest: e.manifest, rootDir: e.rootDir, source: e.source }
+      manifestEntries.push(entry)
+      await activateOne(entry)
+      if (watcher) {
+        watcher.setExtensionPaths(buildPathMap())
       }
     }
   }
 
-  // Register sideload / reload / uninstall / folder-picker IPC channels when
-  // extensionsDir is available (i.e. running inside Electron on the desktop).
-  if (opts.extensionsDir) {
-    registerExtensionActionChannels({
-      extensionsDir: opts.extensionsDir,
-      getManifests,
-      reloadExtension,
-      unloadExtension,
-    })
+  /** Build current id→rootDir map for the watcher. */
+  function buildPathMap(): Map<string, string> {
+    return new Map(manifestEntries.map((e) => [e.manifest.id, e.rootDir]))
   }
 
-  // Register marketplace IPC channels when extensionsDir is available.
-  if (opts.extensionsDir) {
-    registerMarketplaceChannels({
-      extensionsDir: opts.extensionsDir,
-      reloadExtensions,
-    })
+  /**
+   * Allow IPC router to push a new in-memory manifest entry (for add-local
+   * before the extension is activated).
+   */
+  function addManifestEntry(manifest: ExtensionManifest, rootDir: string): void {
+    if (!manifestEntries.some((e) => e.manifest.id === manifest.id)) {
+      // Source will be determined from the registry when reloadExtension runs.
+      const regEntry = findEntry(opts.registryPath, manifest.id)
+      manifestEntries.push({ manifest, rootDir, source: regEntry?.source ?? "local" })
+    }
   }
 
-  // Start manifest mtime watcher when extensionsDir is provided.
+  // Register add-local / reload / uninstall / folder-picker IPC channels.
+  registerExtensionActionChannels({
+    registryPath: opts.registryPath,
+    extensionsRoot: opts.extensionsRoot,
+    getManifests,
+    reloadExtension,
+    unloadExtension,
+    addManifestEntry,
+  })
+
+  // Register marketplace IPC channels.
+  registerMarketplaceChannels({
+    extensionsRoot: opts.extensionsRoot,
+    registryPath: opts.registryPath,
+    reloadExtensions,
+  })
+
+  // Start manifest mtime watcher.
   // On change, trigger reloadExtension — this is the hot-reload path.
   let watcher: ReturnType<typeof watchManifests> | undefined
-  if (opts.extensionsDir) {
-    const extensionsDir = opts.extensionsDir
-    const initialIds = manifestEntries.map((m) => m.manifest.id)
-    watcher = watchManifests(extensionsDir, initialIds, (changedId) => {
-      console.info(`[extension-host] manifest changed for ${changedId} — hot reloading…`)
-      void reloadExtension(changedId).catch((e) => {
-        console.error(`[extension-host] hot reload failed for ${changedId}:`, e)
-      })
+  const initialPaths = buildPathMap()
+  watcher = watchManifests(initialPaths, (changedId) => {
+    console.info(`[extension-host] manifest changed for ${changedId} — hot reloading…`)
+    void reloadExtension(changedId).catch((e) => {
+      console.error(`[extension-host] hot reload failed for ${changedId}:`, e)
     })
-  }
+  })
 
   return {
     registry,
@@ -285,5 +319,7 @@ export async function bootMainExtensionHost(
 
 export { activateMainExtensions } from "./activate"
 export { validateManifest } from "./discover"
-export { discoverFromUserData } from "./discover-fs"
-export type { DiscoveredEntry } from "./discover-fs"
+export { discoverFromRegistry } from "./discover-registry"
+export type { DiscoveredEntry } from "./discover-registry"
+export { loadRegistry, saveRegistry, addEntry, removeEntry, findEntry } from "./registry-store"
+export type { RegistryEntry, Registry, ExtensionSource } from "./registry-store"

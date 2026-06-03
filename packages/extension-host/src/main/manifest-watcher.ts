@@ -4,8 +4,8 @@ import { join } from "node:path"
 
 export interface ManifestWatcher {
   stop(): void
-  /** Re-arm watchers to match the current set of active extension ids. */
-  setExtensionIds(ids: string[]): void
+  /** Re-arm watchers to match the current set of active extension id→path entries. */
+  setExtensionPaths(paths: Map<string, string>): void
 }
 
 /**
@@ -14,29 +14,28 @@ export interface ManifestWatcher {
  * me" — it touches the manifest after a rebuild.
  *
  * Uses node:fs.watch (not chokidar) to keep the host dependency-free.
- * Re-arms watchers when reload happens (the caller passes the updated id
- * list back via setExtensionIds).
+ * Re-arms watchers when reload happens (the caller passes the updated
+ * id→path map back via setExtensionPaths).
  */
 export function watchManifests(
-  extensionsDir: string,
-  initialIds: string[],
+  initialPaths: Map<string, string>,
   onChange: (extensionId: string) => void,
 ): ManifestWatcher {
   const watchers = new Map<string, ReturnType<typeof fsWatch>>()
 
-  const arm = (ids: string[]) => {
+  const arm = (paths: Map<string, string>) => {
     // Remove watchers for extensions no longer present.
     for (const [id, w] of watchers) {
-      if (!ids.includes(id)) {
+      if (!paths.has(id)) {
         w.close()
         watchers.delete(id)
       }
     }
     // Add watchers for newly present extensions.
-    for (const id of ids) {
+    for (const [id, rootDir] of paths) {
       if (watchers.has(id)) continue
       try {
-        const manifestPath = join(extensionsDir, id, "manifest.json")
+        const manifestPath = join(rootDir, "manifest.json")
         const w = fsWatch(manifestPath, () => onChange(id))
         watchers.set(id, w)
       } catch {
@@ -45,11 +44,11 @@ export function watchManifests(
     }
   }
 
-  arm(initialIds)
+  arm(initialPaths)
 
   return {
-    setExtensionIds(ids: string[]) {
-      arm(ids)
+    setExtensionPaths(paths: Map<string, string>) {
+      arm(paths)
     },
     stop() {
       for (const w of watchers.values()) w.close()
