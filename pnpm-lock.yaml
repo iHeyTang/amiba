@@ -20,6 +20,9 @@ importers:
       '@hermes-x/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@hermes-x/ext-knowledge-base':
+        specifier: workspace:*
+        version: link:../../packages/extensions/knowledge-base
       '@hermes-x/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api

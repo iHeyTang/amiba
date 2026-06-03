@@ -62,6 +62,7 @@
   },
   "dependencies": {
     "@hermes-x/core": "workspace:*",
+    "@hermes-x/ext-knowledge-base": "workspace:*",
     "@hermes-x/extension-api": "workspace:*",
     "@hermes-x/extension-host": "workspace:*",
     "@hermes-x/i18n": "workspace:*",
