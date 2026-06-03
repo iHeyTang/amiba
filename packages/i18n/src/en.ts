@@ -47,6 +47,8 @@ export const en = {
   "options.nav.logs": "Logs",
   "options.nav.voice": "Voice",
   "options.nav.extensions": "Extensions",
+  "options.nav.section.core": "General",
+  "options.nav.section.extensions": "Extensions",
 
   // Extensions settings page
   "options.extensions.title": "Extensions",

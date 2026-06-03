@@ -42,6 +42,8 @@ export const zhCN: Messages = {
   "options.nav.logs": "日志",
   "options.nav.voice": "语音",
   "options.nav.extensions": "扩展",
+  "options.nav.section.core": "通用",
+  "options.nav.section.extensions": "扩展",
 
   // Extensions settings page
   "options.extensions.title": "扩展",

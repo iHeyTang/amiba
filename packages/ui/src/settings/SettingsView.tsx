@@ -322,6 +322,9 @@ export function SettingsView({
         )}
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
+            <div className="px-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t("options.nav.section.core")}
+            </div>
             <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
             <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.preference")} active={mainTab === "preference"} onClick={() => onMainTabChange("preference")} />
             {showScriptsTab && (
@@ -337,7 +340,7 @@ export function SettingsView({
             {extensionTabs.length > 0 && (
               <>
                 <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                  {t("options.nav.extensions")}
+                  {t("options.nav.section.extensions")}
                 </div>
                 {extensionTabs.map((tab) => (
                   <NavBtn
