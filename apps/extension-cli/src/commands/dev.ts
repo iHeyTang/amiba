@@ -1,40 +1,41 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, utimesSync, watch as fsWatch } from "node:fs"
-import { join } from "node:path"
+import { mkdirSync, utimesSync, watch as fsWatch } from "node:fs"
+import { join, resolve } from "node:path"
 import kleur from "kleur"
 import { readExtensionManifest } from "../lib/manifest.js"
-import { resolveExtensionsDir } from "../lib/userdata.js"
+import { addLocalEntry, findLocalEntry, resolveRegistryPath } from "../lib/registry.js"
 import { spawnAsync } from "../lib/child-process.js"
 
 interface DevOptions {
-  symlink: boolean
+  symlink?: boolean  // kept for backward-compat CLI flag parsing, ignored
 }
 
-export async function devCommand(opts: DevOptions) {
-  const cwd = process.cwd()
+export async function devCommand(_opts: DevOptions) {
+  const cwd = resolve(process.cwd())
   const manifest = readExtensionManifest(cwd)
-  const extDir = resolveExtensionsDir()
-  mkdirSync(extDir, { recursive: true })
-  const target = join(extDir, manifest.id)
+  const registryPath = resolveRegistryPath()
 
-  // Set up the target slot
-  if (existsSync(target)) {
-    const stat = lstatSync(target)
-    if (stat.isSymbolicLink()) {
-      console.log(kleur.dim(`(removing existing symlink at ${target})`))
-      rmSync(target)
-    } else {
-      throw new Error(
-        `${target} already exists and is not a symlink — refusing to overwrite. ` +
-          `Run \`hermes-x-ext uninstall ${manifest.id}\` from the app, or delete it manually.`,
-      )
-    }
+  // Check if already registered at a different path (refuse with clear error).
+  const existing = findLocalEntry(registryPath, manifest.id)
+  if (existing && existing.path !== cwd) {
+    console.error(
+      kleur.red("✗"),
+      `Extension "${manifest.id}" is already registered at a different path:\n  ${existing.path}\n\n` +
+      `Uninstall it from the app first, then run \`hermes-x-ext dev\` again from the new path.`,
+    )
+    process.exit(1)
   }
 
-  if (opts.symlink) {
-    symlinkSync(cwd, target, "dir")
-    console.log(kleur.green("✓"), `Linked ${kleur.cyan(target)} → ${kleur.dim(cwd)}`)
-  } else {
-    throw new Error("--no-symlink (copy mode) not implemented yet")
+  // Register (or re-register with same path) the local entry.
+  try {
+    addLocalEntry(registryPath, manifest.id, cwd)
+    console.log(
+      kleur.green("✓"),
+      `Registered ${kleur.cyan(manifest.id)} in registry at ${kleur.dim(registryPath)}`,
+    )
+    console.log(kleur.dim(`  path: ${cwd}`))
+  } catch (e) {
+    console.error(kleur.red("✗"), e instanceof Error ? e.message : String(e))
+    process.exit(1)
   }
 
   console.log(kleur.bold("\nStarting build in watch mode…\n"))
@@ -101,7 +102,10 @@ export async function devCommand(opts: DevOptions) {
     rendererProc.kill()
   }
 
+  // On SIGINT/SIGTERM: stop the build watchers but leave the registry entry
+  // in place — user can clean up via UI uninstall or a future CLI command.
   process.on("SIGINT", () => {
+    console.log(kleur.dim("\n[hermes-x-ext] Stopping build watchers. Registry entry kept."))
     cleanup()
     process.exit(0)
   })
