@@ -1,5 +1,5 @@
 // packages/extension-host/src/renderer/make-renderer-host.ts
-import type { RendererHost, SlotEntry, SlotName } from "@hermes-x/extension-api"
+import type { Disposable, RendererHost, SlotEntry, SlotName } from "@hermes-x/extension-api"
 import type { SlotRegistry } from "./slot-registry"
 import type { ExtensionsBridge } from "../preload/index"
 
@@ -20,6 +20,12 @@ export interface RendererHostDeps {
   notify: (kind: "info" | "warn" | "error", message: string) => void
   /** Hermes-agent tool caller (mirror of the main side). */
   callTool: (tool: string, args: unknown) => Promise<unknown>
+  /**
+   * Per-extension disposable tracking array. The loader passes in a fresh
+   * array for each extension so that unloadExtension() can dispose exactly
+   * this extension's slot registrations, settings pages, and watch handles.
+   */
+  disposables: Disposable[]
 }
 
 export function makeRendererHost(extensionId: string, deps: RendererHostDeps): RendererHost {
@@ -41,7 +47,9 @@ export function makeRendererHost(extensionId: string, deps: RendererHostDeps): R
           component,
           props: options?.props,
         }
-        return deps.slotRegistry.register(slot, entry)
+        const d = deps.slotRegistry.register(slot, entry)
+        deps.disposables.push(d)
+        return d
       },
     },
     commands: {
@@ -62,13 +70,15 @@ export function makeRendererHost(extensionId: string, deps: RendererHostDeps): R
         // contributions — that keeps the underlying machinery uniform — but
         // we expose a dedicated API so extension authors don't have to know
         // the slot name and the host UI can render them in a separate group.
-        return deps.slotRegistry.register("settings.tab", {
+        const d = deps.slotRegistry.register("settings.tab", {
           extensionId,
           entryId: opts.id,
           order: opts.order ?? 100,
           component: opts.component,
           props: { labels: opts.labels, icon: opts.icon },
         })
+        deps.disposables.push(d)
+        return d
       },
     },
     storage: {

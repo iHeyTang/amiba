@@ -19,6 +19,12 @@ export interface MainHostDeps {
   /** Lifecycle hook registries. */
   bootBackground: Set<() => Promise<void> | void>
   shutdown: Set<() => Promise<void> | void>
+  /**
+   * Per-extension disposable tracking array. The loader passes in a fresh
+   * array for each extension and stores it in the disposable map so that
+   * unloadExtension() can tear down exactly this extension's contributions.
+   */
+  disposables: Disposable[]
 }
 
 export function makeMainHost(
@@ -39,20 +45,26 @@ export function makeMainHost(
     ipc: {
       expose: (channel, handler) => {
         const fullChannel = `ext.${extensionId}.${channel}`
-        return deps.channelTable.register(
+        const d = deps.channelTable.register(
           fullChannel,
           async (args, ctx) => handler(args as never, ctx),
         ) as Disposable
+        deps.disposables.push(d)
+        return d
       },
     },
     lifecycle: {
       onBootBackground: (h) => {
         deps.bootBackground.add(h)
-        return { dispose: () => deps.bootBackground.delete(h) }
+        const d: Disposable = { dispose: () => deps.bootBackground.delete(h) }
+        deps.disposables.push(d)
+        return d
       },
       onShutdown: (h) => {
         deps.shutdown.add(h)
-        return { dispose: () => deps.shutdown.delete(h) }
+        const d: Disposable = { dispose: () => deps.shutdown.delete(h) }
+        deps.disposables.push(d)
+        return d
       },
     },
     settings: {

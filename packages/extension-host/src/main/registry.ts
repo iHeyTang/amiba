@@ -16,6 +16,9 @@ export function createExtensionRegistry() {
     get(id: string): RuntimeExtension | undefined {
       return byId.get(id)
     },
+    delete(id: string): boolean {
+      return byId.delete(id)
+    },
     list(): RuntimeExtension[] {
       return [...byId.values()]
     },
