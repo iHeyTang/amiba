@@ -1,4 +1,14 @@
-import { FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  FolderOpen,
+  Loader2,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "../primitives";
@@ -25,8 +35,6 @@ import {
 } from "@hermes-x/core";
 import { useT } from "@hermes-x/i18n";
 import { cn } from "../primitives";
-import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
-import { SettingsPaneHeader } from "./SettingsPaneHeader";
 
 const ALL_KEY = "__all__";
 const UNCATEGORIZED_KEY = "__uncategorized__";
@@ -295,21 +303,103 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+interface SkillTreeNode {
+  /** Last path segment — what we render. */
+  name: string;
+  /** Full path from the skill root. For dirs: `"references"`, `"a/b"`. */
+  path: string;
+  isDir: boolean;
+  /** Bytes (files only). */
+  size?: number;
+  /** Populated for dirs; undefined for files. */
+  children?: SkillTreeNode[];
+}
+
 /**
- * Sort entries with `SKILL.md` first (the canonical entry point), then by
- * directory depth (shallower first), then alphabetically. Matches what
- * you'd want when scanning a skill — overview file, top-level docs,
- * deeper references.
+ * Build a directory tree from a flat list of file paths. At each level
+ * the order is: `SKILL.md` first (root only), then dirs before files,
+ * then alphabetical — matches VS Code's file explorer convention.
  */
-function sortSkillFiles(files: HermesSkillFileEntry[]): HermesSkillFileEntry[] {
-  return [...files].sort((a, b) => {
-    if (a.path === "SKILL.md") return -1;
-    if (b.path === "SKILL.md") return 1;
-    const depthA = a.path.split("/").length;
-    const depthB = b.path.split("/").length;
-    if (depthA !== depthB) return depthA - depthB;
-    return a.path.localeCompare(b.path);
-  });
+function buildSkillTree(files: HermesSkillFileEntry[]): SkillTreeNode[] {
+  const root: SkillTreeNode = { name: "", path: "", isDir: true, children: [] };
+  for (const f of files) {
+    const parts = f.path.split("/");
+    let cur = root;
+    for (let i = 0; i < parts.length; i++) {
+      const segment = parts[i];
+      const isLast = i === parts.length - 1;
+      if (isLast) {
+        cur.children!.push({
+          name: segment,
+          path: f.path,
+          isDir: false,
+          size: f.size,
+        });
+      } else {
+        let dir = cur.children!.find((c) => c.isDir && c.name === segment);
+        if (!dir) {
+          dir = {
+            name: segment,
+            path: parts.slice(0, i + 1).join("/"),
+            isDir: true,
+            children: [],
+          };
+          cur.children!.push(dir);
+        }
+        cur = dir;
+      }
+    }
+  }
+  function sortChildren(node: SkillTreeNode, isRoot: boolean): void {
+    if (!node.children) return;
+    node.children.sort((a, b) => {
+      if (isRoot) {
+        if (a.path === "SKILL.md") return -1;
+        if (b.path === "SKILL.md") return 1;
+      }
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const c of node.children) sortChildren(c, false);
+  }
+  sortChildren(root, true);
+  return root.children!;
+}
+
+/** Walk the tree and collect every directory's full path. */
+function collectSkillTreeDirs(nodes: SkillTreeNode[]): string[] {
+  const out: string[] = [];
+  for (const n of nodes) {
+    if (n.isDir) {
+      out.push(n.path);
+      if (n.children) out.push(...collectSkillTreeDirs(n.children));
+    }
+  }
+  return out;
+}
+
+interface FlatSkillTreeRow {
+  node: SkillTreeNode;
+  depth: number;
+}
+
+/**
+ * Flatten the tree into the visible row sequence given the current set
+ * of expanded dir paths — collapsed dirs hide their descendants.
+ */
+function flattenSkillTree(
+  nodes: SkillTreeNode[],
+  expanded: Set<string>,
+  depth = 0,
+): FlatSkillTreeRow[] {
+  const out: FlatSkillTreeRow[] = [];
+  for (const n of nodes) {
+    out.push({ node: n, depth });
+    if (n.isDir && n.children && expanded.has(n.path)) {
+      out.push(...flattenSkillTree(n.children, expanded, depth + 1));
+    }
+  }
+  return out;
 }
 
 interface SkillViewerDialogProps {
@@ -330,6 +420,14 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
   );
   const [loadingFile, setLoadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  /**
+   * Per-dir expansion state. We seed it from the freshly-loaded tree so
+   * that opening a skill shows every file inline (matches the old flat
+   * behaviour); users can then collapse subtrees as needed.
+   */
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const open = !!skill;
 
@@ -345,6 +443,7 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
     setSelectedPath(null);
     setFileBody(null);
     setFileError(null);
+    setExpandedDirs(new Set());
     setLoadingList(true);
     let cancelled = false;
     void (async () => {
@@ -355,18 +454,37 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
         setListError(r.error || "Failed to load");
         return;
       }
-      const sorted = sortSkillFiles(r.files);
-      setFiles(sorted);
+      setFiles(r.files);
       setRoot(r.root || "");
       setTruncated(!!r.truncated);
-      // Auto-select the canonical entry file so the right pane has
-      // something to show immediately.
-      if (sorted.length > 0) setSelectedPath(sorted[0].path);
+      const tree = buildSkillTree(r.files);
+      setExpandedDirs(new Set(collectSkillTreeDirs(tree)));
+      // Auto-select the canonical entry file (SKILL.md) when present so
+      // the right pane has something to show immediately; otherwise pick
+      // the first file in tree order.
+      const skillMd = r.files.find((f) => f.path === "SKILL.md");
+      const firstFile = skillMd ?? r.files[0];
+      if (firstFile) setSelectedPath(firstFile.path);
     })();
     return () => {
       cancelled = true;
     };
   }, [skill]);
+
+  const tree = useMemo(() => buildSkillTree(files), [files]);
+  const flatRows = useMemo(
+    () => flattenSkillTree(tree, expandedDirs),
+    [tree, expandedDirs],
+  );
+
+  const toggleDir = useCallback((path: string) => {
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   // Fetch the selected file's body. Encoding metadata flows straight from
   // the bridge — utf-8 renders inline; binary / too-large render a
@@ -445,28 +563,66 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
                   (no files)
                 </p>
               ) : (
-                <ul className="flex flex-col">
-                  {files.map((f) => {
-                    const isSel = f.path === selectedPath;
+                <ul className="flex flex-col py-1">
+                  {flatRows.map(({ node, depth }) => {
+                    // 8px base + 12px per nesting level — gives the
+                    // chevron/file-icon column a consistent left edge
+                    // per depth, the same trick VS Code's explorer uses.
+                    const indentPx = 8 + depth * 12;
+                    if (node.isDir) {
+                      const expanded = expandedDirs.has(node.path);
+                      return (
+                        <li key={`d:${node.path}`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleDir(node.path)}
+                            title={node.path}
+                            className="flex w-full items-center gap-1 py-1 pr-3 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                            style={{ paddingLeft: indentPx }}
+                            aria-expanded={expanded}
+                          >
+                            {expanded ? (
+                              <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3 shrink-0 opacity-70" />
+                            )}
+                            {expanded ? (
+                              <FolderOpen className="h-3 w-3 shrink-0 opacity-70" />
+                            ) : (
+                              <Folder className="h-3 w-3 shrink-0 opacity-70" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate font-mono">
+                              {node.name}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    }
+                    const isSel = node.path === selectedPath;
                     return (
-                      <li key={f.path}>
+                      <li key={`f:${node.path}`}>
                         <button
                           type="button"
-                          onClick={() => setSelectedPath(f.path)}
-                          title={`${f.path} · ${formatFileSize(f.size)}`}
+                          onClick={() => setSelectedPath(node.path)}
+                          title={`${node.path} · ${formatFileSize(node.size ?? 0)}`}
                           className={cn(
-                            "flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[11px] transition-colors",
+                            "flex w-full items-center gap-1 py-1 pr-3 text-left text-[11px] transition-colors",
                             isSel
                               ? "bg-muted text-foreground"
                               : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                           )}
+                          // Files skip the chevron column so their
+                          // FileText icon lines up with the folder icon
+                          // of a dir at the same depth (chevron 12px +
+                          // gap-1 4px = 16px).
+                          style={{ paddingLeft: indentPx + 16 }}
                         >
                           <FileText className="h-3 w-3 shrink-0 opacity-70" />
                           <span className="min-w-0 flex-1 truncate font-mono">
-                            {f.path}
+                            {node.name}
                           </span>
                           <span className="shrink-0 text-[9px] tabular-nums opacity-70">
-                            {formatFileSize(f.size)}
+                            {formatFileSize(node.size ?? 0)}
                           </span>
                         </button>
                       </li>
@@ -739,39 +895,6 @@ export function SettingsSkills() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPaneHeader
-        title={t("options.skills.title")}
-        subtitle={
-          <>
-            {t("options.skills.subtitle.summary", {
-              enabled: data.totals.enabled,
-              total: data.totals.total,
-            })}
-            {data.platform &&
-              t("options.skills.subtitle.platform", {
-                platform: data.platform,
-              })}
-          </>
-        }
-        subtitleTooltip={data.skills_dirs.join("\n") || "$HERMES_HOME/skills"}
-      >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-xs shrink-0"
-          disabled={loading}
-          onClick={() => void refresh()}
-        >
-          {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          {t("options.skills.refresh")}
-        </Button>
-      </SettingsPaneHeader>
-
       <div className="flex min-h-0 flex-1">
         {/* ── Category sidebar ── */}
         <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-muted/15">
@@ -834,11 +957,33 @@ export function SettingsSkills() {
                     ? "All"
                     : currentBucket?.label ?? category}
                 </h3>
-                <p className="text-[11px] text-muted-foreground">
+                <p
+                  className="text-[11px] text-muted-foreground"
+                  title={data.skills_dirs.join("\n") || "$HERMES_HOME/skills"}
+                >
                   {currentBucket?.count ?? data.totals.total} total ·{" "}
                   {currentBucket?.enabledCount ?? data.totals.enabled} enabled
+                  {data.platform &&
+                    t("options.skills.subtitle.platform", {
+                      platform: data.platform,
+                    })}
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 text-xs"
+                disabled={loading}
+                onClick={() => void refresh()}
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {t("options.skills.refresh")}
+              </Button>
             </div>
 
             <div className="relative">

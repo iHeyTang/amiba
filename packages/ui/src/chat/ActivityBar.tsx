@@ -1,22 +1,32 @@
 /**
  * VSCode/Obsidian-style activity bar — a narrow icon-only column on the
- * far left of the chat surface that switches the sidebar between
- * top-level views (Chats vs. Scheduled tasks). Each icon is a vertical
- * "tab" — clicking activates a view; the active item gets a left-edge
- * accent stripe and full-strength foreground colour.
+ * far left of the chat surface that switches between top-level views
+ * (Chats / Scheduled / Skills / Knowledge). Each icon is a vertical
+ * "tab" — clicking activates a view; the active item gets a soft
+ * foreground tint and full-strength foreground colour.
  *
  * Width is fixed (48px) — the same activity-bar width VSCode ships, just
  * enough to fit a 24×24 hit target with breathing room while staying
  * narrow enough that the sidebar to its right still feels primary.
+ *
+ * Chats and Scheduled drive the inner w-72 session-list sidebar. Skills
+ * and Knowledge are page-level destinations — there's no per-view
+ * sidebar list, so FullScreenChatView collapses the inner aside and
+ * lets those views fill the main pane.
  */
 
-import { MessageSquare, Clock } from "lucide-react";
+import { BookOpen, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useT } from "@hermes-x/i18n";
 import { cn } from "../primitives";
 
-export type ActivityViewId = "chats" | "scheduled";
+export type ActivityViewId =
+  | "chats"
+  | "scheduled"
+  | "skills"
+  | "knowledge"
+  | "tools";
 
 export interface ActivityItem {
   id: ActivityViewId;
@@ -43,6 +53,21 @@ export function ActivityBar({ active, onSelect, className }: ActivityBarProps) {
       id: "scheduled",
       icon: <Clock className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.scheduled"),
+    },
+    {
+      id: "skills",
+      icon: <Sparkles className="h-4 w-4" />,
+      label: t("sidepanel.sessions.group.skills"),
+    },
+    {
+      id: "knowledge",
+      icon: <BookOpen className="h-4 w-4" />,
+      label: t("sidepanel.sessions.group.knowledge"),
+    },
+    {
+      id: "tools",
+      icon: <Wrench className="h-4 w-4" />,
+      label: t("sidepanel.sessions.group.tools"),
     },
   ];
   return (

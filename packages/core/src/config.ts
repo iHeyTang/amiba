@@ -78,4 +78,16 @@ export const DEFAULT_VOICE_PREFS: VoicePrefs = {
 // ---------------------------------------------------------------------------
 export const BRAIN_URL_STORAGE_KEY = "settings.brain.url"
 export const BRAIN_TOKEN_STORAGE_KEY = "settings.brain.token"
-export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3000"
+// gbrain's `serve --http` defaults to port 3131
+// (src/commands/serve.ts: `parseInt(args[portIdx + 1]) || 3131`).
+// Users can override in Settings → Brain if they bound to a different port.
+export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3131"
+
+// ---------------------------------------------------------------------------
+// Hand-off keys between HomeView / Settings and the chat surface
+// ---------------------------------------------------------------------------
+// When a non-chat surface (HomeView composer, "one-click install" button)
+// wants to start a fresh chat with a prefilled message, it writes the
+// payload here and navigates to the chat view. ChatSurface's
+// `drainPendingPrompt` reads this once on mount and clears it.
+export const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"

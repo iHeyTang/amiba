@@ -53,10 +53,7 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
           ? [m.pageBadge]
           : []
     const fileBadges = m.attachmentBadges ?? []
-    const imageFileBadges = fileBadges.filter((b) => b.kind === "image")
-    const textFileBadges = fileBadges.filter((b) => b.kind === "text")
-    const hasReferences =
-      pageBadges.length > 0 || imageFileBadges.length > 0 || textFileBadges.length > 0
+    const hasReferences = pageBadges.length > 0 || fileBadges.length > 0
     const hasContent = bodyText.length > 0
     return (
       <div className="min-w-0 rounded-xl border border-border/60 bg-secondary px-4 py-3 text-sm text-secondary-foreground">
@@ -66,7 +63,7 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
               "flex flex-wrap items-center gap-1.5",
               hasContent && "mb-2"
             )}>
-            {imageFileBadges.map((b) => (
+            {fileBadges.map((b) => (
               <AttachmentBadgeView key={b.uiId} badge={b} />
             ))}
             {pageBadges.map((b, i) => (
@@ -77,9 +74,6 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
                 <Globe className="h-2.5 w-2.5 shrink-0" />
                 <span className="truncate">{b.title || hostnameOf(b.url) || b.url}</span>
               </div>
-            ))}
-            {textFileBadges.map((b) => (
-              <AttachmentBadgeView key={b.uiId} badge={b} />
             ))}
           </div>
         )}

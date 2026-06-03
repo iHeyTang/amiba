@@ -354,10 +354,18 @@ export interface AttachmentBadgeViewProps {
 }
 
 /**
- * Persisted-on-bubble view of one attachment. Image badges render their
- * downscaled thumbnail; everything else renders a chip mirroring the
- * `pageBadges` styling so the user-bubble footer reads as one cohesive
- * "what was attached to this turn" row.
+ * Persisted-on-bubble view of one attachment. Every kind renders as the
+ * same small pill chip so a user message that mixed images, PDFs,
+ * spreadsheets, etc. reads as one row of equal-weight badges. The icon
+ * slot adapts:
+ *
+ * - image with a thumbnail → tiny round thumb (recognisable at a
+ *   glance), whole chip is click-to-zoom via ``ImagePreviewDialog``.
+ * - image without a thumbnail → generic ``ImageIcon``, chip is inert.
+ * - text / pdf / binary → ``KindIcon`` glyph, chip is inert.
+ *
+ * Mirrors the styling of ``pageBadges`` so the user-bubble footer reads
+ * as one cohesive "what was attached to this turn" row.
  */
 export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
   const titleLines: string[] = [badge.name, `${badge.kind} • ${formatBytesShort(badge.size)}`]
@@ -368,41 +376,31 @@ export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
   }
   const title = titleLines.join("\n")
 
-  if (badge.kind === "image") {
-    if (badge.thumbDataUrl) {
-      // After send the high-res ``previewDataUrl`` is gone (deliberately
-      // dropped by ``attachmentToBadge`` to keep persisted storage small),
-      // so the modal scales the chip thumb up. Slightly soft at 256→90vh
-      // but adequate for "let me check what I sent" review.
-      return (
-        <ImagePreviewDialog src={badge.thumbDataUrl} alt={badge.name}>
-          <button
-            type="button"
-            title={title}
-            className="cursor-zoom-in rounded-md ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-          >
-            <img
-              src={badge.thumbDataUrl}
-              alt={badge.name}
-              className="h-12 w-12 rounded-md border border-border object-cover"
-            />
-          </button>
-        </ImagePreviewDialog>
-      )
-    }
-    return (
-      <div
-        className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground"
-        title={title}>
-        <ImageIcon className="h-4 w-4" />
-      </div>
-    )
-  }
-  return (
-    <div
-      className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] text-muted-foreground"
-      title={title}>
+  const isClickableImage = badge.kind === "image" && !!badge.thumbDataUrl
+
+  // Single pill template. Image variant uses ``pl-0.5`` to give the
+  // thumbnail an inset that lines up with the icon-variant text.
+  const pillClass = cn(
+    "inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 text-[10px] text-muted-foreground",
+    isClickableImage
+      ? "py-0.5 pl-0.5 pr-2 ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+      : "px-2 py-0.5",
+  )
+
+  const iconSlot =
+    badge.kind === "image" && badge.thumbDataUrl ? (
+      <img
+        src={badge.thumbDataUrl}
+        alt=""
+        className="h-3.5 w-3.5 shrink-0 rounded-full border border-border object-cover"
+      />
+    ) : (
       <KindIcon kind={badge.kind} className="h-2.5 w-2.5 shrink-0" />
+    )
+
+  const body = (
+    <>
+      {iconSlot}
       <span className="truncate">{badge.name}</span>
       {badge.fromPageContext && (
         <span
@@ -415,6 +413,28 @@ export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
           page
         </span>
       )}
+    </>
+  )
+
+  // Image-with-thumbnail badges open the click-to-zoom modal. The
+  // ImagePreviewDialog wraps a single trigger child via `asChild`, so we
+  // hand it a button styled identically to the inert div below.
+  if (isClickableImage && badge.thumbDataUrl) {
+    return (
+      <ImagePreviewDialog src={badge.thumbDataUrl} alt={badge.name}>
+        <button
+          type="button"
+          title={title}
+          className={cn(pillClass, "cursor-zoom-in")}>
+          {body}
+        </button>
+      </ImagePreviewDialog>
+    )
+  }
+
+  return (
+    <div className={pillClass} title={title}>
+      {body}
     </div>
   )
 }

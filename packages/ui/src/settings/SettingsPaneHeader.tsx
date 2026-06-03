@@ -45,7 +45,13 @@ export function SettingsPaneProvider({
 }
 
 interface SettingsPaneHeaderProps {
-  title: ReactNode;
+  /**
+   * Visible heading. Omit (along with `subtitle` and `children`) when the
+   * pane wants to keep the chrome strip — for desktop window-drag — but
+   * doesn't need a visible title (e.g. its own internal nav makes the
+   * location obvious).
+   */
+  title?: ReactNode;
   subtitle?: ReactNode;
   /** Tooltip displayed on hover over the subtitle row. */
   subtitleTooltip?: string;
@@ -58,6 +64,13 @@ interface SettingsPaneHeaderProps {
  * Title strip shared by every settings tab. Reads its drag-region class
  * and chrome height from `SettingsPaneProvider` so the host decides
  * whether the strip behaves as window chrome.
+ *
+ * Title-less mode: when no title/subtitle/children are supplied, the
+ * strip still renders (and still carries the drag-region className +
+ * chrome height) but has no visible content. Used by panes that surface
+ * their own internal navigation and don't want a redundant header above
+ * it; desktop still gets a draggable top band so the OS window-drag
+ * affordance survives.
  */
 export function SettingsPaneHeader({
   title,
@@ -67,6 +80,18 @@ export function SettingsPaneHeader({
 }: SettingsPaneHeaderProps) {
   const { className, chromeHeightPx } = useContext(PaneHeaderContext);
   const hasChromeFloor = chromeHeightPx !== undefined;
+  const hasContent = !!title || !!subtitle || !!children;
+  if (!hasContent) {
+    // Drag-only strip. Keep the className (drag region on desktop) and
+    // the chrome floor; extension/web hosts collapse to a zero-height
+    // no-op since they don't supply a chrome height.
+    return (
+      <div
+        className={cn("shrink-0", className)}
+        style={hasChromeFloor ? { minHeight: chromeHeightPx } : undefined}
+      />
+    );
+  }
   return (
     <header
       className={cn(
@@ -80,9 +105,11 @@ export function SettingsPaneHeader({
       style={hasChromeFloor ? { minHeight: chromeHeightPx } : undefined}
     >
       <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {title}
-        </h2>
+        {title && (
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            {title}
+          </h2>
+        )}
         {subtitle && (
           <p
             className="truncate text-[11px] text-muted-foreground"

@@ -40,6 +40,13 @@ export interface TopSectionProps {
    * place all sections inside a single outer scroll container.
    */
   flex?: boolean;
+  /**
+   * Optional buttons rendered at the right edge of the section header,
+   * visible only on hover. Used for per-group affordances like "trigger
+   * this cron job now". Each action MUST `stopPropagation` on its own
+   * click handler so it doesn't bubble up and toggle the section.
+   */
+  actions?: ReactNode;
 }
 
 export function TopSection({
@@ -50,6 +57,7 @@ export function TopSection({
   children,
   variant = "drawer",
   flex = false,
+  actions,
 }: TopSectionProps) {
   // Top-level sections have a bottom border so adjacent ones share a
   // single visual divider when stacked (no gap between siblings → the
@@ -60,34 +68,56 @@ export function TopSection({
     variant === "rail"
       ? "px-3 py-1.5 text-[10px]"
       : "px-2 py-1.5 text-xs";
+  // Header is a `<div>` (not a button) because `actions` may contain
+  // nested buttons, and `<button>` inside `<button>` is invalid HTML.
+  // The clickable chevron+label area is its own inner button.
   const header = (
-    <button
-      type="button"
-      onClick={onToggle}
+    <div
       className={cn(
-        "flex w-full shrink-0 items-center gap-1.5 text-left font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
+        "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
         headerCls,
       )}
-      aria-expanded={!collapsed}
     >
-      {collapsed ? (
-        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-      ) : (
-        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="flex-1 truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        aria-expanded={!collapsed}
+      >
+        {collapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+        )}
+        <span className="flex-1 truncate">{label}</span>
+      </button>
       {typeof count === "number" && count > 0 && (
-        // 24×24 right-edge slot with the number CENTRED inside —
-        // identical wrapper to the "+ new chat" button above the
-        // rail. Both items live in the same visual column at the
-        // rail's right margin; centring within that column keeps the
-        // icon glyph and number glyph at the same horizontal position
-        // (slot centre), so the two read as one tidy aligned column.
-        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-[10px] font-normal normal-case text-muted-foreground/70">
+        // Right-edge count. Rendered in natural text height (no h-6
+        // box) so the section header reads at its tighter ~26px row
+        // and doesn't visibly jump shorter when the hover action slot
+        // takes over — the action button is absolute-positioned and
+        // doesn't expand the parent, so a h-6 count would have made
+        // the row jitter on every hover.
+        <span
+          className={cn(
+            "pr-1 text-[10px] font-normal normal-case tabular-nums text-muted-foreground/70",
+            actions && "group-hover/topsection:invisible",
+          )}
+        >
           {count}
         </span>
       )}
-    </button>
+      {actions && (
+        // Absolutely positioned so its height (h-6 icon button) doesn't
+        // push the wrapper taller — the row stays at text height in
+        // both states. We use `invisible` (not `hidden`) on the count
+        // above so the layout slot is reserved; the actions then
+        // overlay that slot without any reflow.
+        <span className="absolute right-1 hidden h-6 items-center gap-0.5 group-hover/topsection:flex">
+          {actions}
+        </span>
+      )}
+    </div>
   );
 
   if (flex) {

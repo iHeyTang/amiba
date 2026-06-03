@@ -48,7 +48,10 @@ import {
   registerHermesRuntimeHandlers,
   stopAllHermesJobs,
 } from "./hermes-runtime"
-import { registerGBrainHandlers } from "./gbrain/ipc"
+import {
+  autoStartGBrainServeHttp,
+  registerGBrainHandlers,
+} from "./gbrain/ipc"
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
@@ -392,6 +395,12 @@ if (!gotSingleInstanceLock) {
     registerChatHandlers()
     registerHermesRuntimeHandlers()
     registerGBrainHandlers()
+    // Background auto-start of `gbrain serve --http`. Detached + unref'd
+    // so the server outlives the desktop process; failures (gbrain not
+    // installed, port in use) are silent here and surfaced in the UI
+    // when the user opens Brain. Lazy = run it AFTER window creation so
+    // we don't block first paint on a subprocess probe.
+    autoStartGBrainServeHttp()
     createWindow()
     createNotifierWindow()
     // Pre-create the Quick-Ask popup so the first double-tap doesn't

@@ -9,6 +9,7 @@
  */
 
 import {
+  BookOpen,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -34,6 +35,7 @@ import {
 } from "@hermes-x/core";
 import {
   Composer,
+  queueChatPrompt,
   useComposerAttachments,
   useVoiceRecorder,
   WallpaperBackdrop,
@@ -42,18 +44,20 @@ import {
 } from "../chat";
 import { shortId } from "@hermes-x/utils";
 import { useT } from "@hermes-x/i18n";
-import { getPlatform } from "@hermes-x/platform";
 import { useResolvedTheme } from "../theme";
 import { HermesLogo } from "../primitives";
 import { cn } from "../primitives";
+import {
+  buildBrainInstallPrompt,
+  ensureBrainDefaultUrl,
+  hasGBrainBridge,
+} from "../settings/brain-install";
 import type {
   FaviconCapability,
   HomeCapabilities,
   HomeShortcut,
   HomeShortcutsController,
 } from "./capabilities";
-
-const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
 
 const NO_SHORTCUTS_CONTROLLER: HomeShortcutsController = {
   ready: true,
@@ -126,7 +130,7 @@ function Home({
   hideInternalHeader,
   panelMode,
 }: HomeViewProps) {
-  const { t } = useT();
+  const { t, language } = useT();
   const sessions = useSessions();
   // Shortcuts hook is capability-provided — stable across renders. Falls
   // back to a no-op so the rules-of-hooks order stays consistent.
@@ -170,6 +174,25 @@ function Home({
   });
   const [voiceTranscribing, setVoiceTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // Brain hint — show when gbrain bridge exists but is not connected
+  const [showBrainHint, setShowBrainHint] = useState(false);
+  useEffect(() => {
+    if (!hasGBrainBridge()) return;
+    const bridge = (window as unknown as {
+      hermes: { gbrain: { health: () => Promise<unknown> } };
+    }).hermes.gbrain;
+    void bridge
+      .health()
+      .then((h) => {
+        setShowBrainHint(!h);
+      })
+      .catch(() => {
+        // Bridge exists but health probe blew up — still surface the
+        // hint; the install flow handles "not actually gbrain" cases.
+        setShowBrainHint(true);
+      });
+  }, []);
 
   // On mount: focus the composer textarea.
   useEffect(() => {
@@ -216,16 +239,21 @@ function Home({
       // empty session — "scenario 2") and creates a fresh session
       // when there isn't (newtab → chat hand-off or panelMode empty
       // activeId — "scenario 1"). One session in either case.
-      await getPlatform().storage.set({
-        [HOME_PENDING_PROMPT_KEY]: {
-          text: trimmed || undefined,
-          // Strip volatile / heavy fields (`uploading`, `thumbDataUrl`
-          // can be re-derived) — the chat surface's `drainPendingPrompt`
-          // expects the same `PendingPromptAttachment` shape every
-          // other hand-off surface produces.
-          attachments:
-            readyAttachments.length > 0
-              ? readyAttachments.map((a) => ({
+      //
+      // Uses `queueChatPrompt` (the bare write — no `createNew`)
+      // rather than the `useChatSessionRequester` hook with `mode:
+      // "new"` precisely because of the orphan-session story above.
+      await queueChatPrompt({
+        text: trimmed || undefined,
+        attachments:
+          readyAttachments.length > 0
+            ? readyAttachments
+                // `readyAttachments` is already filtered on `a.path` above
+                // (`att.attachments.filter((a) => a.path && !a.uploading)`),
+                // so each entry's path is a string at runtime. The filter
+                // doesn't narrow the type, so re-check here for TS.
+                .filter((a): a is typeof a & { path: string } => !!a.path)
+                .map((a) => ({
                   uiId: a.uiId,
                   name: a.name,
                   mime: a.mime,
@@ -235,9 +263,7 @@ function Home({
                   thumbDataUrl: a.thumbDataUrl,
                   textPreview: a.textPreview,
                 }))
-              : undefined,
-          ts: Date.now(),
-        },
+            : undefined,
       });
       // Hand-off done — drop them from the composer state without
       // deleting the files (the chat surface now owns them). Mint a
@@ -436,6 +462,29 @@ function Home({
             }
           />
         </section>
+
+        {/* Knowledge-base hint — subtle pill above the composer when
+            the gbrain bridge exists but isn't connected yet. Clicking
+            prefills the composer with the install prompt and focuses
+            the input, leaving the actual send to the user (they can
+            read/edit/back out). We still pre-seed the default brain URL
+            so a successful install lands on the right port without
+            requiring another visit to Settings → Knowledge. */}
+        {showBrainHint && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowBrainHint(false);
+              setInput(buildBrainInstallPrompt(language));
+              inputRef.current?.focus();
+              void ensureBrainDefaultUrl();
+            }}
+            className="mx-auto flex items-center gap-2 rounded-full border border-border/50 bg-background/60 px-4 py-1.5 text-xs text-muted-foreground backdrop-blur-sm transition-colors hover:border-primary/30 hover:text-foreground"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            {t("newtab.brainHint")}
+          </button>
+        )}
 
         {/*
           Shortcuts strip is extension-only (backed by chrome.bookmarks).

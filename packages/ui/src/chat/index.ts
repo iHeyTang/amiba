@@ -61,6 +61,12 @@ export {
   type VoiceRecorder,
   type MicrophoneButtonProps,
 } from "./useVoiceRecorder"
+export {
+  queueChatPrompt,
+  useChatSessionRequester,
+  type ChatSessionRequest,
+  type ChatSessionMode,
+} from "./chat-session-request"
 
 // Bubble + helpers (the visual identity of the chat surface).
 export { Bubble, MessageTurns, UserStickyBubble, type BubbleProps } from "./bubble/Bubble"

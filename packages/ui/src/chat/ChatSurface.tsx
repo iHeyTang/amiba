@@ -411,6 +411,25 @@ export default function ChatSurface({
     resolve: () => void;
     reject: (e: Error) => void;
   } | null>(null);
+  /**
+   * Survive-tab-switch cache for the user message of each in-flight
+   * turn. `runChatTurn` writes here before `client.submit` (the moment
+   * we know the local-only `userMsg` exists); the terminal-event
+   * handlers clear it. `handleSnapshot` on a switch-back-during-stream
+   * uses this to re-insert the user bubble when `loadMessages` raced
+   * the gateway's persistence and came back without it.
+   *
+   * Without this cache, the symptom is: send a message → switch to a
+   * different session → switch back before the stream finishes →
+   * **user bubble vanishes** until a hard refresh (because `saveMessages`
+   * is a no-op by design — the gateway is the persistence authority —
+   * but `loadMessages` reads from the gateway and the user-message DB
+   * write hasn't landed yet). The cache scopes by sessionId so multiple
+   * in-flight sessions don't trample each other.
+   */
+  const inFlightTurnByIdRef = useRef<
+    Map<string, { user: UiMessage; assistantUiId: string }>
+  >(new Map());
   // Pending-turn queue, per-session persistence, send/stop/sendNow/
   // edit/cancel/remove + the two pre-emption refs all live in
   // `usePendingQueue` — see destructure below `runChatTurn`. The hook
@@ -711,19 +730,43 @@ export default function ChatSurface({
         next[idx] = { ...next[idx], ...merged };
         return next;
       }
-      // Cold-open mid-stream: the panel never persisted the assistant
-      // placeholder (it lived only in memory and the window closed
-      // inside the 250ms debounce). Synthesize one now so subsequent
-      // chunk/verbose flushes — which match by ``assistantUiId`` —
-      // have a bubble to mutate. The matching user bubble is owned by
-      // the Hermes backplane (api_server persists user messages at
-      // request time) and was loaded into ``prev`` by ``loadMessages``.
+      // Cold-open mid-stream OR switch-back-during-stream: the panel
+      // doesn't have a bubble matching ``state.assistantUiId`` yet.
+      // Synthesize one so chunk/verbose flushes find it.
       const synthesized: UiMessage = {
         uiId: state.assistantUiId!,
         role: "assistant",
         content: "",
         ...merged,
       };
+      // The matching user bubble normally comes from ``loadMessages``
+      // (api_server persists user messages at request time). But
+      // `loadMessages` is an HTTP read against the gateway; on a
+      // switch-back-during-stream it can race the user-message DB
+      // write and return without it, leaving the panel showing only
+      // the assistant bubble (or nothing) until the next refresh.
+      // Pull the user bubble out of `inFlightTurnByIdRef` — the cache
+      // we populated in `runChatTurn` before posting — when the
+      // snapshot's assistantUiId matches our cache entry AND ``prev``
+      // doesn't already contain a user message with the same content
+      // near the tail (loaded-from-gateway dedup).
+      const cached = inFlightTurnByIdRef.current.get(sessionId);
+      const cacheMatchesThisTurn =
+        cached && cached.assistantUiId === state.assistantUiId;
+      const tailUser = (() => {
+        for (let i = arr.length - 1; i >= 0; i--) {
+          if (arr[i].role === "user") return arr[i];
+          if (arr[i].role === "assistant") break;
+        }
+        return null;
+      })();
+      const userAlreadyPresent =
+        !!tailUser &&
+        !!cached &&
+        tailUser.content === cached.user.content;
+      if (cacheMatchesThisTurn && !userAlreadyPresent) {
+        return [...arr, cached.user, synthesized];
+      }
       return [...arr, synthesized];
     });
     stream.applyVerboseToAssistant();
@@ -762,6 +805,7 @@ export default function ChatSurface({
     agentFinalTitle?: string,
   ): void {
     if (sessionId !== sessions.activeId) {
+      inFlightTurnByIdRef.current.delete(sessionId);
       resolvePendingTurn(sessionId);
       return;
     }
@@ -806,6 +850,7 @@ export default function ChatSurface({
         console.warn("[sidepanel] auto-title trigger failed:", e);
       });
     setBusy(false);
+    inFlightTurnByIdRef.current.delete(sessionId);
     resolvePendingTurn(sessionId);
   }
 
@@ -842,6 +887,9 @@ export default function ChatSurface({
     // immediately so the `[stopped]` tail actually reaches storage.
     void sessions.flushPersist();
     setBusy(false);
+    if (sessions.activeId) {
+      inFlightTurnByIdRef.current.delete(sessions.activeId);
+    }
   }
 
   function handleStreamAborted(sessionId: string): void {
@@ -855,6 +903,11 @@ export default function ChatSurface({
       return;
     }
     if (sessionId !== sessions.activeId) {
+      // Background-session abort. We don't own this session's
+      // visible bubble, but we do still own its in-flight cache entry
+      // — drop it so a future switch back doesn't re-insert a stale
+      // user bubble for a turn that's already over.
+      inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
       return;
     }
@@ -867,6 +920,7 @@ export default function ChatSurface({
     event: Extract<StreamEvent, { kind: "error" }>,
   ): void {
     if (sessionId !== sessions.activeId) {
+      inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new Error(event.message));
       return;
     }
@@ -888,6 +942,7 @@ export default function ChatSurface({
       );
     }
     setBusy(false);
+    inFlightTurnByIdRef.current.delete(sessionId);
     rejectPendingTurn(sessionId, new Error(event.message));
   }
 
@@ -1206,6 +1261,14 @@ export default function ChatSurface({
       const next = [...prev, userMsg, assistantMsg];
       void sessions.touchSession(sessionId, next);
       return next;
+    });
+    // Cache the (userMsg, assistantUiId) pair so a tab-switch-and-back
+    // during the stream can re-insert the user bubble if loadMessages
+    // beat the gateway's persistence write. Cleared by the terminal
+    // event handlers (done / aborted / error).
+    inFlightTurnByIdRef.current.set(sessionId, {
+      user: userMsg,
+      assistantUiId: assistantMsg.uiId,
     });
     // Persist immediately so a refresh between bubble-append and the
     // first SW echo doesn't lose the user message. The standard

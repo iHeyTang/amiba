@@ -1,10 +1,10 @@
 import {
   Activity,
+  BookOpen,
   Bot,
   BrainCircuit,
   Clock,
   Code2,
-  Database,
   FilePlus2,
   FileText,
   Globe,
@@ -13,7 +13,6 @@ import {
   Palette,
   RadioTower,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -38,25 +37,28 @@ import { HermesModelConfigTab } from "./HermesModelConfigTab";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { ScriptEditor } from "./ScriptEditor";
 import { ScriptList } from "./ScriptList";
-import { SettingsBrain } from "./SettingsBrain";
+import { SettingsBrainConfig } from "./SettingsBrainConfig";
 import { SettingsCron } from "./SettingsCron";
 import { SettingsGateway } from "./SettingsGateway";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { SettingsPreferences } from "./SettingsPreferences";
-import { SettingsSkills } from "./SettingsSkills";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
 
 /**
  * Sidebar order (two groups):
  *   Extension:  Preference → Userscripts (hidden when userscripts capability absent)
- *   Hermes:     Gateway → Models → Skills → Memory → Cron
+ *   Hermes:     Gateway → Models → Memory → Brain → Voice → Cron → Logs
  *
- * Within the Hermes group, items go static → dynamic: Gateway (connection),
- * Models (which LLM), Skills (capabilities), Memory (state), Cron (scheduled
- * actions on top of all of the above).
+ * The knowledge workspace (Brain) still lives on the chat surface's
+ * activity bar — that's the daily-use surface. The "brain" tab here
+ * owns the configuration only (URL / Token / runtime status), so admin
+ * tweaks don't clutter the workspace.
+ *
+ * Skills used to live here too but has been fully promoted to a
+ * top-level destination on the chat surface's activity bar.
  */
 const ALL_TABS = [
   "status",
@@ -64,10 +66,9 @@ const ALL_TABS = [
   "scripts",
   "gateway",
   "models",
-  "skills",
   "memory",
-  "voice",
   "brain",
+  "voice",
   "cron",
   "logs",
 ] as const;
@@ -324,10 +325,9 @@ export function SettingsView({
             <Separator className="my-1.5" />
             <NavBtn icon={<RadioTower className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.gateway")} active={mainTab === "gateway"} onClick={() => onMainTabChange("gateway")} />
             <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
-            <NavBtn icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.skills")} active={mainTab === "skills"} onClick={() => onMainTabChange("skills")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
+            <NavBtn icon={<BookOpen className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.brain")} active={mainTab === "brain"} onClick={() => onMainTabChange("brain")} />
             <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
-            <NavBtn icon={<Database className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.brain")} active={mainTab === "brain"} onClick={() => onMainTabChange("brain")} />
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
           </nav>
@@ -342,8 +342,8 @@ export function SettingsView({
           <HermesModelConfigTab />
         ) : mainTab === "memory" ? (
           <SettingsMemory />
-        ) : mainTab === "skills" ? (
-          <SettingsSkills />
+        ) : mainTab === "brain" ? (
+          <SettingsBrainConfig />
         ) : mainTab === "voice" ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SettingsPaneHeader
@@ -356,8 +356,6 @@ export function SettingsView({
               </div>
             </ScrollArea>
           </div>
-        ) : mainTab === "brain" ? (
-          <SettingsBrain />
         ) : mainTab === "cron" ? (
           <SettingsCron />
         ) : mainTab === "status" ? (
@@ -442,17 +440,7 @@ export function SettingsView({
                 </ScrollArea>
               </>
             ) : mainTab === "preference" ? (
-              <>
-                <SettingsPaneHeader
-                  title={t("options.preference.title")}
-                  subtitle={t("options.preference.subtitle")}
-                />
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="p-6">
-                    <SettingsPreferences />
-                  </div>
-                </ScrollArea>
-              </>
+              <SettingsPreferences />
             ) : (
               <>
                 <SettingsPaneHeader

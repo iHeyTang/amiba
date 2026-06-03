@@ -16,6 +16,7 @@ import {
   useMemo,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 
 import {
@@ -56,6 +57,13 @@ export interface SessionsListViewProps {
    * resolves the cron job id into a human-readable job name.
    */
   sectionLabelFor?: (source: string) => string;
+  /**
+   * Per-section right-edge actions (icon buttons), revealed on hover.
+   * Returning `null`/`undefined` hides the slot for that section. Used
+   * by the Scheduled view to surface a "trigger this job now" button
+   * per cron-job group.
+   */
+  sectionActionsFor?: (source: string) => ReactNode;
 }
 
 export function SessionsListView({
@@ -70,6 +78,7 @@ export function SessionsListView({
   emptyLabel,
   noMatchesLabel,
   sectionLabelFor,
+  sectionActionsFor,
 }: SessionsListViewProps) {
   const { t } = useT();
 
@@ -212,6 +221,7 @@ export function SessionsListView({
                   onToggle={() => toggleTop(sec.source)}
                   variant="rail"
                   flex
+                  actions={sectionActionsFor?.(sec.source)}
                 >
                   <nav className="flex flex-col">
                     {sec.items.map((s) => (

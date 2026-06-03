@@ -13,7 +13,7 @@
  * uses it as the chat view inside the main BrowserWindow.
  */
 
-import { Home, Plus, Settings, X } from "lucide-react";
+import { Home, Loader2, Plus, Settings, X, Zap } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -27,12 +27,13 @@ import {
 import {
   getHermesCronJobs,
   parseCronSessionJobId,
+  triggerHermesCronJob,
   useCronSessions,
   useSessions,
   type ChatEngineClient,
   type SessionMeta,
 } from "@hermes-x/core";
-import { useT, type TranslateFn } from "@hermes-x/i18n";
+import { useT } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
@@ -45,6 +46,9 @@ import {
   useSessionTitle,
 } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
+import { SettingsBrain } from "../settings/SettingsBrain";
+import { SettingsSkills } from "../settings/SettingsSkills";
+import { ToolsView } from "../tools/ToolsView";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -53,7 +57,22 @@ const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 
 function isSidebarView(v: unknown): v is ActivityViewId {
-  return v === "chats" || v === "scheduled";
+  return (
+    v === "chats" ||
+    v === "scheduled" ||
+    v === "skills" ||
+    v === "knowledge" ||
+    v === "tools"
+  );
+}
+
+/**
+ * Page-level activity views — they don't share the inner session-list
+ * sidebar that "chats" and "scheduled" drive. When one of these is
+ * active the w-72 aside is hidden and the main pane fills the width.
+ */
+function isPageView(v: ActivityViewId): boolean {
+  return v === "skills" || v === "knowledge" || v === "tools";
 }
 
 /**
@@ -74,28 +93,6 @@ function formatRunTitle(ms: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function widthOptions(
-  t: TranslateFn,
-): Array<{ value: MessagesMaxWidth; label: string; tooltip: string }> {
-  return [
-    {
-      value: "narrow",
-      label: t("chat.width.narrow"),
-      tooltip: t("chat.width.narrow.tooltip"),
-    },
-    {
-      value: "comfortable",
-      label: t("chat.width.medium"),
-      tooltip: t("chat.width.medium.tooltip"),
-    },
-    {
-      value: "full",
-      label: t("chat.width.full"),
-      tooltip: t("chat.width.full.tooltip"),
-    },
-  ];
 }
 
 function isMessagesMaxWidth(v: unknown): v is MessagesMaxWidth {
@@ -121,8 +118,13 @@ export interface FullScreenChatViewProps {
      */
     emptyState?: ReactNode;
   };
-  /** TabBar gear / top-bar gear → open Settings. */
-  openSettings: () => void;
+  /**
+   * TabBar gear / top-bar gear → open Settings. The optional ``tab``
+   * argument names the Settings sub-pane to land on (matches the
+   * SettingsView hash routing — e.g. ``"brain"``); when omitted, the
+   * host opens the user's last-active pane.
+   */
+  openSettings: (tab?: string) => void;
   /** AgentDestinationChip — open URL in user's primary browser. */
   openAgentDestination: (url: string) => void | Promise<void>;
   /**
@@ -259,6 +261,17 @@ function FullScreenChatViewInner({
     [cronJobNames, t],
   );
 
+  // Per-section trigger button. Orphan sections aren't tied to any
+  // running cron job — there's nothing to trigger — so we skip them.
+  const cronSectionActionsFor = useCallback(
+    (src: string): ReactNode => {
+      if (src === CRON_ORPHAN_SOURCE) return null;
+      const displayName = cronJobNames.get(src) ?? src;
+      return <CronTriggerButton jobId={src} jobName={displayName} />;
+    },
+    [cronJobNames],
+  );
+
   // Active chat-session title — used as one of the top-bar placeholder
   // sources. Cron runs are resolved separately below because they need
   // job-name enrichment that doesn't fit the SessionMeta.title field
@@ -340,11 +353,6 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }
 
-  function onWidthChange(next: MessagesMaxWidth) {
-    setMessagesWidth(next);
-    void getPlatform().storage.set({ [MESSAGES_WIDTH_KEY]: next });
-  }
-
   const onNewChat = useCallback(async () => {
     if (!sessions.ready) return;
     await sessions.createNew();
@@ -391,8 +399,6 @@ function FullScreenChatViewInner({
         onQueryChange={setQuery}
         searchPlaceholder={topBarPlaceholder}
         onNewChat={sidebarView === "chats" ? () => void onNewChat() : undefined}
-        messagesWidth={messagesWidth}
-        onMessagesWidthChange={onWidthChange}
         onOpenSettings={openSettings}
         leftInset={topBarLeftInset}
         heightPx={topBarHeightPx}
@@ -403,43 +409,63 @@ function FullScreenChatViewInner({
           active={sidebarView}
           onSelect={onSidebarViewChange}
         />
-        <aside className="flex min-h-0 w-72 shrink-0 flex-col bg-muted/40">
-          {sidebarView === "chats" ? (
-            <SessionsListView
-              sessions={chatSessions}
-              activeId={sessions.activeId}
-              ready={sessions.ready}
-              query={query}
-              onOpen={(id) => void onOpenSession(id)}
-              onRename={(id, title) => void sessions.rename(id, title)}
-              onDelete={(id) => void sessions.remove(id)}
-              onRefresh={() => void sessions.refresh()}
-            />
+        {/* Inner session-list aside — only when a session-driven view
+            (chats / scheduled) is active. Skills and Knowledge are
+            page-level views with no per-row navigation, so we drop the
+            aside entirely and let the main pane fill the width. */}
+        {!isPageView(sidebarView) && (
+          <aside className="flex min-h-0 w-72 shrink-0 flex-col bg-muted/40">
+            {sidebarView === "chats" ? (
+              <SessionsListView
+                sessions={chatSessions}
+                activeId={sessions.activeId}
+                ready={sessions.ready}
+                query={query}
+                onOpen={(id) => void onOpenSession(id)}
+                onRename={(id, title) => void sessions.rename(id, title)}
+                onDelete={(id) => void sessions.remove(id)}
+                onRefresh={() => void sessions.refresh()}
+              />
+            ) : (
+              <SessionsListView
+                sessions={cronSessionsAsMeta}
+                activeId={sessions.activeId}
+                ready={cronSessions.ready}
+                query={query}
+                onOpen={(id) => void onOpenSession(id)}
+                onRename={(id, title) => void sessions.rename(id, title)}
+                onDelete={(id) => void sessions.remove(id)}
+                onRefresh={() => void cronSessions.refresh()}
+                emptyLabel={t("sidepanel.sessions.scheduled.empty")}
+                sectionLabelFor={cronSectionLabelFor}
+                sectionActionsFor={cronSectionActionsFor}
+              />
+            )}
+          </aside>
+        )}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {sidebarView === "knowledge" ? (
+            // Brain pane was previously a Settings tab — promoted here
+            // as a top-level destination. Its one-click install needs
+            // a way back to a fresh chat surface to host the agent's
+            // install conversation, so we wire `onOpenChat` to flip
+            // the activity view back to "chats".
+            <SettingsBrain onOpenChat={() => onSidebarViewChange("chats")} />
+          ) : sidebarView === "skills" ? (
+            <SettingsSkills />
+          ) : sidebarView === "tools" ? (
+            <ToolsView />
           ) : (
-            <SessionsListView
-              sessions={cronSessionsAsMeta}
-              activeId={sessions.activeId}
-              ready={cronSessions.ready}
-              query={query}
-              onOpen={(id) => void onOpenSession(id)}
-              onRename={(id, title) => void sessions.rename(id, title)}
-              onDelete={(id) => void sessions.remove(id)}
-              onRefresh={() => void cronSessions.refresh()}
-              emptyLabel={t("sidepanel.sessions.scheduled.empty")}
-              sectionLabelFor={cronSectionLabelFor}
+            <ChatSurface
+              variant="fullscreen"
+              messagesMaxWidth={messagesWidth}
+              client={client}
+              capabilities={capabilities}
+              slots={slots}
+              openSettings={openSettings}
+              openAgentDestination={openAgentDestination}
             />
           )}
-        </aside>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ChatSurface
-            variant="fullscreen"
-            messagesMaxWidth={messagesWidth}
-            client={client}
-            capabilities={capabilities}
-            slots={slots}
-            openSettings={openSettings}
-            openAgentDestination={openAgentDestination}
-          />
         </main>
       </div>
     </div>
@@ -469,9 +495,6 @@ interface UnifiedTopBarProps {
    * stays scoped to where it actually makes sense.
    */
   onNewChat?: () => void;
-  /** Width preset for the messages column. */
-  messagesWidth: MessagesMaxWidth;
-  onMessagesWidthChange: (next: MessagesMaxWidth) => void;
   onOpenSettings: () => void;
   /** Reserve on the left edge so OS chrome (mac traffic lights) clears. */
   leftInset?: number;
@@ -486,7 +509,7 @@ interface UnifiedTopBarProps {
  *
  *   - left:   traffic-light reserve (transparent, drag region) + Home button
  *   - centre: command-center style search input (VSCode reference)
- *   - right:  new-chat (Chats view only) + width toggle + Settings gear
+ *   - right:  new-chat (Chats view only) + Settings gear
  *
  * The centre input is the single search affordance for both activity
  * views — the sidebar no longer owns its own search row.
@@ -497,8 +520,6 @@ function UnifiedTopBar({
   onQueryChange,
   searchPlaceholder,
   onNewChat,
-  messagesWidth,
-  onMessagesWidthChange,
   onOpenSettings,
   leftInset = 0,
   heightPx = 24,
@@ -611,7 +632,7 @@ function UnifiedTopBar({
         </div>
       </div>
 
-      {/* Right cluster: new-chat (chats view) + width toggle + settings. */}
+      {/* Right cluster: new-chat (chats view) + settings. */}
       <div className="app-no-drag flex items-center gap-1">
         {onNewChat && (
           <button
@@ -624,7 +645,6 @@ function UnifiedTopBar({
             <Plus className="h-3.5 w-3.5" />
           </button>
         )}
-        <WidthToggle value={messagesWidth} onChange={onMessagesWidthChange} />
         <button
           type="button"
           onClick={onOpenSettings}
@@ -640,64 +660,84 @@ function UnifiedTopBar({
 }
 
 /**
- * Three icon buttons laid out inline next to the other top-bar icons —
- * same `h-8 w-8` cell size, same hover behavior, just an active-state
- * fill to mark the current preset. No outer border / chip so the
- * control reads at the same visual weight as `⛶ pop back` and `⚙`.
+ * Hover-revealed "Run this cron job now" affordance for the Scheduled
+ * sidebar. Renders inside `TopSection.actions` for each per-job
+ * section; the section header's hover state controls visibility.
+ *
+ * Click → native `confirm()` (matches how `SettingsCron` confirms
+ * destructive actions — keeps the keyboard / accessibility behaviour
+ * consistent without introducing a new Dialog instance per section).
+ * On confirm, fires `triggerHermesCronJob(jobId)` and disables the
+ * button while the request is in flight. We do not surface success
+ * inline — the trigger lands on the next scheduler tick and the run
+ * will show up under the section like any other.
  */
-function WidthToggle({
-  value,
-  onChange,
+function CronTriggerButton({
+  jobId,
+  jobName,
 }: {
-  value: MessagesMaxWidth;
-  onChange: (next: MessagesMaxWidth) => void;
+  jobId: string;
+  jobName: string;
 }) {
   const { t } = useT();
-  const options = widthOptions(t);
-  return (
-    <div
-      role="radiogroup"
-      aria-label={t("chat.width.label")}
-      className="flex items-center"
-    >
-      {options.map((opt) => {
-        const active = opt.value === value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(opt.value)}
-            title={opt.tooltip}
-            aria-label={opt.tooltip}
-            className={cn(
-              "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors",
-              active
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <WidthBars value={opt.value} />
-          </button>
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (busy) return;
+    const ok = window.confirm(
+      t("sidepanel.sessions.scheduled.triggerConfirm", { name: jobName }),
+    );
+    if (!ok) return;
+    setError(null);
+    setBusy(true);
+    void (async () => {
+      try {
+        const r = await triggerHermesCronJob(jobId);
+        if (!r.ok) {
+          setError(r.error ?? "Trigger failed");
+          window.alert(
+            t("sidepanel.sessions.scheduled.triggerFailed", {
+              error: r.error ?? "Trigger failed",
+            }),
+          );
+        }
+      } catch (err) {
+        const msg = (err as Error).message ?? String(err);
+        setError(msg);
+        window.alert(
+          t("sidepanel.sessions.scheduled.triggerFailed", { error: msg }),
         );
-      })}
-    </div>
-  );
-}
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
 
-/**
- * Tiny inline width indicator: a horizontal bar whose visible portion
- * grows with the preset. Pure CSS — no extra dependency on an icon set
- * that doesn't ship something this specific.
- */
-function WidthBars({ value }: { value: MessagesMaxWidth }) {
-  const span = value === "narrow" ? "w-1.5" : value === "comfortable" ? "w-3" : "w-4";
   return (
-    <span className="relative inline-block h-2.5 w-4 overflow-hidden rounded-[2px] border border-current">
-      <span className={cn("absolute inset-y-0 left-0 bg-current", span)} />
-    </span>
+    <button
+      type="button"
+      onClick={handleClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      disabled={busy}
+      aria-label={t("sidepanel.sessions.scheduled.trigger")}
+      title={
+        error
+          ? t("sidepanel.sessions.scheduled.triggerFailed", { error })
+          : t("sidepanel.sessions.scheduled.trigger")
+      }
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground",
+        busy && "cursor-wait opacity-60",
+      )}
+    >
+      {busy ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Zap className="h-3.5 w-3.5" />
+      )}
+    </button>
   );
 }
-
 

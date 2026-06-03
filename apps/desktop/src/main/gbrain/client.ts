@@ -35,11 +35,26 @@ interface InitializeResult {
   capabilities: Record<string, unknown>
 }
 
-/** Health check response from GET /health. */
+/**
+ * Health check response from gbrain's GET /health.
+ *
+ * Field shape varies across versions:
+ *   - Released 0.42.x: { status: 'ok', version, engine }
+ *   - Master / unreleased: + transport: 'http', db
+ *
+ * We treat both as valid. Identity check (see `health()`) accepts any
+ * response where `status === 'ok'` literally AND `version` is a
+ * non-empty string — that combination filters out generic /health
+ * endpoints on other services (`{"status": true}`, plain `{"ok": true}`,
+ * FastAPI errors with `{"detail":...}`) without locking us to a
+ * specific gbrain release's optional fields.
+ */
 export interface GBrainHealthResult {
   status: string
   version?: string
   db?: string
+  transport?: string
+  engine?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +92,19 @@ export class GBrainClient {
 
   /**
    * Ping gbrain's `GET /health` endpoint. No auth required.
-   * Returns null if gbrain is unreachable.
+   * Returns null if gbrain is unreachable OR if the responder isn't
+   * actually gbrain (some other service on the same port may answer
+   * with an OK-shaped JSON — we want to refuse those rather than
+   * stream MCP calls into a stranger and fail later with a confusing
+   * 405/422/etc).
+   *
+   * Identity check: accept any response with `status === "ok"`
+   * (literal string — `{"status": true}` and other generic shapes
+   * fail this) AND a non-empty `version` string. Both released gbrain
+   * (`{status, version, engine}`) and master (`{status, version,
+   * transport, db}`) satisfy these; common false-positives
+   * (`{"status": true}`, `{"ok": true}`, FastAPI's `{"detail":...}`)
+   * do not.
    */
   async health(): Promise<GBrainHealthResult | null> {
     try {
@@ -85,7 +112,10 @@ export class GBrainClient {
         signal: AbortSignal.timeout(5_000),
       })
       if (!res.ok) return null
-      return (await res.json()) as GBrainHealthResult
+      const body = (await res.json()) as Partial<GBrainHealthResult>
+      if (body?.status !== "ok") return null
+      if (typeof body.version !== "string" || !body.version) return null
+      return body as GBrainHealthResult
     } catch {
       return null
     }
@@ -116,6 +146,18 @@ export class GBrainClient {
     return this.extractContent<T>(result)
   }
 
+  /**
+   * Authenticated probe — forces a fresh MCP `initialize` handshake
+   * against `/mcp`. Unlike `health()`, this call carries the bearer
+   * token, so an invalid/missing token surfaces as a 401 here rather
+   * than at first tool use. Used by the Settings "Test Connection"
+   * button so the user gets immediate feedback on token validity.
+   */
+  async verifyAuth(): Promise<void> {
+    this.initialized = false
+    await this.initialize()
+  }
+
   // -------------------------------------------------------------------------
   // JSON-RPC transport
   // -------------------------------------------------------------------------
@@ -133,6 +175,7 @@ export class GBrainClient {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
         Authorization: `Bearer ${this.token}`,
       },
       body,
@@ -146,7 +189,14 @@ export class GBrainClient {
       )
     }
 
-    const json = (await res.json()) as JsonRpcResponse
+    // The MCP Streamable HTTP transport lets the server respond with
+    // either application/json OR text/event-stream — we advertised
+    // both in Accept, so we have to handle both here. Servers that
+    // wrap responses in SSE send `event: message\ndata: <json>\n\n`.
+    const contentType = res.headers.get("content-type") ?? ""
+    const json = contentType.includes("text/event-stream")
+      ? await this.readSseResponse(res, id)
+      : ((await res.json()) as JsonRpcResponse)
 
     if (json.error) {
       throw new Error(
@@ -157,17 +207,62 @@ export class GBrainClient {
     return json.result
   }
 
+  /**
+   * Parse a one-shot SSE response from /mcp and return the JSON-RPC
+   * payload matching `expectedId`. Each SSE event looks like:
+   *
+   *   event: message
+   *   data: {"jsonrpc":"2.0","id":1,"result":{...}}
+   *
+   * A single response may contain progress notifications before the
+   * final result, so we walk every `data:` line and return the first
+   * one that is a JSON-RPC response with the matching id.
+   */
+  private async readSseResponse(
+    res: Response,
+    expectedId: number,
+  ): Promise<JsonRpcResponse> {
+    const raw = await res.text()
+    // SSE events are separated by blank lines; data fields may span
+    // multiple `data:` lines within one event (joined by '\n').
+    const events = raw.split(/\r?\n\r?\n/)
+    for (const evt of events) {
+      const dataLines: string[] = []
+      for (const line of evt.split(/\r?\n/)) {
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).replace(/^ /, ""))
+        }
+      }
+      if (dataLines.length === 0) continue
+      const payload = dataLines.join("\n")
+      try {
+        const parsed = JSON.parse(payload) as Partial<JsonRpcResponse>
+        if (parsed.jsonrpc === "2.0" && parsed.id === expectedId) {
+          return parsed as JsonRpcResponse
+        }
+      } catch {
+        // Not JSON (e.g. a ping/comment) — skip.
+      }
+    }
+    throw new Error(
+      `gbrain: no matching JSON-RPC response in SSE stream (id=${expectedId})`,
+    )
+  }
+
   // -------------------------------------------------------------------------
   // MCP initialize handshake
   // -------------------------------------------------------------------------
 
   private async initialize(): Promise<void> {
     try {
-      // Step 1: initialize
-      const initResult = (await this.rpc(
-        "initialize",
-        {},
-      )) as InitializeResult
+      // Step 1: initialize. The MCP spec requires protocolVersion,
+      // capabilities, and clientInfo — sending {} makes strict servers
+      // (newer gbrain validates with zod) reject with -32603.
+      const initResult = (await this.rpc("initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "hermes-x-desktop", version: "0.1.0" },
+      })) as InitializeResult
       console.log(
         "[gbrain] connected to %s v%s (protocol %s)",
         initResult.serverInfo?.name,
