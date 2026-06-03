@@ -59,6 +59,16 @@ export const zhCN: Messages = {
   "options.extensions.uninstall.confirm.body": "{name} 将从应用中移除。<userData>/extensions/{id}/ 目录会被删除。",
   "options.extensions.sideload.error": "侧载失败：{error}",
   "options.extensions.empty": "暂无已安装扩展。点击「从文件夹加载…」开始。",
+  "options.extensions.tab.installed": "已安装",
+  "options.extensions.tab.browse": "浏览",
+  "options.extensions.browse.loading": "正在加载市场…",
+  "options.extensions.browse.empty": "暂无插件。",
+  "options.extensions.browse.error": "无法加载市场：{error}",
+  "options.extensions.browse.install": "安装",
+  "options.extensions.browse.installed": "已安装",
+  "options.extensions.browse.installing": "安装中…",
+  "options.extensions.browse.installFailed": "安装失败：{error}",
+  "options.extensions.browse.indexUrl": "索引：{url}",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",

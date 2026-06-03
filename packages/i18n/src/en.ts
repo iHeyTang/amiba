@@ -64,6 +64,16 @@ export const en = {
   "options.extensions.uninstall.confirm.body": "{name} will be removed from this app. The folder at <userData>/extensions/{id}/ will be deleted.",
   "options.extensions.sideload.error": "Could not sideload: {error}",
   "options.extensions.empty": "No extensions installed yet. Sideload one to get started.",
+  "options.extensions.tab.installed": "Installed",
+  "options.extensions.tab.browse": "Browse",
+  "options.extensions.browse.loading": "Loading marketplace…",
+  "options.extensions.browse.empty": "Marketplace is empty.",
+  "options.extensions.browse.error": "Could not load marketplace: {error}",
+  "options.extensions.browse.install": "Install",
+  "options.extensions.browse.installed": "Installed",
+  "options.extensions.browse.installing": "Installing…",
+  "options.extensions.browse.installFailed": "Install failed: {error}",
+  "options.extensions.browse.indexUrl": "Index: {url}",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
