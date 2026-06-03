@@ -14,10 +14,6 @@
  *
  *   3. **Providers** — dynamic enumeration of gbrain's recipe registry
  *      via the `gbrain providers list` CLI subprocess, with each row
- *      showing the env var name a user needs to set.
- *
- *   3. **Providers** — dynamic enumeration of gbrain's recipe registry
- *      via the `gbrain providers list` CLI subprocess, with each row
  *      expandable into an inline editor that writes per-provider env
  *      values into hermes-x's encrypted override store (`safeStorage`
  *      → `~/.hermes/provider-env.json`). The launcher merges those on
