@@ -3,9 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Extra script-src allowances (only on the main window, not notifier /
+      quick-ask) needed by the extension system:
+        - 'unsafe-inline' lets us inject the <script type="importmap"> at
+          runtime (Vite has no build-time hook for runtime-generated maps).
+        - blob: lets the importmap's trampoline modules load.
+        - hermes-ext: serves extension bundles from `<userData>/extensions/`
+          via the custom protocol registered in main.
+      script-src-elem is also broadened because Chromium falls back to it
+      for <script> tag loads when present.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self'"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext:; script-src 'self' 'unsafe-inline' blob: hermes-ext:; script-src-elem 'self' 'unsafe-inline' blob: hermes-ext:"
     />
     <title>Hermes</title>
   </head>
