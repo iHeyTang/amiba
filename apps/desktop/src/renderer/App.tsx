@@ -1,4 +1,6 @@
 import { getHermesStatus, SessionsProvider } from "@hermes-x/core"
+import { SlotRegistryProvider } from "@hermes-x/extension-host/renderer"
+import { useT } from "@hermes-x/i18n"
 import { FullScreenChatView } from "@hermes-x/ui"
 import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
@@ -6,6 +8,8 @@ import { SettingsView } from "@hermes-x/ui"
 import { useResolvedTheme } from "@hermes-x/ui"
 import { Loader2 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactElement } from "react"
+
+import { bootExtensions, slotRegistry } from "./extensions-boot"
 
 import { ElectronChatEngineClient } from "./chat/electron-engine-client"
 import { desktopCapabilities } from "./chat/desktop-capabilities"
@@ -52,14 +56,22 @@ type Phase = "loading" | "onboarding" | "ready"
 
 export default function App() {
   return (
-    <SessionsProvider>
-      <AppInner />
-    </SessionsProvider>
+    <SlotRegistryProvider registry={slotRegistry}>
+      <SessionsProvider>
+        <AppInner />
+      </SessionsProvider>
+    </SlotRegistryProvider>
   )
 }
 
 function AppInner(): ReactElement {
   useResolvedTheme()
+  const { t } = useT()
+  const [extensionsReady, setExtensionsReady] = useState(false)
+  useEffect(() => {
+    void bootExtensions(t).finally(() => setExtensionsReady(true))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("chat")
   const [phase, setPhase] = useState<Phase>("loading")
@@ -81,7 +93,7 @@ function AppInner(): ReactElement {
 
   const openAgentDestination = (url: string) => getPlatform().shell.openExternal(url)
 
-  if (phase === "loading") {
+  if (phase === "loading" || !extensionsReady) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
