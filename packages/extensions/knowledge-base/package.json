@@ -1,0 +1,39 @@
+{
+  "name": "@hermes-x/ext-knowledge-base",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes desktop knowledge-base extension (gbrain bridge + UI).",
+  "main": "dist/main.cjs",
+  "exports": {
+    ".": {
+      "main": "./dist/main.cjs",
+      "renderer": "./dist/renderer.js"
+    },
+    "./manifest.json": "./manifest.json"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.renderer.config.ts && pnpm copy:i18n",
+    "copy:i18n": "mkdir -p dist/i18n && cp src/i18n/*.json dist/i18n/",
+    "dev": "vite build --watch -c vite.renderer.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hermes-x/extension-api": "workspace:*",
+    "@hermes-x/i18n": "workspace:*",
+    "@hermes-x/platform": "workspace:*",
+    "@hermes-x/ui": "workspace:*",
+    "lucide-react": "^0.460.0",
+    "streamdown": "^2.5.0"
+  },
+  "peerDependencies": {
+    "electron": "*",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "18.3.12",
+    "@vitejs/plugin-react": "4.3.3",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}

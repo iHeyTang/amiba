@@ -332,6 +332,49 @@ importers:
         specifier: 2.1.4
         version: 2.1.4(@types/node@22.9.0)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
 
+  packages/extensions/knowledge-base:
+    dependencies:
+      '@hermes-x/extension-api':
+        specifier: workspace:*
+        version: link:../../extension-api
+      '@hermes-x/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
+      '@hermes-x/platform':
+        specifier: workspace:*
+        version: link:../../platform
+      '@hermes-x/ui':
+        specifier: workspace:*
+        version: link:../../ui
+      electron:
+        specifier: '*'
+        version: 33.4.11
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@18.3.1)
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      streamdown:
+        specifier: ^2.5.0
+        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      '@vitejs/plugin-react':
+        specifier: 4.3.3
+        version: 4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vite:
+        specifier: 5.4.10
+        version: 5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
+
   packages/i18n:
     dependencies:
       '@hermes-x/platform':
@@ -2967,6 +3010,12 @@ packages:
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
 
+  '@vitejs/plugin-react@4.3.3':
+    resolution: {integrity: sha512-NooDe9GpHGqNns1i8XDERg0Vsg5SSYRhRxxyTGogUdkdNt47jal+fbuYi+Yfq6pzRCKXyoPcWisfxE6RIM3GKA==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+    peerDependencies:
+      vite: ^4.2.0 || ^5.0.0
+
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
     engines: {node: ^14.18.0 || >=16.0.0}
@@ -5533,6 +5582,10 @@ packages:
     resolution: {integrity: sha512-wViHqhAd8OHeLS/IRMJjTSDHF3U9eWi62F/MledQGPdJGDhodXJ9PBLNGr6WWL7qlH12Mt3TyTpbS+hGXMjCzQ==}
     engines: {node: '>=0.10.0'}
 
+  react-refresh@0.14.2:
+    resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
+    engines: {node: '>=0.10.0'}
+
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
@@ -6226,6 +6279,37 @@ packages:
     resolution: {integrity: sha512-kqa9v+oi4HwkG6g8ufRnb5AeplcRw8jUF6/7/Qz1qRQOXHImG8YnLbB+LLszENwFnoBl9xIf9nVdCFzNd7GQEg==}
     engines: {node: ^18.0.0 || >=20.0.0}
     hasBin: true
+
+  vite@5.4.10:
+    resolution: {integrity: sha512-1hvaPshuPUtxeQ0hsVH3Mud0ZanOLwVTneA1EgbAM5LhaZEqyPWGRQ7BtaMvUrTDeEaC8pxtj6a6jku3x4z6SQ==}
+    engines: {node: ^18.0.0 || >=20.0.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': ^18.0.0 || >=20.0.0
+      less: '*'
+      lightningcss: ^1.21.0
+      sass: '*'
+      sass-embedded: '*'
+      stylus: '*'
+      sugarss: '*'
+      terser: ^5.4.0
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      less:
+        optional: true
+      lightningcss:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
 
   vite@5.4.21:
     resolution: {integrity: sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==}
@@ -8932,7 +9016,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
       '@types/responselike': 1.0.3
 
   '@types/chrome@0.0.281':
@@ -9077,7 +9161,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
 
   '@types/geojson@7946.0.16': {}
 
@@ -9091,7 +9175,7 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -9111,7 +9195,7 @@ snapshots:
 
   '@types/plist@3.0.5':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
       xmlbuilder: 15.1.1
     optional: true
 
@@ -9130,7 +9214,7 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
 
   '@types/trusted-types@2.0.7': {}
 
@@ -9143,7 +9227,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.41
     optional: true
 
   '@ungap/structured-clone@1.3.1': {}
@@ -9152,6 +9236,17 @@ snapshots:
     optionalDependencies:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
+
+  '@vitejs/plugin-react@4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7)
+      '@types/babel__core': 7.20.5
+      react-refresh: 0.14.2
+      vite: 5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
+    transitivePeerDependencies:
+      - supports-color
 
   '@vitejs/plugin-react@4.7.0(vite@5.4.21(@types/node@22.9.0)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))':
     dependencies:
@@ -12249,6 +12344,8 @@ snapshots:
 
   react-refresh@0.14.0: {}
 
+  react-refresh@0.14.2: {}
+
   react-refresh@0.17.0: {}
 
   react-refresh@0.9.0: {}
@@ -13065,6 +13162,18 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+
+  vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0):
+    dependencies:
+      esbuild: 0.21.5
+      postcss: 8.4.49
+      rollup: 4.60.4
+    optionalDependencies:
+      '@types/node': 20.19.41
+      fsevents: 2.3.3
+      less: 4.6.4
+      lightningcss: 1.32.0
+      sass: 1.100.0
 
   vite@5.4.21(@types/node@22.9.0)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0):
     dependencies:
