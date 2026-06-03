@@ -56,15 +56,63 @@ export const en = {
   "options.brain.connection.title": "GBrain Connection",
   "options.brain.connection.url": "Server URL",
   "options.brain.connection.token": "Access Token",
-  "options.brain.connection.token.placeholder": "Bearer token from gbrain auth",
+  "options.brain.connection.token.placeholder":
+    "Bearer token from `gbrain auth create <name>`",
   "options.brain.connection.test": "Test Connection",
   "options.brain.connection.failed": "Could not reach gbrain. Is it running?",
+  "options.brain.connection.invalidToken":
+    "Server rejected the token. Run `gbrain auth create <name>` to mint a new bearer token, then paste it here.",
+  "options.brain.connection.starting":
+    "Starting `gbrain serve --http`…",
   "options.brain.connection.error": "Connection error: {error}",
+  "options.brainConfig.title": "Brain settings",
+  "options.brainConfig.subtitle":
+    "Configure the GBrain instance — connection and runtime status.",
+  "options.brainConfig.notConnected": "Not connected",
+  "options.brainConfig.hint":
+    "URL defaults to the local `gbrain serve --http` port (http://127.0.0.1:3131). Override if your server runs elsewhere or requires a token.",
+  "options.brainConfig.saveAndTest": "Save & test",
+  "options.brainConfig.saved": "Saved",
+  "options.brainConfig.restart": "Restart server",
+  "options.brainConfig.restart.hint":
+    "Use this if a freshly-minted token is rejected — the running server may be holding a stale brain handle.",
+  "options.brainConfig.restarting": "Restarting…",
+  "options.brainConfig.restarted": "Restarted",
+  "options.brainConfig.restart.failed": "Restart failed: {error}",
+  "options.brainConfig.runtime.title": "Runtime",
+  "options.brainConfig.runtime.version": "Version",
+  "options.brainConfig.runtime.engine": "Engine",
+  "options.brainConfig.runtime.transport": "Transport",
+  "options.brainConfig.runtime.db": "Database",
+  "options.brainConfig.runtime.empty":
+    "Not connected — runtime info shows up here once GBrain responds.",
+  "options.brainConfig.config.section.providers": "AI providers",
+  "options.brainConfig.providers.loading":
+    "Loading gbrain's supported providers…",
+  "options.brainConfig.providers.empty":
+    "`gbrain providers list` returned nothing. Check that the gbrain CLI is on PATH.",
+  "options.brainConfig.providers.refresh": "Re-probe",
+  "options.brainConfig.providers.envHint":
+    "Paste each provider's API key directly here. Values are encrypted via your OS keychain and injected into gbrain when it starts. Restart gbrain after editing to apply.",
+  "options.brainConfig.providers.expand": "Configure",
+  "options.brainConfig.providers.collapse": "Done",
+  "options.brainConfig.providers.required": "Required",
+  "options.brainConfig.providers.optional": "Optional",
+  "options.brainConfig.providers.placeholder.saved": "saved — paste a new value to replace",
+  "options.brainConfig.providers.placeholder.empty": "not set",
+  "options.brainConfig.providers.save": "Save",
+  "options.brainConfig.providers.saved": "Saved — restart gbrain to apply",
+  "options.brainConfig.providers.clear": "Clear",
+  "options.brainConfig.providers.setupLink": "Get an API key →",
   "options.brain.tabs.search": "Search",
   "options.brain.tabs.putPage": "New Page",
   "options.brain.tabs.pages": "Pages",
   "options.brain.search.placeholder": "Search your knowledge base…",
   "options.brain.search.results": "{count} results found",
+  "options.brain.search.empty": "No pages match.",
+  "options.brain.view.placeholder":
+    "Select a page on the left to view it, or click + to create a new one.",
+  "options.brain.view.empty": "(This page has no body.)",
   "options.brain.putPage.slug": "Slug (page path)",
   "options.brain.putPage.slug.placeholder": "e.g. people/alice or notes/2026-06-01",
   "options.brain.putPage.content": "Content (Markdown)",
@@ -74,6 +122,17 @@ export const en = {
   "options.brain.pages.load": "Load Pages",
   "options.brain.pages.count": "{count} pages",
   "options.brain.pages.empty": "No pages yet. Use the \"New Page\" tab to create your first page.",
+  "options.brain.oneClick.title": "Enable Knowledge Base",
+  "options.brain.oneClick.description": "Let the assistant install and start GBrain for you — no terminal commands required.",
+  "options.brain.oneClick.button": "Install with one click",
+  "options.brain.tutorial.tagline": "Give your AI a long-term memory.",
+  "options.brain.tutorial.bullet.recall": "Remembers everything you've shared, across conversations.",
+  "options.brain.tutorial.bullet.link": "Auto-links notes, decisions, and references into a graph.",
+  "options.brain.tutorial.bullet.context": "Surfaces relevant context the moment you need it.",
+  "options.brain.tutorial.advanced.label": "Already running? Connect manually",
+  "options.brain.tutorial.advanced.hint": "Point the desktop client at a GBrain instance you've started yourself (custom port, remote server, etc).",
+  "options.brain.tutorial.checking": "Checking connection…",
+  "newtab.brainHint": "Let AI remember all your knowledge",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
@@ -149,9 +208,8 @@ export const en = {
   "options.preference.title": "Preference",
   "options.preference.subtitle": "Extension UI and behavior",
   "options.preference.section.appearance": "Appearance",
-  "options.preference.section.newtab": "New tab",
   "options.preference.section.chat": "Chat",
-  "options.preference.section.desktop": "Desktop",
+  "options.preference.section.hotkey": "Hotkey",
   "options.preference.hotkey.label": "Summon hotkey",
   "options.preference.hotkey.desc":
     "Bring Hermes to the front from any app when this binding fires.",
@@ -575,10 +633,19 @@ export const en = {
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Scheduled tasks",
+  "sidepanel.sessions.group.knowledge": "Knowledge",
+  "sidepanel.sessions.group.skills": "Skills",
+  "sidepanel.sessions.group.tools": "Tools",
+  "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
   "sidepanel.sessions.scheduled.error": "Couldn't load scheduled tasks. Check that the backplane is running.",
   "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
+  "sidepanel.sessions.scheduled.trigger": "Trigger now",
+  "sidepanel.sessions.scheduled.triggerConfirm":
+    "Run \"{name}\" now? It will fire on the next scheduler tick.",
+  "sidepanel.sessions.scheduled.triggerFailed":
+    "Trigger failed: {error}",
 
   // New tab
   "newtab.greeting": "What can I help with?",
@@ -736,6 +803,45 @@ export const en = {
   "sidepanel.sessions.readOnlyBadge": "Read-only",
   "sidepanel.sessions.readOnlyNotice":
     "This conversation lives on {name}. Continue there to send a new message.",
+
+  "tools.empty": "No configurable toolsets were found.",
+  "tools.loadFailed": "Failed to load toolsets.",
+  "tools.toggleFailed": "Toggle failed, please try again.",
+  "tools.badge.notConfigured": "Not configured",
+  "tools.toggle.enable": "Enable {name}",
+  "tools.toggle.disable": "Disable {name}",
+  "tools.search.placeholder": "Search toolsets…",
+  "tools.search.empty": "No matching toolsets.",
+  "tools.group.builtin": "Built-in",
+  "tools.group.installedMcps": "Installed (MCP)",
+  "tools.installedMcps.empty":
+    "No MCP servers installed yet. Ask the assistant to find and install one for you.",
+  "tools.installedMcp.curated": "Curated",
+  "tools.installedMcp.manual": "Manual",
+  "tools.installedMcp.source": "Source",
+  "tools.installedMcp.transport": "Transport",
+  "tools.installedMcp.cliHeading": "CLI",
+  "tools.installedMcp.cliHint":
+    "Manage this server via the CLI — probe, reconfigure, or remove.",
+  "tools.detail.loadFailed": "Failed to load detail.",
+  "tools.detail.placeholder": "Select a toolset on the left to view its details.",
+  "tools.detail.tab.overview": "Overview",
+  "tools.detail.tab.tools": "Tools",
+  "tools.detail.tab.providers": "Providers",
+  "tools.detail.overview.status": "Status",
+  "tools.detail.overview.configured": "Configuration",
+  "tools.detail.overview.toolCount": "Tools registered",
+  "tools.detail.overview.providerCount": "Providers",
+  "tools.detail.overview.noProviders": "No providers",
+  "tools.detail.overview.persistsHint":
+    "Changes write to ~/.hermes/config.yaml (platform_toolsets.cli) and take effect on the next agent session.",
+  "tools.detail.tools.empty": "No tools resolved for this toolset.",
+  "tools.detail.providers.empty": "No providers configured for this toolset.",
+  "tools.detail.provider.noKeysNeeded": "No keys needed",
+  "tools.detail.provider.configured": "Configured",
+  "tools.detail.provider.missingKeys": "Keys missing",
+  "tools.detail.envVar.set": "Set",
+  "tools.detail.envVar.missing": "Missing",
 } as const;
 
 export type MessageKey = keyof typeof en;
