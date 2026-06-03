@@ -39,15 +39,13 @@ export const activate: RendererActivate = (host) => {
     { slotEntryId: "knowledge", order: 100 },
   )
 
-  host.slots.register(
-    "settings.tab",
-    makeSettingsKnowledgeTab(host),
-    {
-      slotEntryId: "knowledge",
-      order: 100,
-      props: { labels: localize("settings.label") },
-    },
-  )
+  host.settings.registerPage({
+    id: "knowledge",
+    labels: localize("settings.label"),
+    icon: "book-open",
+    order: 100,
+    component: makeSettingsKnowledgeTab(host),
+  })
 
   host.slots.register(
     "composer.hint",

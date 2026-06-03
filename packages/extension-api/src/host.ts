@@ -69,6 +69,22 @@ export interface RendererHost {
     get<T = unknown>(key: string, fallback: T): Promise<T>
     set<T = unknown>(key: string, value: T): Promise<void>
     watch<T = unknown>(key: string, cb: (v: T) => void): Disposable
+    /**
+     * Declare a settings page contributed by this extension. The page renders
+     * under the dedicated "Extensions" group in the host's Settings sidebar
+     * (kept visually separate from the core panes).
+     *
+     * `labels` carries one entry per supported locale (`{ en, "zh-CN" }`) so
+     * the host can pick the right text without owning the extension's
+     * translation tables. `icon` is an optional lucide icon name.
+     */
+    registerPage(opts: {
+      id: string
+      labels: Record<string, string>
+      icon?: string
+      order?: number
+      component: ComponentType<unknown>
+    }): Disposable
   }
   storage: {
     get<T = unknown>(key: string, fallback: T): Promise<T>

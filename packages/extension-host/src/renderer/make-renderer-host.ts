@@ -57,6 +57,19 @@ export function makeRendererHost(extensionId: string, deps: RendererHostDeps): R
         const unsub = deps.settings.watch(`ext.${extensionId}.${key}`, (v) => cb(v as T))
         return { dispose: unsub }
       },
+      registerPage: (opts) => {
+        // Settings pages route through the same slot registry as other UI
+        // contributions — that keeps the underlying machinery uniform — but
+        // we expose a dedicated API so extension authors don't have to know
+        // the slot name and the host UI can render them in a separate group.
+        return deps.slotRegistry.register("settings.tab", {
+          extensionId,
+          entryId: opts.id,
+          order: opts.order ?? 100,
+          component: opts.component,
+          props: { labels: opts.labels, icon: opts.icon },
+        })
+      },
     },
     storage: {
       get: <T,>(key: string, fallback: T) =>

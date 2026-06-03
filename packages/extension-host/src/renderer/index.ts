@@ -74,6 +74,7 @@ export async function bootRendererExtensions(opts: {
 export function useExtensionSettingsTabs(): Array<{
   id: string
   label: string
+  icon: string
   order?: number
 }> {
   const reg = useSlotRegistry()
@@ -84,10 +85,15 @@ export function useExtensionSettingsTabs(): Array<{
     return () => sub.dispose()
   }, [reg])
   return snapshot.map((e) => {
-    const p = (e.props ?? {}) as { labels?: Record<string, string>; order?: number }
+    const p = (e.props ?? {}) as {
+      labels?: Record<string, string>
+      icon?: string
+      order?: number
+    }
     return {
       id: e.entryId,
       label: pickLabel(p.labels, language, e.entryId),
+      icon: p.icon ?? "",
       order: p.order ?? e.order,
     }
   })

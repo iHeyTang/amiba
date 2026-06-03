@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useExtensionSettingsTabs, SlotOutlet } from "@hermes-x/extension-host/renderer";
+import { resolveExtensionIcon } from "../chat/ActivityBar";
 
 import { useT } from "@hermes-x/i18n";
 import { useResolvedTheme } from "../theme";
@@ -336,9 +337,26 @@ export function SettingsView({
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
-            {extensionTabs.map((tab) => (
-              <NavBtn key={tab.id} icon={null} label={tab.label} active={mainTab === tab.id} onClick={() => onMainTabChange(tab.id)} />
-            ))}
+            {extensionTabs.length > 0 && (
+              <>
+                <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {t("options.nav.extensions")}
+                </div>
+                {extensionTabs.map((tab) => (
+                  <NavBtn
+                    key={tab.id}
+                    icon={
+                      resolveExtensionIcon(tab.icon) ?? (
+                        <Boxes className="h-4 w-4 shrink-0 opacity-70" />
+                      )
+                    }
+                    label={tab.label}
+                    active={mainTab === tab.id}
+                    onClick={() => onMainTabChange(tab.id)}
+                  />
+                ))}
+              </>
+            )}
           </nav>
         </ScrollArea>
         <div className="px-3 py-2">
