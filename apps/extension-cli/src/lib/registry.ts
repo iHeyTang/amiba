@@ -84,6 +84,35 @@ export function findLocalEntry(registryPath: string, id: string): RegistryEntry 
 }
 
 /**
+ * Register a marketplace install. Refuses to overwrite an existing entry —
+ * caller must uninstall first. Returns the new entry.
+ */
+export function addMarketplaceEntry(
+  registryPath: string,
+  args: { id: string; absolutePath: string; version: string; sha256?: string },
+): RegistryEntry {
+  const absPath = resolve(args.absolutePath)
+  const reg = loadRegistry(registryPath)
+  const existing = reg.entries.find((e) => e.id === args.id)
+  if (existing) {
+    throw new Error(
+      `Extension "${args.id}" is already registered (source: ${existing.source}, path: ${existing.path}).\n` +
+        `Uninstall first via the desktop UI before installing a new version.`,
+    )
+  }
+  const entry: RegistryEntry = {
+    id: args.id,
+    source: "marketplace",
+    path: absPath,
+    version: args.version,
+    sha256: args.sha256,
+    installedAt: new Date().toISOString(),
+  }
+  saveRegistry(registryPath, { version: 1, entries: [...reg.entries, entry] })
+  return entry
+}
+
+/**
  * Add a local entry pointing at `absolutePath`. If an entry with this id
  * already exists at a DIFFERENT path, throws with a clear error.
  * Idempotent for same-path re-registration.

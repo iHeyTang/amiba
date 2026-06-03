@@ -1,5 +1,6 @@
 import kleur from "kleur"
 import { resolveExtensionsDir } from "../lib/userdata.js"
+import { addMarketplaceEntry, resolveRegistryPath } from "../lib/registry.js"
 import { mkdirSync, existsSync, createWriteStream, rmSync } from "node:fs"
 import { mkdtemp, readFile, rename } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -66,16 +67,18 @@ export async function installCommand(repoArg: string, opts: InstallOptions) {
     }
     await pipeline(Readable.fromWeb(dl.body as never), createWriteStream(tarPath))
 
+    // Always compute the actual sha256 — used for registry pinning even when
+    // the caller didn't pass --sha256 (so later upgrades can compare).
+    const buf = await readFile(tarPath)
+    const actualSha = createHash("sha256").update(buf).digest("hex").toLowerCase()
     if (opts.sha256) {
-      const buf = await readFile(tarPath)
-      const actual = createHash("sha256").update(buf).digest("hex").toLowerCase()
       const expected = opts.sha256.toLowerCase()
-      if (actual !== expected) {
+      if (actualSha !== expected) {
         throw new Error(
-          `install: sha256 mismatch\n  expected: ${expected}\n  actual:   ${actual}`,
+          `install: sha256 mismatch\n  expected: ${expected}\n  actual:   ${actualSha}`,
         )
       }
-      console.log(kleur.green("✓"), `sha256 verified (${actual.slice(0, 16)}…)`)
+      console.log(kleur.green("✓"), `sha256 verified (${actualSha.slice(0, 16)}…)`)
     }
 
     const extractDir = join(stagingRoot, "extracted")
@@ -100,11 +103,25 @@ export async function installCommand(repoArg: string, opts: InstallOptions) {
       )
     }
     await rename(extractDir, target)
+
+    // Register the install. The user invoked this command explicitly, so
+    // they've consented to the install action — same trust contract as
+    // clicking Install in the desktop UI's Browse tab. Without this step
+    // the on-disk install would be invisible to the desktop's registry.
+    const registryPath = resolveRegistryPath()
+    addMarketplaceEntry(registryPath, {
+      id: manifest.id,
+      absolutePath: target,
+      version: manifest.version ?? "0.0.0",
+      sha256: actualSha,
+    })
+
     console.log(
       kleur.green("✓"),
       `Installed ${kleur.cyan(`${manifest.name ?? manifest.id}@${manifest.version}`)}`,
     )
-    console.log(kleur.dim(`  ${target}`))
+    console.log(kleur.dim(`  path:     ${target}`))
+    console.log(kleur.dim(`  registry: ${registryPath}`))
     console.log(
       kleur.dim("  (Hermes Desktop will hot-reload this extension if it's running.)"),
     )
