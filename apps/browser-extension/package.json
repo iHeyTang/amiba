@@ -1,5 +1,5 @@
 {
-  "name": "@hermes-x/extension",
+  "name": "@hermes-x/browser-extension",
   "displayName": "Hermes Browser Extension",
   "version": "0.3.0",
   "description": "Hermes Agent operates in a dedicated background window — runs Tampermonkey-compatible userscripts, exposes scripts to the agent, and embeds a Hermes chat side panel.",

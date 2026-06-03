@@ -15,6 +15,130 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
+  apps/browser-extension:
+    dependencies:
+      '@codemirror/commands':
+        specifier: ^6.10.3
+        version: 6.10.3
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.2
+        version: 6.2.5
+      '@codemirror/state':
+        specifier: ^6.4.1
+        version: 6.6.0
+      '@codemirror/theme-one-dark':
+        specifier: ^6.1.2
+        version: 6.1.3
+      '@codemirror/view':
+        specifier: ^6.34.1
+        version: 6.43.0
+      '@hermes-x/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@hermes-x/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@hermes-x/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
+      '@hermes-x/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@hermes-x/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      '@radix-ui/react-checkbox':
+        specifier: ^1.3.3
+        version: 1.3.3(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-dialog':
+        specifier: ^1.1.2
+        version: 1.1.15(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-label':
+        specifier: ^2.1.0
+        version: 2.1.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-scroll-area':
+        specifier: ^1.2.1
+        version: 1.2.10(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-select':
+        specifier: ^2.2.6
+        version: 2.2.6(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-separator':
+        specifier: ^1.1.0
+        version: 1.1.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-slot':
+        specifier: ^1.1.0
+        version: 1.2.4(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-switch':
+        specifier: ^1.1.1
+        version: 1.2.6(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-tabs':
+        specifier: ^1.1.1
+        version: 1.1.13(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-tooltip':
+        specifier: ^1.1.4
+        version: 1.2.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      class-variance-authority:
+        specifier: ^0.7.0
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      codemirror:
+        specifier: ^6.0.1
+        version: 6.0.2
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@18.3.1)
+      plasmo:
+        specifier: 0.90.5
+        version: 0.90.5(@swc/core@1.15.40(@swc/helpers@0.5.23))(@swc/helpers@0.5.23)(@types/node@22.9.0)(ejs@3.1.10)(lodash@4.18.1)(postcss@8.4.49)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      streamdown:
+        specifier: ^2.5.0
+        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      tailwind-merge:
+        specifier: ^2.5.4
+        version: 2.6.1
+    devDependencies:
+      '@hermes-x/tailwind-preset':
+        specifier: workspace:*
+        version: link:../../packages/tailwind-preset
+      '@ianvs/prettier-plugin-sort-imports':
+        specifier: 4.4.0
+        version: 4.4.0(@vue/compiler-sfc@3.3.4)(prettier@3.3.3)
+      '@types/chrome':
+        specifier: 0.0.281
+        version: 0.0.281
+      '@types/node':
+        specifier: 22.9.0
+        version: 22.9.0
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: 18.3.1
+        version: 18.3.1
+      autoprefixer:
+        specifier: 10.4.20
+        version: 10.4.20(postcss@8.4.49)
+      postcss:
+        specifier: 8.4.49
+        version: 8.4.49
+      prettier:
+        specifier: 3.3.3
+        version: 3.3.3
+      tailwindcss:
+        specifier: 3.4.15
+        version: 3.4.15
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+
   apps/desktop:
     dependencies:
       '@hermes-x/core':
@@ -150,130 +274,6 @@ importers:
       vite:
         specifier: ^5.4.11
         version: 5.4.21(@types/node@22.9.0)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
-
-  apps/extension:
-    dependencies:
-      '@codemirror/commands':
-        specifier: ^6.10.3
-        version: 6.10.3
-      '@codemirror/lang-javascript':
-        specifier: ^6.2.2
-        version: 6.2.5
-      '@codemirror/state':
-        specifier: ^6.4.1
-        version: 6.6.0
-      '@codemirror/theme-one-dark':
-        specifier: ^6.1.2
-        version: 6.1.3
-      '@codemirror/view':
-        specifier: ^6.34.1
-        version: 6.43.0
-      '@hermes-x/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@hermes-x/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../../packages/platform
-      '@hermes-x/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      '@hermes-x/utils':
-        specifier: workspace:*
-        version: link:../../packages/utils
-      '@radix-ui/react-checkbox':
-        specifier: ^1.3.3
-        version: 1.3.3(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-dialog':
-        specifier: ^1.1.2
-        version: 1.1.15(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-label':
-        specifier: ^2.1.0
-        version: 2.1.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-scroll-area':
-        specifier: ^1.2.1
-        version: 1.2.10(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-select':
-        specifier: ^2.2.6
-        version: 2.2.6(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-separator':
-        specifier: ^1.1.0
-        version: 1.1.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-slot':
-        specifier: ^1.1.0
-        version: 1.2.4(@types/react@18.3.12)(react@18.3.1)
-      '@radix-ui/react-switch':
-        specifier: ^1.1.1
-        version: 1.2.6(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-tabs':
-        specifier: ^1.1.1
-        version: 1.1.13(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-tooltip':
-        specifier: ^1.1.4
-        version: 1.2.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      class-variance-authority:
-        specifier: ^0.7.0
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      codemirror:
-        specifier: ^6.0.1
-        version: 6.0.2
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      plasmo:
-        specifier: 0.90.5
-        version: 0.90.5(@swc/core@1.15.40(@swc/helpers@0.5.23))(@swc/helpers@0.5.23)(@types/node@22.9.0)(ejs@3.1.10)(lodash@4.18.1)(postcss@8.4.49)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: 18.3.1
-        version: 18.3.1(react@18.3.1)
-      streamdown:
-        specifier: ^2.5.0
-        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      tailwind-merge:
-        specifier: ^2.5.4
-        version: 2.6.1
-    devDependencies:
-      '@hermes-x/tailwind-preset':
-        specifier: workspace:*
-        version: link:../../packages/tailwind-preset
-      '@ianvs/prettier-plugin-sort-imports':
-        specifier: 4.4.0
-        version: 4.4.0(@vue/compiler-sfc@3.3.4)(prettier@3.3.3)
-      '@types/chrome':
-        specifier: 0.0.281
-        version: 0.0.281
-      '@types/node':
-        specifier: 22.9.0
-        version: 22.9.0
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: 18.3.1
-        version: 18.3.1
-      autoprefixer:
-        specifier: 10.4.20
-        version: 10.4.20(postcss@8.4.49)
-      postcss:
-        specifier: 8.4.49
-        version: 8.4.49
-      prettier:
-        specifier: 3.3.3
-        version: 3.3.3
-      tailwindcss:
-        specifier: 3.4.15
-        version: 3.4.15
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
 
   extensions/knowledge-base:
     dependencies:
@@ -7401,7 +7401,7 @@ snapshots:
       json5: 2.2.3
       msgpackr: 1.11.12
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.8.1
 
   '@parcel/diagnostic@2.8.3':
     dependencies:
@@ -7487,7 +7487,7 @@ snapshots:
       '@parcel/fs': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.8.1
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -7580,7 +7580,7 @@ snapshots:
       '@parcel/types': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       '@parcel/workers': 2.9.3(@parcel/core@2.9.3)
-      semver: 7.7.1
+      semver: 7.8.1
 
   '@parcel/packager-css@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -7721,7 +7721,7 @@ snapshots:
       browserslist: 4.28.2
       json5: 2.2.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.8.1
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -7754,7 +7754,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.8.1
       srcset: 4.0.0
     transitivePeerDependencies:
       - '@parcel/core'
@@ -7785,7 +7785,7 @@ snapshots:
       browserslist: 4.28.2
       nullthrows: 1.1.1
       regenerator-runtime: 0.13.11
-      semver: 7.7.1
+      semver: 7.8.1
 
   '@parcel/transformer-json@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -7811,7 +7811,7 @@ snapshots:
       clone: 2.1.2
       nullthrows: 1.1.1
       postcss-value-parser: 4.2.0
-      semver: 7.7.1
+      semver: 7.8.1
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -7823,7 +7823,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.8.1
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -7868,7 +7868,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.8.1
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -10309,7 +10309,7 @@ snapshots:
 
   dotenv-expand@12.0.1:
     dependencies:
-      dotenv: 16.4.7
+      dotenv: 16.6.1
 
   dotenv-expand@5.1.0: {}
 
@@ -12065,7 +12065,7 @@ snapshots:
       ky: 1.14.3
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
-      semver: 7.7.1
+      semver: 7.8.1
 
   package-manager-detector@1.6.0: {}
 
@@ -12649,7 +12649,7 @@ snapshots:
     dependencies:
       color: 4.2.3
       detect-libc: 2.1.2
-      semver: 7.7.1
+      semver: 7.8.1
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5

@@ -2,7 +2,7 @@
 
 Multi-target workspace for Hermes:
 
-- `apps/extension` — browser extension (Plasmo, copied from `hermes-my-browser-extension`)
+- `apps/browser-extension` — browser extension (Plasmo, copied from `hermes-my-browser-extension`)
 - `apps/desktop` — desktop app (Electron + Vite + React)
 - `packages/platform` — `PlatformAdapter` interface (storage / runtime / tabs / scripting / bookmarks / history / windows / notifications / shell)
 - `packages/utils` — pure helpers (`cn`, `formatBytes`, `shortId`, `safeJsonStringify`)
@@ -81,7 +81,7 @@ The adapter surface lives at `apps/desktop/src/renderer/platform/adapter.ts` (wi
 
 Phase 1 — scaffolding (done):
 - [x] Monorepo root (`pnpm-workspace.yaml`, root `package.json`)
-- [x] `apps/extension` = verbatim copy of original extension (renamed to `@hermes-x/extension`)
+- [x] `apps/browser-extension` = verbatim copy of original extension (renamed to `@hermes-x/browser-extension`)
 - [x] `apps/desktop` = Electron + Vite + React shell with placeholder Chat/Settings routes
 - [x] `PlatformAdapter` interface + Electron implementation skeleton
 
@@ -100,11 +100,11 @@ Phase 2b-1 — UI shell parity (done):
 - [x] `apps/desktop` consumes preset + tokens, calls `useResolvedTheme()` at the app root, pages use semantic tokens (`bg-background`, `text-foreground`, `text-muted-foreground`, `bg-sidebar`, `border-border`). Settings page exposes Language + Theme selectors.
 
 Phase 2b-2 — migrate extension to consume packages (done):
-- [x] `apps/extension/package.json` adds `@hermes-x/{platform,utils,ui,i18n,theme,tailwind-preset}` workspace deps.
-- [x] `apps/extension/src/lib/platform/chrome-adapter.ts` maps `PlatformAdapter` → `chrome.*`; `init.ts` calls `setPlatform()` once.
+- [x] `apps/browser-extension/package.json` adds `@hermes-x/{platform,utils,ui,i18n,theme,tailwind-preset}` workspace deps.
+- [x] `apps/browser-extension/src/lib/platform/chrome-adapter.ts` maps `PlatformAdapter` → `chrome.*`; `init.ts` calls `setPlatform()` once.
 - [x] Every entry (`sidepanel/index.tsx`, `options/index.tsx`, `newtab/index.tsx`, `tabs/chat.tsx`) imports `~lib/platform/init` as its first line.
 - [x] 26 files codemodded to import from `@hermes-x/*`. Zero `~lib/utils` / `~components/ui/*` / `~lib/i18n` / `~lib/theme` references remain.
-- [x] `apps/extension/tailwind.config.js` is now just `presets + content`. `style.css` is `@tailwind` + `@import "@hermes-x/ui/styles/tokens.css"` + surface-specific blocks.
+- [x] `apps/browser-extension/tailwind.config.js` is now just `presets + content`. `style.css` is `@tailwind` + `@import "@hermes-x/ui/styles/tokens.css"` + surface-specific blocks.
 - [x] Duplicated sources deleted: `components/ui/*`, `lib/utils.ts`, `lib/i18n/`, `lib/theme.ts`.
 
 Phase 2c-1 — refactor storage-portable lib modules in place (done):
@@ -149,9 +149,9 @@ Phase 3e — 1:1 chat-surface lift (done):
 - [x] 7 `hermes-*` backplane clients (sessions, memory, cron, logs, skills, lifecycle, agent-model) lifted to `packages/core/`.
 - [x] Capability interfaces in `packages/chat-ui/src/internal/capabilities.ts`: PageContextCapability / LearnCapability / NavigateOpenPolicyCapability / PendingPromptCapability — all optional.
 - [x] **Entire SidePanel function (4199 → 2752 → 2762 LOC) lifted** to `packages/chat-ui/src/SidePanelView.tsx`. All ~30 chrome.* sites replaced with capability/client/prop calls. Extension-only UI (Learn buttons, BridgeStatusBar, NavigateOpenPolicyToggle, page-context chips) gated by capability presence + slot props.
-- [x] `apps/extension/src/lib/chat/chrome-engine-client.ts` — wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })` as ChatEngineClient.
-- [x] `apps/extension/src/lib/chat/chrome-capabilities.ts` — chrome impls of all 4 capabilities + `openAgentDestinationInUserWindow` helper.
-- [x] **`apps/extension/src/sidepanel/index.tsx` reduced from 2752 to 56 LOC** — pure wrapper that builds ChromeChatEngineClient + chromeCapabilities + BridgeStatusBar/NavigateOpenPolicyToggle slots, renders `<SidePanelView>`.
+- [x] `apps/browser-extension/src/lib/chat/chrome-engine-client.ts` — wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })` as ChatEngineClient.
+- [x] `apps/browser-extension/src/lib/chat/chrome-capabilities.ts` — chrome impls of all 4 capabilities + `openAgentDestinationInUserWindow` helper.
+- [x] **`apps/browser-extension/src/sidepanel/index.tsx` reduced from 2752 to 56 LOC** — pure wrapper that builds ChromeChatEngineClient + chromeCapabilities + BridgeStatusBar/NavigateOpenPolicyToggle slots, renders `<SidePanelView>`.
 - [x] **`apps/desktop/src/renderer/App.tsx` is 36 LOC** — `<SidePanelView client={ElectronChatEngineClient} capabilities={{}} ...>`. No left rail, no nav, no custom Composer. Visual identity 1:1 with extension's sidepanel.
 - [x] Multi-window desktop: chat in main BrowserWindow, settings opens via `window.hermes.settings.open()` IPC → new BrowserWindow loading `options.html` (placeholder until Options panes lift).
 - [x] electron-vite multi-entry rollup config (chat + options entries).
@@ -164,8 +164,8 @@ Phase 3f — Options/Settings 1:1 lift (done):
   - `SettingsView.tsx` — main tab container (sidebar nav + content router). Scripts tab hides when `userscripts` capability absent.
   - `capabilities.ts` — `BridgeCapability` + `UserScriptCapability` + composed `OptionsCapabilities`.
 - [x] Additional lifts to `@hermes-x/core` to support settings-ui: `fetch-models` + `quick-actions` (chrome.storage → getPlatform().storage including `.watch()`).
-- [x] `apps/extension/src/options/index.tsx` reduced from 507 → 20 LOC (`<SettingsView capabilities={chromeOptionsCapabilities} />`).
-- [x] `apps/extension/src/lib/options/chrome-capabilities.ts` — `chrome.runtime.sendMessage` impls for userscript CRUD + `bridge.refresh`.
+- [x] `apps/browser-extension/src/options/index.tsx` reduced from 507 → 20 LOC (`<SettingsView capabilities={chromeOptionsCapabilities} />`).
+- [x] `apps/browser-extension/src/lib/options/chrome-capabilities.ts` — `chrome.runtime.sendMessage` impls for userscript CRUD + `bridge.refresh`.
 - [x] `apps/desktop/src/renderer/options.tsx` (29 LOC) — `<SettingsView capabilities={{}} />`. Scripts tab + bridge refresh hidden automatically.
 - [x] Tailwind content paths updated in both apps to scan settings-ui.
 - [x] Self-verify: 9 packages tsc exit=0, extension tsc + plasmo build exit=0, desktop tsc (renderer + main) + electron-vite build exit=0 (2051 modules, chat 1.11 MB + options 988 KB + shared globals 678 KB + CSS 56 KB).

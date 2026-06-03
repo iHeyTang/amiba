@@ -7,7 +7,7 @@
  *   - `logoDarkBg`  — light glyph, render on dark surfaces
  *
  * ~24KB each in base64. Source PNGs live in
- * `apps/extension/src/assets/hermes-logo-{light,dark}.png`; regenerate via:
+ * `apps/browser-extension/src/assets/hermes-logo-{light,dark}.png`; regenerate via:
  *
  *   base64 -i hermes-logo-light.png | tr -d '\n'
  */

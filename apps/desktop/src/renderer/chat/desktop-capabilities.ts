@@ -1,5 +1,5 @@
 /**
- * Desktop counterpart to `apps/extension/src/lib/chat/chrome-capabilities.ts`.
+ * Desktop counterpart to `apps/browser-extension/src/lib/chat/chrome-capabilities.ts`.
  *
  * The chat UI declares optional "platform capabilities" — small interfaces
  * that the chat package itself can't implement because they reach into
