@@ -14,6 +14,13 @@ import {
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
+import { registerExtProtocolScheme, registerExtProtocolHandler } from "./ext-protocol"
+
+// MUST run before app.whenReady() — scheme privileges (standard / secure /
+// supportFetchAPI / corsEnabled) can only be declared while the protocol
+// registry is still mutable. Without this the renderer's dynamic import of
+// hermes-ext://… is treated as "untrusted" and refuses to load.
+registerExtProtocolScheme()
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -421,6 +428,11 @@ if (!gotSingleInstanceLock) {
 
     const extensionsRoot = getExtensionsRoot()
     const registryPath = getRegistryPath()
+
+    // Make hermes-ext://<id>/<file> resolvable from the renderer. Must happen
+    // before any BrowserWindow load() (the renderer's extensions-boot fires a
+    // dynamic import as soon as the React tree mounts).
+    registerExtProtocolHandler(registryPath)
 
     const extensionHost = await bootMainExtensionHost({
       registryPath,

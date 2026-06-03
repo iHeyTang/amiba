@@ -70,21 +70,24 @@ function makeHostFor(id: string, disposables: Disposable[]) {
 async function buildDiscoveredExt(
   manifest: ExtensionManifest,
 ): Promise<DiscoveredExtension> {
-  if (!manifest.entries.renderer) {
+  const rendererRel = manifest.entries.renderer
+  if (!rendererRel) {
     return { manifest, loadRenderer: undefined, loadI18n: async () => null }
   }
-  const bundlePath = await window.hermes.extensions.rendererBundleUrl(manifest.id)
+  // hermes-ext:// is a custom Electron protocol the main process registers
+  // (see apps/desktop/src/main/ext-protocol.ts). It maps to whatever path
+  // the registry entry for this extension points at. Chromium blocks
+  // file:// loads from the renderer, so we can't import("file://…") here.
+  //
+  // The `?t=…` cache-bust forces the dynamic import to skip the JS module
+  // cache so CLI rebuilds get picked up on every reload.
+  const url = `hermes-ext://${manifest.id}/${rendererRel}?t=${Date.now()}`
   return {
     manifest,
-    loadRenderer: bundlePath
-      ? async () => {
-          // Cache-bust the file:// URL so dynamic import doesn't return a
-          // stale module cache entry after a CLI rebuild touched the file.
-          const url = `file://${bundlePath}?t=${Date.now()}`
-          const mod = await import(/* @vite-ignore */ url)
-          return mod as { activate: (h: RendererHost) => void | Promise<void> }
-        }
-      : undefined,
+    loadRenderer: async () => {
+      const mod = await import(/* @vite-ignore */ url)
+      return mod as { activate: (h: RendererHost) => void | Promise<void> }
+    },
     loadI18n: async () => null,
   }
 }
