@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hermes-x Extension Manifest",
+  "type": "object",
+  "required": ["id", "name", "version", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+    "engines": {
+      "type": "object",
+      "properties": { "hermes-x": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main": { "type": "string" },
+        "renderer": { "type": "string" }
+      }
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "en": { "type": "string" },
+        "zh-CN": { "type": "string" }
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activityBar": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "iconKey", "labelKey"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "iconKey": { "type": "string" },
+              "labelKey": { "type": "string" },
+              "order": { "type": "number" }
+            }
+          }
+        },
+        "sidebarViews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "anchor"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "anchor": { "type": "string", "pattern": "^activityBar:" }
+            }
+          }
+        },
+        "settingsTabs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "labelKey"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "labelKey": { "type": "string" },
+              "order": { "type": "number" }
+            }
+          }
+        },
+        "composerHints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": { "id": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "hermesPlugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "enum": ["ipc", "settings", "storage", "i18n", "lifecycle.boot", "hermes.callTool"]
+      }
+    }
+  }
+}
