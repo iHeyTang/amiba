@@ -1,4 +1,6 @@
 // packages/extension-host/src/main/index.ts
+import { join } from "node:path"
+import { readFileSync } from "node:fs"
 import type { Disposable, ExtensionManifest } from "@hermes-x/extension-api"
 import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry } from "./registry"
@@ -10,6 +12,8 @@ import {
 } from "./ipc-router"
 import { makeMainHost } from "./make-main-host"
 import { createExtensionStorage } from "./storage-fs"
+import { validateManifest } from "./discover"
+import { watchManifests } from "./manifest-watcher"
 
 export interface MainBootOptions {
   /** All discovered manifests with their resolved file paths. */
@@ -18,6 +22,13 @@ export interface MainBootOptions {
     /** Absolute path of the manifest dir, used to resolve `entries.main`. */
     rootDir: string
   }>
+  /**
+   * Absolute path to the extensions directory (e.g. `<userData>/extensions/`).
+   * Used by the manifest mtime watcher and to compute renderer bundle URLs.
+   * Optional for backward compatibility — if omitted, watching is disabled
+   * and getRendererBundleUrl falls back to the legacy callback.
+   */
+  extensionsDir?: string
   /** Reads/writes the shared settings store (re-uses desktop's mainStore). */
   settingsStore: {
     get<T>(key: string, fallback: T): Promise<T>
@@ -30,8 +41,13 @@ export interface MainBootOptions {
     extensionId: string,
     locale: "en" | "zh-CN",
   ) => Promise<Record<string, string>>
-  /** Returns a `file://` or `app://` URL the renderer can `import()`. */
-  getRendererBundleUrl: (extensionId: string) => Promise<string | null>
+  /**
+   * Returns a `file://` or `app://` URL the renderer can `import()`.
+   * When `extensionsDir` is provided, the URL is computed automatically
+   * from `rootDir + manifest.entries.renderer` and this callback is ignored.
+   * Keep it for backward compat with callers that do not set extensionsDir.
+   */
+  getRendererBundleUrl?: (extensionId: string) => Promise<string | null>
 }
 
 export interface MainBootResult {
@@ -59,11 +75,27 @@ export async function bootMainExtensionHost(
   // Per-extension disposable tracking: extensionId → Disposable[]
   const extDisposables = new Map<string, Disposable[]>()
 
+  /**
+   * Compute the renderer bundle URL for an extension.
+   * When extensionsDir is set, the absolute path is derived from rootDir + entries.renderer.
+   * Falls back to the legacy callback when extensionsDir is not set.
+   */
+  const resolveRendererBundleUrl = async (extensionId: string): Promise<string | null> => {
+    const entry = manifestEntries.find((m) => m.manifest.id === extensionId)
+    if (entry && entry.manifest.entries.renderer) {
+      return join(entry.rootDir, entry.manifest.entries.renderer)
+    }
+    if (opts.getRendererBundleUrl) {
+      return opts.getRendererBundleUrl(extensionId)
+    }
+    return null
+  }
+
   registerInvokeRouter(channelTable, getManifests)
   registerMetadataChannels({
     getManifests,
     getI18n: opts.getI18n,
-    getRendererBundleUrl: opts.getRendererBundleUrl,
+    getRendererBundleUrl: resolveRendererBundleUrl,
   })
   registerStatusChannel(() =>
     registry.list().map((e) => ({ id: e.id, status: e.status, error: e.error })),
@@ -81,7 +113,7 @@ export async function bootMainExtensionHost(
           if (!e) throw new Error(`manifest not found for ${id}`)
           const mainRel = e.manifest.entries.main
           if (!mainRel) throw new Error(`no main entry for ${id}`)
-          const full = `${e.rootDir}/${mainRel}`
+          const full = join(e.rootDir, mainRel)
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require(full) as { activate: (h: unknown) => Promise<void> | void }
         },
@@ -154,9 +186,6 @@ export async function bootMainExtensionHost(
 
     // Re-read the manifest from disk (it may have changed).
     try {
-      const { readFileSync } = await import("node:fs")
-      const { join } = await import("node:path")
-      const { validateManifest } = await import("./discover")
       const raw = JSON.parse(readFileSync(join(rootDir, "manifest.json"), "utf8"))
       const v = validateManifest(raw)
       if (!v.ok) {
@@ -166,9 +195,27 @@ export async function bootMainExtensionHost(
       const newEntry = { manifest: v.manifest, rootDir }
       manifestEntries.push(newEntry)
       await activateOne(newEntry)
+      // Re-arm the watcher with the updated id set.
+      if (watcher) {
+        watcher.setExtensionIds(manifestEntries.map((m) => m.manifest.id))
+      }
     } catch (e) {
       console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
     }
+  }
+
+  // Start manifest mtime watcher when extensionsDir is provided.
+  // On change, trigger reloadExtension — this is the hot-reload path.
+  let watcher: ReturnType<typeof watchManifests> | undefined
+  if (opts.extensionsDir) {
+    const extensionsDir = opts.extensionsDir
+    const initialIds = manifestEntries.map((m) => m.manifest.id)
+    watcher = watchManifests(extensionsDir, initialIds, (changedId) => {
+      console.info(`[extension-host] manifest changed for ${changedId} — hot reloading…`)
+      void reloadExtension(changedId).catch((e) => {
+        console.error(`[extension-host] hot reload failed for ${changedId}:`, e)
+      })
+    })
   }
 
   return {
@@ -176,6 +223,7 @@ export async function bootMainExtensionHost(
     unloadExtension,
     reloadExtension,
     shutdown: async () => {
+      watcher?.stop()
       await Promise.allSettled([...shutdown].map((h) => Promise.resolve(h())))
     },
   }
