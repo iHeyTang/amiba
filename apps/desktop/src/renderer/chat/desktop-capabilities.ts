@@ -20,7 +20,7 @@
 import type {
   PendingPromptAttachment,
   PendingPromptResult,
-  SidePanelCapabilities,
+  ChatSurfaceCapabilities,
 } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
 
@@ -120,7 +120,7 @@ function subscribePendingPrompt(onChanged: () => void): () => void {
   })
 }
 
-export const desktopCapabilities: SidePanelCapabilities = {
+export const desktopCapabilities: ChatSurfaceCapabilities = {
   pendingPrompt: {
     drain: drainPendingPrompt,
     subscribe: subscribePendingPrompt,

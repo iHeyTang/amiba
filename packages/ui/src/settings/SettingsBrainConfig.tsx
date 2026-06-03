@@ -873,8 +873,14 @@ function FieldRow({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <Label className="w-44 shrink-0 font-mono text-[10px]">{envKey}</Label>
+        <Label
+          htmlFor={`provider-env-${providerId}-${envKey}`}
+          className="w-44 shrink-0 font-mono text-[10px]"
+        >
+          {envKey}
+        </Label>
         <Input
+          id={`provider-env-${providerId}-${envKey}`}
           type="password"
           value={value}
           onChange={(e) => {

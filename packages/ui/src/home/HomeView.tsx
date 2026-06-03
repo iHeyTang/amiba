@@ -194,7 +194,7 @@ function Home({
     setBusy(true);
     try {
       // HomeView only carries the *intent* to start a chat — the
-      // receiving surface (``SidePanelView`` in panelMode, or
+      // receiving surface (``ChatSurface`` in panelMode, or
       // ``tabs/chat.html``'s ``FullScreenChatView`` after navigation)
       // is what actually creates the session via ``ensureActive``
       // inside its autosend chain.
@@ -365,7 +365,7 @@ function Home({
           {panelMode ? (
             // Panel mode (embedded in the chat surface's empty state):
             // a centred Hermes mark over a single-line description.
-            // Matches the look the SidePanelView fallback used to
+            // Matches the look the ChatSurface fallback used to
             // render, so the home composer reads as "Hermes here, type
             // below" instead of an out-of-context wordmark + tagline.
             <div className="flex flex-col items-center gap-2 text-center">

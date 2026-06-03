@@ -13,9 +13,7 @@ import {
   MousePointerClick,
   Pencil,
   Plus,
-  Send,
   Sparkles,
-  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -90,26 +88,20 @@ import {
 import type {
   NavigateOpenPolicy,
   PendingPromptResult,
-  SidePanelCapabilities,
+  ChatSurfaceCapabilities,
 } from "./internal/capabilities";
-
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = window.setTimeout(() => {
-      reject(new Error(`${label} (exceeded ${Math.round(ms / 1000)}s)`));
-    }, ms);
-    p.then(
-      (v) => {
-        window.clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        window.clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
-}
+import { PendingQueueRail } from "./internal/PendingQueueRail";
+import { useApprovals } from "./internal/useApprovals";
+import { useFolderDrop } from "./internal/useFolderDrop";
+import { useLearnMode } from "./internal/useLearnMode";
+import {
+  pendingQueueStorageKey,
+  previewPendingTurn,
+  usePendingQueue,
+  type PendingChatTurn,
+  type RunChatTurnArgs,
+} from "./internal/usePendingQueue";
+import { useStreamBuffer } from "./internal/useStreamBuffer";
 
 const SETTINGS_KEYS = {
   model: "settings.chat.model",
@@ -126,34 +118,13 @@ const SETTINGS_KEYS = {
 // now live in @hermes-x/chat-ui (alongside the rendering components).
 // Imported below in the consolidated import block.
 
-/** One user turn waiting while the model is still streaming the previous reply. */
-interface PendingChatTurn {
-  queueId: string;
-  text: string;
-  attachments: Attachment[];
-  navigateOpenPolicySnapshot: NavigateOpenPolicy;
-  /**
-   * Browser-tab snapshot captured when the user pressed send (queued or
-   * immediate). Replayed verbatim when the turn fires so the agent's
-   * "current tab" tool sees the page the user was actually looking at,
-   * not whatever they switched to afterwards. ``undefined`` for surfaces
-   * without ``pageContext`` (desktop) or restricted pages.
-   */
-  turnMetadataSnapshot?: TurnMetadata;
-}
+// PendingChatTurn / previewPendingTurn / pendingQueueStorageKey now
+// live in internal/usePendingQueue.ts (the queue subsystem owns its own
+// types + helpers). Imported above.
 
 // openAgentDestinationInUserWindow lives in the extension wrapper as a
-// concrete chrome.windows + chrome.tabs implementation; SidePanelView
+// concrete chrome.windows + chrome.tabs implementation; ChatSurface
 // receives it as the `openAgentDestination` prop.
-
-function previewPendingTurn(t: PendingChatTurn): string {
-  const parts: string[] = [];
-  const body = t.text.trim();
-  if (body) parts.push(body.length > 160 ? `${body.slice(0, 157)}…` : body);
-  const n = t.attachments.filter((a) => a.path && !a.uploading).length;
-  if (n > 0) parts.push(n === 1 ? "(1 attachment)" : `(${n} attachments)`);
-  return parts.join(" ") || "(empty)";
-}
 
 // ChatError moved to @hermes-x/chat-ui (see consolidated import block).
 
@@ -189,7 +160,7 @@ const MESSAGES_MAX_WIDTH_CLASS: Record<MessagesMaxWidth, string> = {
   full: "",
 };
 
-export interface SidePanelViewProps {
+export interface ChatSurfaceProps {
   variant?: "sidebar" | "fullscreen";
   messagesMaxWidth?: MessagesMaxWidth;
   /**
@@ -202,7 +173,7 @@ export interface SidePanelViewProps {
    *    composer (with quick-action chips enabled) at the bottom of a
    *    content-sized container. Used by the Quick-Ask popup so its
    *    window can shrink-wrap to the input row while still mounting
-   *    the *same* SidePanelView body as the desktop main window.
+   *    the *same* ChatSurface body as the desktop main window.
    */
   emptyState?: "hero" | "composer-only";
   /**
@@ -231,7 +202,7 @@ export interface SidePanelViewProps {
    *                                     respected if caller provides one)
    *  - `pendingPrompt` undefined → no auto-fire on mount
    */
-  capabilities?: SidePanelCapabilities;
+  capabilities?: ChatSurfaceCapabilities;
 
   /**
    * UI slots for surface-specific extras that aren't expressed by capabilities
@@ -244,7 +215,7 @@ export interface SidePanelViewProps {
     bridgeBar?: ReactNode;
     /**
      * Render-prop for the NavigateOpenPolicyToggle slot in the composer
-     * toolbar. The toggle needs internal SidePanelView state (current
+     * toolbar. The toggle needs internal ChatSurface state (current
      * policy + change handler) so we pass them in as ctx. Extension
      * returns `<NavigateOpenPolicyToggle ...ctx />`; desktop omits.
      */
@@ -277,7 +248,7 @@ export interface SidePanelViewProps {
   openAgentDestination: (url: string) => void | Promise<void>;
 }
 
-export default function SidePanelView({
+export default function ChatSurface({
   variant = "sidebar",
   messagesMaxWidth = "comfortable",
   emptyState = "hero",
@@ -287,7 +258,7 @@ export default function SidePanelView({
   slots,
   openSettings,
   openAgentDestination,
-}: SidePanelViewProps) {
+}: ChatSurfaceProps) {
   // The side panel sits next to the user's active tab, so we let the user
   // opt into mirroring that page's theme via Settings → Theme = "Match
   // active page". Other preferences (`auto`/`light`/`dark`) behave the same
@@ -389,41 +360,46 @@ export default function SidePanelView({
     setAttachmentError,
     addFiles,
   } = att;
-  const [learnRecording, setLearnRecording] = useState(false);
-  const [learnEventCount, setLearnEventCount] = useState(0);
-  const [learnStopBusy, setLearnStopBusy] = useState(false);
+  const learnMode = useLearnMode({
+    learn: capabilities.learn,
+    pageContext: capabilities.pageContext,
+    sessions,
+    attachmentControls: {
+      setAttachments,
+      setAttachmentBusy,
+      setAttachmentError,
+    },
+    setPageError,
+    t,
+  });
+  const {
+    recording: learnRecording,
+    eventCount: learnEventCount,
+    stopBusy: learnStopBusy,
+    start: startLearnFromPanel,
+    stopAndAttach: stopLearnToComposer,
+  } = learnMode;
   // `dragOver` + `dropHandlers` are owned by `useComposerAttachments`
   // — see destructure above. The local state used to live here.
-  /**
-   * Workspace binding for this surface. `null` when no directory is bound
-   * or the platform doesn't expose a WorkspaceAdapter (extension). The chat
-   * area renders a folder-drop overlay when `folderDragOver` is true; the
-   * composer toolbar shows a path chip when `workspacePath` is non-null.
-   */
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [folderDragOver, setFolderDragOver] = useState(false);
+  // Workspace binding (desktop-only folder drop) is owned by
+  // `useFolderDrop`; see internal/useFolderDrop.ts.
+  const {
+    workspacePath,
+    workspaceError,
+    setWorkspaceError,
+    folderDragOver,
+    dropHandlers: folderDropHandlers,
+    unbindCurrent: unbindWorkspace,
+  } = useFolderDrop({ sessions });
   // Hidden file-input ref + onChange handler are owned by
   // `useComposerAttachments` — see `fileInputProps` below.
   /** Composer instance — exposes focus/select via ComposerHandle.
    *  Auto-grow is owned by the Composer component itself. */
   const composerRef = useRef<ComposerHandle | null>(null);
-  /**
-   * Verbose-state accumulator for the currently active in-flight stream.
-   * Mirrors the per-turn closure the old inline `streamChat` used, lifted to
-   * component scope so port events (which fire outside any particular
-   * `runChatTurn` invocation) can find it. Reset on activeId change and
-   * rebuilt wholesale from the SW snapshot on (re)subscribe.
-   */
-  const verboseStateRef = useRef<{
-    assistantUiId: string;
-    reasoning: string;
-    tools: StreamedToolCall[];
-    hermesOrder: string[];
-    hermesById: Map<string, HermesToolProgress>;
-    timeline: AssistantTimelineItem[];
-  } | null>(null);
-  const verboseFlushRafRef = useRef<number | null>(null);
+  // Verbose-state accumulator + chunk buffer + RAF flush machinery now
+  // live in `useStreamBuffer` (see destructure of `stream` below). The
+  // refs that used to live here were lifted out so a single hook owns
+  // both the storage and the API.
   /**
    * Promise plumbing so `runChatTurn` can `await` a stream that runs in the
    * service worker. Resolved by the terminal port event for this sessionId;
@@ -435,95 +411,88 @@ export default function SidePanelView({
     resolve: () => void;
     reject: (e: Error) => void;
   } | null>(null);
-  /** FIFO: user turns composed while `busy`; shown above the composer and drained after each stream. */
-  const [pendingQueue, setPendingQueue] = useState<PendingChatTurn[]>([]);
-  /**
-   * `true` after the user explicitly hits Stop with queued items present.
-   * Freezes auto-drain so the next stream doesn't immediately re-trigger
-   * the queue; user can review/edit/delete pending items first. Cleared
-   * by Resume, a fresh Send, or New Chat.
-   */
-  const [queuePaused, setQueuePaused] = useState(false);
-  const queuePausedRef = useRef(false);
-  useEffect(() => {
-    queuePausedRef.current = queuePaused;
-  }, [queuePaused]);
-  /**
-   * When non-null, the composer mirrors a queue item's content for in-place
-   * edit. The item stays in the queue (visually highlighted) and the queue
-   * is paused while editing so nothing fires past it. Send saves the edit
-   * AND fires that item immediately; cancel just clears the composer +
-   * exits edit mode.
-   */
-  const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
-  /**
-   * Active gateway approval requests for the current session. Mirrored
-   * from the SW chat engine's runtime state (snapshot on subscribe + live
-   * `approvalRequest`/`approvalResolved` events). Empty unless the agent
-   * is blocked waiting for the user. Reset on session switch.
-   */
-  const [pendingApprovals, setPendingApprovals] = useState<
-    HermesApprovalRequest[]
-  >([]);
-  /** Latest `X-Hermes-Run-Id` for the active session. Fallback when an approval event lacks its own runId. */
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  /** Per-approval state for the buttons: which decision is in-flight, if any. */
-  const [approvalInFlight, setApprovalInFlight] = useState<
-    Record<string, HermesApprovalDecision>
-  >({});
-  const [approvalError, setApprovalError] = useState<string | null>(null);
+  // Pending-turn queue, per-session persistence, send/stop/sendNow/
+  // edit/cancel/remove + the two pre-emption refs all live in
+  // `usePendingQueue` — see destructure below `runChatTurn`. The hook
+  // is configured later because it depends on `runChatTurn` (which
+  // depends on `stream.prime`, sessions, capabilities, etc.) and on
+  // `stream.markCurrentAssistantStopped` / `rejectPendingTurn`.
+  // Streaming buffer + flush + verbose-timeline machinery. Owns the
+  // chunk/verbose refs and the two RAFs that batch them into React
+  // state updates. The wire subscription (`client.onStreamEvent`)
+  // stays in this file with the event router below — the router calls
+  // `stream.onChunk` / `onReasoning` / etc. per event.
+  const stream = useStreamBuffer({ sessions });
+
+  // Approval flow (state, banner round-trip, per-message record stamps)
+  // is owned by `useApprovals` — see internal/useApprovals.ts. We pass
+  // the streaming-side hooks it needs (current assistant uiId, timeline
+  // append, verbose flush) as callbacks from `stream`.
+  const approvals = useApprovals({
+    client,
+    sessions,
+    getCurrentAssistantUiId: stream.getCurrentAssistantUiId,
+    appendApprovalToTimeline: stream.onApprovalToTimeline,
+    scheduleVerboseFlush: stream.scheduleVerboseFlush,
+  });
+  const {
+    pendingApprovals,
+    setPendingApprovals,
+    approvalInFlight,
+    approvalError,
+    setApprovalError,
+    activeRunId,
+    setActiveRunId,
+    appendApprovalRecord,
+    markApprovalOutcome,
+    respondToApproval,
+    onApprovalRequestEvent,
+    onApprovalResolvedEvent,
+    reset: resetApprovals,
+  } = approvals;
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  /**
-   * Coalesce SSE `delta.content` strings into at most one React update per
-   * animation frame. Token-at-a-time `setActiveMessages` forces Streamdown /
-   * the whole tree to re-render hundreds of times per second and can wedge or
-   * OOM the side panel on long replies.
-   */
-  const streamChunkBufRef = useRef<{
-    assistantUiId: string;
-    pending: string;
-  } | null>(null);
-  const streamFlushRafRef = useRef<number | null>(null);
+  // The chunk-buffer / RAF-flush machinery used to live inline here; now
+  // owned by `useStreamBuffer` (`stream.*`).
 
-  function cancelStreamChunkFlush(): void {
-    if (streamFlushRafRef.current != null) {
-      cancelAnimationFrame(streamFlushRafRef.current);
-      streamFlushRafRef.current = null;
-    }
-  }
-
-  function flushStreamChunksToMessages(): void {
-    const slot = streamChunkBufRef.current;
-    if (!slot || slot.pending.length === 0) return;
-    const delta = slot.pending;
-    slot.pending = "";
-    const uiId = slot.assistantUiId;
-    sessions.setActiveMessages((prev) => {
-      const next = (prev as UiMessage[]).slice();
-      const i = next.findIndex((m) => m.uiId === uiId);
-      if (i >= 0) {
-        next[i] = { ...next[i], content: next[i].content + delta };
-      }
-      return next;
-    });
-  }
-
-  function scheduleStreamChunkFlush(): void {
-    if (streamFlushRafRef.current != null) return;
-    streamFlushRafRef.current = requestAnimationFrame(() => {
-      streamFlushRafRef.current = null;
-      flushStreamChunksToMessages();
-      if (streamChunkBufRef.current?.pending) {
-        scheduleStreamChunkFlush();
-      }
-    });
-  }
-
-  useEffect(() => {
-    return () => {
-      cancelStreamChunkFlush();
-    };
-  }, []);
+  // Pending-turn queue. `runChatTurn` is referenced by the hook for
+  // sendNow / drainHead / send; it's a function declaration further
+  // down in this component body, so JS hoisting makes the forward
+  // reference safe (the value resolves at call time, not capture time).
+  const queueHook = usePendingQueue({
+    sessions,
+    client,
+    input,
+    setInput,
+    attachments,
+    setAttachments,
+    setAttachmentError,
+    attachmentUploading,
+    navigateOpenPolicy,
+    setNavigateOpenPolicy,
+    setPendingSourceApp,
+    busy,
+    markCurrentAssistantStopped: () => markCurrentAssistantStopped(),
+    rejectPendingTurn: (sid, err) => rejectPendingTurn(sid, err),
+    pageContextCapability: capabilities.pageContext,
+    runChatTurn: (args: RunChatTurnArgs) => runChatTurn(args),
+  });
+  const {
+    queue: pendingQueue,
+    paused: queuePaused,
+    editingQueueId,
+    queuePausedRef,
+    suppressFinallyDrainRef,
+    ignoreAbortForSessionRef,
+    setQueue: setPendingQueue,
+    setPaused: setQueuePaused,
+    setEditingQueueId,
+    send,
+    stop,
+    sendNow: sendQueueItemNow,
+    edit: editPendingQueueItem,
+    cancelEdit: cancelQueueEdit,
+    remove: removePendingQueueItem,
+  } = queueHook;
 
   // Pick up a prompt handed off from the new-tab Home launcher or from
   // an external surface (Quick-Ask Spotlight selection, Region Snip
@@ -618,97 +587,6 @@ export default function SidePanelView({
     if (fn) void fn();
   }, [pendingAutosend, sessions.ready, busy, input]);
 
-  function appendTextToVerboseTimeline(delta: string): void {
-    const v = verboseStateRef.current;
-    if (!v) return;
-    const last = v.timeline[v.timeline.length - 1];
-    if (last && last.kind === "text") {
-      last.text += delta;
-    } else {
-      v.timeline.push({ kind: "text", id: shortId("tl"), text: delta });
-    }
-  }
-
-  function appendToolToVerboseTimeline(toolCallId: string): void {
-    const v = verboseStateRef.current;
-    if (!v) return;
-    const seen = v.timeline.some(
-      (it) => it.kind === "tool" && it.toolCallId === toolCallId,
-    );
-    if (seen) return;
-    v.timeline.push({ kind: "tool", id: shortId("tl"), toolCallId });
-  }
-
-  function appendApprovalToVerboseTimeline(approvalId: string): void {
-    const v = verboseStateRef.current;
-    if (!v) return;
-    const seen = v.timeline.some(
-      (it) => it.kind === "approval" && it.approvalId === approvalId,
-    );
-    if (seen) return;
-    v.timeline.push({
-      kind: "approval",
-      id: shortId("tl"),
-      approvalId,
-    });
-  }
-
-  function cancelVerboseFlush(): void {
-    if (verboseFlushRafRef.current != null) {
-      cancelAnimationFrame(verboseFlushRafRef.current);
-      verboseFlushRafRef.current = null;
-    }
-  }
-
-  function applyVerboseToAssistant(): void {
-    const v = verboseStateRef.current;
-    if (!v) return;
-    // Reasoning rides on its own field so the bubble renderer can chip it
-    // separately from the body text. ``streamVerbose`` now carries only
-    // the tool-args markdown (still hidden behind the dev verbose toggle).
-    const rs = v.reasoning.trimEnd();
-    const parts: string[] = [];
-    const named = v.tools.filter((t) => t.name);
-    if (named.length > 0) {
-      const blocks = named.map((t) => {
-        const args = (t.arguments || "").trimEnd();
-        return `**${t.name}**${args ? `\n\n\`\`\`json\n${args}\n\`\`\`` : ""}`;
-      });
-      parts.push(blocks.join("\n\n"));
-    }
-    const md = parts.join("\n\n");
-    const progress = v.hermesOrder
-      .map((id) => v.hermesById.get(id))
-      .filter((ev): ev is HermesToolProgress => Boolean(ev));
-    // Snapshot the timeline so React sees a new identity for each text item
-    // when its content grows (text items are mutated in place during the run).
-    const timelineSnapshot = v.timeline.map((it) =>
-      it.kind === "text" ? { ...it } : it,
-    );
-    const assistantUiId = v.assistantUiId;
-    sessions.setActiveMessages((prev) =>
-      (prev as UiMessage[]).map((m) =>
-        m.uiId === assistantUiId
-          ? {
-              ...m,
-              streamVerbose: md,
-              reasoning: rs || undefined,
-              hermesToolProgress: progress,
-              assistantTimeline: timelineSnapshot,
-            }
-          : m,
-      ),
-    );
-  }
-
-  function scheduleVerboseFlush(): void {
-    if (verboseFlushRafRef.current != null) return;
-    verboseFlushRafRef.current = requestAnimationFrame(() => {
-      verboseFlushRafRef.current = null;
-      applyVerboseToAssistant();
-    });
-  }
-
   // -------------------------------------------------------------------------
   // Chat port: subscribe/snapshot/event handling.
   //
@@ -717,41 +595,12 @@ export default function SidePanelView({
   // recovery path — sent on `subscribe` so a freshly mounted panel (or one
   // switching to a session that was streaming in another tab) can rebuild
   // the in-flight assistant bubble from accumulated runtime state.
+  //
+  // The accumulator/flush/timeline helpers used to live here as inline
+  // function declarations; they're now on `stream.*` (see
+  // `useStreamBuffer`). The handlers below call `stream.onChunk`,
+  // `stream.onReasoning`, etc.
   // -------------------------------------------------------------------------
-
-  function resetLiveStreamState(): void {
-    cancelStreamChunkFlush();
-    cancelVerboseFlush();
-    streamChunkBufRef.current = null;
-    verboseStateRef.current = null;
-  }
-
-  function hydrateLocalFromSnapshot(state: ChatRuntimeState): void {
-    if (!state.assistantUiId) return;
-    verboseStateRef.current = {
-      assistantUiId: state.assistantUiId,
-      reasoning: state.reasoning,
-      tools: state.toolCalls.slice(),
-      hermesOrder: state.hermesOrder.slice(),
-      hermesById: new Map(
-        state.hermesToolProgress.map((e: HermesToolProgress) => [e.toolCallId, e]),
-      ),
-      // Copy text items so the in-place `last.text += delta` mutations
-      // from future chunk events don't retroactively rewrite history.
-      timeline: state.timeline.map((it: AssistantTimelineItem) =>
-        it.kind === "text" ? { ...it } : { ...it },
-      ),
-    };
-    if (state.streaming) {
-      // The accumulator buffers later deltas on top of the snapshot's
-      // accumulated text. We start `pending` empty; the next chunk event
-      // appends to message.content (which we'll set to assistantText below).
-      streamChunkBufRef.current = {
-        assistantUiId: state.assistantUiId,
-        pending: "",
-      };
-    }
-  }
 
   function handleSnapshot(frame: SnapshotFrame): void {
     const { sessionId, kind } = frame;
@@ -770,10 +619,7 @@ export default function SidePanelView({
       // so it's the authoritative "we're mid-submission" signal.
       if (pendingTurnRef.current?.sessionId === sessionId) return;
       setBusy(false);
-      setPendingApprovals([]);
-      setActiveRunId(null);
-      setApprovalInFlight({});
-      setApprovalError(null);
+      resetApprovals();
       return;
     }
 
@@ -803,7 +649,7 @@ export default function SidePanelView({
     //     present, else synthesize so the [interrupted] tail still
     //     reaches the user.
     const { state } = frame;
-    hydrateLocalFromSnapshot(state);
+    stream.hydrateFromSnapshot(state);
     setBusy(state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
     setActiveRunId(state.runId ?? null);
@@ -880,7 +726,7 @@ export default function SidePanelView({
       };
       return [...arr, synthesized];
     });
-    applyVerboseToAssistant();
+    stream.applyVerboseToAssistant();
     if (kind === "interrupted" && state.error) {
       setError({
         message: state.error.message,
@@ -919,16 +765,12 @@ export default function SidePanelView({
       resolvePendingTurn(sessionId);
       return;
     }
-    cancelStreamChunkFlush();
-    applyVerboseToAssistant();
-    cancelVerboseFlush();
-    flushStreamChunksToMessages();
-    const assistantUiId =
-      streamChunkBufRef.current?.assistantUiId ??
-      verboseStateRef.current?.assistantUiId ??
-      null;
-    streamChunkBufRef.current = null;
-    verboseStateRef.current = null;
+    stream.cancelStreamChunkFlush();
+    stream.applyVerboseToAssistant();
+    stream.cancelVerboseFlush();
+    stream.flushStreamChunksToMessages();
+    const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
+    stream.reset();
     if (assistantUiId) {
       sessions.setActiveMessages((prev) => {
         const next = (prev as UiMessage[]).map((m) =>
@@ -967,21 +809,22 @@ export default function SidePanelView({
     resolvePendingTurn(sessionId);
   }
 
-  function handleStreamAborted(sessionId: string): void {
-    if (sessionId !== sessions.activeId) {
-      rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
-      return;
-    }
-    cancelStreamChunkFlush();
-    applyVerboseToAssistant();
-    cancelVerboseFlush();
-    flushStreamChunksToMessages();
-    const assistantUiId =
-      streamChunkBufRef.current?.assistantUiId ??
-      verboseStateRef.current?.assistantUiId ??
-      null;
-    streamChunkBufRef.current = null;
-    verboseStateRef.current = null;
+  /**
+   * Seal whichever assistant message is currently streaming with the
+   * `[stopped]` suffix, clear all the streaming-side refs, persist, and
+   * flip `busy` off. Used by `handleStreamAborted` (SW echoed abort) AND
+   * `sendQueueItemNow` (local pre-emption — we don't wait for the SW
+   * echo to keep the queue feeling responsive). Idempotent: if there's
+   * no streaming bubble to seal, this is a no-op apart from the busy
+   * clearance.
+   */
+  function markCurrentAssistantStopped(): void {
+    stream.cancelStreamChunkFlush();
+    stream.applyVerboseToAssistant();
+    stream.cancelVerboseFlush();
+    stream.flushStreamChunksToMessages();
+    const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
+    stream.reset();
     if (assistantUiId) {
       sessions.setActiveMessages((prev) =>
         (prev as UiMessage[]).map((m) =>
@@ -999,6 +842,23 @@ export default function SidePanelView({
     // immediately so the `[stopped]` tail actually reaches storage.
     void sessions.flushPersist();
     setBusy(false);
+  }
+
+  function handleStreamAborted(sessionId: string): void {
+    // `sendQueueItemNow` already sealed the previous turn locally AND
+    // fired the next one. The pendingTurnRef now points at the *new*
+    // turn — rejecting it (or re-running the seal logic) would either
+    // cancel what the user just sent or stamp `[stopped]` onto the
+    // wrong bubble. So bail completely on the echoed abort.
+    if (ignoreAbortForSessionRef.current === sessionId) {
+      ignoreAbortForSessionRef.current = null;
+      return;
+    }
+    if (sessionId !== sessions.activeId) {
+      rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
+      return;
+    }
+    markCurrentAssistantStopped();
     rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
   }
 
@@ -1010,14 +870,8 @@ export default function SidePanelView({
       rejectPendingTurn(sessionId, new Error(event.message));
       return;
     }
-    cancelStreamChunkFlush();
-    cancelVerboseFlush();
-    const assistantUiId =
-      streamChunkBufRef.current?.assistantUiId ??
-      verboseStateRef.current?.assistantUiId ??
-      null;
-    streamChunkBufRef.current = null;
-    verboseStateRef.current = null;
+    const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
+    stream.reset();
     setPendingQueue((pq) => {
       for (const q of pq) {
         for (const a of q.attachments) void deleteAttachmentFile(a);
@@ -1026,9 +880,7 @@ export default function SidePanelView({
     });
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
     setQueuePaused(false);
-    setPendingApprovals([]);
-    setApprovalInFlight({});
-    setApprovalError(null);
+    resetApprovals();
     setError({ message: event.message, hint: event.hint });
     if (assistantUiId) {
       sessions.setActiveMessages((prev) =>
@@ -1053,56 +905,20 @@ export default function SidePanelView({
     switch (event.kind) {
       case "begin":
         setBusy(true);
-        if (!streamChunkBufRef.current) {
-          streamChunkBufRef.current = {
-            assistantUiId: event.assistantUiId,
-            pending: "",
-          };
-        }
-        if (!verboseStateRef.current) {
-          verboseStateRef.current = {
-            assistantUiId: event.assistantUiId,
-            reasoning: "",
-            tools: [],
-            hermesOrder: [],
-            hermesById: new Map(),
-            timeline: [],
-          };
-        }
+        stream.onBegin(event.assistantUiId);
         break;
-      case "chunk": {
-        const slot = streamChunkBufRef.current;
-        if (slot) slot.pending += event.text;
-        appendTextToVerboseTimeline(event.text);
-        scheduleStreamChunkFlush();
-        scheduleVerboseFlush();
+      case "chunk":
+        stream.onChunk(event.text);
         break;
-      }
-      case "reasoning": {
-        const v = verboseStateRef.current;
-        if (v) v.reasoning += event.text;
-        scheduleVerboseFlush();
+      case "reasoning":
+        stream.onReasoning(event.text);
         break;
-      }
-      case "toolCalls": {
-        const v = verboseStateRef.current;
-        if (v) v.tools = event.calls.slice();
-        scheduleVerboseFlush();
+      case "toolCalls":
+        stream.onToolCalls(event.calls);
         break;
-      }
-      case "hermesToolProgress": {
-        const v = verboseStateRef.current;
-        const inner = event.event;
-        if (v) {
-          if (!v.hermesById.has(inner.toolCallId)) {
-            v.hermesOrder.push(inner.toolCallId);
-            appendToolToVerboseTimeline(inner.toolCallId);
-          }
-          v.hermesById.set(inner.toolCallId, inner);
-        }
-        scheduleVerboseFlush();
+      case "hermesToolProgress":
+        stream.onHermesToolProgress(event.event);
         break;
-      }
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
           console.warn(
@@ -1115,46 +931,12 @@ export default function SidePanelView({
       case "run":
         setActiveRunId(event.runId || null);
         break;
-      case "approvalRequest": {
-        const req = event.request;
-        setPendingApprovals((prev) => {
-          const without = prev.filter((a) => a.approvalId !== req.approvalId);
-          return [...without, req];
-        });
-        // Persist a pending record onto the assistant message so the
-        // user can still see "I was asked to approve X" long after the
-        // banner closes. The `raw.timestamp` field is Python time.time()
-        // in seconds (see gateway/platforms/api_server.py:2933) —
-        // multiply to ms.
-        const tsField = (req.raw as Record<string, unknown> | undefined)
-          ?.timestamp;
-        const requestedAt =
-          typeof tsField === "number"
-            ? tsField * 1000
-            : Date.now();
-        appendApprovalRecord(req, requestedAt);
-        // Clear any leftover in-flight marker for a re-emitted request.
-        setApprovalInFlight((prev) => {
-          if (!(req.approvalId in prev)) return prev;
-          const next = { ...prev };
-          delete next[req.approvalId];
-          return next;
-        });
+      case "approvalRequest":
+        onApprovalRequestEvent(event.request);
         break;
-      }
-      case "approvalResolved": {
-        const id = event.approvalId;
-        setPendingApprovals((prev) =>
-          prev.filter((a) => a.approvalId !== id),
-        );
-        setApprovalInFlight((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
+      case "approvalResolved":
+        onApprovalResolvedEvent(event.approvalId);
         break;
-      }
       case "done":
         handleStreamDone(sessionId, event.agentFinalUrl, event.agentFinalTitle);
         break;
@@ -1209,135 +991,9 @@ export default function SidePanelView({
   // shared component takes care of it on every value/maxTextareaPx
   // change.
 
-  async function refreshLearnStatus() {
-    if (!capabilities.learn) return;
-    try {
-      const r = await capabilities.learn.getStatus();
-      setLearnRecording(!!r.active);
-      setLearnEventCount(typeof r.eventCount === "number" ? r.eventCount : 0);
-    } catch {
-      // Engine not ready yet.
-    }
-  }
-
-  async function startLearnFromPanel() {
-    if (!capabilities.learn || !capabilities.pageContext) return;
-    try {
-      const tab = await capabilities.pageContext.getActiveBrowserTab();
-      if (tab?.id === undefined) {
-        setPageError(
-          "Cannot start recording: no active web tab detected. Open the page you want to demo, then click “Record actions”.",
-        );
-        return;
-      }
-      const r = await capabilities.learn.start(tab.id);
-      if (!r?.ok) {
-        setPageError(r?.error || t("sidepanel.permission.failedRecordStart"));
-        return;
-      }
-      await refreshLearnStatus();
-    } catch (e) {
-      setPageError(String((e as Error)?.message || e));
-    }
-  }
-
-  async function stopLearnToComposer() {
-    if (!capabilities.learn) return;
-    setLearnStopBusy(true);
-    let trace: unknown = null;
-    try {
-      const r = (await withTimeout(
-        capabilities.learn.stop(),
-        25_000,
-        "Stop-recording request timed out (the extension background may be asleep)",
-      )) as { ok?: boolean; trace?: unknown; error?: string };
-      if (!r?.ok) {
-        setPageError(r?.error || t("sidepanel.permission.failedRecordStop"));
-        return;
-      }
-      if (!r.trace) {
-        setPageError(
-          "No active recording, or the session has expired. Click “Record actions” first, demonstrate, then click “Stop and attach”.",
-        );
-        await refreshLearnStatus();
-        return;
-      }
-      trace = r.trace;
-    } catch (e) {
-      setPageError(String((e as Error)?.message || e));
-      return;
-    } finally {
-      // Clear before attachment upload: the put can hang for a long time when
-      // the bridge isn't connected, and we don't want the "Stop" button stuck
-      // in a perpetual "processing…" state while we wait on it.
-      setLearnStopBusy(false);
-    }
-
-    await refreshLearnStatus();
-
-    setAttachmentBusy(true);
-    setAttachmentError(null);
-    const sessionId = sessions.ready
-      ? await sessions.ensureActive()
-      : "default";
-    const name = `learn-trace-${Date.now()}.json`;
-    const blob = new Blob([JSON.stringify(trace, null, 2)], {
-      type: "application/json",
-    });
-    const pendingUiId = shortId("att");
-    const pending: Attachment = {
-      uiId: pendingUiId,
-      name,
-      mime: "application/json",
-      size: blob.size,
-      kind: classify(name, "application/json"),
-      uploading: true,
-    };
-    setAttachments((prev) => [...prev, pending]);
-    try {
-      const read = (await withTimeout(
-        readBlobAsAttachment({
-          blob,
-          name,
-          mime: "application/json",
-          options: { sessionId, uiId: pendingUiId },
-        }),
-        130_000,
-        "Recorded-trace upload timed out (keep Hermes online; large traces are slower)",
-      )) as AttachmentReadResult;
-      if (!isAttachmentReadOk(read)) {
-        const hint =
-          read.error.includes("No Hermes plugin peer") ||
-          read.error.includes("role=agent")
-            ? "Extension is connected to the bridge, but Hermes hasn't joined as the plugin (agent side missing). Start Hermes and load this browser plugin."
-            : "Check that Hermes is running, the bridge is connected, and the gateway is healthy.";
-        setAttachmentError(`${read.name}: ${read.error} ${hint}`);
-        setAttachments((prev) => prev.filter((a) => a.uiId !== pendingUiId));
-        return;
-      }
-      setAttachments((prev) =>
-        prev.map((a) => (a.uiId === pendingUiId ? read.attachment : a)),
-      );
-      setPageError(null);
-    } catch (e) {
-      setAttachmentError(String((e as Error)?.message || e));
-      setAttachments((prev) => prev.filter((a) => a.uiId !== pendingUiId));
-    } finally {
-      setAttachmentBusy(false);
-    }
-    await refreshLearnStatus();
-  }
-
-  // Learn status: capability emits state changes when active recording
-  // toggles in the engine; we re-fetch on every change.
-  useEffect(() => {
-    void refreshLearnStatus();
-    if (!capabilities.learn) return;
-    return capabilities.learn.onStateChange((status) => {
-      setLearnRecording(!!status.active);
-      setLearnEventCount(typeof status.eventCount === "number" ? status.eventCount : 0);
-    });
-  }, [capabilities.learn]);
+  // Learn-mode handlers (start / stopAndAttach), state (recording /
+  // eventCount / stopBusy), and the engine-status subscription are now
+  // owned by `useLearnMode` above — see internal/useLearnMode.ts.
 
   // navigate-open-policy: extension's Options page can mutate the policy;
   // capability surfaces those mutations so the side-panel state stays in sync.
@@ -1417,114 +1073,10 @@ export default function SidePanelView({
   }, [showStreamDetails]);
 
   // -------------------------------------------------------------------------
-  // Workspace binding: per-session. Each chat session can pin its own
-  // directory; the chip + drop overlay reflect whichever session is
-  // currently active. We re-read on activeId change so switching
-  // sessions flips the chip to the new session's binding (or hides it
-  // if that session has none). Extension lacks the workspaces sub-API
-  // entirely — the chip/drop overlay stays hidden in that case.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const ws = getPlatform().workspaces;
-    if (!ws) return;
-    const activeId = sessions.activeId;
-    if (!activeId) {
-      setWorkspacePath(null);
-      return;
-    }
-    let cancelled = false;
-    void ws.getCurrent(activeId).then((p) => {
-      if (!cancelled) setWorkspacePath(p);
-    });
-    const unsub = ws.onChange((change) => {
-      // Only react to changes for the session this surface is showing —
-      // a bind on session B should not move session A's chip.
-      if (change.sessionId !== activeId) return;
-      if (change.kind === "bound") setWorkspacePath(change.path);
-      else if (change.kind === "unbound") setWorkspacePath(null);
-    });
-    return () => {
-      cancelled = true;
-      unsub();
-    };
-  }, [sessions.activeId]);
-
-  /**
-   * Resolve a dropped folder's absolute path. Electron 33 removed the
-   * legacy `File.path` field; the preload bridge exposes
-   * `webUtils.getPathForFile()` under `window.hermes.workspaces.getPathForFile`.
-   * Returns null when the bridge isn't present (extension / web).
-   */
-  function resolveDroppedFolderPath(file: File): string | null {
-    const bridge = (window as unknown as { hermes?: { workspaces?: { getPathForFile?: (f: File) => string } } })
-      .hermes?.workspaces?.getPathForFile;
-    if (!bridge) return null;
-    try {
-      const p = bridge(file);
-      return p && p.length > 0 ? p : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * True iff the active drag carries at least one filesystem directory.
-   * Used to gate the folder-drop overlay so file drops on the composer
-   * (which the composer's own handler owns) don't accidentally trigger
-   * workspace binding.
-   */
-  function dragHasDirectory(dt: DataTransfer): boolean {
-    const items = dt.items;
-    if (!items) return false;
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      if (it.kind !== "file") continue;
-      const entry = (
-        it as DataTransferItem & {
-          webkitGetAsEntry?: () => { isDirectory?: boolean } | null;
-        }
-      ).webkitGetAsEntry?.();
-      if (entry && entry.isDirectory) return true;
-    }
-    return false;
-  }
-
-  async function handleFolderDrop(files: File[]): Promise<void> {
-    const ws = getPlatform().workspaces;
-    if (!ws) return;
-    // First folder wins. Mixed selections (folder + files) pick the folder
-    // and ignore the rest — the file drop happens on the composer, not here.
-    let chosen: string | null = null;
-    for (const f of files) {
-      const p = resolveDroppedFolderPath(f);
-      if (p) {
-        chosen = p;
-        break;
-      }
-    }
-    if (!chosen) {
-      setWorkspaceError("Could not resolve the dropped folder's path.");
-      return;
-    }
-    try {
-      // Bindings are session-scoped: ensure an active session exists so a
-      // drop on a brand-new app launch (no chat yet) still pins to a real
-      // session id rather than failing silently.
-      const sessionId = sessions.ready
-        ? await sessions.ensureActive()
-        : null;
-      if (!sessionId) {
-        setWorkspaceError(
-          "Open or start a chat session before binding a workspace.",
-        );
-        return;
-      }
-      await ws.bind(sessionId, chosen);
-      setWorkspaceError(null);
-    } catch (e) {
-      setWorkspaceError(String((e as Error)?.message || e));
-    }
-  }
+  // Workspace binding (drop-a-folder-to-pin-it) lives in `useFolderDrop`
+  // — see internal/useFolderDrop.ts. The hook owns the per-session
+  // workspace-path subscription, the drag-target detection, and the
+  // bind/unbind round-trips against `platform.workspaces`.
 
   useEffect(() => {
     if (!showStreamDetailsLoadedRef.current) return;
@@ -1554,29 +1106,28 @@ export default function SidePanelView({
   // affordances (pinned pages, attachments). The previous session's stream
   // keeps running in the SW; switching back to that session will
   // re-subscribe and rebuild local state from the snapshot.
+  //
+  // Note we do NOT delete the outgoing session's queued attachments here:
+  // the queue is persisted per-session (see effects below) and the
+  // attachments belong to it. They get cleaned up when their queue item
+  // fires (consumed by runChatTurn) or is explicitly removed by the user.
   const lastSeenActiveRef = useRef<string>("");
   useEffect(() => {
     if (sessions.activeId !== lastSeenActiveRef.current) {
       const wasInitialised = lastSeenActiveRef.current !== "";
       lastSeenActiveRef.current = sessions.activeId;
-      resetLiveStreamState();
+      stream.reset();
       if (wasInitialised) {
-        setPendingQueue((prev) => {
-          for (const q of prev) {
-            for (const a of q.attachments) void deleteAttachmentFile(a);
-          }
-          return [];
-        });
+        // Drop in-memory queue; the load-effect below will repopulate
+        // from the new session's persisted queue.
+        setPendingQueue([]);
         // Queue is scoped to a session; switching tabs drops it, so
         // any paused flag for the prior session must drop too.
         setQueuePaused(false);
         // Pending approvals are also session-scoped — clear them on
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
-        setPendingApprovals([]);
-        setActiveRunId(null);
-        setApprovalInFlight({});
-        setApprovalError(null);
+        resetApprovals();
         setPageError(null);
         // Same fire-and-forget GC as `newChat` — the composer-time
         // attachments belonged to the session we're leaving.
@@ -1591,6 +1142,9 @@ export default function SidePanelView({
       }
     }
   }, [sessions.activeId]);
+
+  // Per-session pendingQueue persistence (load on activate, save on
+  // change, hydration-guarded) is owned by `usePendingQueue`.
 
   async function runChatTurn(args: {
     text: string;
@@ -1653,6 +1207,11 @@ export default function SidePanelView({
       void sessions.touchSession(sessionId, next);
       return next;
     });
+    // Persist immediately so a refresh between bubble-append and the
+    // first SW echo doesn't lose the user message. The standard
+    // `schedulePersistMessages` debounce is 250ms — long enough for a
+    // quick reload after send-now to miss it.
+    void sessions.flushPersist();
     // Once the user message is in the log, attach the (async-built)
     // badges in a follow-up update so the chips render as soon as the
     // thumbnails are ready.
@@ -1705,20 +1264,7 @@ export default function SidePanelView({
     // back) finds populated state to mutate. The SW also maintains its
     // own copy for snapshot-on-resubscribe; the two are kept in sync by
     // applying every event on both sides.
-    cancelStreamChunkFlush();
-    cancelVerboseFlush();
-    streamChunkBufRef.current = {
-      assistantUiId: assistantMsg.uiId,
-      pending: "",
-    };
-    verboseStateRef.current = {
-      assistantUiId: assistantMsg.uiId,
-      reasoning: "",
-      tools: [],
-      hermesOrder: [],
-      hermesById: new Map(),
-      timeline: [],
-    };
+    stream.prime(assistantMsg.uiId);
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -1749,9 +1295,15 @@ export default function SidePanelView({
       // Busy clearance is owned by the terminal-event handlers (so a
       // background session's `done` doesn't clobber the active session's
       // busy state). Do NOT touch busy here.
-      // If the user hit Stop, the queue was deliberately frozen — don't
-      // re-fire it until they explicitly resume. Otherwise drain the head.
-      if (!queuePausedRef.current) {
+      // If `sendQueueItemNow` already fired the next turn directly (it
+      // does this when the user clicked send-now during busy), skip the
+      // drain here — otherwise we'd kick off a second concurrent
+      // runChatTurn that races the one already running.
+      if (suppressFinallyDrainRef.current) {
+        suppressFinallyDrainRef.current = false;
+      } else if (!queuePausedRef.current) {
+        // If the user hit Stop, the queue was deliberately frozen — don't
+        // re-fire it until they explicitly resume. Otherwise drain the head.
         setPendingQueue((prev) => {
           if (prev.length === 0) return prev;
           const [head, ...tail] = prev;
@@ -1769,260 +1321,12 @@ export default function SidePanelView({
     }
   }
 
-  async function send() {
-    const text = input.trim();
-    // Allow send when the user has uploaded attachments but hasn't typed
-    // anything (e.g. "here's a screenshot — what's wrong with it?"). We
-    // still gate on having SOMETHING to send so an empty composer with
-    // no attachments stays a no-op.
-    if (!text && attachments.every((a) => !a.path || a.uploading)) return;
-    if (attachmentUploading) return;
-    if (!sessions.ready) return;
-
-    // Edit-then-Send: clicking Send while editing a queued item means
-    // "save my changes and fire this one now" — equivalent to the per-row
-    // send-now button on the same item.
-    if (editingQueueId != null) {
-      sendQueueItemNow(editingQueueId);
-      return;
-    }
-
-    const attachmentsForSend = attachments.filter((a) => a.path && !a.uploading);
-
-    // Capture the user's current tab BEFORE the queue/send branches. Snapshot
-    // belongs to the moment the user pressed send — by the time a queued
-    // turn fires, the user has very possibly switched tabs. ``undefined`` on
-    // desktop or when the capability declines (restricted URL etc.).
-    let turnMetadataForSend: TurnMetadata | undefined;
-    try {
-      const snap = await capabilities.pageContext?.captureBrowserTabSnapshot();
-      if (snap) turnMetadataForSend = { browser_tab_snapshot: snap };
-    } catch {
-      // Snapshot failures should never block the user's send.
-    }
-
-    if (busy) {
-      setPendingQueue((prev) => [
-        ...prev,
-        {
-          queueId: shortId("q"),
-          text,
-          attachments: attachmentsForSend.map((a) => ({ ...a })),
-          navigateOpenPolicySnapshot: navigateOpenPolicy,
-          turnMetadataSnapshot: turnMetadataForSend,
-        },
-      ]);
-      setInput("");
-      setAttachments([]);
-      // Page attachments are one-shot — clear so they don't double-attach
-      // to a follow-up turn the user types while this one is still in flight.
-      setAttachmentError(null);
-      // Sending a new message implicitly un-pauses: the user is clearly
-      // ready for the queue to move again. The current stream will finish
-      // and the finally-drain will kick in normally.
-      if (queuePausedRef.current) setQueuePaused(false);
-      return;
-    }
-
-    setInput("");
-    setAttachments([]);
-    setAttachmentError(null);
-    // The "from <App>" chip belongs to a single hand-off turn — clear
-    // it on send so it doesn't trail the user into their next prompt.
-    setPendingSourceApp(null);
-
-    // Not busy. If the queue was paused (i.e., user hit Stop and left items
-    // queued), unpause first so the runChatTurn's finally-drain fires the
-    // remaining items after this fresh turn completes.
-    if (queuePausedRef.current) setQueuePaused(false);
-
-    await runChatTurn({
-      text,
-      attachments: attachmentsForSend,
-      navigateOpenPolicyForTurn: navigateOpenPolicy,
-      turnMetadataForTurn: turnMetadataForSend,
-    });
-  }
-
-  // Keep the ref pointed at the latest `send` closure so the
-  // pending-autosend effect can fire it without putting a fresh function
-  // identity into its deps array on every render.
+  // The queue actions (send / stop / sendNow / edit / cancelEdit /
+  // remove / drainHead) and the per-session persistence effects all
+  // live in `usePendingQueue` — destructured above as `queueHook`.
+  // `sendRef` is still here because the auto-send useEffect wants to
+  // call the latest `send` closure without listing it as a dep.
   sendRef.current = send;
-
-  function stop() {
-    // Preserve the pending queue. Hitting Stop while items are queued is
-    // a "halt and let me think" gesture — wiping the queue forces the user
-    // to retype everything they had lined up. We freeze auto-drain with
-    // `queuePaused` so the next finished stream doesn't immediately fire
-    // the next queued item behind the user's back.
-    setQueuePaused(true);
-    const sid = sessions.activeId;
-    if (sid) {
-      try {
-        client.abort(sid);
-      } catch (e) {
-        console.warn("[sidepanel] abort failed:", e);
-      }
-    }
-  }
-
-  function removePendingQueueItem(queueId: string) {
-    setPendingQueue((prev) => {
-      const hit = prev.find((q) => q.queueId === queueId);
-      if (hit) {
-        for (const a of hit.attachments) void deleteAttachmentFile(a);
-      }
-      return prev.filter((q) => q.queueId !== queueId);
-    });
-    // If we just deleted the row that was being edited, drop edit mode so
-    // the composer doesn't keep a ghost reference to a vanished item.
-    if (editingQueueId === queueId) {
-      setEditingQueueId(null);
-      setInput("");
-      for (const a of attachments) void deleteAttachmentFile(a);
-      setAttachments([]);
-    }
-  }
-
-  /**
-   * Enter edit mode for a queued item. The item STAYS in the queue (the
-   * user explicitly asked for this — clicking edit shouldn't lose the slot
-   * in the queue). The composer mirrors its content for editing, the queue
-   * is paused so nothing fires past it, and the editing row gets a visual
-   * marker. If the composer already had a draft, that draft is appended
-   * to the queue end so nothing is lost.
-   */
-  function editPendingQueueItem(queueId: string) {
-    const item = pendingQueue.find((q) => q.queueId === queueId);
-    if (!item) return;
-    const draftText = input;
-    const draftAttachments = attachments.filter((a) => a.path && !a.uploading);
-    const draftPolicy = navigateOpenPolicy;
-    const hasDraft =
-      draftText.trim().length > 0 || draftAttachments.length > 0;
-
-    setPendingQueue((prev) => {
-      if (!hasDraft) return prev;
-      return [
-        ...prev,
-        {
-          queueId: shortId("q"),
-          text: draftText,
-          attachments: draftAttachments.map((a) => ({ ...a })),
-          navigateOpenPolicySnapshot: draftPolicy,
-          // No fresh snapshot here — this branch only fires when the
-          // composer already had a draft AND the user clicked "edit
-          // another queued item". The draft was typed earlier without a
-          // snapshot pipeline, so we let the queued item ride without
-          // one rather than re-snapshot at edit time (which would point
-          // at whatever tab the user is on right now, not the draft's
-          // original context).
-        },
-      ];
-    });
-    setEditingQueueId(queueId);
-    setInput(item.text);
-    setAttachments(item.attachments.map((a) => ({ ...a })));
-    setNavigateOpenPolicy(item.navigateOpenPolicySnapshot);
-    setQueuePaused(true);
-  }
-
-  /** Exit edit mode without saving the composer content back to the queue. */
-  function cancelQueueEdit() {
-    if (editingQueueId == null) return;
-    setEditingQueueId(null);
-    setInput("");
-    for (const a of attachments) void deleteAttachmentFile(a);
-    setAttachments([]);
-  }
-
-  /**
-   * Kick the head of the queue back into runChatTurn. Used by send-now and
-   * by `send()` when the user dispatches a new message while the queue is
-   * paused.
-   */
-  function drainPendingQueueHead() {
-    setPendingQueue((prev) => {
-      if (prev.length === 0) return prev;
-      const [head, ...tail] = prev;
-      queueMicrotask(() =>
-        void runChatTurn({
-          text: head.text,
-          attachments: head.attachments,
-          navigateOpenPolicyForTurn: head.navigateOpenPolicySnapshot,
-          turnMetadataForTurn: head.turnMetadataSnapshot,
-        }),
-      );
-      return tail;
-    });
-  }
-
-  /**
-   * "Send now": move this item to the front of the queue, unpause, and
-   * (when not already streaming) fire it immediately. While busy, the
-   * reorder is enough — the runChatTurn finally-drain picks up the new
-   * head when the current stream ends. If the user was editing this exact
-   * item, commit the composer content into the item first so the fired
-   * version includes their edits.
-   */
-  function sendQueueItemNow(queueId: string) {
-    const editingThisOne = editingQueueId === queueId;
-    if (editingThisOne) {
-      // Build the updated payload from current composer state — this is the
-      // committed-edit version that fires.
-      const previous = pendingQueue.find((q) => q.queueId === queueId);
-      const updated: PendingChatTurn = {
-        queueId,
-        text: input,
-        attachments: attachments
-          .filter((a) => a.path && !a.uploading)
-          .map((a) => ({ ...a })),
-        navigateOpenPolicySnapshot: navigateOpenPolicy,
-        // Keep the original snapshot from queue time — re-capturing here
-        // would point at "wherever the user is right now while editing",
-        // which is rarely the page they wanted to reference.
-        turnMetadataSnapshot: previous?.turnMetadataSnapshot,
-      };
-      setPendingQueue((prev) => {
-        const without = prev.filter((q) => q.queueId !== queueId);
-        return [updated, ...without];
-      });
-      setEditingQueueId(null);
-      setInput("");
-      setAttachments([]);
-    } else {
-      setPendingQueue((prev) => {
-        const item = prev.find((q) => q.queueId === queueId);
-        if (!item) return prev;
-        const without = prev.filter((q) => q.queueId !== queueId);
-        return [item, ...without];
-      });
-    }
-    setQueuePaused(false);
-    if (busy) {
-      // Interrupt the in-flight stream so the promoted item fires
-      // immediately. The cascade is:
-      //   1. POST `abort` to the SW engine → ctrl.abort() → SSE fetch
-      //      throws AbortError → engine catch → emit "aborted"
-      //   2. Panel `handleStreamAborted` → rejects pendingTurnRef →
-      //      runChatTurn's await rethrows → catch (logs) → finally
-      //   3. finally sees `queuePaused === false` (we just cleared it
-      //      above) → drains queue head (= this just-promoted item) →
-      //      fires it via a fresh runChatTurn
-      // The current stream's partial response is marked [stopped] —
-      // that's the explicit cost the user is paying for "send now".
-      const sid = sessions.activeId;
-      if (sid) {
-        try {
-          client.abort(sid);
-        } catch (e) {
-          console.warn("[sidepanel] abort-for-send-now failed:", e);
-        }
-      }
-    } else {
-      queueMicrotask(() => drainPendingQueueHead());
-    }
-  }
 
   /**
    * Append (or refresh) the persistent approval record on whichever
@@ -2033,174 +1337,9 @@ export default function SidePanelView({
    * assistant message — the gateway shouldn't fire an approval outside
    * a turn, but we don't want to crash if it does.
    */
-  function appendApprovalRecord(
-    req: HermesApprovalRequest,
-    requestedAt: number,
-  ): void {
-    const uiId =
-      verboseStateRef.current?.assistantUiId ??
-      streamChunkBufRef.current?.assistantUiId;
-    if (!uiId) return;
-    const record: ApprovalRecord = {
-      approvalId: req.approvalId,
-      command: req.command,
-      tool: req.tool,
-      description: req.description,
-      reason: req.reason,
-      requestedAt,
-    };
-    // Drop a timeline marker too so the approval chip renders inline
-    // (between whatever text/tool items preceded it). Idempotent —
-    // re-firing the same approval doesn't double up.
-    appendApprovalToVerboseTimeline(req.approvalId);
-    scheduleVerboseFlush();
-    sessions.setActiveMessages((prev) =>
-      (prev as UiMessage[]).map((m) => {
-        if (m.uiId !== uiId) return m;
-        const existing = m.hermesApprovalRecords ?? [];
-        const without = existing.filter(
-          (r) => r.approvalId !== req.approvalId,
-        );
-        return {
-          ...m,
-          hermesApprovalRecords: [...without, record],
-        };
-      }),
-    );
-  }
-
-  /**
-   * Stamp the final outcome on a persisted record. Searches every
-   * message in the active session — the approval may have been
-   * recorded against a message that's no longer the head, especially
-   * when expired approvals are settled long after the turn moved on.
-   * No-op when the record is already settled (don't trample a real
-   * outcome with a follow-up `expired`/`failed`).
-   */
-  function markApprovalOutcome(
-    approvalId: string,
-    outcome: ApprovalOutcome,
-    decidedAt: number,
-  ): void {
-    if (!approvalId) return;
-    sessions.setActiveMessages((prev) =>
-      (prev as UiMessage[]).map((m) => {
-        const records = m.hermesApprovalRecords;
-        if (!records || records.length === 0) return m;
-        const i = records.findIndex((r) => r.approvalId === approvalId);
-        if (i < 0) return m;
-        if (records[i].outcome) return m;
-        const next = records.slice();
-        next[i] = { ...next[i], outcome, decidedAt };
-        return { ...m, hermesApprovalRecords: next };
-      }),
-    );
-  }
-
-  /**
-   * POST a user decision for one pending approval and clear the local card
-   * optimistically. The SW chat engine also drops the approval from its
-   * runtime state via the `clearApproval` port message so any other panel
-   * subscribed to the same session loses the card too (matches the
-   * "multi-panel see same stream" guarantee from the engine refactor).
-   */
-  async function respondToApproval(
-    request: HermesApprovalRequest,
-    decision: HermesApprovalDecision,
-  ): Promise<void> {
-    setApprovalError(null);
-    const runId = request.runId || activeRunId || "";
-    if (!runId) {
-      setApprovalError(
-        "Missing run id for this approval. The gateway didn't return X-Hermes-Run-Id and the event payload didn't include one.",
-      );
-      return;
-    }
-    setApprovalInFlight((prev) => ({
-      ...prev,
-      [request.approvalId]: decision,
-    }));
-    const res = await postHermesApprovalDecision({
-      runId,
-      approvalId: request.approvalId,
-      decision,
-    });
-    if (!res.ok) {
-      // 409 `approval_not_active` means the gateway has already timed out
-      // and cleaned up this approval session (default
-      // approvals.gateway_timeout = 300s). The agent has been unblocked
-      // with a BLOCKED response, the run has typically finished, and
-      // there's nothing left to approve. Treat it as "card is stale" —
-      // drop it locally + show a friendly notice instead of leaving the
-      // user clicking a button that will never succeed.
-      const errStr = res.error || "";
-      const isStale =
-        res.status === 409 ||
-        errStr.includes("approval_not_active") ||
-        errStr.includes("no active approval session") ||
-        errStr.includes("no pending approval");
-      if (isStale) {
-        setPendingApprovals((prev) =>
-          prev.filter((a) => a.approvalId !== request.approvalId),
-        );
-        setApprovalInFlight((prev) => {
-          const next = { ...prev };
-          delete next[request.approvalId];
-          return next;
-        });
-        // Sync the engine so its runtime state also drops the stale pending,
-        // matching the optimistic-clear behaviour on a successful POST.
-        const sid = sessions.activeId;
-        if (sid) {
-          try {
-            client.clearApproval(sid, request.approvalId);
-          } catch {
-            // Best-effort.
-          }
-        }
-        // Stamp the persisted record so the history chip flips to
-        // "Expired" instead of staying in a perpetual pending state.
-        markApprovalOutcome(request.approvalId, "expired", Date.now());
-        setApprovalError(
-          "Approval timed out (default 5 minutes); the command was auto-denied. To extend the window, add `gateway_timeout: 600` under the `approvals` section of ~/.hermes/config.yaml.",
-        );
-        return;
-      }
-      // POST failed for a non-stale reason (network down, gateway error,
-      // bad auth). Mark the record as `failed` so it doesn't stay
-      // "Waiting…" forever in the history view.
-      markApprovalOutcome(request.approvalId, "failed", Date.now());
-      setApprovalError(
-        `Approval failed: ${res.error || "unknown"} (HTTP ${res.status ?? "?"})`,
-      );
-      setApprovalInFlight((prev) => {
-        const next = { ...prev };
-        delete next[request.approvalId];
-        return next;
-      });
-      return;
-    }
-    // Optimistic clear: drop the card locally and tell the SW to do the
-    // same in its runtime state. The gateway's eventual `approval.responded`
-    // SSE event becomes a no-op (already cleared).
-    setPendingApprovals((prev) =>
-      prev.filter((a) => a.approvalId !== request.approvalId),
-    );
-    setApprovalInFlight((prev) => {
-      const next = { ...prev };
-      delete next[request.approvalId];
-      return next;
-    });
-    markApprovalOutcome(request.approvalId, decision, Date.now());
-    const sid = sessions.activeId;
-    if (sid) {
-      try {
-        client.clearApproval(sid, request.approvalId);
-      } catch (e) {
-        console.warn("[sidepanel] clearApproval failed:", e);
-      }
-    }
-  }
+  // Approval-flow helpers (appendApprovalRecord / markApprovalOutcome /
+  // respondToApproval) and the per-card in-flight tracker now live in
+  // `useApprovals` — see destructure near the top of the component.
 
   async function handleNavigateOpenPolicyChange(next: NavigateOpenPolicy) {
     setNavigateOpenPolicy(next);
@@ -2221,17 +1360,11 @@ export default function SidePanelView({
   async function newChat() {
     setError(null);
     setPageError(null);
-    setPendingQueue((prev) => {
-      for (const q of prev) {
-        for (const a of q.attachments) void deleteAttachmentFile(a);
-      }
-      return [];
-    });
+    // The old session's pendingQueue stays with the old session (we
+    // persist it per-session). The switch-effect will swap in-memory
+    // queue to the new session's [] on activeId change.
     setQueuePaused(false);
-    setPendingApprovals([]);
-    setActiveRunId(null);
-    setApprovalInFlight({});
-    setApprovalError(null);
+    resetApprovals();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
     for (const a of attachments) void deleteAttachmentFile(a);
@@ -2251,7 +1384,7 @@ export default function SidePanelView({
   // `addFiles`, `removeAttachment`, `openFilePicker`, `handleComposerPaste`
   // all live in `useComposerAttachments` — destructured up-top. The
   // shared hook is the single source of truth for attachment ingestion
-  // across SidePanelView, HomeView, and the Quick-Ask popup; touching
+  // across ChatSurface, HomeView, and the Quick-Ask popup; touching
   // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
@@ -2518,31 +1651,7 @@ export default function SidePanelView({
           folderDragOver && "ring-2 ring-primary/40",
         )}
         ref={scrollRef}
-        onDragOver={(e) => {
-          // Workspace binding is a desktop-only capability — bail early on
-          // the extension surface so the composer's file-drop handler keeps
-          // owning the chat-area drop without competition.
-          if (!getPlatform().workspaces) return;
-          const dt = e.dataTransfer;
-          if (!dt) return;
-          if (!Array.from(dt.types || []).includes("Files")) return;
-          if (!dragHasDirectory(dt)) return;
-          e.preventDefault();
-          if (!folderDragOver) setFolderDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-          setFolderDragOver(false);
-        }}
-        onDrop={(e) => {
-          if (!getPlatform().workspaces) return;
-          const dt = e.dataTransfer;
-          if (!dt || !dragHasDirectory(dt)) return;
-          e.preventDefault();
-          setFolderDragOver(false);
-          const files = Array.from(dt.files || []);
-          if (files.length > 0) void handleFolderDrop(files);
-        }}
+        {...folderDropHandlers}
       >
         {!hasActive || messages.length === 0 ? (
           isComposerOnlyEmpty ? (
@@ -2711,15 +1820,7 @@ export default function SidePanelView({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    const ws = getPlatform().workspaces;
-                    if (!ws) return;
-                    const sid = sessions.activeId;
-                    if (!sid) return;
-                    void ws.unbind(sid).catch((e) => {
-                      setWorkspaceError(String((e as Error)?.message || e));
-                    });
-                  }}
+                  onClick={unbindWorkspace}
                   className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label="Unbind workspace">
                   <X className="h-3 w-3" />
@@ -2798,77 +1899,17 @@ export default function SidePanelView({
               onDismissError={() => setApprovalError(null)}
             />
           )}
-          {pendingQueue.length > 0 && (
-            <div
-              className={cn(
-                "relative z-[1] overflow-hidden rounded-t-lg border border-input border-b-0 bg-muted/50 shadow-[0_-2px_10px_-2px_rgba(0,0,0,0.12)] dark:bg-muted/35 dark:shadow-[0_-2px_14px_-2px_rgba(0,0,0,0.45)]",
-                att.dragOver && "border-primary/50",
-              )}
-            >
-              <ul className="max-h-[7rem] divide-y divide-border/60 overflow-y-auto">
-                {pendingQueue.map((item) => {
-                  const isEditing = item.queueId === editingQueueId;
-                  return (
-                    <li
-                      key={item.queueId}
-                      className="group flex items-center gap-1.5 py-1.5 pl-2.5 pr-1 transition-colors hover:bg-muted/70"
-                    >
-                      <p
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-[12px] leading-snug",
-                          isEditing
-                            ? "text-muted-foreground"
-                            : "text-foreground/90",
-                        )}
-                        title={
-                          isEditing
-                            ? t("sidepanel.queue.editing")
-                            : previewPendingTurn(item)
-                        }
-                      >
-                        {previewPendingTurn(item)}
-                      </p>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => sendQueueItemNow(item.queueId)}
-                          title={t("sidepanel.queue.sendNow")}
-                          aria-label={t("sidepanel.queue.sendNow.aria")}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => editPendingQueueItem(item.queueId)}
-                          title={t("sidepanel.queue.edit")}
-                          aria-label={t("sidepanel.queue.edit.aria")}
-                          disabled={isEditing}
-                          className={cn(
-                            "rounded p-1 transition-colors",
-                            isEditing
-                              ? "cursor-default text-foreground/40"
-                              : "text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
-                          )}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removePendingQueueItem(item.queueId)}
-                          title={t("sidepanel.queue.delete")}
-                          aria-label={t("sidepanel.queue.delete")}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+          <PendingQueueRail
+            items={pendingQueue.map((item) => ({
+              queueId: item.queueId,
+              preview: previewPendingTurn(item),
+            }))}
+            editingQueueId={editingQueueId}
+            composerDragOver={att.dragOver}
+            onSendNow={sendQueueItemNow}
+            onEdit={editPendingQueueItem}
+            onRemove={removePendingQueueItem}
+          />
         {readOnlyNoticeNode ?? composerNode}
         {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
@@ -2893,7 +1934,13 @@ export default function SidePanelView({
           }
         }}
         onRename={(id, title) => void sessions.rename(id, title)}
-        onDelete={(id) => void sessions.remove(id)}
+        onDelete={(id) => {
+          // Clean up the per-session persisted queue alongside the
+          // session itself. Best-effort: storage failures here only
+          // cost a stale key, they don't affect session deletion.
+          void getPlatform().storage.remove(pendingQueueStorageKey(id));
+          void sessions.remove(id);
+        }}
         onOpenCronSession={onOpenCronSession}
         onRefresh={() => void sessions.refresh()}
       />

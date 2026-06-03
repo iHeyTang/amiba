@@ -2,7 +2,7 @@
  * Composer-attachment hook + `<AttachmentToolbar>` component.
  *
  * Owns the full per-composer attachment lifecycle so every surface
- * (`SidePanelView`, `HomeView`, the Quick-Ask Spotlight popup) shares
+ * (`ChatSurface`, `HomeView`, the Quick-Ask Spotlight popup) shares
  * one implementation:
  *
  *   - State: live `attachments[]`, `attachmentUploading`, `attachmentBusy`,
@@ -47,7 +47,7 @@ import {
 } from "react"
 
 /**
- * Stable input `accept` list. Mirrors the SidePanelView original so we
+ * Stable input `accept` list. Mirrors the ChatSurface original so we
  * keep the same file-type acceptance across surfaces. Empty string is
  * also valid (Chromium accepts any file then), but the list nudges
  * users toward formats the agent's tools actually read.
@@ -331,7 +331,7 @@ export function useComposerAttachments(
 
 /**
  * Paperclip "attach files" button. Style + size match the
- * SidePanelView original so all three surfaces look identical.
+ * ChatSurface original so all three surfaces look identical.
  */
 export interface AttachmentButtonProps {
   onClick: () => void | Promise<void>

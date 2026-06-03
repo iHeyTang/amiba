@@ -18,7 +18,7 @@ setPlatform(createElectronAdapter())
 const root = document.getElementById("root")
 if (!root) throw new Error("root element missing")
 
-// SessionsProvider drives ``useSessions()`` inside SidePanelView — Quick-
+// SessionsProvider drives ``useSessions()`` inside ChatSurface — Quick-
 // Ask reuses the same multi-session runtime as the main window. The two
 // renderers each instantiate their own provider, but they share the
 // underlying SessionDB index via the platform-storage broadcast, so a

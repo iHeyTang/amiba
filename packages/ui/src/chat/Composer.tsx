@@ -40,7 +40,7 @@ import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
 
 /**
  * The chat surface's input box. **One implementation** used by every
- * surface (main panel `<SidePanelView />`, `<ChatView />`, the
+ * surface (main panel `<ChatSurface />`, `<ChatView />`, the
  * Spotlight-style `<QuickAskView />` popup, anywhere else); the visual
  * identity lives here and only here.
  *
@@ -73,7 +73,7 @@ import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
  *                          decides whether to enqueue or no-op).
  * Surfaces without a queue concept just early-return inside their
  * `onSubmit` when `busy` is true (HomeView, ChatView do this implicitly);
- * surfaces with a queue (SidePanelView) push to their FIFO.
+ * surfaces with a queue (ChatSurface) push to their FIFO.
  */
 export interface ComposerHandle {
   focus(): void

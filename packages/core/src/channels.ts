@@ -338,7 +338,7 @@ export function resolveChannel(
 
 /**
  * True when hermes-x is the writing engine for sessions tagged with
- * this source. Drives the read-only banner gating in SidePanelView.
+ * this source. Drives the read-only banner gating in ChatSurface.
  */
 export function isLocalChannel(source: string | null | undefined): boolean {
   if (source == null || source === "") return true;

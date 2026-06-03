@@ -5,7 +5,7 @@
  *   - ``primitives/`` — shadcn-style atoms (Button, Input, Select, …) +
  *                       the Hermes-branded logo
  *   - ``theme/``      — theme preference + resolution hooks (light/dark/auto)
- *   - ``chat/``       — chat surface (Composer, MessageList, SidePanelView, …)
+ *   - ``chat/``       — chat surface (Composer, MessageList, ChatSurface, …)
  *   - ``home/``       — Home page (composer hand-off, recents, shortcuts)
  *   - ``settings/``   — settings panes (gateway, voice, skills, memory, …)
  *

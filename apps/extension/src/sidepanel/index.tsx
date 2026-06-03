@@ -3,7 +3,7 @@ import "~lib/platform/init";
 import "~style.css";
 
 import { SessionsProvider } from "@hermes-x/core";
-import { SidePanelView } from "@hermes-x/ui";
+import { ChatSurface } from "@hermes-x/ui";
 import { HomeView } from "@hermes-x/ui";
 import { useMemo } from "react";
 
@@ -17,12 +17,12 @@ import { BridgeStatusBar } from "./BridgeStatusBar";
 import { EmptyStateBridgeGate } from "./EmptyStateBridgeGate";
 import { NavigateOpenPolicyToggle } from "./NavigateOpenPolicyToggle";
 
-export type { MessagesMaxWidth, SidePanelViewProps as SidePanelProps } from "@hermes-x/ui";
+export type { MessagesMaxWidth, ChatSurfaceProps as SidePanelProps } from "@hermes-x/ui";
 
 /**
  * Extension side-panel entry.
  *
- * This file is a thin wrapper around `<SidePanelView>` (shared between
+ * This file is a thin wrapper around `<ChatSurface>` (shared between
  * extension and desktop). Everything visible — the TabBar, message bubbles,
  * composer, attachment chips, approval banner, session drawer — lives in
  * `@hermes-x/chat-ui`.
@@ -50,12 +50,12 @@ function SidePanelInner(props: {
   messagesMaxWidth?: "narrow" | "comfortable" | "full";
 }) {
   // Single client instance per panel mount; `useMemo` keeps it stable
-  // across renders so the SidePanelView's subscription effect doesn't
+  // across renders so the ChatSurface's subscription effect doesn't
   // re-bind on every state tick.
   const client = useMemo(() => new ChromeChatEngineClient(), []);
 
   return (
-    <SidePanelView
+    <ChatSurface
       variant={props.variant}
       messagesMaxWidth={props.messagesMaxWidth}
       client={client}
@@ -68,7 +68,7 @@ function SidePanelInner(props: {
         // Mirrors desktop: the empty state IS the home composer. HomeView
         // in panelMode drops its full-screen chrome and keeps just the
         // centred composer card. Submit calls `sessions.createNew()` and
-        // writes the text to `home.pendingPrompt`; SidePanelView's drain
+        // writes the text to `home.pendingPrompt`; ChatSurface's drain
         // effect auto-sends inside the freshly-active session, so
         // `onOpenChat` is a no-op (we're already in the chat surface).
         // Capabilities are intentionally empty — the bookmark-shortcuts

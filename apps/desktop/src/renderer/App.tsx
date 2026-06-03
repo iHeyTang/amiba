@@ -124,7 +124,7 @@ function AppInner(): ReactElement {
         // remembers from the old standalone route. ``onOpenChat`` is a
         // no-op because we're already in the chat surface — HomeView's
         // submit still calls ``sessions.createNew()`` and writes the
-        // typed text to ``home.pendingPrompt``; SidePanelView's drain
+        // typed text to ``home.pendingPrompt``; ChatSurface's drain
         // effect then auto-sends inside the freshly-active session.
         emptyState: (
           <HomeView

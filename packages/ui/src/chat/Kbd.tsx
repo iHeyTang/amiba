@@ -8,7 +8,7 @@
  *                            short label, separated by a centered dot),
  *                            for use in `Composer.extrasBelow`.
  *
- * Keeping both here so every surface (main `<SidePanelView />`, the
+ * Keeping both here so every surface (main `<ChatSurface />`, the
  * Quick-Ask Spotlight popup, `<ChatView />`) uses the same caption row
  * without forking the styling.
  */

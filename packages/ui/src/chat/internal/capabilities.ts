@@ -1,5 +1,5 @@
 /**
- * Capability interfaces for extension-only features in <SidePanelView>.
+ * Capability interfaces for extension-only features in <ChatSurface>.
  *
  * Each capability is optional. The extension provides implementations
  * (backed by chrome.* APIs); the desktop app leaves them undefined and
@@ -202,7 +202,7 @@ export interface PendingPromptCapability {
 // composed bundle
 // ---------------------------------------------------------------------------
 
-export interface SidePanelCapabilities {
+export interface ChatSurfaceCapabilities {
   pageContext?: PageContextCapability
   learn?: LearnCapability
   navigateOpenPolicy?: NavigateOpenPolicyCapability

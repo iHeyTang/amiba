@@ -2,7 +2,7 @@
  * Spotlight-style Quick-Ask popup.
  *
  * Architecturally this is *the same chat surface as the desktop main
- * window's right pane* — it mounts ``<SidePanelView />`` directly so
+ * window's right pane* — it mounts ``<ChatSurface />`` directly so
  * the conversation flow, composer, attachments, approvals, reasoning,
  * tool progress, etc. are guaranteed-identical to what the user sees
  * inside the main BrowserWindow. The only differences are:
@@ -11,13 +11,13 @@
  *     and the window-resize coordination (compact → hugs the composer,
  *     expanded → snaps to ``EXPANDED_HEIGHT_PX`` so streaming chunks
  *     scroll inside the messages region without jittering the window).
- *   - **Empty state**: ``emptyState="composer-only"`` on SidePanelView
+ *   - **Empty state**: ``emptyState="composer-only"`` on ChatSurface
  *     skips the logo+greeting hero, flips ``quickActions={true}`` on the
  *     composer, and lets the body shrink to the composer's natural height
  *     so the popup can hug the input row.
  *   - **Prefill IPC**: the Spotlight summon ships a ``{ text?, sourceApp? }``
  *     payload (selection capture or empty re-summon). We feed it into
- *     SidePanelView via the ``pendingPrompt`` capability, the same
+ *     ChatSurface via the ``pendingPrompt`` capability, the same
  *     mechanism the main window uses for HomeView / Region Snip / URL
  *     handler hand-offs — no parallel composer-prefill code path.
  *
@@ -28,18 +28,18 @@
  * resume, we surface an inline ``Continuing chat from N min ago · ⌘K
  * new`` strip above the messages so the state is explicit and a reset
  * is one keystroke away. ⌘K calls ``sessions.deselect()``; the first
- * turn after that auto-creates a fresh session row via SidePanelView's
+ * turn after that auto-creates a fresh session row via ChatSurface's
  * ``sessions.ensureActive()``. The session is tagged ``source="desktop"``
  * by the main-process chat engine, so Quick-Ask conversations show up in
  * the main window's history drawer alongside everything else.
  */
 import { useSessions } from "@hermes-x/core"
 import { useResolvedTheme } from "@hermes-x/ui"
-import { SidePanelView } from "@hermes-x/ui"
+import { ChatSurface } from "@hermes-x/ui"
 import { cn } from "@hermes-x/ui"
 import type {
   PendingPromptResult,
-  SidePanelCapabilities,
+  ChatSurfaceCapabilities,
 } from "@hermes-x/ui"
 import { useT } from "@hermes-x/i18n"
 import { getPlatform } from "@hermes-x/platform"
@@ -59,7 +59,7 @@ type QuickAskPrefill = { text?: string; sourceApp?: string }
 
 /**
  * Window height locked to as soon as the conversation has anything to
- * show. Streaming content scrolls inside the SidePanelView's internal
+ * show. Streaming content scrolls inside the ChatSurface's internal
  * ScrollArea so the window itself never resizes during a stream —
  * eliminating per-chunk jitter.
  */
@@ -83,7 +83,7 @@ export function QuickAskView() {
   const rootRef = useRef<HTMLDivElement | null>(null)
   // Single-slot prefill queue. The IPC handler writes here, the
   // pendingPrompt capability drains it on next effect tick. Stored in a
-  // ref so updates don't re-render — SidePanelView pulls via subscribe.
+  // ref so updates don't re-render — ChatSurface pulls via subscribe.
   const prefillRef = useRef<PendingPromptResult | null>(null)
   const prefillSubscribersRef = useRef<Set<() => void>>(new Set())
 
@@ -111,11 +111,11 @@ export function QuickAskView() {
   messageCountRef.current = messages.length
 
   // Pending-prompt capability — bridges the Quick-Ask IPC prefill payload
-  // into SidePanelView's standard ``capabilities.pendingPrompt`` slot.
-  // SidePanelView's existing drain effect handles the rest: it seeds the
+  // into ChatSurface's standard ``capabilities.pendingPrompt`` slot.
+  // ChatSurface's existing drain effect handles the rest: it seeds the
   // composer, populates attachments, sets the source-app chip, and (when
   // text is present) marks the turn for auto-send.
-  const capabilities = useMemo<SidePanelCapabilities>(
+  const capabilities = useMemo<ChatSurfaceCapabilities>(
     () => ({
       pendingPrompt: {
         drain: async () => {
@@ -135,7 +135,7 @@ export function QuickAskView() {
   )
 
   // Prefill IPC. The previous active session is preserved across
-  // summons (A+D); prefill payload just gets queued for SidePanelView's
+  // summons (A+D); prefill payload just gets queued for ChatSurface's
   // ``pendingPrompt`` drain, which seeds the composer regardless of
   // whether there's a continuing thread or we're on an empty surface.
   useEffect(() => {
@@ -153,7 +153,7 @@ export function QuickAskView() {
       // host many summons in a session.
       setSummonMessageCount(messageCountRef.current)
       setHintDismissed(false)
-      // Notify SidePanelView's drain subscription so it re-pulls even
+      // Notify ChatSurface's drain subscription so it re-pulls even
       // when the active id didn't change (consecutive empty re-summons,
       // or summon while the same session is still active).
       for (const cb of prefillSubscribersRef.current) cb()
@@ -248,13 +248,13 @@ export function QuickAskView() {
     <div
       ref={rootRef}
       className={cn(
-        // ``h-full`` in expanded mode lets SidePanelView fill the entire
+        // ``h-full`` in expanded mode lets ChatSurface fill the entire
         // window. In compact mode the card is content-sized so the popup
         // hugs the input row. No CSS shadow — main/quick-ask-window.ts
         // sets ``hasShadow: true`` and macOS paints the shadow outside
         // the BrowserWindow where it can't be clipped at the edge.
         //
-        // ``overflow-hidden`` clips the inner SidePanelView's
+        // ``overflow-hidden`` clips the inner ChatSurface's
         // ``bg-background`` rectangle to the rounded shape — without it
         // the composer's square bottom edge paints over the outer
         // ``rounded-xl`` and the popup looks half-rounded.
@@ -287,7 +287,7 @@ export function QuickAskView() {
         />
       </div>
 
-      <SidePanelView
+      <ChatSurface
         variant="fullscreen"
         emptyState="composer-only"
         composerAutoFocus

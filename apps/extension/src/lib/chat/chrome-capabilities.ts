@@ -11,7 +11,7 @@ import type {
   PendingPromptAttachment,
   PendingPromptCapability,
   PendingPromptResult,
-  SidePanelCapabilities,
+  ChatSurfaceCapabilities,
 } from "@hermes-x/ui";
 
 import {
@@ -319,10 +319,10 @@ export const chromePendingPrompt: PendingPromptCapability = {
 };
 
 // ---------------------------------------------------------------------------
-// composed bundle for the SidePanelView consumer
+// composed bundle for the ChatSurface consumer
 // ---------------------------------------------------------------------------
 
-export const chromeCapabilities: SidePanelCapabilities = {
+export const chromeCapabilities: ChatSurfaceCapabilities = {
   pageContext: chromePageContext,
   learn: chromeLearn,
   navigateOpenPolicy: chromeNavigateOpenPolicy,

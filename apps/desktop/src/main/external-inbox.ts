@@ -13,7 +13,7 @@
  * Both funnel into `deliverPrompt`, which writes the hand-off into
  * `home.pendingPrompt` (the same key HomeView uses) and summons the
  * window. The renderer's existing watcher flips to the chat view, and
- * SidePanelView's mount drain picks the payload up — text into the
+ * ChatSurface's mount drain picks the payload up — text into the
  * composer, attachments into the live attachment list, sourceApp shown
  * as a small chip.
  *

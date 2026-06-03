@@ -1,12 +1,17 @@
 export { ChatView, type ChatViewProps } from "./ChatView"
 export {
-  default as SidePanelView,
-  type SidePanelViewProps,
-} from "./SidePanelView"
+  default as ChatSurface,
+  type ChatSurfaceProps,
+} from "./ChatSurface"
 export {
   default as FullScreenChatView,
   type FullScreenChatViewProps,
 } from "./FullScreenChatView"
+export {
+  SessionTitleProvider,
+  useSessionTitle,
+  useSetSessionTitle,
+} from "./useSessionTitle"
 export type {
   ActiveTabInfo,
   BrowserTabSnapshot,
@@ -20,7 +25,7 @@ export type {
   PendingPromptAttachment,
   PendingPromptCapability,
   PendingPromptResult,
-  SidePanelCapabilities,
+  ChatSurfaceCapabilities,
 } from "./internal/capabilities"
 export { TabBar } from "./TabBar"
 export { ChannelChip } from "./internal/ChannelChip"
