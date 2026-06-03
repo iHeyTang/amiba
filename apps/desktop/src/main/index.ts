@@ -11,6 +11,8 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
+import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
+import type { ExtensionManifest } from "@hermes-x/extension-api"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -57,6 +59,7 @@ import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
 import { cleanupOldSnips } from "./screen-capture"
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace"
+import { mainStore } from "./storage"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -401,6 +404,25 @@ if (!gotSingleInstanceLock) {
     // when the user opens Brain. Lazy = run it AFTER window creation so
     // we don't block first paint on a subprocess probe.
     autoStartGBrainServeHttp()
+
+    const extensionHost = await bootMainExtensionHost({
+      manifests: [],
+      settingsStore: {
+        get: async (key, fallback) => {
+          const r = await mainStore.get([key])
+          return (r[key] as never) ?? fallback
+        },
+        set: (key, value) => mainStore.set({ [key]: value }),
+      },
+      callTool: async () => {
+        throw new Error("hermes.callTool not wired yet")
+      },
+      getI18n: async (_extensionId, _locale) => ({}),
+      getRendererBundleUrl: async () => null,
+    })
+
+    ;(globalThis as { __hermesExtensionHost?: typeof extensionHost }).__hermesExtensionHost = extensionHost
+
     createWindow()
     createNotifierWindow()
     // Pre-create the Quick-Ask popup so the first double-tap doesn't
@@ -480,6 +502,22 @@ if (!gotSingleInstanceLock) {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
+})
+
+// Shut down the extension host gracefully before the process exits.
+// `before-quit` fires before `will-quit` and before any windows are
+// closed; we prevent the default and re-call `app.quit()` after the
+// async shutdown so the normal `will-quit` / `window-all-closed` chain
+// still runs.
+let _extensionHostShutdownDone = false
+app.on("before-quit", async (event) => {
+  if (_extensionHostShutdownDone) return
+  event.preventDefault()
+  const host = (globalThis as { __hermesExtensionHost?: { shutdown(): Promise<void> } })
+    .__hermesExtensionHost
+  if (host) await host.shutdown()
+  _extensionHostShutdownDone = true
+  app.quit()
 })
 
 // Electron docs explicitly require us to release global shortcuts before
