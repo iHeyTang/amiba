@@ -16,6 +16,7 @@ import type { RendererHost } from "@hermes-x/extension-api"
 import { Button, Input, Label, ScrollArea } from "@hermes-x/ui"
 
 import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "./brain-storage"
+import { useTranslate } from "../i18n"
 
 // ---------------------------------------------------------------------------
 // IPC bridge types — mirrored from SettingsBrainConfig
@@ -105,6 +106,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
     saved: boolean
     onChanged: () => void
   }) {
+    const t = useTranslate(host)
     const [value, setValue] = useState("")
     const [busy, setBusy] = useState(false)
     const [justSaved, setJustSaved] = useState(false)
@@ -170,8 +172,8 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             }}
             placeholder={
               saved
-                ? host.i18n.t("config.providers.placeholder.saved")
-                : host.i18n.t("config.providers.placeholder.empty")
+                ? t("config.providers.placeholder.saved")
+                : t("config.providers.placeholder.empty")
             }
             className="h-7 flex-1 text-xs"
             disabled={busy}
@@ -185,7 +187,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             {busy ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              host.i18n.t("config.providers.save")
+              t("config.providers.save")
             )}
           </Button>
           {saved && (
@@ -196,14 +198,14 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
               onClick={() => void clear()}
               disabled={busy}
             >
-              {host.i18n.t("config.providers.clear")}
+              {t("config.providers.clear")}
             </Button>
           )}
         </div>
         {error && <p className="text-[10px] text-destructive">{error}</p>}
         {justSaved && !error && (
           <p className="text-[10px] text-[hsl(var(--success))]">
-            {host.i18n.t("config.providers.saved")}
+            {t("config.providers.saved")}
           </p>
         )}
       </div>
@@ -252,6 +254,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
     savedKeys: string[]
     onChanged: () => void
   }) {
+    const t = useTranslate(host)
     const [open, setOpen] = useState(false)
     const [schema, setSchema] = useState<{
       required: string[]
@@ -320,8 +323,8 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             onClick={() => setOpen((v) => !v)}
           >
             {open
-              ? host.i18n.t("config.providers.collapse")
-              : host.i18n.t("config.providers.expand")}
+              ? t("config.providers.collapse")
+              : t("config.providers.expand")}
           </Button>
         </div>
 
@@ -330,7 +333,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             {schemaLoading && (
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                {host.i18n.t("config.providers.loading")}
+                {t("config.providers.loading")}
               </div>
             )}
             {schemaError && (
@@ -340,7 +343,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
               <div className="space-y-3">
                 {schema.required.length > 0 && (
                   <FieldGroup
-                    title={host.i18n.t("config.providers.required")}
+                    title={t("config.providers.required")}
                     keys={schema.required}
                     providerId={provider.id}
                     savedKeys={savedKeys}
@@ -349,7 +352,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                 )}
                 {schema.optional.length > 0 && (
                   <FieldGroup
-                    title={host.i18n.t("config.providers.optional")}
+                    title={t("config.providers.optional")}
                     keys={schema.optional}
                     providerId={provider.id}
                     savedKeys={savedKeys}
@@ -363,7 +366,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                     rel="noreferrer"
                     className="text-[11px] text-primary hover:underline"
                   >
-                    {host.i18n.t("config.providers.setupLink")}
+                    {t("config.providers.setupLink")}
                   </a>
                 )}
               </div>
@@ -379,6 +382,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
   // -------------------------------------------------------------------------
 
   return function SettingsKnowledgeTab() {
+    const t = useTranslate(host)
     const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
     const [token, setToken] = useState("")
     const [healthInfo, setHealthInfo] = useState<BrainHealthInfo | null>(null)
@@ -434,7 +438,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
               const r = await host.ipc.invoke<void, EnsureResult | null>("launcher.ensure", undefined)
               if (r && !r.ok) {
                 setConnectionError(
-                  host.i18n.t("connection.error", {
+                  t("connection.error", {
                     error: r.error ?? "ensure failed",
                   }),
                 )
@@ -511,7 +515,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
               if (r && !r.ok) {
                 setHealthInfo(null)
                 setConnectionError(
-                  host.i18n.t("connection.error", {
+                  t("connection.error", {
                     error: r.error ?? "ensure failed",
                   }),
                 )
@@ -530,7 +534,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
           }
           if (!h) {
             setHealthInfo(null)
-            setConnectionError(host.i18n.t("connection.failed"))
+            setConnectionError(t("connection.failed"))
             return
           }
           try {
@@ -542,8 +546,8 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
               setHealthInfo(null)
               setConnectionError(
                 auth.reason === "invalid-token"
-                  ? host.i18n.t("connection.invalidToken")
-                  : host.i18n.t("connection.error", { error: auth.error ?? "" }),
+                  ? t("connection.invalidToken")
+                  : t("connection.error", { error: auth.error ?? "" }),
               )
               return
             }
@@ -555,7 +559,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
         } catch (e) {
           setHealthInfo(null)
           setConnectionError(
-            host.i18n.t("connection.error", {
+            t("connection.error", {
               error: (e as Error).message ?? String(e),
             }),
           )
@@ -576,7 +580,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
         const r = await host.ipc.invoke<void, EnsureResult | null>("launcher.restart", undefined)
         if (r && !r.ok) {
           setConnectionError(
-            host.i18n.t("config.restart.failed", {
+            t("config.restart.failed", {
               error: r.error ?? "unknown error",
             }),
           )
@@ -601,10 +605,10 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
         <header className="flex shrink-0 items-center justify-between gap-3 px-6 pt-5 pb-3">
           <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
             <h2 className="text-base font-semibold tracking-tight text-foreground">
-              {host.i18n.t("config.title")}
+              {t("config.title")}
             </h2>
             <p className="truncate text-[11px] text-muted-foreground">
-              {host.i18n.t("config.subtitle")}
+              {t("config.subtitle")}
             </p>
           </div>
           {bootLoading ? (
@@ -612,7 +616,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
           ) : connected ? (
             <span className="flex items-center gap-1.5 text-xs text-[hsl(var(--success))]">
               <Check className="h-3 w-3" />
-              {host.i18n.t("connected")}
+              {t("connected")}
               {healthInfo?.version && (
                 <span className="text-muted-foreground">
                   v{healthInfo.version}
@@ -621,7 +625,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             </span>
           ) : (
             <span className="text-xs text-muted-foreground">
-              {host.i18n.t("config.notConnected")}
+              {t("config.notConnected")}
             </span>
           )}
         </header>
@@ -631,12 +635,12 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
             {/* Connection */}
             <section className="space-y-3 rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-medium">
-                {host.i18n.t("connection.title")}
+                {t("connection.title")}
               </h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="brain-config-url" className="text-xs">
-                    {host.i18n.t("connection.url")}
+                    {t("connection.url")}
                   </Label>
                   <Input
                     id="brain-config-url"
@@ -653,7 +657,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="brain-config-token" className="text-xs">
-                    {host.i18n.t("connection.token")}
+                    {t("connection.token")}
                   </Label>
                   <Input
                     id="brain-config-token"
@@ -664,7 +668,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                       setDirty(true)
                       setSaved(false)
                     }}
-                    placeholder={host.i18n.t("connection.token.placeholder")}
+                    placeholder={t("connection.token.placeholder")}
                     className="h-8 text-xs"
                     disabled={bootLoading}
                   />
@@ -682,14 +686,14 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   )}
                   {dirty
-                    ? host.i18n.t("config.saveAndTest")
-                    : host.i18n.t("connection.test")}
+                    ? t("config.saveAndTest")
+                    : t("connection.test")}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => void restart()}
                   disabled={restarting || connecting || bootLoading}
-                  title={host.i18n.t("config.restart.hint")}
+                  title={t("config.restart.hint")}
                   size="sm"
                 >
                   {restarting ? (
@@ -698,13 +702,13 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                     <RotateCw className="mr-1.5 h-3.5 w-3.5" />
                   )}
                   {restarting
-                    ? host.i18n.t("config.restarting")
-                    : host.i18n.t("config.restart")}
+                    ? t("config.restarting")
+                    : t("config.restart")}
                 </Button>
                 {starting && (
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    {host.i18n.t("connection.starting")}
+                    {t("connection.starting")}
                   </span>
                 )}
                 {!starting && connectionError && (
@@ -714,47 +718,47 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                 )}
                 {!starting && saved && !connectionError && (
                   <span className="text-xs text-[hsl(var(--success))]">
-                    {host.i18n.t("config.saved")}
+                    {t("config.saved")}
                   </span>
                 )}
                 {!starting && restarted && !connectionError && !saved && (
                   <span className="text-xs text-[hsl(var(--success))]">
-                    {host.i18n.t("config.restarted")}
+                    {t("config.restarted")}
                   </span>
                 )}
               </div>
               <p className="text-[11px] leading-snug text-muted-foreground">
-                {host.i18n.t("config.hint")}
+                {t("config.hint")}
               </p>
             </section>
 
             {/* Runtime info */}
             <section className="space-y-3 rounded-lg border border-border bg-card p-4">
               <h3 className="text-sm font-medium">
-                {host.i18n.t("config.runtime.title")}
+                {t("config.runtime.title")}
               </h3>
               {connected ? (
                 <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
                   <InfoRow
-                    label={host.i18n.t("config.runtime.version")}
+                    label={t("config.runtime.version")}
                     value={healthInfo?.version}
                   />
                   <InfoRow
-                    label={host.i18n.t("config.runtime.engine")}
+                    label={t("config.runtime.engine")}
                     value={healthInfo?.engine}
                   />
                   <InfoRow
-                    label={host.i18n.t("config.runtime.transport")}
+                    label={t("config.runtime.transport")}
                     value={healthInfo?.transport}
                   />
                   <InfoRow
-                    label={host.i18n.t("config.runtime.db")}
+                    label={t("config.runtime.db")}
                     value={healthInfo?.db}
                   />
                 </dl>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {host.i18n.t("config.runtime.empty")}
+                  {t("config.runtime.empty")}
                 </p>
               )}
             </section>
@@ -765,10 +769,10 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-medium">
-                      {host.i18n.t("config.providers.section")}
+                      {t("config.providers.section")}
                     </h3>
                     <p className="text-[11px] leading-snug text-muted-foreground">
-                      {host.i18n.t("config.providers.envHint")}
+                      {t("config.providers.envHint")}
                     </p>
                   </div>
                   <Button
@@ -783,20 +787,20 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
                     ) : (
                       <RefreshCw className="mr-1 h-3.5 w-3.5" />
                     )}
-                    {host.i18n.t("config.providers.refresh")}
+                    {t("config.providers.refresh")}
                   </Button>
                 </div>
 
                 {providersLoading && providers.length === 0 ? (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {host.i18n.t("config.providers.loading")}
+                    {t("config.providers.loading")}
                   </div>
                 ) : providersError ? (
                   <p className="text-xs text-destructive">{providersError}</p>
                 ) : providers.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    {host.i18n.t("config.providers.empty")}
+                    {t("config.providers.empty")}
                   </p>
                 ) : (
                   <div className="space-y-1">

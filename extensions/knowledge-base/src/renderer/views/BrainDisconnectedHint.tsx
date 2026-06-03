@@ -2,12 +2,14 @@ import { useEffect, useState } from "react"
 import type { RendererHost } from "@hermes-x/extension-api"
 import { buildBrainInstallPrompt } from "./brain-install"
 import { BRAIN_URL_KEY, BRAIN_DEFAULT_URL } from "./brain-storage"
+import { useTranslate } from "../i18n"
 
 export function makeBrainDisconnectedHint(host: RendererHost) {
   return function BrainDisconnectedHint(props: {
     onPrefill?: (text: string) => void
     language?: "en" | "zh-CN"
   }) {
+    const t = useTranslate(host)
     const [show, setShow] = useState(false)
     useEffect(() => {
       let cancelled = false
@@ -36,7 +38,7 @@ export function makeBrainDisconnectedHint(host: RendererHost) {
           if (!url) await host.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
         }}
       >
-        {host.i18n.t("composer.brainHint")}
+        {t("composer.brainHint")}
       </button>
     )
   }

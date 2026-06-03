@@ -280,6 +280,9 @@ importers:
       '@hermes-x/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api
+      '@hermes-x/extension-host':
+        specifier: workspace:*
+        version: link:../../packages/extension-host
       '@hermes-x/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n

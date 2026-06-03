@@ -31,6 +31,7 @@ import {
   BRAIN_TOKEN_KEY,
   BRAIN_URL_KEY,
 } from "./brain-storage"
+import { useTranslate } from "../i18n"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +85,7 @@ interface BrainPage {
 export function makeKnowledgePanel(host: RendererHost) {
   return function KnowledgePanel(props: { onOpenChat?: () => void }) {
     const { onOpenChat } = props
+    const t = useTranslate(host)
     const requestChatSession = useChatSessionRequester()
 
     // Connection config
@@ -182,7 +184,7 @@ export function makeKnowledgePanel(host: RendererHost) {
             // health call failed
           }
           if (!h) {
-            setConnectionError(host.i18n.t("connection.failed"))
+            setConnectionError(t("connection.failed"))
           } else {
             let authOk = true
             let authError: string | null = null
@@ -195,8 +197,8 @@ export function makeKnowledgePanel(host: RendererHost) {
                 authOk = false
                 authError =
                   auth.reason === "invalid-token"
-                    ? host.i18n.t("connection.invalidToken")
-                    : host.i18n.t("connection.error", { error: auth.error ?? "" })
+                    ? t("connection.invalidToken")
+                    : t("connection.error", { error: auth.error ?? "" })
               }
             } catch {
               // verify-auth not available — treat as ok
@@ -209,7 +211,7 @@ export function makeKnowledgePanel(host: RendererHost) {
           }
         } catch (e) {
           setConnectionError(
-            host.i18n.t("connection.error", {
+            t("connection.error", {
               error: (e as Error).message ?? String(e),
             }),
           )
@@ -242,7 +244,7 @@ export function makeKnowledgePanel(host: RendererHost) {
         onOpenChat()
       } catch (e) {
         setConnectionError(
-          host.i18n.t("connection.error", {
+          t("connection.error", {
             error: (e as Error).message ?? String(e),
           }),
         )
@@ -287,7 +289,7 @@ export function makeKnowledgePanel(host: RendererHost) {
           tool: "put_page",
           args: { slug: savedSlug, content: putContent.trim() },
         })
-        setPutResult(host.i18n.t("putPage.success"))
+        setPutResult(t("putPage.success"))
         setPutSlug("")
         setPutContent("")
         setSelectedSlug(savedSlug)
@@ -396,18 +398,18 @@ export function makeKnowledgePanel(host: RendererHost) {
                     <BookOpen className="h-6 w-6" />
                   </div>
                   <h1 className="text-xl font-semibold tracking-tight">
-                    {host.i18n.t("title")}
+                    {t("title")}
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    {host.i18n.t("tutorial.tagline")}
+                    {t("tutorial.tagline")}
                   </p>
                 </header>
 
                 <ul className="space-y-2 text-sm">
                   {[
-                    host.i18n.t("tutorial.bullet.recall"),
-                    host.i18n.t("tutorial.bullet.link"),
-                    host.i18n.t("tutorial.bullet.context"),
+                    t("tutorial.bullet.recall"),
+                    t("tutorial.bullet.link"),
+                    t("tutorial.bullet.context"),
                   ].map((line, i) => (
                     <li key={i} className="flex items-start gap-2.5">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -424,10 +426,10 @@ export function makeKnowledgePanel(host: RendererHost) {
                       className="min-w-[200px]"
                     >
                       <Sparkles className="mr-2 h-4 w-4" />
-                      {host.i18n.t("oneClick.button")}
+                      {t("oneClick.button")}
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">
-                      {host.i18n.t("oneClick.description")}
+                      {t("oneClick.description")}
                     </p>
                     {connectionError && (
                       <p className="text-center text-xs text-destructive">
@@ -446,7 +448,7 @@ export function makeKnowledgePanel(host: RendererHost) {
                   >
                     <span className="inline-flex items-center gap-2">
                       <Link2 className="h-3.5 w-3.5" />
-                      {host.i18n.t("tutorial.advanced.label")}
+                      {t("tutorial.advanced.label")}
                     </span>
                     {advancedOpen ? (
                       <ChevronUp className="h-3.5 w-3.5" />
@@ -457,12 +459,12 @@ export function makeKnowledgePanel(host: RendererHost) {
                   {advancedOpen && (
                     <div className="space-y-2.5 border-t border-border/60 p-3">
                       <p className="text-[11px] leading-snug text-muted-foreground">
-                        {host.i18n.t("tutorial.advanced.hint")}
+                        {t("tutorial.advanced.hint")}
                       </p>
                       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                         <div className="space-y-1">
                           <Label htmlFor="brain-url" className="text-xs">
-                            {host.i18n.t("connection.url")}
+                            {t("connection.url")}
                           </Label>
                           <Input
                             id="brain-url"
@@ -474,14 +476,14 @@ export function makeKnowledgePanel(host: RendererHost) {
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="brain-token" className="text-xs">
-                            {host.i18n.t("connection.token")}
+                            {t("connection.token")}
                           </Label>
                           <Input
                             id="brain-token"
                             type="password"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            placeholder={host.i18n.t("connection.token.placeholder")}
+                            placeholder={t("connection.token.placeholder")}
                             className="h-8 text-xs"
                           />
                         </div>
@@ -498,7 +500,7 @@ export function makeKnowledgePanel(host: RendererHost) {
                           ) : (
                             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                           )}
-                          {host.i18n.t("connection.test")}
+                          {t("connection.test")}
                         </Button>
                         {connectionError && advancedOpen && (
                           <span className="text-xs text-destructive">
@@ -558,15 +560,15 @@ export function makeKnowledgePanel(host: RendererHost) {
                     setSearchError(null)
                   }
                 }}
-                placeholder={host.i18n.t("search.placeholder")}
+                placeholder={t("search.placeholder")}
                 className="h-7 w-full rounded bg-transparent pl-6 pr-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:bg-muted/40 focus:outline-none focus:ring-1 focus:ring-ring/40"
               />
             </div>
             <button
               type="button"
               onClick={startNewPage}
-              title={host.i18n.t("tabs.putPage")}
-              aria-label={host.i18n.t("tabs.putPage")}
+              title={t("tabs.putPage")}
+              aria-label={t("tabs.putPage")}
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -588,7 +590,7 @@ export function makeKnowledgePanel(host: RendererHost) {
               {(pagesLoading || searchLoading) && sidebarItems.length === 0 && (
                 <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  {host.i18n.t("common.loading")}
+                  {t("common.loading")}
                 </div>
               )}
               {!pagesLoading &&
@@ -598,8 +600,8 @@ export function makeKnowledgePanel(host: RendererHost) {
                 !searchError && (
                   <p className="px-3 py-3 text-[11px] text-muted-foreground">
                     {sidebarShowsSearch
-                      ? host.i18n.t("search.empty")
-                      : host.i18n.t("pages.empty")}
+                      ? t("search.empty")
+                      : t("pages.empty")}
                   </p>
                 )}
               {sidebarItems.map((p) => {
@@ -639,25 +641,25 @@ export function makeKnowledgePanel(host: RendererHost) {
               <div className="mx-auto max-w-3xl space-y-4 p-6">
                 <div className="space-y-1.5">
                   <Label htmlFor="put-slug">
-                    {host.i18n.t("putPage.slug")}
+                    {t("putPage.slug")}
                   </Label>
                   <Input
                     id="put-slug"
                     value={putSlug}
                     onChange={(e) => setPutSlug(e.target.value)}
-                    placeholder={host.i18n.t("putPage.slug.placeholder")}
+                    placeholder={t("putPage.slug.placeholder")}
                     className="font-mono text-xs"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="put-content">
-                    {host.i18n.t("putPage.content")}
+                    {t("putPage.content")}
                   </Label>
                   <Textarea
                     id="put-content"
                     value={putContent}
                     onChange={(e) => setPutContent(e.target.value)}
-                    placeholder={host.i18n.t("putPage.content.placeholder")}
+                    placeholder={t("putPage.content.placeholder")}
                     className="min-h-[300px] font-mono text-xs"
                   />
                 </div>
@@ -673,7 +675,7 @@ export function makeKnowledgePanel(host: RendererHost) {
                     ) : (
                       <FileText className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    {host.i18n.t("putPage.save")}
+                    {t("putPage.save")}
                   </Button>
                   {putResult && (
                     <span className="text-xs text-[hsl(var(--success))]">
@@ -708,7 +710,7 @@ export function makeKnowledgePanel(host: RendererHost) {
                 {pageDetailLoading ? (
                   <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
                     <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    {host.i18n.t("common.loading")}
+                    {t("common.loading")}
                   </div>
                 ) : pageDetailError ? (
                   <p className="px-4 py-3 text-xs text-destructive">
@@ -720,7 +722,7 @@ export function makeKnowledgePanel(host: RendererHost) {
                     if (!body) {
                       return (
                         <p className="px-6 py-4 text-xs text-muted-foreground">
-                          {host.i18n.t("view.empty")}
+                          {t("view.empty")}
                         </p>
                       )
                     }
@@ -748,7 +750,7 @@ export function makeKnowledgePanel(host: RendererHost) {
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center">
               <p className="max-w-xs text-center text-xs text-muted-foreground">
-                {host.i18n.t("view.placeholder")}
+                {t("view.placeholder")}
               </p>
             </div>
           )}
