@@ -1,6 +1,7 @@
 import {
   Activity,
   Bot,
+  Boxes,
   BrainCircuit,
   Clock,
   Code2,
@@ -43,6 +44,7 @@ import { SettingsGateway } from "./SettingsGateway";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
+import { SettingsExtensions } from "./SettingsExtensions";
 import { SettingsPreferences } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
@@ -65,6 +67,7 @@ const ALL_TABS = [
   "voice",
   "cron",
   "logs",
+  "extensions",
 ] as const;
 type CoreTab = (typeof ALL_TABS)[number];
 /** MainTab is widened to string so extension tab IDs are also accepted. */
@@ -332,6 +335,7 @@ export function SettingsView({
             <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
+            <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
             {extensionTabs.map((tab) => (
               <NavBtn key={tab.id} icon={null} label={t(tab.labelKey as never)} active={mainTab === tab.id} onClick={() => onMainTabChange(tab.id)} />
             ))}
@@ -365,6 +369,8 @@ export function SettingsView({
           <SettingsStatus />
         ) : mainTab === "logs" ? (
           <SettingsLogs />
+        ) : mainTab === "extensions" ? (
+          <SettingsExtensions />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {mainTab === "scripts" && userscripts ? (

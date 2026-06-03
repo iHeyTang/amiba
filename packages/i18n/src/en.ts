@@ -48,6 +48,13 @@ export const en = {
   "options.nav.voice": "Voice",
   "options.nav.extensions": "Extensions",
 
+  // Extensions settings page
+  "options.extensions.title": "Extensions",
+  "options.extensions.subtitle": "View installed extensions and troubleshoot load failures.",
+  "options.extensions.status.loaded": "Loaded",
+  "options.extensions.status.failed": "Failed",
+  "options.extensions.showError": "Show error",
+
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
   "composer.voice.stopRecording": "Stop recording",

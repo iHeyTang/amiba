@@ -43,6 +43,13 @@ export const zhCN: Messages = {
   "options.nav.voice": "语音",
   "options.nav.extensions": "扩展",
 
+  // Extensions settings page
+  "options.extensions.title": "扩展",
+  "options.extensions.subtitle": "查看已加载的扩展，排查加载失败。",
+  "options.extensions.status.loaded": "已加载",
+  "options.extensions.status.failed": "加载失败",
+  "options.extensions.showError": "查看错误信息",
+
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",
   "composer.voice.stopRecording": "停止录音",
