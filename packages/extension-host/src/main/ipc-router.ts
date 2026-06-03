@@ -1,9 +1,16 @@
 // packages/extension-host/src/main/ipc-router.ts
-import { dialog, ipcMain } from "electron"
+import { BrowserWindow, dialog, ipcMain } from "electron"
 import { existsSync, lstatSync, readFileSync, rmSync, symlinkSync } from "node:fs"
 import { join } from "node:path"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
 import { validateManifest } from "./discover"
+import {
+  fetchIndex,
+  getIndexUrl,
+  installFromRelease,
+  resolveRelease,
+  type MarketplaceEntry,
+} from "./marketplace"
 
 export type ChannelHandler = (
   args: unknown,
@@ -214,4 +221,59 @@ export function registerExtensionActionChannels(opts: {
 
     return { ok: true }
   })
+}
+
+/**
+ * Broadcast `extensions:changed` to every open BrowserWindow so the renderer
+ * can refresh its extension registry after a marketplace install completes.
+ */
+export function broadcastExtensionsChanged(): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) {
+      w.webContents.send("extensions:changed")
+    }
+  }
+}
+
+/**
+ * Register the marketplace IPC channels:
+ * - `marketplace:index-url` — returns the current index URL string.
+ * - `marketplace:list` — fetches and returns the full marketplace index.
+ * - `marketplace:install` — resolves, downloads, and installs an entry, then
+ *   triggers a reload and broadcasts `extensions:changed` to all windows.
+ */
+export function registerMarketplaceChannels(opts: {
+  extensionsDir: string
+  reloadExtensions: () => Promise<void>
+}) {
+  ipcMain.handle("marketplace:index-url", () => getIndexUrl())
+
+  ipcMain.handle("marketplace:list", async () => {
+    try {
+      return { ok: true as const, entries: await fetchIndex() }
+    } catch (e) {
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : String(e),
+      }
+    }
+  })
+
+  ipcMain.handle(
+    "marketplace:install",
+    async (_e, entry: MarketplaceEntry) => {
+      try {
+        const release = await resolveRelease(entry)
+        const manifest = await installFromRelease(release, opts.extensionsDir)
+        await opts.reloadExtensions()
+        broadcastExtensionsChanged()
+        return { ok: true as const, id: manifest.id, version: manifest.version }
+      } catch (e) {
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : String(e),
+        }
+      }
+    },
+  )
 }

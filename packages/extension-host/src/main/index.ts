@@ -1,6 +1,6 @@
 // packages/extension-host/src/main/index.ts
 import { join } from "node:path"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync, existsSync, statSync } from "node:fs"
 import type { Disposable, ExtensionManifest } from "@hermes-x/extension-api"
 import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry } from "./registry"
@@ -8,6 +8,7 @@ import {
   createChannelTable,
   registerExtensionActionChannels,
   registerInvokeRouter,
+  registerMarketplaceChannels,
   registerMetadataChannels,
   registerStatusChannel,
 } from "./ipc-router"
@@ -205,6 +206,39 @@ export async function bootMainExtensionHost(
     }
   }
 
+  /**
+   * Re-scan extensionsDir and activate any newly installed extensions that are
+   * not yet in manifestEntries. Called after a marketplace install completes.
+   */
+  async function reloadExtensions(): Promise<void> {
+    if (!opts.extensionsDir) return
+    const extensionsDir = opts.extensionsDir
+    if (!existsSync(extensionsDir)) return
+    const knownIds = new Set(manifestEntries.map((m) => m.manifest.id))
+    for (const name of readdirSync(extensionsDir)) {
+      const rootDir = join(extensionsDir, name)
+      try {
+        const st = statSync(rootDir)
+        if (!st.isDirectory()) continue
+        const manifestPath = join(rootDir, "manifest.json")
+        if (!existsSync(manifestPath)) continue
+        const raw = JSON.parse(readFileSync(manifestPath, "utf8"))
+        const v = validateManifest(raw)
+        if (!v.ok) continue
+        if (knownIds.has(v.manifest.id)) continue
+        // New extension: register and activate.
+        const entry = { manifest: v.manifest, rootDir }
+        manifestEntries.push(entry)
+        await activateOne(entry)
+        if (watcher) {
+          watcher.setExtensionIds(manifestEntries.map((m) => m.manifest.id))
+        }
+      } catch (e) {
+        console.error(`[extension-host] reloadExtensions: failed to load ${name}:`, e)
+      }
+    }
+  }
+
   // Register sideload / reload / uninstall / folder-picker IPC channels when
   // extensionsDir is available (i.e. running inside Electron on the desktop).
   if (opts.extensionsDir) {
@@ -213,6 +247,14 @@ export async function bootMainExtensionHost(
       getManifests,
       reloadExtension,
       unloadExtension,
+    })
+  }
+
+  // Register marketplace IPC channels when extensionsDir is available.
+  if (opts.extensionsDir) {
+    registerMarketplaceChannels({
+      extensionsDir: opts.extensionsDir,
+      reloadExtensions,
     })
   }
 

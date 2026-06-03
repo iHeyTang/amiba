@@ -107,6 +107,20 @@ interface HermesBridgeApi {
     sideload(path: string): Promise<{ ok: boolean; id?: string; error?: string }>
     reload(id: string): Promise<{ ok: boolean; error?: string }>
     uninstall(id: string): Promise<{ ok: boolean; error?: string }>
+    marketplace: {
+      getIndexUrl(): Promise<string>
+      list(): Promise<
+        | { ok: true; entries: import("@hermes-x/extension-host/preload").MarketplaceEntry[] }
+        | { ok: false; error: string }
+      >
+      install(
+        entry: import("@hermes-x/extension-host/preload").MarketplaceEntry,
+      ): Promise<
+        | { ok: true; id: string; version: string }
+        | { ok: false; error: string }
+      >
+    }
+    onExtensionsChanged(cb: () => void): () => void
   }
 }
 
