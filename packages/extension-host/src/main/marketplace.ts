@@ -14,6 +14,7 @@ import { createHash } from "node:crypto"
 import { Readable } from "node:stream"
 import { extract as tarExtract } from "tar"
 import { validateManifest } from "./discover"
+import { addEntry } from "./registry-store"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
 
 export interface MarketplaceEntry {
@@ -105,11 +106,14 @@ export async function resolveRelease(
  * then move the staged dir into <extensionsDir>/<id>/. If the target already
  * exists, refuse (caller should uninstall first).
  *
+ * Registers a marketplace entry in the registry after successful install.
+ *
  * Returns the validated manifest on success.
  */
 export async function installFromRelease(
   release: ResolvedRelease,
   extensionsDir: string,
+  registryPath?: string,
 ): Promise<ExtensionManifest> {
   const stagingRoot = await mkdtemp(join(tmpdir(), "hermes-ext-install-"))
   try {
@@ -169,6 +173,19 @@ export async function installFromRelease(
     mkdirSync(extensionsDir, { recursive: true })
     const { rename } = await import("node:fs/promises")
     await rename(extractDir, target)
+
+    // Register the installed extension in the registry.
+    if (registryPath) {
+      addEntry(registryPath, {
+        id: v.manifest.id,
+        source: "marketplace",
+        path: target,
+        version: release.version,
+        sha256: release.entry.sha256,
+        installedAt: new Date().toISOString(),
+      })
+    }
+
     return v.manifest
   } finally {
     rmSync(stagingRoot, { recursive: true, force: true })
