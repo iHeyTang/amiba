@@ -32,7 +32,6 @@ import {
   Input,
   Label,
   ScrollArea,
-  Separator,
 } from "../primitives";
 
 import type { OptionsCapabilities, UserScriptSummary } from "./capabilities";
@@ -324,12 +323,10 @@ export function SettingsView({
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
             <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
-            <Separator className="my-1.5" />
             <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.preference")} active={mainTab === "preference"} onClick={() => onMainTabChange("preference")} />
             {showScriptsTab && (
               <NavBtn icon={<Code2 className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.scripts")} active={mainTab === "scripts"} onClick={() => onMainTabChange("scripts")} />
             )}
-            <Separator className="my-1.5" />
             <NavBtn icon={<RadioTower className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.gateway")} active={mainTab === "gateway"} onClick={() => onMainTabChange("gateway")} />
             <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
