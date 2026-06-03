@@ -198,8 +198,13 @@ export function SettingsExtensions() {
   const [refreshKey, setRefreshKey] = useState(0)
   const items = useExtensionRegistry(refreshKey)
 
-  const [sideloadError, setSideloadError] = useState<string | null>(null)
-  const [pendingUninstall, setPendingUninstall] = useState<{ id: string; name: string } | null>(null)
+  const [addLocalError, setAddLocalError] = useState<string | null>(null)
+  const [pendingUninstall, setPendingUninstall] = useState<{
+    id: string
+    name: string
+    source?: string
+    path?: string
+  } | null>(null)
   const [busy, setBusy] = useState<string | null>(null) // extensionId currently being acted on
 
   // Subscribe to extensions:changed (fired after marketplace install) so the
@@ -215,14 +220,14 @@ export function SettingsExtensions() {
     setRefreshKey((k) => k + 1)
   }
 
-  async function handleSideload() {
-    setSideloadError(null)
+  async function handleAddLocal() {
+    setAddLocalError(null)
     const ext = getExtensions()
     const folderPath = await ext.pickFolder()
     if (!folderPath) return
-    const result = await ext.sideload(folderPath)
+    const result = await ext.addLocal(folderPath)
     if (!result.ok) {
-      setSideloadError(t("options.extensions.sideload.error", { error: result.error ?? "unknown" }))
+      setAddLocalError(t("options.extensions.sideload.error", { error: result.error ?? "unknown" }))
     } else {
       refresh()
     }
@@ -252,6 +257,18 @@ export function SettingsExtensions() {
   }
 
   const installedIds = new Set(items.map((i) => i.id))
+
+  const uninstallBodyText = pendingUninstall
+    ? pendingUninstall.source === "local"
+      ? t("options.extensions.uninstall.confirm.body.local", {
+          name: pendingUninstall.name,
+          path: pendingUninstall.path ?? "",
+        })
+      : t("options.extensions.uninstall.confirm.body", {
+          name: pendingUninstall.name,
+          id: pendingUninstall.id,
+        })
+    : null
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -297,10 +314,10 @@ export function SettingsExtensions() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void handleSideload()}
+              onClick={() => void handleAddLocal()}
             >
               <FolderOpen />
-              {t("options.extensions.sideload")}
+              {t("options.extensions.addLocal")}
             </Button>
             <Button
               variant="ghost"
@@ -312,9 +329,9 @@ export function SettingsExtensions() {
             </Button>
           </div>
 
-          {/* Sideload error */}
-          {sideloadError && (
-            <p className="text-sm text-destructive">{sideloadError}</p>
+          {/* Add-local error */}
+          {addLocalError && (
+            <p className="text-sm text-destructive">{addLocalError}</p>
           )}
 
           {/* Extension list */}
@@ -325,7 +342,7 @@ export function SettingsExtensions() {
               {items.map((ext) => (
                 <li key={ext.id} className="flex flex-col gap-1 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    {/* Left: name + id badge */}
+                    {/* Left: name + id badge + source badge */}
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{ext.manifest.name}</span>
@@ -341,6 +358,16 @@ export function SettingsExtensions() {
                             ? t("options.extensions.status.failed")
                             : t("options.extensions.status.loaded")}
                         </span>
+                        {/* Source badge */}
+                        {ext.source === "local" ? (
+                          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {t("options.extensions.source.local")}
+                          </span>
+                        ) : ext.source === "marketplace" ? (
+                          <span className="shrink-0 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-600">
+                            {t("options.extensions.source.marketplace")}
+                          </span>
+                        ) : null}
                       </div>
                       <code className="text-xs text-muted-foreground">
                         {ext.id} · v{ext.manifest.version}
@@ -363,7 +390,11 @@ export function SettingsExtensions() {
                         variant="ghost"
                         size="sm"
                         disabled={busy === ext.id}
-                        onClick={() => setPendingUninstall({ id: ext.id, name: ext.manifest.name })}
+                        onClick={() => setPendingUninstall({
+                          id: ext.id,
+                          name: ext.manifest.name,
+                          source: ext.source,
+                        })}
                         title={t("options.extensions.uninstall")}
                         className="text-destructive hover:text-destructive"
                       >
@@ -405,12 +436,7 @@ export function SettingsExtensions() {
           <DialogHeader>
             <DialogTitle>{t("options.extensions.uninstall.confirm.title")}</DialogTitle>
             <DialogDescription>
-              {pendingUninstall
-                ? t("options.extensions.uninstall.confirm.body", {
-                    name: pendingUninstall.name,
-                    id: pendingUninstall.id,
-                  })
-                : null}
+              {uninstallBodyText}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

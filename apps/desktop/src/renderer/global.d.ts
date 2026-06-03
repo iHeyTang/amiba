@@ -102,9 +102,9 @@ interface HermesBridgeApi {
       extensionId: string,
       locale: "en" | "zh-CN",
     ): Promise<Record<string, string>>
-    status(): Promise<Array<{ id: string; status: string; error?: string }>>
+    status(): Promise<Array<{ id: string; status: string; error?: string; source?: string }>>
     pickFolder(): Promise<string | null>
-    sideload(path: string): Promise<{ ok: boolean; id?: string; error?: string }>
+    addLocal(path: string): Promise<{ ok: boolean; id?: string; error?: string }>
     reload(id: string): Promise<{ ok: boolean; error?: string }>
     uninstall(id: string): Promise<{ ok: boolean; error?: string }>
     marketplace: {

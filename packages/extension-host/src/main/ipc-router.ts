@@ -1,7 +1,7 @@
 // packages/extension-host/src/main/ipc-router.ts
 import { BrowserWindow, dialog, ipcMain } from "electron"
-import { existsSync, lstatSync, readFileSync, rmSync, symlinkSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, readFileSync, rmSync } from "node:fs"
+import { join, resolve } from "node:path"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
 import { validateManifest } from "./discover"
 import {
@@ -11,6 +11,7 @@ import {
   resolveRelease,
   type MarketplaceEntry,
 } from "./marketplace"
+import { addEntry, findEntry, removeEntry } from "./registry-store"
 
 export type ChannelHandler = (
   args: unknown,
@@ -70,7 +71,7 @@ export function registerInvokeRouter(
 }
 
 export function registerStatusChannel(
-  getRegistry: () => Array<{ id: string; status: string; error?: string }>,
+  getRegistry: () => Array<{ id: string; status: string; error?: string; source?: string }>,
 ): void {
   ipcMain.handle("extensions:status", () => getRegistry())
 }
@@ -102,16 +103,18 @@ export function registerMetadataChannels(opts: {
 }
 
 /**
- * Register the sideload / reload / uninstall / folder-picker IPC handlers.
+ * Register the add-local / reload / uninstall / folder-picker IPC handlers.
  *
  * Must be called AFTER `bootMainExtensionHost` returns so that
  * `reloadExtension` and `unloadExtension` are available.
  */
 export function registerExtensionActionChannels(opts: {
-  extensionsDir: string
+  registryPath: string
+  extensionsRoot: string
   getManifests: () => ExtensionManifest[]
   reloadExtension: (id: string) => Promise<void>
   unloadExtension: (id: string) => Promise<void>
+  addManifestEntry: (manifest: ExtensionManifest, rootDir: string) => void
 }) {
   /**
    * extensions:show-picker — opens a native directory-picker dialog and
@@ -125,45 +128,61 @@ export function registerExtensionActionChannels(opts: {
   })
 
   /**
-   * extensions:sideload — symlinks `<extensionsDir>/<id>/` → `folderPath`
-   * then reloads the extension into the running host.
+   * extensions:add-local — adds an entry to the registry pointing at the
+   * provided folder path. No file copying or symlinking is done.
    */
-  ipcMain.handle("extensions:sideload", async (_e, folderPath: string) => {
+  ipcMain.handle("extensions:add-local", async (_e, folderPath: string) => {
     if (typeof folderPath !== "string" || !folderPath) {
       return { ok: false, error: "folderPath is required" }
     }
 
+    // Always resolve to an absolute path.
+    const absolutePath = resolve(folderPath)
+
     // Validate the manifest in the provided folder.
-    const manifestPath = join(folderPath, "manifest.json")
+    const manifestPath = join(absolutePath, "manifest.json")
     if (!existsSync(manifestPath)) {
-      return { ok: false, error: `no valid manifest at ${folderPath}` }
+      return { ok: false, error: `no valid manifest at ${absolutePath}` }
     }
     let manifestId: string
+    let manifest: ExtensionManifest
     try {
       const raw = JSON.parse(readFileSync(manifestPath, "utf8"))
       const v = validateManifest(raw)
-      if (!v.ok) return { ok: false, error: `no valid manifest at ${folderPath}: ${v.error}` }
+      if (!v.ok) return { ok: false, error: `no valid manifest at ${absolutePath}: ${v.error}` }
       manifestId = v.manifest.id
+      manifest = v.manifest
     } catch (e) {
       return { ok: false, error: `failed to read manifest: ${e instanceof Error ? e.message : String(e)}` }
     }
 
-    const targetLink = join(opts.extensionsDir, manifestId)
-    if (existsSync(targetLink)) {
-      return { ok: false, error: `an extension with id ${manifestId} is already installed` }
+    // Check if id is already registered with a DIFFERENT path.
+    const existing = findEntry(opts.registryPath, manifestId)
+    if (existing && existing.path !== absolutePath) {
+      return {
+        ok: false,
+        error: `extension ${manifestId} is already registered at a different path: ${existing.path}`,
+      }
     }
 
-    try {
-      symlinkSync(folderPath, targetLink, "dir")
-    } catch (e) {
-      return { ok: false, error: `failed to create symlink: ${e instanceof Error ? e.message : String(e)}` }
+    // Add registry entry (upsert for same path).
+    addEntry(opts.registryPath, {
+      id: manifestId,
+      source: "local",
+      path: absolutePath,
+      addedAt: new Date().toISOString(),
+    })
+
+    // Add to the in-memory manifest entries if not already present.
+    if (!opts.getManifests().some((m) => m.id === manifestId)) {
+      opts.addManifestEntry(manifest, absolutePath)
     }
 
-    // Trigger a reload — the host will read the manifest fresh from targetLink.
+    // Trigger a reload so the host activates the extension.
     try {
       await opts.reloadExtension(manifestId)
     } catch (e) {
-      return { ok: false, error: `symlinked but failed to activate: ${e instanceof Error ? e.message : String(e)}` }
+      return { ok: false, error: `registered but failed to activate: ${e instanceof Error ? e.message : String(e)}` }
     }
 
     return { ok: true, id: manifestId }
@@ -188,7 +207,9 @@ export function registerExtensionActionChannels(opts: {
   })
 
   /**
-   * extensions:uninstall — unload and delete (or unlink) the extension directory.
+   * extensions:uninstall — unload the extension, then:
+   *   - source=marketplace: delete the directory AND remove registry entry
+   *   - source=local: ONLY remove the registry entry, never touch the source dir
    */
   ipcMain.handle("extensions:uninstall", async (_e, extensionId: string) => {
     if (typeof extensionId !== "string") {
@@ -198,26 +219,30 @@ export function registerExtensionActionChannels(opts: {
       return { ok: false, error: `extension ${extensionId} is not loaded` }
     }
 
+    // Look up source before unloading.
+    const entry = findEntry(opts.registryPath, extensionId)
+    const source = entry?.source ?? "marketplace"
+
     try {
       await opts.unloadExtension(extensionId)
     } catch (e) {
       return { ok: false, error: `failed to unload: ${e instanceof Error ? e.message : String(e)}` }
     }
 
-    const extPath = join(opts.extensionsDir, extensionId)
-    try {
-      // If it's a symlink, just unlink it (don't follow into the source tree).
-      let isSym = false
-      try { isSym = lstatSync(extPath).isSymbolicLink() } catch { /* path not found — nothing to remove */ }
-      if (isSym) {
-        const { unlinkSync } = await import("node:fs")
-        unlinkSync(extPath)
-      } else if (existsSync(extPath)) {
-        rmSync(extPath, { recursive: true, force: true })
+    if (source === "marketplace") {
+      const extPath = join(opts.extensionsRoot, extensionId)
+      try {
+        if (existsSync(extPath)) {
+          rmSync(extPath, { recursive: true, force: true })
+        }
+      } catch (e) {
+        return { ok: false, error: `unloaded but failed to remove directory: ${e instanceof Error ? e.message : String(e)}` }
       }
-    } catch (e) {
-      return { ok: false, error: `unloaded but failed to remove directory: ${e instanceof Error ? e.message : String(e)}` }
     }
+    // For local: do NOT touch the source directory.
+
+    // Remove registry entry.
+    removeEntry(opts.registryPath, extensionId)
 
     return { ok: true }
   })
@@ -243,7 +268,8 @@ export function broadcastExtensionsChanged(): void {
  *   triggers a reload and broadcasts `extensions:changed` to all windows.
  */
 export function registerMarketplaceChannels(opts: {
-  extensionsDir: string
+  extensionsRoot: string
+  registryPath: string
   reloadExtensions: () => Promise<void>
 }) {
   ipcMain.handle("marketplace:index-url", () => getIndexUrl())
@@ -264,7 +290,7 @@ export function registerMarketplaceChannels(opts: {
     async (_e, entry: MarketplaceEntry) => {
       try {
         const release = await resolveRelease(entry)
-        const manifest = await installFromRelease(release, opts.extensionsDir)
+        const manifest = await installFromRelease(release, opts.extensionsRoot, opts.registryPath)
         await opts.reloadExtensions()
         broadcastExtensionsChanged()
         return { ok: true as const, id: manifest.id, version: manifest.version }

@@ -177,6 +177,7 @@ export function useExtensionRegistry(refreshKey: number = 0) {
       id: string
       status: string
       error?: string
+      source?: string
       manifest: import("@hermes-x/extension-api").ExtensionManifest
     }>
   >([])
@@ -193,6 +194,7 @@ export function useExtensionRegistry(refreshKey: number = 0) {
           manifest: m,
           status: byId.get(m.id)?.status ?? "loaded",
           error: byId.get(m.id)?.error,
+          source: byId.get(m.id)?.source,
         })),
       )
     })
