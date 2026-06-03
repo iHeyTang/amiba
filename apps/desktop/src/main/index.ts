@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url"
-import { readFileSync } from "node:fs"
+import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 import path from "node:path"
 import type net from "node:net"
@@ -13,8 +13,7 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
-import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import { bootMainExtensionHost, discoverFromUserData } from "@hermes-x/extension-host/main"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -67,27 +66,21 @@ const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL
 const IS_MAC = process.platform === "darwin"
 
 /**
- * Discover built-in extensions by resolving their manifest.json paths from
- * the workspace packages. Extensions are loaded at compile-time via
- * require.resolve so they ship inside the desktop bundle.
+ * Return the absolute path to the extensions directory.
+ *
+ * Override with HERMES_X_DEV_EXTENSIONS_PATH for local development/sideloading
+ * (e.g. `HERMES_X_DEV_EXTENSIONS_PATH=/repo/extensions pnpm dev:desktop`).
+ * In production (and unset dev) this resolves to `<userData>/extensions/`.
+ *
+ * The directory is created if it does not yet exist so the first-run cold
+ * boot with zero extensions does not throw.
  */
-function discoverBuiltinExtensions(): Array<{
-  manifest: ExtensionManifest
-  rootDir: string
-}> {
-  const result: Array<{ manifest: ExtensionManifest; rootDir: string }> = []
-  const ids = ["knowledge-base"] // explicit list — phase 3 only has one
-  for (const id of ids) {
-    try {
-      const manifestPath = require.resolve(`@hermes-x/ext-${id}/manifest.json`)
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ExtensionManifest
-      const rootDir = join(manifestPath, "..")
-      result.push({ manifest, rootDir })
-    } catch (e) {
-      console.warn(`[extensions] failed to discover ${id}:`, e)
-    }
-  }
-  return result
+function getExtensionsDir(): string {
+  const dir =
+    process.env.HERMES_X_DEV_EXTENSIONS_PATH ??
+    join(app.getPath("userData"), "extensions")
+  mkdirSync(dir, { recursive: true })
+  return dir
 }
 
 /**
@@ -420,8 +413,16 @@ if (!gotSingleInstanceLock) {
     registerChatHandlers()
     registerHermesRuntimeHandlers()
 
+    const extensionsDir = getExtensionsDir()
+    const { entries: discoveredEntries, failed: discoveryFailed } =
+      discoverFromUserData(extensionsDir)
+    if (discoveryFailed.length) {
+      console.warn("[extensions] discovery failures:", discoveryFailed)
+    }
+
     const extensionHost = await bootMainExtensionHost({
-      manifests: discoverBuiltinExtensions(),
+      manifests: discoveredEntries,
+      extensionsDir,
       settingsStore: {
         get: async (key, fallback) => {
           const r = await mainStore.get([key])
@@ -433,7 +434,6 @@ if (!gotSingleInstanceLock) {
         throw new Error("hermes.callTool not wired yet")
       },
       getI18n: async (_extensionId, _locale) => ({}),
-      getRendererBundleUrl: async () => null,
     })
 
     ;(globalThis as { __hermesExtensionHost?: typeof extensionHost }).__hermesExtensionHost = extensionHost
