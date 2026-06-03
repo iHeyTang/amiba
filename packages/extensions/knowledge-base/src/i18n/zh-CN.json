@@ -1,1 +1,90 @@
-{}
+{
+  "activityBar.label": "知识库",
+  "settings.label": "知识库",
+
+  "title": "知识库",
+  "connected": "已连接",
+
+  "connection.title": "GBrain 连接",
+  "connection.url": "服务器地址",
+  "connection.token": "访问令牌",
+  "connection.token.placeholder": "通过 `gbrain auth create <name>` 生成的 Bearer token",
+  "connection.test": "测试连接",
+  "connection.failed": "无法连接 gbrain，请确认服务是否运行中",
+  "connection.invalidToken": "服务拒绝了访问令牌。请执行 `gbrain auth create <name>` 生成新的 Bearer token 并粘贴到此处。",
+  "connection.starting": "正在启动 `gbrain serve --http`…",
+  "connection.error": "连接错误：{error}",
+
+  "config.title": "知识库设置",
+  "config.subtitle": "配置 GBrain 实例的连接和运行参数。",
+  "config.notConnected": "未连接",
+  "config.hint": "URL 默认指向 `gbrain serve --http` 的本地端口 (http://127.0.0.1:3131)。如果服务跑在其他地址或需要鉴权，在此处覆盖。",
+  "config.saveAndTest": "保存并测试",
+  "config.saved": "已保存",
+  "config.restart": "重启服务",
+  "config.restart.hint": "如果刚生成的 token 仍被拒绝，可尝试重启 —— 进程可能还在使用旧的 brain 数据库句柄。",
+  "config.restarting": "正在重启…",
+  "config.restarted": "已重启",
+  "config.restart.failed": "重启失败：{error}",
+
+  "config.runtime.title": "运行状态",
+  "config.runtime.version": "版本",
+  "config.runtime.engine": "引擎",
+  "config.runtime.transport": "传输",
+  "config.runtime.db": "数据库",
+  "config.runtime.empty": "未连接到 GBrain，连接成功后会显示服务上报的运行信息。",
+
+  "config.providers.section": "AI Providers",
+  "config.providers.loading": "正在读取 gbrain 支持的 provider…",
+  "config.providers.empty": "gbrain providers list 没有返回任何结果。确认 gbrain CLI 是否可用。",
+  "config.providers.refresh": "重新探测",
+  "config.providers.envHint": "直接在此处粘贴每个 provider 的 API key。值通过系统 keychain 加密，在 gbrain 启动时注入；修改后请重启 gbrain 使其生效。",
+  "config.providers.expand": "配置",
+  "config.providers.collapse": "收起",
+  "config.providers.required": "必填",
+  "config.providers.optional": "可选",
+  "config.providers.placeholder.saved": "已保存 — 粘贴新值可覆盖",
+  "config.providers.placeholder.empty": "未设置",
+  "config.providers.save": "保存",
+  "config.providers.saved": "已保存，重启 gbrain 后生效",
+  "config.providers.clear": "清除",
+  "config.providers.setupLink": "申请 API key →",
+
+  "tutorial.tagline": "给 AI 一个长期记忆。",
+  "tutorial.bullet.recall": "记住你说过的一切，跨对话依然有用。",
+  "tutorial.bullet.link": "自动把笔记、决策、引用连接成知识图谱。",
+  "tutorial.bullet.context": "在你需要的时候自动浮现相关上下文。",
+  "tutorial.advanced.label": "已经在跑？手动连接",
+  "tutorial.advanced.hint": "把桌面客户端指向你自己启动的 GBrain（自定义端口、远程服务器等）。",
+  "tutorial.checking": "正在检查连接…",
+
+  "oneClick.title": "启用知识库",
+  "oneClick.description": "让助手按官方文档帮你安装并启动 GBrain，无需手动敲命令。",
+  "oneClick.button": "一键启用",
+
+  "search.placeholder": "搜索你的知识库…",
+  "search.results": "找到 {count} 条结果",
+  "search.empty": "没有匹配的页面",
+
+  "tabs.search": "搜索",
+  "tabs.putPage": "新建页面",
+  "tabs.pages": "页面列表",
+
+  "view.placeholder": "在左侧选择一个页面查看，或点击 + 新建。",
+  "view.empty": "（页面没有正文）",
+
+  "putPage.slug": "Slug（页面路径）",
+  "putPage.slug.placeholder": "例如 people/alice 或 notes/2026-06-01",
+  "putPage.content": "内容（Markdown）",
+  "putPage.content.placeholder": "# 页面标题\n\n在这里写内容…",
+  "putPage.save": "保存页面",
+  "putPage.success": "页面已保存",
+
+  "pages.load": "加载页面",
+  "pages.count": "共 {count} 个页面",
+  "pages.empty": "暂无页面。使用「新建页面」标签创建你的第一个页面。",
+
+  "composer.brainHint": "让 AI 记住你的所有知识",
+
+  "common.loading": "加载中…"
+}
