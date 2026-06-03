@@ -22,6 +22,21 @@ import { dirname, join } from "path"
 
 const STORE_PATH = join(homedir(), ".hermes", "provider-env.json")
 
+let writeQueue: Promise<void> = Promise.resolve()
+
+/** Serialize all read-modify-write sequences so concurrent UI saves
+ *  can't drop each other's updates. Reads outside this queue are
+ *  fine — they're idempotent. */
+function enqueueWrite(op: () => Promise<void>): Promise<void> {
+  const next = writeQueue.then(op, op)
+  writeQueue = next.catch(() => {
+    /* swallow inside the queue so a failed op doesn't poison
+     * subsequent writes — the original promise still rejects to
+     * the caller. */
+  })
+  return next
+}
+
 /** On-disk shape: `{ [providerId]: { [envKey]: base64-ciphertext } }`. */
 type EncryptedStore = Record<string, Record<string, string>>
 
@@ -29,7 +44,7 @@ async function readRaw(): Promise<EncryptedStore> {
   try {
     const buf = await fs.readFile(STORE_PATH, "utf8")
     const parsed = JSON.parse(buf) as unknown
-    if (!parsed || typeof parsed !== "object") return {}
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
     return parsed as EncryptedStore
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return {}
@@ -39,9 +54,11 @@ async function readRaw(): Promise<EncryptedStore> {
 
 async function writeRaw(store: EncryptedStore): Promise<void> {
   await fs.mkdir(dirname(STORE_PATH), { recursive: true })
-  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), {
+  const tmp = `${STORE_PATH}.tmp`
+  await fs.writeFile(tmp, JSON.stringify(store, null, 2), {
     mode: 0o600,
   })
+  await fs.rename(tmp, STORE_PATH)
 }
 
 function encrypt(plain: string): string {
@@ -82,22 +99,26 @@ export async function setOverride(
       "OS keychain unavailable — refusing to write provider env in cleartext",
     )
   }
-  const store = await readRaw()
-  if (!store[providerId]) store[providerId] = {}
-  store[providerId][envKey] = encrypt(value)
-  await writeRaw(store)
+  return enqueueWrite(async () => {
+    const store = await readRaw()
+    if (!store[providerId]) store[providerId] = {}
+    store[providerId][envKey] = encrypt(value)
+    await writeRaw(store)
+  })
 }
 
 export async function unsetOverride(
   providerId: string,
   envKey: string,
 ): Promise<void> {
-  const store = await readRaw()
-  const entries = store[providerId]
-  if (!entries) return
-  delete entries[envKey]
-  if (Object.keys(entries).length === 0) delete store[providerId]
-  await writeRaw(store)
+  return enqueueWrite(async () => {
+    const store = await readRaw()
+    const entries = store[providerId]
+    if (!entries) return
+    delete entries[envKey]
+    if (Object.keys(entries).length === 0) delete store[providerId]
+    await writeRaw(store)
+  })
 }
 
 /**
