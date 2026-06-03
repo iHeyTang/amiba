@@ -1,23 +1,11 @@
 import {
   bootRendererExtensions,
   createSlotRegistry,
-  discoverRendererExtensions,
   makeRendererHost,
 } from "@hermes-x/extension-host/renderer"
-import type { RendererHost } from "@hermes-x/extension-api"
+import type { RendererHost, Disposable } from "@hermes-x/extension-api"
 import { getCurrentLanguage, subscribeLanguage } from "@hermes-x/i18n"
 import { getPlatform } from "@hermes-x/platform"
-
-const manifestModules = import.meta.glob<{ default: unknown }>(
-  "../../../../extensions/*/manifest.json",
-)
-const rendererModules = import.meta.glob<{ activate: (h: RendererHost) => void | Promise<void> }>(
-  "../../../../extensions/*/dist/renderer.js",
-)
-// Extensions own their i18n catalogs; the host does not load them. We still
-// keep the glob hook empty so older signatures don't break — discover ignores
-// missing entries.
-const i18nModules: Record<string, () => Promise<{ default: Record<string, string> }>> = {}
 
 export const slotRegistry = createSlotRegistry()
 
@@ -34,20 +22,45 @@ export function bootExtensions() {
 }
 
 async function runBootExtensions() {
-  const { extensions, failed: discoveryFailed } = await discoverRendererExtensions({
-    manifestModules,
-    rendererModules,
-    i18nModules,
-  })
-  if (discoveryFailed.length) {
-    console.warn("[extensions] discovery failures:", discoveryFailed)
-  }
+  // Fetch the manifest list from the main process (populated at runtime from
+  // <userData>/extensions/ by discoverFromUserData on the main side).
+  const manifests = await window.hermes.extensions.listManifests()
+
+  // Build DiscoveredExtension entries dynamically using file:// imports
+  // instead of the old compile-time import.meta.glob approach.
+  const extensions = await Promise.all(
+    manifests.map(async (manifest) => {
+      if (!manifest.entries.renderer) {
+        return {
+          manifest,
+          loadRenderer: undefined,
+          loadI18n: async (_locale: "en" | "zh-CN") => null,
+        }
+      }
+      // Ask main for the absolute on-disk path of this extension's renderer bundle.
+      const bundlePath = await window.hermes.extensions.rendererBundleUrl(manifest.id)
+      return {
+        manifest,
+        loadRenderer: bundlePath
+          ? async () => {
+              // @vite-ignore — intentional runtime dynamic import; Vite must not
+              // try to resolve this at build time (path is unknown until runtime).
+              const mod = await import(/* @vite-ignore */ `file://${bundlePath}`)
+              return mod as { activate: (h: RendererHost) => void | Promise<void> }
+            }
+          : undefined,
+        loadI18n: async (_locale: "en" | "zh-CN") => null,
+      }
+    }),
+  )
+
   const result = await bootRendererExtensions({
     extensions,
-    makeHostFor: (id) =>
+    makeHostFor: (id: string, disposables: Disposable[]) =>
       makeRendererHost(id, {
         bridge: window.hermes.extensions,
         slotRegistry,
+        disposables,
         settings: {
           get: async <T,>(key: string, fallback: T) => {
             const r = await getPlatform().storage.get([key])
@@ -69,6 +82,7 @@ async function runBootExtensions() {
         },
       }),
   })
+
   if (result.failed.length) {
     console.warn("[extensions] activation failures:", result.failed)
   }
