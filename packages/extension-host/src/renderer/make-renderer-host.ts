@@ -1,0 +1,74 @@
+// packages/extension-host/src/renderer/make-renderer-host.ts
+import type { RendererHost, SlotEntry, SlotName } from "@hermes-x/extension-api"
+import type { SlotRegistry } from "./slot-registry"
+import type { ExtensionsBridge } from "../preload/index"
+
+export interface RendererHostDeps {
+  bridge: ExtensionsBridge
+  slotRegistry: SlotRegistry
+  /** Reads/writes the shared platform settings store. */
+  settings: {
+    get<T>(key: string, fallback: T): Promise<T>
+    set(key: string, value: unknown): Promise<void>
+    watch(key: string, cb: (v: unknown) => void): () => void
+  }
+  /** Translator from @hermes-x/i18n. */
+  translate: (key: string, params?: Record<string, unknown>) => string
+  /** notify dispatcher (toast / banner). */
+  notify: (kind: "info" | "warn" | "error", message: string) => void
+  /** Hermes-agent tool caller (mirror of the main side). */
+  callTool: (tool: string, args: unknown) => Promise<unknown>
+}
+
+export function makeRendererHost(extensionId: string, deps: RendererHostDeps): RendererHost {
+  const tag = `[ext:${extensionId}]`
+  const log =
+    (level: "log" | "warn" | "error" | "debug") =>
+    (...args: unknown[]) =>
+      console[level](tag, ...args)
+
+  return {
+    id: extensionId,
+    logger: { debug: log("debug"), info: log("log"), warn: log("warn"), error: log("error") },
+    slots: {
+      register<P>(slot: SlotName, component: React.ComponentType<P>, options?: { slotEntryId?: string; order?: number; props?: Partial<P> }) {
+        const entry: SlotEntry<P> = {
+          extensionId,
+          entryId: options?.slotEntryId ?? `${extensionId}:${slot}`,
+          order: options?.order ?? 100,
+          component,
+          props: options?.props,
+        }
+        return deps.slotRegistry.register(slot, entry)
+      },
+    },
+    commands: {
+      register: () => ({ dispose: () => undefined }),
+      invoke: async () => undefined,
+    },
+    settings: {
+      define: () => ({ dispose: () => undefined }),
+      get: <T,>(key: string, fallback: T) =>
+        deps.settings.get<T>(`ext.${extensionId}.${key}`, fallback),
+      set: (key, value) => deps.settings.set(`ext.${extensionId}.${key}`, value),
+      watch: <T,>(key: string, cb: (v: T) => void) => {
+        const unsub = deps.settings.watch(`ext.${extensionId}.${key}`, (v) => cb(v as T))
+        return { dispose: unsub }
+      },
+    },
+    storage: {
+      get: <T,>(key: string, fallback: T) =>
+        deps.bridge.invoke(extensionId, "__storage.get", { key, fallback }) as Promise<T>,
+      set: (key, value) =>
+        deps.bridge.invoke(extensionId, "__storage.set", { key, value }) as Promise<void>,
+      watch: () => ({ dispose: () => undefined }),
+    },
+    ipc: {
+      invoke: <TArgs, TRet>(channel: string, args: TArgs) =>
+        deps.bridge.invoke(extensionId, channel, args) as Promise<TRet>,
+    },
+    i18n: { t: (key, params) => deps.translate(key, params) },
+    hermes: { callTool: (tool, args) => deps.callTool(tool, args) },
+    notify: (kind, message) => deps.notify(kind, message),
+  } as RendererHost
+}
