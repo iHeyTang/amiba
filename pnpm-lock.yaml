@@ -398,10 +398,16 @@ importers:
       electron:
         specifier: '*'
         version: 33.4.11
+      tar:
+        specifier: ^7.0.0
+        version: 7.5.16
     devDependencies:
       '@types/react':
         specifier: 18.3.12
         version: 18.3.12
+      '@types/tar':
+        specifier: ^6.1.0
+        version: 6.1.13
       react:
         specifier: 18.3.1
         version: 18.3.1
