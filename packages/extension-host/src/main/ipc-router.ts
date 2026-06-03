@@ -185,6 +185,7 @@ export function registerExtensionActionChannels(opts: {
       return { ok: false, error: `registered but failed to activate: ${e instanceof Error ? e.message : String(e)}` }
     }
 
+    broadcastExtensionsChanged(manifestId)
     return { ok: true, id: manifestId }
   })
 
@@ -200,6 +201,7 @@ export function registerExtensionActionChannels(opts: {
     }
     try {
       await opts.reloadExtension(extensionId)
+      broadcastExtensionsChanged(extensionId)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
@@ -244,18 +246,24 @@ export function registerExtensionActionChannels(opts: {
     // Remove registry entry.
     removeEntry(opts.registryPath, extensionId)
 
+    broadcastExtensionsChanged(extensionId)
     return { ok: true }
   })
 }
 
 /**
- * Broadcast `extensions:changed` to every open BrowserWindow so the renderer
- * can refresh its extension registry after a marketplace install completes.
+ * Broadcast `extensions:changed` to every open BrowserWindow.
+ *
+ * `extensionId` carries the affected extension's id when known (sideload,
+ * uninstall, reload, manifest hot-reload, marketplace install). The
+ * renderer uses it to surgically reload just that one — instead of
+ * re-importing every bundle. `null` means "we don't know which one,"
+ * which forces the renderer into a full registry diff.
  */
-export function broadcastExtensionsChanged(): void {
+export function broadcastExtensionsChanged(extensionId: string | null = null): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) {
-      w.webContents.send("extensions:changed")
+      w.webContents.send("extensions:changed", extensionId)
     }
   }
 }

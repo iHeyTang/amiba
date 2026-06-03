@@ -120,7 +120,7 @@ interface HermesBridgeApi {
         | { ok: false; error: string }
       >
     }
-    onExtensionsChanged(cb: () => void): () => void
+    onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
   }
 }
 

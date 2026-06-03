@@ -5,6 +5,7 @@ import type { Disposable, ExtensionManifest } from "@hermes-x/extension-api"
 import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry } from "./registry"
 import {
+  broadcastExtensionsChanged,
   createChannelTable,
   registerExtensionActionChannels,
   registerInvokeRouter,
@@ -301,9 +302,12 @@ export async function bootMainExtensionHost(
   const initialPaths = buildPathMap()
   watcher = watchManifests(initialPaths, (changedId) => {
     console.info(`[extension-host] manifest changed for ${changedId} — hot reloading…`)
-    void reloadExtension(changedId).catch((e) => {
-      console.error(`[extension-host] hot reload failed for ${changedId}:`, e)
-    })
+    void reloadExtension(changedId).then(
+      () => broadcastExtensionsChanged(changedId),
+      (e) => {
+        console.error(`[extension-host] hot reload failed for ${changedId}:`, e)
+      },
+    )
   })
 
   return {

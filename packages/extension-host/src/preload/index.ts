@@ -45,8 +45,14 @@ export interface ExtensionsBridge {
   uninstall(id: string): Promise<{ ok: boolean; error?: string }>
   /** Marketplace install flow. */
   marketplace: MarketplaceBridge
-  /** Subscribe to `extensions:changed` pushed from main after installs. Returns unsubscribe fn. */
-  onExtensionsChanged(cb: () => void): () => void
+  /**
+   * Subscribe to `extensions:changed` pushed from main. The optional
+   * `extensionId` payload identifies the affected extension when known
+   * (sideload, uninstall, reload, manifest hot-reload, marketplace install);
+   * `null` means "we don't know which one — do a full sync."
+   * Returns an unsubscribe fn.
+   */
+  onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
 }
 
 export function createExtensionsBridge(): ExtensionsBridge {
@@ -69,8 +75,8 @@ export function createExtensionsBridge(): ExtensionsBridge {
       install: (entry: MarketplaceEntry) =>
         ipcRenderer.invoke("marketplace:install", entry),
     },
-    onExtensionsChanged: (cb: () => void) => {
-      const handler = () => cb()
+    onExtensionsChanged: (cb: (extensionId: string | null) => void) => {
+      const handler = (_e: unknown, extensionId: string | null) => cb(extensionId)
       ipcRenderer.on("extensions:changed", handler)
       return () => ipcRenderer.off("extensions:changed", handler)
     },
