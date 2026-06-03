@@ -9,7 +9,6 @@
  */
 
 import {
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -47,11 +46,7 @@ import { useT } from "@hermes-x/i18n";
 import { useResolvedTheme } from "../theme";
 import { HermesLogo } from "../primitives";
 import { cn } from "../primitives";
-import {
-  buildBrainInstallPrompt,
-  ensureBrainDefaultUrl,
-  hasGBrainBridge,
-} from "../settings/brain-install";
+import { SlotOutlet } from "@hermes-x/extension-host/renderer";
 import type {
   FaviconCapability,
   HomeCapabilities,
@@ -174,25 +169,6 @@ function Home({
   });
   const [voiceTranscribing, setVoiceTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-
-  // Brain hint — show when gbrain bridge exists but is not connected
-  const [showBrainHint, setShowBrainHint] = useState(false);
-  useEffect(() => {
-    if (!hasGBrainBridge()) return;
-    const bridge = (window as unknown as {
-      hermes: { gbrain: { health: () => Promise<unknown> } };
-    }).hermes.gbrain;
-    void bridge
-      .health()
-      .then((h) => {
-        setShowBrainHint(!h);
-      })
-      .catch(() => {
-        // Bridge exists but health probe blew up — still surface the
-        // hint; the install flow handles "not actually gbrain" cases.
-        setShowBrainHint(true);
-      });
-  }, []);
 
   // On mount: focus the composer textarea.
   useEffect(() => {
@@ -463,28 +439,13 @@ function Home({
           />
         </section>
 
-        {/* Knowledge-base hint — subtle pill above the composer when
-            the gbrain bridge exists but isn't connected yet. Clicking
-            prefills the composer with the install prompt and focuses
-            the input, leaving the actual send to the user (they can
-            read/edit/back out). We still pre-seed the default brain URL
-            so a successful install lands on the right port without
-            requiring another visit to Settings → Knowledge. */}
-        {showBrainHint && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowBrainHint(false);
-              setInput(buildBrainInstallPrompt(language));
-              inputRef.current?.focus();
-              void ensureBrainDefaultUrl();
-            }}
-            className="mx-auto flex items-center gap-2 rounded-full border border-border/50 bg-background/60 px-4 py-1.5 text-xs text-muted-foreground backdrop-blur-sm transition-colors hover:border-primary/30 hover:text-foreground"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            {t("newtab.brainHint")}
-          </button>
-        )}
+        <SlotOutlet
+          name="composer.hint"
+          runtimeProps={{
+            onPrefill: (text: string) => setInput(text),
+            language,
+          }}
+        />
 
         {/*
           Shortcuts strip is extension-only (backed by chrome.bookmarks).
