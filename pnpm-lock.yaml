@@ -288,6 +288,19 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
+  packages/extension-api:
+    dependencies:
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+
   packages/i18n:
     dependencies:
       '@hermes-x/platform':
