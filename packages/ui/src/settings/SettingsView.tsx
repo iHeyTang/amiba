@@ -1,6 +1,5 @@
 import {
   Activity,
-  BookOpen,
   Bot,
   BrainCircuit,
   Clock,
@@ -15,6 +14,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
+import { useExtensionSettingsTabs, SlotOutlet } from "@hermes-x/extension-host/renderer";
 
 import { useT } from "@hermes-x/i18n";
 import { useResolvedTheme } from "../theme";
@@ -37,7 +38,6 @@ import { HermesModelConfigTab } from "./HermesModelConfigTab";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { ScriptEditor } from "./ScriptEditor";
 import { ScriptList } from "./ScriptList";
-import { SettingsBrainConfig } from "./SettingsBrainConfig";
 import { SettingsCron } from "./SettingsCron";
 import { SettingsGateway } from "./SettingsGateway";
 import { SettingsLogs } from "./SettingsLogs";
@@ -67,14 +67,19 @@ const ALL_TABS = [
   "gateway",
   "models",
   "memory",
-  "brain",
   "voice",
   "cron",
   "logs",
 ] as const;
-type MainTab = (typeof ALL_TABS)[number];
+type CoreTab = (typeof ALL_TABS)[number];
+/** MainTab is widened to string so extension tab IDs are also accepted. */
+type MainTab = CoreTab | (string & {});
 
 const TAB_SET = new Set<string>(ALL_TABS);
+
+function isCoreTab(tab: MainTab): tab is CoreTab {
+  return (ALL_TABS as readonly string[]).includes(tab)
+}
 
 function mainTabFromLocation(): MainTab {
   const raw =
@@ -156,6 +161,7 @@ export function SettingsView({
   const { t } = useT();
 
   const showScriptsTab = !!capabilities.userscripts;
+  const extensionTabs = useExtensionSettingsTabs();
 
   const [mainTab, setMainTab] = useState<MainTab>(() => {
     const fromHash = mainTabFromLocation();
@@ -196,7 +202,9 @@ export function SettingsView({
   }, [showScriptsTab]);
 
   function onMainTabChange(v: string) {
-    const next = TAB_SET.has(v) ? (v as MainTab) : "status";
+    // Accept core tabs, extension tab IDs (not in TAB_SET), or fall back to "status".
+    const isExtensionTab = extensionTabs.some((t) => t.id === v);
+    const next: MainTab = TAB_SET.has(v) || isExtensionTab ? v : "status";
     if (next === "scripts" && !showScriptsTab) return;
     setMainTab(next);
     const base = window.location.pathname + window.location.search;
@@ -326,10 +334,12 @@ export function SettingsView({
             <NavBtn icon={<RadioTower className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.gateway")} active={mainTab === "gateway"} onClick={() => onMainTabChange("gateway")} />
             <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
-            <NavBtn icon={<BookOpen className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.brain")} active={mainTab === "brain"} onClick={() => onMainTabChange("brain")} />
             <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
+            {extensionTabs.map((tab) => (
+              <NavBtn key={tab.id} icon={null} label={t(tab.labelKey as never)} active={mainTab === tab.id} onClick={() => onMainTabChange(tab.id)} />
+            ))}
           </nav>
         </ScrollArea>
         <div className="px-3 py-2">
@@ -342,8 +352,6 @@ export function SettingsView({
           <HermesModelConfigTab />
         ) : mainTab === "memory" ? (
           <SettingsMemory />
-        ) : mainTab === "brain" ? (
-          <SettingsBrainConfig />
         ) : mainTab === "voice" ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SettingsPaneHeader
@@ -441,7 +449,7 @@ export function SettingsView({
               </>
             ) : mainTab === "preference" ? (
               <SettingsPreferences />
-            ) : (
+            ) : isCoreTab(mainTab) ? (
               <>
                 <SettingsPaneHeader
                   title={t("options.gateway.title")}
@@ -454,6 +462,9 @@ export function SettingsView({
                   </div>
                 </ScrollArea>
               </>
+            ) : null}
+            {!isCoreTab(mainTab) && (
+              <SlotOutlet name="settings.tab" runtimeProps={{ activeId: mainTab }} />
             )}
           </div>
         )}

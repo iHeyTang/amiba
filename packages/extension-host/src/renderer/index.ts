@@ -47,6 +47,23 @@ export async function bootRendererExtensions(opts: {
   return { activated, failed }
 }
 
+export function useExtensionSettingsTabs(): Array<{
+  id: string
+  labelKey: string
+  order?: number
+}> {
+  const reg = useSlotRegistry()
+  const [snapshot, setSnapshot] = useState(() => reg.get("settings.tab"))
+  useEffect(() => {
+    const sub = reg.subscribe(() => setSnapshot(reg.get("settings.tab")))
+    return () => sub.dispose()
+  }, [reg])
+  return snapshot.map((e) => {
+    const p = (e.props ?? {}) as { labelKey?: string; order?: number }
+    return { id: e.entryId, labelKey: p.labelKey ?? "", order: p.order ?? e.order }
+  })
+}
+
 export function useActivityBarItems(): Array<{
   id: string
   iconKey: string
