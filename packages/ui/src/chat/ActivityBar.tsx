@@ -48,8 +48,10 @@ export interface ActivityItem {
 
 export interface ExtensionActivityItem {
   id: string;
-  iconKey: string;
-  labelKey: string;
+  /** Lucide icon name (resolved via the optional `resolveIcon` prop). */
+  icon: string;
+  /** Localized label — the extension picked it via its own catalog already. */
+  label: string;
   order?: number;
 }
 
@@ -61,10 +63,10 @@ export interface ActivityBarProps {
   /** Extension-contributed items merged with core items and sorted by order. */
   extensionItems?: ExtensionActivityItem[];
   /**
-   * Resolves an extension icon key to a ReactNode. When absent or when the
-   * key is unrecognised, the component falls back to BookOpen.
+   * Resolves an extension icon name to a ReactNode. When absent or when the
+   * name is unrecognised, the component falls back to BookOpen.
    */
-  resolveIcon?: (iconKey: string) => ReactNode | null;
+  resolveIcon?: (icon: string) => ReactNode | null;
 }
 
 export function ActivityBar({
@@ -101,8 +103,8 @@ export function ActivityBar({
 
   const extItems: ActivityItem[] = (extensionItems ?? []).map((e) => ({
     id: e.id,
-    icon: resolveIcon?.(e.iconKey) ?? <BookOpen className="h-4 w-4" />,
-    label: t(e.labelKey as never),
+    icon: resolveIcon?.(e.icon) ?? <BookOpen className="h-4 w-4" />,
+    label: e.label,
   }));
 
   const items = [...coreItems, ...extItems].sort((a, b) => {

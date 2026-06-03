@@ -337,7 +337,7 @@ export function SettingsView({
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
             {extensionTabs.map((tab) => (
-              <NavBtn key={tab.id} icon={null} label={t(tab.labelKey as never)} active={mainTab === tab.id} onClick={() => onMainTabChange(tab.id)} />
+              <NavBtn key={tab.id} icon={null} label={tab.label} active={mainTab === tab.id} onClick={() => onMainTabChange(tab.id)} />
             ))}
           </nav>
         </ScrollArea>

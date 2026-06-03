@@ -11,6 +11,31 @@ import type { ExtensionsBridge } from "../preload/index"
 type HermesWindowShape = { extensions: ExtensionsBridge }
 import { useSlotRegistry } from "./slot-outlet"
 import type { DiscoveredExtension } from "./discover"
+import { getCurrentLanguage, subscribeLanguage } from "@hermes-x/i18n"
+
+/**
+ * Host-side language subscription for SlotOutlet consumers that render
+ * extension-provided labels (ActivityBar, Settings tabs). The extension
+ * registers slot props of the form `{ labels: { en: "...", "zh-CN": "..." } }`
+ * and the host hook below picks the entry matching the current locale.
+ */
+function useCurrentLanguage(): string {
+  const [lang, setLang] = useState<string>(() => getCurrentLanguage())
+  useEffect(() => {
+    setLang(getCurrentLanguage())
+    return subscribeLanguage((next) => setLang(next))
+  }, [])
+  return lang
+}
+
+function pickLabel(
+  labels: Record<string, string> | undefined,
+  language: string,
+  fallback: string,
+): string {
+  if (!labels) return fallback
+  return labels[language] ?? labels.en ?? fallback
+}
 
 /**
  * Boot the renderer side of the extension host: load each renderer bundle
@@ -48,39 +73,49 @@ export async function bootRendererExtensions(opts: {
 
 export function useExtensionSettingsTabs(): Array<{
   id: string
-  labelKey: string
+  label: string
   order?: number
 }> {
   const reg = useSlotRegistry()
+  const language = useCurrentLanguage()
   const [snapshot, setSnapshot] = useState(() => reg.get("settings.tab"))
   useEffect(() => {
     const sub = reg.subscribe(() => setSnapshot(reg.get("settings.tab")))
     return () => sub.dispose()
   }, [reg])
   return snapshot.map((e) => {
-    const p = (e.props ?? {}) as { labelKey?: string; order?: number }
-    return { id: e.entryId, labelKey: p.labelKey ?? "", order: p.order ?? e.order }
+    const p = (e.props ?? {}) as { labels?: Record<string, string>; order?: number }
+    return {
+      id: e.entryId,
+      label: pickLabel(p.labels, language, e.entryId),
+      order: p.order ?? e.order,
+    }
   })
 }
 
 export function useActivityBarItems(): Array<{
   id: string
-  iconKey: string
-  labelKey: string
+  icon: string
+  label: string
   order?: number
 }> {
   const reg = useSlotRegistry()
+  const language = useCurrentLanguage()
   const [snapshot, setSnapshot] = useState(() => reg.get("activityBar.item"))
   useEffect(() => {
     const sub = reg.subscribe(() => setSnapshot(reg.get("activityBar.item")))
     return () => sub.dispose()
   }, [reg])
   return snapshot.map((e) => {
-    const props = (e.props ?? {}) as { iconKey?: string; labelKey?: string; order?: number }
+    const props = (e.props ?? {}) as {
+      icon?: string
+      labels?: Record<string, string>
+      order?: number
+    }
     return {
       id: e.entryId,
-      iconKey: props.iconKey ?? "",
-      labelKey: props.labelKey ?? "",
+      icon: props.icon ?? "",
+      label: pickLabel(props.labels, language, e.entryId),
       order: props.order ?? e.order,
     }
   })
