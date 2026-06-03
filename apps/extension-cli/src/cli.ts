@@ -4,6 +4,7 @@ import { createCommand } from "./commands/create.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
 import { packCommand } from "./commands/pack.js"
+import { installCommand } from "./commands/install.js"
 
 const program = new Command()
 
@@ -38,6 +39,13 @@ program
   .description("Produce extension.tgz for distribution")
   .option("-o, --output <path>", "output tarball path", "extension.tgz")
   .action(packCommand)
+
+program
+  .command("install")
+  .description("Install a plugin from a GitHub repo into <userData>/extensions/")
+  .argument("<repo>", "GitHub repo as owner/repo[@tag]; tag defaults to latest")
+  .option("--sha256 <hex>", "verify downloaded tarball against this hex digest")
+  .action(installCommand)
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err)
