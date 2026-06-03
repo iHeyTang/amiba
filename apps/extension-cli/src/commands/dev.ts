@@ -2,46 +2,47 @@ import { mkdirSync, utimesSync, watch as fsWatch } from "node:fs"
 import { join, resolve } from "node:path"
 import kleur from "kleur"
 import { readExtensionManifest } from "../lib/manifest.js"
-import { addLocalEntry, findLocalEntry, resolveRegistryPath } from "../lib/registry.js"
 import { spawnAsync } from "../lib/child-process.js"
 
 interface DevOptions {
   symlink?: boolean  // kept for backward-compat CLI flag parsing, ignored
 }
 
+/**
+ * `hermes-x-ext dev` is purely a build/watch helper. It does NOT touch the
+ * desktop's extension registry — that belongs to the desktop UI, just like
+ * Chrome's `chrome://extensions` → "Load unpacked" owns adding unpacked
+ * extensions, not your bundler.
+ *
+ * Flow:
+ *   1. Read manifest at cwd (sanity-check that this is an extension dir).
+ *   2. Start `vite build --watch` for main + renderer in parallel.
+ *   3. Watch `dist/main.cjs` / `dist/renderer.js`; on rebuild, touch
+ *      `manifest.json` so the desktop's manifest-watcher fires
+ *      reloadExtension(id) — but ONLY for an extension the user has
+ *      already added through the UI ("Add local extension…").
+ *
+ * Recommended workflow:
+ *   - Terminal 1: `pnpm dev:desktop`
+ *   - Terminal 2: `cd <extension dir> && pnpm dev`
+ *   - In the app: Settings → Extensions → "Add local extension…"
+ *     → pick the extension directory. From then on every rebuild hot-reloads.
+ */
 export async function devCommand(_opts: DevOptions) {
   const cwd = resolve(process.cwd())
   const manifest = readExtensionManifest(cwd)
-  const registryPath = resolveRegistryPath()
 
-  // Check if already registered at a different path (refuse with clear error).
-  const existing = findLocalEntry(registryPath, manifest.id)
-  if (existing && existing.path !== cwd) {
-    console.error(
-      kleur.red("✗"),
-      `Extension "${manifest.id}" is already registered at a different path:\n  ${existing.path}\n\n` +
-      `Uninstall it from the app first, then run \`hermes-x-ext dev\` again from the new path.`,
-    )
-    process.exit(1)
-  }
-
-  // Register (or re-register with same path) the local entry.
-  try {
-    addLocalEntry(registryPath, manifest.id, cwd)
-    console.log(
-      kleur.green("✓"),
-      `Registered ${kleur.cyan(manifest.id)} in registry at ${kleur.dim(registryPath)}`,
-    )
-    console.log(kleur.dim(`  path: ${cwd}`))
-  } catch (e) {
-    console.error(kleur.red("✗"), e instanceof Error ? e.message : String(e))
-    process.exit(1)
-  }
-
+  console.log(kleur.bold(`hermes-x-ext dev — ${kleur.cyan(manifest.id)}`))
+  console.log(kleur.dim(`  ${cwd}`))
+  console.log(
+    kleur.dim(
+      "  (this command only builds/watches; add the extension in the desktop UI:" +
+        " Settings → Extensions → Add local extension…)",
+    ),
+  )
   console.log(kleur.bold("\nStarting build in watch mode…\n"))
 
   // Run vite build --watch for both configs in parallel.
-  // The extension's own vite configs handle the entry points.
   const mainProc = spawnAsync("pnpm", ["vite", "build", "--watch", "-c", "vite.main.config.ts"], { cwd })
   const rendererProc = spawnAsync(
     "pnpm",
@@ -52,11 +53,9 @@ export async function devCommand(_opts: DevOptions) {
   const manifestPath = join(cwd, "manifest.json")
 
   // Watch the build outputs; when either changes, touch manifest.json so the
-  // desktop's manifest-watcher fires reloadExtension(id) for us. fsWatch fires
-  // fast and idempotent, so debouncing isn't strictly needed for correctness,
-  // but we coalesce rapid back-to-back events within 200 ms to avoid touching
-  // the manifest several times in a row when vite emits both bundles around
-  // the same instant.
+  // desktop's manifest-watcher fires reloadExtension(id) for us. Coalesce
+  // back-to-back events within 200 ms so simultaneous bundle writes produce
+  // exactly one manifest touch.
   const distDir = join(cwd, "dist")
   const watchTargets = ["main.cjs", "renderer.js"]
   let touchTimer: NodeJS.Timeout | null = null
@@ -67,7 +66,7 @@ export async function devCommand(_opts: DevOptions) {
       try {
         const now = new Date()
         utimesSync(manifestPath, now, now)
-        console.log(kleur.dim(`[hermes-x-ext] manifest touched → desktop reload`))
+        console.log(kleur.dim(`[hermes-x-ext] manifest touched → desktop reload (if added)`))
       } catch { /* manifest may not exist yet on first build */ }
     }, 200)
   }
@@ -85,7 +84,7 @@ export async function devCommand(_opts: DevOptions) {
   }
   // Watch the dist dir itself so we re-arm when files first appear after the
   // initial build.
-  mkdirSync(distDir, { recursive: true })  // make the watch target exist
+  mkdirSync(distDir, { recursive: true })
   let dirWatcher: ReturnType<typeof fsWatch> | null = null
   try {
     dirWatcher = fsWatch(distDir, () => armDistWatchers())
@@ -102,10 +101,8 @@ export async function devCommand(_opts: DevOptions) {
     rendererProc.kill()
   }
 
-  // On SIGINT/SIGTERM: stop the build watchers but leave the registry entry
-  // in place — user can clean up via UI uninstall or a future CLI command.
   process.on("SIGINT", () => {
-    console.log(kleur.dim("\n[hermes-x-ext] Stopping build watchers. Registry entry kept."))
+    console.log(kleur.dim("\n[hermes-x-ext] Stopping build watchers."))
     cleanup()
     process.exit(0)
   })
