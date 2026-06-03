@@ -25,6 +25,14 @@ export interface MarketplaceEntry {
   repo: string
   /** Optional override: pin to a specific tag. Default = latest release. */
   version?: string
+  /**
+   * Optional SHA-256 of the `extension.tgz` asset (hex, case-insensitive).
+   * When set, the install flow verifies the download against this digest and
+   * refuses to install on mismatch. Marketplace maintainers should set this
+   * for plugins that have shipped a release — it pins the binary against
+   * tampering / release-asset replacement.
+   */
+  sha256?: string
 }
 
 export interface ResolvedRelease {
@@ -118,6 +126,19 @@ export async function installFromRelease(
       createWriteStream(tarPath),
     )
 
+    // Verify SHA-256 if the marketplace entry provides one
+    if (release.entry.sha256) {
+      const { readFile } = await import("node:fs/promises")
+      const buf = await readFile(tarPath)
+      const actual = createHash("sha256").update(buf).digest("hex").toLowerCase()
+      const expected = release.entry.sha256.toLowerCase()
+      if (actual !== expected) {
+        throw new Error(
+          `install: sha256 mismatch — expected ${expected}, got ${actual}. Refusing to install.`,
+        )
+      }
+    }
+
     // Extract
     const extractDir = join(stagingRoot, "extracted")
     mkdirSync(extractDir)
@@ -154,8 +175,3 @@ export async function installFromRelease(
   }
 }
 
-export async function sha256OfFile(filePath: string): Promise<string> {
-  const { readFile } = await import("node:fs/promises")
-  const buf = await readFile(filePath)
-  return createHash("sha256").update(buf).digest("hex")
-}
