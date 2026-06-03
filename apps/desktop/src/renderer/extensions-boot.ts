@@ -19,7 +19,19 @@ const i18nModules = import.meta.glob<{ default: Record<string, string> }>(
 
 export const slotRegistry = createSlotRegistry()
 
-export async function bootExtensions(translate: (k: string, p?: Record<string, unknown>) => string) {
+// Extensions activate exactly once per app session. React 18 Strict Mode
+// invokes mount effects twice in dev so this guard is load-bearing — without
+// it every extension's `activate()` runs twice and contributes two of each
+// slot entry (the visible symptom: two ActivityBar icons for one extension).
+let bootPromise: Promise<{ activated: string[]; failed: Array<{ id: string; error: string }> }> | null = null
+
+export function bootExtensions(translate: (k: string, p?: Record<string, unknown>) => string) {
+  if (bootPromise) return bootPromise
+  bootPromise = runBootExtensions(translate)
+  return bootPromise
+}
+
+async function runBootExtensions(translate: (k: string, p?: Record<string, unknown>) => string) {
   const { extensions, failed: discoveryFailed } = await discoverRendererExtensions({
     manifestModules,
     rendererModules,
