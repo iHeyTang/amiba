@@ -46,9 +46,9 @@ import {
   useSessionTitle,
 } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
-import { SettingsBrain } from "../settings/SettingsBrain";
 import { SettingsSkills } from "../settings/SettingsSkills";
 import { ToolsView } from "../tools/ToolsView";
+import { SingleSlotOutlet, useActivityBarItems } from "@hermes-x/extension-host/renderer";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -57,13 +57,7 @@ const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 
 function isSidebarView(v: unknown): v is ActivityViewId {
-  return (
-    v === "chats" ||
-    v === "scheduled" ||
-    v === "skills" ||
-    v === "knowledge" ||
-    v === "tools"
-  );
+  return typeof v === "string" && v.length > 0;
 }
 
 /**
@@ -72,7 +66,16 @@ function isSidebarView(v: unknown): v is ActivityViewId {
  * active the w-72 aside is hidden and the main pane fills the width.
  */
 function isPageView(v: ActivityViewId): boolean {
-  return v === "skills" || v === "knowledge" || v === "tools";
+  return v === "skills" || v === "tools" || isExtensionPageView(v);
+}
+
+/** Extension-provided activity ids are always page views (no inner aside). */
+function isExtensionPageView(v: string): boolean {
+  return v !== "chats" && v !== "scheduled" && v !== "skills" && v !== "tools";
+}
+
+function isActivityView(v: unknown): v is string {
+  return typeof v === "string" && v.length > 0;
 }
 
 /**
@@ -348,6 +351,8 @@ function FullScreenChatViewInner({
     };
   }, []);
 
+  const extensionActivityItems = useActivityBarItems();
+
   function onSidebarViewChange(next: ActivityViewId) {
     setSidebarView(next);
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
@@ -408,6 +413,7 @@ function FullScreenChatViewInner({
         <ActivityBar
           active={sidebarView}
           onSelect={onSidebarViewChange}
+          extensionItems={extensionActivityItems}
         />
         {/* Inner session-list aside — only when a session-driven view
             (chats / scheduled) is active. Skills and Knowledge are
@@ -444,18 +450,11 @@ function FullScreenChatViewInner({
           </aside>
         )}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {sidebarView === "knowledge" ? (
-            // Brain pane was previously a Settings tab — promoted here
-            // as a top-level destination. Its one-click install needs
-            // a way back to a fresh chat surface to host the agent's
-            // install conversation, so we wire `onOpenChat` to flip
-            // the activity view back to "chats".
-            <SettingsBrain onOpenChat={() => onSidebarViewChange("chats")} />
-          ) : sidebarView === "skills" ? (
+          {sidebarView === "skills" ? (
             <SettingsSkills />
           ) : sidebarView === "tools" ? (
             <ToolsView />
-          ) : (
+          ) : sidebarView === "chats" || sidebarView === "scheduled" ? (
             <ChatSurface
               variant="fullscreen"
               messagesMaxWidth={messagesWidth}
@@ -465,6 +464,8 @@ function FullScreenChatViewInner({
               openSettings={openSettings}
               openAgentDestination={openAgentDestination}
             />
+          ) : (
+            <SingleSlotOutlet name="sidebar.view" activeId={sidebarView} />
           )}
         </main>
       </div>

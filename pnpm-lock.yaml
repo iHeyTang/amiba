@@ -376,6 +376,9 @@ importers:
       '@hermes-x/core':
         specifier: workspace:*
         version: link:../core
+      '@hermes-x/extension-host':
+        specifier: workspace:*
+        version: link:../extension-host
       '@hermes-x/i18n':
         specifier: workspace:*
         version: link:../i18n

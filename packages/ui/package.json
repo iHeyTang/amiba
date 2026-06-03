@@ -20,6 +20,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.34.1",
     "@hermes-x/core": "workspace:*",
+    "@hermes-x/extension-host": "workspace:*",
     "@hermes-x/i18n": "workspace:*",
     "@hermes-x/platform": "workspace:*",
     "@hermes-x/utils": "workspace:*",

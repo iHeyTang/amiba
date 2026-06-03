@@ -5,6 +5,8 @@ export { makeRendererHost } from "./make-renderer-host"
 export { discoverRendererExtensions } from "./discover"
 export { mergeExtensionTables, prefixTable } from "./i18n-merge"
 
+import { useEffect, useState } from "react"
+import { useSlotRegistry } from "./slot-outlet"
 import { registerExtensionMessages } from "@hermes-x/i18n"
 import type { DiscoveredExtension } from "./discover"
 import { prefixTable } from "./i18n-merge"
@@ -43,4 +45,27 @@ export async function bootRendererExtensions(opts: {
   }
 
   return { activated, failed }
+}
+
+export function useActivityBarItems(): Array<{
+  id: string
+  iconKey: string
+  labelKey: string
+  order?: number
+}> {
+  const reg = useSlotRegistry()
+  const [snapshot, setSnapshot] = useState(() => reg.get("activityBar.item"))
+  useEffect(() => {
+    const sub = reg.subscribe(() => setSnapshot(reg.get("activityBar.item")))
+    return () => sub.dispose()
+  }, [reg])
+  return snapshot.map((e) => {
+    const props = (e.props ?? {}) as { iconKey?: string; labelKey?: string; order?: number }
+    return {
+      id: e.entryId,
+      iconKey: props.iconKey ?? "",
+      labelKey: props.labelKey ?? "",
+      order: props.order ?? e.order,
+    }
+  })
 }
