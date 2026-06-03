@@ -13,7 +13,7 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
-import { bootMainExtensionHost, discoverFromUserData } from "@hermes-x/extension-host/main"
+import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -66,21 +66,27 @@ const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL
 const IS_MAC = process.platform === "darwin"
 
 /**
- * Return the absolute path to the extensions directory.
+ * Return the absolute path to the extensions root directory (where marketplace
+ * installs land). The env override HERMES_X_DEV_EXTENSIONS_PATH is still
+ * honoured so `HERMES_X_DEV_EXTENSIONS_PATH=... pnpm dev:desktop` can test
+ * marketplace-style installs against a custom directory.
  *
- * Override with HERMES_X_DEV_EXTENSIONS_PATH for local development/sideloading
- * (e.g. `HERMES_X_DEV_EXTENSIONS_PATH=/repo/extensions pnpm dev:desktop`).
- * In production (and unset dev) this resolves to `<userData>/extensions/`.
- *
- * The directory is created if it does not yet exist so the first-run cold
- * boot with zero extensions does not throw.
+ * The directory is created if it does not yet exist.
  */
-function getExtensionsDir(): string {
+function getExtensionsRoot(): string {
   const dir =
     process.env.HERMES_X_DEV_EXTENSIONS_PATH ??
     join(app.getPath("userData"), "extensions")
   mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/**
+ * Return the absolute path to the extensions registry JSON file.
+ * Always lives in <userData>/extensions-registry.json.
+ */
+function getRegistryPath(): string {
+  return join(app.getPath("userData"), "extensions-registry.json")
 }
 
 /**
@@ -413,16 +419,12 @@ if (!gotSingleInstanceLock) {
     registerChatHandlers()
     registerHermesRuntimeHandlers()
 
-    const extensionsDir = getExtensionsDir()
-    const { entries: discoveredEntries, failed: discoveryFailed } =
-      discoverFromUserData(extensionsDir)
-    if (discoveryFailed.length) {
-      console.warn("[extensions] discovery failures:", discoveryFailed)
-    }
+    const extensionsRoot = getExtensionsRoot()
+    const registryPath = getRegistryPath()
 
     const extensionHost = await bootMainExtensionHost({
-      manifests: discoveredEntries,
-      extensionsDir,
+      registryPath,
+      extensionsRoot,
       settingsStore: {
         get: async (key, fallback) => {
           const r = await mainStore.get([key])
