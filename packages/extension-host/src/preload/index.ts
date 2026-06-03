@@ -11,6 +11,14 @@ export interface ExtensionsBridge {
     locale: "en" | "zh-CN",
   ): Promise<Record<string, string>>
   status(): Promise<Array<{ id: string; status: string; error?: string }>>
+  /** Open a native folder-picker dialog and return the chosen path or null. */
+  pickFolder(): Promise<string | null>
+  /** Symlink a local folder into the extensions dir and activate it. */
+  sideload(path: string): Promise<{ ok: boolean; id?: string; error?: string }>
+  /** Reload an already-loaded extension by id. */
+  reload(id: string): Promise<{ ok: boolean; error?: string }>
+  /** Unload and delete (or unlink) an extension by id. */
+  uninstall(id: string): Promise<{ ok: boolean; error?: string }>
 }
 
 export function createExtensionsBridge(): ExtensionsBridge {
@@ -23,5 +31,9 @@ export function createExtensionsBridge(): ExtensionsBridge {
     i18nResources: (extensionId, locale) =>
       ipcRenderer.invoke("extensions:i18n", { extensionId, locale }),
     status: () => ipcRenderer.invoke("extensions:status"),
+    pickFolder: () => ipcRenderer.invoke("extensions:show-picker"),
+    sideload: (path) => ipcRenderer.invoke("extensions:sideload", path),
+    reload: (id) => ipcRenderer.invoke("extensions:reload", id),
+    uninstall: (id) => ipcRenderer.invoke("extensions:uninstall", id),
   }
 }

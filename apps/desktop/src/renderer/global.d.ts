@@ -103,6 +103,10 @@ interface HermesBridgeApi {
       locale: "en" | "zh-CN",
     ): Promise<Record<string, string>>
     status(): Promise<Array<{ id: string; status: string; error?: string }>>
+    pickFolder(): Promise<string | null>
+    sideload(path: string): Promise<{ ok: boolean; id?: string; error?: string }>
+    reload(id: string): Promise<{ ok: boolean; error?: string }>
+    uninstall(id: string): Promise<{ ok: boolean; error?: string }>
   }
 }
 

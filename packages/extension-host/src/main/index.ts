@@ -6,6 +6,7 @@ import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry } from "./registry"
 import {
   createChannelTable,
+  registerExtensionActionChannels,
   registerInvokeRouter,
   registerMetadataChannels,
   registerStatusChannel,
@@ -202,6 +203,17 @@ export async function bootMainExtensionHost(
     } catch (e) {
       console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
     }
+  }
+
+  // Register sideload / reload / uninstall / folder-picker IPC channels when
+  // extensionsDir is available (i.e. running inside Electron on the desktop).
+  if (opts.extensionsDir) {
+    registerExtensionActionChannels({
+      extensionsDir: opts.extensionsDir,
+      getManifests,
+      reloadExtension,
+      unloadExtension,
+    })
   }
 
   // Start manifest mtime watcher when extensionsDir is provided.

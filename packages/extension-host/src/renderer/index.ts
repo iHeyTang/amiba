@@ -171,7 +171,7 @@ export function useActivityBarItems(): Array<{
   })
 }
 
-export function useExtensionRegistry() {
+export function useExtensionRegistry(refreshKey: number = 0) {
   const [items, setItems] = useState<
     Array<{
       id: string
@@ -196,6 +196,7 @@ export function useExtensionRegistry() {
         })),
       )
     })
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
   return items
 }

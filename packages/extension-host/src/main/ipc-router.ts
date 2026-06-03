@@ -1,6 +1,9 @@
 // packages/extension-host/src/main/ipc-router.ts
-import { ipcMain } from "electron"
+import { dialog, ipcMain } from "electron"
+import { existsSync, lstatSync, readFileSync, rmSync, symlinkSync } from "node:fs"
+import { join } from "node:path"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
+import { validateManifest } from "./discover"
 
 export type ChannelHandler = (
   args: unknown,
@@ -89,4 +92,126 @@ export function registerMetadataChannels(opts: {
     async (_e, extensionId: string) =>
       opts.getRendererBundleUrl(extensionId),
   )
+}
+
+/**
+ * Register the sideload / reload / uninstall / folder-picker IPC handlers.
+ *
+ * Must be called AFTER `bootMainExtensionHost` returns so that
+ * `reloadExtension` and `unloadExtension` are available.
+ */
+export function registerExtensionActionChannels(opts: {
+  extensionsDir: string
+  getManifests: () => ExtensionManifest[]
+  reloadExtension: (id: string) => Promise<void>
+  unloadExtension: (id: string) => Promise<void>
+}) {
+  /**
+   * extensions:show-picker — opens a native directory-picker dialog and
+   * returns the chosen path or null. Needed because the renderer cannot
+   * call Electron's dialog module directly (context isolation).
+   */
+  ipcMain.handle("extensions:show-picker", async () => {
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory"] })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]!
+  })
+
+  /**
+   * extensions:sideload — symlinks `<extensionsDir>/<id>/` → `folderPath`
+   * then reloads the extension into the running host.
+   */
+  ipcMain.handle("extensions:sideload", async (_e, folderPath: string) => {
+    if (typeof folderPath !== "string" || !folderPath) {
+      return { ok: false, error: "folderPath is required" }
+    }
+
+    // Validate the manifest in the provided folder.
+    const manifestPath = join(folderPath, "manifest.json")
+    if (!existsSync(manifestPath)) {
+      return { ok: false, error: `no valid manifest at ${folderPath}` }
+    }
+    let manifestId: string
+    try {
+      const raw = JSON.parse(readFileSync(manifestPath, "utf8"))
+      const v = validateManifest(raw)
+      if (!v.ok) return { ok: false, error: `no valid manifest at ${folderPath}: ${v.error}` }
+      manifestId = v.manifest.id
+    } catch (e) {
+      return { ok: false, error: `failed to read manifest: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const targetLink = join(opts.extensionsDir, manifestId)
+    if (existsSync(targetLink)) {
+      return { ok: false, error: `an extension with id ${manifestId} is already installed` }
+    }
+
+    try {
+      symlinkSync(folderPath, targetLink, "dir")
+    } catch (e) {
+      return { ok: false, error: `failed to create symlink: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    // Trigger a reload — the host will read the manifest fresh from targetLink.
+    try {
+      await opts.reloadExtension(manifestId)
+    } catch (e) {
+      return { ok: false, error: `symlinked but failed to activate: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    return { ok: true, id: manifestId }
+  })
+
+  /**
+   * extensions:reload — reload a single extension by id.
+   */
+  ipcMain.handle("extensions:reload", async (_e, extensionId: string) => {
+    if (typeof extensionId !== "string") {
+      return { ok: false, error: "extensionId is required" }
+    }
+    if (!opts.getManifests().some((m) => m.id === extensionId)) {
+      return { ok: false, error: `extension ${extensionId} is not loaded` }
+    }
+    try {
+      await opts.reloadExtension(extensionId)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
+  /**
+   * extensions:uninstall — unload and delete (or unlink) the extension directory.
+   */
+  ipcMain.handle("extensions:uninstall", async (_e, extensionId: string) => {
+    if (typeof extensionId !== "string") {
+      return { ok: false, error: "extensionId is required" }
+    }
+    if (!opts.getManifests().some((m) => m.id === extensionId)) {
+      return { ok: false, error: `extension ${extensionId} is not loaded` }
+    }
+
+    try {
+      await opts.unloadExtension(extensionId)
+    } catch (e) {
+      return { ok: false, error: `failed to unload: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const extPath = join(opts.extensionsDir, extensionId)
+    try {
+      // If it's a symlink, just unlink it (don't follow into the source tree).
+      let isSym = false
+      try { isSym = lstatSync(extPath).isSymbolicLink() } catch { /* path not found — nothing to remove */ }
+      if (isSym) {
+        const { unlinkSync } = await import("node:fs")
+        unlinkSync(extPath)
+      } else if (existsSync(extPath)) {
+        rmSync(extPath, { recursive: true, force: true })
+      }
+    } catch (e) {
+      return { ok: false, error: `unloaded but failed to remove directory: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    return { ok: true }
+  })
 }
