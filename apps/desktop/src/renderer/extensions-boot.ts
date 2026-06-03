@@ -8,13 +8,13 @@ import type { RendererHost } from "@hermes-x/extension-api"
 import { getPlatform } from "@hermes-x/platform"
 
 const manifestModules = import.meta.glob<{ default: unknown }>(
-  "../../../../packages/extensions/*/manifest.json",
+  "../../../../extensions/*/manifest.json",
 )
 const rendererModules = import.meta.glob<{ activate: (h: RendererHost) => void | Promise<void> }>(
-  "../../../../packages/extensions/*/dist/renderer.js",
+  "../../../../extensions/*/dist/renderer.js",
 )
 const i18nModules = import.meta.glob<{ default: Record<string, string> }>(
-  "../../../../packages/extensions/*/dist/i18n/*.json",
+  "../../../../extensions/*/dist/i18n/*.json",
 )
 
 export const slotRegistry = createSlotRegistry()

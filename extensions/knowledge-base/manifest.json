@@ -1,5 +1,5 @@
 {
-  "$schema": "../../extension-api/src/manifest.schema.json",
+  "$schema": "../../packages/extension-api/src/manifest.schema.json",
   "id": "io.hermes.knowledge-base",
   "name": "Knowledge Base",
   "version": "0.1.0",

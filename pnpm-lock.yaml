@@ -22,7 +22,7 @@ importers:
         version: link:../../packages/core
       '@hermes-x/ext-knowledge-base':
         specifier: workspace:*
-        version: link:../../packages/extensions/knowledge-base
+        version: link:../../extensions/knowledge-base
       '@hermes-x/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api
@@ -275,6 +275,49 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
+  extensions/knowledge-base:
+    dependencies:
+      '@hermes-x/extension-api':
+        specifier: workspace:*
+        version: link:../../packages/extension-api
+      '@hermes-x/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@hermes-x/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
+      '@hermes-x/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      electron:
+        specifier: '*'
+        version: 33.4.11
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@18.3.1)
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      streamdown:
+        specifier: ^2.5.0
+        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.41
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      '@vitejs/plugin-react':
+        specifier: 4.3.3
+        version: 4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vite:
+        specifier: 5.4.10
+        version: 5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
+
   packages/core:
     dependencies:
       '@hermes-x/i18n':
@@ -334,49 +377,6 @@ importers:
       vitest:
         specifier: 2.1.4
         version: 2.1.4(@types/node@22.9.0)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
-
-  packages/extensions/knowledge-base:
-    dependencies:
-      '@hermes-x/extension-api':
-        specifier: workspace:*
-        version: link:../../extension-api
-      '@hermes-x/i18n':
-        specifier: workspace:*
-        version: link:../../i18n
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../../platform
-      '@hermes-x/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      electron:
-        specifier: '*'
-        version: 33.4.11
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      streamdown:
-        specifier: ^2.5.0
-        version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      '@types/react':
-        specifier: 18.3.12
-        version: 18.3.12
-      '@vitejs/plugin-react':
-        specifier: 4.3.3
-        version: 4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-      vite:
-        specifier: 5.4.10
-        version: 5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
 
   packages/i18n:
     dependencies:
