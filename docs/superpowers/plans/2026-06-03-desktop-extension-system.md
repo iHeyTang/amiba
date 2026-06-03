@@ -4,7 +4,7 @@
 
 **Goal:** Build a pluggable desktop extension system (Obsidian-style) and migrate all gbrain/knowledge-base surface area out of the core desktop into the first extension.
 
-**Architecture:** `@hermes-x/extension-api` (types-only) + `@hermes-x/extension-host` (main / preload / renderer sub-entries) + `packages/extensions/<id>/` extensions with `manifest.json` + dual entries (main/renderer). First-phase loader is compile-time glob via Vite's `import.meta.glob` so extensions ship inside the desktop bundle; the same Host API survives a runtime FS loader in phase 2.
+**Architecture:** `@hermes-x/extension-api` (types-only) + `@hermes-x/extension-host` (main / preload / renderer sub-entries) + `extensions/<id>/` extensions with `manifest.json` + dual entries (main/renderer). First-phase loader is compile-time glob via Vite's `import.meta.glob` so extensions ship inside the desktop bundle; the same Host API survives a runtime FS loader in phase 2.
 
 **Tech Stack:** TypeScript 5.6, Electron-Vite, React 18, pnpm workspaces, Vitest (introduced for `extension-host` unit tests), lucide-react icons, Tailwind preset shared via `@hermes-x/ui`.
 
@@ -64,7 +64,7 @@ packages/extension-host/
 ```
 
 ```
-packages/extensions/knowledge-base/
+extensions/knowledge-base/
 ├── package.json
 ├── manifest.json
 ├── tsconfig.json
@@ -93,7 +93,7 @@ packages/extensions/knowledge-base/
 
 ### Modified files
 
-- `pnpm-workspace.yaml` — already covers `packages/*`; we add `packages/extensions/*` glob.
+- `pnpm-workspace.yaml` — already covers `packages/*`; we add `extensions/*` glob.
 - `apps/desktop/package.json` — add deps `@hermes-x/extension-host`, `@hermes-x/ext-knowledge-base`.
 - `apps/desktop/src/main/index.ts` — replace gbrain init with extension-host init.
 - `apps/desktop/src/preload/index.ts` — delete `gbrain` namespace, add extensions bridge.
@@ -586,7 +586,7 @@ git commit -m "feat(extension-api): host / slot / settings types"
 
 # Phase 1 — `@hermes-x/extension-host` skeleton
 
-Goal: A loadable host that scans `packages/extensions/*`, validates manifests, activates main entries, exposes preload bridge, and provides SlotOutlet to renderer. Vitest covers the pure-logic units.
+Goal: A loadable host that scans `extensions/*`, validates manifests, activates main entries, exposes preload bridge, and provides SlotOutlet to renderer. Vitest covers the pure-logic units.
 
 ### Task 1.1: Scaffold package + Vitest
 
@@ -1365,7 +1365,7 @@ export interface DiscoveredExtension {
 
 /**
  * Extract the extension directory id from a full glob key.
- * Example key: "/abs/repo/packages/extensions/knowledge-base/manifest.json"
+ * Example key: "/abs/repo/extensions/knowledge-base/manifest.json"
  * → "knowledge-base"
  */
 function extractDirId(globKey: string): string {
@@ -1435,7 +1435,7 @@ describe("discoverRendererExtensions", () => {
   it("matches renderer + i18n to a manifest by directory id", async () => {
     const r = await discoverRendererExtensions({
       manifestModules: {
-        "/r/packages/extensions/kb/manifest.json": async () => ({
+        "/r/extensions/kb/manifest.json": async () => ({
           default: {
             id: "io.hermes.knowledge-base",
             name: "KB",
@@ -1445,12 +1445,12 @@ describe("discoverRendererExtensions", () => {
         }),
       },
       rendererModules: {
-        "/r/packages/extensions/kb/dist/renderer.js": async () => ({
+        "/r/extensions/kb/dist/renderer.js": async () => ({
           activate: () => undefined,
         }),
       },
       i18nModules: {
-        "/r/packages/extensions/kb/dist/i18n/en.json": async () => ({
+        "/r/extensions/kb/dist/i18n/en.json": async () => ({
           default: { hello: "Hello" },
         }),
       },
@@ -2172,11 +2172,11 @@ git add apps/desktop/package.json pnpm-lock.yaml
 git commit -m "chore(desktop): depend on extension-host"
 ```
 
-### Task 2.2: Add empty `packages/extensions/` directory + workspace glob
+### Task 2.2: Add empty `extensions/` directory + workspace glob
 
 **Files:**
 - Modify: `pnpm-workspace.yaml`
-- Create: `packages/extensions/.gitkeep`
+- Create: `extensions/.gitkeep`
 
 - [ ] **Step 1: Modify `pnpm-workspace.yaml`**
 
@@ -2184,18 +2184,18 @@ git commit -m "chore(desktop): depend on extension-host"
 packages:
   - "apps/*"
   - "packages/*"
-  - "packages/extensions/*"
+  - "extensions/*"
 ```
 
 - [ ] **Step 2: Create empty dir**
 
-Run: `mkdir -p packages/extensions && touch packages/extensions/.gitkeep`
+Run: `mkdir -p extensions && touch extensions/.gitkeep`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add pnpm-workspace.yaml packages/extensions/.gitkeep
-git commit -m "chore(workspace): register packages/extensions/* glob"
+git add pnpm-workspace.yaml extensions/.gitkeep
+git commit -m "chore(workspace): register extensions/* glob"
 ```
 
 ### Task 2.3: Wire main process — initialize extension-host (no extensions, no-op smoke)
@@ -2339,13 +2339,13 @@ import { getPlatform } from "@hermes-x/platform"
 // Compile-time glob: vite expands these at build. Paths are RELATIVE to
 // this file (apps/desktop/src/renderer/) — adjust if the file moves.
 const manifestModules = import.meta.glob<{ default: unknown }>(
-  "../../../../packages/extensions/*/manifest.json",
+  "../../../../extensions/*/manifest.json",
 )
 const rendererModules = import.meta.glob<{ activate: (h: RendererHost) => void | Promise<void> }>(
-  "../../../../packages/extensions/*/dist/renderer.js",
+  "../../../../extensions/*/dist/renderer.js",
 )
 const i18nModules = import.meta.glob<{ default: Record<string, string> }>(
-  "../../../../packages/extensions/*/dist/i18n/*.json",
+  "../../../../extensions/*/dist/i18n/*.json",
 )
 
 export const slotRegistry = createSlotRegistry()
@@ -2892,15 +2892,15 @@ git commit -m "refactor(ui): SettingsView renders extension settings tabs via sl
 
 # Phase 3 — `@hermes-x/ext-knowledge-base` (the migration)
 
-Goal: All gbrain/knowledge surface area lives in `packages/extensions/knowledge-base/`. Desktop core's grep is clean.
+Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. Desktop core's grep is clean.
 
 ### Task 3.1: Scaffold the extension package
 
 **Files:**
-- Create: `packages/extensions/knowledge-base/package.json`
-- Create: `packages/extensions/knowledge-base/manifest.json`
-- Create: `packages/extensions/knowledge-base/tsconfig.json`
-- Create: `packages/extensions/knowledge-base/vite.config.ts`
+- Create: `extensions/knowledge-base/package.json`
+- Create: `extensions/knowledge-base/manifest.json`
+- Create: `extensions/knowledge-base/tsconfig.json`
+- Create: `extensions/knowledge-base/vite.config.ts`
 
 - [ ] **Step 1: Write `package.json`**
 
@@ -3131,30 +3131,30 @@ Run: `pnpm install`
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/extensions/knowledge-base/
+git add extensions/knowledge-base/
 git commit -m "feat(ext/knowledge-base): scaffold package, manifest, build configs"
 ```
 
 ### Task 3.2: Migrate main-side gbrain code
 
 **Files:**
-- Create: `packages/extensions/knowledge-base/src/main/lib/cli.ts` (from `apps/desktop/src/main/gbrain/cli.ts`)
-- Create: `packages/extensions/knowledge-base/src/main/lib/client.ts` (from `client.ts`)
-- Create: `packages/extensions/knowledge-base/src/main/lib/launcher.ts` (from `launcher.ts`)
-- Create: `packages/extensions/knowledge-base/src/main/lib/provider-env.ts` (from `provider-env.ts`)
-- Create: `packages/extensions/knowledge-base/src/main/lib/recipe-schema.ts` (from `recipe-schema.ts`)
-- Create: `packages/extensions/knowledge-base/src/main/index.ts` (port `ipc.ts`)
+- Create: `extensions/knowledge-base/src/main/lib/cli.ts` (from `apps/desktop/src/main/gbrain/cli.ts`)
+- Create: `extensions/knowledge-base/src/main/lib/client.ts` (from `client.ts`)
+- Create: `extensions/knowledge-base/src/main/lib/launcher.ts` (from `launcher.ts`)
+- Create: `extensions/knowledge-base/src/main/lib/provider-env.ts` (from `provider-env.ts`)
+- Create: `extensions/knowledge-base/src/main/lib/recipe-schema.ts` (from `recipe-schema.ts`)
+- Create: `extensions/knowledge-base/src/main/index.ts` (port `ipc.ts`)
 
 - [ ] **Step 1: Copy lib files**
 
 Run:
 
 ```bash
-cp apps/desktop/src/main/gbrain/cli.ts packages/extensions/knowledge-base/src/main/lib/cli.ts
-cp apps/desktop/src/main/gbrain/client.ts packages/extensions/knowledge-base/src/main/lib/client.ts
-cp apps/desktop/src/main/gbrain/launcher.ts packages/extensions/knowledge-base/src/main/lib/launcher.ts
-cp apps/desktop/src/main/gbrain/provider-env.ts packages/extensions/knowledge-base/src/main/lib/provider-env.ts
-cp apps/desktop/src/main/gbrain/recipe-schema.ts packages/extensions/knowledge-base/src/main/lib/recipe-schema.ts
+cp apps/desktop/src/main/gbrain/cli.ts extensions/knowledge-base/src/main/lib/cli.ts
+cp apps/desktop/src/main/gbrain/client.ts extensions/knowledge-base/src/main/lib/client.ts
+cp apps/desktop/src/main/gbrain/launcher.ts extensions/knowledge-base/src/main/lib/launcher.ts
+cp apps/desktop/src/main/gbrain/provider-env.ts extensions/knowledge-base/src/main/lib/provider-env.ts
+cp apps/desktop/src/main/gbrain/recipe-schema.ts extensions/knowledge-base/src/main/lib/recipe-schema.ts
 ```
 
 (Do NOT delete the originals yet — phase 3.4 deletes after the extension is wired and verified.)
@@ -3163,10 +3163,10 @@ cp apps/desktop/src/main/gbrain/recipe-schema.ts packages/extensions/knowledge-b
 
 In `cli.ts`, `launcher.ts`, `provider-env.ts`, `recipe-schema.ts`: replace any `import ... from "../storage"` or `from "@hermes-x/core"` paths with extension-local equivalents:
 
-- `BRAIN_URL_STORAGE_KEY` / `BRAIN_TOKEN_STORAGE_KEY` / `BRAIN_DEFAULT_URL`: these are removed from core in Task 3.5. Inline them in the extension. Add to a new file `packages/extensions/knowledge-base/src/main/lib/constants.ts`:
+- `BRAIN_URL_STORAGE_KEY` / `BRAIN_TOKEN_STORAGE_KEY` / `BRAIN_DEFAULT_URL`: these are removed from core in Task 3.5. Inline them in the extension. Add to a new file `extensions/knowledge-base/src/main/lib/constants.ts`:
 
 ```ts
-// packages/extensions/knowledge-base/src/main/lib/constants.ts
+// extensions/knowledge-base/src/main/lib/constants.ts
 /**
  * Storage keys are now scoped under the extension id. The values shown
  * here are the SUFFIXES; MainHost.settings.get/set transparently prepend
@@ -3188,7 +3188,7 @@ In `provider-env.ts`, it uses `safeStorage` from electron — keep as-is. Check 
 - [ ] **Step 3: Write `src/main/index.ts` (the new ipc.ts equivalent)**
 
 ```ts
-// packages/extensions/knowledge-base/src/main/index.ts
+// extensions/knowledge-base/src/main/index.ts
 import type { MainActivate, MainHost } from "@hermes-x/extension-api"
 
 import { GBrainClient, type GBrainHealthResult } from "./lib/client"
@@ -3321,7 +3321,7 @@ Expected: `dist/main.cjs`, `dist/renderer.js` (will be empty for now — rendere
 If renderer build fails because `src/renderer/index.ts` doesn't exist yet, create an empty stub:
 
 ```ts
-// packages/extensions/knowledge-base/src/renderer/index.ts
+// extensions/knowledge-base/src/renderer/index.ts
 import type { RendererActivate } from "@hermes-x/extension-api"
 export const activate: RendererActivate = (_host) => {
   // populated in 3.3
@@ -3331,9 +3331,9 @@ export const activate: RendererActivate = (_host) => {
 And empty i18n stubs:
 
 ```bash
-mkdir -p packages/extensions/knowledge-base/src/i18n
-echo '{}' > packages/extensions/knowledge-base/src/i18n/en.json
-echo '{}' > packages/extensions/knowledge-base/src/i18n/zh-CN.json
+mkdir -p extensions/knowledge-base/src/i18n
+echo '{}' > extensions/knowledge-base/src/i18n/en.json
+echo '{}' > extensions/knowledge-base/src/i18n/zh-CN.json
 ```
 
 Rebuild.
@@ -3341,23 +3341,23 @@ Rebuild.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/extensions/knowledge-base/src/main packages/extensions/knowledge-base/src/renderer packages/extensions/knowledge-base/src/i18n
+git add extensions/knowledge-base/src/main extensions/knowledge-base/src/renderer extensions/knowledge-base/src/i18n
 git commit -m "feat(ext/knowledge-base): migrate main-side gbrain code"
 ```
 
 ### Task 3.3: Migrate renderer-side UI
 
 **Files:**
-- Create: `packages/extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx` (from `SettingsBrain.tsx`)
-- Create: `packages/extensions/knowledge-base/src/renderer/views/SettingsKnowledgeTab.tsx` (from `SettingsBrainConfig.tsx`)
-- Create: `packages/extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx` (from HomeView brain block + `brain-install.ts`)
-- Create: `packages/extensions/knowledge-base/src/renderer/views/brain-install.ts` (from `packages/ui/src/settings/brain-install.ts`)
-- Modify: `packages/extensions/knowledge-base/src/renderer/index.ts` (register slots)
+- Create: `extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx` (from `SettingsBrain.tsx`)
+- Create: `extensions/knowledge-base/src/renderer/views/SettingsKnowledgeTab.tsx` (from `SettingsBrainConfig.tsx`)
+- Create: `extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx` (from HomeView brain block + `brain-install.ts`)
+- Create: `extensions/knowledge-base/src/renderer/views/brain-install.ts` (from `packages/ui/src/settings/brain-install.ts`)
+- Modify: `extensions/knowledge-base/src/renderer/index.ts` (register slots)
 
 - [ ] **Step 1: Copy SettingsBrain.tsx → KnowledgePanel.tsx**
 
 ```bash
-cp packages/ui/src/settings/SettingsBrain.tsx packages/extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx
+cp packages/ui/src/settings/SettingsBrain.tsx extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx
 ```
 
 Edit `KnowledgePanel.tsx`:
@@ -3371,7 +3371,7 @@ The cleanest pattern: take `host` as a prop on the component. Wrap the slot regi
 - [ ] **Step 2: Create `brain-storage.ts` for shared values**
 
 ```ts
-// packages/extensions/knowledge-base/src/renderer/views/brain-storage.ts
+// extensions/knowledge-base/src/renderer/views/brain-storage.ts
 export const BRAIN_URL_KEY = "brain.url"
 export const BRAIN_TOKEN_KEY = "brain.token"
 export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3131"
@@ -3380,7 +3380,7 @@ export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3131"
 - [ ] **Step 3: Copy SettingsBrainConfig → SettingsKnowledgeTab.tsx**
 
 ```bash
-cp packages/ui/src/settings/SettingsBrainConfig.tsx packages/extensions/knowledge-base/src/renderer/views/SettingsKnowledgeTab.tsx
+cp packages/ui/src/settings/SettingsBrainConfig.tsx extensions/knowledge-base/src/renderer/views/SettingsKnowledgeTab.tsx
 ```
 
 Same edits as KnowledgePanel: re-route gbrain calls through `host.ipc.invoke`, settings through `host.settings`.
@@ -3388,7 +3388,7 @@ Same edits as KnowledgePanel: re-route gbrain calls through `host.ipc.invoke`, s
 - [ ] **Step 4: Copy brain-install.ts**
 
 ```bash
-cp packages/ui/src/settings/brain-install.ts packages/extensions/knowledge-base/src/renderer/views/brain-install.ts
+cp packages/ui/src/settings/brain-install.ts extensions/knowledge-base/src/renderer/views/brain-install.ts
 ```
 
 Edit to remove `BRAIN_*_KEY` import from `@hermes-x/core` — replace with local values from `brain-storage.ts`. Drop `hasGBrainBridge()` (no longer needed — extension only loads when host present). Drop `ensureBrainDefaultUrl()` if it's no longer called; if used in the disconnected hint, keep but route through `host.settings`.
@@ -3398,7 +3398,7 @@ Edit to remove `BRAIN_*_KEY` import from `@hermes-x/core` — replace with local
 The existing HomeView brain hint JSX block (around lines 466-490 of HomeView before deletion) was a styled button that prefills the composer with the install prompt. Reproduce it as a component that accepts `onPrefill: (text: string) => void` and `language: "en" | "zh-CN"` from the slot's `runtimeProps`:
 
 ```tsx
-// packages/extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx
+// extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx
 import { useEffect, useState } from "react"
 import type { RendererHost } from "@hermes-x/extension-api"
 import { buildBrainInstallPrompt } from "./brain-install"
@@ -3448,7 +3448,7 @@ export function makeBrainDisconnectedHint(host: RendererHost) {
 
 - [ ] **Step 6: Wire the renderer entry**
 
-Rewrite `packages/extensions/knowledge-base/src/renderer/index.ts`:
+Rewrite `extensions/knowledge-base/src/renderer/index.ts`:
 
 ```ts
 import type { RendererActivate } from "@hermes-x/extension-api"
@@ -3590,15 +3590,15 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/extensions/knowledge-base/src/renderer packages/extension-api packages/ui/src/chat/ActivityBar.tsx
+git add extensions/knowledge-base/src/renderer packages/extension-api packages/ui/src/chat/ActivityBar.tsx
 git commit -m "feat(ext/knowledge-base): renderer views (panel + settings + hint) + activate"
 ```
 
 ### Task 3.4: Migrate i18n
 
 **Files:**
-- Create: `packages/extensions/knowledge-base/src/i18n/en.json`
-- Create: `packages/extensions/knowledge-base/src/i18n/zh-CN.json`
+- Create: `extensions/knowledge-base/src/i18n/en.json`
+- Create: `extensions/knowledge-base/src/i18n/zh-CN.json`
 
 - [ ] **Step 1: Extract brain keys from `packages/i18n/src/zh-CN.ts`**
 
@@ -3663,7 +3663,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/extensions/knowledge-base/src/i18n packages/extensions/knowledge-base/src/renderer/views
+git add extensions/knowledge-base/src/i18n extensions/knowledge-base/src/renderer/views
 git commit -m "feat(ext/knowledge-base): port i18n catalogs to ext.* namespace"
 ```
 
@@ -3717,7 +3717,7 @@ function discoverBuiltinExtensions(): Array<{
 }> {
   // Resolved at runtime from the desktop bundle layout:
   //   desktop/dist (dev) | desktop/out (build)
-  // packages/extensions/<id>/ — relative to monorepo root.
+  // extensions/<id>/ — relative to monorepo root.
   // In dev, __dirname is .../apps/desktop/out/main (or src/main on Vite dev).
   // We use require.resolve on a manifest to find the actual on-disk path.
   const result: Array<{ manifest: ExtensionManifest; rootDir: string }> = []
@@ -4006,7 +4006,7 @@ PATTERNS='\bgbrain\b|\bknowledge\b|\bbrain\b|GBrain|BRAIN_'
 if grep -rEn "$PATTERNS" "${ROOTS[@]}" 2>/dev/null; then
   echo ""
   echo "ERROR: forbidden gbrain/brain/knowledge references found in core."
-  echo "Move them to packages/extensions/<id>/."
+  echo "Move them to extensions/<id>/."
   exit 1
 fi
 

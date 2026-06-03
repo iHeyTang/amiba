@@ -26,7 +26,7 @@ export interface DiscoveredExtension {
 
 /**
  * Extract the extension directory id from a full glob key.
- * Example key: "/abs/repo/packages/extensions/knowledge-base/manifest.json"
+ * Example key: "/abs/repo/extensions/knowledge-base/manifest.json"
  * → "knowledge-base"
  */
 function extractDirId(globKey: string): string {

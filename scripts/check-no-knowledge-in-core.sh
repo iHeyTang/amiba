@@ -30,7 +30,7 @@ if [ -n "$FILTERED" ]; then
   echo "$FILTERED"
   echo ""
   echo "ERROR: forbidden gbrain/brain/knowledge references found in core."
-  echo "Move them to packages/extensions/<id>/."
+  echo "Move them to extensions/<id>/."
   exit 1
 fi
 

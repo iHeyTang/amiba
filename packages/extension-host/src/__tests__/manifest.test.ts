@@ -46,7 +46,7 @@ describe("discoverRendererExtensions", () => {
   it("matches renderer + i18n to a manifest by directory id", async () => {
     const r = await discoverRendererExtensions({
       manifestModules: {
-        "/r/packages/extensions/kb/manifest.json": async () => ({
+        "/r/extensions/kb/manifest.json": async () => ({
           default: {
             id: "io.hermes.knowledge-base",
             name: "KB",
@@ -56,12 +56,12 @@ describe("discoverRendererExtensions", () => {
         }),
       },
       rendererModules: {
-        "/r/packages/extensions/kb/dist/renderer.js": async () => ({
+        "/r/extensions/kb/dist/renderer.js": async () => ({
           activate: () => undefined,
         }),
       },
       i18nModules: {
-        "/r/packages/extensions/kb/dist/i18n/en.json": async () => ({
+        "/r/extensions/kb/dist/i18n/en.json": async () => ({
           default: { hello: "Hello" },
         }),
       },

@@ -11,7 +11,7 @@
 - 给 desktop 加一个**扩展点系统**：核心 desktop 不再硬编码任何业务功能（Knowledge / gbrain / brain-install / activityBar 中的 knowledge 项 / settings 中的 Knowledge tab / HomeView 的 brain hint 全部下沉到扩展）。
 - 扩展形态：一个目录 = manifest + main 入口 + renderer 入口 + i18n。每个扩展能贡献：activityBar item / sidebar view / settings tab / composer hint，能在 main 进程里挂 IPC handler 和后台任务，能调用 hermes-agent 工具。
 - 接口**为第三方分发预留口子**（manifest 字段、permissions、ipc namespace），但第一阶段只交付"内置加载器"——所有扩展和 desktop 一起编译/发版，不做运行时安装。
-- 第一阶段同时完成 `packages/extensions/knowledge-base/`，把现有 gbrain/知识库能力 1:1 迁过去；core desktop grep 不到 `gbrain` / `brain` / `knowledge`（除 extension id 的字面意义外）。
+- 第一阶段同时完成 `extensions/knowledge-base/`，把现有 gbrain/知识库能力 1:1 迁过去；core desktop grep 不到 `gbrain` / `brain` / `knowledge`（除 extension id 的字面意义外）。
 
 ### 非目标（明确不做）
 
@@ -49,7 +49,7 @@
    └──────────┘     │  └─────────────────────────────────────────┘ │
                     └──────────────────────────────────────────────┘
                                          │
-                            packages/extensions/<id>/
+                            extensions/<id>/
                             ├── manifest.json
                             ├── src/main/index.ts
                             ├── src/renderer/index.ts
@@ -63,7 +63,7 @@
 ### 3.1 目录
 
 ```
-packages/extensions/<id>/
+extensions/<id>/
 ├── package.json              # @hermes-x/ext-<id>，仅 build / 类型依赖
 ├── manifest.json             # 静态贡献声明，loader 在不执行扩展代码前提下可读
 ├── src/
@@ -243,7 +243,7 @@ Core desktop 第一阶段提供以下 slot anchor，扩展通过 manifest 的 `c
 
 ```
 1. desktop main/index.ts: app.whenReady()
-2. extensionHost.main.discover()        // 扫描 packages/extensions/* 的 manifest
+2. extensionHost.main.discover()        // 扫描 extensions/* 的 manifest
 3. extensionHost.main.validateAndSort() // 校验 manifest + 处理 hermesPlugins 依赖
 4. for each extension (按 manifest order):
      await extension.main.activate(MainHost)   // 注册 IPC、挂 lifecycle hook
@@ -280,8 +280,8 @@ Core desktop 第一阶段提供以下 slot anchor，扩展通过 manifest 的 `c
 
 | 维度 | 第一阶段（compile-time glob） | 二期（runtime FS） |
 |---|---|---|
-| manifest 来源 | `import.meta.glob("packages/extensions/*/manifest.json")` (renderer) + `require` 同样路径 (main) | 扫 `<userData>/extensions/*/manifest.json` |
-| renderer 入口 | `import.meta.glob("packages/extensions/*/dist/renderer.js")` 静态映射 | 运行时 `import(file://...)` |
+| manifest 来源 | `import.meta.glob("extensions/*/manifest.json")` (renderer) + `require` 同样路径 (main) | 扫 `<userData>/extensions/*/manifest.json` |
+| renderer 入口 | `import.meta.glob("extensions/*/dist/renderer.js")` 静态映射 | 运行时 `import(file://...)` |
 | main 入口 | desktop build 时一并打到 desktop main bundle | 运行时 `require(absolutePath)` |
 | 卸载/安装 UI | 仅 enable/disable | 增加 install/uninstall/update |
 | 沙箱 | 无 | （仍同进程，但加 permission prompt） |
@@ -290,18 +290,18 @@ Core desktop 第一阶段提供以下 slot anchor，扩展通过 manifest 的 `c
 
 ## 9. 知识库扩展迁移（具体清单）
 
-### 9.1 新建 `packages/extensions/knowledge-base/`
+### 9.1 新建 `extensions/knowledge-base/`
 
 | 来源（core） | 去处（扩展） | 备注 |
 |---|---|---|
-| `apps/desktop/src/main/gbrain/{cli,client,launcher,provider-env,recipe-schema}.ts` | `packages/extensions/knowledge-base/src/main/lib/*` | 原样复制，import 改 |
-| `apps/desktop/src/main/gbrain/ipc.ts` | `packages/extensions/knowledge-base/src/main/index.ts` | 改写：每个 `ipcMain.handle("gbrain:xxx", ...)` 改成 `host.ipc.expose("xxx", ...)` |
+| `apps/desktop/src/main/gbrain/{cli,client,launcher,provider-env,recipe-schema}.ts` | `extensions/knowledge-base/src/main/lib/*` | 原样复制，import 改 |
+| `apps/desktop/src/main/gbrain/ipc.ts` | `extensions/knowledge-base/src/main/index.ts` | 改写：每个 `ipcMain.handle("gbrain:xxx", ...)` 改成 `host.ipc.expose("xxx", ...)` |
 | `autoStartGBrainServeHttp` | 同上扩展 `host.lifecycle.onBootBackground(...)` | |
-| `packages/ui/src/settings/SettingsBrain.tsx` | `packages/extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx` | 改为注册到 `sidebar.view` |
-| `packages/ui/src/settings/SettingsBrainConfig.tsx` | `packages/extensions/knowledge-base/src/renderer/views/SettingsKnowledge.tsx` | 改为注册到 `settings.tab` |
-| `packages/ui/src/settings/brain-install.ts` + HomeView 里的 brain hint | `packages/extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx` | 注册到 `composer.hint` |
+| `packages/ui/src/settings/SettingsBrain.tsx` | `extensions/knowledge-base/src/renderer/views/KnowledgePanel.tsx` | 改为注册到 `sidebar.view` |
+| `packages/ui/src/settings/SettingsBrainConfig.tsx` | `extensions/knowledge-base/src/renderer/views/SettingsKnowledge.tsx` | 改为注册到 `settings.tab` |
+| `packages/ui/src/settings/brain-install.ts` + HomeView 里的 brain hint | `extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx` | 注册到 `composer.hint` |
 | `packages/core/src/config.ts` 的 `BRAIN_URL_STORAGE_KEY` / `BRAIN_TOKEN_STORAGE_KEY` | 扩展内部 storage key（不再用全局 settings key） | 通过 `host.settings.get("brain.url", ...)` 拿，实际 key 是 `ext.io.hermes.knowledge-base.brain.url` |
-| `packages/i18n/src/{zh-CN,en}.ts` 的 `options.brain.*` / `options.brainConfig.*` / `options.nav.brain` 全家桶 | `packages/extensions/knowledge-base/src/i18n/{zh-CN,en}.json` | i18n key 前缀变 `ext.io.hermes.knowledge-base.*` |
+| `packages/i18n/src/{zh-CN,en}.ts` 的 `options.brain.*` / `options.brainConfig.*` / `options.nav.brain` 全家桶 | `extensions/knowledge-base/src/i18n/{zh-CN,en}.json` | i18n key 前缀变 `ext.io.hermes.knowledge-base.*` |
 
 ### 9.2 Core 删除清单（grep 干净）
 
@@ -343,7 +343,7 @@ renderer 侧的 RendererHost 把这层包成扩展自己的 API：`host.ipc.invo
 |---|---|---|
 | `packages/extension-host` | 新增 | main / preload / renderer 三个 sub-entry，包含 loader、registry、SlotOutlet、host 实现 |
 | `packages/extension-api` | 新增 | 仅类型定义（`MainHost` / `RendererHost` / `SlotContext` / `SettingsSchema` / `ExtensionManifest` / `manifest.schema.json`），扩展实现作者 `import type` |
-| `packages/extensions/knowledge-base` | 新增 | 第一个扩展，完成 §9 的迁移 |
+| `extensions/knowledge-base` | 新增 | 第一个扩展，完成 §9 的迁移 |
 | `packages/ui` | 调整 | 把 ActivityBar / SettingsView / FullScreenChatView / HomeView 改为 SlotOutlet 风格 |
 | `packages/i18n` | 调整 | 删 brain key；i18n 运行时支持外部表合并 + `ext.*` 前缀 |
 | `packages/core` | 调整 | 删 `BRAIN_URL_STORAGE_KEY` / `BRAIN_TOKEN_STORAGE_KEY` 两个常量（其它文件如 `chat-engine-client.ts` 出现的 "brain" 是 `Acknowledge` 子串的误匹配，无需处理）|
@@ -352,7 +352,7 @@ renderer 侧的 RendererHost 把这层包成扩展自己的 API：`host.ipc.invo
 ## 12. 测试策略
 
 - `packages/extension-host` 单元测试：manifest 校验、依赖排序、failure isolation、slot registry 顺序。
-- `packages/extensions/knowledge-base` 集成测试：起 desktop dev 模式，验证：
+- `extensions/knowledge-base` 集成测试：起 desktop dev 模式，验证：
   - ActivityBar 出现 Knowledge 图标；
   - 点击 → sidebar.view 是原 SettingsBrain 内容；
   - SettingsView 有 Knowledge tab；
@@ -374,7 +374,7 @@ renderer 侧的 RendererHost 把这层包成扩展自己的 API：`host.ipc.invo
 1. **阶段 0**：新建 `packages/extension-api`（仅类型）+ manifest JSON Schema，跑通 tsc。
 2. **阶段 1**：新建 `packages/extension-host`，三入口的最小骨架（manifest 扫描 + 加载 + activate + IPC 路由 + SlotOutlet）。Desktop 接 host，但暂无任何扩展。
 3. **阶段 2**：core 注入 SlotOutlet（ActivityBar / sidebar.view / settings.tab / composer.hint 四个 anchor），ActivityBar items 改为 "core items + extensions" 合并；其它视图（HomeView / chat）保持现状。
-4. **阶段 3**：新建 `packages/extensions/knowledge-base`，按 §9.1 迁移；core 按 §9.2 清理；i18n 切割；preload 桥替换。
+4. **阶段 3**：新建 `extensions/knowledge-base`，按 §9.1 迁移；core 按 §9.2 清理；i18n 切割；preload 桥替换。
 5. **阶段 4**：Settings 加 "Extensions" tab（loaded/failed 列表，enable/disable toggle）。
 6. **阶段 5**：跑通 E2E + regression lint，回归 onboarding 流程。
 
