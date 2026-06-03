@@ -30,29 +30,6 @@ const CATALOG: Record<ResolvedLanguage, Record<string, string>> = {
   "zh-CN": { ...zhCN },
 }
 
-/**
- * Extension i18n tables, registered at boot via `registerExtensionMessages`.
- * Merged on top of the core catalog when `useT()` constructs `t`.
- *
- * `ext.*` keys live here; core keys (`options.*`, `common.*`, …) stay in
- * the imported `en` / `zhCN` modules. We intentionally don't expose a way
- * to overwrite core keys — extensions can only add new namespaces.
- */
-const EXTENSION_OVERLAY: Record<ResolvedLanguage, Record<string, string>> = {
-  en: {},
-  "zh-CN": {},
-}
-
-const overlayListeners = new Set<() => void>()
-
-export function registerExtensionMessages(
-  locale: ResolvedLanguage,
-  table: Record<string, string>,
-): void {
-  Object.assign(EXTENSION_OVERLAY[locale], table)
-  for (const l of overlayListeners) l()
-}
-
 function normalizeStoredLang(v: unknown): LanguagePreference {
   if (v === "en" || v === "zh-CN" || v === "auto") return v
   return DEFAULT_LANGUAGE_PREFERENCE
@@ -127,16 +104,7 @@ function interpolate(template: string, params?: Record<string, unknown>) {
   })
 }
 
-/**
- * Translate fn accepts core MessageKey union or an extension-supplied
- * `ext.<id>.<key>` literal. We widen the type to `string` because
- * extension keys aren't part of MessageKey at compile time; the runtime
- * falls back to the key literal when no template matches.
- */
-export type TranslateFn = (
-  key: MessageKey | (string & {}),
-  params?: Record<string, unknown>,
-) => string
+export type TranslateFn = (key: MessageKey, params?: Record<string, unknown>) => string
 
 export function useT(): {
   t: TranslateFn
@@ -144,29 +112,71 @@ export function useT(): {
   preference: LanguagePreference
 } {
   const [pref] = useStoredLanguagePreference()
-  const [, forceRender] = useState(0)
-  useEffect(() => {
-    const cb = () => forceRender((n) => n + 1)
-    overlayListeners.add(cb)
-    return () => {
-      overlayListeners.delete(cb)
-    }
-  }, [])
   const browser = useBrowserLanguage()
 
   const language: ResolvedLanguage = pref === "en" || pref === "zh-CN" ? pref : browser
 
   const t = useMemo<TranslateFn>(() => {
-    const coreCatalog = CATALOG[language] ?? en
-    const overlay = EXTENSION_OVERLAY[language] ?? {}
+    const catalog = CATALOG[language] ?? en
     return (key, params) => {
-      const template =
-        overlay[key] ?? coreCatalog[key] ?? EXTENSION_OVERLAY.en[key] ?? en[key as MessageKey] ?? key
+      const template = catalog[key] ?? en[key] ?? key
       return interpolate(template, params)
     }
   }, [language])
 
   return { t, language, preference: pref }
+}
+
+// ---------------------------------------------------------------------------
+// Non-React language subscription
+// ---------------------------------------------------------------------------
+//
+// Extensions live outside the React tree at boot time (their `activate(host)`
+// runs once, host then re-uses the registrations across renders). They need a
+// plain JS handle to "what language are we in?" plus a way to react when the
+// user changes it. The host wires these into `host.i18n.{language, subscribe}`.
+//
+// We mirror the storage key into a module-level variable and forward
+// `getPlatform().storage.watch(...)` events to subscribers. The first
+// subscriber bootstraps the storage read; later ones piggy-back.
+
+type LanguageSubscriber = (lang: ResolvedLanguage) => void
+
+let cachedLanguage: ResolvedLanguage = detectBrowserLanguage()
+const languageSubscribers = new Set<LanguageSubscriber>()
+let bootstrapped: Promise<void> | null = null
+
+function bootstrapLanguageMirror(): Promise<void> {
+  if (bootstrapped) return bootstrapped
+  bootstrapped = (async () => {
+    const pref = await loadLanguagePreference()
+    const lang = resolveLanguage(pref)
+    if (lang !== cachedLanguage) {
+      cachedLanguage = lang
+      for (const cb of languageSubscribers) cb(cachedLanguage)
+    }
+    getPlatform().storage.watch([LANG_PREF_STORAGE_KEY], (changes) => {
+      const c = changes[LANG_PREF_STORAGE_KEY]
+      if (!c) return
+      const next = resolveLanguage(normalizeStoredLang(c.newValue))
+      if (next === cachedLanguage) return
+      cachedLanguage = next
+      for (const cb of languageSubscribers) cb(cachedLanguage)
+    })
+  })()
+  return bootstrapped
+}
+
+export function getCurrentLanguage(): ResolvedLanguage {
+  return cachedLanguage
+}
+
+export function subscribeLanguage(cb: LanguageSubscriber): () => void {
+  void bootstrapLanguageMirror()
+  languageSubscribers.add(cb)
+  return () => {
+    languageSubscribers.delete(cb)
+  }
 }
 
 export type { MessageKey } from "./en"

@@ -12,8 +12,10 @@ export interface RendererHostDeps {
     set(key: string, value: unknown): Promise<void>
     watch(key: string, cb: (v: unknown) => void): () => void
   }
-  /** Translator from @hermes-x/i18n. */
-  translate: (key: string, params?: Record<string, unknown>) => string
+  /** Current language code (e.g. "en", "zh-CN"). Read synchronously. */
+  getLanguage: () => string
+  /** Subscribe to language changes. Returns an unsubscribe callback. */
+  subscribeLanguage: (cb: (lang: string) => void) => () => void
   /** notify dispatcher (toast / banner). */
   notify: (kind: "info" | "warn" | "error", message: string) => void
   /** Hermes-agent tool caller (mirror of the main side). */
@@ -67,7 +69,15 @@ export function makeRendererHost(extensionId: string, deps: RendererHostDeps): R
       invoke: <TArgs, TRet>(channel: string, args: TArgs) =>
         deps.bridge.invoke(extensionId, channel, args) as Promise<TRet>,
     },
-    i18n: { t: (key, params) => deps.translate(key, params) },
+    i18n: {
+      get language() {
+        return deps.getLanguage()
+      },
+      subscribe(cb) {
+        const unsub = deps.subscribeLanguage(cb)
+        return { dispose: unsub }
+      },
+    },
     hermes: { callTool: (tool, args) => deps.callTool(tool, args) },
     notify: (kind, message) => deps.notify(kind, message),
   } as RendererHost

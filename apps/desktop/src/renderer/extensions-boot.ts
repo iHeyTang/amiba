@@ -5,6 +5,7 @@ import {
   makeRendererHost,
 } from "@hermes-x/extension-host/renderer"
 import type { RendererHost } from "@hermes-x/extension-api"
+import { getCurrentLanguage, subscribeLanguage } from "@hermes-x/i18n"
 import { getPlatform } from "@hermes-x/platform"
 
 const manifestModules = import.meta.glob<{ default: unknown }>(
@@ -13,9 +14,10 @@ const manifestModules = import.meta.glob<{ default: unknown }>(
 const rendererModules = import.meta.glob<{ activate: (h: RendererHost) => void | Promise<void> }>(
   "../../../../extensions/*/dist/renderer.js",
 )
-const i18nModules = import.meta.glob<{ default: Record<string, string> }>(
-  "../../../../extensions/*/dist/i18n/*.json",
-)
+// Extensions own their i18n catalogs; the host does not load them. We still
+// keep the glob hook empty so older signatures don't break — discover ignores
+// missing entries.
+const i18nModules: Record<string, () => Promise<{ default: Record<string, string> }>> = {}
 
 export const slotRegistry = createSlotRegistry()
 
@@ -25,13 +27,13 @@ export const slotRegistry = createSlotRegistry()
 // slot entry (the visible symptom: two ActivityBar icons for one extension).
 let bootPromise: Promise<{ activated: string[]; failed: Array<{ id: string; error: string }> }> | null = null
 
-export function bootExtensions(translate: (k: string, p?: Record<string, unknown>) => string) {
+export function bootExtensions() {
   if (bootPromise) return bootPromise
-  bootPromise = runBootExtensions(translate)
+  bootPromise = runBootExtensions()
   return bootPromise
 }
 
-async function runBootExtensions(translate: (k: string, p?: Record<string, unknown>) => string) {
+async function runBootExtensions() {
   const { extensions, failed: discoveryFailed } = await discoverRendererExtensions({
     manifestModules,
     rendererModules,
@@ -59,7 +61,8 @@ async function runBootExtensions(translate: (k: string, p?: Record<string, unkno
               if (c) cb((c as { newValue?: unknown }).newValue)
             }),
         },
-        translate,
+        getLanguage: () => getCurrentLanguage(),
+        subscribeLanguage: (cb) => subscribeLanguage(cb),
         notify: (_kind, message) => console.info("[ext notify]", message),
         callTool: async () => {
           throw new Error("hermes.callTool not wired yet (renderer)")

@@ -81,8 +81,17 @@ export interface RendererHost {
       args: TArgs,
     ): Promise<TRet>
   }
+  /**
+   * Host only tells the extension *which language* the app is in. The
+   * extension owns its own translation tables and lookup logic — see the
+   * `useI18n(host, catalogs)` helper from `@hermes-x/extension-host/renderer`.
+   *
+   * `language` is the current resolved code (`"en"` / `"zh-CN"`); the
+   * subscribe channel re-fires whenever the user changes the app locale.
+   */
   i18n: {
-    t(key: string, params?: Record<string, unknown>): string
+    readonly language: string
+    subscribe(cb: (lang: string) => void): Disposable
   }
   hermes: {
     callTool(tool: string, args: unknown): Promise<unknown>
