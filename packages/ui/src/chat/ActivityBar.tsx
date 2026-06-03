@@ -1,7 +1,7 @@
 /**
  * VSCode/Obsidian-style activity bar — a narrow icon-only column on the
  * far left of the chat surface that switches between top-level views
- * (Chats / Scheduled / Skills / Knowledge). Each icon is a vertical
+ * (Chats / Scheduled / Skills / Tools). Each icon is a vertical
  * "tab" — clicking activates a view; the active item gets a soft
  * foreground tint and full-strength foreground colour.
  *
@@ -10,9 +10,13 @@
  * narrow enough that the sidebar to its right still feels primary.
  *
  * Chats and Scheduled drive the inner w-72 session-list sidebar. Skills
- * and Knowledge are page-level destinations — there's no per-view
- * sidebar list, so FullScreenChatView collapses the inner aside and
- * lets those views fill the main pane.
+ * and Tools are page-level destinations — there's no per-view sidebar
+ * list, so FullScreenChatView collapses the inner aside and lets those
+ * views fill the main pane.
+ *
+ * Extensions can contribute additional items via `extensionItems`. Each
+ * item declares an `iconKey` resolved by the optional `resolveIcon` prop;
+ * when unresolved, BookOpen is used as a neutral fallback.
  */
 
 import { BookOpen, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
@@ -21,29 +25,50 @@ import type { ReactNode } from "react";
 import { useT } from "@hermes-x/i18n";
 import { cn } from "../primitives";
 
-export type ActivityViewId =
-  | "chats"
-  | "scheduled"
-  | "skills"
-  | "knowledge"
-  | "tools";
+/**
+ * Widened to `string` so extension-contributed ids (arbitrary strings)
+ * work without a compile-time union update. The old narrow union
+ * ("chats" | "scheduled" | "skills" | "tools") is no longer needed.
+ */
+export type ActivityViewId = string;
 
 export interface ActivityItem {
-  id: ActivityViewId;
+  id: string;
   icon: ReactNode;
   label: string;
 }
 
-export interface ActivityBarProps {
-  active: ActivityViewId;
-  onSelect: (id: ActivityViewId) => void;
-  /** Extra className (desktop passes `app-drag-region` on the wrapper). */
-  className?: string;
+export interface ExtensionActivityItem {
+  id: string;
+  iconKey: string;
+  labelKey: string;
+  order?: number;
 }
 
-export function ActivityBar({ active, onSelect, className }: ActivityBarProps) {
+export interface ActivityBarProps {
+  active: string;
+  onSelect: (id: string) => void;
+  /** Extra className (desktop passes `app-drag-region` on the wrapper). */
+  className?: string;
+  /** Extension-contributed items merged with core items and sorted by order. */
+  extensionItems?: ExtensionActivityItem[];
+  /**
+   * Resolves an extension icon key to a ReactNode. When absent or when the
+   * key is unrecognised, the component falls back to BookOpen.
+   */
+  resolveIcon?: (iconKey: string) => ReactNode | null;
+}
+
+export function ActivityBar({
+  active,
+  onSelect,
+  className,
+  extensionItems,
+  resolveIcon,
+}: ActivityBarProps) {
   const { t } = useT();
-  const items: ActivityItem[] = [
+
+  const coreItems: ActivityItem[] = [
     {
       id: "chats",
       icon: <MessageSquare className="h-4 w-4" />,
@@ -60,16 +85,23 @@ export function ActivityBar({ active, onSelect, className }: ActivityBarProps) {
       label: t("sidepanel.sessions.group.skills"),
     },
     {
-      id: "knowledge",
-      icon: <BookOpen className="h-4 w-4" />,
-      label: t("sidepanel.sessions.group.knowledge"),
-    },
-    {
       id: "tools",
       icon: <Wrench className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.tools"),
     },
   ];
+
+  const extItems: ActivityItem[] = (extensionItems ?? []).map((e) => ({
+    id: e.id,
+    icon: resolveIcon?.(e.iconKey) ?? <BookOpen className="h-4 w-4" />,
+    label: t(e.labelKey as never),
+  }));
+
+  const items = [...coreItems, ...extItems].sort((a, b) => {
+    const ao = extensionItems?.find((e) => e.id === a.id)?.order ?? 0;
+    const bo = extensionItems?.find((e) => e.id === b.id)?.order ?? 0;
+    return ao - bo;
+  });
   return (
     <nav
       className={cn(
