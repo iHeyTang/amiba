@@ -6,6 +6,7 @@ import {
   createChannelTable,
   registerInvokeRouter,
   registerMetadataChannels,
+  registerStatusChannel,
 } from "./ipc-router"
 import { makeMainHost } from "./make-main-host"
 import { createExtensionStorage } from "./storage-fs"
@@ -54,6 +55,9 @@ export async function bootMainExtensionHost(
     getI18n: opts.getI18n,
     getRendererBundleUrl: opts.getRendererBundleUrl,
   })
+  registerStatusChannel(() =>
+    registry.list().map((e) => ({ id: e.id, status: e.status, error: e.error })),
+  )
 
   const result = await activateMainExtensions({
     manifests: allManifests,

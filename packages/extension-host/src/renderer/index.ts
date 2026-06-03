@@ -6,6 +6,9 @@ export { discoverRendererExtensions } from "./discover"
 export { mergeExtensionTables, prefixTable } from "./i18n-merge"
 
 import { useEffect, useState } from "react"
+import type { ExtensionsBridge } from "../preload/index"
+
+type HermesWindowShape = { extensions: ExtensionsBridge }
 import { useSlotRegistry } from "./slot-outlet"
 import { registerExtensionMessages } from "@hermes-x/i18n"
 import type { DiscoveredExtension } from "./discover"
@@ -85,4 +88,33 @@ export function useActivityBarItems(): Array<{
       order: props.order ?? e.order,
     }
   })
+}
+
+export function useExtensionRegistry() {
+  const [items, setItems] = useState<
+    Array<{
+      id: string
+      status: string
+      error?: string
+      manifest: import("@hermes-x/extension-api").ExtensionManifest
+    }>
+  >([])
+  useEffect(() => {
+    const { extensions } = (window as unknown as { hermes: HermesWindowShape }).hermes
+    void Promise.all([
+      extensions.listManifests(),
+      extensions.status(),
+    ]).then(([manifests, statuses]) => {
+      const byId = new Map(statuses.map((s) => [s.id, s]))
+      setItems(
+        manifests.map((m) => ({
+          id: m.id,
+          manifest: m,
+          status: byId.get(m.id)?.status ?? "loaded",
+          error: byId.get(m.id)?.error,
+        })),
+      )
+    })
+  }, [])
+  return items
 }

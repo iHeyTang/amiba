@@ -59,6 +59,12 @@ export function registerInvokeRouter(
   )
 }
 
+export function registerStatusChannel(
+  getRegistry: () => Array<{ id: string; status: string; error?: string }>,
+): void {
+  ipcMain.handle("extensions:status", () => getRegistry())
+}
+
 /**
  * Bridge for listManifests + i18n + bundle path.
  */

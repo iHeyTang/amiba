@@ -102,6 +102,7 @@ interface HermesBridgeApi {
       extensionId: string,
       locale: "en" | "zh-CN",
     ): Promise<Record<string, string>>
+    status(): Promise<Array<{ id: string; status: string; error?: string }>>
   }
 }
 

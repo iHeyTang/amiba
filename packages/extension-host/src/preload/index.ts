@@ -10,6 +10,7 @@ export interface ExtensionsBridge {
     extensionId: string,
     locale: "en" | "zh-CN",
   ): Promise<Record<string, string>>
+  status(): Promise<Array<{ id: string; status: string; error?: string }>>
 }
 
 export function createExtensionsBridge(): ExtensionsBridge {
@@ -21,5 +22,6 @@ export function createExtensionsBridge(): ExtensionsBridge {
       ipcRenderer.invoke("extensions:renderer-bundle-url", extensionId),
     i18nResources: (extensionId, locale) =>
       ipcRenderer.invoke("extensions:i18n", { extensionId, locale }),
+    status: () => ipcRenderer.invoke("extensions:status"),
   }
 }
