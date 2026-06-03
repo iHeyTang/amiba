@@ -117,12 +117,9 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
       setJustSaved(false)
       try {
         const r = await host.ipc.invoke<
-          { tool: string; args: Record<string, unknown> },
+          { providerId: string; envKey: string; value: string },
           OverrideSetResult
-        >("call", {
-          tool: "providers_override_set",
-          args: { providerId, envKey, value },
-        })
+        >("providers.overrides.set", { providerId, envKey, value })
         if (!r.ok) {
           setError(r.error ?? "save failed")
           return
@@ -141,12 +138,9 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
       setJustSaved(false)
       try {
         const r = await host.ipc.invoke<
-          { tool: string; args: Record<string, unknown> },
+          { providerId: string; envKey: string },
           OverrideSetResult
-        >("call", {
-          tool: "providers_override_unset",
-          args: { providerId, envKey },
-        })
+        >("providers.overrides.unset", { providerId, envKey })
         if (!r.ok) {
           setError(r.error ?? "clear failed")
           return
@@ -272,10 +266,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
       setSchemaLoading(true)
       setSchemaError(null)
       void host.ipc
-        .invoke<{ tool: string; args: Record<string, unknown> }, ProviderEnvResult>("call", {
-          tool: "providers_env",
-          args: { id: provider.id },
-        })
+        .invoke<string, ProviderEnvResult>("providers.env", provider.id)
         .then((r) => {
           if (!r.ok) setSchemaError(r.error ?? "failed to load schema")
           else setSchema(r.schema ?? null)
@@ -409,9 +400,9 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
     const refreshOverrides = useCallback(async () => {
       try {
         const r = await host.ipc.invoke<
-          { tool: string; args: Record<string, unknown> },
+          undefined,
           OverridesListResult
-        >("call", { tool: "providers_overrides_list", args: {} })
+        >("providers.overrides.list", undefined)
         if (r.ok) setOverrideKeys(r.overrides ?? {})
       } catch {
         // ignore — overrides are optional capability
@@ -440,7 +431,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
           if (!h) {
             setStarting(true)
             try {
-              const r = await host.ipc.invoke<void, EnsureResult | null>("ensure", undefined)
+              const r = await host.ipc.invoke<void, EnsureResult | null>("launcher.ensure", undefined)
               if (r && !r.ok) {
                 setConnectionError(
                   host.i18n.t("connection.error", {
@@ -473,9 +464,9 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
       setProvidersError(null)
       try {
         const r = await host.ipc.invoke<
-          { tool: string; args: Record<string, unknown> },
+          undefined,
           ListProvidersResult
-        >("call", { tool: "providers_list", args: {} })
+        >("providers.list", undefined)
         if (!r.ok) {
           setProvidersError(r.error ?? "Failed to list gbrain providers")
           setProviders([])
@@ -516,7 +507,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
           if (!h) {
             setStarting(true)
             try {
-              const r = await host.ipc.invoke<void, EnsureResult | null>("ensure", undefined)
+              const r = await host.ipc.invoke<void, EnsureResult | null>("launcher.ensure", undefined)
               if (r && !r.ok) {
                 setHealthInfo(null)
                 setConnectionError(
@@ -582,7 +573,7 @@ export function makeSettingsKnowledgeTab(host: RendererHost) {
       setConnectionError(null)
       setSaved(false)
       try {
-        const r = await host.ipc.invoke<void, EnsureResult | null>("restart", undefined)
+        const r = await host.ipc.invoke<void, EnsureResult | null>("launcher.restart", undefined)
         if (r && !r.ok) {
           setConnectionError(
             host.i18n.t("config.restart.failed", {
