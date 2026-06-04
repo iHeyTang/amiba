@@ -14,10 +14,21 @@
  * out of the disconnected branch when the user succeeds.
  */
 
-import { BookOpen, Check, Download, Loader2, Play, Sparkles } from "lucide-react"
-import { useCallback, useState } from "react"
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Link2,
+  Loader2,
+  Play,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 
-import { Button } from "@hermes-x/ui"
+import { Button, Input, Label } from "@hermes-x/ui"
 
 import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
 import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
@@ -88,9 +99,9 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
   }, [t])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="flex min-h-full w-full justify-center px-6 py-6">
-        <div className="my-auto flex w-full max-w-xl flex-col gap-5">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+      <div className="flex w-full justify-center px-6 pt-[12vh] pb-10">
+        <div className="flex w-full max-w-xl flex-col gap-5">
           {stage === "not-installed" ? (
             <NotInstalled
               t={t}
@@ -106,8 +117,117 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
               onStart={() => void startServe()}
             />
           )}
+          <AdvancedSection
+            t={t}
+            connecting={connecting}
+            onReprobe={reprobe}
+          />
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Escape hatch for power users who want to install gbrain themselves
+ * (their package manager of choice, a custom path, a remote instance,
+ * etc.) and just point this client at a running server. Hidden behind
+ * a collapse so the primary "one-click install" path stays the visible
+ * default for everyone else.
+ */
+function AdvancedSection({
+  t,
+  connecting,
+  onReprobe,
+}: {
+  t: (k: string, vars?: Record<string, string>) => string
+  connecting: boolean
+  onReprobe: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void (async () => {
+      const stored = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
+      if (stored) setUrl(stored)
+    })()
+  }, [])
+
+  const saveAndReprobe = useCallback(async () => {
+    setBusy(true)
+    setSavedFlash(false)
+    try {
+      await hermes.settings.set(BRAIN_URL_KEY, url.trim())
+      await onReprobe()
+      setSavedFlash(true)
+    } finally {
+      setBusy(false)
+    }
+  }, [url, onReprobe])
+
+  return (
+    <div className="rounded-lg border border-border/60">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
+        aria-expanded={open}
+      >
+        <span className="inline-flex items-center gap-2">
+          <Link2 className="h-3.5 w-3.5" />
+          {t("tutorial.advanced.label")}
+        </span>
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )}
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-border/60 p-3">
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {t("tutorial.advanced.hint")}
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="brain-url-advanced" className="text-xs">
+              {t("connection.url")}
+            </Label>
+            <Input
+              id="brain-url-advanced"
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                setSavedFlash(false)
+              }}
+              placeholder={BRAIN_DEFAULT_URL}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => void saveAndReprobe()}
+              disabled={busy || connecting}
+              size="sm"
+              variant="outline"
+            >
+              {busy ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {t("connection.test")}
+            </Button>
+            {savedFlash && (
+              <span className="text-xs text-[hsl(var(--success))]">
+                {t("config.saved")}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
