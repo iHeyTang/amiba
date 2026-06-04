@@ -2,6 +2,11 @@
 
 CLI for developing and distributing Hermes Desktop extensions.
 
+Extensions follow the **WebView model**: each UI surface (sidebar, settings, etc.)
+is an independent HTML page served via the `hermes-ext://` protocol into an
+Electron `<webview>`. Extensions ship `manifest.json` + `dist/main.cjs` (Node/main
+process) + `dist/ui/<surface>/index.html` (self-contained React pages).
+
 ## Installation
 
 ```sh
@@ -20,34 +25,83 @@ Scaffold a new extension from the built-in template.
 hermes-x-ext create my-extension --id com.example.my-extension
 ```
 
+The scaffold produces:
+
+```
+my-extension/
+├── manifest.json          # declares sidebarViews + settingsTabs
+├── package.json
+├── tsconfig.json
+├── vite.main.config.ts    # builds src/main → dist/main.cjs
+├── vite.ui.config.ts      # builds src/ui/* → dist/ui/*/index.html
+└── src/
+    ├── main/index.ts      # activate(host) — registers IPC handlers
+    ├── ui/
+    │   ├── shared/
+    │   │   ├── hermes-bridge.ts   # typed window.hermes re-export
+    │   │   └── styles.css
+    │   ├── sidebar/
+    │   │   ├── index.html
+    │   │   ├── main.tsx
+    │   │   └── App.tsx
+    │   └── settings/
+    │       ├── index.html
+    │       ├── main.tsx
+    │       └── App.tsx
+    └── i18n/
+        ├── en.json
+        └── zh-CN.json
+```
+
 ### `hermes-x-ext dev`
 
-Build the extension in watch mode and sideload it into the running desktop app.
-The command symlinks the current directory into `<userData>/extensions/<id>/`
-and uses `fs.watch` on `dist/` to touch `manifest.json` whenever `main.cjs` or
-`renderer.js` change — triggering the desktop's hot-reload path automatically.
+Build the extension in watch mode. Spawns two parallel Vite watch processes
+(main + UI) and touches `manifest.json` on any output change so the running
+desktop app hot-reloads the extension automatically.
 
 ```sh
 hermes-x-ext dev
 ```
 
+Recommended workflow:
+
+1. Terminal 1: `pnpm dev:desktop`
+2. Terminal 2: `cd <extension dir> && pnpm dev`
+3. In the app: **Settings → Extensions → Add local extension…** → pick the
+   extension directory. Every rebuild hot-reloads from then on.
+
 Options:
 
 | Flag | Description |
 |------|-------------|
-| `--no-symlink` | Copy files instead of symlinking (not yet implemented) |
+| `--no-symlink` | Accepted for backward compatibility; has no effect |
 
 ### `hermes-x-ext build`
 
-Production build (single run, no watch).
+Production build — runs `vite build -c vite.main.config.ts` followed by
+`vite build -c vite.ui.config.ts`. Validates `manifest.json` first.
 
 ```sh
 hermes-x-ext build
 ```
 
+Output:
+
+```
+dist/
+├── main.cjs                  # Node/main-process bundle
+├── main.cjs.map
+└── ui/
+    ├── sidebar/index.html    # self-contained React page
+    ├── settings/index.html   # self-contained React page
+    └── assets/               # shared JS chunks
+```
+
 ### `hermes-x-ext pack`
 
 Produce `extension.tgz` ready for attaching to a GitHub Release.
+Tarballs `manifest.json` + `dist/` (which contains `main.cjs` and
+`ui/<surface>/index.html`).
 
 ```sh
 hermes-x-ext pack
@@ -105,3 +159,21 @@ The install path honours the `HERMES_X_DEV_EXTENSIONS_PATH` environment variable
 This command re-implements the GitHub-release-to-disk flow in pure Node rather
 than delegating to `@hermes-x/extension-host/main`, which depends on Electron
 and is therefore unavailable in a plain Node CLI process.
+
+## Extension architecture
+
+```
+Desktop (Electron)
+└── ExtensionWebView src="hermes-ext://<id>/dist/ui/sidebar/index.html"
+        │  served by ext-protocol handler → reads from extension root on disk
+        │
+        └── React page
+                └── window.hermes  (injected by webview-bridge preload)
+                        ├── hermes.ipc.invoke(channel, args)
+                        ├── hermes.settings.get/set(key, value)
+                        └── hermes.on("language" | "theme", cb)
+```
+
+The `hermes-ext://` protocol resolves `<id>/<relative-path>` to
+`<extensionRoot>/<relative-path>`, so paths in `manifest.json` like
+`"view": "dist/ui/sidebar/index.html"` map directly to the file on disk.
