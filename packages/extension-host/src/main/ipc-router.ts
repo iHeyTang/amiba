@@ -134,17 +134,19 @@ export function registerWebViewChannels(opts: {
    * from `@hermes-x/extension-api`. Hand a prompt off to the main
    * desktop window's chat surface and pass control back.
    *
-   * Steps the renderer relies on:
-   *   1. Write the prompt to `home.pendingPrompt` (the same key Quick-
-   *      Ask, the URL handler, and the socket inbox use). ChatSurface
-   *      already watches this key and drains + auto-submits when it
-   *      sees a value land.
-   *   2. Flip `settings.chat.sidebarView` back to "chats" so the
-   *      activity bar deselects whatever extension panel was focused
-   *      (otherwise the webview would stay rendered over the chat).
-   *   3. Send `ui:switch-to-chat` so the renderer can flip its top-
-   *      level view from settings → chat. The other two steps don't
-   *      help if the user is currently sitting on the Settings page.
+   * The actual orchestration runs in the renderer because session
+   * lifecycle (`sessions.createNew()`) is React-state-bound — only the
+   * renderer can mint the new session, activate it, AND ensure the
+   * subsequent `home.pendingPrompt` drain lands on that session's id.
+   * Doing the storage write from main blindly would deliver the prompt
+   * to whatever stale session happened to be active (or to no session
+   * at all), which is what made the v1 implementation land the user on
+   * the empty home view instead of a freshly-spawned chat.
+   *
+   * So the main side here is intentionally tiny: validate the payload,
+   * broadcast `ui:chat-start-session` with the text, and let the
+   * renderer's handler do `createNew → queueChatPrompt → flip view`
+   * in the right order.
    *
    * Returns a boolean so callers can react if the host rejects the
    * payload (currently only happens on shape validation failure).
@@ -155,13 +157,11 @@ export function registerWebViewChannels(opts: {
       if (!payload || typeof payload !== "object") return false
       const text = (payload as { text?: unknown }).text
       if (typeof text !== "string" || !text.trim()) return false
-      await opts.settingsStore.set("home.pendingPrompt", { text })
-      await opts.settingsStore.set("settings.chat.sidebarView", "chats")
       for (const wc of webContents.getAllWebContents()) {
         try {
-          wc.send("ui:switch-to-chat")
+          wc.send("ui:chat-start-session", { text })
         } catch {
-          /* ignore — only the main window listens */
+          /* ignore — only the main window has the listener */
         }
       }
       return true

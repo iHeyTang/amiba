@@ -143,10 +143,12 @@ interface HermesBridgeApi {
    */
   setResolvedTheme(theme: "light" | "dark"): Promise<void>
   /**
-   * Subscribe to "switch to chat view" requests forwarded from an
-   * extension webview via the host bridge. Returns an unsubscribe.
+   * Subscribe to `chat.startSession` requests forwarded from an
+   * extension webview via the host bridge. Payload carries the
+   * prompt text the extension wants the assistant to act on.
+   * Returns an unsubscribe.
    */
-  onSwitchToChat(cb: () => void): () => void
+  onChatStartSession(cb: (payload: { text: string }) => void): () => void
 }
 
 declare global {

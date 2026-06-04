@@ -158,15 +158,15 @@ const api = {
     ipcRenderer.invoke("theme:set-resolved", theme),
 
   /**
-   * Subscribe to "switch to chat view" requests from an extension
-   * webview. The webview already arranged the pending prompt + sidebar
-   * deselect; the renderer just needs to flip its top-level view back
-   * to chat if the user was sitting on Settings.
+   * Subscribe to `chat.startSession` requests forwarded from an
+   * extension webview. The renderer does the actual orchestration
+   * (mint a fresh session via the Sessions context, then queue the
+   * prompt + flip the sidebar) — this bridge just delivers the text.
    */
-  onSwitchToChat: (cb: () => void) => {
-    const handler = () => cb()
-    ipcRenderer.on("ui:switch-to-chat", handler)
-    return () => ipcRenderer.off("ui:switch-to-chat", handler)
+  onChatStartSession: (cb: (payload: { text: string }) => void) => {
+    const handler = (_e: unknown, payload: { text: string }) => cb(payload)
+    ipcRenderer.on("ui:chat-start-session", handler)
+    return () => ipcRenderer.off("ui:chat-start-session", handler)
   },
 
   /**

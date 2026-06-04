@@ -1,5 +1,5 @@
 import { getHermesStatus, SessionsProvider } from "@hermes-x/core"
-import { FullScreenChatView } from "@hermes-x/ui"
+import { FullScreenChatView, useChatSessionRequester } from "@hermes-x/ui"
 import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
 import { SettingsView } from "@hermes-x/ui"
@@ -7,6 +7,8 @@ import { useResolvedTheme } from "@hermes-x/ui"
 import { useT } from "@hermes-x/i18n"
 import { Loader2 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactElement } from "react"
+
+const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView"
 
 // TODO(phase-b): re-wire SlotRegistryProvider / extension boot when the
 // WebView-based extension chrome is fully plumbed. For now the extension
@@ -47,17 +49,35 @@ function AppInner(): ReactElement {
   useEffect(() => {
     void window.hermes.setResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
-  // Extension webviews can ask the host to flip back to the chat view
-  // after queueing a prompt (see "webview:host-queue-chat-prompt" in
-  // packages/extension-host). The sidebar deselect + pending-prompt
-  // drain are storage-driven and already wired; this just covers the
-  // case where the user was sitting on Settings when the request fired.
-  useEffect(() => {
-    return window.hermes.onSwitchToChat(() => setView("chat"))
-  }, [])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("chat")
   const [phase, setPhase] = useState<Phase>("loading")
+  // Sessions-aware prompt requester. Used by the extension chat.startSession
+  // path below — minting the session HERE (not from main) is what makes
+  // the ChatSurface drain land on a fresh, freshly-active id; doing the
+  // storage write blindly from main races with sessions.activeId and
+  // either lands the prompt on a stale session or on nothing, leaving
+  // the user staring at the empty HomeView.
+  const requestNewChat = useChatSessionRequester()
+  useEffect(() => {
+    return window.hermes.onChatStartSession(({ text }) => {
+      void (async () => {
+        try {
+          // Mint a fresh session + queue the prompt. ChatSurface's
+          // drain + auto-submit pipeline picks it up; send() lands on
+          // the just-minted activeId.
+          await requestNewChat({ mode: "new", text })
+          // Move the sidebar back to chats (deselect whatever extension
+          // activity was focused) and bring the top-level view back
+          // from Settings if the user was over there.
+          await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" })
+          setView("chat")
+        } catch (err) {
+          console.error("chat.startSession failed:", err)
+        }
+      })()
+    })
+  }, [requestNewChat])
 
   useEffect(() => {
     let cancelled = false
