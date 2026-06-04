@@ -95,7 +95,7 @@ interface HermesBridgeApi {
     onPtyData(cb: (msg: HermesPtyDataMsg) => void): () => void
   }
   extensions: {
-    listManifests(): Promise<import("@hermes-x/extension-api").ExtensionManifest[]>
+    listManifests(): Promise<Array<{ manifest: import("@hermes-x/extension-api").ExtensionManifest; path: string }>>
     invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
     i18nResources(
       extensionId: string,

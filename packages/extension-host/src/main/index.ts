@@ -98,10 +98,13 @@ export async function bootMainExtensionHost(
     (e) => ({ manifest: e.manifest, rootDir: e.rootDir, source: e.source }),
   )
   const getManifests = () => manifestEntries.map((m) => m.manifest)
+  const getManifestEntries = () =>
+    manifestEntries.map((m) => ({ manifest: m.manifest, path: m.rootDir }))
 
   registerInvokeRouter(runnerManager, getManifests)
   registerMetadataChannels({
     getManifests,
+    getManifestEntries,
     getI18n: opts.getI18n,
   })
 

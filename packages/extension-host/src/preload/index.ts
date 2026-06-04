@@ -27,7 +27,7 @@ export interface MarketplaceBridge {
 }
 
 export interface ExtensionsBridge {
-  listManifests(): Promise<ExtensionManifest[]>
+  listManifests(): Promise<Array<{ manifest: ExtensionManifest; path: string }>>
   invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
   i18nResources(
     extensionId: string,

@@ -56,12 +56,13 @@ export function registerStatusChannel(
  */
 export function registerMetadataChannels(opts: {
   getManifests: () => ExtensionManifest[]
+  getManifestEntries: () => Array<{ manifest: ExtensionManifest; path: string }>
   getI18n: (
     extensionId: string,
     locale: "en" | "zh-CN",
   ) => Promise<Record<string, string>>
 }) {
-  ipcMain.handle("extensions:list", () => opts.getManifests())
+  ipcMain.handle("extensions:list", () => opts.getManifestEntries())
   ipcMain.handle(
     "extensions:i18n",
     async (
