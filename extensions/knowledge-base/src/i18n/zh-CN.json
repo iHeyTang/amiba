@@ -7,6 +7,9 @@
 
   "connection.title": "GBrain 连接",
   "connection.url": "服务器地址",
+  "connection.token": "访问令牌",
+  "connection.token.placeholder": "本地默认安装可留空",
+  "connection.token.hint": "仅当你自己跑了带 --auth-token 的 gbrain（自定义构建、远程服务器等）才需要填。本应用默认一键安装的本地服务是免鉴权的。",
   "connection.test": "测试连接",
   "connection.failed": "无法连接 gbrain，请确认服务是否运行中",
   "connection.starting": "正在启动 `gbrain serve --http`…",

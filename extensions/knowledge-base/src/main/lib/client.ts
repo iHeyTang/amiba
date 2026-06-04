@@ -17,6 +17,12 @@
 
 export interface GBrainClientOptions {
   baseUrl: string
+  /**
+   * Bearer token for gbrain servers running with `--auth-token`.
+   * Empty / undefined = no Authorization header (the default for our
+   * one-click-installed local serve, which runs unauthenticated).
+   */
+  token?: string
 }
 
 /** Shape of a JSON-RPC 2.0 response from gbrain's /mcp endpoint. */
@@ -62,22 +68,26 @@ export interface GBrainHealthResult {
 
 export class GBrainClient {
   private baseUrl: string
+  private token: string
   private initialized = false
   private requestId = 0
 
   constructor(opts: GBrainClientOptions) {
     // Strip trailing slash
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "")
+    this.token = opts.token ?? ""
   }
 
   /**
-   * Update connection config (URL changed). Resets the handshake so the
-   * next call re-initializes. No-op if URL hasn't changed.
+   * Update connection config (URL and/or token changed). Resets the
+   * handshake so the next call re-initializes. No-op if nothing changed.
    */
   configure(opts: GBrainClientOptions): void {
     const newBase = opts.baseUrl.replace(/\/+$/, "")
-    if (newBase === this.baseUrl) return
+    const newToken = opts.token ?? ""
+    if (newBase === this.baseUrl && newToken === this.token) return
     this.baseUrl = newBase
+    this.token = newToken
     this.initialized = false
   }
 
@@ -164,12 +174,15 @@ export class GBrainClient {
       id,
     })
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    }
+    if (this.token) headers.Authorization = `Bearer ${this.token}`
+
     const res = await fetch(`${this.baseUrl}/mcp`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-      },
+      headers,
       body,
       signal: AbortSignal.timeout(30_000),
     })

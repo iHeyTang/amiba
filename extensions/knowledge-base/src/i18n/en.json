@@ -7,6 +7,9 @@
 
   "connection.title": "GBrain Connection",
   "connection.url": "Server URL",
+  "connection.token": "Access Token",
+  "connection.token.placeholder": "Leave empty for the local default",
+  "connection.token.hint": "Only fill in if your gbrain runs with --auth-token (custom build, remote server, etc.). Our default one-click install runs unauthenticated.",
   "connection.test": "Test Connection",
   "connection.failed": "Could not reach gbrain. Is it running?",
   "connection.starting": "Starting `gbrain serve --http`…",

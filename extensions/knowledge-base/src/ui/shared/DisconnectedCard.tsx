@@ -30,7 +30,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { Button, Input, Label } from "@hermes-x/ui"
 
-import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
 import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
 import { hermes } from "./hermes-bridge"
 import { useT } from "./i18n"
@@ -146,13 +146,16 @@ function AdvancedSection({
 }) {
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
+  const [token, setToken] = useState("")
   const [savedFlash, setSavedFlash] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     void (async () => {
-      const stored = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
-      if (stored) setUrl(stored)
+      const storedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
+      if (storedUrl) setUrl(storedUrl)
+      const storedToken = await hermes.settings.get<string>(BRAIN_TOKEN_KEY, "")
+      if (storedToken) setToken(storedToken)
     })()
   }, [])
 
@@ -161,12 +164,13 @@ function AdvancedSection({
     setSavedFlash(false)
     try {
       await hermes.settings.set(BRAIN_URL_KEY, url.trim())
+      await hermes.settings.set(BRAIN_TOKEN_KEY, token.trim())
       await onReprobe()
       setSavedFlash(true)
     } finally {
       setBusy(false)
     }
-  }, [url, onReprobe])
+  }, [url, token, onReprobe])
 
   return (
     <div className="rounded-lg border border-border/60">
@@ -205,6 +209,25 @@ function AdvancedSection({
               placeholder={BRAIN_DEFAULT_URL}
               className="h-8 font-mono text-xs"
             />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="brain-token-advanced" className="text-xs">
+              {t("connection.token")}
+            </Label>
+            <Input
+              id="brain-token-advanced"
+              type="password"
+              value={token}
+              onChange={(e) => {
+                setToken(e.target.value)
+                setSavedFlash(false)
+              }}
+              placeholder={t("connection.token.placeholder")}
+              className="h-8 text-xs"
+            />
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              {t("connection.token.hint")}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Button

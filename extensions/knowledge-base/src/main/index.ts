@@ -9,7 +9,7 @@ import {
 } from "./lib/launcher"
 import { runProvidersEnv } from "./lib/recipe-schema"
 import { listOverrideKeys, setOverride, unsetOverride } from "./lib/provider-env"
-import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "./lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "./lib/constants"
 
 /**
  * Aggregated status used by the renderer to pick an onboarding state:
@@ -35,10 +35,14 @@ let client: GBrainClient | null = null
 
 async function getClient(host: MainHost): Promise<GBrainClient> {
   const url = (await host.settings.get<string>(BRAIN_URL_KEY, "")).trim() || BRAIN_DEFAULT_URL
+  // Token only matters for remote / custom-build gbrain runs with
+  // --auth-token. The default one-click-installed local serve writes
+  // nothing here, so the empty string disables the Authorization header.
+  const token = (await host.settings.get<string>(BRAIN_TOKEN_KEY, "")).trim()
   if (!client) {
-    client = new GBrainClient({ baseUrl: url })
+    client = new GBrainClient({ baseUrl: url, token })
   } else {
-    client.configure({ baseUrl: url })
+    client.configure({ baseUrl: url, token })
   }
   return client
 }

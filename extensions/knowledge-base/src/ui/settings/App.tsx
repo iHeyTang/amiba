@@ -19,7 +19,7 @@ import { hermes } from "../shared/hermes-bridge"
 import { DisconnectedCard } from "../shared/DisconnectedCard"
 import { useT, useTheme } from "../shared/i18n"
 import type { BrainHealthInfo, LifecycleProbe, LifecycleStage } from "../shared/lifecycle"
-import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
 
 // ---------------------------------------------------------------------------
 // IPC types
@@ -375,6 +375,9 @@ export default function App() {
   useTheme()
   const t = useT()
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
+  // Token only sent for remote/custom-build gbrain runs with
+  // --auth-token. Empty for the default local serve.
+  const [token, setToken] = useState("")
   // Settings shares the main panel's stage model. While stage is null
   // the boot probe is in flight; not-installed/stopped fall through to
   // the shared DisconnectedCard; no-provider/ready render the provider
@@ -426,6 +429,8 @@ export default function App() {
     void (async () => {
       const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
       if (savedUrl) setUrl(savedUrl)
+      const savedToken = await hermes.settings.get<string>(BRAIN_TOKEN_KEY, "")
+      if (savedToken) setToken(savedToken)
       await probeStage()
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -461,6 +466,7 @@ export default function App() {
       try {
         if (persist) {
           await hermes.settings.set(BRAIN_URL_KEY, url.trim())
+          await hermes.settings.set(BRAIN_TOKEN_KEY, token.trim())
           setDirty(false)
         }
         await probeStage()
@@ -476,7 +482,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [url, probeStage],
+    [url, token, probeStage],
   )
 
   // -------------------------------------------------------------------------
@@ -665,6 +671,26 @@ export default function App() {
                     placeholder={BRAIN_DEFAULT_URL}
                     className="h-8 font-mono text-xs"
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="brain-config-token" className="text-xs">
+                    {t("connection.token")}
+                  </Label>
+                  <Input
+                    id="brain-config-token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => {
+                      setToken(e.target.value)
+                      setDirty(true)
+                      setSaved(false)
+                    }}
+                    placeholder={t("connection.token.placeholder")}
+                    className="h-8 text-xs"
+                  />
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    {t("connection.token.hint")}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
