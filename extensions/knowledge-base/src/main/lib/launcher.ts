@@ -38,7 +38,16 @@ const PROBE_TIMEOUT_MS = 2_000
 const STARTUP_TIMEOUT_MS = 8_000
 const POLL_INTERVAL_MS = 500
 
-function findGBrainBinary(): string {
+/**
+ * Resolve a usable `gbrain` binary path. Returns null when gbrain is
+ * not installed (binary not found in any of the well-known locations).
+ *
+ * The previous fallback of returning the bare string "gbrain" let PATH
+ * resolution paper over the difference between "missing binary" and
+ * "binary exists but server is stopped", which the onboarding UI now
+ * needs to distinguish so it can show the right next-step button.
+ */
+function findGBrainBinary(): string | null {
   const explicit = process.env.GBRAIN_BIN
   if (explicit && existsSync(explicit)) return explicit
   const candidates = [
@@ -49,7 +58,7 @@ function findGBrainBinary(): string {
   for (const c of candidates) {
     if (existsSync(c)) return c
   }
-  return "gbrain"
+  return null
 }
 
 async function probeHealth(port: number): Promise<boolean> {
@@ -76,12 +85,21 @@ export interface EnsureResult {
   started: boolean
   /** True iff the first probe already succeeded; no spawn happened. */
   alreadyRunning: boolean
-  /** Absolute path of the binary we'd shell out to. Always populated. */
-  binary: string
+  /** Absolute path of the binary, or null if gbrain is not installed. */
+  binary: string | null
   /** PID of the spawned child, when we spawned one. */
   pid?: number
   /** Human-readable failure reason; absent on success. */
   error?: string
+}
+
+/**
+ * Read-only "is gbrain installed anywhere?" helper. Exposed separately
+ * so the renderer can render the not-installed branch without spawning
+ * anything.
+ */
+export function locateGBrainBinary(): string | null {
+  return findGBrainBinary()
 }
 
 let inflight: Promise<EnsureResult> | null = null
@@ -198,6 +216,16 @@ async function runEnsure(port: number): Promise<EnsureResult> {
 
   if (await probeHealth(port)) {
     return { ok: true, started: false, alreadyRunning: true, binary }
+  }
+
+  if (binary === null) {
+    return {
+      ok: false,
+      started: false,
+      alreadyRunning: false,
+      binary: null,
+      error: "gbrain binary not found — install gbrain first.",
+    }
   }
 
   let env: NodeJS.ProcessEnv

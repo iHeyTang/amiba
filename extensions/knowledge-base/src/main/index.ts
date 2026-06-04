@@ -2,10 +2,34 @@ import type { MainActivate, MainHost } from "@hermes-x/extension-api"
 
 import { GBrainClient, type GBrainHealthResult } from "./lib/client"
 import { runProvidersList } from "./lib/cli"
-import { ensureGBrainServeHttp, restartGBrainServeHttp } from "./lib/launcher"
+import {
+  ensureGBrainServeHttp,
+  restartGBrainServeHttp,
+  locateGBrainBinary,
+} from "./lib/launcher"
 import { runProvidersEnv } from "./lib/recipe-schema"
 import { listOverrideKeys, setOverride, unsetOverride } from "./lib/provider-env"
 import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "./lib/constants"
+
+/**
+ * Aggregated status used by the renderer to pick an onboarding state:
+ *
+ *   not-installed   binary missing entirely
+ *   stopped         binary exists, /health unreachable
+ *   no-provider     /health OK, but no provider is `ready=true`
+ *   ready           /health OK and at least one provider is configured
+ *
+ * Computed in a single IPC roundtrip so the renderer doesn't have to
+ * orchestrate three separate calls + their failure modes.
+ */
+type LifecycleStage = "not-installed" | "stopped" | "no-provider" | "ready"
+interface LifecycleProbe {
+  stage: LifecycleStage
+  binary: string | null
+  health: GBrainHealthResult | null
+  providerCount: number
+  readyProviderCount: number
+}
 
 let client: GBrainClient | null = null
 
@@ -32,6 +56,41 @@ export const activate: MainActivate = async (host) => {
       return c.call(tool, args)
     },
   )
+
+  host.ipc.expose<void, LifecycleProbe>("lifecycle.probe", async () => {
+    const binary = locateGBrainBinary()
+    if (binary === null) {
+      return {
+        stage: "not-installed",
+        binary: null,
+        health: null,
+        providerCount: 0,
+        readyProviderCount: 0,
+      }
+    }
+    const c = await getClient(host)
+    const health = await c.health()
+    if (health === null) {
+      return {
+        stage: "stopped",
+        binary,
+        health: null,
+        providerCount: 0,
+        readyProviderCount: 0,
+      }
+    }
+    const providers = await runProvidersList()
+    const providerCount = providers.providers?.length ?? 0
+    const readyProviderCount =
+      providers.providers?.filter((p) => p.ready).length ?? 0
+    return {
+      stage: readyProviderCount > 0 ? "ready" : "no-provider",
+      binary,
+      health,
+      providerCount,
+      readyProviderCount,
+    }
+  })
 
   host.ipc.expose("providers.list", () => runProvidersList())
   host.ipc.expose<string, unknown>("providers.env", async (id) => {

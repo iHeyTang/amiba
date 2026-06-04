@@ -26,9 +26,13 @@ const SPAWN_TIMEOUT_MS = 8_000
  * macOS often inherit a stripped PATH that omits `~/.bun/bin`, so a
  * bare `spawn("gbrain", …)` fails for users who installed via Bun even
  * though the same command works in their terminal. We probe the most
- * common install locations and fall back to PATH.
+ * common install locations.
+ *
+ * Returns null when gbrain is not installed anywhere — callers should
+ * surface a "not installed" status to the renderer rather than spawn a
+ * doomed subprocess.
  */
-function findGBrainBinary(): string {
+function findGBrainBinary(): string | null {
   const explicit = process.env.GBRAIN_BIN
   if (explicit && existsSync(explicit)) return explicit
 
@@ -40,9 +44,7 @@ function findGBrainBinary(): string {
   for (const c of candidates) {
     if (existsSync(c)) return c
   }
-
-  // Last resort: $PATH lookup at exec time.
-  return "gbrain"
+  return null
 }
 
 /**
@@ -67,8 +69,8 @@ export interface GBrainProvider {
 export interface ListProvidersResult {
   ok: boolean
   providers?: GBrainProvider[]
-  /** Resolved binary path we shelled out to. Always populated. */
-  binary: string
+  /** Resolved binary path we shelled out to, or null if not installed. */
+  binary: string | null
   error?: string
 }
 
@@ -109,6 +111,9 @@ function parseProviderRow(line: string): GBrainProvider | null {
  */
 export async function runProvidersList(): Promise<ListProvidersResult> {
   const binary = findGBrainBinary()
+  if (binary === null) {
+    return { ok: false, binary: null, error: "gbrain binary not found" }
+  }
   return new Promise((resolve) => {
     let stdout = ""
     let stderr = ""
@@ -194,8 +199,14 @@ export async function runProvidersList(): Promise<ListProvidersResult> {
  * Quick liveness probe — used to decide whether to even render the
  * providers section in the GUI. Returns the binary path on success.
  */
-export function probeGBrainBinary(): { ok: boolean; binary: string; version?: string; error?: string } {
+export function probeGBrainBinary(): {
+  ok: boolean
+  binary: string | null
+  version?: string
+  error?: string
+} {
   const binary = findGBrainBinary()
+  if (binary === null) return { ok: false, binary: null, error: "not installed" }
   try {
     const r = spawnSync(binary, ["--version"], {
       stdio: ["ignore", "pipe", "pipe"],

@@ -36,11 +36,11 @@ export interface ProviderEnvSchema {
 export interface ProvidersEnvResult {
   ok: boolean
   schema?: ProviderEnvSchema
-  binary: string
+  binary: string | null
   error?: string
 }
 
-function findGBrainBinary(): string {
+function findGBrainBinary(): string | null {
   const explicit = process.env.GBRAIN_BIN
   if (explicit && existsSync(explicit)) return explicit
   const candidates = [
@@ -51,7 +51,7 @@ function findGBrainBinary(): string {
   for (const c of candidates) {
     if (existsSync(c)) return c
   }
-  return "gbrain"
+  return null
 }
 
 /** Pure parser, exported for inline review (no unit-test infra in this repo). */
@@ -95,6 +95,9 @@ export async function runProvidersEnv(
   id: string,
 ): Promise<ProvidersEnvResult> {
   const binary = findGBrainBinary()
+  if (binary === null) {
+    return { ok: false, binary: null, error: "gbrain binary not found" }
+  }
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(id)) {
     return { ok: false, binary, error: `invalid provider id: ${id}` }
   }
