@@ -17,7 +17,6 @@
 
 export interface GBrainClientOptions {
   baseUrl: string
-  token: string
 }
 
 /** Shape of a JSON-RPC 2.0 response from gbrain's /mcp endpoint. */
@@ -63,26 +62,22 @@ export interface GBrainHealthResult {
 
 export class GBrainClient {
   private baseUrl: string
-  private token: string
   private initialized = false
   private requestId = 0
 
   constructor(opts: GBrainClientOptions) {
     // Strip trailing slash
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "")
-    this.token = opts.token
   }
 
   /**
-   * Update connection config (e.g. user changed URL/token in settings).
-   * Resets the handshake so the next call re-initializes.
-   * No-op if config hasn't changed (avoids unnecessary re-handshake).
+   * Update connection config (URL changed). Resets the handshake so the
+   * next call re-initializes. No-op if URL hasn't changed.
    */
   configure(opts: GBrainClientOptions): void {
     const newBase = opts.baseUrl.replace(/\/+$/, "")
-    if (newBase === this.baseUrl && opts.token === this.token) return
+    if (newBase === this.baseUrl) return
     this.baseUrl = newBase
-    this.token = opts.token
     this.initialized = false
   }
 
@@ -147,13 +142,11 @@ export class GBrainClient {
   }
 
   /**
-   * Authenticated probe — forces a fresh MCP `initialize` handshake
-   * against `/mcp`. Unlike `health()`, this call carries the bearer
-   * token, so an invalid/missing token surfaces as a 401 here rather
-   * than at first tool use. Used by the Settings "Test Connection"
-   * button so the user gets immediate feedback on token validity.
+   * Force a fresh MCP `initialize` handshake. Used to verify the server
+   * actually speaks MCP (and not just /health), e.g. catching the case
+   * where gbrain came up but the MCP transport failed to mount.
    */
-  async verifyAuth(): Promise<void> {
+  async verifyHandshake(): Promise<void> {
     this.initialized = false
     await this.initialize()
   }
@@ -176,7 +169,6 @@ export class GBrainClient {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
-        Authorization: `Bearer ${this.token}`,
       },
       body,
       signal: AbortSignal.timeout(30_000),

@@ -5,17 +5,16 @@ import { runProvidersList } from "./lib/cli"
 import { ensureGBrainServeHttp, restartGBrainServeHttp } from "./lib/launcher"
 import { runProvidersEnv } from "./lib/recipe-schema"
 import { listOverrideKeys, setOverride, unsetOverride } from "./lib/provider-env"
-import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "./lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "./lib/constants"
 
 let client: GBrainClient | null = null
 
 async function getClient(host: MainHost): Promise<GBrainClient> {
   const url = (await host.settings.get<string>(BRAIN_URL_KEY, "")).trim() || BRAIN_DEFAULT_URL
-  const token = (await host.settings.get<string>(BRAIN_TOKEN_KEY, "")).trim()
   if (!client) {
-    client = new GBrainClient({ baseUrl: url, token })
+    client = new GBrainClient({ baseUrl: url })
   } else {
-    client.configure({ baseUrl: url, token })
+    client.configure({ baseUrl: url })
   }
   return client
 }
@@ -33,22 +32,6 @@ export const activate: MainActivate = async (host) => {
       return c.call(tool, args)
     },
   )
-
-  host.ipc.expose<
-    void,
-    | { ok: true }
-    | { ok: false; reason: "invalid-token" | "other"; error: string }
-  >("verify-auth", async () => {
-    const c = await getClient(host)
-    try {
-      await c.verifyAuth()
-      return { ok: true }
-    } catch (e) {
-      const error = (e as Error).message ?? String(e)
-      const isAuth = /HTTP 401|invalid_token|Invalid token|Unauthorized/i.test(error)
-      return { ok: false, reason: isAuth ? "invalid-token" : "other", error }
-    }
-  })
 
   host.ipc.expose("providers.list", () => runProvidersList())
   host.ipc.expose<string, unknown>("providers.env", async (id) => {

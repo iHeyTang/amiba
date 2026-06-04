@@ -18,7 +18,7 @@ import { Button, Input, Label, ScrollArea } from "@hermes-x/ui"
 import { hermes } from "../shared/hermes-bridge"
 import enCatalog from "../../i18n/en.json"
 import zhCNCatalog from "../../i18n/zh-CN.json"
-import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
 
 // ---------------------------------------------------------------------------
 // Inline i18n
@@ -418,7 +418,6 @@ export default function App() {
   useTheme()
   const t = useT()
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
-  const [token, setToken] = useState("")
   const [healthInfo, setHealthInfo] = useState<BrainHealthInfo | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -455,9 +454,7 @@ export default function App() {
     void (async () => {
       try {
         const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
-        const savedToken = await hermes.settings.get<string>(BRAIN_TOKEN_KEY, "")
         if (savedUrl) setUrl(savedUrl)
-        if (savedToken) setToken(savedToken)
 
         let h: BrainHealthInfo | null = null
         try {
@@ -525,10 +522,8 @@ export default function App() {
       setSaved(false)
       try {
         const u = url.trim()
-        const tk = token.trim()
         if (persist) {
           await hermes.settings.set(BRAIN_URL_KEY, u)
-          await hermes.settings.set(BRAIN_TOKEN_KEY, tk)
           setDirty(false)
         }
         let h: BrainHealthInfo | null = null
@@ -566,22 +561,6 @@ export default function App() {
           setConnectionError(t("connection.failed"))
           return
         }
-        try {
-          const auth = await hermes.ipc.invoke<
-            { ok: boolean; reason?: string; error?: string }
-          >("verify-auth")
-          if (!auth.ok) {
-            setHealthInfo(null)
-            setConnectionError(
-              auth.reason === "invalid-token"
-                ? t("connection.invalidToken")
-                : t("connection.error", { error: auth.error ?? "" }),
-            )
-            return
-          }
-        } catch {
-          // verify-auth not available — treat as ok
-        }
         setHealthInfo(h)
         if (persist) setSaved(true)
       } catch (e) {
@@ -596,7 +575,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [url, token],
+    [url],
   )
 
   const restart = useCallback(async () => {
@@ -664,42 +643,22 @@ export default function App() {
             <h3 className="text-sm font-medium">
               {t("connection.title")}
             </h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="brain-config-url" className="text-xs">
-                  {t("connection.url")}
-                </Label>
-                <Input
-                  id="brain-config-url"
-                  value={url}
-                  onChange={(e) => {
-                    setUrl(e.target.value)
-                    setDirty(true)
-                    setSaved(false)
-                  }}
-                  placeholder={BRAIN_DEFAULT_URL}
-                  className="h-8 font-mono text-xs"
-                  disabled={bootLoading}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="brain-config-token" className="text-xs">
-                  {t("connection.token")}
-                </Label>
-                <Input
-                  id="brain-config-token"
-                  type="password"
-                  value={token}
-                  onChange={(e) => {
-                    setToken(e.target.value)
-                    setDirty(true)
-                    setSaved(false)
-                  }}
-                  placeholder={t("connection.token.placeholder")}
-                  className="h-8 text-xs"
-                  disabled={bootLoading}
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brain-config-url" className="text-xs">
+                {t("connection.url")}
+              </Label>
+              <Input
+                id="brain-config-url"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value)
+                  setDirty(true)
+                  setSaved(false)
+                }}
+                placeholder={BRAIN_DEFAULT_URL}
+                className="h-8 font-mono text-xs"
+                disabled={bootLoading}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button

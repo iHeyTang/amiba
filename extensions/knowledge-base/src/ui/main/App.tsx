@@ -40,7 +40,7 @@ import { hermes } from "../shared/hermes-bridge"
 import enCatalog from "../../i18n/en.json"
 import zhCNCatalog from "../../i18n/zh-CN.json"
 import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
-import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
+import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
 
 // ---------------------------------------------------------------------------
 // Inline i18n — no host.i18n dependency
@@ -124,9 +124,9 @@ export default function App() {
   useTheme()
   const t = useT()
 
-  // Connection config
+  // Connection config — URL is configurable but defaults to loopback;
+  // there is no token (local serve runs unauthenticated).
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
-  const [token, setToken] = useState("")
 
   // Connection state
   const [healthInfo, setHealthInfo] = useState<BrainHealthInfo | null>(null)
@@ -168,11 +168,9 @@ export default function App() {
     void (async () => {
       try {
         const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
-        const savedToken = await hermes.settings.get<string>(BRAIN_TOKEN_KEY, "")
         if (savedUrl) {
           setUrl(savedUrl)
-          setToken(savedToken)
-          await testConnection(savedUrl, savedToken)
+          await testConnection(savedUrl)
         } else {
           try {
             const h = await hermes.ipc.invoke<{ status: string; version?: string } | null>("health")
@@ -196,15 +194,13 @@ export default function App() {
   // -------------------------------------------------------------------------
 
   const testConnection = useCallback(
-    async (testUrl?: string, testToken?: string) => {
+    async (testUrl?: string) => {
       setConnecting(true)
       setConnectionError(null)
       setHealthInfo(null)
       try {
         const u = (testUrl ?? url).trim()
-        const tk = (testToken ?? token).trim()
         await hermes.settings.set(BRAIN_URL_KEY, u)
-        await hermes.settings.set(BRAIN_TOKEN_KEY, tk)
 
         let h: { status: string; version?: string } | null = null
         try {
@@ -215,25 +211,7 @@ export default function App() {
         if (!h) {
           setConnectionError(t("connection.failed"))
         } else {
-          let authOk = true
-          let authError: string | null = null
-          try {
-            const auth = await hermes.ipc.invoke<{ ok: boolean; reason?: string; error?: string }>("verify-auth")
-            if (!auth.ok) {
-              authOk = false
-              authError =
-                auth.reason === "invalid-token"
-                  ? t("connection.invalidToken")
-                  : t("connection.error", { error: auth.error ?? "" })
-            }
-          } catch {
-            // verify-auth not available — treat as ok
-          }
-          if (!authOk) {
-            setConnectionError(authError)
-          } else {
-            setHealthInfo(h)
-          }
+          setHealthInfo(h)
         }
       } catch (e) {
         setConnectionError(
@@ -246,7 +224,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [url, token],
+    [url],
   )
 
   // -------------------------------------------------------------------------
@@ -480,32 +458,17 @@ export default function App() {
                     <p className="text-[11px] leading-snug text-muted-foreground">
                       {t("tutorial.advanced.hint")}
                     </p>
-                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="brain-url" className="text-xs">
-                          {t("connection.url")}
-                        </Label>
-                        <Input
-                          id="brain-url"
-                          value={url}
-                          onChange={(e) => setUrl(e.target.value)}
-                          placeholder={BRAIN_DEFAULT_URL}
-                          className="h-8 font-mono text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="brain-token" className="text-xs">
-                          {t("connection.token")}
-                        </Label>
-                        <Input
-                          id="brain-token"
-                          type="password"
-                          value={token}
-                          onChange={(e) => setToken(e.target.value)}
-                          placeholder={t("connection.token.placeholder")}
-                          className="h-8 text-xs"
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="brain-url" className="text-xs">
+                        {t("connection.url")}
+                      </Label>
+                      <Input
+                        id="brain-url"
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        placeholder={BRAIN_DEFAULT_URL}
+                        className="h-8 font-mono text-xs"
+                      />
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
