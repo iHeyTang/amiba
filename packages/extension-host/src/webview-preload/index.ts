@@ -1,6 +1,12 @@
 /**
  * Webview bridge preload — bundled to `out/preload/webview-bridge.js` and
- * injected into every extension WebView (file://<abs-path>?_ext=<id>).
+ * injected into every extension WebView.
+ *
+ * WebView URLs now use the local HTTP server:
+ *   http://127.0.0.1:<port>/extensions/<extensionId>/dist/ui/sidebar/index.html
+ *
+ * The extensionId is extracted from `location.pathname` — no query parameter
+ * needed. This is consistent with the URL shape produced by use-contributes.
  *
  * Exposes `window.hermes` to the extension page so it can communicate with
  * the desktop host without needing nodeIntegration.
@@ -37,19 +43,18 @@ declare global {
 // Resolve extensionId from the webview URL
 // ---------------------------------------------------------------------------
 
-// URL shape: file://<abs-path>?_ext=<extensionId>
-// For file:// URLs, window.location.hostname is always empty, so we read the
-// extensionId from the `_ext` query parameter appended by the renderer.
+// URL shape: http://127.0.0.1:<port>/extensions/<extensionId>/dist/ui/...
+// The extensionId is the path segment after "/extensions/".
 function resolveExtensionId(): string {
   if (typeof window === "undefined") return "unknown"
-  const id = new URL(window.location.href).searchParams.get("_ext")
-  if (!id) {
+  const m = window.location.pathname.match(/^\/extensions\/([^/]+)\//)
+  if (!m) {
     throw new Error(
-      "[hermes webview preload] Missing `_ext` query parameter. " +
-      "Extension WebViews must be loaded via a file:// URL with ?_ext=<extensionId>."
+      `[hermes webview preload] Cannot extract extensionId from pathname: ${window.location.pathname}. ` +
+      "Extension WebViews must be loaded via http://127.0.0.1:<port>/extensions/<extensionId>/..."
     )
   }
-  return id
+  return decodeURIComponent(m[1]!)
 }
 
 const extensionId: string = resolveExtensionId()
