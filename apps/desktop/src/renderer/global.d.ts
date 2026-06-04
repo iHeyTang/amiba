@@ -142,6 +142,11 @@ interface HermesBridgeApi {
    * preference against `prefers-color-scheme`, so it is the source of truth.
    */
   setResolvedTheme(theme: "light" | "dark"): Promise<void>
+  /**
+   * Subscribe to "switch to chat view" requests forwarded from an
+   * extension webview via the host bridge. Returns an unsubscribe.
+   */
+  onSwitchToChat(cb: () => void): () => void
 }
 
 declare global {

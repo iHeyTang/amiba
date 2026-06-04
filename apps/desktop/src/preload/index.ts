@@ -158,6 +158,18 @@ const api = {
     ipcRenderer.invoke("theme:set-resolved", theme),
 
   /**
+   * Subscribe to "switch to chat view" requests from an extension
+   * webview. The webview already arranged the pending prompt + sidebar
+   * deselect; the renderer just needs to flip its top-level view back
+   * to chat if the user was sitting on Settings.
+   */
+  onSwitchToChat: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on("ui:switch-to-chat", handler)
+    return () => ipcRenderer.off("ui:switch-to-chat", handler)
+  },
+
+  /**
    * Hermes-agent lifecycle bridge — drives the first-run install wizard
    * and the supervised backplane subprocess. Logs from long-running
    * spawns stream back via `onJobLog`; completion lands in `onJobEnd`.

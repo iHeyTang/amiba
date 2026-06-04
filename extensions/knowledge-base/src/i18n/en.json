@@ -65,8 +65,9 @@
   "tutorial.advanced.hint": "Point the desktop client at a GBrain instance you've started yourself (custom port, remote server, etc).",
   "tutorial.checking": "Checking connection…",
 
-  "install.openDocs": "Install GBrain",
-  "install.openDocs.description": "Opens the gbrain install docs in your browser. Once installed, click \"I've installed it\" below.",
+  "install.agent.button": "Let the assistant install it",
+  "install.agent.description": "Hands a guided install prompt to the chat. The AI runs through it step by step in this window.",
+  "install.manual.link": "Install manually",
   "install.recheck": "I've installed it — check again",
 
   "search.placeholder": "Search your knowledge base…",

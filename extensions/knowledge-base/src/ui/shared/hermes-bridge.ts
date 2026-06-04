@@ -22,6 +22,9 @@ declare global {
       shell: {
         openExternal(url: string): Promise<void>
       }
+      host: {
+        queueChatPrompt(payload: { text: string }): Promise<boolean>
+      }
       on(event: "language" | "theme", cb: (value: string) => void): () => void
     }
   }

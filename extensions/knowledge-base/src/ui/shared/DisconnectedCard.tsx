@@ -34,17 +34,35 @@ import { Button, Input, Label } from "@hermes-x/ui"
 
 import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
 import { hermes } from "./hermes-bridge"
-
-/**
- * gbrain's official install docs page. Bouncing to a real browser is
- * the honest UX here — we can't fully automate "install a CLI" inside
- * a sandboxed webview, and the docs walk users through Bun/Homebrew/
- * manual install in one place. Once gbrain is on disk, the user comes
- * back and clicks "Re-check" (probe re-runs and the stage flips).
- */
-const GBRAIN_INSTALL_URL = "https://github.com/garrytan/gbrain#installation"
 import { useT } from "./i18n"
 import type { LifecycleProbe } from "./lifecycle"
+
+/** Public install docs — used by the secondary "Install manually" link. */
+const GBRAIN_INSTALL_URL = "https://github.com/garrytan/gbrain#installation"
+
+/**
+ * Prompt the assistant runs when the user picks the agent-walkthrough
+ * install path. Retrieves the official agent install instructions,
+ * walks them through, and tiers post-install provider options so a
+ * first-time user gets a sensible default without having to pick blind.
+ *
+ * Kept inline in this component because nothing else needs it.
+ */
+function buildAgentInstallPrompt(language: "en" | "zh-CN"): string {
+  const langLabel = language === "zh-CN" ? "Simplified Chinese (简体中文)" : "English"
+  return [
+    "Retrieve and follow the instructions at:",
+    "https://raw.githubusercontent.com/garrytan/gbrain/master/INSTALL_FOR_AGENTS.md",
+    "",
+    "After installation, walk me through post-install configuration progressively — cheapest / simplest first, then mid-tier paid, then premium:",
+    "- Lead with a free / local option I can try without any API key or spend (e.g. local embedding model + local LLM).",
+    "- For each subsequent tier, name the providers, rough cost (per 1M tokens or per month for typical personal use), and what to expect for quality / latency.",
+    "- Recommend a sensible default for a first-time user so I don't have to pick blind.",
+    "- Use a Markdown table when comparing options within a tier.",
+    "",
+    `Respond in ${langLabel}.`,
+  ].join("\n")
+}
 
 interface Props {
   stage: "not-installed" | "stopped"
@@ -88,18 +106,47 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
     }
   }, [t, reprobe])
 
-  const openInstallDocs = useCallback(async () => {
+  /**
+   * Primary "let the assistant install gbrain" path. Hands a tiered
+   * install prompt off to the main chat surface via the host bridge:
+   * main flips the sidebar back to chats, drops the prompt into the
+   * pending-prompt slot, and the agent picks it up and auto-runs. The
+   * user lands in chat watching the install happen instead of being
+   * dropped into a browser tab.
+   */
+  const handoffToAgent = useCallback(async () => {
     setError(null)
     try {
       // Seed the default URL so the post-install reprobe targets the
-      // same port `gbrain serve --http` listens on by default. Cheap to
-      // do unconditionally; settings.set is a no-op write if unchanged.
+      // same port `gbrain serve --http` listens on by default.
       const existingUrl = (
         await hermes.settings.get<string>(BRAIN_URL_KEY, "")
       ).trim()
       if (!existingUrl) {
         await hermes.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
       }
+      const lang = hermes.language === "zh-CN" ? "zh-CN" : "en"
+      const ok = await hermes.host.queueChatPrompt({
+        text: buildAgentInstallPrompt(lang),
+      })
+      if (!ok) {
+        setError(t("connection.error", { error: "host rejected prompt" }))
+      }
+    } catch (e) {
+      setError(
+        t("connection.error", { error: (e as Error).message ?? String(e) }),
+      )
+    }
+  }, [t])
+
+  /**
+   * Secondary "install manually" path for users who don't want the
+   * agent to drive — opens the install docs in the default browser
+   * and they come back to click "Re-check".
+   */
+  const openInstallDocs = useCallback(async () => {
+    setError(null)
+    try {
       await hermes.shell.openExternal(GBRAIN_INSTALL_URL)
     } catch (e) {
       setError(
@@ -117,7 +164,8 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
               t={t}
               connecting={connecting}
               error={error}
-              onInstall={() => void openInstallDocs()}
+              onAgentInstall={() => void handoffToAgent()}
+              onOpenDocs={() => void openInstallDocs()}
               onReprobe={() => void reprobe()}
             />
           ) : (
@@ -292,9 +340,14 @@ function NotInstalled({
   t,
   connecting,
   error,
-  onInstall,
+  onAgentInstall,
+  onOpenDocs,
   onReprobe,
-}: CardProps & { onInstall: () => void; onReprobe: () => void }) {
+}: CardProps & {
+  onAgentInstall: () => void
+  onOpenDocs: () => void
+  onReprobe: () => void
+}) {
   return (
     <>
       <header className="flex flex-col items-center gap-2 text-center">
@@ -317,27 +370,36 @@ function NotInstalled({
         ))}
       </ul>
       <div className="flex flex-col items-center gap-2">
-        <Button onClick={onInstall} size="lg" className="min-w-[200px]">
+        <Button onClick={onAgentInstall} size="lg" className="min-w-[220px]">
           <Sparkles className="mr-2 h-4 w-4" />
-          {t("install.openDocs")}
+          {t("install.agent.button")}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          {t("install.openDocs.description")}
+          {t("install.agent.description")}
         </p>
-        <Button
-          onClick={onReprobe}
-          disabled={connecting}
-          size="sm"
-          variant="ghost"
-          className="text-xs"
-        >
-          {connecting ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          {t("install.recheck")}
-        </Button>
+        <div className="flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            onClick={onOpenDocs}
+            className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {t("install.manual.link")}
+          </button>
+          <span className="text-muted-foreground/50">·</span>
+          <button
+            type="button"
+            onClick={onReprobe}
+            disabled={connecting}
+            className="inline-flex items-center gap-1 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+          >
+            {connecting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {t("install.recheck")}
+          </button>
+        </div>
         {error && (
           <p className="text-center text-xs text-destructive">{error}</p>
         )}

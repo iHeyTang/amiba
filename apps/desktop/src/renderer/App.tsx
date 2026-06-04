@@ -47,6 +47,14 @@ function AppInner(): ReactElement {
   useEffect(() => {
     void window.hermes.setResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
+  // Extension webviews can ask the host to flip back to the chat view
+  // after queueing a prompt (see "webview:host-queue-chat-prompt" in
+  // packages/extension-host). The sidebar deselect + pending-prompt
+  // drain are storage-driven and already wired; this just covers the
+  // case where the user was sitting on Settings when the request fired.
+  useEffect(() => {
+    return window.hermes.onSwitchToChat(() => setView("chat"))
+  }, [])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("chat")
   const [phase, setPhase] = useState<Phase>("loading")

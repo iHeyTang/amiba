@@ -43,6 +43,19 @@ declare global {
          */
         openExternal(url: string): Promise<void>
       }
+      host: {
+        /**
+         * Hand a prompt off to the desktop's main chat surface. The
+         * host queues the text into the shared pending-prompt slot,
+         * deselects any extension activity that's currently focused,
+         * and switches the renderer back to the chat view. The agent
+         * picks the prompt up and runs with it.
+         *
+         * Returns true if the host accepted the payload, false if the
+         * payload was rejected (empty text, malformed shape).
+         */
+        queueChatPrompt(payload: { text: string }): Promise<boolean>
+      }
       on(event: "language" | "theme", cb: (value: string) => void): () => void
     }
   }
@@ -124,6 +137,15 @@ contextBridge.exposeInMainWorld("hermes", {
   shell: {
     openExternal(url: string): Promise<void> {
       return ipcRenderer.invoke("webview:shell-open-external", url) as Promise<void>
+    },
+  },
+
+  host: {
+    queueChatPrompt(payload: { text: string }): Promise<boolean> {
+      return ipcRenderer.invoke(
+        "webview:host-queue-chat-prompt",
+        payload,
+      ) as Promise<boolean>
     },
   },
 

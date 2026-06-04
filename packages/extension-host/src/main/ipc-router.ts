@@ -1,5 +1,5 @@
 // packages/extension-host/src/main/ipc-router.ts
-import { BrowserWindow, dialog, ipcMain, shell } from "electron"
+import { BrowserWindow, dialog, ipcMain, shell, webContents } from "electron"
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join, resolve } from "node:path"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
@@ -128,6 +128,44 @@ export function registerWebViewChannels(opts: {
     if (!/^https?:\/\//i.test(url)) return
     await shell.openExternal(url)
   })
+
+  /**
+   * Queue a prompt for the main desktop window's chat surface and
+   * hand control back to it.
+   *
+   * Steps the renderer relies on:
+   *   1. Write the prompt to `home.pendingPrompt` (the same key Quick-
+   *      Ask, the URL handler, and the socket inbox use). ChatSurface
+   *      already watches this key and drains + auto-submits when it
+   *      sees a value land.
+   *   2. Flip `settings.chat.sidebarView` back to "chats" so the
+   *      activity bar deselects whatever extension panel was focused
+   *      (otherwise the webview would stay rendered over the chat).
+   *   3. Send `ui:switch-to-chat` so the renderer can flip its top-
+   *      level view from settings → chat. The other two steps don't
+   *      help if the user is currently sitting on the Settings page.
+   *
+   * Returns a boolean so callers can react if the host rejects the
+   * payload (currently only happens on shape validation failure).
+   */
+  ipcMain.handle(
+    "webview:host-queue-chat-prompt",
+    async (_e, payload: unknown): Promise<boolean> => {
+      if (!payload || typeof payload !== "object") return false
+      const text = (payload as { text?: unknown }).text
+      if (typeof text !== "string" || !text.trim()) return false
+      await opts.settingsStore.set("home.pendingPrompt", { text })
+      await opts.settingsStore.set("settings.chat.sidebarView", "chats")
+      for (const wc of webContents.getAllWebContents()) {
+        try {
+          wc.send("ui:switch-to-chat")
+        } catch {
+          /* ignore — only the main window listens */
+        }
+      }
+      return true
+    },
+  )
 
   ipcMain.handle(
     "ext-settings:get",
