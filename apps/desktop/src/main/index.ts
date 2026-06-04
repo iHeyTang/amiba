@@ -440,7 +440,10 @@ if (!gotSingleInstanceLock) {
     const webviewBridgePath = path.join(__dirname, "../preload/webview-bridge.js")
 
     const { LANG_PREF_STORAGE_KEY } = await import("@hermes-x/i18n")
-    const { THEME_PREF_STORAGE_KEY } = await import("@hermes-x/ui")
+    // Mirrors `packages/ui/src/theme/index.ts`. Inlined to avoid pulling
+    // the entire @hermes-x/ui graph (React + streamdown + mermaid + …)
+    // into the main-process bundle just to read one constant string.
+    const THEME_PREF_STORAGE_KEY = "settings.ui.theme"
 
     // Track current language and theme so webviews can request initial state.
     let currentLanguage = "en"
