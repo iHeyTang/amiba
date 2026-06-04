@@ -1,6 +1,6 @@
 /**
  * Webview bridge preload — bundled to `out/preload/webview-bridge.js` and
- * injected into every extension WebView (hermes-ext://<id>/<view>).
+ * injected into every extension WebView (file://<abs-path>?_ext=<id>).
  *
  * Exposes `window.hermes` to the extension page so it can communicate with
  * the desktop host without needing nodeIntegration.
@@ -37,10 +37,22 @@ declare global {
 // Resolve extensionId from the webview URL
 // ---------------------------------------------------------------------------
 
-// URL shape: hermes-ext://<extensionId>/<view-path>
-// window.location.hostname == extensionId inside the webview
-const extensionId: string =
-  typeof window !== "undefined" ? window.location.hostname : "unknown"
+// URL shape: file://<abs-path>?_ext=<extensionId>
+// For file:// URLs, window.location.hostname is always empty, so we read the
+// extensionId from the `_ext` query parameter appended by the renderer.
+function resolveExtensionId(): string {
+  if (typeof window === "undefined") return "unknown"
+  const id = new URL(window.location.href).searchParams.get("_ext")
+  if (!id) {
+    throw new Error(
+      "[hermes webview preload] Missing `_ext` query parameter. " +
+      "Extension WebViews must be loaded via a file:// URL with ?_ext=<extensionId>."
+    )
+  }
+  return id
+}
+
+const extensionId: string = resolveExtensionId()
 
 // ---------------------------------------------------------------------------
 // Bootstrap: fetch initial state synchronously at preload time.
