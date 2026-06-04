@@ -52,7 +52,16 @@ export interface ExtensionsBridge {
    * Returns an unsubscribe fn.
    */
   onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
+  /**
+   * Base URL of the local extension HTTP server (e.g. `http://127.0.0.1:54321`).
+   * Cached module-level after the first call so all hooks share one IPC round-trip.
+   */
+  getHttpBaseUrl(): Promise<string>
 }
+
+// Module-level cache for the HTTP base URL.  Set once per renderer process
+// lifetime — the port never changes while the app is running.
+let _httpBaseUrlPromise: Promise<string> | null = null
 
 export function createExtensionsBridge(): ExtensionsBridge {
   return {
@@ -76,6 +85,12 @@ export function createExtensionsBridge(): ExtensionsBridge {
       const handler = (_e: unknown, extensionId: string | null) => cb(extensionId)
       ipcRenderer.on("extensions:changed", handler)
       return () => ipcRenderer.off("extensions:changed", handler)
+    },
+    getHttpBaseUrl: () => {
+      if (!_httpBaseUrlPromise) {
+        _httpBaseUrlPromise = ipcRenderer.invoke("extensions:http-base-url") as Promise<string>
+      }
+      return _httpBaseUrlPromise
     },
   }
 }

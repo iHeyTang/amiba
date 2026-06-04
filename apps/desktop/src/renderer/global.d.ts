@@ -120,6 +120,11 @@ interface HermesBridgeApi {
       >
     }
     onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
+    /**
+     * Base URL of the local extension HTTP server (e.g. `http://127.0.0.1:54321`).
+     * Cached module-level after the first call.
+     */
+    getHttpBaseUrl(): Promise<string>
   }
   /** Returns the absolute file:// path of the webview bridge preload bundle. */
   getWebviewPreloadPath(): Promise<string>

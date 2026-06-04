@@ -292,6 +292,16 @@ export function registerExtensionActionChannels(opts: {
 }
 
 /**
+ * Register the `extensions:http-base-url` IPC channel.
+ *
+ * The renderer calls this once (cached module-level) to discover the
+ * loopback port of the extension HTTP server started in main.
+ */
+export function registerExtHttpChannel(getBaseUrl: () => string): void {
+  ipcMain.handle("extensions:http-base-url", () => getBaseUrl())
+}
+
+/**
  * Broadcast `extensions:changed` to every open BrowserWindow.
  *
  * `extensionId` carries the affected extension's id when known (sideload,

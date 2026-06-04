@@ -13,7 +13,8 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
-import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
+import { bootMainExtensionHost, registerExtHttpChannel } from "@hermes-x/extension-host/main"
+import { startExtHttpServer } from "./ext-http-server"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -227,6 +228,10 @@ function registerVoicePermissionHandler(): void {
 // and protocol-URL handling.
 let mainWindow: BrowserWindow | null = null
 
+// Extension HTTP server — started inside app.whenReady() once the
+// registryPath is known. Stopped in before-quit alongside the extension host.
+let _extHttpServer: import("./ext-http-server").ExtHttpServer | null = null
+
 /**
  * Bring the main window forward when the user hits the global shortcut.
  *
@@ -426,6 +431,16 @@ if (!gotSingleInstanceLock) {
     const extensionsRoot = getExtensionsRoot()
     const registryPath = getRegistryPath()
 
+    // Start the local HTTP server that serves extension WebView assets.
+    // Bound to loopback only (127.0.0.1), OS-assigned port.
+    const extHttpServer = await startExtHttpServer({ registryPath })
+    _extHttpServer = extHttpServer
+    console.info(`[main] extension http server listening at ${extHttpServer.url()}`)
+
+    // Expose the base URL to the renderer via IPC so use-contributes
+    // can build http:// URLs without knowing the port at compile time.
+    registerExtHttpChannel(() => extHttpServer.url())
+
     // Absolute path to the webview bridge preload bundle (built as a second
     // preload entry — see electron.vite.config.ts).
     const webviewBridgePath = path.join(__dirname, "../preload/webview-bridge.js")
@@ -592,6 +607,7 @@ app.on("before-quit", async (event) => {
   const host = (globalThis as { __hermesExtensionHost?: { shutdown(): Promise<void> } })
     .__hermesExtensionHost
   if (host) await host.shutdown()
+  if (_extHttpServer) await _extHttpServer.stop().catch(() => { /* ignore shutdown errors */ })
   _extensionHostShutdownDone = true
   app.quit()
 })
