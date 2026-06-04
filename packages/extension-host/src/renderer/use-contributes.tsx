@@ -17,6 +17,24 @@ import type { ExtensionManifest } from "@hermes-x/extension-api"
 type ManifestEntry = { manifest: ExtensionManifest; path: string }
 
 // ---------------------------------------------------------------------------
+// Module-level base URL cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared promise for the extension HTTP server base URL.  Resolved once per
+ * renderer process lifetime; all hooks re-use the same fetch.
+ */
+let _baseUrlPromise: Promise<string> | null = null
+
+function getBaseUrl(): Promise<string> {
+  if (!_baseUrlPromise) {
+    const bridge = (window as unknown as { hermes: { extensions: { getHttpBaseUrl(): Promise<string> } } }).hermes.extensions
+    _baseUrlPromise = bridge.getHttpBaseUrl()
+  }
+  return _baseUrlPromise
+}
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -32,7 +50,7 @@ export interface SidebarViewContribution {
   id: string
   extensionId: string
   anchor: string
-  /** Full file:// URL pointing at the HTML page (includes ?_ext=<id>). */
+  /** Full http://127.0.0.1:<port>/extensions/<id>/... URL. */
   viewUrl: string
 }
 
@@ -59,6 +77,7 @@ type HermesWindowShape = {
   extensions: {
     listManifests(): Promise<ManifestEntry[]>
     onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
+    getHttpBaseUrl(): Promise<string>
   }
 }
 
@@ -67,22 +86,17 @@ function getExtensionsBridge(): HermesWindowShape["extensions"] {
 }
 
 /**
- * Build a `file://` URL for an extension view HTML file, appending
- * `?_ext=<extensionId>` so the webview preload can identify the extension
- * without relying on `location.hostname` (which is empty for file:// URLs).
+ * Build an `http://127.0.0.1:<port>` URL for an extension view HTML file.
  *
- * NOTE: On Windows, absolute paths use backslashes. We normalise them to
- * forward slashes for the URL. Full Windows path-to-URL handling (drive
- * letters, UNC paths) is a TODO — this project targets macOS/Linux for v1.
+ * URL shape: `<baseUrl>/extensions/<extensionId>/<view>`
+ *
+ * The extensionId is URL-encoded so it round-trips safely through the path.
+ * The webview preload extracts the id from `location.pathname`.
  */
-function buildViewUrl(rootPath: string, view: string, extensionId: string): string {
-  // Normalise: strip leading slash from view, convert backslashes
+function buildViewUrl(baseUrl: string, extensionId: string, view: string): string {
+  // Strip any leading slash from the relative view path.
   const normalView = view.replace(/^\//, "").replace(/\\/g, "/")
-  const normalRoot = rootPath.replace(/\\/g, "/")
-  const abs = `${normalRoot}/${normalView}`
-  const url = new URL(`file://${abs}`)
-  url.searchParams.set("_ext", extensionId)
-  return url.toString()
+  return `${baseUrl}/extensions/${encodeURIComponent(extensionId)}/${normalView}`
 }
 
 function pickLabel(labels: Record<string, string>, language: string, fallback: string): string {
@@ -122,6 +136,25 @@ function useManifests(): ManifestEntry[] {
   return entries
 }
 
+/**
+ * Resolves the extension HTTP server base URL once per renderer process
+ * lifetime.  Re-renders the component when the URL becomes available
+ * (typically within the first render cycle — the IPC round-trip is fast).
+ */
+function useHttpBaseUrl(): string | null {
+  const [baseUrl, setBaseUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void getBaseUrl().then((url) => {
+      if (!cancelled) setBaseUrl(url)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  return baseUrl
+}
+
 // ---------------------------------------------------------------------------
 // Public hooks
 // ---------------------------------------------------------------------------
@@ -143,13 +176,14 @@ export function useActivityBarItems(): ActivityBarItem[] {
 
 export function useSidebarViews(): SidebarViewContribution[] {
   const entries = useManifests()
+  const baseUrl = useHttpBaseUrl()
 
-  return entries.flatMap(({ manifest: m, path }) =>
+  return entries.flatMap(({ manifest: m }) =>
     (m.contributes?.sidebarViews ?? []).map((sv) => ({
       id: sv.id,
       extensionId: m.id,
       anchor: sv.anchor,
-      viewUrl: buildViewUrl(path, sv.view, m.id),
+      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, sv.view) : "",
     })),
   )
 }
@@ -157,14 +191,15 @@ export function useSidebarViews(): SidebarViewContribution[] {
 export function useExtensionSettingsTabs(): SettingsTabContribution[] {
   const entries = useManifests()
   const language = useCurrentLanguage()
+  const baseUrl = useHttpBaseUrl()
 
-  return entries.flatMap(({ manifest: m, path }) =>
+  return entries.flatMap(({ manifest: m }) =>
     (m.contributes?.settingsTabs ?? []).map((tab) => ({
       id: tab.id,
       extensionId: m.id,
       label: pickLabel(tab.labels, language, tab.id),
       icon: tab.icon,
-      viewUrl: buildViewUrl(path, tab.view, m.id),
+      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, tab.view) : "",
       order: tab.order ?? 100,
     })),
   )
@@ -172,12 +207,13 @@ export function useExtensionSettingsTabs(): SettingsTabContribution[] {
 
 export function useComposerHints(): ComposerHintContribution[] {
   const entries = useManifests()
+  const baseUrl = useHttpBaseUrl()
 
-  return entries.flatMap(({ manifest: m, path }) =>
+  return entries.flatMap(({ manifest: m }) =>
     (m.contributes?.composerHints ?? []).map((hint) => ({
       id: hint.id,
       extensionId: m.id,
-      viewUrl: buildViewUrl(path, hint.view, m.id),
+      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, hint.view) : "",
     })),
   )
 }
