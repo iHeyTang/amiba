@@ -1,0 +1,206 @@
+/**
+ * Onboarding card for the two stages where gbrain isn't reachable:
+ *
+ *   not-installed  binary missing entirely
+ *   stopped        binary exists but the daemon isn't up
+ *
+ * Both the main panel and the settings page need an identical pane in
+ * these stages — there's no point letting the user configure providers
+ * if the service can't even be talked to. Centralising the card here
+ * keeps copy + icons + actions in lockstep across both surfaces.
+ *
+ * The card owns its own connecting/error state and pushes the post-action
+ * lifecycle probe back up via `onProbeUpdate` so the parent can transition
+ * out of the disconnected branch when the user succeeds.
+ */
+
+import { BookOpen, Check, Download, Loader2, Play, Sparkles } from "lucide-react"
+import { useCallback, useState } from "react"
+
+import { Button } from "@hermes-x/ui"
+
+import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
+import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
+import { hermes } from "./hermes-bridge"
+import { useT } from "./i18n"
+import type { LifecycleProbe } from "./lifecycle"
+
+interface Props {
+  stage: "not-installed" | "stopped"
+  onProbeUpdate: (probe: LifecycleProbe) => void
+}
+
+export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
+  const t = useT()
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const reprobe = useCallback(async () => {
+    try {
+      const probe = await hermes.ipc.invoke<LifecycleProbe>("lifecycle.probe")
+      onProbeUpdate(probe)
+    } catch {
+      // Swallow — parent stays in its current stage; the user can
+      // retry by clicking the action button again.
+    }
+  }, [onProbeUpdate])
+
+  const startServe = useCallback(async () => {
+    setConnecting(true)
+    setError(null)
+    try {
+      const r = await hermes.ipc.invoke<
+        { ok: boolean; error?: string } | null
+      >("launcher.ensure")
+      if (r && !r.ok) {
+        setError(
+          t("connection.error", { error: r.error ?? "ensure failed" }),
+        )
+      }
+      await reprobe()
+    } catch (e) {
+      setError(
+        t("connection.error", { error: (e as Error).message ?? String(e) }),
+      )
+    } finally {
+      setConnecting(false)
+    }
+  }, [t, reprobe])
+
+  const startOneClickInstall = useCallback(async () => {
+    setError(null)
+    try {
+      const existingUrl = (
+        await hermes.settings.get<string>(BRAIN_URL_KEY, "")
+      ).trim()
+      if (!existingUrl) {
+        await hermes.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
+      }
+      await hermes.ipc.invoke("chat:queue-prompt", {
+        text: buildBrainInstallPrompt(hermes.language === "zh-CN" ? "zh-CN" : "en"),
+        mode: "new",
+      })
+    } catch (e) {
+      setError(
+        t("connection.error", { error: (e as Error).message ?? String(e) }),
+      )
+    }
+  }, [t])
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="flex min-h-full w-full justify-center px-6 py-6">
+        <div className="my-auto flex w-full max-w-xl flex-col gap-5">
+          {stage === "not-installed" ? (
+            <NotInstalled
+              t={t}
+              connecting={connecting}
+              error={error}
+              onInstall={() => void startOneClickInstall()}
+            />
+          ) : (
+            <Stopped
+              t={t}
+              connecting={connecting}
+              error={error}
+              onStart={() => void startServe()}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface CardProps {
+  t: (k: string, vars?: Record<string, string>) => string
+  connecting: boolean
+  error: string | null
+}
+
+function NotInstalled({
+  t,
+  connecting: _connecting,
+  error,
+  onInstall,
+}: CardProps & { onInstall: () => void }) {
+  return (
+    <>
+      <header className="flex flex-col items-center gap-2 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <BookOpen className="h-6 w-6" />
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("tutorial.tagline")}</p>
+      </header>
+      <ul className="space-y-2 text-sm">
+        {[
+          t("tutorial.bullet.recall"),
+          t("tutorial.bullet.link"),
+          t("tutorial.bullet.context"),
+        ].map((line, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span className="text-foreground/90">{line}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-col items-center gap-1.5">
+        <Button onClick={onInstall} size="lg" className="min-w-[200px]">
+          <Sparkles className="mr-2 h-4 w-4" />
+          {t("oneClick.button")}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          {t("oneClick.description")}
+        </p>
+        {error && (
+          <p className="text-center text-xs text-destructive">{error}</p>
+        )}
+      </div>
+    </>
+  )
+}
+
+function Stopped({
+  t,
+  connecting,
+  error,
+  onStart,
+}: CardProps & { onStart: () => void }) {
+  return (
+    <>
+      <header className="flex flex-col items-center gap-2 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          <Download className="h-6 w-6" />
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {t("stage.stopped.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("stage.stopped.description")}
+        </p>
+      </header>
+      <div className="flex flex-col items-center gap-1.5">
+        <Button
+          onClick={onStart}
+          disabled={connecting}
+          size="lg"
+          className="min-w-[200px]"
+        >
+          {connecting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-4 w-4" />
+          )}
+          {connecting ? t("stage.stopped.starting") : t("stage.stopped.button")}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          {t("stage.stopped.hint")}
+        </p>
+        {error && (
+          <p className="text-center text-xs text-destructive">{error}</p>
+        )}
+      </div>
+    </>
+  )
+}

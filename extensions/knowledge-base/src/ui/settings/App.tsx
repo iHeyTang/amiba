@@ -16,57 +16,14 @@ import { useCallback, useEffect, useState } from "react"
 import { Button, Input, Label, ScrollArea } from "@hermes-x/ui"
 
 import { hermes } from "../shared/hermes-bridge"
-import enCatalog from "../../i18n/en.json"
-import zhCNCatalog from "../../i18n/zh-CN.json"
+import { DisconnectedCard } from "../shared/DisconnectedCard"
+import { useT, useTheme } from "../shared/i18n"
+import type { BrainHealthInfo, LifecycleProbe, LifecycleStage } from "../shared/lifecycle"
 import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
-
-// ---------------------------------------------------------------------------
-// Inline i18n
-// ---------------------------------------------------------------------------
-
-function useT() {
-  const [lang, setLang] = useState<string>(() => hermes.language)
-  useEffect(() => {
-    setLang(hermes.language)
-    return hermes.on("language", setLang)
-  }, [])
-  const catalog = lang === "zh-CN" ? (zhCNCatalog as Record<string, string>) : (enCatalog as Record<string, string>)
-  return (k: string, vars?: Record<string, string>): string => {
-    let str = catalog[k] ?? k
-    if (vars) {
-      for (const [key, val] of Object.entries(vars)) {
-        str = str.replaceAll(`{${key}}`, val)
-      }
-    }
-    return str
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Theme sync
-// ---------------------------------------------------------------------------
-
-function useTheme() {
-  useEffect(() => {
-    const apply = (theme: string) => {
-      document.documentElement.classList.toggle("dark", theme === "dark")
-    }
-    apply(hermes.theme)
-    return hermes.on("theme", apply)
-  }, [])
-}
 
 // ---------------------------------------------------------------------------
 // IPC types
 // ---------------------------------------------------------------------------
-
-interface BrainHealthInfo {
-  status: string
-  version?: string
-  db?: string
-  transport?: string
-  engine?: string
-}
 
 interface GBrainProvider {
   id: string
@@ -83,15 +40,6 @@ interface ListProvidersResult {
   ok: boolean
   providers?: GBrainProvider[]
   binary: string
-  error?: string
-}
-
-interface EnsureResult {
-  ok: boolean
-  started: boolean
-  alreadyRunning: boolean
-  binary: string
-  pid?: number
   error?: string
 }
 
@@ -427,11 +375,14 @@ export default function App() {
   useTheme()
   const t = useT()
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
+  // Settings shares the main panel's stage model. While stage is null
+  // the boot probe is in flight; not-installed/stopped fall through to
+  // the shared DisconnectedCard; no-provider/ready render the provider
+  // management + advanced URL chrome below.
+  const [stage, setStage] = useState<LifecycleStage | null>(null)
   const [healthInfo, setHealthInfo] = useState<BrainHealthInfo | null>(null)
   const [connecting, setConnecting] = useState(false)
-  const [starting, setStarting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [bootLoading, setBootLoading] = useState(true)
   // URL is in an Advanced collapse — dirty/saved drive the inline
   // success affordance after the user edits + saves the URL there.
   const [dirty, setDirty] = useState(false)
@@ -459,46 +410,23 @@ export default function App() {
     void refreshOverrides()
   }, [refreshOverrides])
 
+  const probeStage = useCallback(async () => {
+    try {
+      const p = await hermes.ipc.invoke<LifecycleProbe>("lifecycle.probe")
+      setStage(p.stage)
+      setHealthInfo(p.health)
+    } catch {
+      setStage("stopped")
+      setHealthInfo(null)
+    }
+  }, [])
+
   // Boot
   useEffect(() => {
     void (async () => {
-      try {
-        const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
-        if (savedUrl) setUrl(savedUrl)
-
-        let h: BrainHealthInfo | null = null
-        try {
-          h = await hermes.ipc.invoke<BrainHealthInfo | null>("health")
-        } catch {
-          // ignore
-        }
-        if (!h) {
-          setStarting(true)
-          try {
-            const r = await hermes.ipc.invoke<EnsureResult | null>("launcher.ensure")
-            if (r && !r.ok) {
-              setConnectionError(
-                t("connection.error", {
-                  error: r.error ?? "ensure failed",
-                }),
-              )
-            } else {
-              try {
-                h = await hermes.ipc.invoke<BrainHealthInfo | null>("health")
-              } catch {
-                // ignore
-              }
-            }
-          } catch {
-            // ensure not available on this host
-          } finally {
-            setStarting(false)
-          }
-        }
-        if (h) setHealthInfo(h)
-      } finally {
-        setBootLoading(false)
-      }
+      const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
+      if (savedUrl) setUrl(savedUrl)
+      await probeStage()
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -531,50 +459,13 @@ export default function App() {
       setConnectionError(null)
       setSaved(false)
       try {
-        const u = url.trim()
         if (persist) {
-          await hermes.settings.set(BRAIN_URL_KEY, u)
+          await hermes.settings.set(BRAIN_URL_KEY, url.trim())
           setDirty(false)
         }
-        let h: BrainHealthInfo | null = null
-        try {
-          h = await hermes.ipc.invoke<BrainHealthInfo | null>("health")
-        } catch {
-          // ignore
-        }
-        if (!h) {
-          setStarting(true)
-          try {
-            const r = await hermes.ipc.invoke<EnsureResult | null>("launcher.ensure")
-            if (r && !r.ok) {
-              setHealthInfo(null)
-              setConnectionError(
-                t("connection.error", {
-                  error: r.error ?? "ensure failed",
-                }),
-              )
-              return
-            }
-            try {
-              h = await hermes.ipc.invoke<BrainHealthInfo | null>("health")
-            } catch {
-              // ignore
-            }
-          } catch {
-            // ensure not available
-          } finally {
-            setStarting(false)
-          }
-        }
-        if (!h) {
-          setHealthInfo(null)
-          setConnectionError(t("connection.failed"))
-          return
-        }
-        setHealthInfo(h)
+        await probeStage()
         if (persist) setSaved(true)
       } catch (e) {
-        setHealthInfo(null)
         setConnectionError(
           t("connection.error", {
             error: (e as Error).message ?? String(e),
@@ -585,8 +476,32 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [url],
+    [url, probeStage],
   )
+
+  // -------------------------------------------------------------------------
+  // Render: shared DisconnectedCard for not-installed / stopped. Settings
+  // chrome is meaningless until the service is reachable, so we delegate
+  // to the same onboarding component the main panel uses.
+  // -------------------------------------------------------------------------
+  if (stage === null) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-background">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+  if (stage === "not-installed" || stage === "stopped") {
+    return (
+      <DisconnectedCard
+        stage={stage}
+        onProbeUpdate={(p) => {
+          setStage(p.stage)
+          setHealthInfo(p.health)
+        }}
+      />
+    )
+  }
 
   const connected = !!healthInfo
 
@@ -602,9 +517,7 @@ export default function App() {
             {t("config.subtitle")}
           </p>
         </div>
-        {bootLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        ) : connected ? (
+        {connected ? (
           <span className="flex items-center gap-1.5 text-xs text-[hsl(var(--success))]">
             <Check className="h-3 w-3" />
             {t("connected")}
@@ -623,19 +536,9 @@ export default function App() {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-6 p-6">
-          {/* Transient "starting…" / connection error shown only while a
-              boot probe or URL change is in flight. The provider section
-              owns the rest of the connectivity feedback. */}
-          {(starting || connectionError) && (
+          {connectionError && (
             <section className="rounded-lg border border-border bg-card p-3 text-xs">
-              {starting ? (
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {t("connection.starting")}
-                </span>
-              ) : connectionError ? (
-                <span className="text-destructive">{connectionError}</span>
-              ) : null}
+              <span className="text-destructive">{connectionError}</span>
             </section>
           )}
 
@@ -761,13 +664,12 @@ export default function App() {
                     }}
                     placeholder={BRAIN_DEFAULT_URL}
                     className="h-8 font-mono text-xs"
-                    disabled={bootLoading}
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={() => void testConnection({ persist: true })}
-                    disabled={connecting || bootLoading}
+                    disabled={connecting}
                     size="sm"
                   >
                     {connecting ? (

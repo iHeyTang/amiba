@@ -12,20 +12,15 @@
  */
 
 import {
-  BookOpen,
-  Check,
   ChevronDown,
   ChevronUp,
-  Download,
   FileText,
   Link2,
   Loader2,
-  Play,
   Plus,
   RefreshCw,
   Search,
   Settings as SettingsIcon,
-  Sparkles,
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Streamdown } from "streamdown"
@@ -40,56 +35,14 @@ import {
 } from "@hermes-x/ui"
 
 import { hermes } from "../shared/hermes-bridge"
-import enCatalog from "../../i18n/en.json"
-import zhCNCatalog from "../../i18n/zh-CN.json"
-import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
+import { DisconnectedCard } from "../shared/DisconnectedCard"
+import { useT, useTheme } from "../shared/i18n"
+import type { BrainHealthInfo, LifecycleProbe, LifecycleStage } from "../shared/lifecycle"
 import { BRAIN_DEFAULT_URL, BRAIN_URL_KEY } from "../../main/lib/constants"
-
-// ---------------------------------------------------------------------------
-// Inline i18n — no host.i18n dependency
-// ---------------------------------------------------------------------------
-
-function useT() {
-  const [lang, setLang] = useState<string>(() => hermes.language)
-  useEffect(() => {
-    setLang(hermes.language)
-    return hermes.on("language", setLang)
-  }, [])
-  const catalog = lang === "zh-CN" ? (zhCNCatalog as Record<string, string>) : (enCatalog as Record<string, string>)
-  return (k: string, vars?: Record<string, string>): string => {
-    let str = catalog[k] ?? k
-    if (vars) {
-      for (const [key, val] of Object.entries(vars)) {
-        str = str.replaceAll(`{${key}}`, val)
-      }
-    }
-    return str
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Theme sync
-// ---------------------------------------------------------------------------
-
-function useTheme() {
-  useEffect(() => {
-    const apply = (theme: string) => {
-      document.documentElement.classList.toggle("dark", theme === "dark")
-    }
-    apply(hermes.theme)
-    return hermes.on("theme", apply)
-  }, [])
-}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface BrainHealthInfo {
-  status: string
-  version?: string
-  db?: string
-}
 
 interface BrainSearchResult {
   slug: string
@@ -117,19 +70,6 @@ interface BrainPage {
   created_at?: string
   tags?: string[]
   frontmatter?: Record<string, unknown> | null
-}
-
-/**
- * Mirrors LifecycleProbe in src/main/index.ts. The renderer can't import
- * from the main entry (different bundles), so the shape is duplicated.
- */
-type LifecycleStage = "not-installed" | "stopped" | "no-provider" | "ready"
-interface LifecycleProbe {
-  stage: LifecycleStage
-  binary: string | null
-  health: BrainHealthInfo | null
-  providerCount: number
-  readyProviderCount: number
 }
 
 // ---------------------------------------------------------------------------
@@ -232,55 +172,6 @@ export default function App() {
   // -------------------------------------------------------------------------
   // One-click install — opens chat via IPC to desktop host
   // -------------------------------------------------------------------------
-
-  // -------------------------------------------------------------------------
-  // Start gbrain serve (stopped → running). Used by the "stopped" stage
-  // card — binary is on disk but the daemon isn't up (typical after a
-  // reboot or terminal close).
-  // -------------------------------------------------------------------------
-  const startServe = useCallback(async () => {
-    setConnecting(true)
-    setConnectionError(null)
-    try {
-      const r = await hermes.ipc.invoke<
-        { ok: boolean; error?: string } | null
-      >("launcher.ensure")
-      if (r && !r.ok) {
-        setConnectionError(
-          t("connection.error", { error: r.error ?? "ensure failed" }),
-        )
-      }
-      await probeStage()
-    } catch (e) {
-      setConnectionError(
-        t("connection.error", { error: (e as Error).message ?? String(e) }),
-      )
-    } finally {
-      setConnecting(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [probeStage])
-
-  const startOneClickInstall = useCallback(async () => {
-    setConnectionError(null)
-    try {
-      const existingUrl = (await hermes.settings.get<string>(BRAIN_URL_KEY, "")).trim()
-      if (!existingUrl) {
-        await hermes.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
-      }
-      await hermes.ipc.invoke("chat:queue-prompt", {
-        text: buildBrainInstallPrompt(hermes.language === "zh-CN" ? "zh-CN" : "en"),
-        mode: "new",
-      })
-    } catch (e) {
-      setConnectionError(
-        t("connection.error", {
-          error: (e as Error).message ?? String(e),
-        }),
-      )
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // -------------------------------------------------------------------------
   // Search
@@ -414,97 +305,24 @@ export default function App() {
     )
   }
 
+  if (stage === "not-installed" || stage === "stopped") {
+    return (
+      <DisconnectedCard
+        stage={stage}
+        onProbeUpdate={(p) => {
+          setStage(p.stage)
+          setHealthInfo(p.health)
+        }}
+      />
+    )
+  }
+
   if (stage !== "ready") {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-background">
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex min-h-full w-full justify-center px-6 py-6">
             <div className="my-auto flex w-full max-w-xl flex-col gap-5">
-              {stage === "not-installed" && (
-                <>
-                  <header className="flex flex-col items-center gap-2 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <BookOpen className="h-6 w-6" />
-                    </div>
-                    <h1 className="text-xl font-semibold tracking-tight">
-                      {t("title")}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                      {t("tutorial.tagline")}
-                    </p>
-                  </header>
-                  <ul className="space-y-2 text-sm">
-                    {[
-                      t("tutorial.bullet.recall"),
-                      t("tutorial.bullet.link"),
-                      t("tutorial.bullet.context"),
-                    ].map((line, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        <span className="text-foreground/90">{line}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex flex-col items-center gap-1.5">
-                    <Button
-                      onClick={() => void startOneClickInstall()}
-                      size="lg"
-                      className="min-w-[200px]"
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      {t("oneClick.button")}
-                    </Button>
-                    <p className="text-center text-xs text-muted-foreground">
-                      {t("oneClick.description")}
-                    </p>
-                    {connectionError && (
-                      <p className="text-center text-xs text-destructive">
-                        {connectionError}
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {stage === "stopped" && (
-                <>
-                  <header className="flex flex-col items-center gap-2 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                      <Download className="h-6 w-6" />
-                    </div>
-                    <h1 className="text-xl font-semibold tracking-tight">
-                      {t("stage.stopped.title")}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                      {t("stage.stopped.description")}
-                    </p>
-                  </header>
-                  <div className="flex flex-col items-center gap-1.5">
-                    <Button
-                      onClick={() => void startServe()}
-                      disabled={connecting}
-                      size="lg"
-                      className="min-w-[200px]"
-                    >
-                      {connecting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="mr-2 h-4 w-4" />
-                      )}
-                      {connecting ? t("stage.stopped.starting") : t("stage.stopped.button")}
-                    </Button>
-                    <p className="text-center text-xs text-muted-foreground">
-                      {t("stage.stopped.hint")}
-                    </p>
-                    {connectionError && (
-                      <p className="text-center text-xs text-destructive">
-                        {connectionError}
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-
               {stage === "no-provider" && (
                 <>
                   <header className="flex flex-col items-center gap-2 text-center">
