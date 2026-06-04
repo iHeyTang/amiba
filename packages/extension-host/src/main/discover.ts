@@ -23,11 +23,8 @@ export function validateManifest(raw: unknown): ValidationResult {
     return { ok: false, error: `invalid version: ${String(m.version)}` }
   }
   const entries = m.entries as Record<string, unknown> | undefined
-  if (
-    !entries ||
-    (typeof entries.main !== "string" && typeof entries.renderer !== "string")
-  ) {
-    return { ok: false, error: "entries must include main and/or renderer" }
+  if (!entries || typeof entries !== "object") {
+    return { ok: false, error: "entries must be an object (all keys optional)" }
   }
 
   const contributes = m.contributes as Record<string, unknown> | undefined

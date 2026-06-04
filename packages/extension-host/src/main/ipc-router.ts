@@ -85,7 +85,6 @@ export function registerMetadataChannels(opts: {
     extensionId: string,
     locale: "en" | "zh-CN",
   ) => Promise<Record<string, string>>
-  getRendererBundleUrl: (extensionId: string) => Promise<string | null>
 }) {
   ipcMain.handle("extensions:list", () => opts.getManifests())
   ipcMain.handle(
@@ -95,10 +94,75 @@ export function registerMetadataChannels(opts: {
       payload: { extensionId: string; locale: "en" | "zh-CN" },
     ) => opts.getI18n(payload.extensionId, payload.locale),
   )
+}
+
+/**
+ * Register IPC channels required by the WebView bridge preload:
+ *
+ * - `webview:get-state` (sync + async) — returns { language, theme, extensionId }
+ *   for a given extensionId. The preload calls this once at startup.
+ * - `webview:preload-path` — returns the absolute file:// path of the
+ *   webview bridge bundle so the renderer can inject it via the preload attr.
+ * - `ext-settings:get` / `ext-settings:set` — namespaced settings access.
+ *   The extension's key is prepended with `ext.<id>.` before hitting the store.
+ */
+export function registerWebViewChannels(opts: {
+  /** Returns the current language code, e.g. "en" or "zh-CN". */
+  getLanguage: () => string
+  /** Returns the current theme, e.g. "light" or "dark". */
+  getTheme: () => string
+  /** Absolute path to the compiled webview-bridge preload bundle. */
+  webviewBridgePath: string
+  /** Reads/writes the shared settings store. */
+  settingsStore: {
+    get<T>(key: string, fallback: T): Promise<T>
+    set(key: string, value: unknown): Promise<void>
+  }
+}): void {
+  // Synchronous version used by the preload (ipcRenderer.sendSync).
+  // Must be registered with ipcMain.on (not handle) for sendSync.
+  ipcMain.on(
+    "webview:get-state",
+    (event, extensionId: string) => {
+      event.returnValue = {
+        language: opts.getLanguage(),
+        theme: opts.getTheme(),
+        extensionId: typeof extensionId === "string" ? extensionId : "unknown",
+      }
+    },
+  )
+
+  // Async version as well, for completeness.
+  ipcMain.handle("webview:get-state-async", (_e, extensionId: string) => ({
+    language: opts.getLanguage(),
+    theme: opts.getTheme(),
+    extensionId: typeof extensionId === "string" ? extensionId : "unknown",
+  }))
+
+  ipcMain.handle("webview:preload-path", () => opts.webviewBridgePath)
+
   ipcMain.handle(
-    "extensions:renderer-bundle-url",
-    async (_e, extensionId: string) =>
-      opts.getRendererBundleUrl(extensionId),
+    "ext-settings:get",
+    async (
+      _e,
+      payload: { extensionId: string; key: string; fallback: unknown },
+    ) => {
+      const { extensionId, key, fallback } = payload ?? {}
+      if (typeof extensionId !== "string" || typeof key !== "string") return fallback
+      return opts.settingsStore.get(`ext.${extensionId}.${key}`, fallback)
+    },
+  )
+
+  ipcMain.handle(
+    "ext-settings:set",
+    async (
+      _e,
+      payload: { extensionId: string; key: string; value: unknown },
+    ) => {
+      const { extensionId, key, value } = payload ?? {}
+      if (typeof extensionId !== "string" || typeof key !== "string") return
+      await opts.settingsStore.set(`ext.${extensionId}.${key}`, value)
+    },
   )
 }
 

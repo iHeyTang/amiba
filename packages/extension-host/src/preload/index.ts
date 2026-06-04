@@ -29,7 +29,6 @@ export interface MarketplaceBridge {
 export interface ExtensionsBridge {
   listManifests(): Promise<ExtensionManifest[]>
   invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
-  rendererBundleUrl(extensionId: string): Promise<string | null>
   i18nResources(
     extensionId: string,
     locale: "en" | "zh-CN",
@@ -60,8 +59,6 @@ export function createExtensionsBridge(): ExtensionsBridge {
     listManifests: () => ipcRenderer.invoke("extensions:list"),
     invoke: (extensionId, channel, args) =>
       ipcRenderer.invoke("ext-invoke", { extensionId, channel, args }),
-    rendererBundleUrl: (extensionId) =>
-      ipcRenderer.invoke("extensions:renderer-bundle-url", extensionId),
     i18nResources: (extensionId, locale) =>
       ipcRenderer.invoke("extensions:i18n", { extensionId, locale }),
     status: () => ipcRenderer.invoke("extensions:status"),
@@ -80,5 +77,19 @@ export function createExtensionsBridge(): ExtensionsBridge {
       ipcRenderer.on("extensions:changed", handler)
       return () => ipcRenderer.off("extensions:changed", handler)
     },
+  }
+}
+
+/**
+ * Returns the absolute file:// path of the compiled webview bridge preload
+ * bundle. The desktop renderer passes this to `<webview preload="...">` so
+ * extension pages get `window.hermes` injected.
+ */
+export function createWebviewPreloadBridge() {
+  return {
+    getWebviewPreloadPath: (): Promise<string> =>
+      ipcRenderer.invoke("webview:preload-path"),
+    getWebviewInitState: (): Promise<{ language: string; theme: string }> =>
+      ipcRenderer.invoke("webview:get-state-async", ""),
   }
 }

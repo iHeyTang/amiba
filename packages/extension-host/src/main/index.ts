@@ -12,6 +12,7 @@ import {
   registerMarketplaceChannels,
   registerMetadataChannels,
   registerStatusChannel,
+  registerWebViewChannels,
 } from "./ipc-router"
 import { makeMainHost } from "./make-main-host"
 import { createExtensionStorage } from "./storage-fs"
@@ -44,12 +45,20 @@ export interface MainBootOptions {
     locale: "en" | "zh-CN",
   ) => Promise<Record<string, string>>
   /**
-   * Returns a `file://` or `app://` URL the renderer can `import()`.
-   * When `registryPath` is provided, the URL is computed automatically
-   * from `rootDir + manifest.entries.renderer` and this callback is ignored.
-   * Keep it for backward compat with callers that do not set registryPath.
+   * Returns the current UI language code (e.g. "en" or "zh-CN").
+   * Used by the webview bridge for `webview:get-state`.
    */
-  getRendererBundleUrl?: (extensionId: string) => Promise<string | null>
+  getLanguage?: () => string
+  /**
+   * Returns the current UI theme ("light" or "dark").
+   * Used by the webview bridge for `webview:get-state`.
+   */
+  getTheme?: () => string
+  /**
+   * Absolute path to the compiled webview-bridge preload bundle.
+   * Used by the webview bridge for `webview:preload-path`.
+   */
+  webviewBridgePath?: string
 }
 
 export interface MainBootResult {
@@ -85,28 +94,23 @@ export async function bootMainExtensionHost(
   // Per-extension disposable tracking: extensionId → Disposable[]
   const extDisposables = new Map<string, Disposable[]>()
 
-  /**
-   * Compute the renderer bundle URL for an extension.
-   * The absolute path is derived from rootDir + entries.renderer.
-   * Falls back to the legacy callback when neither rootDir nor entry is found.
-   */
-  const resolveRendererBundleUrl = async (extensionId: string): Promise<string | null> => {
-    const entry = manifestEntries.find((m) => m.manifest.id === extensionId)
-    if (entry && entry.manifest.entries.renderer) {
-      return join(entry.rootDir, entry.manifest.entries.renderer)
-    }
-    if (opts.getRendererBundleUrl) {
-      return opts.getRendererBundleUrl(extensionId)
-    }
-    return null
-  }
-
   registerInvokeRouter(channelTable, getManifests)
   registerMetadataChannels({
     getManifests,
     getI18n: opts.getI18n,
-    getRendererBundleUrl: resolveRendererBundleUrl,
   })
+
+  // Register webview bridge IPC channels (language/theme state, settings,
+  // and preload path). These are only wired when the host is told about
+  // them; desktop passes the paths/getters; plain unit tests omit them.
+  if (opts.webviewBridgePath) {
+    registerWebViewChannels({
+      getLanguage: opts.getLanguage ?? (() => "en"),
+      getTheme: opts.getTheme ?? (() => "dark"),
+      webviewBridgePath: opts.webviewBridgePath,
+      settingsStore: opts.settingsStore,
+    })
+  }
   registerStatusChannel(() =>
     registry.list().map((e) => ({
       id: e.id,
