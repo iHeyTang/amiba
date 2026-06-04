@@ -12,23 +12,7 @@ export default defineConfig({
       fileName: () => "main.cjs",
     },
     rollupOptions: {
-      external: [
-        "electron",
-        /^@hermes-x\//,
-        /^node:/,
-        // bare Node.js built-ins (without the node: prefix)
-        "child_process",
-        "fs",
-        "os",
-        "path",
-        "crypto",
-        "events",
-        "stream",
-        "util",
-        "assert",
-        "buffer",
-        "url",
-      ],
+      external: ["electron", /^node:/],
     },
   },
 })
