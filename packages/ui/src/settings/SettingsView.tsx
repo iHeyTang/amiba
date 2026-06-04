@@ -16,9 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-// TODO(phase-b): SlotOutlet removed — extension settings tabs will render via
-// <ExtensionWebView> using useExtensionSettingsTabs() viewUrl. Stubbed for now.
-import { useExtensionSettingsTabs } from "@hermes-x/extension-host/renderer";
+import { ExtensionWebView, useExtensionSettingsTabs } from "@hermes-x/extension-host/renderer";
 import { resolveExtensionIcon } from "../chat/ActivityBar";
 
 import { useT } from "@hermes-x/i18n";
@@ -483,9 +481,14 @@ export function SettingsView({
                   </div>
                 </ScrollArea>
               </>
-            ) : null}
-            {/* TODO(phase-b): Render extension settings tab via <ExtensionWebView>
-               using useExtensionSettingsTabs() viewUrl for the active tab. */}
+            ) : (() => {
+              // Extension-contributed settings tab — render via WebView.
+              const extTab = extensionTabs.find((tab) => tab.id === mainTab);
+              if (extTab) {
+                return <ExtensionWebView src={extTab.viewUrl} className="h-full w-full" />;
+              }
+              return null;
+            })()}
           </div>
         )}
       </main>
