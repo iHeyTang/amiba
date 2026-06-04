@@ -12,13 +12,10 @@ export interface ExtensionManifest {
   version: string
   /** Host version constraint. Phase 1: read but not enforced. */
   engines?: { "hermes-x"?: string }
-  /** Relative bundle paths (each optional — pure renderer / pure main allowed). */
+  /** Relative bundle paths. Only main remains; renderer bundles are gone. */
   entries: {
     main?: string
-    renderer?: string
   }
-  /** Relative paths to flat-key JSON catalogs per locale. */
-  i18n?: Partial<Record<"en" | "zh-CN", string>>
   /** Static contribution declarations. Loader registers them whether or not activate runs. */
   contributes?: ManifestContributes
   /** Hermes-agent plugin dependencies. */
@@ -34,22 +31,33 @@ export interface ExtensionManifest {
 export interface ManifestContributes {
   activityBar?: Array<{
     id: string
-    iconKey: string
-    labelKey: string
+    /** Lucide icon name. */
+    icon: string
+    /** Locale → display text. */
+    labels: Record<string, string>
     order?: number
   }>
   sidebarViews?: Array<{
     id: string
     /** "activityBar:<id>" — view is mounted when matching activity item is selected. */
     anchor: string
+    /** Relative path to the HTML page, e.g. "ui/sidebar.html". */
+    view: string
   }>
   settingsTabs?: Array<{
     id: string
-    labelKey: string
+    /** Locale → display text. */
+    labels: Record<string, string>
+    /** Optional lucide icon name. */
+    icon?: string
+    /** Relative path to the HTML page. */
+    view: string
     order?: number
   }>
   composerHints?: Array<{
     id: string
+    /** Relative path to the HTML page. */
+    view: string
   }>
 }
 

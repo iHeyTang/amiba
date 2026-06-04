@@ -18,16 +18,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "main": { "type": "string" },
-        "renderer": { "type": "string" }
-      }
-    },
-    "i18n": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "en": { "type": "string" },
-        "zh-CN": { "type": "string" }
+        "main": { "type": "string" }
       }
     },
     "contributes": {
@@ -38,12 +29,15 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "iconKey", "labelKey"],
+            "required": ["id", "icon", "labels"],
             "additionalProperties": false,
             "properties": {
               "id": { "type": "string" },
-              "iconKey": { "type": "string" },
-              "labelKey": { "type": "string" },
+              "icon": { "type": "string" },
+              "labels": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
               "order": { "type": "number" }
             }
           }
@@ -52,11 +46,12 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "anchor"],
+            "required": ["id", "anchor", "view"],
             "additionalProperties": false,
             "properties": {
               "id": { "type": "string" },
-              "anchor": { "type": "string", "pattern": "^activityBar:" }
+              "anchor": { "type": "string", "pattern": "^activityBar:" },
+              "view": { "type": "string" }
             }
           }
         },
@@ -64,11 +59,16 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "labelKey"],
+            "required": ["id", "labels", "view"],
             "additionalProperties": false,
             "properties": {
               "id": { "type": "string" },
-              "labelKey": { "type": "string" },
+              "labels": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "icon": { "type": "string" },
+              "view": { "type": "string" },
               "order": { "type": "number" }
             }
           }
@@ -77,9 +77,12 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id"],
+            "required": ["id", "view"],
             "additionalProperties": false,
-            "properties": { "id": { "type": "string" } }
+            "properties": {
+              "id": { "type": "string" },
+              "view": { "type": "string" }
+            }
           }
         }
       }
