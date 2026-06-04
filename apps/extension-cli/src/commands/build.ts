@@ -7,7 +7,7 @@ export async function buildCommand() {
   readExtensionManifest(cwd) // validates we're in an extension dir
   console.log(kleur.bold("Building main bundle…"))
   await spawnAsync("pnpm", ["vite", "build", "-c", "vite.main.config.ts"], { cwd }).exit
-  console.log(kleur.bold("Building renderer bundle…"))
-  await spawnAsync("pnpm", ["vite", "build", "-c", "vite.renderer.config.ts"], { cwd }).exit
+  console.log(kleur.bold("Building UI bundles…"))
+  await spawnAsync("pnpm", ["vite", "build", "-c", "vite.ui.config.ts"], { cwd }).exit
   console.log(kleur.green("✓"), "Build complete")
 }
