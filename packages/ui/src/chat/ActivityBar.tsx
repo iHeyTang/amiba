@@ -15,8 +15,8 @@
  * views fill the main pane.
  *
  * Extensions can contribute additional items via `extensionItems`. Each
- * item declares an `iconKey` resolved by the optional `resolveIcon` prop;
- * when unresolved, BookOpen is used as a neutral fallback.
+ * item declares an `icon` (Lucide name) and a pre-localised `label`
+ * resolved by the manifest-driven hooks before reaching this component.
  */
 
 import { BookOpen, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
@@ -40,6 +40,13 @@ export function resolveExtensionIcon(name: string): ReactNode | null {
  */
 export type ActivityViewId = string;
 
+interface SortableItem {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  order: number;
+}
+
 export interface ActivityItem {
   id: string;
   icon: ReactNode;
@@ -50,7 +57,7 @@ export interface ExtensionActivityItem {
   id: string;
   /** Lucide icon name (resolved via the optional `resolveIcon` prop). */
   icon: string;
-  /** Localized label — the extension picked it via its own catalog already. */
+  /** Localized label — the extension resolved it via manifest labels already. */
   label: string;
   order?: number;
 }
@@ -78,40 +85,44 @@ export function ActivityBar({
 }: ActivityBarProps) {
   const { t } = useT();
 
-  const coreItems: ActivityItem[] = [
+  // Core items get implicit orders 1–4 so that extension items with
+  // order >= 100 (the manifest default) always sort after them, while
+  // an extension that explicitly sets order=0 can still sort first.
+  const coreItems: SortableItem[] = [
     {
       id: "chats",
       icon: <MessageSquare className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.chats"),
+      order: 1,
     },
     {
       id: "scheduled",
       icon: <Clock className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.scheduled"),
+      order: 2,
     },
     {
       id: "skills",
       icon: <Sparkles className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.skills"),
+      order: 3,
     },
     {
       id: "tools",
       icon: <Wrench className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.tools"),
+      order: 4,
     },
   ];
 
-  const extItems: ActivityItem[] = (extensionItems ?? []).map((e) => ({
+  const extItems: SortableItem[] = (extensionItems ?? []).map((e) => ({
     id: e.id,
     icon: resolveIcon?.(e.icon) ?? <BookOpen className="h-4 w-4" />,
     label: e.label,
+    order: e.order ?? 100,
   }));
 
-  const items = [...coreItems, ...extItems].sort((a, b) => {
-    const ao = extensionItems?.find((e) => e.id === a.id)?.order ?? 0;
-    const bo = extensionItems?.find((e) => e.id === b.id)?.order ?? 0;
-    return ao - bo;
-  });
+  const items = [...coreItems, ...extItems].sort((a, b) => a.order - b.order);
   return (
     <nav
       className={cn(
