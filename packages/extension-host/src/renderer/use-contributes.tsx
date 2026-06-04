@@ -11,6 +11,12 @@ import { getCurrentLanguage, subscribeLanguage } from "@hermes-x/i18n"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
 
 // ---------------------------------------------------------------------------
+// Internal manifest entry type (what listManifests now returns)
+// ---------------------------------------------------------------------------
+
+type ManifestEntry = { manifest: ExtensionManifest; path: string }
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -26,7 +32,7 @@ export interface SidebarViewContribution {
   id: string
   extensionId: string
   anchor: string
-  /** Full hermes-ext:// URL pointing at the HTML page. */
+  /** Full file:// URL pointing at the HTML page (includes ?_ext=<id>). */
   viewUrl: string
 }
 
@@ -51,7 +57,7 @@ export interface ComposerHintContribution {
 
 type HermesWindowShape = {
   extensions: {
-    listManifests(): Promise<ExtensionManifest[]>
+    listManifests(): Promise<ManifestEntry[]>
     onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
   }
 }
@@ -60,10 +66,23 @@ function getExtensionsBridge(): HermesWindowShape["extensions"] {
   return (window as unknown as { hermes: HermesWindowShape }).hermes.extensions
 }
 
-function viewUrl(extensionId: string, view: string): string {
-  // view may already be prefixed or start with a slash — normalise.
-  const normalised = view.replace(/^\//, "")
-  return `hermes-ext://${extensionId}/${normalised}`
+/**
+ * Build a `file://` URL for an extension view HTML file, appending
+ * `?_ext=<extensionId>` so the webview preload can identify the extension
+ * without relying on `location.hostname` (which is empty for file:// URLs).
+ *
+ * NOTE: On Windows, absolute paths use backslashes. We normalise them to
+ * forward slashes for the URL. Full Windows path-to-URL handling (drive
+ * letters, UNC paths) is a TODO — this project targets macOS/Linux for v1.
+ */
+function buildViewUrl(rootPath: string, view: string, extensionId: string): string {
+  // Normalise: strip leading slash from view, convert backslashes
+  const normalView = view.replace(/^\//, "").replace(/\\/g, "/")
+  const normalRoot = rootPath.replace(/\\/g, "/")
+  const abs = `${normalRoot}/${normalView}`
+  const url = new URL(`file://${abs}`)
+  url.searchParams.set("_ext", extensionId)
+  return url.toString()
 }
 
 function pickLabel(labels: Record<string, string>, language: string, fallback: string): string {
@@ -79,8 +98,8 @@ function useCurrentLanguage(): string {
   return lang
 }
 
-function useManifests(): ExtensionManifest[] {
-  const [manifests, setManifests] = useState<ExtensionManifest[]>([])
+function useManifests(): ManifestEntry[] {
+  const [entries, setEntries] = useState<ManifestEntry[]>([])
 
   useEffect(() => {
     const bridge = getExtensionsBridge()
@@ -88,7 +107,7 @@ function useManifests(): ExtensionManifest[] {
 
     const load = () => {
       void bridge.listManifests().then((m) => {
-        if (!cancelled) setManifests(m)
+        if (!cancelled) setEntries(m)
       })
     }
 
@@ -100,7 +119,7 @@ function useManifests(): ExtensionManifest[] {
     }
   }, [])
 
-  return manifests
+  return entries
 }
 
 // ---------------------------------------------------------------------------
@@ -108,10 +127,10 @@ function useManifests(): ExtensionManifest[] {
 // ---------------------------------------------------------------------------
 
 export function useActivityBarItems(): ActivityBarItem[] {
-  const manifests = useManifests()
+  const entries = useManifests()
   const language = useCurrentLanguage()
 
-  return manifests.flatMap((m) =>
+  return entries.flatMap(({ manifest: m }) =>
     (m.contributes?.activityBar ?? []).map((item) => ({
       id: item.id,
       extensionId: m.id,
@@ -123,42 +142,42 @@ export function useActivityBarItems(): ActivityBarItem[] {
 }
 
 export function useSidebarViews(): SidebarViewContribution[] {
-  const manifests = useManifests()
+  const entries = useManifests()
 
-  return manifests.flatMap((m) =>
+  return entries.flatMap(({ manifest: m, path }) =>
     (m.contributes?.sidebarViews ?? []).map((sv) => ({
       id: sv.id,
       extensionId: m.id,
       anchor: sv.anchor,
-      viewUrl: viewUrl(m.id, sv.view),
+      viewUrl: buildViewUrl(path, sv.view, m.id),
     })),
   )
 }
 
 export function useExtensionSettingsTabs(): SettingsTabContribution[] {
-  const manifests = useManifests()
+  const entries = useManifests()
   const language = useCurrentLanguage()
 
-  return manifests.flatMap((m) =>
+  return entries.flatMap(({ manifest: m, path }) =>
     (m.contributes?.settingsTabs ?? []).map((tab) => ({
       id: tab.id,
       extensionId: m.id,
       label: pickLabel(tab.labels, language, tab.id),
       icon: tab.icon,
-      viewUrl: viewUrl(m.id, tab.view),
+      viewUrl: buildViewUrl(path, tab.view, m.id),
       order: tab.order ?? 100,
     })),
   )
 }
 
 export function useComposerHints(): ComposerHintContribution[] {
-  const manifests = useManifests()
+  const entries = useManifests()
 
-  return manifests.flatMap((m) =>
+  return entries.flatMap(({ manifest: m, path }) =>
     (m.contributes?.composerHints ?? []).map((hint) => ({
       id: hint.id,
       extensionId: m.id,
-      viewUrl: viewUrl(m.id, hint.view),
+      viewUrl: buildViewUrl(path, hint.view, m.id),
     })),
   )
 }
