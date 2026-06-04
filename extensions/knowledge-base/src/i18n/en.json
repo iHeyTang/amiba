@@ -18,12 +18,6 @@
   "config.hint": "URL defaults to the local `gbrain serve --http` port (http://127.0.0.1:3131). Override if your server runs on a different port.",
   "config.saveAndTest": "Save & test",
   "config.saved": "Saved",
-  "config.restart": "Restart server",
-  "config.restart.hint": "Use this if a freshly-minted token is rejected — the running server may be holding a stale brain handle.",
-  "config.restarting": "Restarting…",
-  "config.restarted": "Restarted",
-  "config.restart.failed": "Restart failed: {error}",
-
   "config.runtime.title": "Runtime",
   "config.runtime.version": "Version",
   "config.runtime.engine": "Engine",

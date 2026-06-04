@@ -18,12 +18,6 @@
   "config.hint": "URL 默认指向 `gbrain serve --http` 的本地端口 (http://127.0.0.1:3131)。如果服务跑在其他端口可在此处覆盖。",
   "config.saveAndTest": "保存并测试",
   "config.saved": "已保存",
-  "config.restart": "重启服务",
-  "config.restart.hint": "如果刚生成的 token 仍被拒绝，可尝试重启 —— 进程可能还在使用旧的 brain 数据库句柄。",
-  "config.restarting": "正在重启…",
-  "config.restarted": "已重启",
-  "config.restart.failed": "重启失败：{error}",
-
   "config.runtime.title": "运行状态",
   "config.runtime.version": "版本",
   "config.runtime.engine": "引擎",

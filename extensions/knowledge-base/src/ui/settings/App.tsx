@@ -10,7 +10,7 @@
  * as module-level functions sharing the `hermes` bridge and the `useT` hook.
  */
 
-import { Check, Loader2, RefreshCw, RotateCw } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Link2, Loader2, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { Button, Input, Label, ScrollArea } from "@hermes-x/ui"
@@ -432,10 +432,11 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [bootLoading, setBootLoading] = useState(true)
+  // URL is in an Advanced collapse — dirty/saved drive the inline
+  // success affordance after the user edits + saves the URL there.
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [restarting, setRestarting] = useState(false)
-  const [restarted, setRestarted] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const [providers, setProviders] = useState<GBrainProvider[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
@@ -587,31 +588,6 @@ export default function App() {
     [url],
   )
 
-  const restart = useCallback(async () => {
-    setRestarting(true)
-    setRestarted(false)
-    setConnectionError(null)
-    setSaved(false)
-    try {
-      const r = await hermes.ipc.invoke<EnsureResult | null>("launcher.restart")
-      if (r && !r.ok) {
-        setConnectionError(
-          t("config.restart.failed", {
-            error: r.error ?? "unknown error",
-          }),
-        )
-        return
-      }
-      setRestarted(true)
-    } catch {
-      setRestarted(true)
-    } finally {
-      setRestarting(false)
-    }
-    await testConnection({ persist: false })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testConnection])
-
   const connected = !!healthInfo
 
   return (
@@ -647,85 +623,21 @@ export default function App() {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-6 p-6">
-          {/* Connection */}
-          <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-            <h3 className="text-sm font-medium">
-              {t("connection.title")}
-            </h3>
-            <div className="space-y-1.5">
-              <Label htmlFor="brain-config-url" className="text-xs">
-                {t("connection.url")}
-              </Label>
-              <Input
-                id="brain-config-url"
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value)
-                  setDirty(true)
-                  setSaved(false)
-                }}
-                placeholder={BRAIN_DEFAULT_URL}
-                className="h-8 font-mono text-xs"
-                disabled={bootLoading}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button
-                onClick={() => void testConnection({ persist: true })}
-                disabled={connecting || restarting || bootLoading}
-                size="sm"
-              >
-                {connecting ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {dirty
-                  ? t("config.saveAndTest")
-                  : t("connection.test")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void restart()}
-                disabled={restarting || connecting || bootLoading}
-                title={t("config.restart.hint")}
-                size="sm"
-              >
-                {restarting ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RotateCw className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {restarting
-                  ? t("config.restarting")
-                  : t("config.restart")}
-              </Button>
-              {starting && (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {/* Transient "starting…" / connection error shown only while a
+              boot probe or URL change is in flight. The provider section
+              owns the rest of the connectivity feedback. */}
+          {(starting || connectionError) && (
+            <section className="rounded-lg border border-border bg-card p-3 text-xs">
+              {starting ? (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   {t("connection.starting")}
                 </span>
-              )}
-              {!starting && connectionError && (
-                <span className="text-xs text-destructive">
-                  {connectionError}
-                </span>
-              )}
-              {!starting && saved && !connectionError && (
-                <span className="text-xs text-[hsl(var(--success))]">
-                  {t("config.saved")}
-                </span>
-              )}
-              {!starting && restarted && !connectionError && !saved && (
-                <span className="text-xs text-[hsl(var(--success))]">
-                  {t("config.restarted")}
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              {t("config.hint")}
-            </p>
-          </section>
+              ) : connectionError ? (
+                <span className="text-destructive">{connectionError}</span>
+              ) : null}
+            </section>
+          )}
 
           {/* Runtime info */}
           <section className="space-y-3 rounded-lg border border-border bg-card p-4">
@@ -811,6 +723,74 @@ export default function App() {
               )}
             </section>
           ) : null}
+
+          {/* Advanced — the URL knob has no place in the primary flow
+              (loopback default is right for everyone), but keep it
+              accessible for users running gbrain on a custom port or
+              against a remote instance. */}
+          <section className="rounded-lg border border-border/60">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
+              aria-expanded={advancedOpen}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Link2 className="h-3.5 w-3.5" />
+                {t("connection.title")}
+              </span>
+              {advancedOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+            {advancedOpen && (
+              <div className="space-y-3 border-t border-border/60 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="brain-config-url" className="text-xs">
+                    {t("connection.url")}
+                  </Label>
+                  <Input
+                    id="brain-config-url"
+                    value={url}
+                    onChange={(e) => {
+                      setUrl(e.target.value)
+                      setDirty(true)
+                      setSaved(false)
+                    }}
+                    placeholder={BRAIN_DEFAULT_URL}
+                    className="h-8 font-mono text-xs"
+                    disabled={bootLoading}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => void testConnection({ persist: true })}
+                    disabled={connecting || bootLoading}
+                    size="sm"
+                  >
+                    {connecting ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {dirty
+                      ? t("config.saveAndTest")
+                      : t("connection.test")}
+                  </Button>
+                  {saved && !connectionError && (
+                    <span className="text-xs text-[hsl(var(--success))]">
+                      {t("config.saved")}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {t("config.hint")}
+                </p>
+              </div>
+            )}
+          </section>
         </div>
       </ScrollArea>
     </div>
