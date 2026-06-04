@@ -478,9 +478,15 @@ if (!gotSingleInstanceLock) {
       }
     })
 
+    // Absolute path to the extension runner bundle.
+    // In production: out/main/../extension-runner/index.js
+    // In dev: same path (electron-vite outputs all targets under out/)
+    const runnerPath = path.join(__dirname, "../extension-runner/index.js")
+
     const extensionHost = await bootMainExtensionHost({
       registryPath,
       extensionsRoot,
+      runnerPath,
       settingsStore: {
         get: async (key, fallback) => {
           const r = await mainStore.get([key])
