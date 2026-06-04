@@ -39,7 +39,7 @@ import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
-import { ActivityBar, resolveExtensionIcon, type ActivityViewId } from "./ActivityBar";
+import { ActivityBar, type ActivityViewId } from "./ActivityBar";
 import { SessionsListView } from "./SessionsListView";
 import {
   SessionTitleProvider,
@@ -50,8 +50,7 @@ import { SettingsSkills } from "../settings/SettingsSkills";
 import { ToolsView } from "../tools/ToolsView";
 import {
   ExtensionWebView,
-  useActivityBarItems,
-  useSidebarViews,
+  useExtensionMains,
 } from "@hermes-x/extension-host/renderer";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
@@ -355,8 +354,7 @@ function FullScreenChatViewInner({
     };
   }, []);
 
-  const extensionActivityItems = useActivityBarItems();
-  const sidebarViews = useSidebarViews();
+  const extensionMains = useExtensionMains();
 
   function onSidebarViewChange(next: ActivityViewId) {
     setSidebarView(next);
@@ -418,8 +416,7 @@ function FullScreenChatViewInner({
         <ActivityBar
           active={sidebarView}
           onSelect={onSidebarViewChange}
-          extensionItems={extensionActivityItems}
-          resolveIcon={resolveExtensionIcon}
+          extensionItems={extensionMains}
         />
         {/* Inner session-list aside — only when a session-driven view
             (chats / scheduled) is active. Skills and Knowledge are
@@ -471,10 +468,8 @@ function FullScreenChatViewInner({
               openAgentDestination={openAgentDestination}
             />
           ) : (() => {
-            // Extension-contributed sidebar view. Anchor convention:
-            // "activityBar:<activityItemId>" — match the current sidebarView id.
-            const anchor = `activityBar:${sidebarView}`;
-            const contrib = sidebarViews.find((v) => v.anchor === anchor);
+            // Extension-contributed main panel. The sidebarView id IS the extensionId.
+            const contrib = extensionMains.find((m) => m.extensionId === sidebarView);
             if (contrib) {
               return <ExtensionWebView src={contrib.viewUrl} className="h-full w-full" />;
             }

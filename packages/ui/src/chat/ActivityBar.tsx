@@ -24,6 +24,7 @@ import type { ReactNode } from "react";
 
 import { useT } from "@hermes-x/i18n";
 import { cn } from "../primitives";
+import type { MainContribution } from "@hermes-x/extension-host/renderer";
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
@@ -47,33 +48,16 @@ interface SortableItem {
   order: number;
 }
 
-export interface ActivityItem {
-  id: string;
-  icon: ReactNode;
-  label: string;
-}
-
-export interface ExtensionActivityItem {
-  id: string;
-  /** Lucide icon name (resolved via the optional `resolveIcon` prop). */
-  icon: string;
-  /** Localized label — the extension resolved it via manifest labels already. */
-  label: string;
-  order?: number;
-}
-
 export interface ActivityBarProps {
   active: string;
   onSelect: (id: string) => void;
   /** Extra className (desktop passes `app-drag-region` on the wrapper). */
   className?: string;
-  /** Extension-contributed items merged with core items and sorted by order. */
-  extensionItems?: ExtensionActivityItem[];
   /**
-   * Resolves an extension icon name to a ReactNode. When absent or when the
-   * name is unrecognised, the component falls back to BookOpen.
+   * Extension-contributed items from useExtensionMains(). Each item's
+   * extensionId is used as the activity view id and for onSelect.
    */
-  resolveIcon?: (icon: string) => ReactNode | null;
+  extensionItems?: MainContribution[];
 }
 
 export function ActivityBar({
@@ -81,7 +65,6 @@ export function ActivityBar({
   onSelect,
   className,
   extensionItems,
-  resolveIcon,
 }: ActivityBarProps) {
   const { t } = useT();
 
@@ -116,10 +99,10 @@ export function ActivityBar({
   ];
 
   const extItems: SortableItem[] = (extensionItems ?? []).map((e) => ({
-    id: e.id,
-    icon: resolveIcon?.(e.icon) ?? <BookOpen className="h-4 w-4" />,
+    id: e.extensionId,
+    icon: resolveExtensionIcon(e.icon) ?? <BookOpen className="h-4 w-4" />,
     label: e.label,
-    order: e.order ?? 100,
+    order: e.order,
   }));
 
   const items = [...coreItems, ...extItems].sort((a, b) => a.order - b.order);
