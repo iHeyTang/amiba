@@ -142,6 +142,15 @@ const api = {
   ...createWebviewPreloadBridge(),
 
   /**
+   * Push the renderer's resolved theme ("light" | "dark") to main so it can
+   * rebroadcast to all extension webviews. The renderer is the single source
+   * of truth — only it knows how to resolve "auto" against
+   * `prefers-color-scheme`. Main is just a broker.
+   */
+  setResolvedTheme: (theme: "light" | "dark"): Promise<void> =>
+    ipcRenderer.invoke("theme:set-resolved", theme),
+
+  /**
    * Hermes-agent lifecycle bridge — drives the first-run install wizard
    * and the supervised backplane subprocess. Logs from long-running
    * spawns stream back via `onJobLog`; completion lands in `onJobEnd`.

@@ -446,24 +446,26 @@ if (!gotSingleInstanceLock) {
     const webviewBridgePath = path.join(__dirname, "../preload/webview-bridge.js")
 
     const { LANG_PREF_STORAGE_KEY } = await import("@hermes-x/i18n")
-    // Mirrors `packages/ui/src/theme/index.ts`. Inlined to avoid pulling
-    // the entire @hermes-x/ui graph (React + streamdown + mermaid + …)
-    // into the main-process bundle just to read one constant string.
-    const THEME_PREF_STORAGE_KEY = "settings.ui.theme"
 
     // Track current language and theme so webviews can request initial state.
+    //
+    // Language is a preference: the stored value IS what we broadcast.
+    // Theme is a RESOLVED value (always "light" or "dark"); the stored
+    // preference may be "auto", and only the renderer can resolve "auto"
+    // against `prefers-color-scheme`. The renderer pushes its resolved
+    // theme to us via `theme:set-resolved` on every change, and we
+    // re-broadcast to all webviews. THEME_PREF_STORAGE_KEY is therefore
+    // NOT read here — the resolved-theme IPC is the only source.
     let currentLanguage = "en"
-    let currentTheme = "dark"
+    let currentTheme: "light" | "dark" = "light"
 
-    // Initialise from persisted store.
-    void mainStore.get([LANG_PREF_STORAGE_KEY, THEME_PREF_STORAGE_KEY]).then((r) => {
+    // Initialise language from persisted store.
+    void mainStore.get([LANG_PREF_STORAGE_KEY]).then((r) => {
       const rawLang = r[LANG_PREF_STORAGE_KEY]
       if (rawLang === "en" || rawLang === "zh-CN") currentLanguage = rawLang
-      const rawTheme = r[THEME_PREF_STORAGE_KEY]
-      if (rawTheme === "light" || rawTheme === "dark") currentTheme = rawTheme as string
     })
 
-    // Subscribe to preference changes and broadcast to all open webviews.
+    // Subscribe to language preference changes and broadcast to all webviews.
     mainStore.watch((changes) => {
       const langChange = changes[LANG_PREF_STORAGE_KEY]
       if (langChange) {
@@ -475,15 +477,16 @@ if (!gotSingleInstanceLock) {
           }
         }
       }
-      const themeChange = changes[THEME_PREF_STORAGE_KEY]
-      if (themeChange) {
-        const next = themeChange.newValue
-        if (next === "light" || next === "dark") {
-          currentTheme = next as string
-          for (const wc of require("electron").webContents.getAllWebContents()) {
-            try { wc.send("webview:theme-changed", currentTheme) } catch { /* ignore */ }
-          }
-        }
+    })
+
+    // Resolved theme IPC — the renderer (with access to `prefers-color-scheme`)
+    // is the source of truth; we just rebroadcast.
+    ipcMain.handle("theme:set-resolved", (_e, theme: unknown) => {
+      if (theme !== "light" && theme !== "dark") return
+      if (theme === currentTheme) return
+      currentTheme = theme
+      for (const wc of require("electron").webContents.getAllWebContents()) {
+        try { wc.send("webview:theme-changed", currentTheme) } catch { /* ignore */ }
       }
     })
 

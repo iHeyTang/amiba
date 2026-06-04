@@ -34,7 +34,12 @@ export default function App() {
 }
 
 function AppInner(): ReactElement {
-  useResolvedTheme()
+  const { theme: resolvedTheme } = useResolvedTheme()
+  // Push the resolved theme to main on every change so extension webviews
+  // see the same "light"/"dark" value the desktop UI is rendering.
+  useEffect(() => {
+    void window.hermes.setResolvedTheme(resolvedTheme)
+  }, [resolvedTheme])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   const [view, setView] = useState<View>("chat")
   const [phase, setPhase] = useState<Phase>("loading")
