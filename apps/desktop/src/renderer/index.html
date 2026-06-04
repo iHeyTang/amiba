@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       CSP notes:
-        - script-src 'self'        — only the bundled renderer scripts.
-        - frame-src / child-src    — allow <webview> to host hermes-ext: pages
-                                     (extension HTML pages served by the custom
-                                     protocol; Electron's webview is internally a
-                                     kind of frame from the parent document's
-                                     perspective).
-        - connect-src hermes-ext:  — extension webviews may fetch from the protocol
-                                     (e.g. relative asset loads from the ext page).
+        - script-src 'self' 'unsafe-inline' — only the bundled renderer scripts.
+        - frame-src / child-src             — extension WebViews load file:// pages
+                                              via Electron <webview>; file: is allowed
+                                              by default for the renderer, and the
+                                              webview's own document has its own CSP
+                                              separate from this one.
+        - connect-src                       — local dev servers + remote API traffic;
+                                              no custom protocol entries needed.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext:; script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline'; frame-src 'self' hermes-ext:; child-src 'self' hermes-ext:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline'; frame-src 'self' file:; child-src 'self' file:"
     />
     <title>Hermes</title>
   </head>
