@@ -1,19 +1,16 @@
 /**
- * Inject an import map so dynamically imported extension bundles can resolve
- * bare specifiers like `react`, `@hermes-x/ui`, etc.
+ * Populate `globalThis.__hermesShared` with the renderer's own copies of
+ * shared modules (React, @hermes-x/*). Trampoline modules served by the
+ * main process under `hermes-shared://<specifier>` re-export from this
+ * object — which is what the static <script type="importmap"> entry in
+ * `index.html` points each bare specifier at.
  *
- * Background: when the Phase 2 loader does `import("file:///<userData>/extensions/<id>/dist/renderer.js")`,
- * that bundle was built with these modules as `external` (so we ship them
- * once, in the desktop). The desktop's own bundle has already loaded the
- * real modules; we expose those instances on `globalThis.__hermesShared`
- * and use a trampoline JS blob per specifier — the import map points the
- * bare specifier at the blob URL, which re-exports everything off
- * `__hermesShared` so extensions get the *same* module instance the host
- * uses (critical for React: any second React instance breaks hooks).
+ * Critical invariant: the React instance an extension component pulls
+ * via `import { useState } from "react"` MUST be the same React instance
+ * the host renderer uses, or hooks throw "Invalid hook call." Exposing
+ * desktop's own React on the global guarantees that.
  *
- * Chrome 108+ allows multiple import maps and adding them dynamically, so
- * inserting one after page bundle load is fine. Electron 33 ships
- * Chromium 130.
+ * This runs BEFORE any extension import (called at the top of index.tsx).
  */
 import * as React from "react"
 import * as ReactJsxRuntime from "react/jsx-runtime"
@@ -39,42 +36,7 @@ const SHARED: Record<string, SharedModule> = {
   "@hermes-x/ui": HermesUI as unknown as SharedModule,
 }
 
-;(globalThis as unknown as { __hermesShared: typeof SHARED }).__hermesShared = SHARED
-
-function makeTrampolineUrl(specifier: string, mod: SharedModule): string {
-  // Re-export every named binding. We list them explicitly so importers
-  // can do `import { useState } from "react"` and get the real value
-  // rather than going through a default proxy.
-  const exportNames = Object.keys(mod).filter((k) => k !== "default")
-  const json = JSON.stringify(specifier)
-  const namedExports = exportNames
-    .map((name) => `export const ${name} = m[${JSON.stringify(name)}];`)
-    .join("\n")
-  const src = [
-    `const m = globalThis.__hermesShared[${json}];`,
-    `if (!m) throw new Error(${JSON.stringify(`hermes shared module missing: ${specifier}`)});`,
-    namedExports,
-    `export default m.default ?? m;`,
-  ].join("\n")
-  const blob = new Blob([src], { type: "application/javascript" })
-  return URL.createObjectURL(blob)
-}
-
-let installed = false
-
 export function installImportMap(): void {
-  if (installed) return
-  installed = true
-
-  const imports: Record<string, string> = {}
-  for (const specifier of Object.keys(SHARED)) {
-    const mod = SHARED[specifier]
-    if (!mod) continue
-    imports[specifier] = makeTrampolineUrl(specifier, mod)
-  }
-
-  const script = document.createElement("script")
-  script.type = "importmap"
-  script.textContent = JSON.stringify({ imports })
-  document.head.appendChild(script)
+  ;(globalThis as unknown as { __hermesShared: typeof SHARED }).__hermesShared =
+    SHARED
 }

@@ -6,18 +6,41 @@
     <!--
       Extra script-src allowances (only on the main window, not notifier /
       quick-ask) needed by the extension system:
-        - 'unsafe-inline' lets us inject the <script type="importmap"> at
-          runtime (Vite has no build-time hook for runtime-generated maps).
-        - blob: lets the importmap's trampoline modules load.
-        - hermes-ext: serves extension bundles from `<userData>/extensions/`
-          via the custom protocol registered in main.
-      script-src-elem is also broadened because Chromium falls back to it
-      for <script> tag loads when present.
+        - hermes-ext:    serves extension bundles
+        - hermes-shared: serves trampolines that re-export shared modules
+                         (react, @hermes-x/*) from globalThis.__hermesShared
+      The static <script type="importmap"> below is allowed by 'self' since
+      it's part of the document.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext:; script-src 'self' 'unsafe-inline' blob: hermes-ext:; script-src-elem 'self' 'unsafe-inline' blob: hermes-ext:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext: hermes-shared:; script-src 'self' 'unsafe-inline' hermes-ext: hermes-shared:; script-src-elem 'self' 'unsafe-inline' hermes-ext: hermes-shared:"
     />
+    <!--
+      Static import map: maps bare specifiers an extension bundle expects
+      (react, @hermes-x/ui, …) to URLs on the hermes-shared:// custom
+      protocol. The main process serves a tiny ESM trampoline per specifier
+      that re-exports from globalThis.__hermesShared, which the renderer's
+      setup-importmap.ts populates with desktop's own copies of these
+      modules. Same React instance for desktop and extensions → hooks work.
+
+      Keep in sync with apps/desktop/src/main/shared-protocol.ts EXPORTS.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "hermes-shared://react",
+          "react/jsx-runtime": "hermes-shared://react/jsx-runtime",
+          "react/jsx-dev-runtime": "hermes-shared://react/jsx-dev-runtime",
+          "react-dom": "hermes-shared://react-dom",
+          "react-dom/client": "hermes-shared://react-dom/client",
+          "@hermes-x/extension-host/renderer": "hermes-shared://@hermes-x/extension-host/renderer",
+          "@hermes-x/i18n": "hermes-shared://@hermes-x/i18n",
+          "@hermes-x/platform": "hermes-shared://@hermes-x/platform",
+          "@hermes-x/ui": "hermes-shared://@hermes-x/ui"
+        }
+      }
+    </script>
     <title>Hermes</title>
   </head>
   <body class="h-full bg-background text-foreground">

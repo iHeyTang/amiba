@@ -15,12 +15,18 @@ import {
 import { setPlatform } from "@hermes-x/platform"
 import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
 import { registerExtProtocolScheme, registerExtProtocolHandler } from "./ext-protocol"
+import {
+  registerSharedProtocolScheme,
+  registerSharedProtocolHandler,
+} from "./shared-protocol"
 
 // MUST run before app.whenReady() — scheme privileges (standard / secure /
 // supportFetchAPI / corsEnabled) can only be declared while the protocol
-// registry is still mutable. Without this the renderer's dynamic import of
-// hermes-ext://… is treated as "untrusted" and refuses to load.
+// registry is still mutable. Without these the renderer treats imports from
+// hermes-ext://… (extension bundles) and hermes-shared://… (shared-module
+// trampolines for react / @hermes-x/*) as "untrusted" and refuses to load.
 registerExtProtocolScheme()
+registerSharedProtocolScheme()
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -433,6 +439,9 @@ if (!gotSingleInstanceLock) {
     // before any BrowserWindow load() (the renderer's extensions-boot fires a
     // dynamic import as soon as the React tree mounts).
     registerExtProtocolHandler(registryPath)
+    // Same goes for hermes-shared:// — the static importmap in index.html
+    // points bare specifiers (react, @hermes-x/ui, …) at this scheme.
+    registerSharedProtocolHandler()
 
     const extensionHost = await bootMainExtensionHost({
       registryPath,
