@@ -108,9 +108,18 @@ interface OverridesListResult {
   error?: string
 }
 
+/**
+ * Main acks the override mutation AFTER it has also restarted gbrain
+ * with the new env vars and re-probed, so an `ok: true` here means the
+ * provider is actually live now — no manual restart needed from the
+ * user. The probe payload is returned for callers that want to update
+ * their onboarding UI in the same trip; field-row save/clear ignores it
+ * because the surrounding settings shell re-fetches via its own probe.
+ */
 interface OverrideSetResult {
   ok: boolean
   error?: string
+  probe?: unknown
 }
 
 // ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ export const activate: MainActivate = async (host) => {
     },
   )
 
-  host.ipc.expose<void, LifecycleProbe>("lifecycle.probe", async () => {
+  async function computeProbe(): Promise<LifecycleProbe> {
     const binary = locateGBrainBinary()
     if (binary === null) {
       return {
@@ -90,7 +90,9 @@ export const activate: MainActivate = async (host) => {
       providerCount,
       readyProviderCount,
     }
-  })
+  }
+
+  host.ipc.expose<void, LifecycleProbe>("lifecycle.probe", computeProbe)
 
   host.ipc.expose("providers.list", () => runProvidersList())
   host.ipc.expose<string, unknown>("providers.env", async (id) => {
@@ -108,6 +110,37 @@ export const activate: MainActivate = async (host) => {
     }
   })
 
+  /**
+   * After an env override write, the *running* `gbrain serve --http`
+   * still holds the env vars it inherited at spawn time, so a fresh
+   * value is silently ignored until the process is restarted. Hide
+   * that mechanic from the user: every successful override mutation
+   * triggers a restart + re-probe in the same IPC roundtrip, so the
+   * renderer sees the post-restart state directly.
+   *
+   * If gbrain isn't running yet (e.g. user is configuring providers
+   * before first start), the restart still runs ensure() which
+   * correctly spawns a new process — the env var lands the first time.
+   */
+  async function applyOverrideMutation(
+    mutation: () => Promise<void>,
+  ): Promise<{ ok: true; probe: LifecycleProbe } | { ok: false; error: string }> {
+    try {
+      await mutation()
+    } catch (e) {
+      return { ok: false, error: (e as Error).message ?? String(e) }
+    }
+    try {
+      await restartGBrainServeHttp()
+    } catch {
+      // Restart failed but the override is written. Fall through so
+      // the renderer at least sees the new probe state — it'll show
+      // "stopped" or similar and the user can retry.
+    }
+    const probe = await computeProbe()
+    return { ok: true, probe }
+  }
+
   host.ipc.expose<{ providerId: string; envKey: string; value: string }, unknown>(
     "providers.overrides.set",
     async ({ providerId, envKey, value }) => {
@@ -117,12 +150,7 @@ export const activate: MainActivate = async (host) => {
       if (!/^[A-Z][A-Z0-9_]*$/.test(envKey)) {
         return { ok: false, error: `invalid envKey: ${envKey}` }
       }
-      try {
-        await setOverride(providerId, envKey, value)
-        return { ok: true }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message ?? String(e) }
-      }
+      return applyOverrideMutation(() => setOverride(providerId, envKey, value))
     },
   )
 
@@ -132,12 +160,7 @@ export const activate: MainActivate = async (host) => {
       if (!providerId || !envKey) {
         return { ok: false, error: "providerId, envKey required" }
       }
-      try {
-        await unsetOverride(providerId, envKey)
-        return { ok: true }
-      } catch (e) {
-        return { ok: false, error: (e as Error).message ?? String(e) }
-      }
+      return applyOverrideMutation(() => unsetOverride(providerId, envKey))
     },
   )
 

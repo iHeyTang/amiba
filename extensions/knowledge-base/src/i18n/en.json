@@ -35,7 +35,7 @@
   "config.providers.loading": "Loading gbrain's supported providers…",
   "config.providers.empty": "`gbrain providers list` returned nothing. Check that the gbrain CLI is on PATH.",
   "config.providers.refresh": "Re-probe",
-  "config.providers.envHint": "Paste each provider's API key directly here. Values are encrypted via your OS keychain and injected into gbrain when it starts. Restart gbrain after editing to apply.",
+  "config.providers.envHint": "Paste each provider's API key directly here. Values are encrypted via your OS keychain. Saving takes effect immediately — gbrain is restarted in the background.",
   "config.providers.expand": "Configure",
   "config.providers.collapse": "Done",
   "config.providers.required": "Required",
@@ -43,7 +43,7 @@
   "config.providers.placeholder.saved": "saved — paste a new value to replace",
   "config.providers.placeholder.empty": "not set",
   "config.providers.save": "Save",
-  "config.providers.saved": "Saved — restart gbrain to apply",
+  "config.providers.saved": "Saved — applied",
   "config.providers.clear": "Clear",
   "config.providers.setupLink": "Get an API key →",
 

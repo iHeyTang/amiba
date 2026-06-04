@@ -35,7 +35,7 @@
   "config.providers.loading": "正在读取 gbrain 支持的 provider…",
   "config.providers.empty": "gbrain providers list 没有返回任何结果。确认 gbrain CLI 是否可用。",
   "config.providers.refresh": "重新探测",
-  "config.providers.envHint": "直接在此处粘贴每个 provider 的 API key。值通过系统 keychain 加密，在 gbrain 启动时注入；修改后请重启 gbrain 使其生效。",
+  "config.providers.envHint": "直接在此处粘贴每个 provider 的 API key。值通过系统 keychain 加密。保存后立刻生效 —— gbrain 会在后台自动重启。",
   "config.providers.expand": "配置",
   "config.providers.collapse": "收起",
   "config.providers.required": "必填",
@@ -43,7 +43,7 @@
   "config.providers.placeholder.saved": "已保存 — 粘贴新值可覆盖",
   "config.providers.placeholder.empty": "未设置",
   "config.providers.save": "保存",
-  "config.providers.saved": "已保存，重启 gbrain 后生效",
+  "config.providers.saved": "已保存并生效",
   "config.providers.clear": "清除",
   "config.providers.setupLink": "申请 API key →",
 
