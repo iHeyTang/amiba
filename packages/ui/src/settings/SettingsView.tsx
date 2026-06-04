@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { ExtensionWebView, useExtensionSettingsTabs } from "@hermes-x/extension-host/renderer";
+import { ExtensionWebView, useExtensionSettings } from "@hermes-x/extension-host/renderer";
 import { resolveExtensionIcon } from "../chat/ActivityBar";
 
 import { useT } from "@hermes-x/i18n";
@@ -159,7 +159,7 @@ export function SettingsView({
   const { t } = useT();
 
   const showScriptsTab = !!capabilities.userscripts;
-  const extensionTabs = useExtensionSettingsTabs();
+  const extensionSettings = useExtensionSettings();
 
   const [mainTab, setMainTab] = useState<MainTab>(() => {
     const fromHash = mainTabFromLocation();
@@ -201,7 +201,7 @@ export function SettingsView({
 
   function onMainTabChange(v: string) {
     // Accept core tabs, extension tab IDs (not in TAB_SET), or fall back to "status".
-    const isExtensionTab = extensionTabs.some((t) => t.id === v);
+    const isExtensionTab = extensionSettings.some((s) => s.extensionId === v);
     const next: MainTab = TAB_SET.has(v) || isExtensionTab ? v : "status";
     if (next === "scripts" && !showScriptsTab) return;
     setMainTab(next);
@@ -337,22 +337,22 @@ export function SettingsView({
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
-            {extensionTabs.length > 0 && (
+            {extensionSettings.length > 0 && (
               <>
                 <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
                   {t("options.nav.section.extensions")}
                 </div>
-                {extensionTabs.map((tab) => (
+                {extensionSettings.map((s) => (
                   <NavBtn
-                    key={tab.id}
+                    key={s.extensionId}
                     icon={
-                      (tab.icon ? resolveExtensionIcon(tab.icon) : null) ?? (
+                      (s.icon ? resolveExtensionIcon(s.icon) : null) ?? (
                         <Boxes className="h-4 w-4 shrink-0 opacity-70" />
                       )
                     }
-                    label={tab.label}
-                    active={mainTab === tab.id}
-                    onClick={() => onMainTabChange(tab.id)}
+                    label={s.label}
+                    active={mainTab === s.extensionId}
+                    onClick={() => onMainTabChange(s.extensionId)}
                   />
                 ))}
               </>
@@ -483,9 +483,10 @@ export function SettingsView({
               </>
             ) : (() => {
               // Extension-contributed settings tab — render via WebView.
-              const extTab = extensionTabs.find((tab) => tab.id === mainTab);
-              if (extTab) {
-                return <ExtensionWebView src={extTab.viewUrl} className="h-full w-full" />;
+              // The settings tab id IS the extensionId.
+              const extSetting = extensionSettings.find((s) => s.extensionId === mainTab);
+              if (extSetting) {
+                return <ExtensionWebView src={extSetting.viewUrl} className="h-full w-full" />;
               }
               return null;
             })()}

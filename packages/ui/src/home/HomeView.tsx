@@ -46,7 +46,6 @@ import { useT } from "@hermes-x/i18n";
 import { useResolvedTheme } from "../theme";
 import { HermesLogo } from "../primitives";
 import { cn } from "../primitives";
-import { ExtensionWebView, useComposerHints } from "@hermes-x/extension-host/renderer";
 import type {
   FaviconCapability,
   HomeCapabilities,
@@ -126,7 +125,6 @@ function Home({
   panelMode,
 }: HomeViewProps) {
   const { t, language } = useT();
-  const composerHints = useComposerHints();
   const sessions = useSessions();
   // Shortcuts hook is capability-provided — stable across renders. Falls
   // back to a no-op so the rules-of-hooks order stays consistent.
@@ -439,24 +437,6 @@ function Home({
             }
           />
         </section>
-
-        {/* Composer hint WebViews — one per extension contribution.
-            Each page is self-contained and decides whether to render itself
-            (e.g. the brain-disconnected hint self-hides once connected).
-            Height h-12 (48 px) matches the pill-button look; width is
-            unconstrained so each page can fit a pill-shaped button inside
-            its own layout. */}
-        {composerHints.length > 0 && (
-          <div className="mx-auto flex w-full max-w-2xl shrink-0 flex-col gap-1">
-            {composerHints.map((hint) => (
-              <ExtensionWebView
-                key={hint.id}
-                src={hint.viewUrl}
-                className="h-12 w-full"
-              />
-            ))}
-          </div>
-        )}
 
         {/*
           Shortcuts strip is extension-only (backed by chrome.bookmarks).
