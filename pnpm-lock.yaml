@@ -311,15 +311,6 @@ importers:
       '@hermes-x/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api
-      '@hermes-x/extension-host':
-        specifier: workspace:*
-        version: link:../../packages/extension-host
-      '@hermes-x/i18n':
-        specifier: workspace:*
-        version: link:../../packages/i18n
-      '@hermes-x/platform':
-        specifier: workspace:*
-        version: link:../../packages/platform
       '@hermes-x/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -332,6 +323,9 @@ importers:
       react:
         specifier: ^18.0.0
         version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
       streamdown:
         specifier: ^2.5.0
         version: 2.5.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -345,6 +339,9 @@ importers:
       '@types/react':
         specifier: 18.3.12
         version: 18.3.12
+      '@types/react-dom':
+        specifier: 18.3.1
+        version: 18.3.1
       '@vitejs/plugin-react':
         specifier: 4.3.3
         version: 4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))

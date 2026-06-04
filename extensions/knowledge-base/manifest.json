@@ -4,45 +4,41 @@
   "name": "Knowledge Base",
   "version": "0.1.0",
   "engines": { "hermes-x": "^0.1.0" },
-  "entries": {
-    "main": "dist/main.cjs",
-    "renderer": "dist/renderer.js"
-  },
-  "i18n": {
-    "en": "dist/i18n/en.json",
-    "zh-CN": "dist/i18n/zh-CN.json"
-  },
+  "entries": { "main": "dist/main.cjs" },
   "contributes": {
     "activityBar": [
       {
         "id": "knowledge",
-        "iconKey": "book-open",
-        "labelKey": "ext.io.hermes.knowledge-base.activityBar.label",
+        "icon": "book-open",
+        "labels": { "en": "Knowledge Base", "zh-CN": "知识库" },
         "order": 200
       }
     ],
     "sidebarViews": [
-      { "id": "knowledge", "anchor": "activityBar:knowledge" }
+      {
+        "id": "knowledge",
+        "anchor": "activityBar:knowledge",
+        "view": "dist/ui/sidebar/index.html"
+      }
     ],
     "settingsTabs": [
       {
         "id": "knowledge",
-        "labelKey": "ext.io.hermes.knowledge-base.settings.label",
+        "labels": { "en": "Knowledge Base", "zh-CN": "知识库" },
+        "icon": "book-open",
+        "view": "dist/ui/settings/index.html",
         "order": 100
       }
     ],
     "composerHints": [
-      { "id": "brain-disconnected" }
+      {
+        "id": "brain-disconnected",
+        "view": "dist/ui/hint/index.html"
+      }
     ]
   },
   "hermesPlugins": [
     { "id": "gbrain", "version": "^0", "required": false }
   ],
-  "permissions": [
-    "ipc",
-    "settings",
-    "storage",
-    "i18n",
-    "lifecycle.boot"
-  ]
+  "permissions": ["ipc", "settings", "i18n", "lifecycle.boot"]
 }

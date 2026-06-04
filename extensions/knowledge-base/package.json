@@ -6,34 +6,32 @@
   "main": "dist/main.cjs",
   "exports": {
     ".": {
-      "main": "./dist/main.cjs",
-      "renderer": "./dist/renderer.js"
+      "main": "./dist/main.cjs"
     },
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.renderer.config.ts",
+    "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.ui.config.ts",
     "dev": "hermes-x-ext dev",
     "pack": "hermes-x-ext pack",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hermes-x/extension-api": "workspace:*",
-    "@hermes-x/extension-host": "workspace:*",
-    "@hermes-x/i18n": "workspace:*",
-    "@hermes-x/platform": "workspace:*",
     "@hermes-x/ui": "workspace:*",
     "lucide-react": "^0.460.0",
     "streamdown": "^2.5.0"
   },
   "peerDependencies": {
     "electron": "*",
-    "react": "^18.0.0"
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   },
   "devDependencies": {
     "@hermes-x/extension-cli": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.3",
     "typescript": "5.6.3",
     "vite": "5.4.10"
