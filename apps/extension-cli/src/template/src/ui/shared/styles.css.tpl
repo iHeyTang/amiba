@@ -1,2 +1,14 @@
-:root[data-theme="dark"] { color-scheme: dark; }
-body { font-family: system-ui, sans-serif; margin: 0; }
+@import "@hermes-x/ui/styles/tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Webview-specific resets */
+html,
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+body {
+  margin: 0;
+}
