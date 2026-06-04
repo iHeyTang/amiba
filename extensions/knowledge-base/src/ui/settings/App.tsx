@@ -10,7 +10,7 @@
  * as module-level functions sharing the `hermes` bridge and the `useT` hook.
  */
 
-import { Check, ChevronDown, ChevronUp, Link2, Loader2, RefreshCw } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Eye, EyeOff, Link2, Loader2, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { Button, Input, Label, ScrollArea } from "@hermes-x/ui"
@@ -391,6 +391,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [tokenVisible, setTokenVisible] = useState(false)
 
   const [providers, setProviders] = useState<GBrainProvider[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
@@ -676,18 +677,33 @@ export default function App() {
                   <Label htmlFor="brain-config-token" className="text-xs">
                     {t("connection.token")}
                   </Label>
-                  <Input
-                    id="brain-config-token"
-                    type="password"
-                    value={token}
-                    onChange={(e) => {
-                      setToken(e.target.value)
-                      setDirty(true)
-                      setSaved(false)
-                    }}
-                    placeholder={t("connection.token.placeholder")}
-                    className="h-8 text-xs"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="brain-config-token"
+                      type={tokenVisible ? "text" : "password"}
+                      value={token}
+                      onChange={(e) => {
+                        setToken(e.target.value)
+                        setDirty(true)
+                        setSaved(false)
+                      }}
+                      placeholder={t("connection.token.placeholder")}
+                      className="h-8 pr-8 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTokenVisible((v) => !v)}
+                      className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      aria-label={tokenVisible ? t("connection.token.hide") : t("connection.token.show")}
+                      title={tokenVisible ? t("connection.token.hide") : t("connection.token.show")}
+                    >
+                      {tokenVisible ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
                   <p className="text-[10px] leading-snug text-muted-foreground">
                     {t("connection.token.hint")}
                   </p>

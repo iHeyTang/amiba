@@ -20,6 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Eye,
+  EyeOff,
   Link2,
   Loader2,
   Play,
@@ -147,6 +149,7 @@ function AdvancedSection({
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
   const [token, setToken] = useState("")
+  const [tokenVisible, setTokenVisible] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -214,17 +217,32 @@ function AdvancedSection({
             <Label htmlFor="brain-token-advanced" className="text-xs">
               {t("connection.token")}
             </Label>
-            <Input
-              id="brain-token-advanced"
-              type="password"
-              value={token}
-              onChange={(e) => {
-                setToken(e.target.value)
-                setSavedFlash(false)
-              }}
-              placeholder={t("connection.token.placeholder")}
-              className="h-8 text-xs"
-            />
+            <div className="relative">
+              <Input
+                id="brain-token-advanced"
+                type={tokenVisible ? "text" : "password"}
+                value={token}
+                onChange={(e) => {
+                  setToken(e.target.value)
+                  setSavedFlash(false)
+                }}
+                placeholder={t("connection.token.placeholder")}
+                className="h-8 pr-8 text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setTokenVisible((v) => !v)}
+                className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                aria-label={tokenVisible ? t("connection.token.hide") : t("connection.token.show")}
+                title={tokenVisible ? t("connection.token.hide") : t("connection.token.show")}
+              >
+                {tokenVisible ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
             <p className="text-[10px] leading-snug text-muted-foreground">
               {t("connection.token.hint")}
             </p>
