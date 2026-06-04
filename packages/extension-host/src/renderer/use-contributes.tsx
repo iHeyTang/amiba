@@ -38,35 +38,27 @@ function getBaseUrl(): Promise<string> {
 // Shared types
 // ---------------------------------------------------------------------------
 
-export interface ActivityBarItem {
-  id: string
+export interface MainContribution {
+  /** extensionId doubles as ActivityBar item id + activity view id */
   extensionId: string
+  /** Lucide icon name */
   icon: string
+  /** Already resolved for current language */
   label: string
-  order: number
-}
-
-export interface SidebarViewContribution {
-  id: string
-  extensionId: string
-  anchor: string
-  /** Full http://127.0.0.1:<port>/extensions/<id>/... URL. */
-  viewUrl: string
-}
-
-export interface SettingsTabContribution {
-  id: string
-  extensionId: string
-  label: string
-  icon?: string
+  /** http://localhost:<port>/extensions/<id>/<view> */
   viewUrl: string
   order: number
 }
 
-export interface ComposerHintContribution {
-  id: string
+export interface SettingsContribution {
+  /** extensionId doubles as settings tab id */
   extensionId: string
+  /** Lucide icon name or null */
+  icon: string | null
+  /** Already resolved for current language */
+  label: string
   viewUrl: string
+  order: number
 }
 
 // ---------------------------------------------------------------------------
@@ -159,61 +151,52 @@ function useHttpBaseUrl(): string | null {
 // Public hooks
 // ---------------------------------------------------------------------------
 
-export function useActivityBarItems(): ActivityBarItem[] {
-  const entries = useManifests()
-  const language = useCurrentLanguage()
-
-  return entries.flatMap(({ manifest: m }) =>
-    (m.contributes?.activityBar ?? []).map((item) => ({
-      id: item.id,
-      extensionId: m.id,
-      icon: item.icon,
-      label: pickLabel(item.labels, language, item.id),
-      order: item.order ?? 100,
-    })),
-  )
-}
-
-export function useSidebarViews(): SidebarViewContribution[] {
-  const entries = useManifests()
-  const baseUrl = useHttpBaseUrl()
-
-  return entries.flatMap(({ manifest: m }) =>
-    (m.contributes?.sidebarViews ?? []).map((sv) => ({
-      id: sv.id,
-      extensionId: m.id,
-      anchor: sv.anchor,
-      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, sv.view) : "",
-    })),
-  )
-}
-
-export function useExtensionSettingsTabs(): SettingsTabContribution[] {
+/**
+ * Returns one entry per extension that declares `contributes.main`.
+ * Each entry becomes an ActivityBar icon + a full-screen main panel.
+ * Sorted ascending by `order` (default 100).
+ */
+export function useExtensionMains(): MainContribution[] {
   const entries = useManifests()
   const language = useCurrentLanguage()
   const baseUrl = useHttpBaseUrl()
 
-  return entries.flatMap(({ manifest: m }) =>
-    (m.contributes?.settingsTabs ?? []).map((tab) => ({
-      id: tab.id,
-      extensionId: m.id,
-      label: pickLabel(tab.labels, language, tab.id),
-      icon: tab.icon,
-      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, tab.view) : "",
-      order: tab.order ?? 100,
-    })),
-  )
+  return entries
+    .flatMap(({ manifest: m }) => {
+      const main = m.contributes?.main
+      if (!main) return []
+      return [{
+        extensionId: m.id,
+        icon: main.icon,
+        label: pickLabel(main.labels, language, m.id),
+        viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, main.view) : "",
+        order: main.order ?? 100,
+      }]
+    })
+    .sort((a, b) => a.order - b.order)
 }
 
-export function useComposerHints(): ComposerHintContribution[] {
+/**
+ * Returns one entry per extension that declares `contributes.settings`.
+ * Each entry becomes a row in the Settings → EXTENSIONS sidebar group.
+ * Sorted ascending by `order` (default 100).
+ */
+export function useExtensionSettings(): SettingsContribution[] {
   const entries = useManifests()
+  const language = useCurrentLanguage()
   const baseUrl = useHttpBaseUrl()
 
-  return entries.flatMap(({ manifest: m }) =>
-    (m.contributes?.composerHints ?? []).map((hint) => ({
-      id: hint.id,
-      extensionId: m.id,
-      viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, hint.view) : "",
-    })),
-  )
+  return entries
+    .flatMap(({ manifest: m }) => {
+      const settings = m.contributes?.settings
+      if (!settings) return []
+      return [{
+        extensionId: m.id,
+        icon: settings.icon ?? null,
+        label: pickLabel(settings.labels, language, m.id),
+        viewUrl: baseUrl ? buildViewUrl(baseUrl, m.id, settings.view) : "",
+        order: settings.order ?? 100,
+      }]
+    })
+    .sort((a, b) => a.order - b.order)
 }

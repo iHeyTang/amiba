@@ -7,14 +7,10 @@
 
 export { ExtensionWebView } from "./extension-webview"
 export {
-  useActivityBarItems,
-  useSidebarViews,
-  useExtensionSettingsTabs,
-  useComposerHints,
-  type ActivityBarItem,
-  type SidebarViewContribution,
-  type SettingsTabContribution,
-  type ComposerHintContribution,
+  useExtensionMains,
+  useExtensionSettings,
+  type MainContribution,
+  type SettingsContribution,
 } from "./use-contributes"
 
 // useExtensionRegistry is used by the SettingsExtensions tab to list installed
