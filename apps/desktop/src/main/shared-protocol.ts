@@ -153,12 +153,14 @@ export function registerSharedProtocolHandler(): void {
     } catch {
       return new Response("invalid URL", { status: 400 })
     }
-    // For hermes-shared://react the specifier is the host. URL parsing
-    // lowercases the host, so we keep the lookup case-insensitive.
-    // We also support hermes-shared://react/jsx-runtime form (path appended).
-    const host = url.hostname
-    const path = url.pathname.replace(/^\/+/, "")
-    const specifier = path ? `${host}/${path}` : host
+    // URL design: `hermes-shared://_/<full specifier>`. Host is the
+    // placeholder `_` so that specifiers containing `@` (npm scopes like
+    // `@hermes-x/ui`) live entirely in the path — `@` is reserved in
+    // URL host syntax (userinfo separator) and `new URL` mangles it.
+    // The path may also contain `/` (`react/jsx-runtime`, scoped paths
+    // like `@hermes-x/extension-host/renderer`); we treat everything
+    // after the leading slash as the specifier.
+    const specifier = decodeURIComponent(url.pathname.replace(/^\/+/, ""))
     const exportNames = EXPORTS[specifier]
     if (!exportNames) {
       return new Response(
@@ -202,7 +204,7 @@ export function buildImportMap(): Record<string, string> {
   const out: Record<string, string> = {}
   for (const specifier of Object.keys(EXPORTS)) {
     if (EXPORTS[specifier]!.length === 0) continue
-    out[specifier] = `${SCHEME}://${specifier}`
+    out[specifier] = `${SCHEME}://_/${specifier}`
   }
   return out
 }
