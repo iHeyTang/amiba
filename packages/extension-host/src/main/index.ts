@@ -1,12 +1,10 @@
 // packages/extension-host/src/main/index.ts
 import { join } from "node:path"
 import { readFileSync } from "node:fs"
-import type { Disposable, ExtensionManifest } from "@hermes-x/extension-api"
-import { activateMainExtensions } from "./activate"
+import type { ExtensionManifest } from "@hermes-x/extension-api"
 import { createExtensionRegistry } from "./registry"
 import {
   broadcastExtensionsChanged,
-  createChannelTable,
   registerExtensionActionChannels,
   registerInvokeRouter,
   registerMarketplaceChannels,
@@ -14,12 +12,12 @@ import {
   registerStatusChannel,
   registerWebViewChannels,
 } from "./ipc-router"
-import { makeMainHost } from "./make-main-host"
 import { createExtensionStorage } from "./storage-fs"
 import { validateManifest } from "./discover"
 import { watchManifests } from "./manifest-watcher"
 import { discoverFromRegistry } from "./discover-registry"
 import { findEntry } from "./registry-store"
+import { createRunnerManagerWithRpc } from "./runner-controller"
 
 export interface MainBootOptions {
   /**
@@ -32,6 +30,11 @@ export interface MainBootOptions {
    * (e.g. `<userData>/extensions/`)
    */
   extensionsRoot: string
+  /**
+   * Absolute path to the compiled runner bundle.
+   * (e.g. `out/extension-runner/index.js` relative to desktop's __dirname)
+   */
+  runnerPath: string
   /** Reads/writes the shared settings store (re-uses desktop's mainStore). */
   settingsStore: {
     get<T>(key: string, fallback: T): Promise<T>
@@ -73,11 +76,16 @@ export interface MainBootResult {
 export async function bootMainExtensionHost(
   opts: MainBootOptions,
 ): Promise<MainBootResult> {
-  const channelTable = createChannelTable()
   const storage = createExtensionStorage()
   const registry = createExtensionRegistry()
-  const bootBackground = new Set<() => Promise<void> | void>()
-  const shutdown = new Set<() => Promise<void> | void>()
+
+  // Create the runner manager — one utilityProcess per extension.
+  const runnerManager = createRunnerManagerWithRpc({
+    runnerPath: opts.runnerPath,
+    settingsStore: opts.settingsStore,
+    storage,
+    callTool: opts.callTool,
+  })
 
   // Discover extensions from registry.
   const { entries: discovered, failed: discoveryFailed } = discoverFromRegistry(opts.registryPath)
@@ -91,10 +99,7 @@ export async function bootMainExtensionHost(
   )
   const getManifests = () => manifestEntries.map((m) => m.manifest)
 
-  // Per-extension disposable tracking: extensionId → Disposable[]
-  const extDisposables = new Map<string, Disposable[]>()
-
-  registerInvokeRouter(channelTable, getManifests)
+  registerInvokeRouter(runnerManager, getManifests)
   registerMetadataChannels({
     getManifests,
     getI18n: opts.getI18n,
@@ -122,40 +127,18 @@ export async function bootMainExtensionHost(
 
   async function activateOne(entry: { manifest: ExtensionManifest; rootDir: string }): Promise<void> {
     const { manifest } = entry
-    const disposables: Disposable[] = []
-    extDisposables.set(manifest.id, disposables)
+    if (!manifest.entries.main) {
+      // No main entry — still register as loaded (renderer-only extension).
+      registry.set({ id: manifest.id, manifest, status: "loaded" })
+      return
+    }
+    const mainPath = join(entry.rootDir, manifest.entries.main)
     try {
-      const result = await activateMainExtensions({
-        manifests: [manifest],
-        loadMain: async (id) => {
-          const e = manifestEntries.find((m) => m.manifest.id === id)
-          if (!e) throw new Error(`manifest not found for ${id}`)
-          const mainRel = e.manifest.entries.main
-          if (!mainRel) throw new Error(`no main entry for ${id}`)
-          const full = join(e.rootDir, mainRel)
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          return require(full) as { activate: (h: unknown) => Promise<void> | void }
-        },
-        makeHost: (id) =>
-          makeMainHost(id, {
-            channelTable,
-            settingsStore: opts.settingsStore,
-            storage,
-            callTool: opts.callTool,
-            bootBackground,
-            shutdown,
-            disposables,
-          }),
-      })
-      if (result.loaded.length > 0) {
+      const result = await runnerManager.activateExtension(manifest.id, mainPath)
+      if (result.ok) {
         registry.set({ id: manifest.id, manifest, status: "loaded" })
-      } else if (result.failed.length > 0) {
-        registry.set({
-          id: manifest.id,
-          manifest,
-          status: "failed",
-          error: result.failed[0]!.error,
-        })
+      } else {
+        registry.set({ id: manifest.id, manifest, status: "failed", error: result.error })
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
@@ -168,24 +151,8 @@ export async function bootMainExtensionHost(
     await activateOne(entry)
   }
 
-  // Fire boot-background hooks in parallel; failures are logged but
-  // do NOT downgrade the extension's status.
-  void Promise.allSettled(
-    [...bootBackground].map((h) =>
-      Promise.resolve(h()).catch((e) => {
-        console.error("[extension-host] onBootBackground:", e)
-      }),
-    ),
-  )
-
   async function unloadExtension(id: string): Promise<void> {
-    const disposables = extDisposables.get(id)
-    if (disposables) {
-      for (const d of disposables) {
-        try { d.dispose() } catch { /* ignore */ }
-      }
-      extDisposables.delete(id)
-    }
+    await runnerManager.deactivateExtension(id)
     registry.delete(id)
     // Remove from mutable entries list
     const idx = manifestEntries.findIndex((m) => m.manifest.id === id)
@@ -302,6 +269,7 @@ export async function bootMainExtensionHost(
 
   // Start manifest mtime watcher.
   // On change, trigger reloadExtension — this is the hot-reload path.
+  // The runner model makes this a kill+fork rather than a require() swap.
   let watcher: ReturnType<typeof watchManifests> | undefined
   const initialPaths = buildPathMap()
   watcher = watchManifests(initialPaths, (changedId) => {
@@ -320,12 +288,14 @@ export async function bootMainExtensionHost(
     reloadExtension,
     shutdown: async () => {
       watcher?.stop()
-      await Promise.allSettled([...shutdown].map((h) => Promise.resolve(h())))
+      // Gracefully shut down all running extension processes.
+      await Promise.allSettled(
+        runnerManager.getRunners().map((r) => runnerManager.deactivateExtension(r.extensionId)),
+      )
     },
   }
 }
 
-export { activateMainExtensions } from "./activate"
 export { validateManifest } from "./discover"
 export { discoverFromRegistry } from "./discover-registry"
 export type { DiscoveredEntry } from "./discover-registry"

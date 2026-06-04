@@ -12,46 +12,25 @@ import {
   type MarketplaceEntry,
 } from "./marketplace"
 import { addEntry, findEntry, removeEntry } from "./registry-store"
+import type { createRunnerManagerWithRpc } from "./runner-controller"
 
-export type ChannelHandler = (
-  args: unknown,
-  ctx: { windowId: number | null },
-) => Promise<unknown> | unknown
-
-export function createChannelTable() {
-  const table = new Map<string, ChannelHandler>()
-  return {
-    register(full: string, h: ChannelHandler) {
-      if (table.has(full)) throw new Error(`duplicate channel: ${full}`)
-      table.set(full, h)
-      return { dispose: () => table.delete(full) }
-    },
-    invoke(full: string, args: unknown, windowId: number | null) {
-      const h = table.get(full)
-      if (!h) throw new Error(`no handler for ${full}`)
-      return Promise.resolve(h(args, { windowId }))
-    },
-    has(full: string) {
-      return table.has(full)
-    },
-  }
-}
+type RunnerManager = ReturnType<typeof createRunnerManagerWithRpc>
 
 /**
  * The renderer talks to extensions through a single bridge channel
  * `ext-invoke`. The bridge resolves the (extensionId, channel) tuple
- * to the full `ext.<id>.<channel>` form the extension registered.
+ * and forwards the call to the appropriate utilityProcess runner.
  * This keeps the preload surface small and prevents renderer code from
  * faking another extension's id at the IPC layer.
  */
 export function registerInvokeRouter(
-  channelTable: ReturnType<typeof createChannelTable>,
+  runnerManager: RunnerManager,
   getManifests: () => ExtensionManifest[],
 ) {
   ipcMain.handle(
     "ext-invoke",
     async (
-      event,
+      _event,
       payload: { extensionId?: string; channel?: string; args?: unknown },
     ) => {
       const { extensionId, channel, args } = payload ?? {}
@@ -61,11 +40,7 @@ export function registerInvokeRouter(
       if (!getManifests().some((m) => m.id === extensionId)) {
         throw new Error(`unknown extension: ${extensionId}`)
       }
-      return channelTable.invoke(
-        `ext.${extensionId}.${channel}`,
-        args,
-        event.sender?.id ?? null,
-      )
+      return runnerManager.invokeExtensionChannel(extensionId, channel, args)
     },
   )
 }
