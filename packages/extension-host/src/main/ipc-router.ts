@@ -1,5 +1,5 @@
 // packages/extension-host/src/main/ipc-router.ts
-import { BrowserWindow, dialog, ipcMain } from "electron"
+import { BrowserWindow, dialog, ipcMain, shell } from "electron"
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join, resolve } from "node:path"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
@@ -116,6 +116,18 @@ export function registerWebViewChannels(opts: {
   }))
 
   ipcMain.handle("webview:preload-path", () => opts.webviewBridgePath)
+
+  /**
+   * Bounce a URL out to the user's default browser. Webviews can't
+   * reach the renderer's `shell.openExternal` directly, so this
+   * channel proxies the call. Restricted to http(s) to keep extensions
+   * from invoking `file://`, `vbscript:`, or other scheme abuses.
+   */
+  ipcMain.handle("webview:shell-open-external", async (_e, url: unknown) => {
+    if (typeof url !== "string") return
+    if (!/^https?:\/\//i.test(url)) return
+    await shell.openExternal(url)
+  })
 
   ipcMain.handle(
     "ext-settings:get",

@@ -65,9 +65,9 @@
   "tutorial.advanced.hint": "把桌面客户端指向你自己启动的 GBrain（自定义端口、远程服务器等）。",
   "tutorial.checking": "正在检查连接…",
 
-  "oneClick.title": "启用知识库",
-  "oneClick.description": "让助手按官方文档帮你安装并启动 GBrain，无需手动敲命令。",
-  "oneClick.button": "一键启用",
+  "install.openDocs": "安装 GBrain",
+  "install.openDocs.description": "在浏览器中打开 gbrain 官方安装文档。装好后回来点下方「已安装」即可。",
+  "install.recheck": "已经装好了，重新检测",
 
   "search.placeholder": "搜索你的知识库…",
   "search.results": "找到 {count} 条结果",

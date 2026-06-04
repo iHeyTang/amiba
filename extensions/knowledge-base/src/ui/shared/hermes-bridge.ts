@@ -19,6 +19,9 @@ declare global {
         get<T>(key: string, fallback: T): Promise<T>
         set(key: string, value: unknown): Promise<void>
       }
+      shell: {
+        openExternal(url: string): Promise<void>
+      }
       on(event: "language" | "theme", cb: (value: string) => void): () => void
     }
   }

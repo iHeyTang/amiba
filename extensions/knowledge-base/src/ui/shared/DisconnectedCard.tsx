@@ -33,8 +33,16 @@ import { useCallback, useEffect, useState } from "react"
 import { Button, Input, Label } from "@hermes-x/ui"
 
 import { BRAIN_DEFAULT_URL, BRAIN_TOKEN_KEY, BRAIN_URL_KEY } from "../../main/lib/constants"
-import { buildBrainInstallPrompt } from "../../main/lib/brain-install-ui"
 import { hermes } from "./hermes-bridge"
+
+/**
+ * gbrain's official install docs page. Bouncing to a real browser is
+ * the honest UX here — we can't fully automate "install a CLI" inside
+ * a sandboxed webview, and the docs walk users through Bun/Homebrew/
+ * manual install in one place. Once gbrain is on disk, the user comes
+ * back and clicks "Re-check" (probe re-runs and the stage flips).
+ */
+const GBRAIN_INSTALL_URL = "https://github.com/garrytan/gbrain#installation"
 import { useT } from "./i18n"
 import type { LifecycleProbe } from "./lifecycle"
 
@@ -80,19 +88,19 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
     }
   }, [t, reprobe])
 
-  const startOneClickInstall = useCallback(async () => {
+  const openInstallDocs = useCallback(async () => {
     setError(null)
     try {
+      // Seed the default URL so the post-install reprobe targets the
+      // same port `gbrain serve --http` listens on by default. Cheap to
+      // do unconditionally; settings.set is a no-op write if unchanged.
       const existingUrl = (
         await hermes.settings.get<string>(BRAIN_URL_KEY, "")
       ).trim()
       if (!existingUrl) {
         await hermes.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
       }
-      await hermes.ipc.invoke("chat:queue-prompt", {
-        text: buildBrainInstallPrompt(hermes.language === "zh-CN" ? "zh-CN" : "en"),
-        mode: "new",
-      })
+      await hermes.shell.openExternal(GBRAIN_INSTALL_URL)
     } catch (e) {
       setError(
         t("connection.error", { error: (e as Error).message ?? String(e) }),
@@ -109,7 +117,8 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
               t={t}
               connecting={connecting}
               error={error}
-              onInstall={() => void startOneClickInstall()}
+              onInstall={() => void openInstallDocs()}
+              onReprobe={() => void reprobe()}
             />
           ) : (
             <Stopped
@@ -281,10 +290,11 @@ interface CardProps {
 
 function NotInstalled({
   t,
-  connecting: _connecting,
+  connecting,
   error,
   onInstall,
-}: CardProps & { onInstall: () => void }) {
+  onReprobe,
+}: CardProps & { onInstall: () => void; onReprobe: () => void }) {
   return (
     <>
       <header className="flex flex-col items-center gap-2 text-center">
@@ -306,14 +316,28 @@ function NotInstalled({
           </li>
         ))}
       </ul>
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex flex-col items-center gap-2">
         <Button onClick={onInstall} size="lg" className="min-w-[200px]">
           <Sparkles className="mr-2 h-4 w-4" />
-          {t("oneClick.button")}
+          {t("install.openDocs")}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          {t("oneClick.description")}
+          {t("install.openDocs.description")}
         </p>
+        <Button
+          onClick={onReprobe}
+          disabled={connecting}
+          size="sm"
+          variant="ghost"
+          className="text-xs"
+        >
+          {connecting ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {t("install.recheck")}
+        </Button>
         {error && (
           <p className="text-center text-xs text-destructive">{error}</p>
         )}

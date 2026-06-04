@@ -34,6 +34,15 @@ declare global {
         get<T>(key: string, fallback: T): Promise<T>
         set(key: string, value: unknown): Promise<void>
       }
+      shell: {
+        /**
+         * Open a URL in the user's default browser. Use for "install
+         * docs" style links, OAuth flows, anywhere the extension wants
+         * to bounce the user out to a real browser instead of trying
+         * to navigate inside the webview.
+         */
+        openExternal(url: string): Promise<void>
+      }
       on(event: "language" | "theme", cb: (value: string) => void): () => void
     }
   }
@@ -109,6 +118,12 @@ contextBridge.exposeInMainWorld("hermes", {
     },
     set(key: string, value: unknown): Promise<void> {
       return ipcRenderer.invoke("ext-settings:set", { extensionId, key, value }) as Promise<void>
+    },
+  },
+
+  shell: {
+    openExternal(url: string): Promise<void> {
+      return ipcRenderer.invoke("webview:shell-open-external", url) as Promise<void>
     },
   },
 
