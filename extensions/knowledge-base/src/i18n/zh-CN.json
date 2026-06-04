@@ -47,6 +47,17 @@
   "config.providers.clear": "清除",
   "config.providers.setupLink": "申请 API key →",
 
+  "stage.stopped.title": "知识库引擎没运行",
+  "stage.stopped.description": "GBrain 已经装在这台电脑上了，但后台服务没启动。通常是因为重启过电脑。",
+  "stage.stopped.button": "启动",
+  "stage.stopped.starting": "启动中…",
+  "stage.stopped.hint": "1-2 秒就好。启动后会一直运行，直到你重启电脑或主动关掉 gbrain。",
+
+  "stage.noProvider.title": "再差一步就能用了",
+  "stage.noProvider.description": "服务已经跑起来了，但还没选 AI 提供商。",
+  "stage.noProvider.instructions": "去 设置 → 知识库，选一个 AI 提供商（首次推荐选免费的本地模型），如果需要 API key 就粘进去保存。保存后立刻生效，不需要重启。",
+  "stage.noProvider.recheck": "重新检查",
+
   "tutorial.tagline": "给 AI 一个长期记忆。",
   "tutorial.bullet.recall": "记住你说过的一切，跨对话依然有用。",
   "tutorial.bullet.link": "自动把笔记、决策、引用连接成知识图谱。",

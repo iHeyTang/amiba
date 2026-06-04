@@ -16,12 +16,15 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Download,
   FileText,
   Link2,
   Loader2,
+  Play,
   Plus,
   RefreshCw,
   Search,
+  Settings as SettingsIcon,
   Sparkles,
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -116,6 +119,19 @@ interface BrainPage {
   frontmatter?: Record<string, unknown> | null
 }
 
+/**
+ * Mirrors LifecycleProbe in src/main/index.ts. The renderer can't import
+ * from the main entry (different bundles), so the shape is duplicated.
+ */
+type LifecycleStage = "not-installed" | "stopped" | "no-provider" | "ready"
+interface LifecycleProbe {
+  stage: LifecycleStage
+  binary: string | null
+  health: BrainHealthInfo | null
+  providerCount: number
+  readyProviderCount: number
+}
+
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -128,11 +144,13 @@ export default function App() {
   // there is no token (local serve runs unauthenticated).
   const [url, setUrl] = useState(BRAIN_DEFAULT_URL)
 
-  // Connection state
+  // Lifecycle stage, driven by lifecycle.probe. null = boot probe in flight.
+  // Once resolved, drives which onboarding card OR the connected KB UI
+  // gets rendered (see the switch below).
+  const [stage, setStage] = useState<LifecycleStage | null>(null)
   const [healthInfo, setHealthInfo] = useState<BrainHealthInfo | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [bootLoading, setBootLoading] = useState(true)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   // Search
@@ -161,33 +179,29 @@ export default function App() {
   const [pageDetailError, setPageDetailError] = useState<string | null>(null)
 
   // -------------------------------------------------------------------------
-  // Load saved config
+  // Boot probe — single roundtrip resolves which onboarding stage to show.
   // -------------------------------------------------------------------------
+
+  const probeStage = useCallback(async () => {
+    try {
+      const p = await hermes.ipc.invoke<LifecycleProbe>("lifecycle.probe")
+      setStage(p.stage)
+      setHealthInfo(p.health)
+    } catch {
+      // probe failed entirely — treat as stopped so the user sees the
+      // "start" button rather than a blank pane.
+      setStage("stopped")
+      setHealthInfo(null)
+    }
+  }, [])
 
   useEffect(() => {
     void (async () => {
-      try {
-        const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
-        if (savedUrl) {
-          setUrl(savedUrl)
-          await testConnection(savedUrl)
-        } else {
-          try {
-            const h = await hermes.ipc.invoke<{ status: string; version?: string } | null>("health")
-            if (h) {
-              setUrl(BRAIN_DEFAULT_URL)
-              setHealthInfo(h)
-            }
-          } catch {
-            // ignore — probe failure just leaves us in unconnected state
-          }
-        }
-      } finally {
-        setBootLoading(false)
-      }
+      const savedUrl = await hermes.settings.get<string>(BRAIN_URL_KEY, "")
+      if (savedUrl) setUrl(savedUrl)
+      await probeStage()
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [probeStage])
 
   // -------------------------------------------------------------------------
   // Connection
@@ -197,22 +211,10 @@ export default function App() {
     async (testUrl?: string) => {
       setConnecting(true)
       setConnectionError(null)
-      setHealthInfo(null)
       try {
         const u = (testUrl ?? url).trim()
         await hermes.settings.set(BRAIN_URL_KEY, u)
-
-        let h: { status: string; version?: string } | null = null
-        try {
-          h = await hermes.ipc.invoke<{ status: string; version?: string } | null>("health")
-        } catch {
-          // health call failed
-        }
-        if (!h) {
-          setConnectionError(t("connection.failed"))
-        } else {
-          setHealthInfo(h)
-        }
+        await probeStage()
       } catch (e) {
         setConnectionError(
           t("connection.error", {
@@ -224,12 +226,40 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [url],
+    [url, probeStage],
   )
 
   // -------------------------------------------------------------------------
   // One-click install — opens chat via IPC to desktop host
   // -------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------
+  // Start gbrain serve (stopped → running). Used by the "stopped" stage
+  // card — binary is on disk but the daemon isn't up (typical after a
+  // reboot or terminal close).
+  // -------------------------------------------------------------------------
+  const startServe = useCallback(async () => {
+    setConnecting(true)
+    setConnectionError(null)
+    try {
+      const r = await hermes.ipc.invoke<
+        { ok: boolean; error?: string } | null
+      >("launcher.ensure")
+      if (r && !r.ok) {
+        setConnectionError(
+          t("connection.error", { error: r.error ?? "ensure failed" }),
+        )
+      }
+      await probeStage()
+    } catch (e) {
+      setConnectionError(
+        t("connection.error", { error: (e as Error).message ?? String(e) }),
+      )
+    } finally {
+      setConnecting(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probeStage])
 
   const startOneClickInstall = useCallback(async () => {
     setConnectionError(null)
@@ -376,9 +406,7 @@ export default function App() {
   // Render
   // -------------------------------------------------------------------------
 
-  const connected = !!healthInfo
-
-  if (bootLoading) {
+  if (stage === null) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -386,55 +414,128 @@ export default function App() {
     )
   }
 
-  if (!connected) {
+  if (stage !== "ready") {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-background">
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex min-h-full w-full justify-center px-6 py-6">
             <div className="my-auto flex w-full max-w-xl flex-col gap-5">
-              <header className="flex flex-col items-center gap-2 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <BookOpen className="h-6 w-6" />
-                </div>
-                <h1 className="text-xl font-semibold tracking-tight">
-                  {t("title")}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {t("tutorial.tagline")}
-                </p>
-              </header>
+              {stage === "not-installed" && (
+                <>
+                  <header className="flex flex-col items-center gap-2 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <BookOpen className="h-6 w-6" />
+                    </div>
+                    <h1 className="text-xl font-semibold tracking-tight">
+                      {t("title")}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      {t("tutorial.tagline")}
+                    </p>
+                  </header>
+                  <ul className="space-y-2 text-sm">
+                    {[
+                      t("tutorial.bullet.recall"),
+                      t("tutorial.bullet.link"),
+                      t("tutorial.bullet.context"),
+                    ].map((line, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span className="text-foreground/90">{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button
+                      onClick={() => void startOneClickInstall()}
+                      size="lg"
+                      className="min-w-[200px]"
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {t("oneClick.button")}
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      {t("oneClick.description")}
+                    </p>
+                    {connectionError && (
+                      <p className="text-center text-xs text-destructive">
+                        {connectionError}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
 
-              <ul className="space-y-2 text-sm">
-                {[
-                  t("tutorial.bullet.recall"),
-                  t("tutorial.bullet.link"),
-                  t("tutorial.bullet.context"),
-                ].map((line, i) => (
-                  <li key={i} className="flex items-start gap-2.5">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span className="text-foreground/90">{line}</span>
-                  </li>
-                ))}
-              </ul>
+              {stage === "stopped" && (
+                <>
+                  <header className="flex flex-col items-center gap-2 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <Download className="h-6 w-6" />
+                    </div>
+                    <h1 className="text-xl font-semibold tracking-tight">
+                      {t("stage.stopped.title")}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      {t("stage.stopped.description")}
+                    </p>
+                  </header>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button
+                      onClick={() => void startServe()}
+                      disabled={connecting}
+                      size="lg"
+                      className="min-w-[200px]"
+                    >
+                      {connecting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      {connecting ? t("stage.stopped.starting") : t("stage.stopped.button")}
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      {t("stage.stopped.hint")}
+                    </p>
+                    {connectionError && (
+                      <p className="text-center text-xs text-destructive">
+                        {connectionError}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
 
-              <div className="flex flex-col items-center gap-1.5">
-                <Button
-                  onClick={() => void startOneClickInstall()}
-                  size="lg"
-                  className="min-w-[200px]"
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  {t("oneClick.button")}
-                </Button>
-                <p className="text-center text-xs text-muted-foreground">
-                  {t("oneClick.description")}
-                </p>
-                {connectionError && (
-                  <p className="text-center text-xs text-destructive">
-                    {connectionError}
-                  </p>
-                )}
-              </div>
+              {stage === "no-provider" && (
+                <>
+                  <header className="flex flex-col items-center gap-2 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <SettingsIcon className="h-6 w-6" />
+                    </div>
+                    <h1 className="text-xl font-semibold tracking-tight">
+                      {t("stage.noProvider.title")}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      {t("stage.noProvider.description")}
+                    </p>
+                  </header>
+                  <div className="rounded-lg border border-border bg-card/40 p-4 text-sm">
+                    <p className="text-foreground/90">
+                      {t("stage.noProvider.instructions")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button
+                      onClick={() => void probeStage()}
+                      disabled={connecting}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                      {t("stage.noProvider.recheck")}
+                    </Button>
+                  </div>
+                </>
+              )}
 
               <div className="rounded-lg border border-border/60">
                 <button

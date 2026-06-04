@@ -47,6 +47,17 @@
   "config.providers.clear": "Clear",
   "config.providers.setupLink": "Get an API key →",
 
+  "stage.stopped.title": "Knowledge Base engine not running",
+  "stage.stopped.description": "GBrain is already installed on this computer but its background service isn't up. This usually happens after a reboot.",
+  "stage.stopped.button": "Start",
+  "stage.stopped.starting": "Starting…",
+  "stage.stopped.hint": "Takes 1-2 seconds. Stays running until you reboot or quit gbrain manually.",
+
+  "stage.noProvider.title": "One step away from ready",
+  "stage.noProvider.description": "The service is up, but you haven't picked an AI provider yet.",
+  "stage.noProvider.instructions": "Open Settings → Knowledge Base, choose a provider (free local model recommended for first-time users), paste the API key if it needs one, and save. It takes effect immediately — no restart needed.",
+  "stage.noProvider.recheck": "Re-check",
+
   "tutorial.tagline": "Give your AI a long-term memory.",
   "tutorial.bullet.recall": "Remembers everything you've shared, across conversations.",
   "tutorial.bullet.link": "Auto-links notes, decisions, and references into a graph.",
