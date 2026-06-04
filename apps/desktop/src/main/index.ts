@@ -14,11 +14,6 @@ import {
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
 import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
-import { registerExtProtocolScheme, registerExtProtocolHandler } from "./ext-protocol"
-
-// MUST run before app.whenReady() — scheme privileges can only be declared
-// while the protocol registry is still mutable.
-registerExtProtocolScheme()
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -356,7 +351,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
       // Required to allow <webview> tags in the renderer. Extension views
-      // are hosted in isolated <webview> elements (hermes-ext:// URLs) with
+      // are hosted in isolated <webview> elements (file:// URLs) with
       // their own preload bridge — no node integration inside them.
       webviewTag: true,
     }
@@ -430,10 +425,6 @@ if (!gotSingleInstanceLock) {
 
     const extensionsRoot = getExtensionsRoot()
     const registryPath = getRegistryPath()
-
-    // Make hermes-ext://<id>/<file> resolvable from the renderer. Must happen
-    // before any BrowserWindow load().
-    registerExtProtocolHandler(registryPath)
 
     // Absolute path to the webview bridge preload bundle (built as a second
     // preload entry — see electron.vite.config.ts).
