@@ -1,32 +1,19 @@
 /**
- * Typed re-export of `window.hermes` for convenience.
+ * Typed accessor for `window.hermes`. The interface
+ * (`WebViewHostAPI`) is the single source of truth in
+ * `@hermes-x/extension-api`; we only declare the ambient
+ * `Window.hermes` binding locally so the extension's TS code can
+ * read `window.hermes.chat.startSession(...)` etc. without casts.
  *
- * Extension UI pages import `hermes` from this module instead of
- * casting `window.hermes` everywhere.  The type definition mirrors
- * the shape exposed by the webview-bridge preload.
+ * extension-api itself intentionally does NOT `declare global` so it
+ * stays compatible with the desktop renderer's own (much larger)
+ * `window.hermes` shape.
  */
+import type { WebViewHostAPI } from "@hermes-x/extension-api"
 
 declare global {
   interface Window {
-    hermes: {
-      readonly extensionId: string
-      readonly language: string
-      readonly theme: "light" | "dark"
-      ipc: {
-        invoke<T>(channel: string, args?: unknown): Promise<T>
-      }
-      settings: {
-        get<T>(key: string, fallback: T): Promise<T>
-        set(key: string, value: unknown): Promise<void>
-      }
-      shell: {
-        openExternal(url: string): Promise<void>
-      }
-      host: {
-        queueChatPrompt(payload: { text: string }): Promise<boolean>
-      }
-      on(event: "language" | "theme", cb: (value: string) => void): () => void
-    }
+    hermes: WebViewHostAPI
   }
 }
 

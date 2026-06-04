@@ -126,7 +126,7 @@ export function DisconnectedCard({ stage, onProbeUpdate }: Props) {
         await hermes.settings.set(BRAIN_URL_KEY, BRAIN_DEFAULT_URL)
       }
       const lang = hermes.language === "zh-CN" ? "zh-CN" : "en"
-      const ok = await hermes.host.queueChatPrompt({
+      const ok = await hermes.chat.startSession({
         text: buildAgentInstallPrompt(lang),
       })
       if (!ok) {

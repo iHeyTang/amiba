@@ -17,49 +17,14 @@
 
 import { contextBridge, ipcRenderer } from "electron"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type {
+  ChatStartSessionPayload,
+  WebViewHostAPI,
+} from "@hermes-x/extension-api"
 
-declare global {
-  interface Window {
-    hermes: {
-      readonly extensionId: string
-      readonly language: string
-      readonly theme: "light" | "dark"
-      ipc: {
-        invoke<T>(channel: string, args?: unknown): Promise<T>
-      }
-      settings: {
-        get<T>(key: string, fallback: T): Promise<T>
-        set(key: string, value: unknown): Promise<void>
-      }
-      shell: {
-        /**
-         * Open a URL in the user's default browser. Use for "install
-         * docs" style links, OAuth flows, anywhere the extension wants
-         * to bounce the user out to a real browser instead of trying
-         * to navigate inside the webview.
-         */
-        openExternal(url: string): Promise<void>
-      }
-      host: {
-        /**
-         * Hand a prompt off to the desktop's main chat surface. The
-         * host queues the text into the shared pending-prompt slot,
-         * deselects any extension activity that's currently focused,
-         * and switches the renderer back to the chat view. The agent
-         * picks the prompt up and runs with it.
-         *
-         * Returns true if the host accepted the payload, false if the
-         * payload was rejected (empty text, malformed shape).
-         */
-        queueChatPrompt(payload: { text: string }): Promise<boolean>
-      }
-      on(event: "language" | "theme", cb: (value: string) => void): () => void
-    }
-  }
-}
+// Side-effect import only: the `declare global { Window.hermes }`
+// augmentation lives in @hermes-x/extension-api/src/webview.ts so
+// extensions and the preload share one source of truth for the shape.
 
 // ---------------------------------------------------------------------------
 // Resolve extensionId from the webview URL
@@ -106,7 +71,7 @@ try {
 // Expose the bridge
 // ---------------------------------------------------------------------------
 
-contextBridge.exposeInMainWorld("hermes", {
+const api: WebViewHostAPI = {
   get extensionId(): string {
     return extensionId
   },
@@ -140,20 +105,22 @@ contextBridge.exposeInMainWorld("hermes", {
     },
   },
 
-  host: {
-    queueChatPrompt(payload: { text: string }): Promise<boolean> {
+  chat: {
+    startSession(payload: ChatStartSessionPayload): Promise<boolean> {
       return ipcRenderer.invoke(
-        "webview:host-queue-chat-prompt",
+        "webview:chat-start-session",
         payload,
       ) as Promise<boolean>
     },
   },
 
-  on(event: "language" | "theme", cb: (value: string) => void): () => void {
+  on(event, cb) {
     const channel =
       event === "language" ? "webview:language-changed" : "webview:theme-changed"
     const handler = (_e: unknown, value: string) => cb(value)
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.off(channel, handler)
   },
-})
+}
+
+contextBridge.exposeInMainWorld("hermes", api)

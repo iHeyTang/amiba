@@ -1,18 +1,15 @@
-// Re-export the host bridge with a typed shape.
-// window.hermes is injected by the webview preload — see hermes-x docs.
+/**
+ * Typed accessor for `window.hermes`. The interface (`WebViewHostAPI`)
+ * is the single source of truth in `@hermes-x/extension-api`; we
+ * declare the ambient `Window.hermes` binding locally so this
+ * extension's TS code can read `window.hermes.<...>` without casts.
+ */
+import type { WebViewHostAPI } from "@hermes-x/extension-api"
 
-interface HermesBridge {
-  readonly extensionId: string
-  readonly language: string
-  readonly theme: "light" | "dark"
-  ipc: {
-    invoke<T = unknown>(channel: string, args?: unknown): Promise<T>
+declare global {
+  interface Window {
+    hermes: WebViewHostAPI
   }
-  settings: {
-    get<T = unknown>(key: string, fallback: T): Promise<T>
-    set(key: string, value: unknown): Promise<void>
-  }
-  on(event: "language" | "theme", cb: (value: string) => void): () => void
 }
 
-export const hermes = (window as unknown as { hermes: HermesBridge }).hermes
+export const hermes = window.hermes

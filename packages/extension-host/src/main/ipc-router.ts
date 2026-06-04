@@ -130,8 +130,9 @@ export function registerWebViewChannels(opts: {
   })
 
   /**
-   * Queue a prompt for the main desktop window's chat surface and
-   * hand control back to it.
+   * Backing implementation of `hermes.chat.startSession({ text })`
+   * from `@hermes-x/extension-api`. Hand a prompt off to the main
+   * desktop window's chat surface and pass control back.
    *
    * Steps the renderer relies on:
    *   1. Write the prompt to `home.pendingPrompt` (the same key Quick-
@@ -149,7 +150,7 @@ export function registerWebViewChannels(opts: {
    * payload (currently only happens on shape validation failure).
    */
   ipcMain.handle(
-    "webview:host-queue-chat-prompt",
+    "webview:chat-start-session",
     async (_e, payload: unknown): Promise<boolean> => {
       if (!payload || typeof payload !== "object") return false
       const text = (payload as { text?: unknown }).text
