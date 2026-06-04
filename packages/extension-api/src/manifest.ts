@@ -1,7 +1,7 @@
 /**
  * Static, build-time-readable description of an extension. Parsed before
  * any extension code is loaded, so loader can still render contributes
- * (activityBar item, settings tab) for an extension whose entry crashed.
+ * (main panel, settings tab) for an extension whose entry crashed.
  */
 export interface ExtensionManifest {
   /** Reverse-DNS id, used to namespace ipc / settings / storage / i18n. */
@@ -29,36 +29,32 @@ export interface ExtensionManifest {
 }
 
 export interface ManifestContributes {
-  activityBar?: Array<{
-    id: string
+  /**
+   * The ActivityBar icon AND its corresponding main-panel page.
+   * Clicking the icon enters this page. extensionId doubles as the activity item id.
+   */
+  main?: {
     /** Lucide icon name. */
     icon: string
     /** Locale → display text. */
     labels: Record<string, string>
-    order?: number
-  }>
-  sidebarViews?: Array<{
-    id: string
-    /** "activityBar:<id>" — view is mounted when matching activity item is selected. */
-    anchor: string
-    /** Relative path to the HTML page, e.g. "ui/sidebar.html". */
+    /** Relative path to the HTML page. */
     view: string
-  }>
-  settingsTabs?: Array<{
-    id: string
-    /** Locale → display text. */
-    labels: Record<string, string>
+    order?: number
+  }
+  /**
+   * A row under Settings → EXTENSIONS sidebar group, plus the page
+   * rendered when clicked. extensionId doubles as the settings tab id.
+   */
+  settings?: {
     /** Optional lucide icon name. */
     icon?: string
+    /** Locale → display text. */
+    labels: Record<string, string>
     /** Relative path to the HTML page. */
     view: string
     order?: number
-  }>
-  composerHints?: Array<{
-    id: string
-    /** Relative path to the HTML page. */
-    view: string
-  }>
+  }
 }
 
 export type Permission =

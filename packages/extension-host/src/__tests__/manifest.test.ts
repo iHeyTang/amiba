@@ -30,32 +30,164 @@ describe("validateManifest", () => {
     expect(r.ok).toBe(false)
   })
 
-  it("rejects sidebarView anchor that does not start with activityBar:", () => {
-    const r = validateManifest({
-      ...base,
-      contributes: { sidebarViews: [{ id: "x", anchor: "main:y", view: "ui/sidebar.html" }] },
-    })
-    expect(r.ok).toBe(false)
-    expect(r.ok ? "" : r.error).toMatch(/anchor/)
-  })
+  // ---------------------------------------------------------------------------
+  // contributes.main
+  // ---------------------------------------------------------------------------
 
-  it("accepts valid activityBar contributes with icon + labels", () => {
+  it("accepts a valid contributes.main singleton", () => {
     const r = validateManifest({
       ...base,
       contributes: {
-        activityBar: [{ id: "panel", icon: "book-open", labels: { en: "Panel" } }],
+        main: {
+          icon: "book-open",
+          labels: { en: "Knowledge Base", "zh-CN": "知识库" },
+          view: "dist/ui/main/index.html",
+          order: 200,
+        },
       },
     })
     expect(r.ok).toBe(true)
   })
 
-  it("accepts valid sidebarView with view path", () => {
+  it("accepts contributes.main without order (optional)", () => {
     const r = validateManifest({
       ...base,
       contributes: {
-        sidebarViews: [{ id: "sv", anchor: "activityBar:panel", view: "ui/sidebar.html" }],
+        main: {
+          icon: "book-open",
+          labels: { en: "Panel" },
+          view: "dist/ui/main/index.html",
+        },
       },
     })
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects contributes.main with missing icon", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        main: {
+          labels: { en: "Panel" },
+          view: "dist/ui/main/index.html",
+        },
+      },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/icon/)
+  })
+
+  it("rejects contributes.main with empty labels", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        main: {
+          icon: "book-open",
+          labels: {},
+          view: "dist/ui/main/index.html",
+        },
+      },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/labels/)
+  })
+
+  it("rejects contributes.main with missing view", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        main: {
+          icon: "book-open",
+          labels: { en: "Panel" },
+        },
+      },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/view/)
+  })
+
+  // ---------------------------------------------------------------------------
+  // contributes.settings
+  // ---------------------------------------------------------------------------
+
+  it("accepts a valid contributes.settings singleton", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        settings: {
+          icon: "book-open",
+          labels: { en: "Knowledge Base", "zh-CN": "知识库" },
+          view: "dist/ui/settings/index.html",
+          order: 100,
+        },
+      },
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts contributes.settings without icon (optional)", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        settings: {
+          labels: { en: "My Extension" },
+          view: "dist/ui/settings/index.html",
+        },
+      },
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects contributes.settings with empty labels", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        settings: {
+          labels: {},
+          view: "dist/ui/settings/index.html",
+        },
+      },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/labels/)
+  })
+
+  it("rejects contributes.settings with missing view", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        settings: {
+          labels: { en: "My Extension" },
+        },
+      },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/view/)
+  })
+
+  it("accepts both main and settings contributions together", () => {
+    const r = validateManifest({
+      ...base,
+      contributes: {
+        main: {
+          icon: "book-open",
+          labels: { en: "Knowledge Base" },
+          view: "dist/ui/main/index.html",
+          order: 200,
+        },
+        settings: {
+          icon: "book-open",
+          labels: { en: "Knowledge Base" },
+          view: "dist/ui/settings/index.html",
+          order: 100,
+        },
+      },
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a manifest with neither main nor settings (pure background)", () => {
+    const r = validateManifest({ ...base, contributes: {} })
     expect(r.ok).toBe(true)
   })
 })

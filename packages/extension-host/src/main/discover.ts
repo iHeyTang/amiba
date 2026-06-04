@@ -28,10 +28,35 @@ export function validateManifest(raw: unknown): ValidationResult {
   }
 
   const contributes = m.contributes as Record<string, unknown> | undefined
-  if (contributes && Array.isArray(contributes.sidebarViews)) {
-    for (const v of contributes.sidebarViews as Array<Record<string, unknown>>) {
-      if (typeof v.anchor !== "string" || !v.anchor.startsWith("activityBar:")) {
-        return { ok: false, error: `sidebarView anchor must start with "activityBar:": ${String(v.anchor)}` }
+  if (contributes) {
+    if (contributes.main !== undefined) {
+      const main = contributes.main as Record<string, unknown>
+      if (typeof main.icon !== "string" || main.icon.length === 0) {
+        return { ok: false, error: "contributes.main: icon must be a non-empty string" }
+      }
+      if (
+        !main.labels ||
+        typeof main.labels !== "object" ||
+        Object.keys(main.labels as object).length === 0
+      ) {
+        return { ok: false, error: "contributes.main: labels must be a non-empty object" }
+      }
+      if (typeof main.view !== "string" || main.view.length === 0) {
+        return { ok: false, error: "contributes.main: view must be a non-empty string" }
+      }
+    }
+
+    if (contributes.settings !== undefined) {
+      const settings = contributes.settings as Record<string, unknown>
+      if (
+        !settings.labels ||
+        typeof settings.labels !== "object" ||
+        Object.keys(settings.labels as object).length === 0
+      ) {
+        return { ok: false, error: "contributes.settings: labels must be a non-empty object" }
+      }
+      if (typeof settings.view !== "string" || settings.view.length === 0) {
+        return { ok: false, error: "contributes.settings: view must be a non-empty string" }
       }
     }
   }

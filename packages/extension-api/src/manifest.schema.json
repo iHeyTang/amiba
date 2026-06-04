@@ -25,64 +25,34 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "activityBar": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["id", "icon", "labels"],
-            "additionalProperties": false,
-            "properties": {
-              "id": { "type": "string" },
-              "icon": { "type": "string" },
-              "labels": {
-                "type": "object",
-                "additionalProperties": { "type": "string" }
-              },
-              "order": { "type": "number" }
-            }
+        "main": {
+          "type": "object",
+          "required": ["icon", "labels", "view"],
+          "additionalProperties": false,
+          "properties": {
+            "icon": { "type": "string" },
+            "labels": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "string" }
+            },
+            "view": { "type": "string" },
+            "order": { "type": "number" }
           }
         },
-        "sidebarViews": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["id", "anchor", "view"],
-            "additionalProperties": false,
-            "properties": {
-              "id": { "type": "string" },
-              "anchor": { "type": "string", "pattern": "^activityBar:" },
-              "view": { "type": "string" }
-            }
-          }
-        },
-        "settingsTabs": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["id", "labels", "view"],
-            "additionalProperties": false,
-            "properties": {
-              "id": { "type": "string" },
-              "labels": {
-                "type": "object",
-                "additionalProperties": { "type": "string" }
-              },
-              "icon": { "type": "string" },
-              "view": { "type": "string" },
-              "order": { "type": "number" }
-            }
-          }
-        },
-        "composerHints": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["id", "view"],
-            "additionalProperties": false,
-            "properties": {
-              "id": { "type": "string" },
-              "view": { "type": "string" }
-            }
+        "settings": {
+          "type": "object",
+          "required": ["labels", "view"],
+          "additionalProperties": false,
+          "properties": {
+            "icon": { "type": "string" },
+            "labels": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "string" }
+            },
+            "view": { "type": "string" },
+            "order": { "type": "number" }
           }
         }
       }
