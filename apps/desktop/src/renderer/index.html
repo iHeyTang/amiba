@@ -4,43 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      Extra script-src allowances (only on the main window, not notifier /
-      quick-ask) needed by the extension system:
-        - hermes-ext:    serves extension bundles
-        - hermes-shared: serves trampolines that re-export shared modules
-                         (react, @hermes-x/*) from globalThis.__hermesShared
-      The static <script type="importmap"> below is allowed by 'self' since
-      it's part of the document.
+      CSP notes:
+        - script-src 'self'        — only the bundled renderer scripts.
+        - frame-src / child-src    — allow <webview> to host hermes-ext: pages
+                                     (extension HTML pages served by the custom
+                                     protocol; Electron's webview is internally a
+                                     kind of frame from the parent document's
+                                     perspective).
+        - connect-src hermes-ext:  — extension webviews may fetch from the protocol
+                                     (e.g. relative asset loads from the ext page).
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext: hermes-shared:; script-src 'self' 'unsafe-inline' hermes-ext: hermes-shared:; script-src-elem 'self' 'unsafe-inline' hermes-ext: hermes-shared:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: hermes-ext:; script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline'; frame-src 'self' hermes-ext:; child-src 'self' hermes-ext:"
     />
-    <!--
-      Static import map: maps bare specifiers an extension bundle expects
-      (react, @hermes-x/ui, …) to URLs on the hermes-shared:// custom
-      protocol. The main process serves a tiny ESM trampoline per specifier
-      that re-exports from globalThis.__hermesShared, which the renderer's
-      setup-importmap.ts populates with desktop's own copies of these
-      modules. Same React instance for desktop and extensions → hooks work.
-
-      Keep in sync with apps/desktop/src/main/shared-protocol.ts EXPORTS.
-    -->
-    <script type="importmap">
-      {
-        "imports": {
-          "react": "hermes-shared://_/react",
-          "react/jsx-runtime": "hermes-shared://_/react/jsx-runtime",
-          "react/jsx-dev-runtime": "hermes-shared://_/react/jsx-dev-runtime",
-          "react-dom": "hermes-shared://_/react-dom",
-          "react-dom/client": "hermes-shared://_/react-dom/client",
-          "@hermes-x/extension-host/renderer": "hermes-shared://_/@hermes-x/extension-host/renderer",
-          "@hermes-x/i18n": "hermes-shared://_/@hermes-x/i18n",
-          "@hermes-x/platform": "hermes-shared://_/@hermes-x/platform",
-          "@hermes-x/ui": "hermes-shared://_/@hermes-x/ui"
-        }
-      }
-    </script>
     <title>Hermes</title>
   </head>
   <body class="h-full bg-background text-foreground">

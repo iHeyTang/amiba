@@ -15,18 +15,10 @@ import {
 import { setPlatform } from "@hermes-x/platform"
 import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
 import { registerExtProtocolScheme, registerExtProtocolHandler } from "./ext-protocol"
-import {
-  registerSharedProtocolScheme,
-  registerSharedProtocolHandler,
-} from "./shared-protocol"
 
-// MUST run before app.whenReady() — scheme privileges (standard / secure /
-// supportFetchAPI / corsEnabled) can only be declared while the protocol
-// registry is still mutable. Without these the renderer treats imports from
-// hermes-ext://… (extension bundles) and hermes-shared://… (shared-module
-// trampolines for react / @hermes-x/*) as "untrusted" and refuses to load.
+// MUST run before app.whenReady() — scheme privileges can only be declared
+// while the protocol registry is still mutable.
 registerExtProtocolScheme()
-registerSharedProtocolScheme()
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -362,7 +354,11 @@ function createWindow() {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // Required to allow <webview> tags in the renderer. Extension views
+      // are hosted in isolated <webview> elements (hermes-ext:// URLs) with
+      // their own preload bridge — no node integration inside them.
+      webviewTag: true,
     }
   })
 
@@ -436,12 +432,51 @@ if (!gotSingleInstanceLock) {
     const registryPath = getRegistryPath()
 
     // Make hermes-ext://<id>/<file> resolvable from the renderer. Must happen
-    // before any BrowserWindow load() (the renderer's extensions-boot fires a
-    // dynamic import as soon as the React tree mounts).
+    // before any BrowserWindow load().
     registerExtProtocolHandler(registryPath)
-    // Same goes for hermes-shared:// — the static importmap in index.html
-    // points bare specifiers (react, @hermes-x/ui, …) at this scheme.
-    registerSharedProtocolHandler()
+
+    // Absolute path to the webview bridge preload bundle (built as a second
+    // preload entry — see electron.vite.config.ts).
+    const webviewBridgePath = path.join(__dirname, "../preload/webview-bridge.js")
+
+    const { LANG_PREF_STORAGE_KEY } = await import("@hermes-x/i18n")
+    const { THEME_PREF_STORAGE_KEY } = await import("@hermes-x/ui")
+
+    // Track current language and theme so webviews can request initial state.
+    let currentLanguage = "en"
+    let currentTheme = "dark"
+
+    // Initialise from persisted store.
+    void mainStore.get([LANG_PREF_STORAGE_KEY, THEME_PREF_STORAGE_KEY]).then((r) => {
+      const rawLang = r[LANG_PREF_STORAGE_KEY]
+      if (rawLang === "en" || rawLang === "zh-CN") currentLanguage = rawLang
+      const rawTheme = r[THEME_PREF_STORAGE_KEY]
+      if (rawTheme === "light" || rawTheme === "dark") currentTheme = rawTheme as string
+    })
+
+    // Subscribe to preference changes and broadcast to all open webviews.
+    mainStore.watch((changes) => {
+      const langChange = changes[LANG_PREF_STORAGE_KEY]
+      if (langChange) {
+        const next = langChange.newValue
+        if (next === "en" || next === "zh-CN") {
+          currentLanguage = next
+          for (const wc of require("electron").webContents.getAllWebContents()) {
+            try { wc.send("webview:language-changed", currentLanguage) } catch { /* ignore */ }
+          }
+        }
+      }
+      const themeChange = changes[THEME_PREF_STORAGE_KEY]
+      if (themeChange) {
+        const next = themeChange.newValue
+        if (next === "light" || next === "dark") {
+          currentTheme = next as string
+          for (const wc of require("electron").webContents.getAllWebContents()) {
+            try { wc.send("webview:theme-changed", currentTheme) } catch { /* ignore */ }
+          }
+        }
+      }
+    })
 
     const extensionHost = await bootMainExtensionHost({
       registryPath,
@@ -457,6 +492,9 @@ if (!gotSingleInstanceLock) {
         throw new Error("hermes.callTool not wired yet")
       },
       getI18n: async (_extensionId, _locale) => ({}),
+      getLanguage: () => currentLanguage,
+      getTheme: () => currentTheme,
+      webviewBridgePath,
     })
 
     ;(globalThis as { __hermesExtensionHost?: typeof extensionHost }).__hermesExtensionHost = extensionHost

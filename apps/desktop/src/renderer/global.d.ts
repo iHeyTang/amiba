@@ -97,7 +97,6 @@ interface HermesBridgeApi {
   extensions: {
     listManifests(): Promise<import("@hermes-x/extension-api").ExtensionManifest[]>
     invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
-    rendererBundleUrl(extensionId: string): Promise<string | null>
     i18nResources(
       extensionId: string,
       locale: "en" | "zh-CN",
@@ -122,6 +121,10 @@ interface HermesBridgeApi {
     }
     onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
   }
+  /** Returns the absolute file:// path of the webview bridge preload bundle. */
+  getWebviewPreloadPath(): Promise<string>
+  /** Returns the current { language, theme } init state for a webview. */
+  getWebviewInitState(): Promise<{ language: string; theme: string }>
 }
 
 declare global {

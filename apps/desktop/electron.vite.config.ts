@@ -32,7 +32,18 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PKGS })],
     build: {
       outDir: "out/preload",
-      lib: { entry: "src/preload/index.ts" }
+      rollupOptions: {
+        input: {
+          // Desktop bridge (window.hermes for the main renderer).
+          index: resolve(__dirname, "src/preload/index.ts"),
+          // Webview bridge (window.hermes for extension WebViews).
+          "webview-bridge": resolve(__dirname, "src/preload/webview-bridge.ts"),
+        },
+        output: {
+          // Ensure each entry produces a separate file named after its key.
+          entryFileNames: "[name].js",
+        },
+      },
     }
   },
   renderer: {
