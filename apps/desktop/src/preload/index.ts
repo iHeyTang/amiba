@@ -142,10 +142,17 @@ const api = {
   ...createWebviewPreloadBridge(),
 
   /**
-   * Push the renderer's resolved theme ("light" | "dark") to main so it can
-   * rebroadcast to all extension webviews. The renderer is the single source
-   * of truth — only it knows how to resolve "auto" against
-   * `prefers-color-scheme`. Main is just a broker.
+   * Push the renderer's resolved language ("en" | "zh-CN") to main for
+   * rebroadcast to all extension webviews. Only the renderer can resolve
+   * the "auto" preference against `navigator.language`.
+   */
+  setResolvedLanguage: (language: "en" | "zh-CN"): Promise<void> =>
+    ipcRenderer.invoke("language:set-resolved", language),
+
+  /**
+   * Same pattern as setResolvedLanguage but for theme ("light" | "dark").
+   * Only the renderer can resolve the "auto" preference against
+   * `prefers-color-scheme`.
    */
   setResolvedTheme: (theme: "light" | "dark"): Promise<void> =>
     ipcRenderer.invoke("theme:set-resolved", theme),

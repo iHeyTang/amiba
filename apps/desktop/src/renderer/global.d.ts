@@ -131,6 +131,12 @@ interface HermesBridgeApi {
   /** Returns the current { language, theme } init state for a webview. */
   getWebviewInitState(): Promise<{ language: string; theme: string }>
   /**
+   * Push the renderer's resolved language to main for rebroadcast to all
+   * extension webviews. Only the renderer can resolve the "auto"
+   * preference against `navigator.language`, so it is the source of truth.
+   */
+  setResolvedLanguage(language: "en" | "zh-CN"): Promise<void>
+  /**
    * Push the renderer's resolved theme to main, which rebroadcasts it to
    * every extension webview. Only the renderer can resolve the "auto"
    * preference against `prefers-color-scheme`, so it is the source of truth.

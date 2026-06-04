@@ -445,49 +445,36 @@ if (!gotSingleInstanceLock) {
     // preload entry — see electron.vite.config.ts).
     const webviewBridgePath = path.join(__dirname, "../preload/webview-bridge.js")
 
-    const { LANG_PREF_STORAGE_KEY } = await import("@hermes-x/i18n")
 
     // Track current language and theme so webviews can request initial state.
     //
-    // Language is a preference: the stored value IS what we broadcast.
-    // Theme is a RESOLVED value (always "light" or "dark"); the stored
-    // preference may be "auto", and only the renderer can resolve "auto"
-    // against `prefers-color-scheme`. The renderer pushes its resolved
-    // theme to us via `theme:set-resolved` on every change, and we
-    // re-broadcast to all webviews. THEME_PREF_STORAGE_KEY is therefore
-    // NOT read here — the resolved-theme IPC is the only source.
-    let currentLanguage = "en"
+    // Both are RESOLVED values pushed from the renderer — only the renderer
+    // can resolve "auto" against `prefers-color-scheme` (theme) and
+    // `navigator.language` (language). Main is just a broker: it caches
+    // whatever the renderer pushed last and rebroadcasts to every webview
+    // on change. Storing the preference here would be wrong because the
+    // stored preference can be "auto" (the default).
+    let currentLanguage: "en" | "zh-CN" = "en"
     let currentTheme: "light" | "dark" = "light"
 
-    // Initialise language from persisted store.
-    void mainStore.get([LANG_PREF_STORAGE_KEY]).then((r) => {
-      const rawLang = r[LANG_PREF_STORAGE_KEY]
-      if (rawLang === "en" || rawLang === "zh-CN") currentLanguage = rawLang
-    })
-
-    // Subscribe to language preference changes and broadcast to all webviews.
-    mainStore.watch((changes) => {
-      const langChange = changes[LANG_PREF_STORAGE_KEY]
-      if (langChange) {
-        const next = langChange.newValue
-        if (next === "en" || next === "zh-CN") {
-          currentLanguage = next
-          for (const wc of require("electron").webContents.getAllWebContents()) {
-            try { wc.send("webview:language-changed", currentLanguage) } catch { /* ignore */ }
-          }
-        }
+    function broadcastToWebviews(channel: string, payload: unknown) {
+      for (const wc of require("electron").webContents.getAllWebContents()) {
+        try { wc.send(channel, payload) } catch { /* ignore */ }
       }
+    }
+
+    ipcMain.handle("language:set-resolved", (_e, language: unknown) => {
+      if (language !== "en" && language !== "zh-CN") return
+      if (language === currentLanguage) return
+      currentLanguage = language
+      broadcastToWebviews("webview:language-changed", currentLanguage)
     })
 
-    // Resolved theme IPC — the renderer (with access to `prefers-color-scheme`)
-    // is the source of truth; we just rebroadcast.
     ipcMain.handle("theme:set-resolved", (_e, theme: unknown) => {
       if (theme !== "light" && theme !== "dark") return
       if (theme === currentTheme) return
       currentTheme = theme
-      for (const wc of require("electron").webContents.getAllWebContents()) {
-        try { wc.send("webview:theme-changed", currentTheme) } catch { /* ignore */ }
-      }
+      broadcastToWebviews("webview:theme-changed", currentTheme)
     })
 
     // Absolute path to the extension runner bundle.

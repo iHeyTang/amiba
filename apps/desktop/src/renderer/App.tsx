@@ -4,6 +4,7 @@ import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
 import { SettingsView } from "@hermes-x/ui"
 import { useResolvedTheme } from "@hermes-x/ui"
+import { useT } from "@hermes-x/i18n"
 import { Loader2 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactElement } from "react"
 
@@ -35,8 +36,14 @@ export default function App() {
 
 function AppInner(): ReactElement {
   const { theme: resolvedTheme } = useResolvedTheme()
-  // Push the resolved theme to main on every change so extension webviews
-  // see the same "light"/"dark" value the desktop UI is rendering.
+  const { language: resolvedLanguage } = useT()
+  // Push the resolved language and theme to main on every change so extension
+  // webviews see the same values the desktop UI is rendering. The renderer
+  // is the only context that can resolve "auto" against navigator.language
+  // and prefers-color-scheme.
+  useEffect(() => {
+    void window.hermes.setResolvedLanguage(resolvedLanguage)
+  }, [resolvedLanguage])
   useEffect(() => {
     void window.hermes.setResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
