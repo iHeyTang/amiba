@@ -46,7 +46,8 @@ import { useT } from "@hermes-x/i18n";
 import { useResolvedTheme } from "../theme";
 import { HermesLogo } from "../primitives";
 import { cn } from "../primitives";
-import { SlotOutlet } from "@hermes-x/extension-host/renderer";
+// TODO(phase-b): SlotOutlet removed — composer hints will render via
+// <ExtensionWebView> using useComposerHints() viewUrl. Stubbed for now.
 import type {
   FaviconCapability,
   HomeCapabilities,
@@ -439,13 +440,8 @@ function Home({
           />
         </section>
 
-        <SlotOutlet
-          name="composer.hint"
-          runtimeProps={{
-            onPrefill: (text: string) => setInput(text),
-            language,
-          }}
-        />
+        {/* TODO(phase-b): Render composer hint extension views via <ExtensionWebView>
+           using useComposerHints() viewUrl. */}
 
         {/*
           Shortcuts strip is extension-only (backed by chrome.bookmarks).

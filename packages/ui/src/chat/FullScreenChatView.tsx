@@ -48,7 +48,9 @@ import {
 import ChatSurface from "./ChatSurface";
 import { SettingsSkills } from "../settings/SettingsSkills";
 import { ToolsView } from "../tools/ToolsView";
-import { SingleSlotOutlet, useActivityBarItems } from "@hermes-x/extension-host/renderer";
+// TODO(phase-b): SingleSlotOutlet removed — replace with <ExtensionWebView> once
+// SidebarViewContributions are wired into FullScreenChatView.
+import { useActivityBarItems } from "@hermes-x/extension-host/renderer";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -466,7 +468,9 @@ function FullScreenChatViewInner({
               openAgentDestination={openAgentDestination}
             />
           ) : (
-            <SingleSlotOutlet name="sidebar.view" activeId={sidebarView} />
+            // TODO(phase-b): Render extension sidebar view via <ExtensionWebView>
+            // using useSidebarViews() hook and matching anchor to sidebarView id.
+            null
           )}
         </main>
       </div>
