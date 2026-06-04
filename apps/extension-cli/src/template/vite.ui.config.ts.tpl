@@ -16,7 +16,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        sidebar: resolve(__dirname, "src/ui/sidebar/index.html"),
+        main: resolve(__dirname, "src/ui/main/index.html"),
         settings: resolve(__dirname, "src/ui/settings/index.html"),
       },
     },
