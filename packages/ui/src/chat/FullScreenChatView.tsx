@@ -48,9 +48,11 @@ import {
 import ChatSurface from "./ChatSurface";
 import { SettingsSkills } from "../settings/SettingsSkills";
 import { ToolsView } from "../tools/ToolsView";
-// TODO(phase-b): SingleSlotOutlet removed — replace with <ExtensionWebView> once
-// SidebarViewContributions are wired into FullScreenChatView.
-import { useActivityBarItems } from "@hermes-x/extension-host/renderer";
+import {
+  ExtensionWebView,
+  useActivityBarItems,
+  useSidebarViews,
+} from "@hermes-x/extension-host/renderer";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -354,6 +356,7 @@ function FullScreenChatViewInner({
   }, []);
 
   const extensionActivityItems = useActivityBarItems();
+  const sidebarViews = useSidebarViews();
 
   function onSidebarViewChange(next: ActivityViewId) {
     setSidebarView(next);
@@ -467,11 +470,16 @@ function FullScreenChatViewInner({
               openSettings={openSettings}
               openAgentDestination={openAgentDestination}
             />
-          ) : (
-            // TODO(phase-b): Render extension sidebar view via <ExtensionWebView>
-            // using useSidebarViews() hook and matching anchor to sidebarView id.
-            null
-          )}
+          ) : (() => {
+            // Extension-contributed sidebar view. Anchor convention:
+            // "activityBar:<activityItemId>" — match the current sidebarView id.
+            const anchor = `activityBar:${sidebarView}`;
+            const contrib = sidebarViews.find((v) => v.anchor === anchor);
+            if (contrib) {
+              return <ExtensionWebView src={contrib.viewUrl} className="h-full w-full" />;
+            }
+            return null;
+          })()}
         </main>
       </div>
     </div>
