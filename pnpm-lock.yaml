@@ -336,6 +336,9 @@ importers:
       '@hermes-x/extension-cli':
         specifier: workspace:*
         version: link:../../apps/extension-cli
+      '@hermes-x/tailwind-preset':
+        specifier: workspace:*
+        version: link:../../packages/tailwind-preset
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
@@ -348,6 +351,15 @@ importers:
       '@vitejs/plugin-react':
         specifier: 4.3.3
         version: 4.3.3(vite@5.4.10(@types/node@20.19.41)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0))
+      autoprefixer:
+        specifier: 10.4.20
+        version: 10.4.20(postcss@8.4.49)
+      postcss:
+        specifier: 8.4.49
+        version: 8.4.49
+      tailwindcss:
+        specifier: 3.4.15
+        version: 3.4.15
       typescript:
         specifier: 5.6.3
         version: 5.6.3
