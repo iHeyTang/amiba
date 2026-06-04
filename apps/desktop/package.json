@@ -6,7 +6,7 @@
   "author": "iHeyTang",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "concurrently --names \"runner,desktop\" --prefix-colors \"yellow,cyan\" --kill-others-on-fail \"vite build --config vite.runner.config.ts --watch\" \"electron-vite dev\"",
     "build": "vite build --config vite.runner.config.ts && electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron .",
@@ -100,6 +100,7 @@
     "@hermes-x/tailwind-preset": "workspace:*",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "10.4.20",
+    "concurrently": "^9.1.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
