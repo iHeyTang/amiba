@@ -1,0 +1,17 @@
+{
+  "$schema": "../../packages/extension-api/src/manifest.schema.json",
+  "id": "io.hermes.tool-meter",
+  "name": "Tool Activity",
+  "version": "0.1.0",
+  "engines": { "hermes-x": "^0.1.0" },
+  "entries": { "main": "dist/main.cjs" },
+  "contributes": {
+    "main": {
+      "icon": "wrench",
+      "labels": { "en": "Tools", "zh-CN": "工具活动" },
+      "view": "dist/ui/main/index.html",
+      "order": 400
+    }
+  },
+  "permissions": ["ipc", "storage", "i18n", "lifecycle.boot"]
+}

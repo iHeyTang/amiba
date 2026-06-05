@@ -1,0 +1,35 @@
+{
+  "activityBar.label": "工具活动",
+  "title": "工具调用",
+
+  "hero.calls": "调用次数",
+  "hero.tools": "工具种类",
+  "hero.unfinished": "未完成",
+
+  "section.activity": "活跃度",
+  "section.trend": "调用趋势",
+  "section.byTool": "按工具",
+  "section.recent": "最近调用",
+
+  "heatmap.dow.mon": "一",
+  "heatmap.dow.wed": "三",
+  "heatmap.dow.fri": "五",
+  "heatmap.legend.less": "少",
+  "heatmap.legend.more": "多",
+  "heatmap.range": "{weeks} 周",
+  "heatmap.tooltip.calls": "次调用",
+  "heatmap.tooltip.none": "无活动",
+
+  "range.today": "今天",
+  "range.lastN": "{n} 天",
+
+  "label.calls": "{count} 次",
+  "label.noData": "暂无数据。",
+  "label.percentage": "{pct}%",
+  "label.running": "运行中",
+  "label.completed": "{ms}ms",
+
+  "action.refresh": "刷新",
+
+  "footer.source": "本地采集 · 每 30 秒自动刷新"
+}
