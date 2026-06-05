@@ -286,6 +286,36 @@ async function handleSubmit(payload: SubmitPayload) {
         }
         state.updatedAt = Date.now()
         emitEvent(sessionId, { kind: "hermesToolProgress", event: stamped })
+
+        // Fan out to extension runners via host.chat.onEvent. We split
+        // the gateway's "running"/"completed" status into two distinct
+        // event names so a subscriber that only cares about completions
+        // doesn't have to branch on status. runId comes from the
+        // session state because hermes-agent's tool-progress payload
+        // doesn't carry it directly — it's the same runId the chat
+        // engine cached from the X-Hermes-Run-Id header at turn start.
+        if (stamped.status === "running") {
+          publishChatEvent("tool.started", {
+            sessionId,
+            runId: state.runId,
+            tool: stamped.tool,
+            toolCallId: stamped.toolCallId,
+            startedAt: stamped.startedAt,
+            label: stamped.label,
+            emoji: stamped.emoji,
+          })
+        } else if (stamped.status === "completed") {
+          publishChatEvent("tool.completed", {
+            sessionId,
+            runId: state.runId,
+            tool: stamped.tool,
+            toolCallId: stamped.toolCallId,
+            startedAt: stamped.startedAt,
+            durationMs: stamped.durationMs,
+            label: stamped.label,
+            emoji: stamped.emoji,
+          })
+        }
       },
       onApprovalRequest: (request: HermesApprovalRequest) => {
         const seen = state.pendingApprovals.some(
