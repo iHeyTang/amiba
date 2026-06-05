@@ -35,13 +35,52 @@ export interface ChatRunCompletedEvent {
 }
 
 /**
- * Allow-list of event names extensions can subscribe to via
- * `host.chat.onEvent`. Starts with one entry; future additions (e.g.
- * "run.started", "tool.completed") get a new payload type + a string
- * literal here. Keeping it a discriminated union forces an exhaustive
- * compile-time check when we add the next event.
+ * Fired when hermes-agent reports that a tool call has started running
+ * (SSE `hermes.tool.progress` event with `status: "running"`).
+ * Subscribers commonly use this to log "agent just invoked X" without
+ * having to wait for completion.
  */
-export type ChatEventName = "run.completed"
+export interface ChatToolStartedEvent {
+  sessionId?: string
+  runId?: string
+  /** Tool name, e.g. "search", "shell", "write_file". */
+  tool: string
+  /** Provider-side correlation id linking this start to its completion. */
+  toolCallId: string
+  /** ms epoch when the gateway saw the tool start, when available. */
+  startedAt?: number
+  /** Optional human-readable label / emoji the gateway sometimes ships. */
+  label?: string
+  emoji?: string
+}
+
+/**
+ * Fired when a tool call resolves (`hermes.tool.progress` with
+ * `status: "completed"`). Same correlation id as the matching
+ * `tool.started`; `durationMs` is the gateway-reported wall-clock
+ * runtime when present, else undefined.
+ */
+export interface ChatToolCompletedEvent {
+  sessionId?: string
+  runId?: string
+  tool: string
+  toolCallId: string
+  startedAt?: number
+  durationMs?: number
+  label?: string
+  emoji?: string
+}
+
+/**
+ * Allow-list of event names extensions can subscribe to via
+ * `host.chat.onEvent`. Each name has its own payload type below;
+ * `host.chat.onEvent` is overloaded per-name so subscribers get the
+ * right type without a manual cast.
+ */
+export type ChatEventName =
+  | "run.completed"
+  | "tool.started"
+  | "tool.completed"
 
 export interface MainHost {
   readonly id: string
@@ -116,6 +155,14 @@ export interface MainHost {
     onEvent(
       event: "run.completed",
       handler: (e: ChatRunCompletedEvent) => void,
+    ): Disposable
+    onEvent(
+      event: "tool.started",
+      handler: (e: ChatToolStartedEvent) => void,
+    ): Disposable
+    onEvent(
+      event: "tool.completed",
+      handler: (e: ChatToolCompletedEvent) => void,
     ): Disposable
   }
 }

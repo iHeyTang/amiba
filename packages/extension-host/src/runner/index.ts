@@ -17,7 +17,6 @@
 
 import type {
   ChatEventName,
-  ChatRunCompletedEvent,
   Disposable,
   HermesSessionInfo,
   IpcContext,
@@ -203,15 +202,19 @@ const host: MainHost = {
   },
 
   chat: {
-    onEvent: ((event: ChatEventName, handler: (e: ChatRunCompletedEvent) => void) => {
+    onEvent: ((event: ChatEventName, handler: (e: unknown) => void) => {
       let set = chatEventHandlers.get(event)
       if (!set) {
         set = new Set()
         chatEventHandlers.set(event, set)
       }
-      // Wrap in a generic adapter so the registry stores one callback shape,
-      // regardless of which event-typed payload the subscriber asked for.
-      const wrapped = (payload: unknown) => handler(payload as ChatRunCompletedEvent)
+      // Wrap in a generic adapter so the registry stores one callback
+      // shape regardless of which event-typed payload the subscriber
+      // asked for. The MainHost overload signature (run.completed /
+      // tool.started / tool.completed) is enforced at the call site
+      // via the cast on the outer function; here we just dispatch the
+      // raw payload — the subscriber sees their declared type.
+      const wrapped = (payload: unknown) => handler(payload)
       set.add(wrapped)
       const d: Disposable = {
         dispose: () => {
