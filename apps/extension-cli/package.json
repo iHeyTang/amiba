@@ -1,7 +1,6 @@
 {
   "name": "@hermes-x/extension-cli",
   "version": "0.1.0",
-  "private": true,
   "description": "CLI for developing hermes-x desktop extensions.",
   "type": "module",
   "bin": {
@@ -18,6 +17,9 @@
     "prepare": "tsc"
   },
   "files": ["dist", "src/template"],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "commander": "^12.0.0",
     "kleur": "^4.1.5",
