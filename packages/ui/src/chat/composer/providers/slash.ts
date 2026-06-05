@@ -20,8 +20,23 @@ export function makeSlashProvider(): TriggerProvider {
     group: "Commands",
     match: () => true,
     async search(query: string): Promise<MenuItem[]> {
-      const q = query.toLowerCase()
       const cmds = await load()
+      const spaceIdx = query.indexOf(" ")
+      if (spaceIdx >= 0) {
+        const cmdName = query.slice(0, spaceIdx)
+        const subQuery = query.slice(spaceIdx + 1).toLowerCase()
+        const cmd = cmds.find((c) => c.name === cmdName || c.aliases.includes(cmdName))
+        if (!cmd || cmd.subcommands.length === 0) return []
+        return cmd.subcommands
+          .filter((s) => s.toLowerCase().includes(subQuery))
+          .map((s) => ({
+            id: `slash:${cmd.name}:${s}`,
+            label: s,
+            description: cmd.name,
+            raw: `/${cmd.name} ${s} `,
+          }))
+      }
+      const q = query.toLowerCase()
       return cmds
         .filter((c) => c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q)))
         .slice(0, 30)
@@ -47,7 +62,7 @@ function replaceLineWith(editor: LexicalEditor, text: string) {
     const node = sel.anchor.getNode()
     const offset = sel.anchor.offset
     const before = node.getTextContent().slice(0, offset)
-    const m = /\/([^\s]*)$/.exec(before)
+    const m = /\/[^\n]*$/.exec(before) // whole line from the leading slash
     if (!m) return
     const start = offset - m[0].length
     if (typeof (node as { spliceText?: unknown }).spliceText === "function") {

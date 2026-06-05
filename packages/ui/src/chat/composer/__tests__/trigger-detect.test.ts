@@ -15,4 +15,7 @@ describe("detectTrigger", () => {
   it("returns null with no trigger", () => {
     expect(detectTrigger("plain text", 10)).toBeNull()
   })
+  it("slash query spans whole line incl. spaces", () => {
+    expect(detectTrigger("/reasoning lo", 13)).toEqual({ trigger: "/", query: "reasoning lo", start: 0 })
+  })
 })

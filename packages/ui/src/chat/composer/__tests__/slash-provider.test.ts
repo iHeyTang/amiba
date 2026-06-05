@@ -24,4 +24,15 @@ describe("slash provider", () => {
     const reasoning = items.find((i) => i.label === "reasoning")
     expect(reasoning?.subcommands).toEqual(["low", "high"])
   })
+  it("offers subcommand items when query has 'cmd sub'", async () => {
+    const p = makeSlashProvider()
+    const items = await p.search("reasoning hi")
+    expect(items).toHaveLength(1)
+    expect(items[0].label).toBe("high")
+    expect(items[0].raw).toBe("/reasoning high ")
+  })
+  it("returns empty for a command without subcommands at second level", async () => {
+    const p = makeSlashProvider()
+    expect(await p.search("model foo")).toEqual([])
+  })
 })
