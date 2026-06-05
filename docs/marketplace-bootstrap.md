@@ -220,6 +220,22 @@ To exercise the install path without publishing to GitHub, you need to fake the 
 
 This is exactly the production flow; you've just used a throwaway repo for the binding.
 
+## API compatibility (`apiVersion`)
+
+Each extension declares the minimum host extension-API level it needs:
+
+```json
+{ "id": "...", "version": "0.1.0", "apiVersion": 1 }
+```
+
+`apiVersion` is a monotonic integer matching the `@hermes-x/extension-api`
+`API_VERSION` the extension built against. The desktop implements a level
+(`HOST_API_VERSION`); it loads an extension only when
+`apiVersion <= HOST_API_VERSION`. Otherwise the extension is marked
+**incompatible** (skipped at activation; refused at marketplace install)
+and the user is told to update the desktop. Omitting `apiVersion` defaults
+to `1` for backward compatibility.
+
 ## Recap
 
 ```
