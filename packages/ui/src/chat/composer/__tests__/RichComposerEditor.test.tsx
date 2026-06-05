@@ -111,4 +111,11 @@ describe("RichComposerEditor", () => {
     editor.dispatchCommand(KEY_ENTER_COMMAND, imeEvt2)
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
+
+  it("exposes focus() imperative handle", async () => {
+    const ref = { current: null as null | { focus(): void; select(): void; getTextarea(): unknown } }
+    render(<RichComposerEditor ref={ref as never} value="" onChange={() => {}} />)
+    expect(typeof ref.current?.focus).toBe("function")
+    expect(ref.current?.getTextarea()).toBeNull()
+  })
 })
