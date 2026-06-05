@@ -6,6 +6,7 @@ import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import type { CSSProperties, ReactNode } from "react"
 import { cn } from "../../primitives"
 import { baseEditorConfig } from "./lexical-config"
+import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin"
 
 export interface RichComposerEditorProps {
@@ -15,12 +16,14 @@ export interface RichComposerEditorProps {
   disabled?: boolean
   className?: string
   style?: CSSProperties
+  /** Max height in px before the editor switches to scrolling. Defaults to 200. */
+  maxHeightPx?: number
   /** Extra plugins rendered inside the Lexical context (mentions, slash, etc.). */
   children?: ReactNode
 }
 
 export function RichComposerEditor(props: RichComposerEditorProps) {
-  const { value, onChange, placeholder, disabled, className, style, children } =
+  const { value, onChange, placeholder, disabled, className, style, maxHeightPx, children } =
     props
   return (
     <LexicalComposer initialConfig={baseEditorConfig({ editable: !disabled })}>
@@ -48,6 +51,7 @@ export function RichComposerEditor(props: RichComposerEditorProps) {
           ErrorBoundary={LexicalErrorBoundary}
         />
         <HistoryPlugin />
+        <AutoGrowPlugin maxHeightPx={maxHeightPx ?? 200} />
         <ValueSyncPlugin value={value} onChange={onChange} />
         {children}
       </div>

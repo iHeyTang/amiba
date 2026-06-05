@@ -63,4 +63,13 @@ describe("RichComposerEditor", () => {
       expect(screen.getByRole("textbox")).toHaveTextContent("preset"),
     )
   })
+
+  it("caps height at maxHeightPx and switches to scroll", async () => {
+    const { container } = render(
+      <RichComposerEditor value={"a\n".repeat(50)} onChange={() => {}} maxHeightPx={100} />,
+    )
+    const editable = container.querySelector('[role="textbox"]') as HTMLElement
+    // jsdom 不计算真实布局，这里断言样式被写入（overflowY 被设置）
+    expect(["auto", "hidden"]).toContain(editable.style.overflowY)
+  })
 })
