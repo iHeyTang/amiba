@@ -14,6 +14,8 @@ import { createHash } from "node:crypto"
 import { Readable } from "node:stream"
 import { extract as tarExtract } from "tar"
 import { validateManifest } from "./discover"
+import { checkCompat } from "../compat"
+import { HOST_API_VERSION } from "../version"
 import { addEntry } from "./registry-store"
 import type { ExtensionManifest } from "@hermes-x/extension-api"
 
@@ -163,6 +165,11 @@ export async function installFromRelease(
       throw new Error(
         `install: manifest id "${v.manifest.id}" does not match marketplace entry id "${release.entry.id}"`,
       )
+    }
+
+    const compat = checkCompat(v.manifest.apiVersion, HOST_API_VERSION)
+    if (!compat.ok) {
+      throw new Error(`install: ${v.manifest.id} — ${compat.reason}`)
     }
 
     // Move into place
