@@ -55,6 +55,7 @@ export const en = {
   "options.extensions.subtitle": "View installed extensions and troubleshoot load failures.",
   "options.extensions.status.loaded": "Loaded",
   "options.extensions.status.failed": "Failed",
+  "options.extensions.status.incompatible": "Incompatible",
   "options.extensions.showError": "Show error",
   "options.extensions.addLocal": "Add local extension…",
   "options.extensions.source.marketplace": "Marketplace",

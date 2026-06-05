@@ -18,6 +18,8 @@ import { watchManifests } from "./manifest-watcher"
 import { discoverFromRegistry } from "./discover-registry"
 import { findEntry } from "./registry-store"
 import { createRunnerManagerWithRpc } from "./runner-controller"
+import { checkCompat } from "../compat"
+import { HOST_API_VERSION } from "../version"
 
 export interface MainBootOptions {
   /**
@@ -163,6 +165,12 @@ export async function bootMainExtensionHost(
 
   async function activateOne(entry: { manifest: ExtensionManifest; rootDir: string }): Promise<void> {
     const { manifest } = entry
+    const compat = checkCompat(manifest.apiVersion, HOST_API_VERSION)
+    if (!compat.ok) {
+      console.error(`[extension-host] ${manifest.id} incompatible: ${compat.reason}`)
+      registry.set({ id: manifest.id, manifest, status: "incompatible", error: compat.reason })
+      return
+    }
     if (!manifest.entries.main) {
       // No main entry — still register as loaded (renderer-only extension).
       registry.set({ id: manifest.id, manifest, status: "loaded" })

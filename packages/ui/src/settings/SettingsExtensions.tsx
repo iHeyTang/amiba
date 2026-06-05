@@ -351,12 +351,16 @@ export function SettingsExtensions() {
                             "shrink-0 rounded-full px-2 py-0.5 text-xs",
                             ext.status === "failed"
                               ? "bg-destructive/15 text-destructive"
-                              : "bg-emerald-500/15 text-emerald-600",
+                              : ext.status === "incompatible"
+                                ? "bg-amber-500/15 text-amber-600"
+                                : "bg-emerald-500/15 text-emerald-600",
                           )}
                         >
                           {ext.status === "failed"
                             ? t("options.extensions.status.failed")
-                            : t("options.extensions.status.loaded")}
+                            : ext.status === "incompatible"
+                              ? t("options.extensions.status.incompatible")
+                              : t("options.extensions.status.loaded")}
                         </span>
                         {/* Source badge */}
                         {ext.source === "local" ? (

@@ -3,7 +3,7 @@ import type { ExtensionManifest } from "@hermes-x/extension-api"
 export interface RuntimeExtension {
   id: string
   manifest: ExtensionManifest
-  status: "loaded" | "failed" | "disabled"
+  status: "loaded" | "failed" | "disabled" | "incompatible"
   error?: string
 }
 

@@ -50,6 +50,7 @@ export const zhCN: Messages = {
   "options.extensions.subtitle": "查看已加载的扩展，排查加载失败。",
   "options.extensions.status.loaded": "已加载",
   "options.extensions.status.failed": "加载失败",
+  "options.extensions.status.incompatible": "不兼容",
   "options.extensions.showError": "查看错误信息",
   "options.extensions.addLocal": "添加本地扩展…",
   "options.extensions.source.marketplace": "市场",
