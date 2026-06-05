@@ -1,4 +1,5 @@
 import type { InitialConfigType } from "@lexical/react/LexicalComposer"
+import { MentionNode } from "./MentionNode"
 
 export const EDITOR_NAMESPACE = "hermes-composer"
 
@@ -10,7 +11,7 @@ export function baseEditorConfig(
     onError: (e) => {
       throw e
     },
-    nodes: [],
+    nodes: [MentionNode],
     theme: {
       paragraph: "m-0",
     },
