@@ -6,7 +6,6 @@ import {
 import { useT } from "@hermes-x/i18n"
 import {
   Button,
-  Textarea,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -16,6 +15,10 @@ import { cn } from "../primitives"
 import { ArrowUp } from "lucide-react"
 
 import { AttachmentChip } from "./bubble/chips"
+import {
+  RichComposerEditor,
+  type RichComposerHandle,
+} from "./composer/RichComposerEditor"
 import { ComposerKbdHints, type ComposerKbdHint } from "./Kbd"
 import { QuickActionChips } from "./QuickActionChips"
 import {
@@ -27,7 +30,6 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEventHandler,
@@ -130,7 +132,11 @@ export interface ComposerProps {
    * animation. Respects `prefers-reduced-motion`.
    */
   placeholder?: string | { typewriter: string[]; active?: boolean }
-  /** Initial rows. Default 2 — matches the main panel composer. */
+  /**
+   * Initial rows. Kept for back-compat with existing consumers, but no
+   * longer applied: the Lexical editor auto-grows from a min height, so
+   * an initial `rows` count has no effect.
+   */
   rows?: number
   autoFocus?: boolean
   /** Max height before the textarea starts scrolling instead of growing. */
@@ -276,7 +282,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       canSubmit,
       disabled = false,
       placeholder = "Send a message…",
-      rows = 2,
+      // `rows` stays in the public ComposerProps for the 5 consumers, but
+      // RichComposerEditor auto-grows and has no rows attr, so we no longer
+      // read it here (sizing is driven by min-height classes + AutoGrowPlugin).
       autoFocus = false,
       maxTextareaPx = COMPOSER_TEXTAREA_MAX_PX,
       textareaStyle,
@@ -304,14 +312,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     },
     ref,
   ) {
-    const taRef = useRef<HTMLTextAreaElement>(null)
+    const innerRef = useRef<RichComposerHandle>(null)
 
     useImperativeHandle(
       ref,
       (): ComposerHandle => ({
-        focus: () => taRef.current?.focus(),
-        select: () => taRef.current?.select(),
-        getTextarea: () => taRef.current,
+        focus: () => innerRef.current?.focus(),
+        select: () => innerRef.current?.select(),
+        getTextarea: () => innerRef.current?.getTextarea() ?? null,
       }),
       [],
     )
@@ -340,39 +348,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const resolvedPlaceholder: string =
       typeof placeholder === "string" ? placeholder : typewriterText
 
-    // Auto-grow up to `maxTextareaPx`; switch to scroll past that.
-    useLayoutEffect(() => {
-      const el = taRef.current
-      if (!el) return
-      el.style.height = "auto"
-      const sh = el.scrollHeight
-      const next = Math.min(sh, maxTextareaPx)
-      el.style.height = `${next}px`
-      el.style.overflowY = sh > maxTextareaPx ? "auto" : "hidden"
-    }, [value, maxTextareaPx])
+    // Auto-grow + IME-safe Enter/Shift+Enter handling now live inside
+    // RichComposerEditor (AutoGrowPlugin / ImeEnterPlugin). The old
+    // textarea `useLayoutEffect` and `handleKeyDown` are gone.
 
-    function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-      if (onKeyDownExtra) {
-        const swallow = onKeyDownExtra(e)
-        if (swallow === true) return
-        if (e.defaultPrevented) return
-      }
-      // Ignore Enter while an IME is composing — the user may press
-      // Enter to commit Latin/pinyin, not to send.
-      const ne = e.nativeEvent as KeyboardEvent["nativeEvent"] & {
-        isComposing?: boolean
-      }
-      if (ne.isComposing || e.key === "Process") return
-      const isSendChord =
-        (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ||
-        (e.key === "Enter" && !e.shiftKey && !e.altKey)
-      if (!isSendChord) return
-      e.preventDefault()
-      if (disabled) return
-      // Enter never aborts — it's a typing chord. Stop is mouse-only.
-      if (!effectiveCanSubmit) return
-      onSubmit()
-    }
+    // `autoFocus` used to be a textarea attribute; RichComposerEditor has
+    // no such attr, so we focus its Lexical editor imperatively on mount.
+    useEffect(() => {
+      if (autoFocus) innerRef.current?.focus()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     function handleSendClick() {
       if (disabled) return
@@ -563,21 +548,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           ) : null}
           {topAffordance}
           {renderedChipRow}
-          <Textarea
-            ref={taRef}
+          <RichComposerEditor
+            ref={innerRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+            onChange={onChange}
             placeholder={resolvedPlaceholder}
-            rows={rows}
-            autoFocus={autoFocus}
             disabled={disabled}
-            style={{ maxHeight: maxTextareaPx, ...textareaStyle }}
+            maxHeightPx={maxTextareaPx}
+            style={textareaStyle}
+            onSubmitChord={() => {
+              if (disabled) return
+              if (!effectiveCanSubmit) return
+              onSubmit()
+            }}
+            onKeyDownExtra={onKeyDownExtra as never}
+            onPaste={handlePaste}
             className={cn(
-              "resize-none overflow-hidden border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
               frameVariant === "hero"
-                ? "min-h-[3.5rem] px-5 pb-1 pt-3.5 text-sm"
+                ? "min-h-[3.5rem] px-5 pb-1 pt-3.5"
                 : "min-h-9 px-3 py-2",
             )}
           />

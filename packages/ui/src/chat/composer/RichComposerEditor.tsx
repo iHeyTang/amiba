@@ -3,7 +3,12 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary"
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
-import { forwardRef, type CSSProperties, type ReactNode } from "react"
+import {
+  forwardRef,
+  type ClipboardEventHandler,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
 import { cn } from "../../primitives"
 import { baseEditorConfig } from "./lexical-config"
 import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
@@ -26,6 +31,13 @@ export interface RichComposerEditorProps {
   onSubmitChord?: () => void
   /** Extra keydown hook inside KEY_ENTER_COMMAND; return true to swallow. */
   onKeyDownExtra?: (e: KeyboardEvent) => boolean | void
+  /**
+   * Pass-through paste handler on the editable surface. Composer uses this
+   * to keep paste-to-attach working: the attachments hook's handlePaste
+   * only intercepts when the clipboard carries Files; plain text paste
+   * still falls through to Lexical.
+   */
+  onPaste?: ClipboardEventHandler<HTMLElement>
   /** Extra plugins rendered inside the Lexical context (mentions, slash, etc.). */
   children?: ReactNode
 }
@@ -42,6 +54,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
       maxHeightPx,
       onSubmitChord,
       onKeyDownExtra,
+      onPaste,
       children,
     } = props
     return (
@@ -53,6 +66,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
                 role="textbox"
                 aria-multiline="true"
                 spellCheck
+                onPaste={onPaste}
                 style={style}
                 className={cn(
                   "resize-none overflow-hidden border-0 bg-transparent text-sm outline-none",
