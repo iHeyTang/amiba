@@ -9,8 +9,22 @@
     ".": "./src/index.ts",
     "./manifest.schema.json": "./src/manifest.schema.json"
   },
+  "files": ["dist", "src/manifest.schema.json"],
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./manifest.schema.json": "./src/manifest.schema.json"
+    }
+  },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build"
   },
   "peerDependencies": {
     "react": "^18.0.0"
