@@ -21,6 +21,7 @@ import type {
   ChatStartSessionPayload,
   WebViewHostAPI,
 } from "@hermes-x/extension-api"
+import { HOST_API_VERSION } from "../version"
 
 // Side-effect import only: the `declare global { Window.hermes }`
 // augmentation lives in @hermes-x/extension-api/src/webview.ts so
@@ -83,6 +84,8 @@ const api: WebViewHostAPI = {
   get theme(): "light" | "dark" {
     return initialTheme
   },
+
+  apiVersion: HOST_API_VERSION,
 
   ipc: {
     invoke<T>(channel: string, args?: unknown): Promise<T> {

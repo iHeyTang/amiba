@@ -84,6 +84,13 @@ export type ChatEventName =
 
 export interface MainHost {
   readonly id: string
+  /**
+   * Host runtime info — notably the extension-API level this desktop
+   * implements. (The WebView surface exposes this directly as
+   * `window.hermes.apiVersion` — a single scalar doesn't warrant a
+   * sub-namespace there.)
+   */
+  readonly hostInfo: { readonly apiVersion: number }
   logger: Logger
   ipc: {
     expose<TArgs = unknown, TRet = unknown>(

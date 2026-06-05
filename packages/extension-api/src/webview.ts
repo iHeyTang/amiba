@@ -103,6 +103,8 @@ export interface WebViewHostAPI {
   readonly language: string
   /** Resolved theme ("light" | "dark"). */
   readonly theme: "light" | "dark"
+  /** Host extension-API level this desktop implements (for graceful degradation). */
+  readonly apiVersion: number
 
   ipc: WebViewIpc
   settings: WebViewSettings

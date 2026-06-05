@@ -23,6 +23,7 @@ import type {
   MainHost,
   MainModule,
 } from "@hermes-x/extension-api"
+import { HOST_API_VERSION } from "../version"
 
 // Typed accessor for parentPort (Electron augments NodeJS.Process).
 // We use a cast so the tsconfig doesn't need to pull in the full electron
@@ -133,6 +134,7 @@ const chatEventHandlers = new Map<string, Set<(payload: unknown) => void>>()
 
 const host: MainHost = {
   id: extensionId,
+  hostInfo: { apiVersion: HOST_API_VERSION },
 
   logger: {
     debug: (...a: unknown[]) => {
