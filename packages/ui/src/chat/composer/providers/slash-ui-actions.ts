@@ -6,6 +6,11 @@ export interface SlashUiActionContext {
   openSettings?: () => void
 }
 
+// These are MANUALLY-TYPED client UI actions: a `/name` the user can type to
+// trigger a native UI surface instead of sending text. They are NOT
+// guaranteed to appear in the backend-driven `/hermes/commands` menu — e.g.
+// `config` is `cli_only` server-side, so it won't show up in that menu but is
+// still handled here when typed.
 export const UI_ACTION_NAMES = new Set<string>([
   // Extend as native UI surfaces are added. Keep tiny.
   "config",

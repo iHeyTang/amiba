@@ -1563,7 +1563,7 @@ export default function ChatSurface({
       ref={composerRef}
       value={input}
       onChange={setInput}
-      onSubmit={() => void send()}
+      onSubmit={(t) => void send(t)}
       busy={busy}
       onAbort={stop}
       autoFocus={composerAutoFocus}

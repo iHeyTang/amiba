@@ -9,6 +9,7 @@ import { MessageTurns } from "./bubble/Bubble"
 import { SessionDrawer } from "./SessionDrawer"
 import { TabBar } from "./TabBar"
 import type { ChatError, UiMessage } from "./internal/types"
+import { pickSendText } from "./internal/pickSendText"
 
 export interface ChatViewProps {
   /** Engine the view talks to. Provided by each app (Chrome port / Electron IPC). */
@@ -101,8 +102,12 @@ export function ChatView({
     client.subscribe(activeId)
   }, [client, activeId])
 
-  function handleSubmit() {
-    const text = input.trim()
+  // `override` carries the Composer's mention-expanded text (`@[...]` tokens
+  // turned into agent-facing text); prefer it over the raw input so the
+  // backend never sees the raw `@[type:payload]` tokens. Falls back to the
+  // raw input for callers that submit without expansion.
+  function handleSubmit(override?: string) {
+    const text = pickSendText(override, input)
     if (!text) return
     setInput("")
     onSubmitMessage(text)
