@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from "react"
 import { cn } from "../../primitives"
 import { baseEditorConfig } from "./lexical-config"
 import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
+import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin"
 
 export interface RichComposerEditorProps {
@@ -18,13 +19,27 @@ export interface RichComposerEditorProps {
   style?: CSSProperties
   /** Max height in px before the editor switches to scrolling. Defaults to 200. */
   maxHeightPx?: number
+  /** Called when Enter / Cmd+Enter / Ctrl+Enter is pressed (not during IME). */
+  onSubmitChord?: () => void
+  /** Extra keydown hook inside KEY_ENTER_COMMAND; return true to swallow. */
+  onKeyDownExtra?: (e: KeyboardEvent) => boolean | void
   /** Extra plugins rendered inside the Lexical context (mentions, slash, etc.). */
   children?: ReactNode
 }
 
 export function RichComposerEditor(props: RichComposerEditorProps) {
-  const { value, onChange, placeholder, disabled, className, style, maxHeightPx, children } =
-    props
+  const {
+    value,
+    onChange,
+    placeholder,
+    disabled,
+    className,
+    style,
+    maxHeightPx,
+    onSubmitChord,
+    onKeyDownExtra,
+    children,
+  } = props
   return (
     <LexicalComposer initialConfig={baseEditorConfig({ editable: !disabled })}>
       <div className="relative">
@@ -53,6 +68,9 @@ export function RichComposerEditor(props: RichComposerEditorProps) {
         <HistoryPlugin />
         <AutoGrowPlugin maxHeightPx={maxHeightPx ?? 200} />
         <ValueSyncPlugin value={value} onChange={onChange} />
+        {onSubmitChord && (
+          <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
+        )}
         {children}
       </div>
     </LexicalComposer>

@@ -4,6 +4,7 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
+  KEY_ENTER_COMMAND,
   type LexicalEditor,
 } from "lexical"
 import { useEffect } from "react"
@@ -71,5 +72,43 @@ describe("RichComposerEditor", () => {
     const editable = container.querySelector('[role="textbox"]') as HTMLElement
     // jsdom 不计算真实布局，这里断言样式被写入（overflowY 被设置）
     expect(["auto", "hidden"]).toContain(editable.style.overflowY)
+  })
+
+  it("Enter submits, Shift+Enter inserts newline, IME-composing Enter does not submit", async () => {
+    const onSubmit = vi.fn()
+    const editorRef: { current: LexicalEditor | null } = { current: null }
+
+    render(
+      <RichComposerEditor value="" onChange={() => {}} onSubmitChord={onSubmit}>
+        <EditorRefCapture onReady={(e) => (editorRef.current = e)} />
+      </RichComposerEditor>,
+    )
+
+    await waitFor(() => expect(editorRef.current).not.toBeNull())
+    const editor = editorRef.current!
+
+    // jsdom does not wire real DOM keydown events into Lexical's KEY_ENTER_COMMAND,
+    // so we dispatch the command directly with a synthetic KeyboardEvent.
+
+    // plain Enter -> submit
+    const enterEvt = new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, enterEvt)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // Shift+Enter -> newline, no additional submit
+    const shiftEnterEvt = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, shiftEnterEvt)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // IME-composing Enter (key="Process") -> no submit
+    const imeEvt = new KeyboardEvent("keydown", { key: "Process", bubbles: true })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, imeEvt)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // IME-composing Enter via isComposing flag -> no submit
+    const imeEvt2 = new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    Object.defineProperty(imeEvt2, "isComposing", { value: true })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, imeEvt2)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 })
