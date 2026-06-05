@@ -1,7 +1,7 @@
 # Composer 斜杠命令 + @ 引用设计
 
 - 日期：2026-06-05
-- 范围：packages/ui（主体）+ packages/core（数据源复用）+ apps/desktop（Files provider 注入）
+- 范围：packages/ui（主体）+ packages/core（数据源复用 + 新增 commands 客户端）+ hermes-plugin-http-backplane（新增 `/hermes/commands` 接口）+ apps/desktop（Files provider 注入）
 - 目标：把 hermes-agent CLI 的「`/` 唤起命令、`@` 唤起引用」体验带到 web/desktop 聊天输入框
 - 第一阶段交付物：基于 Lexical 的富文本 Composer 内核（行为 1:1 平替）+ 触发引擎 + Skills 的 @ 芯片
 
@@ -14,6 +14,7 @@
   - **`@` 行内引用**：任意位置触发，选中后插入可整体删除的**原子芯片**，嵌在正常消息文本里。
 - `@` 支持四类来源：**Skills / Files-文件夹 / Sessions-历史 / Agents-Personas**（数据源就绪程度不同，见 §5 分阶段）。
 - 斜杠命令采用 **hybrid** 行为：多数命令作为文本发给后端（后端已能解析），少数有原生 UI 的命令（如打开设置）选中即执行 UI 动作。
+- 斜杠命令清单**实时从后端拿**：新增 `GET /hermes/commands` 由 backplane 序列化下发 `COMMAND_REGISTRY`，与 CLI 同一份 single source of truth，**不存在静态镜像漂移**。
 - 用 **Lexical** 替换现有 `<textarea>`，芯片为原子节点，但**对外契约保持 `value: string` / `onChange(string)` 不变**，5 个消费界面零改动。
 - 提供**可插拔 provider 抽象**：`packages/ui` 内置可处处使用的 provider，宿主特有数据源（如 Files）由各 app 注入。
 
@@ -21,7 +22,7 @@
 
 - ❌ 改 `Composer` 的对外 props 契约（仍是 `value: string`）。
 - ❌ 后端识别 `@[...]` token 语法 —— 展开在前端发送层完成。
-- ❌ 新增 `/hermes/commands` 后端接口（一期用静态镜像；后续可选）。
+- ❌ `/hermes/commands` 的写操作（仅只读列表；命令的执行仍走 content 文本，由后端原有逻辑解析）。
 - ❌ 真正的 Personas 列表接口（一期用 channels 兜底）。
 - ❌ 浏览器扩展端的 Files 引用（一期仅桌面端注入；扩展端退化为无该 provider）。
 - ❌ 富文本格式化（粗体/列表等）—— 编辑器只承载纯文本 + 芯片 + 命令文本。
@@ -70,13 +71,22 @@ Composer (对外 props 不变: value:string / onChange / onSubmit(overrideText?)
    └─ expandMentions(tokenString) -> finalText
         - 命令模式整行: 原样发 (后端解析) 或拦截为 UI 动作
         - @[skill|file|session|channel]: 各 provider.serialize() 展开
+
+数据后端 (新增)
+   hermes-plugin-http-backplane
+   └─ GET /hermes/commands  ──serialize──> COMMAND_REGISTRY (hermes_cli.commands)
+                                            复用 _is_gateway_available() 做 surface 过滤
+   packages/core
+   └─ getHermesCommands()  ──fetch──> /hermes/commands   (与 getHermesSkills 同范式)
 ```
 
 组件落点（建议）：
 
 - `packages/ui/src/chat/composer/` 新目录：
   - `RichComposerEditor.tsx`、`plugins/*`、`MentionNode.tsx`、`TriggerMenu.tsx`、`serialize.ts`、`parse.ts`
-  - `providers/`：`types.ts`（接口）、`skills.ts`、`sessions.ts`、`channels.ts`、`slash.ts`、`slash-registry.ts`（静态镜像）
+  - `providers/`：`types.ts`（接口）、`skills.ts`、`sessions.ts`、`channels.ts`、`slash.ts`
+- `packages/core/src/hermes-commands.ts`：新增 `getHermesCommands()`（参照 `hermes-skills.ts`），从 core 导出。
+- `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/`：新增 `commands_routes.py`（+ 必要时 `commands_service.py`），在 `__init__.py` 的 `register()` 里挂 `register_commands_routes(app)`。
 - `Composer.tsx`：内部把 `<Textarea>` 换成 `<RichComposerEditor>`，props 不变。
 - Files provider 接口在 ui 定义，实现由 `apps/desktop` 注入（Electron IPC）。
 
@@ -120,7 +130,7 @@ interface MentionData {
 
 | Provider | 触发 | 数据源 | 状态 |
 |---|---|---|---|
-| Slash 命令 | `/` 行首 | 静态镜像 `slash-registry.ts`（精选 `COMMAND_REGISTRY`，排除 `cli_only`/`gateway_only`） | ✅ |
+| Slash 命令 | `/` 行首 | `GET /hermes/commands`（backplane 实时下发 `COMMAND_REGISTRY`） | ✅ |
 | Skills | `@` | `getHermesSkills()`（`@hermes-x/core`） | ✅ 全界面 |
 | Sessions | `@` | `listHermesSessions()`（`@hermes-x/core`） | ✅ |
 | Agents/Channels | `@` | `listChannels()`（静态） | ⚠️ 仅 channels，无 personas |
@@ -131,13 +141,22 @@ interface MentionData {
 - Files：`packages/ui` 只定义 provider 接口；桌面端实现「列工作区文件」的 IPC 并注入。浏览器扩展端一期不注入该 provider。
 - Personas：一期用 channels 兜底当作「目标/Agent」。真正的 persona 列表需后端补接口，列为后续。
 
-## 6. 斜杠命令清单来源（静态镜像）
+## 6. 斜杠命令清单来源（后端实时下发，无漂移）
 
-- 一期在 `slash-registry.ts` 维护精选命令清单，字段与 Python `CommandDef` 对齐：`name / description / category / aliases / argsHint / subcommands`，外加前端特有的 `kind: 'send' | 'ui-action'` 与可选 `onSelect`。
-- 仅收录 UI 相关、`cli_only=false` 且 `gateway_only=false` 的命令。
+**后端 `GET /hermes/commands`**（新增）：
+
+- 落点：`hermes-plugin-http-backplane/.../settings/commands_routes.py`，与 `skills_routes.py` 同范式（aiohttp，`web.get` + `web.json_response`），在 `settings/__init__.py` 的 `register()` 中挂载。
+- 数据：`from hermes_cli.commands import COMMAND_REGISTRY`（backplane 已普遍 import `hermes_cli.*`，可直接用）。
+- **surface 过滤**：复用 `hermes_cli.commands._is_gateway_available(cmd)`（web/desktop 是非 CLI 客户端，等价 gateway surface）；排除 `cli_only`（除非 `gateway_config_gate` 命中），把 `gateway_only` 中明显仅消息平台用的（`start`/`topic`/`approve`/`deny`/`sethome` 等）在序列化时剔除。具体白/黑名单在实现期定稿。
+- 响应：每条 `{ name, description, category, aliases, args_hint, subcommands }` 的 JSON 数组（字段名沿用后端 snake_case，与 `/hermes/skills` 风格一致）。只读，无写操作。
+
+**前端**：
+
+- `packages/core/src/hermes-commands.ts` 新增 `getHermesCommands(): Promise<HermesCommand[]>`，参照 `getHermesSkills()`；TS 类型 `HermesCommand` 映射上面字段。
+- Slash provider（`providers/slash.ts`）启动时拉一次（可缓存），把后端命令 + 前端特有的 `kind: 'send' | 'ui-action'` 标注合并：默认全部 `send`；少数有原生 UI 的命令在前端**覆盖表**里标 `ui-action` 并给 `onSelect`（如打开设置面板）。
 - `kind: 'send'`（如 `/model`、`/new`、`/skills`、`/help`、`/status`）→ 补全为文本，发送时整行原样发后端。
-- `kind: 'ui-action'`（如打开设置面板）→ 选中即执行 `onSelect`，清空输入，不发消息。
-- 漂移风险：清单与后端 registry 手工同步。后续可加 `/hermes/commands` 接口由后端下发，替换静态镜像（provider 接口不变）。
+- `kind: 'ui-action'` → 选中即执行 `onSelect`，清空输入，不发消息。
+- **与 CLI 永远一致**：命令清单本体来自同一份 `COMMAND_REGISTRY`，前端只额外维护极小的「哪些走 UI 动作」覆盖表，不复制命令定义本身。
 
 ## 7. 序列化与发送链路
 
@@ -182,7 +201,7 @@ Files provider 仅桌面相关界面注入；其余界面 `@` 菜单不含 Files
 
 - **P0 平替**：接入 Lexical，做成保持 `value:string` 契约、行为 1:1 对齐的 Composer 内核；5 界面验证无回归。**不加任何触发能力。**
 - **P1**：触发引擎 + TriggerMenu + MentionNode 芯片 + serialize/parse，**只接 Skills**（接口处处可用、最简单），打通 @ 全链路。
-- **P2**：Slash provider（静态镜像 + hybrid 路由：send vs ui-action）。
+- **P2**：后端 `GET /hermes/commands` 接口 + core `getHermesCommands()` + Slash provider（实时拉取 + hybrid 路由：send vs ui-action）。后端接口与前端 provider 可并行开发（接口契约先定）。
 - **P3**：Sessions + Channels providers。
 - **P4**：Files provider（按界面注入，桌面优先，Electron IPC 列文件）。Personas 待后端接口。
 
@@ -202,10 +221,11 @@ Files provider 仅桌面相关界面注入；其余界面 `@` 菜单不含 Files
 - **键盘路径**：IME 合成、Enter/Cmd+Enter/Shift+Enter、菜单内上下/Enter/Esc。
 - **provider 单测**：各 `match/search/onSelect`，命中排序、空态、失败态。
 - **命令路由**：`send` 类整行入 content；`ui-action` 类触发动作且不发消息；行首 vs 非行首 `/`。
+- **后端接口**：`GET /hermes/commands` 返回结构正确、surface 过滤生效（不含 `cli_only`、不含被剔除的消息平台命令）、`getHermesCommands()` 解析与失败兜底。
 - **集成 / 快照**：5 界面 Composer 挂载与发送链路；附件、快捷动作、麦克风与触发能力共存不冲突。
 
 ## 13. 待后续解决（不阻塞一期）
 
-- `/hermes/commands` 后端接口（替换静态镜像，消除漂移）。
 - 真正的 Personas 列表接口（替换 channels 兜底）。
 - 浏览器扩展端的 Files 来源（页面上下文 / 受限 fs）。
+- `/hermes/commands` 的 subcommand 级补全（二级菜单，如 `/reasoning ` 后补 `low/medium/high`）—— 一期先只补一级命令名。
