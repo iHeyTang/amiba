@@ -1,0 +1,17 @@
+{
+  "$schema": "../../packages/extension-api/src/manifest.schema.json",
+  "id": "io.hermes.token-meter",
+  "name": "Token & Cost Meter",
+  "version": "0.1.0",
+  "engines": { "hermes-x": "^0.1.0" },
+  "entries": { "main": "dist/main.cjs" },
+  "contributes": {
+    "main": {
+      "icon": "wallet",
+      "labels": { "en": "Tokens", "zh-CN": "用量" },
+      "view": "dist/ui/main/index.html",
+      "order": 300
+    }
+  },
+  "permissions": ["ipc", "storage", "i18n", "lifecycle.boot"]
+}

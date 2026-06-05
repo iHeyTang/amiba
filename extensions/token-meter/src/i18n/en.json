@@ -1,0 +1,36 @@
+{
+  "activityBar.label": "Tokens",
+  "title": "Token Usage",
+
+  "hero.tokens": "Tokens",
+  "hero.turns": "Turns",
+  "hero.sessions": "Sessions",
+
+  "section.activity": "Activity",
+  "section.trend": "Activity trend",
+  "section.byModel": "By model",
+  "section.recent": "Recent sessions",
+
+  "range.today": "Today",
+  "range.lastN": "{n}d",
+
+  "heatmap.dow.mon": "M",
+  "heatmap.dow.wed": "W",
+  "heatmap.dow.fri": "F",
+  "heatmap.legend.less": "Less",
+  "heatmap.legend.more": "More",
+  "heatmap.range": "{weeks}w",
+  "heatmap.tooltip.tokens": "tokens",
+  "heatmap.tooltip.none": "no activity",
+
+  "label.turns": "{count} turns",
+  "label.tokens": "{in} in / {out} out",
+  "label.noData": "No data yet.",
+  "label.percentage": "{pct}%",
+  "label.placeholder": "Unknown",
+  "label.placeholderHint": "No specific model was recorded for this session. The gateway used its default routing — the real model that ran isn't stored per-session.",
+
+  "action.refresh": "Refresh",
+
+  "footer.source": "Data from hermes-agent · auto-refreshes every 30 s"
+}
