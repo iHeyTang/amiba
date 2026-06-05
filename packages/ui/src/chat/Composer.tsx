@@ -36,7 +36,6 @@ import {
   useState,
   type ClipboardEventHandler,
   type CSSProperties,
-  type KeyboardEvent,
   type ReactNode,
 } from "react"
 
@@ -155,7 +154,7 @@ export interface ComposerProps {
    * Return `true` to swallow the event (skip the default handling).
    * Returning nothing lets the default kick in.
    */
-  onKeyDownExtra?: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean | void
+  onKeyDownExtra?: (e: KeyboardEvent) => boolean | void
   /** Pass-through paste handler (used for image / file paste). */
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>
 
@@ -411,9 +410,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (disabled) return
       if (busy) {
         if (effectiveCanSubmit) {
-          // Queue branch — parent decides whether to enqueue. Left as the
-          // raw onSubmit() so queue semantics are unchanged.
-          onSubmit()
+          // Queue branch — route through handleSend so @[...] mentions are
+          // expanded before the parent enqueues the message.
+          handleSend()
           return
         }
         // Abort branch — untouched.
@@ -614,7 +613,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               handleSend()
             }}
             mentionProviders={mentionProviders}
-            onKeyDownExtra={onKeyDownExtra as never}
+            onKeyDownExtra={onKeyDownExtra}
             onPaste={handlePaste}
             className={cn(
               frameVariant === "hero"
