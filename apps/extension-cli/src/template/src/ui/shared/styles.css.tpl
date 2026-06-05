@@ -1,4 +1,4 @@
-@import "@hermes-x/ui/styles/tokens.css";
+@import "@hermes-x/tailwind-preset/styles/tokens.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

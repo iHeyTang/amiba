@@ -5,7 +5,8 @@
   "description": "Shared Tailwind preset — shadcn HSL color tokens, radius, font stack, darkMode class strategy.",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./styles/tokens.css": "./styles/tokens.css"
   },
-  "files": ["index.js"]
+  "files": ["index.js", "styles"]
 }

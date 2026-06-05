@@ -9,6 +9,8 @@ pnpm install            # installs the @hermes-x/* SDK from GitHub Release tarba
 pnpm dev                # watch-build; load it in the Hermes desktop app
 ```
 
+> **First install:** pnpm may prompt `approve-builds` for `esbuild` (bundled with Vite). Run `pnpm approve-builds`, or add `onlyBuiltDependencies=["esbuild"]` to a project `.npmrc`, to suppress it.
+
 ## Build & package
 
 ```bash

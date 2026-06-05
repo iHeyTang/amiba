@@ -1,4 +1,4 @@
-/* NOTE: kept in sync manually with packages/tailwind-preset/styles/tokens.css — edit both. */
+/* NOTE: kept in sync manually with packages/ui/src/styles/tokens.css — edit both. */
 /*
  * Hermes shadcn HSL token palette + base layer + Radix ScrollArea fixes.
  *
@@ -144,8 +144,8 @@
 }
 
 /*
- * Radix ScrollArea fixes — shared by every consumer of @hermes-x/ui because
- * they ship with the ScrollArea primitive.
+ * Radix ScrollArea fixes — included here so extensions that use a ScrollArea
+ * primitive get correct behaviour without extra CSS (no-ops otherwise).
  *
  * - Stop scroll chaining at the viewport so wheel-at-edge doesn't bounce
  *   the parent surface.
