@@ -38,6 +38,22 @@ export interface RunnerManagerOpts {
   }
   /** Hermes-agent tool dispatcher */
   callTool: (tool: string, args: unknown) => Promise<unknown>
+  /**
+   * Read-only fetch of a hermes-agent session's stats — backs
+   * host.hermes.getSession. Optional so older bootstrap paths
+   * (unit tests, etc.) can leave it unwired; the runner returns
+   * null in that case.
+   */
+  getSession?: (sessionId: string) => Promise<unknown | null>
+  /**
+   * Bulk session list — backs host.hermes.listSessions. Optional;
+   * runner returns [] when unwired.
+   */
+  listSessions?: (opts?: {
+    limit?: number
+    offset?: number
+    source?: string
+  }) => Promise<unknown[]>
   /** Activation timeout in ms (default 10_000) */
   activateTimeoutMs?: number
   /** Graceful shutdown timeout in ms before SIGKILL (default 5_000) */
@@ -281,7 +297,30 @@ export function createRunnerManager(opts: RunnerManagerOpts) {
     return [...runners.values()]
   }
 
-  return { activateExtension, deactivateExtension, invokeExtensionChannel, getRunners }
+  /**
+   * Push a chat-engine event out to every live runner. Best-effort:
+   * a failed postMessage on one runner (process exited mid-broadcast,
+   * IPC pipe wedged) won't block the others. The runner side filters
+   * by event name — broadcasting to all is cheaper than maintaining
+   * a per-event subscriber registry on the main side.
+   */
+  function broadcastChatEvent(event: string, payload: unknown): void {
+    for (const handle of runners.values()) {
+      try {
+        handle.proc.postMessage({ kind: "chat.event", event, payload })
+      } catch {
+        // Runner pipe wedged or process gone; let the next call reap.
+      }
+    }
+  }
+
+  return {
+    activateExtension,
+    deactivateExtension,
+    invokeExtensionChannel,
+    getRunners,
+    broadcastChatEvent,
+  }
 }
 
 // ── Internal augmented handle type ───────────────────────────────────────────
@@ -367,6 +406,13 @@ export function createRunnerManagerWithRpc(opts: RunnerManagerOpts) {
           return opts.storage.set(extId, a.key as string, a.value)
         case "hermes.callTool":
           return opts.callTool(a.tool as string, a.args)
+        case "hermes.getSession":
+          // Optional bootstrap hook — older callers may not wire this.
+          if (!opts.getSession) return null
+          return opts.getSession(a.sessionId as string)
+        case "hermes.listSessions":
+          if (!opts.listSessions) return []
+          return opts.listSessions(a.opts as Record<string, unknown> | undefined)
         default:
           throw new Error(`unknown RPC method: ${method}`)
       }
@@ -534,5 +580,21 @@ export function createRunnerManagerWithRpc(opts: RunnerManagerOpts) {
     return [...runners.values()]
   }
 
-  return { activateExtension, deactivateExtension, invokeExtensionChannel, getRunners }
+  function broadcastChatEvent(event: string, payload: unknown): void {
+    for (const handle of runners.values()) {
+      try {
+        handle.proc.postMessage({ kind: "chat.event", event, payload })
+      } catch {
+        // Best-effort; see createRunnerManager twin for the rationale.
+      }
+    }
+  }
+
+  return {
+    activateExtension,
+    deactivateExtension,
+    invokeExtensionChannel,
+    getRunners,
+    broadcastChatEvent,
+  }
 }

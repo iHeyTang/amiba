@@ -15,7 +15,15 @@
  * Electron-augmented property available in utilityProcess children.
  */
 
-import type { Disposable, IpcContext, MainHost, MainModule } from "@hermes-x/extension-api"
+import type {
+  ChatEventName,
+  ChatRunCompletedEvent,
+  Disposable,
+  HermesSessionInfo,
+  IpcContext,
+  MainHost,
+  MainModule,
+} from "@hermes-x/extension-api"
 
 // Typed accessor for parentPort (Electron augments NodeJS.Process).
 // We use a cast so the tsconfig doesn't need to pull in the full electron
@@ -65,7 +73,24 @@ interface ShutdownMsg {
   kind: "shutdown"
 }
 
-type IncomingMessage = RpcResponse | IpcInvoke | ActivateMsg | ShutdownMsg
+/**
+ * Fanout from the desktop main process. Carries a chat-engine event the
+ * runner forwards to whichever extension handlers subscribed via
+ * `host.chat.onEvent`. The main side broadcasts to every runner — the
+ * filter by event name + the handler registry both live here.
+ */
+interface ChatEventMsg {
+  kind: "chat.event"
+  event: string
+  payload: unknown
+}
+
+type IncomingMessage =
+  | RpcResponse
+  | IpcInvoke
+  | ActivateMsg
+  | ShutdownMsg
+  | ChatEventMsg
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
@@ -96,6 +121,14 @@ const handlers = new Map<string, (args: unknown, ctx: IpcContext) => Promise<unk
 const bootBackgroundHandlers = new Set<() => Promise<void> | void>()
 const shutdownHandlers = new Set<() => Promise<void> | void>()
 const disposables: Disposable[] = []
+
+/**
+ * `event name → set of handlers` for host.chat.onEvent subscriptions.
+ * Stored on the runner because the main side broadcasts indiscriminately
+ * — keeping the per-event filter local saves on cross-process traffic
+ * for events the extension doesn't care about.
+ */
+const chatEventHandlers = new Map<string, Set<(payload: unknown) => void>>()
 
 // ── Build the MainHost proxy ─────────────────────────────────────────────────
 
@@ -163,6 +196,34 @@ const host: MainHost = {
 
   hermes: {
     callTool: (tool, args) => rpc("hermes.callTool", { tool, args }) as Promise<never>,
+    getSession: (sessionId) =>
+      rpc("hermes.getSession", { sessionId }) as Promise<HermesSessionInfo | null>,
+    listSessions: (opts) =>
+      rpc("hermes.listSessions", { opts }) as Promise<HermesSessionInfo[]>,
+  },
+
+  chat: {
+    onEvent: ((event: ChatEventName, handler: (e: ChatRunCompletedEvent) => void) => {
+      let set = chatEventHandlers.get(event)
+      if (!set) {
+        set = new Set()
+        chatEventHandlers.set(event, set)
+      }
+      // Wrap in a generic adapter so the registry stores one callback shape,
+      // regardless of which event-typed payload the subscriber asked for.
+      const wrapped = (payload: unknown) => handler(payload as ChatRunCompletedEvent)
+      set.add(wrapped)
+      const d: Disposable = {
+        dispose: () => {
+          const s = chatEventHandlers.get(event)
+          if (!s) return
+          s.delete(wrapped)
+          if (s.size === 0) chatEventHandlers.delete(event)
+        },
+      }
+      disposables.push(d)
+      return d
+    }) as MainHost["chat"]["onEvent"],
   },
 }
 
@@ -259,6 +320,25 @@ parentPort.on("message", (event: { data: unknown }) => {
         pending.reject(new Error(msg.error))
       } else {
         pending.resolve(msg.result)
+      }
+      break
+    }
+
+    case "chat.event": {
+      const set = chatEventHandlers.get(msg.event)
+      if (!set || set.size === 0) break
+      // Snapshot the set before iterating so a handler that disposes its
+      // subscription mid-loop doesn't trip a concurrent-modification on
+      // the live registry.
+      for (const h of [...set]) {
+        try {
+          h(msg.payload)
+        } catch (e) {
+          console.error(
+            `[runner:${extensionId}] chat.onEvent(${msg.event}) handler threw:`,
+            e,
+          )
+        }
       }
       break
     }

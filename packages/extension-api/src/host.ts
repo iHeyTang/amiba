@@ -16,6 +16,33 @@ export interface IpcContext {
   windowId: number | null
 }
 
+/**
+ * Per-turn token usage payload, OpenAI-style field names so it can be
+ * threaded straight through from `/v1/chat/completions` without a
+ * client-side rename pass. Numeric fields are always present (0 when
+ * unknown) so subscribers don't have to nil-check every read.
+ */
+export interface ChatRunCompletedEvent {
+  /** Hermes session id, when the run carried one. */
+  sessionId?: string
+  /** Model id the run was dispatched against (e.g. "claude-opus-4-7"). */
+  model?: string
+  usage: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
+}
+
+/**
+ * Allow-list of event names extensions can subscribe to via
+ * `host.chat.onEvent`. Starts with one entry; future additions (e.g.
+ * "run.started", "tool.completed") get a new payload type + a string
+ * literal here. Keeping it a discriminated union forces an exhaustive
+ * compile-time check when we add the next event.
+ */
+export type ChatEventName = "run.completed"
+
 export interface MainHost {
   readonly id: string
   logger: Logger
@@ -42,7 +69,87 @@ export interface MainHost {
       tool: string,
       args: TArgs,
     ): Promise<TRet>
+    /**
+     * Read-only accessor for a hermes-agent session's authoritative
+     * stats — the same payload `GET /api/sessions/{id}` returns. Used
+     * by usage / cost telemetry extensions that need ground-truth
+     * numbers (hermes-agent computes cost against the actually-used
+     * model, regardless of the routing placeholder the request
+     * advertised).
+     *
+     * Returns null when:
+     *   - the gateway is unreachable
+     *   - the session id doesn't exist (404)
+     *   - the payload didn't parse
+     *
+     * Callers should treat null as "no data" — don't synthesize a
+     * zero-cost record from it.
+     */
+    getSession(sessionId: string): Promise<HermesSessionInfo | null>
+    /**
+     * Bulk read of hermes-agent's session list. Mirrors
+     * `GET /api/sessions?limit=…&offset=…`. Returns the empty array
+     * (NOT null) when the gateway is unreachable so callers can
+     * unconditionally `.map` / `.filter` the result without nil-checks.
+     *
+     * The hermes-agent default page size is 50, max 200; pass `limit`
+     * explicitly when you want all-time data (e.g. for the heatmap
+     * window).
+     */
+    listSessions(opts?: {
+      limit?: number
+      offset?: number
+      source?: string
+    }): Promise<HermesSessionInfo[]>
   }
+  /**
+   * Subscribe to chat-engine events broadcast from the desktop main
+   * process. Currently exposes "run.completed" only (final per-turn
+   * usage) — the foundation hook for the token-meter / tool-call-
+   * timeline / context-inspector class of extensions.
+   *
+   * Read-only: extensions observe what the agent did but cannot alter
+   * the chat state from this surface. Handlers run in the extension's
+   * utility process; throws are caught and logged by the runner.
+   */
+  chat: {
+    onEvent(
+      event: "run.completed",
+      handler: (e: ChatRunCompletedEvent) => void,
+    ): Disposable
+  }
+}
+
+/**
+ * Subset of hermes-agent's session row exposed to extensions. Field
+ * names match the gateway's `_session_response` payload exactly so the
+ * extension can pipe values through without renaming. `model` may be
+ * the routing placeholder the client sent (e.g. "hermes-agent") — the
+ * cost numbers were still computed against the real underlying model
+ * inside the gateway, so trust them even when `model` looks generic.
+ */
+export interface HermesSessionInfo {
+  id: string
+  source?: string
+  model?: string
+  title?: string
+  started_at?: number
+  ended_at?: number
+  end_reason?: string
+  message_count?: number
+  tool_call_count?: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_write_tokens?: number
+  reasoning_tokens?: number
+  estimated_cost_usd?: number
+  actual_cost_usd?: number
+  api_call_count?: number
+  parent_session_id?: string
+  last_active?: number
+  has_system_prompt?: boolean
+  has_model_config?: boolean
 }
 
 export type MainActivate = (host: MainHost) => Promise<void> | void

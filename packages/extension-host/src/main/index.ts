@@ -42,6 +42,24 @@ export interface MainBootOptions {
   }
   /** Hermes tool dispatcher (desktop wires its hermes-agent client). */
   callTool: (tool: string, args: unknown) => Promise<unknown>
+  /**
+   * Read-only accessor for a hermes-agent session's stats. Backs
+   * `host.hermes.getSession` for extensions; desktop main implements
+   * this by hitting `GET /api/sessions/{id}` through `backplaneFetch`.
+   * Should resolve to null on 404 / parse error / unreachable.
+   */
+  getSession?: (sessionId: string) => Promise<unknown | null>
+  /**
+   * Bulk session list backing `host.hermes.listSessions`. Desktop main
+   * implements this by hitting `GET /api/sessions` through the
+   * backplane. Returns the empty array on unreachable / parse error so
+   * extensions don't need to nil-check.
+   */
+  listSessions?: (opts?: {
+    limit?: number
+    offset?: number
+    source?: string
+  }) => Promise<unknown[]>
   /** Async loader for an extension's i18n JSON (per locale). */
   getI18n: (
     extensionId: string,
@@ -71,6 +89,19 @@ export interface MainBootResult {
   unloadExtension: (id: string) => Promise<void>
   /** Unload then re-activate a single extension by id. */
   reloadExtension: (id: string) => Promise<void>
+  /**
+   * Broadcast a chat-engine event to every live extension runner. The
+   * desktop chat engine wires its `streamChat` callbacks into this so
+   * extensions subscribed via `host.chat.onEvent` see per-turn token
+   * usage, tool progress, etc., without taking a direct dependency on
+   * the runner-controller's IPC surface.
+   *
+   * Best-effort, fire-and-forget. Errors in one runner do not affect
+   * delivery to siblings (see `broadcastChatEvent` in the runner
+   * controller). Returns synchronously — extensions get the event in
+   * their own utility process on the next tick.
+   */
+  publishChatEvent: (event: string, payload: unknown) => void
 }
 
 export async function bootMainExtensionHost(
@@ -85,6 +116,8 @@ export async function bootMainExtensionHost(
     settingsStore: opts.settingsStore,
     storage,
     callTool: opts.callTool,
+    getSession: opts.getSession,
+    listSessions: opts.listSessions,
   })
 
   // Discover extensions from registry.
@@ -289,6 +322,9 @@ export async function bootMainExtensionHost(
     registry,
     unloadExtension,
     reloadExtension,
+    publishChatEvent: (event, payload) => {
+      runnerManager.broadcastChatEvent(event, payload)
+    },
     shutdown: async () => {
       watcher?.stop()
       // Gracefully shut down all running extension processes.
