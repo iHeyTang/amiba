@@ -29,6 +29,7 @@ import type { MainContribution } from "@hermes-x/extension-host/renderer";
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
   "wallet": <Wallet className="h-4 w-4" />,
+  "wrench": <Wrench className="h-4 w-4" />,
 };
 
 export function resolveExtensionIcon(name: string): ReactNode | null {
