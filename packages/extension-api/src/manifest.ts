@@ -10,6 +10,8 @@ export interface ExtensionManifest {
   name: string
   /** Semver — must match `package.json`. */
   version: string
+  /** Minimum host extension-API level this extension requires (integer ≥ 1). Absent ⇒ 1. */
+  apiVersion?: number
   /** Host version constraint. Phase 1: read but not enforced. */
   engines?: { "hermes-x"?: string }
   /** Relative bundle paths. Only main remains; renderer bundles are gone. */

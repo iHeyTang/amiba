@@ -22,6 +22,18 @@ export function validateManifest(raw: unknown): ValidationResult {
   if (typeof m.version !== "string" || !SEMVER_RE.test(m.version)) {
     return { ok: false, error: `invalid version: ${String(m.version)}` }
   }
+  if (m.apiVersion !== undefined) {
+    if (
+      typeof m.apiVersion !== "number" ||
+      !Number.isInteger(m.apiVersion) ||
+      m.apiVersion < 1
+    ) {
+      return {
+        ok: false,
+        error: `invalid apiVersion (must be an integer ≥ 1): ${String(m.apiVersion)}`,
+      }
+    }
+  }
   const entries = m.entries as Record<string, unknown> | undefined
   if (!entries || typeof entries !== "object") {
     return { ok: false, error: "entries must be an object (all keys optional)" }

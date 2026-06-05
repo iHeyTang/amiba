@@ -190,4 +190,38 @@ describe("validateManifest", () => {
     const r = validateManifest({ ...base, contributes: {} })
     expect(r.ok).toBe(true)
   })
+
+  // ---------------------------------------------------------------------------
+  // apiVersion (minimum host API level)
+  // ---------------------------------------------------------------------------
+
+  it("accepts a manifest with an integer apiVersion", () => {
+    expect(validateManifest({ ...base, apiVersion: 2 }).ok).toBe(true)
+  })
+
+  it("accepts apiVersion 1 (minimum valid value)", () => {
+    expect(validateManifest({ ...base, apiVersion: 1 }).ok).toBe(true)
+  })
+
+  it("accepts a manifest without apiVersion (optional)", () => {
+    expect(validateManifest(base).ok).toBe(true)
+  })
+
+  it("rejects apiVersion 0", () => {
+    const r = validateManifest({ ...base, apiVersion: 0 })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/apiVersion/)
+  })
+
+  it("rejects a non-integer apiVersion", () => {
+    const r = validateManifest({ ...base, apiVersion: 1.5 })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/apiVersion/)
+  })
+
+  it("rejects a string apiVersion", () => {
+    const r = validateManifest({ ...base, apiVersion: "2" })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/apiVersion/)
+  })
 })
