@@ -9,11 +9,11 @@
  *   • Latest day anchored to its real day-of-week slot in the right-
  *     most column; future-of-current-week cells render blank
  *
- * Cell size is computed from the container width so the grid never
- * overflows its parent; floors at HEATMAP_CELL_MIN_PX before allowing
- * overflow. Hover (or focus) opens a popover anchored above the cell
- * showing the day + the caller-formatted value + an optional detail
- * list.
+ * Cell size is fixed (HEATMAP_CELL_PX). When the container is too
+ * narrow to fit every week column the grid overflows horizontally
+ * and the wrapper scrolls; a non-passive wheel listener translates
+ * mouse-wheel deltaY into horizontal scroll so users without
+ * trackpad horizontal gestures can still navigate.
  *
  * Lifted from extensions/token-meter so other telemetry extensions
  * (tool-meter, future agent-self-introspection panels) can reuse the
@@ -21,18 +21,19 @@
  */
 
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 
 import { cn } from "../primitives"
 
 const HEATMAP_CELL_PX = 14
 const HEATMAP_CELL_GAP_PX = 3
-const HEATMAP_CELL_MIN_PX = 8
 
 const DEFAULT_MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -131,25 +132,58 @@ export function Heatmap<T extends HeatmapCellBase>({
   emptyStateLabel,
 }: HeatmapProps<T>) {
   const layout = useMemo(() => buildLayout<T>(cells), [cells])
-  const [hovered, setHovered] = useState<{
-    cell: T
-    row: number
-    col: number
-  } | null>(null)
+  // Track the DOM element of the hovered cell so the popover can use
+  // its getBoundingClientRect() directly — that's how we stay
+  // viewport-correct after the user scrolls the heatmap horizontally.
+  const [hovered, setHovered] = useState<{ cell: T; anchor: HTMLElement } | null>(
+    null,
+  )
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState(0)
-  useLayoutEffect(() => {
-    const el = containerRef.current
+  // Absorb every wheel event inside the heatmap track and apply the
+  // dominant delta as horizontal scroll. Why unconditionally absorb:
+  // when a user wheels over the heatmap they almost never mean "scroll
+  // the outer panel" — they're trying to navigate weeks. Letting the
+  // event bubble feels glitchy (you start panning weeks, then suddenly
+  // the whole panel jumps). passive: false is required so
+  // preventDefault is honoured; React's onWheel prop is passive in
+  // modern versions, hence the manual addEventListener.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scrollRef.current
     if (!el) return
-    setContainerWidth(el.getBoundingClientRect().width)
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (typeof w === "number") setContainerWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      if (el.scrollWidth <= el.clientWidth) return
+      // Trackpads emit deltaX for native horizontal pans; plain mouse
+      // wheels only emit deltaY. Pick whichever is larger so both
+      // gestures translate to horizontal scroll.
+      const delta =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+      el.scrollLeft += delta
+    }
+    el.addEventListener("wheel", handler, { passive: false })
+    return () => el.removeEventListener("wheel", handler)
   }, [])
+
+  // Anchor the initial view to the rightmost column — today's cell —
+  // so the first thing the user sees is the most-recent activity.
+  // Re-run whenever the cell set changes (new data, range switch); a
+  // mid-scroll re-render of the SAME cells won't trigger this so user
+  // scroll position is preserved.
+  //
+  // Two details that matter for the "scrollbar flashes on load" bug:
+  //   • Guard on actual overflow — assigning scrollLeft when content
+  //     already fits triggers macOS overlay scrollbars to briefly
+  //     fade in even though the value doesn't change.
+  //   • useLayoutEffect (not useEffect) so the scroll lands before
+  //     paint; otherwise the user sees the leftmost frame first and
+  //     the jump-to-right registers as a scroll event.
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    if (el.scrollWidth <= el.clientWidth) return
+    el.scrollLeft = el.scrollWidth
+  }, [cells])
 
   if (!layout) {
     return (
@@ -160,16 +194,7 @@ export function Heatmap<T extends HeatmapCellBase>({
   }
 
   const gap = HEATMAP_CELL_GAP_PX
-  const colsCount = layout.cols.length
-  const availableForCells = Math.max(0, containerWidth - dowLabelWidth - 4)
-  const idealCell =
-    colsCount > 0
-      ? Math.floor((availableForCells - (colsCount - 1) * gap) / colsCount)
-      : HEATMAP_CELL_PX
-  const cellSize =
-    containerWidth === 0
-      ? HEATMAP_CELL_PX
-      : Math.max(HEATMAP_CELL_MIN_PX, Math.min(HEATMAP_CELL_PX, idealCell))
+  const cellSize = HEATMAP_CELL_PX
 
   const monthLabels = layout.colMonths.map((m, ci) => {
     if (m === null) return null
@@ -178,86 +203,105 @@ export function Heatmap<T extends HeatmapCellBase>({
   })
 
   return (
-    <div className="relative" ref={containerRef}>
-      {/* Month axis */}
+    <div>
+      {/* Scroll track. dow labels stay sticky on the left so they're
+          always readable; month axis and grid scroll together. */}
       <div
-        className="flex select-none gap-[3px] pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
-        style={{ paddingLeft: dowLabelWidth + 4 }}
+        ref={scrollRef}
+        className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {monthLabels.map((m, ci) => (
+        <div className="flex w-fit items-start">
+          {/* Sticky day-of-week labels (placeholder row for the month
+              axis at top, then 7 dow rows). */}
           <div
-            key={ci}
-            style={{ width: cellSize }}
-            className="flex justify-start whitespace-nowrap"
+            className="sticky left-0 z-[1] flex flex-col bg-background pr-1 text-[9px] uppercase tracking-wide text-muted-foreground/60"
+            style={{ width: dowLabelWidth }}
           >
-            {m !== null ? monthNames[m] : ""}
+            <div style={{ height: cellSize + 4 }} />
+            <div className="flex flex-col" style={{ gap }}>
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center leading-none"
+                  style={{ height: cellSize }}
+                >
+                  {i === 1
+                    ? dowLabels.mon
+                    : i === 3
+                      ? dowLabels.wed
+                      : i === 5
+                        ? dowLabels.fri
+                        : ""}
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
 
-      <div className="flex items-start">
-        {/* Day-of-week labels */}
-        <div
-          className="flex flex-col text-[9px] uppercase tracking-wide text-muted-foreground/60"
-          style={{ width: dowLabelWidth, gap }}
-        >
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          {/* Scrolling column: month axis + grid stacked. */}
+          <div>
+            {/* Month axis */}
             <div
-              key={i}
-              className="flex items-center leading-none"
-              style={{ height: cellSize }}
+              className="flex select-none gap-[3px] pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
+              style={{ height: cellSize + 4 }}
             >
-              {i === 1
-                ? dowLabels.mon
-                : i === 3
-                  ? dowLabels.wed
-                  : i === 5
-                    ? dowLabels.fri
-                    : ""}
+              {monthLabels.map((m, ci) => (
+                <div
+                  key={ci}
+                  style={{ width: cellSize }}
+                  className="flex justify-start whitespace-nowrap"
+                >
+                  {m !== null ? monthNames[m] : ""}
+                </div>
+              ))}
             </div>
-          ))}
+
+            {/* Weeks columns */}
+            <div className="flex" style={{ gap }}>
+              {layout.cols.map((col, ci) => (
+                <div key={ci} className="flex flex-col" style={{ gap }}>
+                  {col.map((cell, ri) =>
+                    cell ? (
+                      <button
+                        key={ri}
+                        type="button"
+                        onMouseEnter={(e) =>
+                          setHovered({ cell, anchor: e.currentTarget })
+                        }
+                        onMouseLeave={() => setHovered(null)}
+                        onFocus={(e) =>
+                          setHovered({ cell, anchor: e.currentTarget })
+                        }
+                        onBlur={() => setHovered(null)}
+                        className={cn(
+                          "block rounded-[3px] outline-none ring-foreground/40 transition-colors focus-visible:ring-2",
+                          levelClass(cell.level),
+                        )}
+                        style={{ width: cellSize, height: cellSize }}
+                        aria-label={`${cell.day} ${formatValue(cell)}`}
+                      />
+                    ) : (
+                      <div
+                        key={ri}
+                        style={{ width: cellSize, height: cellSize }}
+                      />
+                    ),
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Weeks columns */}
-        <div className="flex" style={{ gap }}>
-          {layout.cols.map((col, ci) => (
-            <div key={ci} className="flex flex-col" style={{ gap }}>
-              {col.map((cell, ri) =>
-                cell ? (
-                  <button
-                    key={ri}
-                    type="button"
-                    onMouseEnter={() => setHovered({ cell, row: ri, col: ci })}
-                    onMouseLeave={() => setHovered(null)}
-                    onFocus={() => setHovered({ cell, row: ri, col: ci })}
-                    onBlur={() => setHovered(null)}
-                    className={cn(
-                      "block rounded-[3px] outline-none ring-foreground/40 transition-colors focus-visible:ring-2",
-                      levelClass(cell.level),
-                    )}
-                    style={{ width: cellSize, height: cellSize }}
-                    aria-label={`${cell.day} ${formatValue(cell)}`}
-                  />
-                ) : (
-                  <div
-                    key={ri}
-                    style={{ width: cellSize, height: cellSize }}
-                  />
-                ),
-              )}
-            </div>
-          ))}
-        </div>
       </div>
 
+      {/* Popover renders through a Portal so it can't be clipped by
+          the scroll track's overflow box. Positioning uses the cell
+          element's viewport coordinates, so it always lands above the
+          cell regardless of scrollLeft / outer panel scroll. */}
       {hovered && (
         <Popover
           cell={hovered.cell}
-          col={hovered.col}
-          row={hovered.row}
-          dowLabelWidth={dowLabelWidth}
-          gap={gap}
-          cellSize={cellSize}
+          anchor={hovered.anchor}
           formatValue={formatValue}
           renderDetail={renderDetail}
           emptyLabel={emptyLabel}
@@ -283,38 +327,39 @@ export function Heatmap<T extends HeatmapCellBase>({
   )
 }
 
+/**
+ * Portal'd popover. Positions itself above the hovered cell using
+ * the cell's viewport rect — so it's immune to clipping by the
+ * heatmap's overflow box (which clips both axes once overflow-x is
+ * non-visible) or by the outer panel's ScrollArea.
+ */
 function Popover<T extends HeatmapCellBase>({
   cell,
-  col,
-  row,
-  dowLabelWidth,
-  gap,
-  cellSize,
+  anchor,
   formatValue,
   renderDetail,
   emptyLabel,
 }: {
   cell: T
-  col: number
-  row: number
-  dowLabelWidth: number
-  gap: number
-  cellSize: number
+  anchor: HTMLElement
   formatValue: (cell: T) => string
   renderDetail?: (cell: T) => ReactNode
   emptyLabel: string
 }) {
-  const monthAxisHeight = cellSize + 4
-  const xCellCenter =
-    dowLabelWidth + 4 + col * (cellSize + gap) + cellSize / 2
-  const yCellTop = monthAxisHeight + row * (cellSize + gap)
+  const rect = anchor.getBoundingClientRect()
+  // Centre the popover horizontally over the cell; sit 4 px above it
+  // with the -100% translate flipping it from "top edge at cell top"
+  // to "bottom edge at cell top - 4".
+  const x = rect.left + rect.width / 2
+  const y = rect.top - 4
 
   const hasActivity = cell.value > 0
 
-  return (
+  return createPortal(
     <div
-      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/80 bg-popover px-2.5 py-1.5 text-[10px] text-popover-foreground shadow-md"
-      style={{ left: xCellCenter, top: yCellTop - 4 }}
+      className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/80 bg-popover px-2.5 py-1.5 text-[10px] text-popover-foreground shadow-md"
+      style={{ left: x, top: y }}
+      role="tooltip"
     >
       <div className="font-mono text-muted-foreground">{cell.day}</div>
       {hasActivity ? (
@@ -329,6 +374,7 @@ function Popover<T extends HeatmapCellBase>({
       ) : (
         <div className="italic text-muted-foreground/70">{emptyLabel}</div>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }
