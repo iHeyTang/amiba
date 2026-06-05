@@ -213,7 +213,9 @@ export const activate: MainActivate = async (host) => {
       perDay.set(k, cur)
     }
 
-    // Build the window (oldest first).
+    // Build the window (oldest first). `value` is the shared Heatmap's
+    // generic numeric — for this extension that's total tokens of the
+    // day; the popover labels it accordingly via formatValue.
     const cells: Array<Omit<HeatmapCell, "level">> = []
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date()
@@ -226,11 +228,11 @@ export const activate: MainActivate = async (host) => {
             .map(([model, t]) => ({ model, tokens: t }))
             .sort((a, b) => b.tokens - a.tokens)
         : []
-      cells.push({ day: k, tokens, modelBreakdown: breakdown })
+      cells.push({ day: k, value: tokens, modelBreakdown: breakdown })
     }
 
     // Quartile bucket against non-zero days.
-    const nonZero = cells.map((c) => c.tokens).filter((v) => v > 0).sort((a, b) => a - b)
+    const nonZero = cells.map((c) => c.value).filter((v) => v > 0).sort((a, b) => a - b)
     const q = (frac: number) =>
       nonZero.length === 0
         ? 0
@@ -241,10 +243,10 @@ export const activate: MainActivate = async (host) => {
 
     return cells.map((c): HeatmapCell => {
       let level: HeatmapCell["level"] = 0
-      if (c.tokens > 0) {
-        if (c.tokens > q3) level = 4
-        else if (c.tokens > q2) level = 3
-        else if (c.tokens > q1) level = 2
+      if (c.value > 0) {
+        if (c.value > q3) level = 4
+        else if (c.value > q2) level = 3
+        else if (c.value > q1) level = 2
         else level = 1
       }
       return { ...c, level }

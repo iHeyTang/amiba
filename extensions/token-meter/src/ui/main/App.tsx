@@ -14,16 +14,9 @@
  */
 
 import { Loader2, RefreshCw, Wallet } from "lucide-react"
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { Button, cn, ScrollArea } from "@hermes-x/ui"
+import { Button, ChipSwitcher, cn, Heatmap, ScrollArea } from "@hermes-x/ui"
 
 import { hermes } from "../../shared/hermes-bridge"
 import { useT, useTheme } from "../../shared/i18n"
@@ -49,9 +42,6 @@ const DAY_RANGES = [1, 3, 7] as const
 type DayRange = (typeof DAY_RANGES)[number]
 const TREND_RANGE_SETTING_KEY = "ui.trend.days"
 const BYMODEL_RANGE_SETTING_KEY = "ui.bymodel.days"
-const HEATMAP_CELL_PX = 14
-const HEATMAP_CELL_GAP_PX = 3
-const HEATMAP_CELL_MIN_PX = 8
 const AUTO_REFRESH_INTERVAL_MS = 30_000
 const CONTENT_MAX_W_CLASS = "max-w-2xl"
 
@@ -277,7 +267,7 @@ export default function App() {
             }
           >
             {heatmap.length > 0 ? (
-              <Heatmap cells={heatmap} t={t} />
+              <TokenHeatmap cells={heatmap} t={t} />
             ) : (
               <Empty>{t("label.noData")}</Empty>
             )}
@@ -440,41 +430,6 @@ function ModelLabel({
   )
 }
 
-function ChipSwitcher<T extends number>({
-  options,
-  value,
-  onChange,
-  formatLabel,
-}: {
-  options: readonly T[]
-  value: T
-  onChange: (v: T) => void
-  formatLabel: (v: T) => string
-}) {
-  return (
-    <div className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border/50 bg-muted/30 p-0.5">
-      {options.map((opt) => {
-        const active = value === opt
-        return (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onChange(opt)}
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
-              active
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {formatLabel(opt)}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 function dayRangeLabel(n: DayRange, t: ReturnType<typeof useT>): string {
   return n === 1 ? t("range.today") : t("range.lastN", { n: String(n) })
 }
@@ -563,294 +518,63 @@ function SparkBar({ value, max }: { value: number; max: number }) {
   )
 }
 
+
 // ---------------------------------------------------------------------------
-// Heatmap
+// Token-meter heatmap wrapper
+//
+// Adapts the runner's HeatmapCell (carrying per-model breakdown) into
+// what the shared @hermes-x/ui Heatmap expects, and renders the
+// per-model detail list in the popover.
 // ---------------------------------------------------------------------------
 
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-]
 const MONTH_NAMES_ZH = [
   "1月", "2月", "3月", "4月", "5月", "6月",
   "7月", "8月", "9月", "10月", "11月", "12月",
 ]
 
-type CellSlot = HeatmapCell | null
-
-interface HeatmapLayout {
-  cols: CellSlot[][]
-  colMonths: Array<number | null>
-}
-
-function layoutHeatmap(cells: HeatmapCell[]): HeatmapLayout | null {
-  const total = cells.length
-  if (total === 0) return null
-  const latestDay = new Date(cells[total - 1]!.day).getDay()
-  const trailingPad = 6 - latestDay
-  const slots: CellSlot[] = []
-  for (let i = 0; i < trailingPad; i++) slots.push(null)
-  for (let i = total - 1; i >= 0; i--) slots.push(cells[i]!)
-  while (slots.length % 7 !== 0) slots.push(null)
-  const cols: CellSlot[][] = []
-  for (let i = 0; i < slots.length; i += 7) {
-    cols.push(slots.slice(i, i + 7).reverse())
-  }
-  cols.reverse()
-  const colMonths = cols.map((col) => {
-    for (const c of col) {
-      if (c) return new Date(c.day).getMonth()
-    }
-    return null
-  })
-  return { cols, colMonths }
-}
-
-function Heatmap({
+function TokenHeatmap({
   cells,
   t,
 }: {
   cells: HeatmapCell[]
   t: ReturnType<typeof useT>
 }) {
-  const layout = useMemo(() => layoutHeatmap(cells), [cells])
-  const [hovered, setHovered] = useState<{
-    cell: HeatmapCell
-    row: number
-    col: number
-  } | null>(null)
   const isZh = (hermes.language ?? "").toLowerCase().startsWith("zh")
-  const monthNames = isZh ? MONTH_NAMES_ZH : MONTH_NAMES
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState(0)
-  useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    setContainerWidth(el.getBoundingClientRect().width)
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (typeof w === "number") setContainerWidth(w)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  if (!layout) return <Empty>{t("label.noData")}</Empty>
-
-  const gap = HEATMAP_CELL_GAP_PX
-  const dowLabelWidth = isZh ? 18 : 16
-  const colsCount = layout.cols.length
-  const availableForCells = Math.max(0, containerWidth - dowLabelWidth - 4)
-  const idealCell =
-    colsCount > 0
-      ? Math.floor((availableForCells - (colsCount - 1) * gap) / colsCount)
-      : HEATMAP_CELL_PX
-  const cellSize =
-    containerWidth === 0
-      ? HEATMAP_CELL_PX
-      : Math.max(HEATMAP_CELL_MIN_PX, Math.min(HEATMAP_CELL_PX, idealCell))
-
-  const monthLabels = layout.colMonths.map((m, ci) => {
-    if (m === null) return null
-    if (ci > 0 && layout.colMonths[ci - 1] === m) return null
-    return m
-  })
-
   return (
-    <div className="relative" ref={containerRef}>
-      {/* Month axis */}
-      <div
-        className="flex select-none gap-[3px] pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
-        style={{ paddingLeft: dowLabelWidth + 4 }}
-      >
-        {monthLabels.map((m, ci) => (
-          <div
-            key={ci}
-            style={{ width: cellSize }}
-            className="flex justify-start whitespace-nowrap"
-          >
-            {m !== null ? monthNames[m] : ""}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-start">
-        {/* Day-of-week labels */}
-        <div
-          className="flex flex-col text-[9px] uppercase tracking-wide text-muted-foreground/60"
-          style={{ width: dowLabelWidth, gap }}
-        >
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="flex items-center leading-none"
-              style={{ height: cellSize }}
-            >
-              {i === 1
-                ? t("heatmap.dow.mon")
-                : i === 3
-                  ? t("heatmap.dow.wed")
-                  : i === 5
-                    ? t("heatmap.dow.fri")
-                    : ""}
-            </div>
-          ))}
-        </div>
-
-        {/* Weeks columns */}
-        <div className="flex" style={{ gap }}>
-          {layout.cols.map((col, ci) => (
-            <div key={ci} className="flex flex-col" style={{ gap }}>
-              {col.map((cell, ri) =>
-                cell ? (
-                  <button
-                    key={ri}
-                    type="button"
-                    onMouseEnter={() => setHovered({ cell, row: ri, col: ci })}
-                    onMouseLeave={() => setHovered(null)}
-                    onFocus={() => setHovered({ cell, row: ri, col: ci })}
-                    onBlur={() => setHovered(null)}
-                    className={cn(
-                      "block rounded-[3px] outline-none ring-foreground/40 transition-colors focus-visible:ring-2",
-                      levelClass(cell.level),
-                    )}
-                    style={{ width: cellSize, height: cellSize }}
-                    aria-label={`${cell.day} ${formatTokens(cell.tokens)}`}
-                  />
-                ) : (
-                  <div
-                    key={ri}
-                    style={{ width: cellSize, height: cellSize }}
-                  />
-                ),
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {hovered && (
-        <HeatPopover
-          cell={hovered.cell}
-          col={hovered.col}
-          row={hovered.row}
-          dowLabelWidth={dowLabelWidth}
-          gap={gap}
-          cellSize={cellSize}
-          t={t}
-        />
-      )}
-
-      {/* Legend */}
-      <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground/70">
-        <span>{t("heatmap.legend.less")}</span>
-        {[0, 1, 2, 3, 4].map((lvl) => (
-          <div
-            key={lvl}
-            className={cn(
-              "rounded-[3px]",
-              levelClass(lvl as HeatmapCell["level"]),
-            )}
-            style={{ width: cellSize, height: cellSize }}
-          />
-        ))}
-        <span>{t("heatmap.legend.more")}</span>
-      </div>
-    </div>
-  )
-}
-
-function levelClass(level: HeatmapCell["level"]): string {
-  switch (level) {
-    case 0:
-      return "bg-muted/50"
-    case 1:
-      return "bg-primary/20"
-    case 2:
-      return "bg-primary/40"
-    case 3:
-      return "bg-primary/65"
-    case 4:
-      return "bg-primary"
-  }
-}
-
-/**
- * Popover anchored above the hovered cell. Shows the day, total
- * tokens, and a sorted per-model breakdown so the user can see which
- * model actually drove that day's volume — placeholder model names
- * render via ModelLabel so they're explicitly marked as "unknown".
- */
-function HeatPopover({
-  cell,
-  col,
-  row,
-  dowLabelWidth,
-  gap,
-  cellSize,
-  t,
-}: {
-  cell: HeatmapCell
-  col: number
-  row: number
-  dowLabelWidth: number
-  gap: number
-  cellSize: number
-  t: ReturnType<typeof useT>
-}) {
-  const monthAxisHeight = cellSize + 4
-  const xCellCenter =
-    dowLabelWidth + 4 + col * (cellSize + gap) + cellSize / 2
-  const yCellTop = monthAxisHeight + row * (cellSize + gap)
-
-  const hasActivity = cell.tokens > 0
-
-  return (
-    <div
-      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/80 bg-popover px-2.5 py-1.5 text-[10px] text-popover-foreground shadow-md"
-      style={{ left: xCellCenter, top: yCellTop - 4 }}
-    >
-      <div className="font-mono text-muted-foreground">{cell.day}</div>
-      {hasActivity ? (
-        <>
-          <div className="tabular-nums">
-            {formatTokens(cell.tokens)} {t("heatmap.tooltip.tokens")}
-          </div>
-          {cell.modelBreakdown.length > 1 && (
-            <ul className="mt-1 space-y-0.5 border-t border-border/40 pt-1">
-              {cell.modelBreakdown.map((m) => (
-                <ModelBreakdownRow key={m.model} share={m} t={t} />
-              ))}
-            </ul>
-          )}
-        </>
-      ) : (
-        <div className="italic text-muted-foreground/70">
-          {t("heatmap.tooltip.none")}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ModelBreakdownRow({
-  share,
-  t,
-}: {
-  share: HeatmapModelShare
-  t: ReturnType<typeof useT>
-}) {
-  return (
-    <li className="flex items-center justify-between gap-3 font-mono">
-      <ModelLabel
-        name={share.model}
-        t={t}
-        className="text-[10px] text-foreground/90"
-      />
-      <span className="tabular-nums text-muted-foreground">
-        {formatTokens(share.tokens)}
-      </span>
-    </li>
+    <Heatmap
+      cells={cells}
+      formatValue={(c) => `${formatTokens(c.value)} ${t("heatmap.tooltip.tokens")}`}
+      renderDetail={(c) =>
+        c.modelBreakdown.length > 1 ? (
+          <ul className="space-y-0.5">
+            {c.modelBreakdown.map((m) => (
+              <li
+                key={m.model}
+                className="flex items-center justify-between gap-3 font-mono"
+              >
+                <ModelLabel
+                  name={m.model}
+                  t={t}
+                  className="text-[10px] text-foreground/90"
+                />
+                <span className="tabular-nums text-muted-foreground">
+                  {formatTokens(m.tokens)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null
+      }
+      dowLabels={{
+        mon: t("heatmap.dow.mon"),
+        wed: t("heatmap.dow.wed"),
+        fri: t("heatmap.dow.fri"),
+      }}
+      emptyLabel={t("heatmap.tooltip.none")}
+      emptyStateLabel={t("label.noData")}
+      legend={{ less: t("heatmap.legend.less"), more: t("heatmap.legend.more") }}
+      monthNames={isZh ? MONTH_NAMES_ZH : undefined}
+      dowLabelWidth={isZh ? 18 : 16}
+    />
   )
 }

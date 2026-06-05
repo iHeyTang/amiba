@@ -58,11 +58,17 @@ export interface HeatmapModelShare {
   tokens: number
 }
 
+/**
+ * Heatmap cell. Extends the generic `HeatmapCellBase` from
+ * @hermes-x/ui — `value` carries the day's total token count so the
+ * shared Heatmap component (which is value-agnostic) can render it.
+ * The popover's per-model detail rows come from `modelBreakdown`.
+ */
 export interface HeatmapCell {
   day: string
   /** Total tokens for the day; 0 means no activity. */
-  tokens: number
+  value: number
   level: 0 | 1 | 2 | 3 | 4
-  /** Per-model contribution to this day, sorted tokens-desc. */
+  /** Per-model contribution to this day, sorted by tokens desc. */
   modelBreakdown: HeatmapModelShare[]
 }
