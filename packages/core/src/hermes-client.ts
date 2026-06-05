@@ -57,6 +57,22 @@ export interface StreamHandlers {
    * approval decision since the path is keyed by run id, not session id.
    */
   onRun?: (runId: string) => void;
+  /**
+   * Token usage for the turn, surfaced exactly once from the final
+   * chat.completion.chunk before [DONE] (see api_server.py
+   * `_write_sse_chat_completion`). Field names are OpenAI-style
+   * (prompt/completion/total). Fires only when the gateway included a
+   * `usage` field — older gateway builds may omit it, in which case
+   * this callback simply never runs.
+   *
+   * Drives the token-meter extension and any other usage-tracking
+   * surface that needs per-turn input/output token counts.
+   */
+  onUsage?: (usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  }) => void;
 }
 
 /**
@@ -296,6 +312,18 @@ export async function streamChat(
               if (merged && merged.length > 0) {
                 handlers.onToolCallsState?.(merged);
               }
+            }
+            // The gateway tacks `usage` onto the final chat.completion.chunk
+            // (the finish_reason="stop" frame, see api_server.py). It only
+            // appears once per stream, so a simple side-channel emit is fine
+            // — no accumulator needed.
+            if (obj?.usage && typeof obj.usage === "object") {
+              const u = obj.usage as Record<string, unknown>;
+              handlers.onUsage?.({
+                prompt_tokens: Number(u.prompt_tokens) || 0,
+                completion_tokens: Number(u.completion_tokens) || 0,
+                total_tokens: Number(u.total_tokens) || 0,
+              });
             }
           } catch {
             // Non-JSON chunk; ignore.
