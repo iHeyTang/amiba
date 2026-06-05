@@ -19,7 +19,7 @@
  * resolved by the manifest-driven hooks before reaching this component.
  */
 
-import { BookOpen, Clock, MessageSquare, Sparkles, Wrench } from "lucide-react";
+import { BookOpen, Clock, MessageSquare, Sparkles, Wallet, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useT } from "@hermes-x/i18n";
@@ -28,6 +28,7 @@ import type { MainContribution } from "@hermes-x/extension-host/renderer";
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
+  "wallet": <Wallet className="h-4 w-4" />,
 };
 
 export function resolveExtensionIcon(name: string): ReactNode | null {
