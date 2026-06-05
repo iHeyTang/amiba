@@ -28,8 +28,10 @@ import {
 import { MicrophoneButton } from "./useVoiceRecorder"
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ClipboardEventHandler,
@@ -39,6 +41,11 @@ import {
 } from "react"
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
+import { buildProviderRegistry } from "./composer/providers/registry"
+import { expandMentions } from "./composer/expandMentions"
+import { routeSubmit } from "./composer/command-routing"
+import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions"
+import type { TriggerProvider } from "./composer/providers/types"
 
 /**
  * The chat surface's input box. **One implementation** used by every
@@ -269,6 +276,21 @@ export interface ComposerProps {
 
   /** Pass-through DOM attributes on the OUTER wrapper (drag handlers). */
   wrapperProps?: React.HTMLAttributes<HTMLDivElement>
+
+  /**
+   * Extra @ / slash trigger providers, merged with the built-in registry
+   * (skills @-mentions + slash commands). Passed through to
+   * RichComposerEditor (so the trigger menu sees them) and used at
+   * send-time to expand `@[...]` tokens into their serialized text.
+   */
+  mentionProviders?: TriggerProvider[]
+  /**
+   * Host-wired handlers for slash commands that map to a native UI action
+   * (e.g. `/config` → open settings) instead of being sent as text. When a
+   * matching handler is present the command is performed and NOT sent;
+   * otherwise it falls through to a normal send.
+   */
+  slashUiActions?: SlashUiActionContext
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
@@ -309,10 +331,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       kbdHints,
       renderSendButton,
       wrapperProps,
+      mentionProviders,
+      slashUiActions,
     },
     ref,
   ) {
     const innerRef = useRef<RichComposerHandle>(null)
+
+    // Active provider list (built-in @ skills + / commands, plus any
+    // injected providers). Built once per provider-list identity; used both
+    // for the trigger menu (passed to RichComposerEditor) and for send-time
+    // `@[...]` expansion.
+    const providerRegistry = useMemo(
+      () => buildProviderRegistry(mentionProviders ?? []),
+      [mentionProviders],
+    )
+
+    // Single normal-send path. Slash UI-action commands with a wired handler
+    // are performed and NOT sent; everything else expands `@[...]` mention
+    // tokens to text (a no-op for plain messages) and submits. Abort / stop /
+    // queue branches do NOT route through here.
+    const handleSend = useCallback(
+      (overrideText?: string) => {
+        const text = overrideText ?? value
+        if (routeSubmit(text, { send: () => {}, ctx: slashUiActions ?? {} }))
+          return // UI action handled, don't send
+        const finalText = expandMentions(text, providerRegistry.all)
+        onSubmit(finalText)
+      },
+      [value, slashUiActions, providerRegistry, onSubmit],
+    )
 
     useImperativeHandle(
       ref,
@@ -363,14 +411,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (disabled) return
       if (busy) {
         if (effectiveCanSubmit) {
+          // Queue branch — parent decides whether to enqueue. Left as the
+          // raw onSubmit() so queue semantics are unchanged.
           onSubmit()
           return
         }
+        // Abort branch — untouched.
         onAbort?.()
         return
       }
       if (!effectiveCanSubmit) return
-      onSubmit()
+      // Normal send — route through handleSend (slash routing + @ expansion).
+      handleSend()
     }
 
     // Resolve which heading the tooltip / aria should use given the
@@ -559,8 +611,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             onSubmitChord={() => {
               if (disabled) return
               if (!effectiveCanSubmit) return
-              onSubmit()
+              handleSend()
             }}
+            mentionProviders={mentionProviders}
             onKeyDownExtra={onKeyDownExtra as never}
             onPaste={handlePaste}
             className={cn(
@@ -605,7 +658,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   value={value}
                   busy={busy}
                   disabled={disabled}
-                  onSubmit={onSubmit}
+                  // Quick-action chips are a normal-send path: route through
+                  // handleSend so the expanded prompt gets @ expansion / slash
+                  // routing like any other send.
+                  onSubmit={handleSend}
                   // Hero mode lets the chip row absorb the leftover space
                   // so the send button hugs the right edge; default mode
                   // sits inline next to actionsLeft.

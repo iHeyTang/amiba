@@ -1,5 +1,6 @@
 import type { TriggerProvider } from "./types"
 import { makeSkillsProvider } from "./skills"
+import { makeSlashProvider } from "./slash"
 
 export interface ProviderRegistry {
   all: TriggerProvider[]
@@ -7,7 +8,7 @@ export interface ProviderRegistry {
 }
 
 export function buildProviderRegistry(extra: TriggerProvider[] = []): ProviderRegistry {
-  const builtin: TriggerProvider[] = [makeSkillsProvider()]
+  const builtin: TriggerProvider[] = [makeSkillsProvider(), makeSlashProvider()]
   const all = [...builtin, ...extra]
   return {
     all,
