@@ -13,6 +13,7 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@hermes-x/platform"
+import { getHermesSession, listHermesSessions } from "@hermes-x/core"
 import { bootMainExtensionHost, registerExtHttpChannel } from "@hermes-x/extension-host/main"
 import { startExtHttpServer } from "./ext-http-server"
 
@@ -28,7 +29,7 @@ process.on("uncaughtException", (err) => {
   console.error("[main] uncaughtException:", err)
 })
 
-import { registerChatHandlers, resolveApproval } from "./chat/engine"
+import { registerChatHandlers, resolveApproval, setChatEventPublisher } from "./chat/engine"
 import { startCronWatcher, stopCronWatcher } from "./cron-watcher"
 import {
   createNotifierWindow,
@@ -496,6 +497,33 @@ if (!gotSingleInstanceLock) {
       callTool: async () => {
         throw new Error("hermes.callTool not wired yet")
       },
+      // Backs host.hermes.getSession for extensions. Goes through the
+      // backplane (`/hermes/sessions/{id}` reverse-proxies upstream
+      // `/api/sessions/{id}`), with auth already wired by the @hermes-x/core
+      // wrapper. Returns null on 404 / network failure / non-200 so the
+      // extension treats "no data" and "unreachable" the same way.
+      getSession: async (sessionId: string) => {
+        if (!sessionId || typeof sessionId !== "string") return null
+        try {
+          const r = await getHermesSession(sessionId)
+          if ("ok" in r && r.ok) return r.session as unknown
+          return null
+        } catch {
+          return null
+        }
+      },
+      // Bulk session list — backs host.hermes.listSessions. Returns []
+      // on failure for the same reason as getSession's null return:
+      // extension code stays simple.
+      listSessions: async (opts) => {
+        try {
+          const r = await listHermesSessions(opts ?? {})
+          if ("ok" in r && r.ok) return r.sessions as unknown[]
+          return []
+        } catch {
+          return []
+        }
+      },
       getI18n: async (_extensionId, _locale) => ({}),
       getLanguage: () => currentLanguage,
       getTheme: () => currentTheme,
@@ -503,6 +531,11 @@ if (!gotSingleInstanceLock) {
     })
 
     ;(globalThis as { __hermesExtensionHost?: typeof extensionHost }).__hermesExtensionHost = extensionHost
+
+    // Hand the chat engine a reference to the extension host's broadcaster so
+    // per-turn usage events reach subscribers of host.chat.onEvent. Wired
+    // here (not in registerChatHandlers) because the host has to exist first.
+    setChatEventPublisher(extensionHost.publishChatEvent)
 
     createWindow()
     createNotifierWindow()

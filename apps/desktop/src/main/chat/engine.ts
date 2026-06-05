@@ -32,6 +32,27 @@ const sessions = new Map<string, SessionState>()
 const subscribers = new Set<string>() // sessionIds the engine is currently streaming to
 
 /**
+ * Pluggable sink for chat-engine events that the extension host
+ * broadcasts to subscribed extension runners. Initialized by the
+ * desktop boot path right after `bootMainExtensionHost` returns; left
+ * as a no-op so unit tests that exercise the engine don't have to
+ * stand up the extension host.
+ */
+let publishChatEvent: (event: string, payload: unknown) => void = () => {}
+
+/**
+ * Wire the engine to the extension host's broadcaster. Called once
+ * from `apps/desktop/src/main/index.ts` after the host comes up;
+ * subsequent calls overwrite (so hot-reload of the host during dev
+ * doesn't strand stale references).
+ */
+export function setChatEventPublisher(
+  fn: (event: string, payload: unknown) => void,
+): void {
+  publishChatEvent = fn
+}
+
+/**
  * Pending approvals indexed by approvalId so the Heads-up Notifier can
  * resolve them without knowing which session they came from. Populated
  * when the chat engine first sees an approval request (along with the
@@ -214,6 +235,18 @@ async function handleSubmit(payload: SubmitPayload) {
         state.reasoning += delta
         state.updatedAt = Date.now()
         emitEvent(sessionId, { kind: "reasoning", text: delta })
+      },
+      onUsage: (usage) => {
+        // Fan out token usage to extension runners. Fires exactly once
+        // per turn (final chat.completion.chunk before [DONE], see
+        // hermes-agent api_server.py). model + sessionId come from the
+        // submit payload that started this run; usage shape is the
+        // OpenAI-standard prompt/completion/total triple.
+        publishChatEvent("run.completed", {
+          sessionId,
+          model,
+          usage,
+        })
       },
       onToolCallsState: (calls: StreamedToolCall[]) => {
         state.toolCalls = calls
