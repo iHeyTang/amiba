@@ -3,6 +3,7 @@ import { makeSkillsProvider } from "./skills"
 import { makeSlashProvider } from "./slash"
 import { makeSessionsProvider } from "./sessions"
 import { makePersonasProvider } from "./personas"
+import { makeChannelsProvider } from "./channels"
 
 export interface ProviderRegistry {
   all: TriggerProvider[]
@@ -10,7 +11,7 @@ export interface ProviderRegistry {
 }
 
 export function buildProviderRegistry(extra: TriggerProvider[] = []): ProviderRegistry {
-  const builtin: TriggerProvider[] = [makeSkillsProvider(), makeSlashProvider(), makeSessionsProvider(), makePersonasProvider()]
+  const builtin: TriggerProvider[] = [makeSkillsProvider(), makeSlashProvider(), makeSessionsProvider(), makePersonasProvider(), makeChannelsProvider()]
   const all = [...builtin, ...extra]
   return {
     all,
