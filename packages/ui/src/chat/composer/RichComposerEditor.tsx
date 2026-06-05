@@ -15,6 +15,8 @@ import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ImperativeHandlePlugin, type RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
 import { MentionSerializePlugin } from "./plugins/MentionSerializePlugin"
+import { TriggerMenuPlugin } from "./plugins/TriggerMenuPlugin"
+import type { TriggerProvider } from "./providers/types"
 
 export type { RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
 
@@ -40,6 +42,8 @@ export interface RichComposerEditorProps {
   onPaste?: ClipboardEventHandler<HTMLElement>
   /** Extra plugins rendered inside the Lexical context (mentions, slash, etc.). */
   children?: ReactNode
+  /** Additional @ / slash mention providers, merged with the built-in registry. */
+  mentionProviders?: TriggerProvider[]
 }
 
 export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEditorProps>(
@@ -56,6 +60,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
       onKeyDownExtra,
       onPaste,
       children,
+      mentionProviders,
     } = props
     return (
       <LexicalComposer initialConfig={baseEditorConfig({ editable: !disabled })}>
@@ -90,6 +95,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
           <ImperativeHandlePlugin handleRef={ref} />
+          <TriggerMenuPlugin extraProviders={mentionProviders} />
           {children}
         </div>
       </LexicalComposer>
