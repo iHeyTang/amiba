@@ -18,7 +18,8 @@
     "build:extensions": "pnpm --filter \"./extensions/*\" build",
     "build:desktop": "pnpm --filter @hermes-x/desktop build",
     "clean": "pnpm -r exec rm -rf node_modules dist build .plasmo .turbo .vite",
-    "lint:no-extension-leak": "bash scripts/check-no-knowledge-in-core.sh"
+    "lint:no-extension-leak": "bash scripts/check-no-knowledge-in-core.sh",
+    "sdk:pack": "bash scripts/sdk-pack.sh"
   },
   "devDependencies": {
     "prettier": "3.3.3",

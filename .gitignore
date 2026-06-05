@@ -13,3 +13,4 @@ out
 !.env.example
 coverage
 *.tsbuildinfo
+sdk-dist/
