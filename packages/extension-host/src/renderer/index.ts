@@ -20,7 +20,12 @@ import type { ExtensionManifest } from "@hermes-x/extension-api"
 
 type HermesWindowShape = {
   extensions: {
-    listManifests(): Promise<ExtensionManifest[]>
+    // The actual IPC payload is { manifest, path } per row — the preload
+    // signature lines up with `getManifestEntries()` on the main side.
+    // The renderer type used to mis-declare this as ExtensionManifest[]
+    // which made every consumer reach into undefined for name/id/version
+    // and render blank chrome.
+    listManifests(): Promise<Array<{ manifest: ExtensionManifest; path: string }>>
     status(): Promise<Array<{ id: string; status: string; error?: string; source?: string }>>
   }
 }
@@ -40,15 +45,15 @@ export function useExtensionRegistry(refreshKey: number = 0) {
     void Promise.all([
       extensions.listManifests(),
       extensions.status(),
-    ]).then(([manifests, statuses]) => {
+    ]).then(([entries, statuses]) => {
       const byId = new Map(statuses.map((s) => [s.id, s]))
       setItems(
-        manifests.map((m) => ({
-          id: m.id,
-          manifest: m,
-          status: byId.get(m.id)?.status ?? "loaded",
-          error: byId.get(m.id)?.error,
-          source: byId.get(m.id)?.source,
+        entries.map(({ manifest }) => ({
+          id: manifest.id,
+          manifest,
+          status: byId.get(manifest.id)?.status ?? "loaded",
+          error: byId.get(manifest.id)?.error,
+          source: byId.get(manifest.id)?.source,
         })),
       )
     })
