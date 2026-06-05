@@ -1,3 +1,6 @@
+import { readdir } from "node:fs/promises"
+import { join } from "node:path"
+
 import { BrowserWindow, ipcMain, shell } from "electron"
 import type { WorkspaceChange } from "@hermes-x/platform"
 
@@ -46,5 +49,29 @@ export function registerIpcHandlers() {
   ipcMain.handle("workspace:get-current", (_e, sessionId: string) =>
     workspaceManager.getForSession(sessionId),
   )
+
+  // @file mention source for the desktop chat. Lists the active session's
+  // bound workspace dir (top level only — recursion is a later enhancement),
+  // filtered by the typed query and excluding dotfiles. Returns [] when the
+  // session has no bound workspace or the dir can't be read.
+  ipcMain.handle(
+    "files:list",
+    async (_e, args: { sessionId: string; query: string }): Promise<{ path: string; isDir: boolean }[]> => {
+      const root = workspaceManager.getForSession(args.sessionId)
+      if (!root) return []
+      const q = (args.query || "").toLowerCase()
+      try {
+        const entries = await readdir(root, { withFileTypes: true })
+        return entries
+          .filter((e) => !e.name.startsWith("."))
+          .filter((e) => e.name.toLowerCase().includes(q))
+          .slice(0, 30)
+          .map((e) => ({ path: join(root, e.name), isDir: e.isDirectory() }))
+      } catch {
+        return []
+      }
+    },
+  )
+
   workspaceManager.onChange(broadcastWorkspaceChange)
 }

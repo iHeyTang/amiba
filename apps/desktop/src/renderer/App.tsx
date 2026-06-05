@@ -1,4 +1,4 @@
-import { getHermesStatus, SessionsProvider } from "@hermes-x/core"
+import { getHermesStatus, SessionsProvider, useSessions } from "@hermes-x/core"
 import { FullScreenChatView, useChatSessionRequester } from "@hermes-x/ui"
 import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
@@ -6,7 +6,7 @@ import { SettingsView } from "@hermes-x/ui"
 import { useResolvedTheme } from "@hermes-x/ui"
 import { useT } from "@hermes-x/i18n"
 import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useState, type ReactElement } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react"
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView"
 
@@ -16,6 +16,7 @@ const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView"
 
 import { ElectronChatEngineClient } from "./chat/electron-engine-client"
 import { desktopCapabilities } from "./chat/desktop-capabilities"
+import { makeDesktopFilesProvider } from "./chat/files-provider"
 import { OnboardingWizard } from "./onboarding/OnboardingWizard"
 
 type View = "chat" | "settings"
@@ -50,6 +51,19 @@ function AppInner(): ReactElement {
     void window.hermes.setResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
+  // Desktop `@file` mention source. The provider lists files under the
+  // ACTIVE session's bound workspace, so it needs the live active id — not
+  // the one captured at first render. We keep the latest id in a ref and
+  // hand the provider a stable getter that reads it, so the provider object
+  // stays referentially stable (no re-instantiation churn through ChatSurface)
+  // while always querying against the current session.
+  const sessions = useSessions()
+  const activeIdRef = useRef(sessions.activeId)
+  activeIdRef.current = sessions.activeId
+  const filesProvider = useMemo(
+    () => makeDesktopFilesProvider(() => activeIdRef.current),
+    [],
+  )
   const [view, setView] = useState<View>("chat")
   const [phase, setPhase] = useState<Phase>("loading")
   // Sessions-aware prompt requester. Used by the extension chat.startSession
@@ -122,6 +136,7 @@ function AppInner(): ReactElement {
     <FullScreenChatView
       client={client}
       capabilities={desktopCapabilities}
+      mentionProviders={[filesProvider]}
       openSettings={(tab) => {
         if (tab) {
           window.location.hash = tab
