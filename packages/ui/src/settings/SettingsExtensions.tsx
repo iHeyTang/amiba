@@ -408,11 +408,20 @@ export function SettingsExtensions() {
                     </div>
                   </div>
 
-                  {/* Error stack */}
+                  {/* Error / reason stack */}
                   {ext.error && (
                     <details className="mt-1 text-xs">
-                      <summary className="cursor-pointer text-destructive">
-                        {t("options.extensions.showError")}
+                      <summary
+                        className={cn(
+                          "cursor-pointer",
+                          ext.status === "incompatible"
+                            ? "text-muted-foreground"
+                            : "text-destructive",
+                        )}
+                      >
+                        {ext.status === "incompatible"
+                          ? t("options.extensions.showDetails")
+                          : t("options.extensions.showError")}
                       </summary>
                       <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-[11px]">
                         {ext.error}

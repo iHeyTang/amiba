@@ -57,6 +57,7 @@ export const en = {
   "options.extensions.status.failed": "Failed",
   "options.extensions.status.incompatible": "Incompatible",
   "options.extensions.showError": "Show error",
+  "options.extensions.showDetails": "Show details",
   "options.extensions.addLocal": "Add local extension…",
   "options.extensions.source.marketplace": "Marketplace",
   "options.extensions.source.local": "Local",

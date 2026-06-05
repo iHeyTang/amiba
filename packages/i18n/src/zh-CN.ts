@@ -52,6 +52,7 @@ export const zhCN: Messages = {
   "options.extensions.status.failed": "加载失败",
   "options.extensions.status.incompatible": "不兼容",
   "options.extensions.showError": "查看错误信息",
+  "options.extensions.showDetails": "查看详情",
   "options.extensions.addLocal": "添加本地扩展…",
   "options.extensions.source.marketplace": "市场",
   "options.extensions.source.local": "本地",
