@@ -90,6 +90,7 @@ import type {
   PendingPromptResult,
   ChatSurfaceCapabilities,
 } from "./internal/capabilities";
+import type { TriggerProvider } from "./composer/providers/types";
 import { PendingQueueRail } from "./internal/PendingQueueRail";
 import { useApprovals } from "./internal/useApprovals";
 import { useFolderDrop } from "./internal/useFolderDrop";
@@ -234,6 +235,14 @@ export interface ChatSurfaceProps {
   };
 
   /**
+   * Extra @ providers contributed by host apps (e.g. desktop's @file,
+   * extension's @page). Forwarded verbatim to `<Composer mentionProviders>`.
+   * Leave undefined to use only the built-in skills / slash / sessions /
+   * personas / channels providers.
+   */
+  mentionProviders?: TriggerProvider[];
+
+  /**
    * Called when the TabBar gear icon is clicked. Extension uses
    * `openSettings()`; desktop opens a separate Options
    * BrowserWindow.
@@ -256,6 +265,7 @@ export default function ChatSurface({
   client,
   capabilities = {},
   slots,
+  mentionProviders,
   openSettings,
   openAgentDestination,
 }: ChatSurfaceProps) {
@@ -1611,6 +1621,7 @@ export default function ChatSurface({
             }
           : undefined
       }
+      mentionProviders={mentionProviders}
       chipRow={undefined}
       actionsLeft={
         hasActive ? (
