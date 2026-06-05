@@ -15,9 +15,9 @@
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
-    "@hermes-x/extension-api": "*",
-    "@hermes-x/extension-cli": "*",
-    "@hermes-x/tailwind-preset": "*",
+    "@hermes-x/extension-api": "https://github.com/iHeyTang/hermes-x/releases/download/sdk-v1/hermes-x-extension-api-0.1.0.tgz",
+    "@hermes-x/extension-cli": "https://github.com/iHeyTang/hermes-x/releases/download/sdk-v1/hermes-x-extension-cli-0.1.0.tgz",
+    "@hermes-x/tailwind-preset": "https://github.com/iHeyTang/hermes-x/releases/download/sdk-v1/hermes-x-tailwind-preset-0.1.0.tgz",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",

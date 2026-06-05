@@ -3,6 +3,7 @@
   "id": "{{ID}}",
   "name": "{{NAME}}",
   "version": "0.1.0",
+  "apiVersion": 1,
   "engines": { "hermes-x": "^0.1.0" },
   "entries": { "main": "dist/main.cjs" },
   "contributes": {

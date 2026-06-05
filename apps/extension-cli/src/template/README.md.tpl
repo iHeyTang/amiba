@@ -1,0 +1,27 @@
+# {{NAME}}
+
+A hermes-x desktop extension (`{{ID}}`).
+
+## Develop
+
+```bash
+pnpm install            # installs the @hermes-x/* SDK from GitHub Release tarballs
+pnpm dev                # watch-build; load it in the Hermes desktop app
+```
+
+## Build & package
+
+```bash
+pnpm build              # vite build (main + ui) -> dist/
+pnpm pack               # -> extension.tgz
+```
+
+## Release
+
+Push a `v*` tag; `.github/workflows/release.yml` builds, packs, and attaches
+`extension.tgz` to the GitHub Release. Add the repo to the marketplace index to
+make it installable from the desktop app.
+
+> The SDK is consumed via tarball URLs pinned to `sdk-v1` (host extension-API
+> level 1). `manifest.apiVersion` must be <= the desktop's implemented level or
+> the extension is marked incompatible.
