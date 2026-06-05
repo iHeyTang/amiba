@@ -236,6 +236,41 @@ Each extension declares the minimum host extension-API level it needs:
 and the user is told to update the desktop. Omitting `apiVersion` defaults
 to `1` for backward compatibility.
 
+## SDK distribution (standalone extension repos)
+
+Extensions can live in their own repos and build against the hermes-x SDK without
+the monorepo. The SDK is distributed as GitHub Release tarballs (no public npm yet).
+
+**Maintainer — cut an SDK release (once per API-level bump):**
+
+```bash
+pnpm sdk:pack            # → sdk-dist/hermes-x-{extension-api,tailwind-preset,extension-cli}-0.1.0.tgz
+gh release create sdk-v1 sdk-dist/*.tgz   # tag MUST match the API level (sdk-v<HOST_API_VERSION>)
+```
+
+You can validate the whole consumption chain offline first with `pnpm sdk:verify-scaffold`
+(scaffolds a demo extension and installs/builds/packs it against the local tarballs).
+
+**Author — start a standalone extension:**
+
+```bash
+# with the published CLI tarball (or a local checkout of the monorepo CLI):
+hermes-x-ext create my-ext --id com.example.my-ext
+cd my-ext && pnpm install   # pulls @hermes-x/* from the sdk-v1 release tarballs
+pnpm dev
+```
+
+The scaffold pins `@hermes-x/*` to `sdk-v1` tarball URLs and stamps
+`manifest.apiVersion: 1`. Releasing the extension (`git tag v… && git push --tags`)
+runs the generated `.github/workflows/release.yml`, which packs `extension.tgz` and
+attaches it to the GitHub Release — ready to add to the marketplace index.
+
+> Order matters: the `sdk-v1` release must exist before an extension repo's CI can
+> `pnpm install` its tarball deps.
+
+> Migrating to public npm later is a find-replace: swap the tarball URLs for version
+> ranges (`^0.1.0`) once the packages are published. No other change needed.
+
 ## Recap
 
 ```
