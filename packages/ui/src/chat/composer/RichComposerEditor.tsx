@@ -14,7 +14,7 @@ import { baseEditorConfig } from "./lexical-config"
 import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ImperativeHandlePlugin, type RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
-import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin"
+import { MentionSerializePlugin } from "./plugins/MentionSerializePlugin"
 
 export type { RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
 
@@ -85,7 +85,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
           />
           <HistoryPlugin />
           <AutoGrowPlugin maxHeightPx={maxHeightPx ?? 200} />
-          <ValueSyncPlugin value={value} onChange={onChange} />
+          <MentionSerializePlugin value={value} onChange={onChange} />
           {onSubmitChord && (
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
