@@ -41,6 +41,7 @@ import {
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
 import { buildProviderRegistry } from "./composer/providers/registry"
+import { loadMentionResourceProviders } from "./composer/providers/mention-resources"
 import { expandMentions } from "./composer/expandMentions"
 import { routeSubmit } from "./composer/command-routing"
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions"
@@ -337,13 +338,40 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   ) {
     const innerRef = useRef<RichComposerHandle>(null)
 
-    // Active provider list (built-in @ skills + / commands, plus any
-    // injected providers). Built once per provider-list identity; used both
-    // for the trigger menu (passed to RichComposerEditor) and for send-time
+    // Backplane-contributed mention resources (e.g. lark.doc/chat/user) become
+    // generic @-providers, fetched once from GET /hermes/mention-resources.
+    // Empty until the fetch resolves (and stays empty if the backplane is
+    // down) — the composer degrades to its built-in + injected providers.
+    const [dynamicMentionProviders, setDynamicMentionProviders] = useState<
+      TriggerProvider[]
+    >([])
+    useEffect(() => {
+      let alive = true
+      loadMentionResourceProviders()
+        .then((ps) => {
+          if (alive) setDynamicMentionProviders(ps)
+        })
+        .catch(() => {})
+      return () => {
+        alive = false
+      }
+    }, [])
+
+    // The single mention-provider source: backplane-dynamic first, then any
+    // host-injected ones (Files on desktop, Page-context on the extension).
+    // Threaded to BOTH the trigger menu (via RichComposerEditor) and the
+    // send-time `@[...]` expansion registry, so the two never diverge.
+    const effectiveMentionProviders = useMemo(
+      () => [...dynamicMentionProviders, ...(mentionProviders ?? [])],
+      [dynamicMentionProviders, mentionProviders],
+    )
+
+    // Active provider list (built-in @ skills + / commands, plus the resolved
+    // mention providers). Used both for the trigger menu and send-time
     // `@[...]` expansion.
     const providerRegistry = useMemo(
-      () => buildProviderRegistry(mentionProviders ?? []),
-      [mentionProviders],
+      () => buildProviderRegistry(effectiveMentionProviders),
+      [effectiveMentionProviders],
     )
 
     // Single normal-send path. Slash UI-action commands with a wired handler
@@ -612,7 +640,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               if (!effectiveCanSubmit) return
               handleSend()
             }}
-            mentionProviders={mentionProviders}
+            mentionProviders={effectiveMentionProviders}
             onKeyDownExtra={onKeyDownExtra}
             onPaste={handlePaste}
             className={cn(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { encodeMention, parseTokens } from "../serialize"
+import { encodeMention, parseTokens, registerMentionType } from "../serialize"
 import type { MentionData } from "../providers/types"
 
 const skill: MentionData = { type: "skill", payload: { name: "translate" }, display: "translate" }
@@ -25,5 +25,28 @@ describe("token serialize/parse", () => {
     const parts = parseTokens("see @[bogus:x] here")
     expect(parts.every((p) => p.kind === "text")).toBe(true)
     expect(parts.map((p) => (p.kind === "text" ? p.text : "")).join("")).toBe("see @[bogus:x] here")
+  })
+
+  it("round-trips a dynamic (dotted) registry type once registered", () => {
+    // Backplane integration contributes "lark.doc" with fields [url, title].
+    registerMentionType("lark.doc", ["url", "title"])
+    const doc: MentionData = {
+      type: "lark.doc",
+      payload: { url: "https://x.feishu.cn/docx/a|b", title: "PRD" },
+      display: "PRD",
+    }
+    // dot in the key + pipe in the url both survive
+    const token = encodeMention(doc)
+    expect(token).toBe("@[lark.doc:https://x.feishu.cn/docx/a%7Cb|PRD]")
+    const parts = parseTokens(`pre ${token} post`)
+    const mention = parts.find((p) => p.kind === "mention")
+    expect(mention?.kind === "mention" && mention.mention.payload.url).toBe(
+      "https://x.feishu.cn/docx/a|b",
+    )
+  })
+
+  it("still treats a dotted key as plain text when NOT registered", () => {
+    const parts = parseTokens("see @[unreg.type:x] here")
+    expect(parts.every((p) => p.kind === "text")).toBe(true)
   })
 })
