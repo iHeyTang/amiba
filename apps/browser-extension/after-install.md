@@ -6,7 +6,7 @@ Hermes can control a **separate Chrome window** in your normal profile (no autom
 
 **Next steps for you**
 
-1. **Chrome** — `chrome://extensions/` → Developer mode → **Load unpacked** → the unzipped extension folder you downloaded from the [download page](https://iheytang.github.io/hermes-my-browser-extension/).
+1. **Chrome** — `chrome://extensions/` → Developer mode → **Load unpacked** → the unzipped extension folder you downloaded from the [download page](https://iheytang.github.io/hermes-x-browser-extension/).
 2. **Gateway** — `hermes gateway restart`, then open the extension → **side panel** → tap **● Offline** until **● Online**.
 3. **Side panel sign-in** — if chat shows errors, set `API_SERVER_ENABLED`, `API_SERVER_KEY`, and `API_SERVER_CORS_ORIGINS=*` in `~/.hermes/.env`, restart the gateway, and paste the same API key under **Options → Settings** in the extension.
 

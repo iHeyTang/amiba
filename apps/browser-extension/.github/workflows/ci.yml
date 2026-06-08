@@ -1,5 +1,13 @@
 name: CI
 
+# NOTE: This workflow file is REFERENCE-ONLY. It lives under
+# apps/browser-extension/.github/workflows/ inside the hermes-x monorepo and
+# will NOT be picked up by GitHub Actions, which only reads workflows from the
+# repo-root .github/workflows/ directory. To make it active, copy it to the
+# root .github/workflows/ of the relevant repo (e.g. iHeyTang/hermes-x or
+# iHeyTang/hermes-x-browser-extension). The monorepo's own CI handles the
+# full workspace build; this file is kept here for reference.
+#
 # Sanity-check every push / PR against ``main``: install deps, run the
 # TypeScript compiler in no-emit mode, and confirm the production build
 # still succeeds. Catches regressions before they hit a tag and trigger

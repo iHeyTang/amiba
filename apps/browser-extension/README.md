@@ -139,10 +139,10 @@ show their structured synthesis.
 
 The extension is **not on the Chrome Web Store** (yet). Sideload it:
 
-1. Visit the [download page](https://iheytang.github.io/hermes-my-browser-extension/)
-   (served by GitHub Pages from `docs/index.html`)
-2. Download the latest `.zip` (pulled from this repo's
-   [GitHub Releases](https://github.com/iHeyTang/hermes-my-browser-extension/releases))
+1. Visit the [download page](https://iheytang.github.io/hermes-x-browser-extension/)
+   (served by GitHub Pages from the dist repo's `docs/index.html`)
+2. Download the latest `.zip` (pulled from the dist repo's
+   [GitHub Releases](https://github.com/iHeyTang/hermes-x-browser-extension/releases))
 3. Unzip → `chrome://extensions/` → Developer mode → Load unpacked
 
 The matching Hermes plugin (WebSocket hub + tools) lives at

@@ -2,39 +2,53 @@
 
 How to ship a new version of the Hermes Browser Extension.
 
-Distribution model: **GitHub Releases sideload** (users download the zip
-from the [download page](https://iheytang.github.io/hermes-my-browser-extension/)
-and load it unpacked via Chrome's developer mode). No Chrome Web Store
-submission — that path is deferred until / if we ever want it.
-
-CI workflow at [`.github/workflows/release.yml`](./.github/workflows/release.yml)
-handles the build + upload. The release is fully automated on tag push;
-the only manual step is bumping the version + tagging.
+Distribution model: **GitHub Releases sideload** — the extension source lives
+here in the monorepo (`apps/browser-extension`, built with Plasmo); the built
+`.zip` is published as a GitHub Release on the dedicated distribution repo
+[`iHeyTang/hermes-x-browser-extension`](https://github.com/iHeyTang/hermes-x-browser-extension).
+The GitHub Pages download page at
+`https://iheytang.github.io/hermes-x-browser-extension/` auto-picks up the
+latest release via the GitHub Releases API. No Chrome Web Store submission —
+that path is deferred until / if we ever want it.
 
 ## Cutting a release
 
-```bash
-# 1. bump version in package.json
-$EDITOR package.json               # change "version": "X.Y.Z"
+All steps run from the **monorepo root** (`iHeyTang/hermes-x`):
 
-# 2. commit + tag
-git commit -am "chore: bump version to vX.Y.Z"
+```bash
+# 1. Bump version in the browser-extension package.json
+$EDITOR apps/browser-extension/package.json   # change "version": "X.Y.Z"
+
+# 2. Build + package
+pnpm -F @hermes-x/browser-extension build
+pnpm -F @hermes-x/browser-extension package
+# Produces the packaged zip (check pnpm output for exact path).
+# If `package` is not a defined script, zip manually:
+#   cd apps/browser-extension/build/chrome-mv3-prod
+#   zip -r ../../hermes-extension-vX.Y.Z.zip .
+
+# 3. Commit + tag in the monorepo
+git commit -am "chore: bump browser-extension to vX.Y.Z"
 git tag vX.Y.Z
 git push origin main vX.Y.Z
 
-# 3. wait ~2-3 min — GitHub Actions builds and creates the release
+# 4. Publish the zip as a GitHub Release on the dist repo
+gh release create vX.Y.Z apps/browser-extension/build/hermes-extension-vX.Y.Z.zip \
+  -R iHeyTang/hermes-x-browser-extension \
+  --title "Hermes Browser Extension vX.Y.Z" \
+  --generate-notes
 ```
 
-When the workflow finishes, the release is at
-`https://github.com/iHeyTang/hermes-my-browser-extension/releases/tag/vX.Y.Z`
+When step 4 completes, the release is at
+`https://github.com/iHeyTang/hermes-x-browser-extension/releases/tag/vX.Y.Z`
 with `hermes-extension-vX.Y.Z.zip` attached. The download page
 auto-picks it up on next page-load (it queries the GitHub Releases API).
 
 ## Smoke test the release zip before announcing
 
 ```bash
-# Download the asset the CI uploaded
-gh release download vX.Y.Z -p '*.zip'
+# Download the asset just published
+gh release download vX.Y.Z -p '*.zip' -R iHeyTang/hermes-x-browser-extension
 unzip hermes-extension-vX.Y.Z.zip -d /tmp/hermes-ext-test
 
 # Load in Chrome
@@ -44,26 +58,28 @@ unzip hermes-extension-vX.Y.Z.zip -d /tmp/hermes-ext-test
 # - Side panel opens, Status tab shows backplane (if running)
 ```
 
-If smoke test fails, the right move is **delete the GitHub release**,
-fix, bump to the next patch version, and re-tag — Chrome users who
-already downloaded won't auto-update without manual action anyway, so a
-yanked zip just stops new installs.
+If smoke test fails, the right move is **delete the GitHub release** on the
+dist repo (`iHeyTang/hermes-x-browser-extension`), fix the source here,
+bump to the next patch version, and re-tag — Chrome users who already
+downloaded won't auto-update without manual action anyway, so a yanked zip
+just stops new installs.
 
 ## Manual build (when you need a local zip without tagging)
 
 ```bash
+cd apps/browser-extension
 pnpm install --frozen-lockfile
 pnpm build
 cd build/chrome-mv3-prod && zip -r ../../hermes-extension-dev.zip .
 ```
 
-Output: `hermes-extension-dev.zip` (about 7 MB).
+Output: `apps/browser-extension/hermes-extension-dev.zip` (about 7 MB).
 
 ## Future: swap to a self-hosted artifact registry
 
 The download page reads its release source from a single config block at
-the top of [`docs/index.html`](./docs/index.html). To point users at
-your own host instead of GitHub Releases:
+the top of the dist repo's [`docs/index.html`](https://github.com/iHeyTang/hermes-x-browser-extension/blob/main/docs/index.html).
+To point users at your own host instead of GitHub Releases:
 
 1. Set up your registry to serve a `latest.json` manifest like:
    ```json
@@ -75,27 +91,24 @@ your own host instead of GitHub Releases:
      "sha256": "..."
    }
    ```
-2. In `docs/index.html`, change the `RELEASE_SOURCE` block from
+2. In the dist repo's `docs/index.html`, change the `RELEASE_SOURCE` block from
    `type: 'github'` to `type: 'custom'` with `manifestUrl` pointing at
    your `latest.json`.
-3. (Optional) Tweak the CI workflow to also push to your registry on
-   tag push.
+3. (Optional) Extend the release step to also push to your registry.
 
 The download page UI doesn't care about the source as long as
 `getLatestRelease()` resolves to `{ version, zipUrl, releasedAt, sizeBytes? }`.
 
 ## Common gotchas
 
-- **Forgot to bump version in `package.json`** → CI builds but the zip
-  inside has the wrong version. Manifest version mismatch surfaces in
-  `chrome://extensions/` for sideload users (they'll see the old number
-  even after "reload").
+- **Forgot to bump version in `package.json`** → The zip inside has the wrong
+  version. Manifest version mismatch surfaces in `chrome://extensions/` for
+  sideload users (they'll see the old number even after "reload").
 - **Bundle size > 10 MB** → Chrome refuses to load. Run
-  `du -sh build/chrome-mv3-prod/` before tagging. Usually
-  means unbundled fonts or images.
+  `du -sh apps/browser-extension/build/chrome-mv3-prod/` before tagging.
+  Usually means unbundled fonts or images.
 - **Service worker takes too long to register** → Manifest v3 caps SW
   startup at 30s. If hit, lazy-load heavy modules.
-- **GitHub Pages 404 on the download page** → After enabling Pages
-  (settings → Pages → source = `main` branch, folder = `/docs`), give
-  it a minute to publish; check the deploy status in the repo's
-  "Environments" tab.
+- **GitHub Pages 404 on the download page** → After enabling Pages on the
+  dist repo (settings → Pages → source = `main` branch, folder = `/docs`),
+  give it a minute to publish; check the "Environments" tab for deploy status.

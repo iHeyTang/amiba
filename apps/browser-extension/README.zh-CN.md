@@ -105,9 +105,9 @@ Home 页左栏把 Inbox 渲染成卡片流：未读的浮到顶部、错误带�
 
 扩展暂未上架 Chrome 商店，使用 sideload 方式安装：
 
-1. 打开 [下载页](https://iheytang.github.io/hermes-my-browser-extension/)
-   （由 GitHub Pages 从 `docs/index.html` 提供）
-2. 下载最新版 `.zip`（自动从 [GitHub Releases](https://github.com/iHeyTang/hermes-my-browser-extension/releases) 拉取）
+1. 打开 [下载页](https://iheytang.github.io/hermes-x-browser-extension/)
+   （由 GitHub Pages 从发布仓库的 `docs/index.html` 提供）
+2. 下载最新版 `.zip`（自动从 [GitHub Releases](https://github.com/iHeyTang/hermes-x-browser-extension/releases) 拉取）
 3. 解压 → `chrome://extensions/` → 打开开发者模式 → 加载已解压的扩展程序
 
 配套的 Hermes 插件（WebSocket hub + 工具集）位于
