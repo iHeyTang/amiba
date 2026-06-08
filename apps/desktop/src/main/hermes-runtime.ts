@@ -84,8 +84,8 @@ const HERMES_BINARY_CANDIDATES: string[] = IS_WIN
  * already there.
  */
 export const REQUIRED_PLUGINS: readonly string[] = [
-  "iHeyTang/hermes-plugin-http-backplane",
-  "iHeyTang/hermes-plugin-browser-tools",
+  "iHeyTang/hermes-x-plugin-http-backplane",
+  "iHeyTang/hermes-x-plugin-browser-tools",
 ]
 
 /**

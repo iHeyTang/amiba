@@ -111,7 +111,7 @@ Home 页左栏把 Inbox 渲染成卡片流：未读的浮到顶部、错误带�
 3. 解压 → `chrome://extensions/` → 打开开发者模式 → 加载已解压的扩展程序
 
 配套的 Hermes 插件（WebSocket hub + 工具集）位于
-[`iHeyTang/hermes-plugin-browser-tools`](https://github.com/iHeyTang/hermes-plugin-browser-tools)
+[`iHeyTang/hermes-x-plugin-browser-tools`](https://github.com/iHeyTang/hermes-x-plugin-browser-tools)
 —— 先把它装到 Hermes 里，再 sideload 本扩展，扩展会自动连上本机 bridge。
 
 ---
@@ -125,7 +125,7 @@ Home 页左栏把 Inbox 渲染成卡片流：未读的浮到顶部、错误带�
 ## 卸载
 
 在 `chrome://extensions/` 中移除扩展即可。Hermes 端如需一并卸载插件：
-`hermes plugins remove hermes-plugin-browser-tools`。
+`hermes plugins remove hermes-x-plugin-browser-tools`。
 
 ## 许可证
 

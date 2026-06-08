@@ -6,7 +6,7 @@
 
 **Architecture:** 用 Lexical 富文本编辑器替换 Composer 内部的 `<textarea>`，对外保持 `value:string` / `onChange(string)` 契约不变（5 个界面零改动）。`@` 引用是原子芯片节点，序列化成规范 token 串 `@[type:payload]`；`/` 命令是行首文本，发送时整行路由（多数发后端，少数触发 UI 动作）。命令与 personas 列表由 backplane 新增的两个只读接口实时下发（与 CLI 同一份 source of truth）。Provider 抽象：内置 5 个（slash/skills/sessions/personas/channels），桌面注入 Files、扩展注入 Page-context。
 
-**Tech Stack:** React 18 + TypeScript + Lexical + Radix + Tailwind（packages/ui）；vitest（ui/core 测试，新增）；aiohttp + pytest（hermes-plugin-http-backplane，新增 pytest）；pnpm 9 workspace。
+**Tech Stack:** React 18 + TypeScript + Lexical + Radix + Tailwind（packages/ui）；vitest（ui/core 测试，新增）；aiohttp + pytest（hermes-x-plugin-http-backplane，新增 pytest）；pnpm 9 workspace。
 
 **Spec:** [docs/superpowers/specs/2026-06-05-composer-slash-and-mentions-design.md](../specs/2026-06-05-composer-slash-and-mentions-design.md)
 
@@ -15,7 +15,7 @@
 ## 重要约定（每个 Task 都适用）
 
 - 所有 `pnpm` 命令在 monorepo 根 `/Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x` 执行。
-- 所有 `pytest` 命令在 `/Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-plugin-http-backplane` 执行。
+- 所有 `pytest` 命令在 `/Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane` 执行。
 - Git 身份：commit 用 `iHeyTang <dehui1012@gmail.com>`。每个 Task 末尾 commit。
 - 分支：`feat/composer-slash-and-mentions`（已创建）。
 - backplane base URL：`http://127.0.0.1:9394`；core 用 `backplaneFetch`（已带 Bearer 鉴权）。
@@ -27,16 +27,16 @@
 - Create: `packages/core/vitest.config.ts`
 - Modify: `packages/ui/package.json`（+vitest、@testing-library、jsdom、lexical 全家桶、test script）
 - Create: `packages/ui/vitest.config.ts`、`packages/ui/src/test/setup.ts`
-- Modify: `hermes-plugin-http-backplane/pyproject.toml`（+dev deps）
-- Create: `hermes-plugin-http-backplane/pytest.ini`、`hermes-plugin-http-backplane/tests/conftest.py`
+- Modify: `hermes-x-plugin-http-backplane/pyproject.toml`（+dev deps）
+- Create: `hermes-x-plugin-http-backplane/pytest.ini`、`hermes-x-plugin-http-backplane/tests/conftest.py`
 
 **Part 1 — 后端接口 + core 客户端**
-- Create: `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_service.py`
-- Create: `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_routes.py`
-- Create: `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_service.py`
-- Create: `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_routes.py`
-- Modify: `hermes-plugin-http-backplane/runtime/features/hermes_proxy/settings/__init__.py`
-- Create: `hermes-plugin-http-backplane/tests/test_commands_routes.py`、`tests/test_personalities_routes.py`
+- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_service.py`
+- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_routes.py`
+- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_service.py`
+- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_routes.py`
+- Modify: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/__init__.py`
+- Create: `hermes-x-plugin-http-backplane/tests/test_commands_routes.py`、`tests/test_personalities_routes.py`
 - Create: `packages/core/src/hermes-commands.ts`、`packages/core/src/hermes-personalities.ts`
 - Modify: `packages/core/src/index.ts`（导出）
 - Create: `packages/core/src/__tests__/hermes-commands.test.ts`、`hermes-personalities.test.ts`
@@ -191,8 +191,8 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "test:
 ### Task 0.3: 给 backplane 加 pytest
 
 **Files:**
-- Modify: `hermes-plugin-http-backplane/pyproject.toml`
-- Create: `hermes-plugin-http-backplane/pytest.ini`、`tests/conftest.py`、`tests/test_smoke.py`
+- Modify: `hermes-x-plugin-http-backplane/pyproject.toml`
+- Create: `hermes-x-plugin-http-backplane/pytest.ini`、`tests/conftest.py`、`tests/test_smoke.py`
 
 - [ ] **Step 1: pyproject dev deps**
 
@@ -239,12 +239,12 @@ def test_smoke():
 
 - [ ] **Step 4: 跑测试**
 
-Run: `cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-plugin-http-backplane && python -m pytest tests/test_smoke.py -v`
+Run: `cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane && python -m pytest tests/test_smoke.py -v`
 Expected: 1 passed。（若缺 pytest：先 `python -m pip install -e ".[dev]"`）
 
 - [ ] **Step 5: Commit**
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-plugin-http-backplane
+cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane
 git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -am "test: add pytest infra to backplane"
 ```
 > 注：backplane 是独立 git 仓库时在其目录内 commit；若与主仓同管则统一在主仓 commit。先 `git rev-parse --show-toplevel` 确认。
@@ -2993,7 +2993,7 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "feat(
 
 ## 收尾验证（全部 Task 完成后）
 
-- [ ] **全量测试**：`pnpm --filter @hermes-x/core test && pnpm --filter @hermes-x/ui test`，以及 `cd ../hermes-plugin-http-backplane && python -m pytest -q`。全绿。
+- [ ] **全量测试**：`pnpm --filter @hermes-x/core test && pnpm --filter @hermes-x/ui test`，以及 `cd ../hermes-x-plugin-http-backplane && python -m pytest -q`。全绿。
 - [ ] **typecheck**：`pnpm --filter @hermes-x/core typecheck && pnpm --filter @hermes-x/ui typecheck && pnpm --filter @hermes-x/desktop typecheck`（或各自 build 的 tsc 阶段）。
 - [ ] **桌面手测全链路**：`/` 命令（含 subcommand 菜单、ui-action 如 `/config` 开设置、send 类整行发送）、`@` 五类（Skills/Sessions/Personas/Channels/Files）插芯片+发送展开、IME/Enter/Shift+Enter/附件/快捷动作/麦克风/占位 无回归。
 - [ ] **扩展手测**：`@` 四类内置 + Page 分组；无 Files 分组。

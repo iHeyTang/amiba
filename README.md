@@ -11,7 +11,7 @@ Multi-target workspace for Hermes:
 - `packages/theme` — `useStoredThemePreference` / `useResolvedTheme` / `useDocumentTheme`, persists via adapter
 - `packages/tailwind-preset` — shared Tailwind preset (shadcn color tokens, radius, font stack, `darkMode: class`)
 
-The four sibling directories at the parent (`hermes-agent`, `hermes-my-browser-extension`, `hermes-plugin-browser-tools`, `hermes-plugin-http-backplane`) are **not** part of this workspace and remain untouched.
+The four sibling directories at the parent (`hermes-agent`, `hermes-my-browser-extension`, `hermes-x-plugin-browser-tools`, `hermes-x-plugin-http-backplane`) are **not** part of this workspace and remain untouched.
 
 ## Layout
 

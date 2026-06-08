@@ -11,8 +11,8 @@ three pieces running for the extension to be useful:
 
 | Repo | What it gives you |
 |---|---|
-| [hermes-plugin-http-backplane](https://github.com/iHeyTang/hermes-plugin-http-backplane) | Local HTTP server on `127.0.0.1:9394` that this extension talks to (sessions / cron / skills / model config / lifecycle). Without it the extension shows an "offline" onboarding screen. |
-| [hermes-plugin-browser-tools](https://github.com/iHeyTang/hermes-plugin-browser-tools) | Hermes-side tools (`my_browser_screenshot`, `my_browser_inbox_*`, etc.) so the agent can drive this extension. Without it, this extension still works but the agent has no browser tools. |
+| [hermes-x-plugin-http-backplane](https://github.com/iHeyTang/hermes-x-plugin-http-backplane) | Local HTTP server on `127.0.0.1:9394` that this extension talks to (sessions / cron / skills / model config / lifecycle). Without it the extension shows an "offline" onboarding screen. |
+| [hermes-x-plugin-browser-tools](https://github.com/iHeyTang/hermes-x-plugin-browser-tools) | Hermes-side tools (`my_browser_screenshot`, `my_browser_inbox_*`, etc.) so the agent can drive this extension. Without it, this extension still works but the agent has no browser tools. |
 | **this repo** | The Chrome extension (side panel + home page + chat tab + options). |
 
 ### Quick install
@@ -20,8 +20,8 @@ three pieces running for the extension to be useful:
 After [Hermes Agent](https://github.com/NousResearch/hermes-agent) is set up:
 
 ```bash
-hermes plugins install iHeyTang/hermes-plugin-http-backplane
-hermes plugins install iHeyTang/hermes-plugin-browser-tools
+hermes plugins install iHeyTang/hermes-x-plugin-http-backplane
+hermes plugins install iHeyTang/hermes-x-plugin-browser-tools
 hermes chat   # starts Hermes + the backplane HTTP server
 ```
 
@@ -146,7 +146,7 @@ The extension is **not on the Chrome Web Store** (yet). Sideload it:
 3. Unzip → `chrome://extensions/` → Developer mode → Load unpacked
 
 The matching Hermes plugin (WebSocket hub + tools) lives at
-[`iHeyTang/hermes-plugin-browser-tools`](https://github.com/iHeyTang/hermes-plugin-browser-tools)
+[`iHeyTang/hermes-x-plugin-browser-tools`](https://github.com/iHeyTang/hermes-x-plugin-browser-tools)
 — install that into Hermes first, then sideload this extension and it
 will connect to the local bridge automatically.
 

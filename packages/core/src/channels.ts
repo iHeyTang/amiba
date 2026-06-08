@@ -41,7 +41,7 @@
  *
  * Pre-unification rows tagged ``"browser-extension"`` /
  * ``"desktop"`` are normalised to this value on backplane boot (see
- * ``hermes-plugin-http-backplane/.../sessions/migrations.py``), so the
+ * ``hermes-x-plugin-http-backplane/.../sessions/migrations.py``), so the
  * client doesn't carry back-compat aliases — by the time the renderer
  * reads the SessionDB, legacy values are already gone.
  */

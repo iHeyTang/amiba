@@ -34,8 +34,8 @@ const ACTION_POLL_MS = 1_000;
  * shouldn't be translated.
  */
 const INSTALL_COMMANDS = [
-  "hermes plugins install iHeyTang/hermes-plugin-http-backplane",
-  "hermes plugins install iHeyTang/hermes-plugin-browser-tools",
+  "hermes plugins install iHeyTang/hermes-x-plugin-http-backplane",
+  "hermes plugins install iHeyTang/hermes-x-plugin-browser-tools",
   "hermes chat   # 启动 Hermes 进程 + backplane HTTP server",
 ];
 
