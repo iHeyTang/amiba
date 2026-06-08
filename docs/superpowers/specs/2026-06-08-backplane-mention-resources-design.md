@@ -224,3 +224,59 @@ core unchanged.
 - Per-keystroke MCP calls for search (MCP is agent-facing, wrong for
   typeahead — see 方案 B rejected).
 - hermes-agent core changes (the contract is entirely backplane + skill).
+
+---
+
+## v2 — HTTP-agnostic integration protocol + two-plugin split
+
+After v1 shipped (integration framework bundled in the backplane, integrations
+HTTP-coupled via `setup(router)`), the design was sharpened so the backplane
+becomes a *uniform* adapter over upstream and the integration contract drops
+HTTP entirely.
+
+**New shape (3 layers):**
+
+```
+hermes-agent plugin system
+  ▲ register(ctx)
+hermes-x-plugin-integrations   = the integration protocol + `hermes integration`
+                                 CLI + loader + in-process capability registry +
+                                 resolver-skill external_dirs wiring. NO HTTP.
+  ▲ integration protocol (search + manifest + skill)
+~/.hermes/integrations/<name>/  e.g. hermes-x-integration-lark
+                                 = async search(rtype,q,limit)->{ok,items} +
+                                   integration.yaml(mention_resources) + skills/
+
+hermes-x-plugin-http-backplane = pure HTTP adapter. /hermes/* (compat over core)
+                                 + integrations_gateway: /integrations/<name>/search
+                                 (calls the integration's in-process search),
+                                 /hermes/mention-resources, /hermes/integrations*
+                                 admin. Reads the integrations plugin's registry
+                                 in-process; degrades gracefully if absent.
+```
+
+**Why:** an integration's core purpose isn't to expose HTTP — it's a capability
+declaration. Making it HTTP-agnostic means lark is plain domain logic (no
+aiohttp), the backplane is the *only* HTTP owner, and the backplane's role is
+uniformly "wrap upstream → webapi" for both lanes (resolving the v1 "origin vs
+compat" split-role). The dependency inverts correctly: backplane → integrations
+(adapter depends on upstream), in-process, same Hermes process.
+
+**Contract change:** integration exposes a module-level `async search(rtype,
+query, limit) -> {ok, items}` (loader grabs it) instead of `setup(router)`. The
+backplane's generic `/integrations/<name>/search` adapter calls it. Composer
+URLs are byte-identical, so the TS side is unchanged.
+
+**Trade-off:** integrations can no longer mount arbitrary HTTP routes (only the
+known `search` capability). This is intentional — it sharpens the boundary:
+capability-shaped → integration; needs bespoke HTTP / tools / hooks → a full
+Hermes plugin.
+
+**Repo deltas:** new `hermes-x-plugin-integrations` (loader/manager/cli/registry
++ integration-management skill); backplane loses `runtime/api.py`,
+`runtime/dispatch.py`, `cli.py`, `runtime/features/integrations/`,
+`integrations_admin`, `mention_resources`, and gains
+`hermes_proxy/integrations_gateway`; lark drops `handler.py`, `__init__`
+re-exports `search`. Validated in-process (backplane imports + builds app,
+gateway bridges to the plugin, search + mention_resources) + pytest (backplane
+11, integrations plugin 6).
