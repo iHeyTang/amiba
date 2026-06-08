@@ -81,7 +81,17 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             }
             placeholder={
               placeholder ? (
-                <div className="pointer-events-none absolute left-0 top-0 select-none text-sm text-muted-foreground">
+                // Mirror the ContentEditable's padding (`className` carries it,
+                // e.g. hero's `px-5 pt-3.5`) onto the overlay so the placeholder
+                // text starts exactly where typed text would. `inset-0` makes the
+                // overlay's content box match the editor's — without the shared
+                // padding the placeholder pins to the raw top-left corner.
+                <div
+                  className={cn(
+                    "pointer-events-none absolute inset-0 select-none text-sm text-muted-foreground",
+                    className,
+                  )}
+                >
                   {placeholder}
                 </div>
               ) : null
