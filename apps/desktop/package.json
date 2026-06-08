@@ -83,6 +83,7 @@
     "chokidar": "^3.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "lexical": "^0.21.0",
     "lucide-react": "^0.460.0",
     "node-pty": "^1.0.0",
     "react": "18.3.1",

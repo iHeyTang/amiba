@@ -12,6 +12,7 @@ import {
   chromeCapabilities,
   openAgentDestinationInUserWindow,
 } from "~lib/chat/chrome-capabilities";
+import { makePageContextProvider } from "~lib/chat/page-context-provider";
 
 import { BridgeStatusBar } from "./BridgeStatusBar";
 import { EmptyStateBridgeGate } from "./EmptyStateBridgeGate";
@@ -53,9 +54,11 @@ function SidePanelInner(props: {
   // across renders so the ChatSurface's subscription effect doesn't
   // re-bind on every state tick.
   const client = useMemo(() => new ChromeChatEngineClient(), []);
+  const pageProvider = useMemo(() => makePageContextProvider(), []);
 
   return (
     <ChatSurface
+      mentionProviders={[pageProvider]}
       variant={props.variant}
       messagesMaxWidth={props.messagesMaxWidth}
       client={client}

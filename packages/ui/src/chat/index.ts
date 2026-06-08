@@ -115,3 +115,14 @@ export {
   hostnameOf,
   splitThinkingFromBody
 } from "./internal/helpers"
+
+// Composer mention providers — host apps build TriggerProviders, pass them via
+// <ChatSurface mentionProviders={…}>, and reuse insertMentionAtTrigger inside
+// their own onSelect handlers.
+export { insertMentionAtTrigger } from "./composer/providers/skills"
+export type {
+  TriggerProvider,
+  MenuItem,
+  MentionData,
+  MentionType,
+} from "./composer/providers/types"

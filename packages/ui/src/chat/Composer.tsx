@@ -6,7 +6,6 @@ import {
 import { useT } from "@hermes-x/i18n"
 import {
   Button,
-  Textarea,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -16,6 +15,10 @@ import { cn } from "../primitives"
 import { ArrowUp } from "lucide-react"
 
 import { AttachmentChip } from "./bubble/chips"
+import {
+  RichComposerEditor,
+  type RichComposerHandle,
+} from "./composer/RichComposerEditor"
 import { ComposerKbdHints, type ComposerKbdHint } from "./Kbd"
 import { QuickActionChips } from "./QuickActionChips"
 import {
@@ -25,18 +28,23 @@ import {
 import { MicrophoneButton } from "./useVoiceRecorder"
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEventHandler,
   type CSSProperties,
-  type KeyboardEvent,
   type ReactNode,
 } from "react"
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types"
+import { buildProviderRegistry } from "./composer/providers/registry"
+import { expandMentions } from "./composer/expandMentions"
+import { routeSubmit } from "./composer/command-routing"
+import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions"
+import type { TriggerProvider } from "./composer/providers/types"
 
 /**
  * The chat surface's input box. **One implementation** used by every
@@ -130,7 +138,11 @@ export interface ComposerProps {
    * animation. Respects `prefers-reduced-motion`.
    */
   placeholder?: string | { typewriter: string[]; active?: boolean }
-  /** Initial rows. Default 2 — matches the main panel composer. */
+  /**
+   * Initial rows. Kept for back-compat with existing consumers, but no
+   * longer applied: the Lexical editor auto-grows from a min height, so
+   * an initial `rows` count has no effect.
+   */
   rows?: number
   autoFocus?: boolean
   /** Max height before the textarea starts scrolling instead of growing. */
@@ -142,7 +154,7 @@ export interface ComposerProps {
    * Return `true` to swallow the event (skip the default handling).
    * Returning nothing lets the default kick in.
    */
-  onKeyDownExtra?: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean | void
+  onKeyDownExtra?: (e: KeyboardEvent) => boolean | void
   /** Pass-through paste handler (used for image / file paste). */
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>
 
@@ -263,6 +275,21 @@ export interface ComposerProps {
 
   /** Pass-through DOM attributes on the OUTER wrapper (drag handlers). */
   wrapperProps?: React.HTMLAttributes<HTMLDivElement>
+
+  /**
+   * Extra @ / slash trigger providers, merged with the built-in registry
+   * (skills @-mentions + slash commands). Passed through to
+   * RichComposerEditor (so the trigger menu sees them) and used at
+   * send-time to expand `@[...]` tokens into their serialized text.
+   */
+  mentionProviders?: TriggerProvider[]
+  /**
+   * Host-wired handlers for slash commands that map to a native UI action
+   * (e.g. `/config` → open settings) instead of being sent as text. When a
+   * matching handler is present the command is performed and NOT sent;
+   * otherwise it falls through to a normal send.
+   */
+  slashUiActions?: SlashUiActionContext
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
@@ -276,7 +303,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       canSubmit,
       disabled = false,
       placeholder = "Send a message…",
-      rows = 2,
+      // `rows` stays in the public ComposerProps for the 5 consumers, but
+      // RichComposerEditor auto-grows and has no rows attr, so we no longer
+      // read it here (sizing is driven by min-height classes + AutoGrowPlugin).
       autoFocus = false,
       maxTextareaPx = COMPOSER_TEXTAREA_MAX_PX,
       textareaStyle,
@@ -301,17 +330,43 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       kbdHints,
       renderSendButton,
       wrapperProps,
+      mentionProviders,
+      slashUiActions,
     },
     ref,
   ) {
-    const taRef = useRef<HTMLTextAreaElement>(null)
+    const innerRef = useRef<RichComposerHandle>(null)
+
+    // Active provider list (built-in @ skills + / commands, plus any
+    // injected providers). Built once per provider-list identity; used both
+    // for the trigger menu (passed to RichComposerEditor) and for send-time
+    // `@[...]` expansion.
+    const providerRegistry = useMemo(
+      () => buildProviderRegistry(mentionProviders ?? []),
+      [mentionProviders],
+    )
+
+    // Single normal-send path. Slash UI-action commands with a wired handler
+    // are performed and NOT sent; everything else expands `@[...]` mention
+    // tokens to text (a no-op for plain messages) and submits. Abort / stop /
+    // queue branches do NOT route through here.
+    const handleSend = useCallback(
+      (overrideText?: string) => {
+        const text = overrideText ?? value
+        if (routeSubmit(text, { send: () => {}, ctx: slashUiActions ?? {} }))
+          return // UI action handled, don't send
+        const finalText = expandMentions(text, providerRegistry.all)
+        onSubmit(finalText)
+      },
+      [value, slashUiActions, providerRegistry, onSubmit],
+    )
 
     useImperativeHandle(
       ref,
       (): ComposerHandle => ({
-        focus: () => taRef.current?.focus(),
-        select: () => taRef.current?.select(),
-        getTextarea: () => taRef.current,
+        focus: () => innerRef.current?.focus(),
+        select: () => innerRef.current?.select(),
+        getTextarea: () => innerRef.current?.getTextarea() ?? null,
       }),
       [],
     )
@@ -340,52 +395,33 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const resolvedPlaceholder: string =
       typeof placeholder === "string" ? placeholder : typewriterText
 
-    // Auto-grow up to `maxTextareaPx`; switch to scroll past that.
-    useLayoutEffect(() => {
-      const el = taRef.current
-      if (!el) return
-      el.style.height = "auto"
-      const sh = el.scrollHeight
-      const next = Math.min(sh, maxTextareaPx)
-      el.style.height = `${next}px`
-      el.style.overflowY = sh > maxTextareaPx ? "auto" : "hidden"
-    }, [value, maxTextareaPx])
+    // Auto-grow + IME-safe Enter/Shift+Enter handling now live inside
+    // RichComposerEditor (AutoGrowPlugin / ImeEnterPlugin). The old
+    // textarea `useLayoutEffect` and `handleKeyDown` are gone.
 
-    function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-      if (onKeyDownExtra) {
-        const swallow = onKeyDownExtra(e)
-        if (swallow === true) return
-        if (e.defaultPrevented) return
-      }
-      // Ignore Enter while an IME is composing — the user may press
-      // Enter to commit Latin/pinyin, not to send.
-      const ne = e.nativeEvent as KeyboardEvent["nativeEvent"] & {
-        isComposing?: boolean
-      }
-      if (ne.isComposing || e.key === "Process") return
-      const isSendChord =
-        (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ||
-        (e.key === "Enter" && !e.shiftKey && !e.altKey)
-      if (!isSendChord) return
-      e.preventDefault()
-      if (disabled) return
-      // Enter never aborts — it's a typing chord. Stop is mouse-only.
-      if (!effectiveCanSubmit) return
-      onSubmit()
-    }
+    // `autoFocus` used to be a textarea attribute; RichComposerEditor has
+    // no such attr, so we focus its Lexical editor imperatively on mount.
+    useEffect(() => {
+      if (autoFocus) innerRef.current?.focus()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     function handleSendClick() {
       if (disabled) return
       if (busy) {
         if (effectiveCanSubmit) {
-          onSubmit()
+          // Queue branch — route through handleSend so @[...] mentions are
+          // expanded before the parent enqueues the message.
+          handleSend()
           return
         }
+        // Abort branch — untouched.
         onAbort?.()
         return
       }
       if (!effectiveCanSubmit) return
-      onSubmit()
+      // Normal send — route through handleSend (slash routing + @ expansion).
+      handleSend()
     }
 
     // Resolve which heading the tooltip / aria should use given the
@@ -563,21 +599,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           ) : null}
           {topAffordance}
           {renderedChipRow}
-          <Textarea
-            ref={taRef}
+          <RichComposerEditor
+            ref={innerRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+            onChange={onChange}
             placeholder={resolvedPlaceholder}
-            rows={rows}
-            autoFocus={autoFocus}
             disabled={disabled}
-            style={{ maxHeight: maxTextareaPx, ...textareaStyle }}
+            maxHeightPx={maxTextareaPx}
+            style={textareaStyle}
+            onSubmitChord={() => {
+              if (disabled) return
+              if (!effectiveCanSubmit) return
+              handleSend()
+            }}
+            mentionProviders={mentionProviders}
+            onKeyDownExtra={onKeyDownExtra}
+            onPaste={handlePaste}
             className={cn(
-              "resize-none overflow-hidden border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
               frameVariant === "hero"
-                ? "min-h-[3.5rem] px-5 pb-1 pt-3.5 text-sm"
+                ? "min-h-[3.5rem] px-5 pb-1 pt-3.5"
                 : "min-h-9 px-3 py-2",
             )}
           />
@@ -617,7 +657,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   value={value}
                   busy={busy}
                   disabled={disabled}
-                  onSubmit={onSubmit}
+                  // Quick-action chips are a normal-send path: route through
+                  // handleSend so the expanded prompt gets @ expansion / slash
+                  // routing like any other send.
+                  onSubmit={handleSend}
                   // Hero mode lets the chip row absorb the leftover space
                   // so the send button hugs the right edge; default mode
                   // sits inline next to actionsLeft.

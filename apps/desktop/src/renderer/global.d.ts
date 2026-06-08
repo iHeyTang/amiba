@@ -58,6 +58,9 @@ interface HermesBridgeApi {
     onChanged(cb: (change: WorkspaceChange) => void): () => void
     getPathForFile(file: File): string
   }
+  files: {
+    list(sessionId: string, query: string): Promise<{ path: string; isDir: boolean }[]>
+  }
   notifier: {
     onMessage(cb: (msg: unknown) => void): () => void
     activateMain(): Promise<void>

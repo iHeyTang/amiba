@@ -11,6 +11,7 @@ import {
 } from "@hermes-x/core";
 
 import type { NavigateOpenPolicy, PageContextCapability } from "./capabilities";
+import { pickSendText } from "./pickSendText";
 
 /** One user turn waiting while the model is still streaming the previous reply. */
 export interface PendingChatTurn {
@@ -134,7 +135,12 @@ export interface UsePendingQueueResult {
   setEditingQueueId: (v: string | null) => void;
 
   // Actions.
-  send: () => Promise<void>;
+  /**
+   * `textArg` is the Composer's mention-expanded send text. When present
+   * it's what gets dispatched to the engine / queued; omit it to fall
+   * back to the raw composer input (backward-compatible).
+   */
+  send: (textArg?: string) => Promise<void>;
   stop: () => void;
   sendNow: (queueId: string) => void;
   edit: (queueId: string) => void;
@@ -343,8 +349,15 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     ],
   );
 
-  const send = useCallback(async (): Promise<void> => {
-    const text = input.trim();
+  const send = useCallback(async (textArg?: string): Promise<void> => {
+    // `textArg` carries the Composer's mention-expanded text (`@[...]`
+    // tokens turned into agent-facing text). Prefer it for the payload
+    // that's DISPATCHED to the engine / QUEUED so the backend never sees
+    // raw `@[type:payload]` tokens. Everything else (gating, clearing the
+    // composer, attachment handling, queue bookkeeping) keeps operating on
+    // the raw `input` exactly as before. Falls back to `input` for callers
+    // that invoke `send()` without an expanded override.
+    const text = pickSendText(textArg, input);
     // Allow send when the user has uploaded attachments but hasn't typed
     // anything (e.g. "here's a screenshot — what's wrong with it?"). We
     // still gate on having SOMETHING to send so an empty composer with

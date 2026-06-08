@@ -77,6 +77,16 @@ const api = {
   },
 
   /**
+   * `@file` mention source for the desktop chat. Lists the active session's
+   * bound workspace dir (top level only) filtered by the typed query; the
+   * renderer's Files TriggerProvider maps the rows into composer menu items.
+   */
+  files: {
+    list: (sessionId: string, query: string): Promise<{ path: string; isDir: boolean }[]> =>
+      ipcRenderer.invoke("files:list", { sessionId, query }),
+  },
+
+  /**
    * Heads-up Notifier bridge. The notifier renderer (bottom-right floating
    * window) listens for `notifier:message` pushes from main and sends
    * approve/deny/activate-main back over their own channels.

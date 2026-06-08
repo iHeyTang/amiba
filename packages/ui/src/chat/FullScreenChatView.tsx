@@ -33,6 +33,7 @@ import {
   type ChatEngineClient,
   type SessionMeta,
 } from "@hermes-x/core";
+import type { TriggerProvider } from "./composer/providers/types";
 import { useT } from "@hermes-x/i18n";
 import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
 import { useResolvedTheme } from "../theme";
@@ -157,6 +158,13 @@ export interface FullScreenChatViewProps {
    * (buttons inside opt out automatically via the global CSS rule).
    */
   topBarClassName?: string;
+  /**
+   * Host-injected composer mention providers (e.g. desktop's `@file`
+   * source). Forwarded verbatim to the inner `<ChatSurface mentionProviders>`
+   * → Composer editor menu + send expansion. Mirrors how ChatSurface itself
+   * forwards the prop down to Composer.
+   */
+  mentionProviders?: TriggerProvider[];
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -180,6 +188,7 @@ function FullScreenChatViewInner({
   topBarLeftInset,
   topBarHeightPx,
   topBarClassName,
+  mentionProviders,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -466,6 +475,7 @@ function FullScreenChatViewInner({
               slots={slots}
               openSettings={openSettings}
               openAgentDestination={openAgentDestination}
+              mentionProviders={mentionProviders}
             />
           ) : (() => {
             // Extension-contributed main panel. The sidebarView id IS the extensionId.
