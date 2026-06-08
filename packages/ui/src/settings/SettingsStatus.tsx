@@ -181,6 +181,26 @@ function OnboardingGate({
   );
 }
 
+function ProtocolMismatchBanner({
+  mismatch,
+}: {
+  mismatch: HermesStatusResponse["protocol_mismatch"];
+}) {
+  if (!mismatch) return null;
+  const message =
+    mismatch.advise === "update-backplane"
+      ? `Backplane plugin is out of date (protocol v${mismatch.backplane}, this app needs v${mismatch.expected}). Update the hermes backplane plugin.`
+      : `This app is older than the backplane (protocol v${mismatch.backplane} > v${mismatch.expected}). Update the desktop app / extension.`;
+  return (
+    <section className="space-y-1 rounded-md border border-amber-500/60 bg-amber-50/60 p-4 dark:bg-amber-950/30">
+      <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+        Protocol version mismatch
+      </h3>
+      <p className="text-xs text-amber-700 dark:text-amber-400">{message}</p>
+    </section>
+  );
+}
+
 function UpdateHint({ status }: { status: HermesStatusResponse | null }) {
   const u = status?.update_check;
   if (!u || u.status === "unknown") return null;
@@ -405,6 +425,9 @@ export function SettingsStatus() {
               onRetry={refreshStatus}
               loading={statusLoading}
             />
+          )}
+          {!statusErr && status?.protocol_mismatch && (
+            <ProtocolMismatchBanner mismatch={status.protocol_mismatch} />
           )}
           {!statusErr && !status && (
             <p className="text-xs text-muted-foreground">Loading…</p>

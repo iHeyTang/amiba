@@ -73,6 +73,13 @@ export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   deviceId: "",
 }
 
+/**
+ * The backplane HTTP/WS protocol version this client is built for.
+ * If the running backplane plugin reports a different `protocol_version`,
+ * surface a mismatch (see getHermesStatus).
+ */
+export const EXPECTED_BACKPLANE_PROTOCOL = 1
+
 // ---------------------------------------------------------------------------
 // Hand-off keys between HomeView / Settings and the chat surface
 // ---------------------------------------------------------------------------

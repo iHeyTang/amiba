@@ -10,6 +10,7 @@
  */
 
 import { backplaneFetch } from "./backplane-client";
+import { EXPECTED_BACKPLANE_PROTOCOL } from "./config";
 
 function responseError(
   res: Response,
@@ -51,6 +52,14 @@ export interface HermesStatusResponse {
   gateway_updated_at?: unknown;
   active_sessions?: number;
   update_check?: HermesUpdateCheck;
+  /** The protocol version reported by the running backplane plugin. */
+  protocol_version?: number;
+  /** Set when the running backplane's protocol_version != EXPECTED_BACKPLANE_PROTOCOL. */
+  protocol_mismatch?: {
+    backplane: number;        // what the backplane reports
+    expected: number;         // EXPECTED_BACKPLANE_PROTOCOL
+    advise: "update-backplane" | "update-client";  // backplane<expected → update-backplane; backplane>expected → update-client
+  };
 }
 
 export interface GetHermesStatusOptions {
@@ -77,7 +86,24 @@ export async function getHermesStatus(
     if (!res.ok) {
       return { ok: false, error: responseError(res, data ?? null) };
     }
-    return { ...((data as HermesStatusResponse) ?? {}), ok: true };
+    const status: HermesStatusResponse = { ...((data as HermesStatusResponse) ?? {}), ok: true };
+    // Compute protocol compatibility.
+    const reportedVersion = (data as HermesStatusResponse)?.protocol_version;
+    if (reportedVersion == null) {
+      // Old backplane that predates the protocol_version field — treat as v0.
+      status.protocol_mismatch = {
+        backplane: 0,
+        expected: EXPECTED_BACKPLANE_PROTOCOL,
+        advise: "update-backplane",
+      };
+    } else if (reportedVersion !== EXPECTED_BACKPLANE_PROTOCOL) {
+      status.protocol_mismatch = {
+        backplane: reportedVersion,
+        expected: EXPECTED_BACKPLANE_PROTOCOL,
+        advise: reportedVersion < EXPECTED_BACKPLANE_PROTOCOL ? "update-backplane" : "update-client",
+      };
+    }
+    return status;
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message || e) };
   }
