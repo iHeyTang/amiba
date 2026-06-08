@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander"
+import { createCommand } from "./commands/create.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
 import { packCommand } from "./commands/pack.js"
@@ -11,6 +12,14 @@ program
   .name("hermes-x-ext")
   .description("CLI for hermes-x desktop extensions")
   .version("0.1.0")
+
+program
+  .command("create")
+  .description("Scaffold a new extension")
+  .argument("[name]", "extension folder name")
+  .option("--id <id>", "reverse-DNS extension id (e.g. com.example.my-ext)")
+  .option("--no-install", "skip pnpm install after scaffold")
+  .action(createCommand)
 
 program
   .command("dev")
