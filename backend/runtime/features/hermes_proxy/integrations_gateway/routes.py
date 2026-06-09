@@ -1,8 +1,8 @@
-"""HTTP adapter over the ``hermes-x-plugin-integrations`` registry.
+"""HTTP adapter over the backplane's integration registry.
 
 The backplane is the only thing that speaks HTTP. Integrations themselves are
-HTTP-agnostic domain logic loaded by the integrations plugin; this module
-treats "Hermes + installed integrations" as upstream and exposes the
+HTTP-agnostic domain logic (see :mod:`hermes_x_backplane.runtime.integrations`);
+this module treats "Hermes + installed integrations" as upstream and exposes the
 front-end-relevant slices as a web API for the composer:
 
 - ``GET    /integrations/<name>/search`` — call the integration's ``search``
@@ -10,11 +10,14 @@ front-end-relevant slices as a web API for the composer:
 - ``GET    /hermes/mention-resources``   — the flattened mention-resource
   registry (for the composer's ``@`` providers).
 - ``GET    /hermes/integrations``        — lifecycle snapshot (admin).
+- ``POST   /hermes/integrations``        — install from git/path (admin).
 - ``POST   /hermes/integrations/reload`` — re-import + swap one integration.
 - ``DELETE /hermes/integrations/{name}`` — unregister + delete files.
 
-If the integrations plugin isn't installed, every route degrades gracefully
-(empty registry / 503 on lifecycle) — the backplane stays up regardless.
+The registry is loaded by the backplane at startup; admin routes drive
+lifecycle in-process (the desktop UI calls them — there is no `hermes
+integration` CLI anymore). Every route degrades gracefully if the framework is
+somehow unavailable, so the backplane stays up regardless.
 """
 
 from __future__ import annotations
@@ -27,9 +30,10 @@ from ....common import json_error
 
 
 def _integrations() -> Tuple[Optional[Any], Optional[Any]]:
-    """Return ``(loader, manager)`` from the integrations plugin, or (None, None)."""
+    """Return ``(loader, manager)`` from the backplane's integration framework,
+    or (None, None) if it somehow can't be imported."""
     try:
-        from hermes_plugin_integrations import loader, manager  # type: ignore
+        from ....integrations import loader, manager  # type: ignore
 
         return loader, manager
     except Exception:
@@ -87,10 +91,48 @@ async def handle_list(_request: web.Request) -> web.Response:
     return web.json_response(manager.list_integrations())
 
 
+async def handle_install(request: web.Request) -> web.Response:
+    """Install an integration from git/path, then register it live.
+
+    Body (JSON): ``{from_git, ref, subdir, from_path, name, overwrite}``. This
+    replaces the old ``hermes integration install`` CLI — the desktop UI POSTs
+    here. ``name`` may be omitted for dir/git sources (read from
+    ``integration.yaml``).
+    """
+    loader, manager = _integrations()
+    if manager is None:
+        return json_error(503, "integrations framework unavailable")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        result = manager.install(
+            name=body.get("name"),
+            from_git=body.get("from_git"),
+            git_ref=body.get("ref"),
+            subdir=body.get("subdir"),
+            from_path=body.get("from_path"),
+            overwrite=bool(body.get("overwrite", False)),
+        )
+        # Register the freshly-installed integration into the live registry so
+        # search / mention-resources see it without a backplane restart.
+        if loader is not None and result.get("name"):
+            try:
+                loader.load_one(result["name"])
+            except Exception as exc:  # noqa: BLE001
+                result["load_warning"] = str(exc)
+        return web.json_response(result)
+    except manager.IntegrationError as exc:
+        return json_error(_admin_status(manager, exc), str(exc))
+
+
 async def handle_reload(request: web.Request) -> web.Response:
     _, manager = _integrations()
     if manager is None:
-        return json_error(503, "integrations plugin not installed")
+        return json_error(503, "integrations framework unavailable")
     name = request.query.get("name", "")
     try:
         return web.json_response(manager.reload(name))
@@ -101,7 +143,7 @@ async def handle_reload(request: web.Request) -> web.Response:
 async def handle_remove(request: web.Request) -> web.Response:
     _, manager = _integrations()
     if manager is None:
-        return json_error(503, "integrations plugin not installed")
+        return json_error(503, "integrations framework unavailable")
     name = request.match_info.get("name", "")
     try:
         return web.json_response(manager.remove(name))
@@ -115,6 +157,7 @@ def register(app: web.Application) -> None:
             web.get("/integrations/{name}/search", handle_search),
             web.get("/hermes/mention-resources", handle_mention_resources),
             web.get("/hermes/integrations", handle_list),
+            web.post("/hermes/integrations", handle_install),
             web.post("/hermes/integrations/reload", handle_reload),
             web.delete("/hermes/integrations/{name}", handle_remove),
         ]

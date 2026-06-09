@@ -27,24 +27,25 @@ logger = logging.getLogger(__name__)
 
 
 def _load_integrations() -> None:
-    """Load integrations into this process so ``/integrations/*`` +
-    ``/hermes/mention-resources`` work standalone.
+    """Load integrations + wire their resolver skills.
 
-    The integrations plugin runs in the gateway (a different process), so we
-    can't read its in-process registry — we load ``~/.hermes/integrations/``
-    ourselves. Absent / failed integrations plugin degrades to an empty
-    registry; the rest of the server is unaffected.
+    The integrations framework is owned by the backplane now (see
+    :mod:`hermes_x_backplane.runtime.integrations`) — it is no longer a hermes
+    plugin. We load ``~/.hermes/integrations/`` here so ``/integrations/*`` +
+    ``/hermes/mention-resources`` work, and wire each integration's ``skills/``
+    into the agent config. A failure degrades to an empty registry; the rest of
+    the server is unaffected.
     """
     try:
-        from hermes_plugin_integrations import loader as integ_loader
+        from .integrations import load_all_and_wire
 
-        result = integ_loader.load_all()
+        result = load_all_and_wire()
         logger.info(
             "integrations loaded: %d ok, %d failed",
             len(result.loaded), len(result.failed),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.info("integrations not loaded (plugin absent or failed): %s", exc)
+        logger.info("integrations not loaded: %s", exc)
 
 
 async def _main(port: int) -> None:

@@ -82,14 +82,16 @@ const HERMES_BINARY_CANDIDATES: string[] = IS_WIN
 /**
  * Plugins the desktop installs into the gateway. NOTE: `http-backplane` is no
  * longer here — it stopped being a plugin and became a standalone server the
- * desktop spawns (see {@link startBackend}). What remains are real plugins:
- * `integrations` (the `hermes integration` CLI + resolver-skill wiring) and
- * `browser-tools` (page-context features the extension relies on).
- * `hermes plugins install` errors with "already exists" when present, so we
- * probe `~/.hermes/plugins/<name>` up-front and skip already-installed ones.
+ * desktop spawns (see {@link startBackend}). `integrations` left too — its
+ * framework moved INTO the backplane (it registered no agent tools; it only fed
+ * the composer via the backplane), so the backplane vendors it and there's
+ * nothing to `hermes plugins install`. What remains is the one genuine agent
+ * plugin: `browser-tools` (registers `my_browser_*` tools + the WS hub the
+ * extension relies on). `hermes plugins install` errors with "already exists"
+ * when present, so we probe `~/.hermes/plugins/<name>` up-front and skip
+ * already-installed ones.
  */
 export const REQUIRED_PLUGINS: readonly string[] = [
-  "iHeyTang/hermes-x-plugin-integrations",
   "iHeyTang/hermes-x-plugin-browser-tools",
 ]
 

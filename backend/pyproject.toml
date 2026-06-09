@@ -43,6 +43,7 @@ packages = [
     "hermes_x_backplane",
     "hermes_x_backplane.runtime",
     "hermes_x_backplane.runtime.adapters",
+    "hermes_x_backplane.runtime.integrations",
     "hermes_x_backplane.runtime.features",
     "hermes_x_backplane.runtime.features.gateway_proxy",
     "hermes_x_backplane.runtime.features.hermes_proxy",
