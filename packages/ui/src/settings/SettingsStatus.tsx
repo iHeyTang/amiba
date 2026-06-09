@@ -34,9 +34,9 @@ const ACTION_POLL_MS = 1_000;
  * shouldn't be translated.
  */
 const INSTALL_COMMANDS = [
-  "hermes plugins install iHeyTang/hermes-x-plugin-http-backplane",
   "hermes plugins install iHeyTang/hermes-x-plugin-browser-tools",
-  "hermes chat   # 启动 Hermes 进程 + backplane HTTP server",
+  "hermes gateway                  # Hermes agent (chat / LLM / tools)",
+  "hermes-x-backplane --port 9394  # local backend on :9394 (the desktop app spawns this for you)",
 ];
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -121,7 +121,8 @@ function OnboardingGate({
           Backplane 没连上
         </h3>
         <p className="text-xs text-muted-foreground">
-          扩展需要本地 Hermes Agent 跑起来 + 装两个 Python 插件。请按下面三步：
+          需要本地 Hermes Agent + backplane server(`hermes-x-backplane`)跑起来,外加
+          browser-tools 插件。桌面版会自动配置;手动设置按下面三步:
         </p>
       </div>
 
@@ -137,7 +138,7 @@ function OnboardingGate({
             官方文档
           </a>
         </li>
-        <li>装两个必需 Hermes 插件</li>
+        <li>装 browser-tools 插件 + 起 backplane server</li>
         <li>
           启动 Hermes：<code className="font-mono">hermes chat</code>{" "}
           或任意长命模式

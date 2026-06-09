@@ -1,13 +1,13 @@
 /**
- * STT client — posts an audio blob to the backplane plugin's
+ * STT client — posts an audio blob to the backplane's
  * ``/hermes/stt`` endpoint and returns the transcribed text.
  *
- * The HTTP backplane (``hermes-x-plugin-http-backplane``) hosts this
- * route and lazy-imports ``tools.transcription_tools.transcribe_audio``
- * from the upstream hermes-agent runtime in the same Python process.
- * That keeps the wire contract self-contained on the plugin side —
- * the renderer never reaches into hermes-agent directly, and we
- * don't need to modify upstream sources.
+ * The ``hermes-x-backplane`` server hosts this route and lazy-imports
+ * ``tools.transcription_tools.transcribe_audio`` from the upstream
+ * hermes-agent runtime in the same Python process. That keeps the wire
+ * contract self-contained on the backplane side — the renderer never
+ * reaches into hermes-agent directly, and we don't need to modify
+ * upstream sources.
  *
  * Provider / model / API keys live in the user's existing
  * ``~/.hermes/config.yaml`` (``stt.*``) and ``~/.hermes/.env``. The

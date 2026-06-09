@@ -2,9 +2,9 @@
  * Endpoints + storage keys shared by extension and desktop.
  *
  * Both apps talk to the same local Hermes infrastructure:
- *   - hermes-x-plugin-http-backplane (BACKPLANE_HTTP_BASE)
+ *   - hermes-x-backplane server      (BACKPLANE_HTTP_BASE)
  *   - hermes-x-plugin-browser-tools  (BRIDGE_URL — websocket hub)
- *   - hermes-agent gateway         (DEFAULT_HERMES_API_BASE)
+ *   - hermes-agent gateway           (DEFAULT_HERMES_API_BASE)
  *
  * Storage keys are platform-neutral strings; each app reads/writes them
  * through `getPlatform().storage`.
@@ -20,10 +20,11 @@ export const BRIDGE_URL = "ws://127.0.0.1:9393"
 export const BRIDGE_URL_STORAGE_KEY = "settings.bridge.url"
 
 /**
- * Local HTTP base for the `hermes-x-plugin-http-backplane` plugin (env
- * `HERMES_BACKPLANE_PORT`, default 9394). Hosts three lanes:
+ * Local HTTP base for the `hermes-x-backplane` server (env
+ * `HERMES_BACKPLANE_PORT`, default 9394; spawned + supervised by the desktop
+ * app — it is NOT a hermes plugin). Hosts three lanes:
  *   - `/hermes/*`              — proxies to Hermes core
- *   - `/integrations/<name>/*` — third-party plugin routes
+ *   - `/integrations/<name>/*` — built-in integrations framework routes
  *   - `/v1/*`                  — reverse-proxy to Hermes gateway
  */
 export const BACKPLANE_HTTP_BASE = "http://127.0.0.1:9394"
