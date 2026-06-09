@@ -45,6 +45,12 @@ import { SettingsLogs } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { SettingsExtensions } from "./SettingsExtensions";
+import {
+  FEATURED_FEATURES,
+  FeatureSettingsPage,
+  featuredFeatureById,
+  isFeaturedFeatureId,
+} from "./featured-features";
 import { SettingsPreferences } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
@@ -84,7 +90,7 @@ function mainTabFromLocation(): MainTab {
     typeof window !== "undefined"
       ? window.location.hash.replace(/^#/, "").split("?")[0]
       : "";
-  if (raw && TAB_SET.has(raw)) {
+  if (raw && (TAB_SET.has(raw) || isFeaturedFeatureId(raw))) {
     return raw as MainTab;
   }
   if (raw === "settings") {
@@ -200,9 +206,11 @@ export function SettingsView({
   }, [showScriptsTab]);
 
   function onMainTabChange(v: string) {
-    // Accept core tabs, extension tab IDs (not in TAB_SET), or fall back to "status".
+    // Accept core tabs, featured-feature IDs, extension tab IDs (not in
+    // TAB_SET), or fall back to "status".
     const isExtensionTab = extensionSettings.some((s) => s.extensionId === v);
-    const next: MainTab = TAB_SET.has(v) || isExtensionTab ? v : "status";
+    const next: MainTab =
+      TAB_SET.has(v) || isFeaturedFeatureId(v) || isExtensionTab ? v : "status";
     if (next === "scripts" && !showScriptsTab) return;
     setMainTab(next);
     const base = window.location.pathname + window.location.search;
@@ -337,6 +345,22 @@ export function SettingsView({
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
+            {FEATURED_FEATURES.length > 0 && (
+              <>
+                <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {t("options.nav.section.features")}
+                </div>
+                {FEATURED_FEATURES.map((f) => (
+                  <NavBtn
+                    key={f.id}
+                    icon={f.icon}
+                    label={t(f.titleKey)}
+                    active={mainTab === f.id}
+                    onClick={() => onMainTabChange(f.id)}
+                  />
+                ))}
+              </>
+            )}
             {extensionSettings.length > 0 && (
               <>
                 <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
@@ -365,7 +389,9 @@ export function SettingsView({
       </aside>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {mainTab === "models" ? (
+        {featuredFeatureById(mainTab) ? (
+          <FeatureSettingsPage feature={featuredFeatureById(mainTab)!} />
+        ) : mainTab === "models" ? (
           <HermesModelConfigTab />
         ) : mainTab === "memory" ? (
           <SettingsMemory />

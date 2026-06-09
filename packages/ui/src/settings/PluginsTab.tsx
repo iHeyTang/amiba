@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 
 import { useT } from "@hermes-x/i18n"
 import { Switch, cn } from "../primitives"
+import { featuredFeatureForPlugin, openFeaturedFeature } from "./featured-features"
 
 type State =
   | { kind: "loading" }
@@ -152,16 +153,26 @@ function PluginList({
 }
 
 function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onToggle: () => void }) {
+  const { t } = useT()
   // Nested/category plugins (e.g. backends) share a `name` across categories —
   // `name` alone isn't unique. The key is path-derived (`image_gen/xai`), so
   // surface the category prefix as a badge to disambiguate same-named plugins.
   const slash = p.key.indexOf("/")
   const category = slash > 0 ? p.key.slice(0, slash) : null
+  // A plugin promoted to a first-class "featured feature" still appears here
+  // (it really is a plugin) — but we flag the dual-surfacing so it reads as
+  // intentional, and offer a jump to its dedicated page.
+  const feature = featuredFeatureForPlugin(p)
   return (
     <li className="flex items-start justify-between gap-2 p-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{p.name}</span>
+          {feature && (
+            <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
+              {t("options.plugins.featuredBadge")}
+            </span>
+          )}
           {category && (
             <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600">
               {category}
@@ -188,6 +199,15 @@ function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onTo
           {p.key}
           {p.version ? ` · v${p.version}` : ""}
         </code>
+        {feature && (
+          <button
+            type="button"
+            onClick={() => openFeaturedFeature(feature.id)}
+            className="self-start text-xs font-medium text-primary hover:underline"
+          >
+            {t("options.plugins.manageInFeature", { name: t(feature.titleKey) })}
+          </button>
+        )}
       </div>
       <div className={cn("flex shrink-0 items-center pt-0.5", busy && "opacity-50")}>
         <Switch checked={p.enabled} disabled={busy} onCheckedChange={onToggle} />

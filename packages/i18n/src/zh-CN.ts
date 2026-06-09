@@ -43,6 +43,7 @@ export const zhCN: Messages = {
   "options.nav.voice": "语音",
   "options.nav.extensions": "扩展与插件",
   "options.nav.section.core": "通用",
+  "options.nav.section.features": "高光功能",
   "options.nav.section.extensions": "扩展与插件",
 
   // Extensions settings page
@@ -84,6 +85,19 @@ export const zhCN: Messages = {
   "options.plugins.group.bundled": "内置（{count}）",
   "options.plugins.restartHint": "重启 Hermes 使插件改动生效。",
   "options.plugins.toggleError": "切换插件失败：{error}",
+  "options.plugins.featuredBadge": "高光功能",
+  "options.plugins.manageInFeature": "在「{name}」中管理 →",
+
+  // Featured features —— 被提升为一级设置入口的插件
+  "options.feature.enableLabel": "启用",
+  "options.feature.stateOn": "已启用 —— 下次启动 Hermes 时生效。",
+  "options.feature.stateOff": "已停用。",
+  "options.feature.notInstalled": "支撑此功能的插件尚未安装。请通过引导向导或 `hermes plugins install` 安装。",
+  "options.feature.backplaneError": "无法连接 backplane 读取此功能的状态。",
+  "options.feature.browser.title": "浏览器",
+  "options.feature.browser.subtitle": "通过配套的 Chrome 扩展，让 Hermes 查看并操作你的浏览器。",
+  "options.feature.browser.how.title": "工作方式",
+  "options.feature.browser.how.body": "启用后，Hermes 会注册浏览器操作工具并运行一个本地 WebSocket 中枢。安装配套的 Chrome 扩展后会自动连接 —— 之后 Hermes 即可读取标签页、导航、点击、输入并在浏览器中运行脚本。",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",

@@ -48,6 +48,7 @@ export const en = {
   "options.nav.voice": "Voice",
   "options.nav.extensions": "Extensions & Plugins",
   "options.nav.section.core": "General",
+  "options.nav.section.features": "Features",
   "options.nav.section.extensions": "Extensions & Plugins",
 
   // Extensions settings page
@@ -89,6 +90,19 @@ export const en = {
   "options.plugins.group.bundled": "Bundled ({count})",
   "options.plugins.restartHint": "Restart Hermes to apply plugin changes.",
   "options.plugins.toggleError": "Couldn't change plugin: {error}",
+  "options.plugins.featuredBadge": "Featured",
+  "options.plugins.manageInFeature": "Manage in {name} →",
+
+  // Featured features — plugins promoted to a first-class Settings surface
+  "options.feature.enableLabel": "Enable",
+  "options.feature.stateOn": "Enabled — applies on the next Hermes start.",
+  "options.feature.stateOff": "Disabled.",
+  "options.feature.notInstalled": "The backing plugin isn't installed yet. Install it via the onboarding wizard or `hermes plugins install`.",
+  "options.feature.backplaneError": "Couldn't reach the backplane to read this feature's status.",
+  "options.feature.browser.title": "Browser",
+  "options.feature.browser.subtitle": "Let Hermes see and control your browser through the companion Chrome extension.",
+  "options.feature.browser.how.title": "How it works",
+  "options.feature.browser.how.body": "When enabled, Hermes registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Hermes can then read tabs, navigate, click, type, and run scripts in your browser.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
