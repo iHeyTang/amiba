@@ -288,7 +288,7 @@ export function SettingsView({
       className={paneHeaderClassName}
       chromeHeightPx={paneHeaderChromeHeightPx}
     >
-    <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
+    <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
       <aside className="flex min-h-0 w-60 shrink-0 flex-col bg-muted/30">
         {onGoHome ? (
           /*

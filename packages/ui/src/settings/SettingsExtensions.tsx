@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollArea,
   cn,
 } from "../primitives"
 
@@ -479,29 +480,35 @@ export function SettingsExtensions() {
   const [topTab, setTopTab] = useState<TopTab>("extensions")
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="text-lg font-semibold">{t("options.extplugins.title")}</h2>
-
-      {/* Top-level type tabs */}
-      <div className="flex items-center rounded-md border bg-muted p-1 w-fit gap-1">
-        {(["extensions", "plugins"] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setTopTab(tab)}
-            className={cn(
-              "rounded px-3 py-1 text-sm font-medium transition-colors",
-              topTab === tab
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab === "extensions" ? t("options.extensions.title") : t("options.plugins.heading")}
-          </button>
-        ))}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Pinned header: panel title + top-level type tabs */}
+      <div className="flex shrink-0 flex-col gap-3 border-b p-4 pb-3">
+        <h2 className="text-lg font-semibold">{t("options.extplugins.title")}</h2>
+        <div className="flex items-center rounded-md border bg-muted p-1 w-fit gap-1">
+          {(["extensions", "plugins"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setTopTab(tab)}
+              className={cn(
+                "rounded px-3 py-1 text-sm font-medium transition-colors",
+                topTab === tab
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {tab === "extensions" ? t("options.extensions.title") : t("options.plugins.heading")}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {topTab === "extensions" ? <ExtensionsTab /> : <PluginsTab />}
+      {/* Scrollable content */}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-4">
+          {topTab === "extensions" ? <ExtensionsTab /> : <PluginsTab />}
+        </div>
+      </ScrollArea>
     </div>
   )
 }
