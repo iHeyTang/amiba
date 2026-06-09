@@ -201,6 +201,10 @@ const api = {
       args: { binary: string; pluginId: string },
     ): Promise<{ id: string; pid: number | undefined }> =>
       ipcRenderer.invoke("hermes:install-plugin", args),
+    installBackplane: (
+      args: { binary: string },
+    ): Promise<{ id: string; pid: number | undefined }> =>
+      ipcRenderer.invoke("hermes:install-backplane", args),
     startBackplane: (
       args: { binary: string },
     ): Promise<{ id: string; pid: number | undefined; alreadyRunning: boolean }> =>

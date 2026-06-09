@@ -306,8 +306,16 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       setDetection(det)
     }
 
-    // 3. Start the gateway and wait for the HTTP probe.
+    // 3. Install the backplane server into the hermes env (it's a pip package,
+    //    not a plugin — provides the `hermes-x-backplane` command), then start
+    //    the backend (gateway + backplane server) and wait for the HTTP probe.
     if (!det.backplane.running) {
+      const rb = await runJob("backplane", () => rt.installBackplane({ binary }))
+      if (rb.exitCode !== 0) {
+        setError(formatJobError(rb, t("onboarding.error.backplane")))
+        setPhase("summary")
+        return
+      }
       setActiveAction({ itemKey: "backplane" })
       clearLogs()
       const start = await rt.startBackplane({ binary })

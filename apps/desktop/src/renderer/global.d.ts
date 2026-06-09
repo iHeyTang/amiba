@@ -83,6 +83,7 @@ interface HermesBridgeApi {
       binary: string
       pluginId: string
     }): Promise<{ id: string; pid: number | undefined }>
+    installBackplane(args: { binary: string }): Promise<{ id: string; pid: number | undefined }>
     startBackplane(args: {
       binary: string
     }): Promise<{ id: string; pid: number | undefined; alreadyRunning: boolean }>

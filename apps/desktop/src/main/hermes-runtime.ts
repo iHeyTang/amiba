@@ -31,11 +31,12 @@
 
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { BrowserWindow, ipcMain } from "electron"
+import { app, BrowserWindow, ipcMain } from "electron"
 
 import type { IPty } from "node-pty"
 
@@ -225,7 +226,12 @@ export async function detectHermes(): Promise<DetectionResult> {
 // Job manager — long-running spawns that stream logs back to renderers
 // ---------------------------------------------------------------------------
 
-type JobKind = "install-hermes" | "install-plugin" | "start-gateway" | "start-backplane-server"
+type JobKind =
+  | "install-hermes"
+  | "install-plugin"
+  | "install-backplane"
+  | "start-gateway"
+  | "start-backplane-server"
 
 interface Job {
   id: string
@@ -492,6 +498,59 @@ function startInstallPlugin(binary: string, pluginId: string) {
 }
 
 /**
+ * Where the backplane Python source lives — it ships inside the app and gets
+ * pip-installed into the hermes env (it's NOT a plugin). Packaged builds put it
+ * under `resources/backend` (electron-builder extraResources); in dev it's the
+ * monorepo's top-level `backend/`. `HERMES_BACKPLANE_SOURCE` overrides both.
+ */
+function resolveBackplaneSource(): string {
+  if (process.env.HERMES_BACKPLANE_SOURCE) return process.env.HERMES_BACKPLANE_SOURCE
+  const candidates = [
+    path.join(process.resourcesPath, "backend"),
+    path.resolve(app.getAppPath(), "..", "..", "backend"),
+    path.resolve(app.getAppPath(), "..", "..", "..", "backend"),
+  ]
+  for (const c of candidates) {
+    if (existsSync(path.join(c, "pyproject.toml"))) return c
+  }
+  return candidates[0] // best guess (packaged layout)
+}
+
+/**
+ * The Python interpreter of the hermes env, so the backplane (which imports
+ * hermes-agent) installs into the SAME env. Prefer the env python from the
+ * `hermes` script's shebang; fall back to a `python` next to it, then PATH.
+ */
+async function resolveHermesPython(hermesBinary: string): Promise<string> {
+  try {
+    const head = (await fs.readFile(hermesBinary, "utf8")).slice(0, 256)
+    const m = /^#!\s*(\S*python\S*)/.exec(head)
+    if (m && (await fileExists(m[1]))) return m[1]
+  } catch {
+    // not a text script (compiled binary), unreadable, etc. — fall through
+  }
+  if (path.isAbsolute(hermesBinary)) {
+    const dir = path.dirname(hermesBinary)
+    for (const name of IS_WIN ? ["python.exe"] : ["python3", "python"]) {
+      const p = path.join(dir, name)
+      if (await fileExists(p)) return p
+    }
+  }
+  return IS_WIN ? "python" : "python3"
+}
+
+/**
+ * Install the backplane server into the hermes Python env (creates the
+ * `hermes-x-backplane` command that {@link startBackend} spawns). Idempotent —
+ * `pip install --upgrade` re-installs cleanly if already present.
+ */
+async function startInstallBackplane(hermesBinary: string) {
+  const python = await resolveHermesPython(hermesBinary)
+  const source = resolveBackplaneSource()
+  return startJob("install-backplane", python, ["-m", "pip", "install", "--upgrade", source])
+}
+
+/**
  * The backplane server's launch command. The `hermes-x-backplane` console
  * script is pip-installed into the same Python env as `hermes`, so it lives in
  * the same bin dir. If `hermes` was PATH-resolved (relative name), rely on PATH
@@ -543,6 +602,9 @@ export function registerHermesRuntimeHandlers() {
     "hermes:install-plugin",
     (_e, args: { binary: string; pluginId: string }) =>
       startInstallPlugin(args.binary, args.pluginId),
+  )
+  ipcMain.handle("hermes:install-backplane", (_e, args: { binary: string }) =>
+    startInstallBackplane(args.binary),
   )
   ipcMain.handle("hermes:start-backplane", (_e, args: { binary: string }) =>
     startBackend(args.binary),
