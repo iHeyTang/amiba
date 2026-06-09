@@ -5,10 +5,10 @@ Hermes core APIs (cron, sessions, model catalog, provider settings, memory,
 skills, attachment uploads) that the gateway doesn't expose itself, mounted at
 ``/hermes/*``, plus the ``integrations_gateway`` adapter that serves
 ``/integrations/<name>/search`` + ``/hermes/mention-resources`` + lifecycle
-admin by reading the separately-installed ``hermes-x-plugin-integrations``
-registry in-process. The integration framework itself (loader / manager /
-``hermes integration`` CLI) lives in that plugin, not here — the backplane
-only adapts its capabilities to HTTP.
+admin by reading the integration registry in-process. The integration framework
+itself (loader / manager / skills wiring) lives in the backplane now
+(``runtime/integrations/``) — it used to be a separate hermes plugin; this lane
+just adapts its capabilities to HTTP.
 """
 
 from __future__ import annotations
