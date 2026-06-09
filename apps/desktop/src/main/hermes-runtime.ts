@@ -201,6 +201,29 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+/**
+ * Resolve a bare command name to its absolute path via `which`/`where`, using
+ * the same PATH a spawn would. Returns null if it can't be resolved to an
+ * absolute path.
+ *
+ * Why it matters: a PATH-matched bare name like `"hermes"` breaks every
+ * downstream consumer that treats the path as a FILE rather than doing its own
+ * PATH lookup — `resolveHermesPython` reads the binary to sniff its shebang,
+ * and `resolveBackplaneCmd` derives a sibling path from it. With a bare name
+ * both fall back to bare `python3` / `hermes-x-backplane`, and the backplane
+ * console script (which lives in the venv bin, NOT on PATH) then ENOENTs.
+ */
+async function resolveOnPath(name: string): Promise<string | null> {
+  const finder = IS_WIN ? "where" : "which"
+  const res = await runQuiet(finder, [name], 4000)
+  if (res.code !== 0) return null
+  const first = res.stdout
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .find(Boolean)
+  return first && path.isAbsolute(first) ? first : null
+}
+
 export async function detectHermes(): Promise<DetectionResult> {
   for (const candidate of HERMES_BINARY_CANDIDATES) {
     // Absolute paths: short-circuit if the file isn't there so we don't
@@ -210,10 +233,16 @@ export async function detectHermes(): Promise<DetectionResult> {
 
     const res = await runQuiet(candidate, ["--version"])
     if (res.code === 0) {
+      // Normalise to an ABSOLUTE path. A PATH-matched bare name ("hermes")
+      // would break resolveHermesPython / resolveBackplaneCmd and the
+      // gateway/backplane spawns under Electron's GUI PATH — see resolveOnPath.
+      const binary = isAbsolute
+        ? candidate
+        : ((await resolveOnPath(candidate)) ?? candidate)
       const combined = `${res.stdout}${res.stderr}`.trim()
       return {
         installed: true,
-        binary: candidate,
+        binary,
         version: combined || "(version unknown)",
       }
     }
@@ -521,6 +550,11 @@ function resolveBackplaneSource(): string {
  * `hermes` script's shebang; fall back to a `python` next to it, then PATH.
  */
 async function resolveHermesPython(hermesBinary: string): Promise<string> {
+  // Defense-in-depth: if we were handed a bare name, resolve it to absolute
+  // first so the shebang read + sibling-dir derivation below actually work.
+  if (!path.isAbsolute(hermesBinary)) {
+    hermesBinary = (await resolveOnPath(hermesBinary)) ?? hermesBinary
+  }
   try {
     const head = (await fs.readFile(hermesBinary, "utf8")).slice(0, 256)
     const m = /^#!\s*(\S*python\S*)/.exec(head)
