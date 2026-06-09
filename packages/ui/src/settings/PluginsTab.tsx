@@ -152,11 +152,21 @@ function PluginList({
 }
 
 function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onToggle: () => void }) {
+  // Nested/category plugins (e.g. backends) share a `name` across categories —
+  // `name` alone isn't unique. The key is path-derived (`image_gen/xai`), so
+  // surface the category prefix as a badge to disambiguate same-named plugins.
+  const slash = p.key.indexOf("/")
+  const category = slash > 0 ? p.key.slice(0, slash) : null
   return (
     <li className="flex items-start justify-between gap-2 p-3">
       <div className="flex min-w-0 flex-col gap-0.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{p.name}</span>
+          {category && (
+            <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600">
+              {category}
+            </span>
+          )}
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             {p.source}
           </span>
