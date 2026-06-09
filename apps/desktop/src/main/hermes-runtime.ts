@@ -15,9 +15,13 @@
  *      renderer never blocks waiting for completion — it subscribes to
  *      `hermes:job-log` + `hermes:job-end` and renders the tail live.
  *
- *   3. Supervise the long-running backplane process (`hermes gateway`).
- *      Only one supervised process at a time; killing it on app quit so
- *      the next launch isn't blocked by a stale 9394 listener.
+ *   3. Supervise the two long-running backend processes: the gateway
+ *      (`hermes gateway` — the agent that runs chat/LLM/tools) and the
+ *      backplane server (`hermes-x-backplane` — the 9394 front door that
+ *      serves /hermes/* + /integrations/* and proxies /v1/* to the gateway).
+ *      Both killed on app quit so the next launch isn't blocked by a stale
+ *      9394 listener. (The backplane used to be a plugin loaded *inside* the
+ *      gateway; it's now its own process desktop spawns + supervises.)
  *
  * We deliberately do NOT try to be smart about plugin-list parsing here.
  * `hermes plugins install <id>` is idempotent on the hermes side, so
@@ -75,16 +79,16 @@ const HERMES_BINARY_CANDIDATES: string[] = IS_WIN
     ]
 
 /**
- * Plugins the desktop shell depends on. The HTTP backplane exposes the
- * `/hermes/*` REST surface the renderer's `@hermes-x/core` client calls;
- * the browser-tools plugin handles the page-context features that the
- * extension also relies on. `hermes plugins install` errors out with
- * "already exists" when a plugin is present, so we probe the install
- * directory (`~/.hermes/plugins/<name>`) up-front and skip ones that are
- * already there.
+ * Plugins the desktop installs into the gateway. NOTE: `http-backplane` is no
+ * longer here — it stopped being a plugin and became a standalone server the
+ * desktop spawns (see {@link startBackend}). What remains are real plugins:
+ * `integrations` (the `hermes integration` CLI + resolver-skill wiring) and
+ * `browser-tools` (page-context features the extension relies on).
+ * `hermes plugins install` errors with "already exists" when present, so we
+ * probe `~/.hermes/plugins/<name>` up-front and skip already-installed ones.
  */
 export const REQUIRED_PLUGINS: readonly string[] = [
-  "iHeyTang/hermes-x-plugin-http-backplane",
+  "iHeyTang/hermes-x-plugin-integrations",
   "iHeyTang/hermes-x-plugin-browser-tools",
 ]
 
@@ -221,7 +225,7 @@ export async function detectHermes(): Promise<DetectionResult> {
 // Job manager — long-running spawns that stream logs back to renderers
 // ---------------------------------------------------------------------------
 
-type JobKind = "install-hermes" | "install-plugin" | "start-backplane"
+type JobKind = "install-hermes" | "install-plugin" | "start-gateway" | "start-backplane-server"
 
 interface Job {
   id: string
@@ -230,7 +234,10 @@ interface Job {
 }
 
 const jobs = new Map<string, Job>()
-let backplaneJob: Job | null = null
+// The two supervised long-runners (see startBackend). Each kept in its own
+// slot so app-quit / stop-backplane can target both.
+let gatewayJob: Job | null = null
+let backplaneServerJob: Job | null = null
 
 /**
  * PTY-backed jobs run alongside the pipe-backed ones in a separate map.
@@ -291,7 +298,8 @@ function startJob(
 
   const job: Job = { id, kind, child }
   jobs.set(id, job)
-  if (kind === "start-backplane") backplaneJob = job
+  if (kind === "start-gateway") gatewayJob = job
+  else if (kind === "start-backplane-server") backplaneServerJob = job
 
   let outBuf = ""
   let errBuf = ""
@@ -347,7 +355,8 @@ function startJob(
     }
     broadcast("hermes:job-end", { jobId: id, exitCode: effectiveCode, error })
     jobs.delete(id)
-    if (backplaneJob?.id === id) backplaneJob = null
+    if (gatewayJob?.id === id) gatewayJob = null
+    if (backplaneServerJob?.id === id) backplaneServerJob = null
   }
 
   child.on("error", (err) => finish(null, err.message))
@@ -482,15 +491,44 @@ function startInstallPlugin(binary: string, pluginId: string) {
   return startJob("install-plugin", binary, ["plugins", "install", pluginId])
 }
 
-function startBackplane(binary: string) {
-  if (backplaneJob && !backplaneJob.child.killed) {
-    return { id: backplaneJob.id, pid: backplaneJob.child.pid, alreadyRunning: true }
+/**
+ * The backplane server's launch command. The `hermes-x-backplane` console
+ * script is pip-installed into the same Python env as `hermes`, so it lives in
+ * the same bin dir. If `hermes` was PATH-resolved (relative name), rely on PATH
+ * for the script too.
+ */
+function resolveBackplaneCmd(hermesBinary: string): { cmd: string; args: string[] } {
+  const name = IS_WIN ? "hermes-x-backplane.exe" : "hermes-x-backplane"
+  const cmd = path.isAbsolute(hermesBinary)
+    ? path.join(path.dirname(hermesBinary), name)
+    : name
+  return { cmd, args: ["--port", "9394"] }
+}
+
+/**
+ * Start (and supervise) the backend: two long-running processes —
+ *   - the **gateway** (`hermes gateway`): the agent that runs chat/LLM/tools;
+ *   - the **backplane server** (`hermes-x-backplane`): the 9394 front door that
+ *     serves /hermes/* + /integrations/* and proxies /v1/* to the gateway.
+ * Either order is fine — the backplane's /v1/* just 502s until the gateway is
+ * up. The returned `id` is the backplane server's job (that's what serves 9394,
+ * which the onboarding wizard polls); `alreadyRunning` is true only if BOTH are
+ * already up. Both procs' logs still stream via `hermes:job-log`.
+ */
+function startBackend(binary: string) {
+  const gatewayUp = !!gatewayJob && !gatewayJob.child.killed
+  if (!gatewayUp) startJob("start-gateway", binary, ["gateway"])
+
+  const backplaneUp = !!backplaneServerJob && !backplaneServerJob.child.killed
+  let backplane: { id: string; pid: number | undefined }
+  if (backplaneUp) {
+    backplane = { id: backplaneServerJob!.id, pid: backplaneServerJob!.child.pid }
+  } else {
+    const { cmd, args } = resolveBackplaneCmd(binary)
+    backplane = startJob("start-backplane-server", cmd, args)
   }
-  // `hermes gateway` is the headless long-running entry — it boots the
-  // plugin host (which in turn starts the HTTP backplane on 9394) without
-  // claiming a TTY for an interactive chat REPL.
-  const j = startJob("start-backplane", binary, ["gateway"])
-  return { ...j, alreadyRunning: false }
+
+  return { id: backplane.id, pid: backplane.pid, alreadyRunning: gatewayUp && backplaneUp }
 }
 
 // ---------------------------------------------------------------------------
@@ -507,11 +545,14 @@ export function registerHermesRuntimeHandlers() {
       startInstallPlugin(args.binary, args.pluginId),
   )
   ipcMain.handle("hermes:start-backplane", (_e, args: { binary: string }) =>
-    startBackplane(args.binary),
+    startBackend(args.binary),
   )
-  ipcMain.handle("hermes:stop-backplane", () =>
-    backplaneJob ? killJob(backplaneJob.id) : false,
-  )
+  ipcMain.handle("hermes:stop-backplane", () => {
+    let any = false
+    if (gatewayJob) any = killJob(gatewayJob.id) || any
+    if (backplaneServerJob) any = killJob(backplaneServerJob.id) || any
+    return any
+  })
   ipcMain.handle("hermes:cancel-job", (_e, jobId: string) =>
     // Look in both job tables — caller doesn't know whether the id
     // belongs to a pipe job or a PTY job.
@@ -541,7 +582,8 @@ export function stopAllHermesJobs() {
     }
   }
   jobs.clear()
-  backplaneJob = null
+  gatewayJob = null
+  backplaneServerJob = null
   for (const job of ptyJobs.values()) {
     try {
       job.pty.kill()
