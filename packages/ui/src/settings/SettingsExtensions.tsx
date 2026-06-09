@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useExtensionRegistry } from "@hermes-x/extension-host/renderer"
 import type { ExtensionsBridge, MarketplaceEntry } from "@hermes-x/extension-host/preload"
 import { useT } from "@hermes-x/i18n"
-import { PluginsSection } from "./PluginsSection"
+import { PluginsTab } from "./PluginsTab"
 import {
   Button,
   Dialog,
@@ -193,7 +193,7 @@ function BrowseTab({
 
 type Tab = "installed" | "browse"
 
-export function SettingsExtensions() {
+function ExtensionsTab() {
   const { t } = useT()
   const [activeTab, setActiveTab] = useState<Tab>("installed")
   const [refreshKey, setRefreshKey] = useState(0)
@@ -272,12 +272,8 @@ export function SettingsExtensions() {
     : null
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">{t("options.extensions.title")}</h2>
-        <p className="text-sm text-muted-foreground">{t("options.extensions.subtitle")}</p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">{t("options.extensions.subtitle")}</p>
 
       {/* Sub-tab toggle */}
       <div className="flex items-center rounded-md border bg-muted p-1 w-fit gap-1">
@@ -444,9 +440,6 @@ export function SettingsExtensions() {
         />
       )}
 
-      {/* ---- Plugins (hermes-agent, distinct type) ---- */}
-      <PluginsSection />
-
       {/* Uninstall confirm dialog */}
       <Dialog open={pendingUninstall !== null} onOpenChange={(open) => { if (!open) setPendingUninstall(null) }}>
         <DialogContent>
@@ -466,6 +459,49 @@ export function SettingsExtensions() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Panel shell: top-level type tabs (Extensions vs Plugins)
+// ---------------------------------------------------------------------------
+
+type TopTab = "extensions" | "plugins"
+
+/**
+ * Two type tabs — extensions (renderer add-ons: install/remove/reload via the
+ * marketplace, desktop-only) and plugins (agent-side, read + enable/disable).
+ * They're genuinely different things, so each tab renders its own nature-fit UI.
+ */
+export function SettingsExtensions() {
+  const { t } = useT()
+  const [topTab, setTopTab] = useState<TopTab>("extensions")
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <h2 className="text-lg font-semibold">{t("options.extplugins.title")}</h2>
+
+      {/* Top-level type tabs */}
+      <div className="flex items-center rounded-md border bg-muted p-1 w-fit gap-1">
+        {(["extensions", "plugins"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setTopTab(tab)}
+            className={cn(
+              "rounded px-3 py-1 text-sm font-medium transition-colors",
+              topTab === tab
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab === "extensions" ? t("options.extensions.title") : t("options.plugins.heading")}
+          </button>
+        ))}
+      </div>
+
+      {topTab === "extensions" ? <ExtensionsTab /> : <PluginsTab />}
     </div>
   )
 }

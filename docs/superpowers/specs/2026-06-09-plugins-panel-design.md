@@ -104,3 +104,25 @@ existing `settings`/`integrations_gateway` module shape.
 - Hot-reload on toggle (config-only; restart applies).
 - Merging extensions and plugins into one data model (they're different;
   type-labelled sections keep them honest).
+
+---
+
+## Amendment (2026-06-09): two tabs instead of two sections
+
+Refined from approach (A)'s stacked "two sections" to **two top-level tabs**
+inside the panel — `[Extensions | Plugins]` — because the two are genuinely
+different in nature and each warrants its own UI:
+
+- Panel (`SettingsExtensions`) is now a thin shell: title "Extensions &
+  Plugins" + a top-level type-tab toggle. The nav label is renamed to match.
+- `ExtensionsTab` — the existing extension UI (installed/browse sub-tabs,
+  marketplace install, add-local, reload, uninstall), unchanged, just moved
+  under the Extensions tab.
+- `PluginsTab` — replaces the earlier flat list + "show bundled" toggle with
+  **grouping**: "Your plugins" (user/project/pip) always shown, "Bundled (N)"
+  collapsed by default. Enable/disable switch + restart hint kept; no
+  install/remove (operator CLI owns that).
+
+Each tab's affordances reflect its type: extensions are UI-installable/
+removable; plugins are read + toggle only, with the bundled-vs-yours axis and
+restart-required semantics surfaced.
