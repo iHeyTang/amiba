@@ -51,16 +51,12 @@ const IS_MAC =
 type Phase = "detecting" | "summary" | "running" | "ready"
 
 /**
- * Two faces of the same machinery, chosen by whether `hermes` is already
- * installed:
- *   - `install`  — no hermes yet. The full guided wizard: hero + "一键安装"
- *                  CTA, PTY install of hermes, then plugins + backplane.
- *   - `configure`— hermes is present; only OUR backend (plugins + the
- *                  hermes-x-backplane server) needs bringing up. Runs
- *                  automatically with a transparent "正在配置…" face — no
- *                  install hero, no button — so the user just lands in the app.
+ * This wizard is ONLY shown when `hermes` isn't installed — installing the agent
+ * is a real, user-facing decision (and needs a terminal for `hermes setup`).
+ * When hermes is already present, App.tsx brings the backend up SILENTLY
+ * (ensureBackend) behind a plain spinner — starting :9394 is plumbing, not
+ * onboarding, so it never reaches this wizard.
  */
-type Mode = "install" | "configure"
 
 type DetectionItemKey = "hermes" | "backplane" | `plugin:${string}`
 
@@ -147,7 +143,6 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
   const rt = window.hermes.hermesRuntime
 
   const [phase, setPhase] = useState<Phase>("detecting")
-  const [mode, setMode] = useState<Mode>("install")
   const [detection, setDetection] = useState<Detection | null>(null)
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -241,16 +236,8 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       return
     }
 
-    // Hermes already installed → this isn't an "install", it's just bringing
-    // OUR backend up. Run it automatically with the transparent configure face;
-    // the user never sees the install hero/CTA. Only a genuinely hermes-less
-    // machine gets the guided install summary.
-    if (det.hermes.installed) {
-      setMode("configure")
-      void runPipeline(det)
-      return
-    }
-    setMode("install")
+    // We're here only because hermes isn't installed (App routes the
+    // hermes-present case to silent init). Show the guided install summary.
     setPhase("summary")
   }
 
@@ -432,7 +419,7 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-6 pt-4">
         {phase === "detecting" && <DetectingState t={t} />}
 
-        {phase === "summary" && detection && mode === "install" && (
+        {phase === "summary" && detection && (
           <SummaryBlock
             detection={detection}
             error={error}
@@ -441,17 +428,6 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
             onInstall={() => void runPipeline()}
             onRedetect={() => void runDetect()}
             onCopy={(i, cmd) => void copyManualCommand(i, cmd)}
-            t={t}
-          />
-        )}
-
-        {/* Configure mode only reaches "summary" on failure — hermes is fine,
-            our backend couldn't come up. Show a quiet retry, not the install
-            hero. */}
-        {phase === "summary" && mode === "configure" && (
-          <ConfigureErrorBlock
-            error={error}
-            onRetry={() => void runDetect()}
             t={t}
           />
         )}
@@ -807,46 +783,6 @@ function ReadyState({ t }: { t: TranslateFn }) {
       </div>
       <p className="text-base font-medium">{t("onboarding.ready.title")}</p>
       <p className="text-sm text-muted-foreground">{t("onboarding.ready.subtitle")}</p>
-    </div>
-  )
-}
-
-// --- Phase: configure error ----------------------------------------------
-
-/**
- * Configure mode's only "stop and ask" surface. Hermes itself is fine — only
- * our backend failed to come up — so this is a quiet retry, deliberately NOT
- * the install hero (the user already has hermes; "一键安装" would mislead).
- */
-function ConfigureErrorBlock({
-  error,
-  onRetry,
-  t,
-}: {
-  error: string | null
-  onRetry: () => void
-  t: TranslateFn
-}) {
-  return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 text-center">
-      <HermesLogo size={56} />
-      <div>
-        <h1 className="text-xl font-medium tracking-tight">
-          {t("onboarding.configure.errorTitle")}
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {t("onboarding.configure.errorHint")}
-        </p>
-      </div>
-      {error && <ErrorBanner message={error} />}
-      <button
-        type="button"
-        onClick={onRetry}
-        className="app-no-drag inline-flex items-center gap-1.5 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background shadow-lg shadow-foreground/20 transition-all hover:-translate-y-px hover:bg-foreground/90 active:translate-y-0"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-        {t("onboarding.configure.retry")}
-      </button>
     </div>
   )
 }

@@ -209,6 +209,10 @@ const api = {
       args: { binary: string },
     ): Promise<{ id: string; pid: number | undefined; alreadyRunning: boolean }> =>
       ipcRenderer.invoke("hermes:start-backplane", args),
+    ensureBackend: (
+      args: { binary: string },
+    ): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke("hermes:ensure-backend", args),
     stopBackplane: (): Promise<boolean> => ipcRenderer.invoke("hermes:stop-backplane"),
     cancelJob: (jobId: string): Promise<boolean> =>
       ipcRenderer.invoke("hermes:cancel-job", jobId),

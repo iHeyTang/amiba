@@ -29,6 +29,9 @@ export const zhCN: Messages = {
   // App shell
   "app.title": "Hermes",
   "app.subtitle": "扩展控制台",
+  "app.initializing": "正在启动本地服务…",
+  "app.initError": "本地服务启动失败。请确认已安装 Hermes 后重试。",
+  "app.initRetry": "重试",
 
   // Options nav
   "options.nav.preference": "偏好设置",

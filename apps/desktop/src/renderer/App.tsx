@@ -27,7 +27,14 @@ const IS_MAC =
 const TITLE_BAR_HEIGHT = 32
 const MAC_TRAFFIC_LIGHT_RESERVE = 96
 
-type Phase = "loading" | "onboarding" | "ready"
+// loading       — first status probe in flight (brief)
+// initializing  — hermes is installed; silently bringing the backend up on :9394
+//                 (install-if-missing + start). Plumbing, NOT onboarding — just
+//                 a spinner, never a wizard.
+// init-error    — the silent init couldn't bring the backend up (rare); offer retry
+// onboarding    — no hermes on the machine → the guided install wizard
+// ready         — backend serving; show the app
+type Phase = "loading" | "initializing" | "init-error" | "onboarding" | "ready"
 
 export default function App() {
   return (
@@ -39,7 +46,7 @@ export default function App() {
 
 function AppInner(): ReactElement {
   const { theme: resolvedTheme } = useResolvedTheme()
-  const { language: resolvedLanguage } = useT()
+  const { t, language: resolvedLanguage } = useT()
   // Push the resolved language and theme to main on every change so extension
   // webviews see the same values the desktop UI is rendering. The renderer
   // is the only context that can resolve "auto" against navigator.language
@@ -105,33 +112,73 @@ function AppInner(): ReactElement {
     })
   }, [requestNewChat])
 
-  useEffect(() => {
-    let cancelled = false
-    // Boot routing is deliberately thin: backend already serving → straight to
-    // the app; otherwise hand off to OnboardingWizard, which runs the real
-    // self-check and decides between two faces — INSTALL (no hermes → guided
-    // setup) vs CONFIGURE (hermes present → transparently bring our backend up).
-    void getHermesStatus().then((s) => {
-      if (cancelled) return
-      setPhase(s.ok ? "ready" : "onboarding")
-    })
-    return () => {
-      cancelled = true
+  // Boot decision, split by what actually needs the USER:
+  //   - backend already serving → straight in.
+  //   - no hermes installed → the guided install wizard (the only user-facing
+  //     setup; installing hermes is a real decision + needs a terminal).
+  //   - hermes installed but backend down → SILENT init (ensureBackend brings
+  //     :9394 up, installing the backplane the first time). Starting the backend
+  //     is plumbing, not onboarding, so it stays behind a plain spinner — no
+  //     wizard. Re-runnable so the wizard's onReady (after a hermes install)
+  //     falls through to the same silent init.
+  const runBoot = useCallback(async (signal: { cancelled: boolean }) => {
+    setPhase("loading")
+    if ((await getHermesStatus()).ok) {
+      if (!signal.cancelled) setPhase("ready")
+      return
     }
+    const det = await window.hermes.hermesRuntime.detect()
+    if (signal.cancelled) return
+    if (!det.installed || !det.binary) {
+      setPhase("onboarding")
+      return
+    }
+    setPhase("initializing")
+    const r = await window.hermes.hermesRuntime.ensureBackend({ binary: det.binary })
+    if (!signal.cancelled) setPhase(r.ok ? "ready" : "init-error")
   }, [])
 
-  const openAgentDestination = (url: string) => getPlatform().shell.openExternal(url)
+  useEffect(() => {
+    const signal = { cancelled: false }
+    void runBoot(signal)
+    return () => {
+      signal.cancelled = true
+    }
+  }, [runBoot])
 
-  if (phase === "loading") {
+  const openAgentDestination = (url: string) => getPlatform().shell.openExternal(url)
+  const reboot = () => void runBoot({ cancelled: false })
+
+  // Loading + initializing share a plain spinner — starting the backend is
+  // plumbing, so the most we show is a one-line hint, never a wizard.
+  if (phase === "loading" || phase === "initializing") {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
+      <div className="flex h-screen w-full flex-col items-center justify-center gap-3 bg-background text-foreground">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {phase === "initializing" && (
+          <p className="text-sm text-muted-foreground">{t("app.initializing")}</p>
+        )}
+      </div>
+    )
+  }
+
+  if (phase === "init-error") {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background px-8 text-center text-foreground">
+        <p className="max-w-sm text-sm text-muted-foreground">{t("app.initError")}</p>
+        <button
+          type="button"
+          onClick={reboot}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+        >
+          {t("app.initRetry")}
+        </button>
       </div>
     )
   }
 
   if (phase === "onboarding") {
-    return <OnboardingWizard onReady={() => setPhase("ready")} />
+    return <OnboardingWizard onReady={reboot} />
   }
 
   if (view === "settings") {

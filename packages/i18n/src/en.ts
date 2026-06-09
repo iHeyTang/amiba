@@ -34,6 +34,9 @@ export const en = {
   // App shell
   "app.title": "Hermes",
   "app.subtitle": "Extension console",
+  "app.initializing": "Starting the local service…",
+  "app.initError": "Couldn't start the local service. Make sure Hermes is installed and try again.",
+  "app.initRetry": "Retry",
 
   // Options nav
   "options.nav.preference": "Preference",

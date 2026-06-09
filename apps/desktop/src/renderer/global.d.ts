@@ -87,6 +87,7 @@ interface HermesBridgeApi {
     startBackplane(args: {
       binary: string
     }): Promise<{ id: string; pid: number | undefined; alreadyRunning: boolean }>
+    ensureBackend(args: { binary: string }): Promise<{ ok: boolean; error?: string }>
     stopBackplane(): Promise<boolean>
     cancelJob(jobId: string): Promise<boolean>
     ptyInput(args: { jobId: string; data: string }): Promise<boolean>

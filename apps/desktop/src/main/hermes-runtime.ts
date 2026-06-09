@@ -33,6 +33,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
+import http from "node:http"
 import os from "node:os"
 import path from "node:path"
 
@@ -629,6 +630,92 @@ async function startBackend(binary: string) {
   return { id: backplane.id, pid: backplane.pid, alreadyRunning: gatewayUp && backplaneUp }
 }
 
+/**
+ * Pip-install the bundled backplane into the hermes env, resolving on exit.
+ * Awaitable, silent variant of {@link startInstallBackplane} (which streams as a
+ * job) — used by {@link ensureBackend} so the renderer can `await` it without
+ * juggling job-end events. stderr is captured + logged on failure for devs; the
+ * UI shows nothing.
+ */
+async function pipInstallBackplane(binary: string): Promise<boolean> {
+  const python = await resolveHermesPython(binary)
+  const source = resolveBackplaneSource()
+  return new Promise((resolve) => {
+    let child: ChildProcess
+    try {
+      child = spawn(python, ["-m", "pip", "install", "--upgrade", source], { shell: false })
+    } catch (err) {
+      console.error("[ensureBackend] could not spawn pip:", (err as Error).message)
+      resolve(false)
+      return
+    }
+    let stderr = ""
+    child.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString()
+    })
+    child.stdout?.resume() // drain so the pipe never backs up
+    child.on("error", (err) => {
+      console.error("[ensureBackend] pip error:", err.message)
+      resolve(false)
+    })
+    child.on("exit", (code) => {
+      if (code !== 0) console.error("[ensureBackend] pip install failed:", stderr.slice(-800))
+      resolve(code === 0)
+    })
+  })
+}
+
+/** One main-side health probe of the backplane on :9394. */
+function probeBackplane(timeoutMs = 1500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: "127.0.0.1", port: 9394, path: "/hermes/status", timeout: timeoutMs },
+      (res) => {
+        res.resume()
+        resolve(res.statusCode === 200)
+      },
+    )
+    req.on("error", () => resolve(false))
+    req.on("timeout", () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
+
+/** Poll the backplane health until it answers or we give up. */
+async function pollBackplaneUp(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await probeBackplane()) return true
+    await new Promise((r) => setTimeout(r, 800))
+  }
+  return false
+}
+
+/**
+ * SILENT backend initialization — the "this is plumbing, not onboarding" path.
+ *
+ * Brings :9394 up for an ALREADY-installed hermes with no UI beyond a plain
+ * loading state: probe → pip-install the backplane only if its console script
+ * is missing (first run) → spawn + supervise the backend → wait for :9394.
+ * Returns {ok}. The renderer runs this behind a spinner; it never shows a
+ * wizard. (The hermes-install wizard stays separate, for machines with no
+ * hermes at all.)
+ */
+async function ensureBackend(binary: string): Promise<{ ok: boolean; error?: string }> {
+  if (await probeBackplane(1000)) return { ok: true }
+  const { cmd } = await resolveBackplaneCmd(binary)
+  const haveScript = !path.isAbsolute(cmd) || (await fileExists(cmd))
+  if (!haveScript) {
+    const installed = await pipInstallBackplane(binary)
+    if (!installed) return { ok: false, error: "backplane install failed (see main process log)" }
+  }
+  await startBackend(binary)
+  const up = await pollBackplaneUp(60_000)
+  return up ? { ok: true } : { ok: false, error: "backplane did not come up on :9394" }
+}
+
 // ---------------------------------------------------------------------------
 // IPC wiring
 // ---------------------------------------------------------------------------
@@ -647,6 +734,9 @@ export function registerHermesRuntimeHandlers() {
   )
   ipcMain.handle("hermes:start-backplane", (_e, args: { binary: string }) =>
     startBackend(args.binary),
+  )
+  ipcMain.handle("hermes:ensure-backend", (_e, args: { binary: string }) =>
+    ensureBackend(args.binary),
   )
   ipcMain.handle("hermes:stop-backplane", () => {
     let any = false
