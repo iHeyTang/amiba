@@ -149,11 +149,25 @@ def load_all() -> LoadResult:
             result.failed.append({"name": name, "error": str(exc)})
             continue
         caps = _capabilities(mod)
+        meta = _read_meta(integration_dir)
+        if caps["search"] is None:
+            # Imported fine but exposes no capability — almost always a
+            # stale/misconfigured integration (e.g. its __init__ forgot to
+            # `from .x import search`). It would otherwise sit in the registry
+            # silently returning empty results, so make it visible.
+            declares_mentions = isinstance(meta.get("mention_resources"), list)
+            logger.warning(
+                "integration %r loaded but exposes no `search` capability%s — "
+                "its @-mentions will return nothing. Check its __init__.py "
+                "re-exports `search`.",
+                name,
+                " (it declares mention_resources)" if declares_mentions else "",
+            )
         result.loaded.append(
             LoadedIntegration(
                 name=name,
                 path=integration_dir,
-                meta=_read_meta(integration_dir),
+                meta=meta,
                 search=caps["search"],
             )
         )
