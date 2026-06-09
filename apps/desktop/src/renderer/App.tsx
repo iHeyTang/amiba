@@ -2,11 +2,11 @@ import { getHermesStatus, SessionsProvider, useSessions } from "@hermes-x/core"
 import { FullScreenChatView, useChatSessionRequester } from "@hermes-x/ui"
 import { HomeView } from "@hermes-x/ui"
 import { getPlatform } from "@hermes-x/platform"
-import { SettingsView } from "@hermes-x/ui"
+import { SettingsView, type StartAgentTask } from "@hermes-x/ui"
 import { useResolvedTheme } from "@hermes-x/ui"
 import { useT } from "@hermes-x/i18n"
 import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react"
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView"
 
@@ -73,6 +73,18 @@ function AppInner(): ReactElement {
   // either lands the prompt on a stale session or on nothing, leaving
   // the user staring at the empty HomeView.
   const requestNewChat = useChatSessionRequester()
+  // Settings panes (plugin install/uninstall) delegate operator work to the
+  // agent through this: mint a fresh session with the task prompt, then bring
+  // the chat view forward so the user watches the agent do it. Same pipeline
+  // as the extension `chat.startSession` hand-off below.
+  const startAgentTask = useCallback<StartAgentTask>(
+    async (prompt, opts) => {
+      await requestNewChat({ mode: "new", text: prompt, sourceApp: opts?.sourceApp })
+      await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" })
+      setView("chat")
+    },
+    [requestNewChat],
+  )
   useEffect(() => {
     return window.hermes.onChatStartSession(({ text }) => {
       void (async () => {
@@ -121,7 +133,7 @@ function AppInner(): ReactElement {
   if (view === "settings") {
     return (
       <SettingsView
-        capabilities={{}}
+        capabilities={{ startAgentTask }}
         onGoHome={() => setView("chat")}
         sidebarHeaderLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
         sidebarHeaderHeightPx={TITLE_BAR_HEIGHT}

@@ -1,8 +1,10 @@
 import { getHermesPlugins, setPluginEnabled, type HermesPlugin } from "@hermes-x/core"
+import { Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { useT } from "@hermes-x/i18n"
-import { Switch, cn } from "../primitives"
+import { Button, Switch, cn } from "../primitives"
+import { useStartAgentTask } from "./agent-task"
 import { featuredFeatureForPlugin, openFeaturedFeature } from "./featured-features"
 
 type State =
@@ -154,6 +156,7 @@ function PluginList({
 
 function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onToggle: () => void }) {
   const { t } = useT()
+  const startAgentTask = useStartAgentTask()
   // Nested/category plugins (e.g. backends) share a `name` across categories —
   // `name` alone isn't unique. The key is path-derived (`image_gen/xai`), so
   // surface the category prefix as a badge to disambiguate same-named plugins.
@@ -163,6 +166,17 @@ function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onTo
   // (it really is a plugin) — but we flag the dual-surfacing so it reads as
   // intentional, and offer a jump to its dedicated page.
   const feature = featuredFeatureForPlugin(p)
+  // Only user-installed plugins are uninstallable; bundled plugins ship with
+  // hermes-agent. We hand removal to the agent (no terminal for the user) —
+  // gated on the host providing a chat surface.
+  const canUninstall = !!startAgentTask && p.source !== "bundled"
+  function onUninstall() {
+    if (!startAgentTask) return
+    if (!confirm(t("options.plugins.uninstallConfirm", { name: p.name }))) return
+    void startAgentTask(t("options.plugins.uninstallPrompt", { name: p.name }), {
+      sourceApp: t("options.plugins.agentSourceApp"),
+    })
+  }
   return (
     <li className="flex items-start justify-between gap-2 p-3">
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -209,7 +223,18 @@ function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onTo
           </button>
         )}
       </div>
-      <div className={cn("flex shrink-0 items-center pt-0.5", busy && "opacity-50")}>
+      <div className={cn("flex shrink-0 items-center gap-1 pt-0.5", busy && "opacity-50")}>
+        {canUninstall && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onUninstall}
+            title={t("options.plugins.uninstallAction")}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 />
+          </Button>
+        )}
         <Switch checked={p.enabled} disabled={busy} onCheckedChange={onToggle} />
       </div>
     </li>

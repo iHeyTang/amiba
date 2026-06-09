@@ -44,6 +44,7 @@ import { SettingsGateway } from "./SettingsGateway";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
+import { AgentTaskProvider } from "./agent-task";
 import { SettingsExtensions } from "./SettingsExtensions";
 import {
   FEATURED_FEATURES,
@@ -296,6 +297,7 @@ export function SettingsView({
       className={paneHeaderClassName}
       chromeHeightPx={paneHeaderChromeHeightPx}
     >
+    <AgentTaskProvider value={capabilities.startAgentTask}>
     <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
       <aside className="flex min-h-0 w-60 shrink-0 flex-col bg-muted/30">
         {onGoHome ? (
@@ -548,6 +550,7 @@ export function SettingsView({
         </Dialog>
       )}
     </div>
+    </AgentTaskProvider>
     </SettingsPaneProvider>
   );
 }

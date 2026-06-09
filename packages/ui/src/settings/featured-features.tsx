@@ -8,7 +8,8 @@ import {
 } from "@hermes-x/core"
 import { useT, type MessageKey } from "@hermes-x/i18n"
 
-import { ScrollArea, Switch } from "../primitives"
+import { Button, ScrollArea, Switch } from "../primitives"
+import { useStartAgentTask } from "./agent-task"
 import { SettingsPaneHeader } from "./SettingsPaneHeader"
 
 /**
@@ -50,6 +51,13 @@ export interface FeaturedFeature {
    */
   match: (p: HermesPlugin) => boolean
   /**
+   * Plugin reference (git slug / package spec) for `hermes plugins install`,
+   * used when the backing plugin is missing: the "Install" button hands this
+   * to the agent so a normal user never touches a terminal. Omit if the plugin
+   * can't be auto-installed this way.
+   */
+  installRef?: string
+  /**
    * Feature-specific content rendered below the standard enable/disable
    * control. This is what *earns* a featured plugin its dedicated page — if a
    * feature only needs an on/off switch, it shouldn't be promoted here.
@@ -74,6 +82,7 @@ const BROWSER_FEATURE: FeaturedFeature = {
   subtitleKey: "options.feature.browser.subtitle",
   match: (p) =>
     /browser[-_]tools/.test(p.name) || /browser[-_]tools/.test(p.key),
+  installRef: "iHeyTang/hermes-x-plugin-browser-tools",
   Body: BrowserFeatureBody,
 }
 
@@ -118,6 +127,7 @@ type PageState =
  */
 export function FeatureSettingsPage({ feature }: { feature: FeaturedFeature }) {
   const { t } = useT()
+  const startAgentTask = useStartAgentTask()
   const [state, setState] = useState<PageState>({ kind: "loading" })
   const [busy, setBusy] = useState(false)
   const [restartHint, setRestartHint] = useState(false)
@@ -154,6 +164,18 @@ export function FeatureSettingsPage({ feature }: { feature: FeaturedFeature }) {
     setRestartHint(true)
   }
 
+  // Hand installation to the agent instead of telling the user to run a CLI.
+  function onInstall() {
+    if (!startAgentTask || !feature.installRef) return
+    void startAgentTask(
+      t("options.feature.installPrompt", {
+        name: t(feature.titleKey),
+        ref: feature.installRef,
+      }),
+      { sourceApp: t("options.feature.agentSourceApp") },
+    )
+  }
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SettingsPaneHeader title={t(feature.titleKey)} subtitle={t(feature.subtitleKey)} />
@@ -168,8 +190,13 @@ export function FeatureSettingsPage({ feature }: { feature: FeaturedFeature }) {
           )}
 
           {state.kind === "loaded" && !state.plugin && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700">
-              {t("options.feature.notInstalled")}
+            <div className="flex flex-col items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
+              <p className="text-sm text-amber-700">{t("options.feature.notInstalled")}</p>
+              {startAgentTask && feature.installRef && (
+                <Button size="sm" onClick={onInstall}>
+                  {t("options.feature.installAction")}
+                </Button>
+              )}
             </div>
           )}
 

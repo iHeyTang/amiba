@@ -48,9 +48,32 @@ export interface UserScriptCapability {
 }
 
 // ---------------------------------------------------------------------------
+// Agent task hand-off (host-owned — desktop has a chat surface, others may not)
+// ---------------------------------------------------------------------------
+/**
+ * Hand a natural-language task to the agent by starting a fresh chat session
+ * prefilled with `prompt` (and auto-submitting it). This lets product surfaces
+ * delegate operator work — "install this plugin", "uninstall that plugin" — to
+ * the agent instead of telling the user to open a terminal. The host owns
+ * everything UI-specific (minting the session, bringing the chat view forward);
+ * the settings panes just describe the task.
+ *
+ * Optional: hosts without a chat surface omit it, and the affordances that
+ * depend on it hide themselves (same pattern as `bridge` / `userscripts`).
+ */
+export type StartAgentTask = (
+  prompt: string,
+  opts?: {
+    /** Origin badge shown above the composer until the user edits. */
+    sourceApp?: string
+  },
+) => void | Promise<void>
+
+// ---------------------------------------------------------------------------
 // composed bundle
 // ---------------------------------------------------------------------------
 export interface OptionsCapabilities {
   bridge?: BridgeCapability
   userscripts?: UserScriptCapability
+  startAgentTask?: StartAgentTask
 }
