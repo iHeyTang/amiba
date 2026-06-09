@@ -28,6 +28,17 @@
       {
         "from": "resources",
         "to": "resources"
+      },
+      {
+        "from": "../../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!.venv/**",
+          "!**/__pycache__/**",
+          "!**/*.egg-info/**",
+          "!**/.pytest_cache/**"
+        ]
       }
     ],
     "mac": {
