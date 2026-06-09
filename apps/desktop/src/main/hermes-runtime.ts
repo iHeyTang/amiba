@@ -80,20 +80,17 @@ const HERMES_BINARY_CANDIDATES: string[] = IS_WIN
     ]
 
 /**
- * Plugins the desktop installs into the gateway. NOTE: `http-backplane` is no
- * longer here — it stopped being a plugin and became a standalone server the
- * desktop spawns (see {@link startBackend}). `integrations` left too — its
- * framework moved INTO the backplane (it registered no agent tools; it only fed
- * the composer via the backplane), so the backplane vendors it and there's
- * nothing to `hermes plugins install`. What remains is the one genuine agent
- * plugin: `browser-tools` (registers `my_browser_*` tools + the WS hub the
- * extension relies on). `hermes plugins install` errors with "already exists"
- * when present, so we probe `~/.hermes/plugins/<name>` up-front and skip
- * already-installed ones.
+ * Plugins the first-run configure flow installs into the gateway — deliberately
+ * EMPTY. Nothing the desktop needs to boot is a hermes plugin anymore:
+ * `http-backplane` became the standalone server the desktop spawns (see
+ * {@link startBackend}); `integrations` moved INTO the backplane (vendored —
+ * nothing to install). And `browser-tools`, while a genuine plugin, is an
+ * OPTIONAL capability — the user opts in from the "Browser" featured-feature
+ * settings page (which hands the install to the agent), so it must NOT block
+ * onboarding. So a fresh machine just needs Hermes + the backplane; no plugin
+ * clones, no GitHub dependency at first run.
  */
-export const REQUIRED_PLUGINS: readonly string[] = [
-  "iHeyTang/hermes-x-plugin-browser-tools",
-]
+export const REQUIRED_PLUGINS: readonly string[] = []
 
 /**
  * The on-disk directory name a plugin lives under — `~/.hermes/plugins/<name>`.
