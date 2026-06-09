@@ -36,6 +36,10 @@ import { HermesLogo } from "@hermes-x/ui"
 const MAX_LOG_LINES = 600
 const BACKPLANE_POLL_INTERVAL_MS = 1200
 const BACKPLANE_POLL_TIMEOUT_MS = 60_000
+// Short probe: after `startBackplane`, an already-installed backplane binds
+// :9394 within a second or two. If it doesn't answer in this window we treat it
+// as not-yet-installed and run the one-time pip install before starting again.
+const BACKPLANE_PROBE_TIMEOUT_MS = 5_000
 // macOS keeps the traffic-light cluster at (20, 14) (see main/index.ts).
 // We reserve a draggable strip at the top of the window that's exactly
 // as tall as that cluster instead of overlapping it with welcome text —
@@ -45,6 +49,18 @@ const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
 type Phase = "detecting" | "summary" | "running" | "ready"
+
+/**
+ * Two faces of the same machinery, chosen by whether `hermes` is already
+ * installed:
+ *   - `install`  — no hermes yet. The full guided wizard: hero + "一键安装"
+ *                  CTA, PTY install of hermes, then plugins + backplane.
+ *   - `configure`— hermes is present; only OUR backend (plugins + the
+ *                  hermes-x-backplane server) needs bringing up. Runs
+ *                  automatically with a transparent "正在配置…" face — no
+ *                  install hero, no button — so the user just lands in the app.
+ */
+type Mode = "install" | "configure"
 
 type DetectionItemKey = "hermes" | "backplane" | `plugin:${string}`
 
@@ -131,6 +147,7 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
   const rt = window.hermes.hermesRuntime
 
   const [phase, setPhase] = useState<Phase>("detecting")
+  const [mode, setMode] = useState<Mode>("install")
   const [detection, setDetection] = useState<Detection | null>(null)
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -223,6 +240,17 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       window.setTimeout(() => onReadyRef.current(), 500)
       return
     }
+
+    // Hermes already installed → this isn't an "install", it's just bringing
+    // OUR backend up. Run it automatically with the transparent configure face;
+    // the user never sees the install hero/CTA. Only a genuinely hermes-less
+    // machine gets the guided install summary.
+    if (det.hermes.installed) {
+      setMode("configure")
+      void runPipeline(det)
+      return
+    }
+    setMode("install")
     setPhase("summary")
   }
 
@@ -241,12 +269,16 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
     })
   }
 
-  async function runPipeline() {
-    if (!detection) return
+  async function runPipeline(startDet?: Detection) {
+    // Auto-configure passes the just-detected snapshot directly (React state
+    // hasn't flushed yet); the manual "一键安装" button calls with no arg and
+    // uses the committed `detection`.
+    const initial = startDet ?? detection
+    if (!initial) return
     setPhase("running")
     setError(null)
 
-    let det = detection
+    let det = initial
 
     // 1. Install Hermes binary under a PTY so the embedded `hermes setup`
     //    wizard sees a real terminal — the line-based pipe path causes the
@@ -306,21 +338,31 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       setDetection(det)
     }
 
-    // 3. Install the backplane server into the hermes env (it's a pip package,
-    //    not a plugin — provides the `hermes-x-backplane` command), then start
-    //    the backend (gateway + backplane server) and wait for the HTTP probe.
+    // 3. Bring the backplane server up. Try STARTING what's there first — for a
+    //    returning user it's already installed, so this is just a quick spawn +
+    //    probe with no pip step ("直接可用"). Only if it doesn't answer do we run
+    //    the one-time pip install (the `hermes-x-backplane` command lands in the
+    //    hermes env) and start again.
     if (!det.backplane.running) {
-      const rb = await runJob("backplane", () => rt.installBackplane({ binary }))
-      if (rb.exitCode !== 0) {
-        setError(formatJobError(rb, t("onboarding.error.backplane")))
-        setPhase("summary")
-        return
-      }
       setActiveAction({ itemKey: "backplane" })
       clearLogs()
-      const start = await rt.startBackplane({ binary })
+      let start = await rt.startBackplane({ binary })
       activeJobIdRef.current = start.id
-      const up = await pollBackplane()
+      let up = await pollBackplane(BACKPLANE_PROBE_TIMEOUT_MS)
+      if (!up) {
+        // Not installed yet (or it failed to bind) → install once, then start.
+        const rb = await runJob("backplane", () => rt.installBackplane({ binary }))
+        if (rb.exitCode !== 0) {
+          setError(formatJobError(rb, t("onboarding.error.backplane")))
+          setPhase("summary")
+          return
+        }
+        setActiveAction({ itemKey: "backplane" })
+        clearLogs()
+        start = await rt.startBackplane({ binary })
+        activeJobIdRef.current = start.id
+        up = await pollBackplane()
+      }
       if (!up) {
         setError(t("onboarding.error.backplane"))
         setPhase("summary")
@@ -335,8 +377,10 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
     window.setTimeout(() => onReadyRef.current(), 700)
   }
 
-  function pollBackplane(): Promise<boolean> {
-    const deadline = Date.now() + BACKPLANE_POLL_TIMEOUT_MS
+  function pollBackplane(
+    timeoutMs: number = BACKPLANE_POLL_TIMEOUT_MS,
+  ): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs
     return new Promise((resolve) => {
       const tick = async () => {
         const s = await getHermesStatus()
@@ -388,7 +432,7 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden px-8 pb-6 pt-4">
         {phase === "detecting" && <DetectingState t={t} />}
 
-        {phase === "summary" && detection && (
+        {phase === "summary" && detection && mode === "install" && (
           <SummaryBlock
             detection={detection}
             error={error}
@@ -397,6 +441,17 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
             onInstall={() => void runPipeline()}
             onRedetect={() => void runDetect()}
             onCopy={(i, cmd) => void copyManualCommand(i, cmd)}
+            t={t}
+          />
+        )}
+
+        {/* Configure mode only reaches "summary" on failure — hermes is fine,
+            our backend couldn't come up. Show a quiet retry, not the install
+            hero. */}
+        {phase === "summary" && mode === "configure" && (
+          <ConfigureErrorBlock
+            error={error}
+            onRetry={() => void runDetect()}
             t={t}
           />
         )}
@@ -752,6 +807,46 @@ function ReadyState({ t }: { t: TranslateFn }) {
       </div>
       <p className="text-base font-medium">{t("onboarding.ready.title")}</p>
       <p className="text-sm text-muted-foreground">{t("onboarding.ready.subtitle")}</p>
+    </div>
+  )
+}
+
+// --- Phase: configure error ----------------------------------------------
+
+/**
+ * Configure mode's only "stop and ask" surface. Hermes itself is fine — only
+ * our backend failed to come up — so this is a quiet retry, deliberately NOT
+ * the install hero (the user already has hermes; "一键安装" would mislead).
+ */
+function ConfigureErrorBlock({
+  error,
+  onRetry,
+  t,
+}: {
+  error: string | null
+  onRetry: () => void
+  t: TranslateFn
+}) {
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 text-center">
+      <HermesLogo size={56} />
+      <div>
+        <h1 className="text-xl font-medium tracking-tight">
+          {t("onboarding.configure.errorTitle")}
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {t("onboarding.configure.errorHint")}
+        </p>
+      </div>
+      {error && <ErrorBanner message={error} />}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="app-no-drag inline-flex items-center gap-1.5 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background shadow-lg shadow-foreground/20 transition-all hover:-translate-y-px hover:bg-foreground/90 active:translate-y-0"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        {t("onboarding.configure.retry")}
+      </button>
     </div>
   )
 }
