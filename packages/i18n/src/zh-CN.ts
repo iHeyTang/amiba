@@ -74,6 +74,14 @@ export const zhCN: Messages = {
   "options.extensions.browse.installing": "安装中…",
   "options.extensions.browse.installFailed": "安装失败：{error}",
   "options.extensions.browse.indexUrl": "索引：{url}",
+  "options.plugins.heading": "插件",
+  "options.plugins.subtitle": "Hermes agent 插件（Python）。开关启用或停用；改动在下次启动 Hermes 时生效。",
+  "options.plugins.loading": "加载插件中…",
+  "options.plugins.error": "加载插件失败：{error}",
+  "options.plugins.empty": "没有插件。",
+  "options.plugins.showBundled": "显示内置插件",
+  "options.plugins.restartHint": "重启 Hermes 使插件改动生效。",
+  "options.plugins.toggleError": "切换插件失败：{error}",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",

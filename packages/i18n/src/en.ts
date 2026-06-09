@@ -79,6 +79,14 @@ export const en = {
   "options.extensions.browse.installing": "Installing…",
   "options.extensions.browse.installFailed": "Install failed: {error}",
   "options.extensions.browse.indexUrl": "Index: {url}",
+  "options.plugins.heading": "Plugins",
+  "options.plugins.subtitle": "Hermes agent plugins (Python). Toggle to enable or disable; changes apply on the next Hermes start.",
+  "options.plugins.loading": "Loading plugins…",
+  "options.plugins.error": "Couldn't load plugins: {error}",
+  "options.plugins.empty": "No plugins.",
+  "options.plugins.showBundled": "Show bundled",
+  "options.plugins.restartHint": "Restart Hermes to apply plugin changes.",
+  "options.plugins.toggleError": "Couldn't change plugin: {error}",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",

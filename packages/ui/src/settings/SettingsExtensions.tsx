@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useExtensionRegistry } from "@hermes-x/extension-host/renderer"
 import type { ExtensionsBridge, MarketplaceEntry } from "@hermes-x/extension-host/preload"
 import { useT } from "@hermes-x/i18n"
+import { PluginsSection } from "./PluginsSection"
 import {
   Button,
   Dialog,
@@ -442,6 +443,9 @@ export function SettingsExtensions() {
           onInstallComplete={refresh}
         />
       )}
+
+      {/* ---- Plugins (hermes-agent, distinct type) ---- */}
+      <PluginsSection />
 
       {/* Uninstall confirm dialog */}
       <Dialog open={pendingUninstall !== null} onOpenChange={(open) => { if (!open) setPendingUninstall(null) }}>
