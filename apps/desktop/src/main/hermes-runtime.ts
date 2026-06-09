@@ -552,14 +552,20 @@ async function startInstallBackplane(hermesBinary: string) {
 
 /**
  * The backplane server's launch command. The `hermes-x-backplane` console
- * script is pip-installed into the same Python env as `hermes`, so it lives in
- * the same bin dir. If `hermes` was PATH-resolved (relative name), rely on PATH
- * for the script too.
+ * script is pip-installed alongside the **env python** (the venv `bin/`), which
+ * is NOT necessarily the dir holding the `hermes` launcher — `hermes` is
+ * commonly a symlink in `~/.local/bin` pointing into a venv elsewhere. So we
+ * resolve the script against the SAME env python the install used (via the
+ * `hermes` shebang), not next to the launcher. If the env python can only be
+ * PATH-resolved (relative name), rely on PATH for the script too.
  */
-function resolveBackplaneCmd(hermesBinary: string): { cmd: string; args: string[] } {
+async function resolveBackplaneCmd(
+  hermesBinary: string,
+): Promise<{ cmd: string; args: string[] }> {
   const name = IS_WIN ? "hermes-x-backplane.exe" : "hermes-x-backplane"
-  const cmd = path.isAbsolute(hermesBinary)
-    ? path.join(path.dirname(hermesBinary), name)
+  const python = await resolveHermesPython(hermesBinary)
+  const cmd = path.isAbsolute(python)
+    ? path.join(path.dirname(python), name)
     : name
   return { cmd, args: ["--port", "9394"] }
 }
@@ -574,7 +580,7 @@ function resolveBackplaneCmd(hermesBinary: string): { cmd: string; args: string[
  * which the onboarding wizard polls); `alreadyRunning` is true only if BOTH are
  * already up. Both procs' logs still stream via `hermes:job-log`.
  */
-function startBackend(binary: string) {
+async function startBackend(binary: string) {
   const gatewayUp = !!gatewayJob && !gatewayJob.child.killed
   if (!gatewayUp) startJob("start-gateway", binary, ["gateway"])
 
@@ -583,7 +589,7 @@ function startBackend(binary: string) {
   if (backplaneUp) {
     backplane = { id: backplaneServerJob!.id, pid: backplaneServerJob!.child.pid }
   } else {
-    const { cmd, args } = resolveBackplaneCmd(binary)
+    const { cmd, args } = await resolveBackplaneCmd(binary)
     backplane = startJob("start-backplane-server", cmd, args)
   }
 

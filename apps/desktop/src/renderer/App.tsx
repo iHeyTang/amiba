@@ -29,6 +29,26 @@ const MAC_TRAFFIC_LIGHT_RESERVE = 96
 
 type Phase = "loading" | "onboarding" | "ready"
 
+/**
+ * Poll the backplane's `/hermes/status` until it answers or we give up. The
+ * backplane binds :9394 within a second or two of spawn — its `/hermes/*`
+ * routes are file-backed and don't wait on the gateway — so a short bounded
+ * poll covers a normal cold start, while a genuine failure (e.g. the
+ * `hermes-x-backplane` server isn't installed) falls through to onboarding.
+ */
+async function waitForBackplane(
+  isCancelled: () => boolean,
+  tries = 16,
+  delayMs = 500,
+): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    if (isCancelled()) return false
+    if ((await getHermesStatus()).ok) return true
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  return false
+}
+
 export default function App() {
   return (
     <SessionsProvider>
@@ -107,10 +127,35 @@ function AppInner(): ReactElement {
 
   useEffect(() => {
     let cancelled = false
-    void getHermesStatus().then((s) => {
-      if (cancelled) return
-      setPhase(s.ok ? "ready" : "onboarding")
-    })
+    void (async () => {
+      // Fast path — the backend is already serving :9394 (a dev re-render, or a
+      // backend left running from a previous launch).
+      if ((await getHermesStatus()).ok) {
+        if (!cancelled) setPhase("ready")
+        return
+      }
+      // Backend down. Desktop is the supervisor now — the backplane no longer
+      // rides inside `hermes gateway`, so a returning (already set-up) user's
+      // backend has to be (re)started HERE on every launch, not only during
+      // onboarding. First confirm hermes itself is installed; if not, it's a
+      // genuine first run → onboarding.
+      const det = await window.hermes.hermesRuntime.detect()
+      if (!det.installed || !det.binary) {
+        if (!cancelled) setPhase("onboarding")
+        return
+      }
+      // Hermes is installed → bring the backend up and wait for :9394. If it
+      // can't come up (e.g. the hermes-x-backplane server isn't installed yet),
+      // fall to onboarding, which installs + starts it.
+      try {
+        await window.hermes.hermesRuntime.startBackplane({ binary: det.binary })
+      } catch {
+        // A spawn-level failure surfaces via the job log; the poll below turns
+        // "never came up" into the onboarding fallback uniformly.
+      }
+      const up = await waitForBackplane(() => cancelled)
+      if (!cancelled) setPhase(up ? "ready" : "onboarding")
+    })()
     return () => {
       cancelled = true
     }
