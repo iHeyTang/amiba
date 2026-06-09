@@ -1,9 +1,9 @@
 """Integration lifecycle as plain Python: list / install / remove / reload.
 
-Returns plain dicts, raises plain exceptions. Two callers wrap this:
-- :mod:`hermes_plugin_integrations.cli` — the ``hermes integration`` CLI.
-- the ``http-backplane`` plugin's admin endpoints (``/hermes/integrations/*``),
-  which the CLI pokes over loopback HTTP for live reload.
+Returns plain dicts, raises plain exceptions. The backplane's
+``/hermes/integrations*`` admin routes (``integrations_gateway``) wrap this and
+the desktop UI drives those — there is no ``hermes integration`` CLI anymore
+(this framework used to be a hermes plugin; it now lives in the backplane).
 
 HTTP-agnostic: knows nothing about routers or aiohttp. Install writes files +
 updates the in-process registry via :mod:`loader`.
