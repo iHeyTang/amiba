@@ -27,21 +27,33 @@ dev = [
 # standalone HTTP server desktop spawns + supervises — see __init__.py.
 
 [project.scripts]
-hermes-x-backplane = "hermes_x_backplane.server:main"
+hermes-x-backplane = "hermes_x_backplane.runtime.server:main"
 
 [tool.setuptools]
+# Flat layout (package code lives directly in backend/) remapped to the
+# hermes_x_backplane import name. The package list below MUST stay in sync with
+# the actual subpackage dirs — a stale list silently ships an incomplete tree
+# and the server crashes at import (e.g. `from . import logs` → looks like a
+# circular import). Regenerate with:
+#   find . -name __init__.py -not -path '*/build/*' -not -path '*/.venv/*' \
+#     -not -path '*/__pycache__/*' | sed 's|/__init__.py$||;s|^\./||' \
+#     | sed 's|^$|hermes_x_backplane|; t; s|/|.|g; s|^|hermes_x_backplane.|'
 package-dir = { "hermes_x_backplane" = "." }
 packages = [
     "hermes_x_backplane",
     "hermes_x_backplane.runtime",
     "hermes_x_backplane.runtime.adapters",
     "hermes_x_backplane.runtime.features",
+    "hermes_x_backplane.runtime.features.gateway_proxy",
     "hermes_x_backplane.runtime.features.hermes_proxy",
     "hermes_x_backplane.runtime.features.hermes_proxy.attachments",
     "hermes_x_backplane.runtime.features.hermes_proxy.cron",
     "hermes_x_backplane.runtime.features.hermes_proxy.integrations_gateway",
     "hermes_x_backplane.runtime.features.hermes_proxy.lifecycle",
+    "hermes_x_backplane.runtime.features.hermes_proxy.logs",
     "hermes_x_backplane.runtime.features.hermes_proxy.plugins_routes",
     "hermes_x_backplane.runtime.features.hermes_proxy.sessions",
     "hermes_x_backplane.runtime.features.hermes_proxy.settings",
+    "hermes_x_backplane.runtime.features.hermes_proxy.stt",
+    "hermes_x_backplane.runtime.features.hermes_proxy.turn_metadata",
 ]
