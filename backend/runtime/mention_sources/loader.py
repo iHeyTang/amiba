@@ -1,19 +1,20 @@
-"""Integration discovery, load, and the in-process capability registry.
+"""Mention-source discovery, load, and the in-process registry.
 
-**Single source:** directories under ``~/.hermes/integrations/<name>/``. Each
+**Single dir:** directories under ``~/.hermes/mention-sources/<name>/``. Each
 directory is imported as a free-standing package named
-``hermes_integration_<name>`` (so relative imports inside it resolve), and we
-grab its **capabilities** — currently a module-level ``search`` callable — plus
-its ``integration.yaml`` metadata.
+``hermes_mention_source_<name>`` (so relative imports inside it resolve), and we
+grab its **capability** — a module-level ``search`` callable — plus its
+``mention-source.yaml`` manifest (``integration.yaml`` accepted for legacy
+sources).
 
-This package is **HTTP-agnostic**. An integration is plain domain logic +
-a manifest + (optionally) a resolver skill; it never touches aiohttp or knows
-it will be served over HTTP. The ``http-backplane`` plugin reads this registry
-in-process and adapts the capabilities into a web API for the composer.
+A mention source is plain, HTTP-agnostic domain logic: it lets the desktop
+composer @-mention an external system's resources. It never touches aiohttp or
+knows it'll be served over HTTP — the backplane reads this registry in-process
+and adapts ``search`` into a web API for the composer.
 
 Public surface (what the backplane reads):
-- :func:`list_loaded` / :func:`get` — loaded integrations + their ``search``.
-- :func:`mention_resources` — flattened ``mention_resources`` registry.
+- :func:`list_loaded` / :func:`get` — loaded sources + their ``search``.
+- :func:`mention_resources` — flattened mention-resource registry.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,15 +34,35 @@ logger = logging.getLogger(__name__)
 SearchFn = Callable[..., Awaitable[Dict[str, Any]]]
 
 _HERMES_HOME = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
-USER_INTEGRATIONS_DIR = _HERMES_HOME / "integrations"
+USER_SOURCES_DIR = _HERMES_HOME / "mention-sources"
+
+# Manifest filenames, in preference order (the second is legacy).
+_MANIFEST_NAMES = ("mention-source.yaml", "integration.yaml")
+
+_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_NAME_MAX_LEN = 32
+
+
+def validate_name(name: object) -> str:
+    """A source name is a short lowercase slug (also the on-disk dir name)."""
+    if (
+        not isinstance(name, str)
+        or not _NAME_RE.match(name)
+        or len(name) > _NAME_MAX_LEN
+    ):
+        raise ValueError(
+            f"invalid name {name!r}; must match {_NAME_RE.pattern} "
+            f"(max {_NAME_MAX_LEN} chars)"
+        )
+    return name
 
 
 @dataclass
-class LoadedIntegration:
-    """An integration that imported cleanly.
+class LoadedSource:
+    """A mention source that imported cleanly.
 
-    ``search`` is the integration's typeahead capability (or None if it
-    declares none). ``meta`` is the parsed ``integration.yaml``.
+    ``search`` is the source's typeahead capability (or None if it declares
+    none). ``meta`` is the parsed manifest.
     """
 
     name: str
@@ -51,7 +73,7 @@ class LoadedIntegration:
 
 @dataclass
 class LoadResult:
-    loaded: List[LoadedIntegration] = field(default_factory=list)
+    loaded: List[LoadedSource] = field(default_factory=list)
     failed: List[Dict[str, str]] = field(default_factory=list)
 
 
@@ -62,18 +84,18 @@ def get_state() -> LoadResult:
     return _state
 
 
-def list_loaded() -> List[LoadedIntegration]:
+def list_loaded() -> List[LoadedSource]:
     return list(_state.loaded)
 
 
-def get(name: str) -> Optional[LoadedIntegration]:
-    """Loaded integration by name, or None."""
+def get(name: str) -> Optional[LoadedSource]:
+    """Loaded source by name, or None."""
     return next((e for e in _state.loaded if e.name == name), None)
 
 
-def _read_meta(integration_dir: Path) -> Dict[str, Any]:
-    yaml_path = integration_dir / "integration.yaml"
-    if not yaml_path.exists():
+def _read_meta(source_dir: Path) -> Dict[str, Any]:
+    yaml_path = next((source_dir / n for n in _MANIFEST_NAMES if (source_dir / n).exists()), None)
+    if yaml_path is None:
         return {}
     try:
         import yaml  # pyyaml is a hermes-agent dep
@@ -89,24 +111,22 @@ def _read_meta(integration_dir: Path) -> Dict[str, Any]:
         return {}
 
 
-def _import_integration(integration_dir: Path):
-    """Import a user integration directory as a synthetic package.
+def _import_source(source_dir: Path):
+    """Import a mention-source directory as a synthetic package.
 
-    Namespaced ``hermes_integration_<name>`` so user integrations can't
-    collide in ``sys.modules``; ``submodule_search_locations`` makes
-    ``from .lark_cli import ...`` resolve to siblings.
+    Namespaced ``hermes_mention_source_<name>`` so sources can't collide in
+    ``sys.modules``; ``submodule_search_locations`` makes ``from .x import ...``
+    resolve to siblings.
     """
-    name = integration_dir.name
-    pkg_name = f"hermes_integration_{name}"
-    init_path = integration_dir / "__init__.py"
+    name = source_dir.name
+    pkg_name = f"hermes_mention_source_{name}"
+    init_path = source_dir / "__init__.py"
     if not init_path.exists():
-        raise FileNotFoundError(
-            f"integration {name!r} missing __init__.py at {init_path}"
-        )
+        raise FileNotFoundError(f"mention source {name!r} missing __init__.py at {init_path}")
     for stale in [k for k in sys.modules if k == pkg_name or k.startswith(pkg_name + ".")]:
         del sys.modules[stale]
     spec = importlib.util.spec_from_file_location(
-        pkg_name, init_path, submodule_search_locations=[str(integration_dir)]
+        pkg_name, init_path, submodule_search_locations=[str(source_dir)]
     )
     if spec is None or spec.loader is None:
         raise ImportError(f"could not build import spec for {init_path}")
@@ -117,16 +137,16 @@ def _import_integration(integration_dir: Path):
 
 
 def _capabilities(mod) -> Dict[str, Any]:
-    """Pull the capability callables an integration exposes. Today: search."""
+    """Pull the capability callables a source exposes. Today: search."""
     search = getattr(mod, "search", None)
     return {"search": search if callable(search) else None}
 
 
 def _discover_user_dirs() -> List[Path]:
-    if not USER_INTEGRATIONS_DIR.exists():
+    if not USER_SOURCES_DIR.exists():
         return []
     out: List[Path] = []
-    for entry in sorted(USER_INTEGRATIONS_DIR.iterdir()):
+    for entry in sorted(USER_SOURCES_DIR.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
             continue
         if not (entry / "__init__.py").exists():
@@ -137,55 +157,51 @@ def _discover_user_dirs() -> List[Path]:
 
 
 def load_all() -> LoadResult:
-    """Discover + import every user integration into the registry."""
+    """Discover + import every mention source into the registry."""
     global _state
     result = LoadResult()
-    for integration_dir in _discover_user_dirs():
-        name = integration_dir.name
+    for source_dir in _discover_user_dirs():
+        name = source_dir.name
         try:
-            mod = _import_integration(integration_dir)
+            mod = _import_source(source_dir)
         except Exception as exc:
-            logger.exception("integration %s failed to import", name)
+            logger.exception("mention source %s failed to import", name)
             result.failed.append({"name": name, "error": str(exc)})
             continue
         caps = _capabilities(mod)
-        meta = _read_meta(integration_dir)
+        meta = _read_meta(source_dir)
         if caps["search"] is None:
             # Imported fine but exposes no capability — almost always a
-            # stale/misconfigured integration (e.g. its __init__ forgot to
+            # stale/misconfigured source (e.g. its __init__ forgot to
             # `from .x import search`). It would otherwise sit in the registry
             # silently returning empty results, so make it visible.
             declares_mentions = isinstance(meta.get("mention_resources"), list)
             logger.warning(
-                "integration %r loaded but exposes no `search` capability%s — "
+                "mention source %r loaded but exposes no `search` capability%s — "
                 "its @-mentions will return nothing. Check its __init__.py "
                 "re-exports `search`.",
                 name,
                 " (it declares mention_resources)" if declares_mentions else "",
             )
         result.loaded.append(
-            LoadedIntegration(
-                name=name,
-                path=integration_dir,
-                meta=meta,
-                search=caps["search"],
-            )
+            LoadedSource(name=name, path=source_dir, meta=meta, search=caps["search"])
         )
     _state = result
     logger.info(
-        "integrations loaded: %d ok, %d failed", len(result.loaded), len(result.failed)
+        "mention sources loaded: %d ok, %d failed",
+        len(result.loaded), len(result.failed),
     )
     return result
 
 
-def load_one(name: str) -> LoadedIntegration:
-    """(Re)load a single integration and swap it into the registry."""
-    integration_dir = USER_INTEGRATIONS_DIR / name
-    mod = _import_integration(integration_dir)
-    entry = LoadedIntegration(
+def load_one(name: str) -> LoadedSource:
+    """(Re)load a single source and swap it into the registry."""
+    source_dir = USER_SOURCES_DIR / name
+    mod = _import_source(source_dir)
+    entry = LoadedSource(
         name=name,
-        path=integration_dir,
-        meta=_read_meta(integration_dir),
+        path=source_dir,
+        meta=_read_meta(source_dir),
         search=_capabilities(mod)["search"],
     )
     _state.loaded[:] = [e for e in _state.loaded if e.name != name]
@@ -194,18 +210,18 @@ def load_one(name: str) -> LoadedIntegration:
 
 
 def drop(name: str) -> bool:
-    """Remove an integration from the in-process registry."""
+    """Remove a source from the in-process registry."""
     before = len(_state.loaded)
     _state.loaded[:] = [e for e in _state.loaded if e.name != name]
     return len(_state.loaded) != before
 
 
 def mention_resources() -> List[Dict[str, Any]]:
-    """Flatten every loaded integration's ``mention_resources`` declarations.
+    """Flatten every loaded source's ``mention_resources`` declarations.
 
-    The composite ``key`` (``<integration>.<type>``) is what the ``@[key:...]``
-    token and the frontend provider registry key on. Tolerant of malformed
-    manifests — a bad entry is skipped, never fatal.
+    The composite ``key`` (``<source>.<type>``) is what the ``@[key:...]`` token
+    and the frontend provider registry key on. Tolerant of malformed manifests —
+    a bad entry is skipped, never fatal.
     """
     out: List[Dict[str, Any]] = []
     for entry in _state.loaded:
@@ -225,6 +241,8 @@ def mention_resources() -> List[Dict[str, Any]]:
             out.append(
                 {
                     "key": f"{entry.name}.{rtype}",
+                    # `source` is canonical; `integration` kept for older clients.
+                    "source": entry.name,
                     "integration": entry.name,
                     "type": rtype,
                     "label": decl.get("label") or f"{entry.name}.{rtype}",
@@ -236,7 +254,7 @@ def mention_resources() -> List[Dict[str, Any]]:
                         else []
                     ),
                     "serialize": serialize if isinstance(serialize, str) else "",
-                    "search": f"/integrations/{entry.name}/search?type={rtype}",
+                    "search": f"/mention-sources/{entry.name}/search?type={rtype}",
                     "group": group if isinstance(group, str) and group else entry.name,
                 }
             )

@@ -11,12 +11,12 @@ Sub-modules:
 - ``attachments``: ``/hermes/attachments*`` — upload/delete conversation
   attachments, persisted under
   ``<hermes_home>/hermes-x/inbox/<session>/``
-- ``integrations_gateway``: HTTP adapter over the ``hermes-x-plugin-
-  integrations`` registry — ``/integrations/<name>/search`` (calls the
-  integration's in-process ``search`` capability), ``/hermes/mention-
-  resources`` (flattened registry for the composer), and ``/hermes/
-  integrations*`` lifecycle admin (delegates to the integrations plugin's
-  manager). Degrades gracefully if that plugin isn't installed.
+- ``mention_sources_gateway``: HTTP adapter over the mention-source registry
+  (``runtime/mention_sources``) — ``/mention-sources/<name>/search`` (calls the
+  source's in-process ``search`` capability), ``/hermes/mention-resources``
+  (flattened registry for the composer), and ``/hermes/mention-sources*``
+  lifecycle admin (git install / update / remove). Degrades gracefully if the
+  framework is unavailable.
 - ``turn_metadata``: ``/hermes/turn-metadata`` — small in-memory TTL
   store for per-turn snapshots (browser tab freeze, etc.) that the
   agent's tool handlers fetch over loopback. Keeps out-of-band turn
@@ -37,7 +37,7 @@ from aiohttp import web
 from . import (
     attachments,
     cron,
-    integrations_gateway,
+    mention_sources_gateway,
     lifecycle,
     logs,
     plugins_routes,
@@ -54,7 +54,7 @@ def register(app: web.Application) -> None:
     settings.register(app)
     sessions.register(app)
     attachments.register(app)
-    integrations_gateway.register(app)
+    mention_sources_gateway.register(app)
     plugins_routes.register(app)
     lifecycle.register(app)
     logs.register(app)

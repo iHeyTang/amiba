@@ -3,12 +3,11 @@
 All routes live under the ``hermes_proxy`` lane — thin HTTP wrappers over
 Hermes core APIs (cron, sessions, model catalog, provider settings, memory,
 skills, attachment uploads) that the gateway doesn't expose itself, mounted at
-``/hermes/*``, plus the ``integrations_gateway`` adapter that serves
-``/integrations/<name>/search`` + ``/hermes/mention-resources`` + lifecycle
-admin by reading the integration registry in-process. The integration framework
-itself (loader / manager / skills wiring) lives in the backplane now
-(``runtime/integrations/``) — it used to be a separate hermes plugin; this lane
-just adapts its capabilities to HTTP.
+``/hermes/*``, plus the ``mention_sources_gateway`` adapter that serves
+``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` + lifecycle
+admin by reading the mention-source registry in-process. The framework itself
+(loader / manager / skills wiring) lives in ``runtime/mention_sources/``; this
+lane just adapts its ``search`` capability to HTTP.
 """
 
 from __future__ import annotations

@@ -1,11 +1,8 @@
 """HTTP application factory.
 
-Composes the backplane's HTTP surface from native feature lanes plus a
-single catch-all dispatcher for ``/integrations/<name>/*``. The
-dispatcher reads a runtime-mutable registry (see :mod:`runtime.api`),
-so register / replace / remove on integrations works at any time —
-boot, mid-flight, or post-tool-call — without re-touching the aiohttp
-Application.
+Composes the backplane's HTTP surface from native feature lanes (under
+``runtime/features``), including the ``mention_sources_gateway`` adapter that
+serves ``/mention-sources/<name>/search`` + ``/hermes/mention-resources``.
 """
 
 from __future__ import annotations
@@ -73,12 +70,10 @@ def build_http_app() -> web.Application:
     app.router.add_get("/health", _health_handler)
     register_native(app)
     register_gateway_proxy(app)
-    # ``/integrations/<name>/search`` + ``/hermes/mention-resources`` +
-    # lifecycle admin are served by the hermes_proxy ``integrations_gateway``
-    # adapter, which reads the (separately-installed) hermes-x-plugin-
-    # integrations registry in-process. No catch-all dispatcher and no
-    # integration loading happen here — integrations are loaded by their own
-    # plugin; the backplane only adapts them to HTTP.
+    # ``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` +
+    # lifecycle admin are served by the hermes_proxy ``mention_sources_gateway``
+    # adapter, which reads the in-process registry loaded at startup
+    # (``runtime.mention_sources``).
     app.router.add_route(
         "OPTIONS", "/{path_info:.*}", lambda _req: web.Response(status=204)
     )

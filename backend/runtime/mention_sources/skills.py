@@ -1,16 +1,14 @@
-"""Wire each installed integration's resolver skill into the agent.
+"""Wire each installed mention source's resolver skill into the agent.
 
-An integration is a cross-cutting bundle: a ``search`` capability the backplane
+A mention source is a cross-cutting bundle: a ``search`` capability the backplane
 serves to the composer (this package's :mod:`loader`) **and** a resolver skill
 the agent reads when a mentioned handle shows up in a turn. The composer half is
 served over HTTP here; the agent half is plain skill markdown under
-``~/.hermes/integrations/<name>/skills/``.
+``~/.hermes/mention-sources/<name>/skills/``.
 
 The agent discovers skills via ``skills.external_dirs`` in ``~/.hermes/
-config.yaml``. The backplane owns this wiring now (it used to be the
-integrations *plugin*'s job at gateway-load — but integrations are no longer a
-hermes plugin). We add each integration's ``skills/`` dir idempotently; the
-agent picks them up on its next start.
+config.yaml``. The backplane owns this wiring. We add each source's ``skills/``
+dir idempotently; the agent picks them up on its next start.
 """
 
 from __future__ import annotations
@@ -20,7 +18,7 @@ import os
 from pathlib import Path
 from typing import List
 
-from .loader import USER_INTEGRATIONS_DIR
+from .loader import USER_SOURCES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -28,23 +26,23 @@ _SKILLS_DIRNAME = "skills"
 
 
 def _collect_skills_dirs() -> List[Path]:
-    """Every installed integration's ``skills/`` dir that exists on disk."""
+    """Every installed source's ``skills/`` dir that exists on disk."""
     dirs: List[Path] = []
     try:
-        if USER_INTEGRATIONS_DIR.is_dir():
-            for entry in sorted(USER_INTEGRATIONS_DIR.iterdir()):
+        if USER_SOURCES_DIR.is_dir():
+            for entry in sorted(USER_SOURCES_DIR.iterdir()):
                 if not entry.is_dir() or entry.name.startswith("."):
                     continue
                 sk = (entry / _SKILLS_DIRNAME).resolve()
                 if sk.is_dir():
                     dirs.append(sk)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("Could not scan integration skills dirs: %s", exc)
+        logger.debug("Could not scan source skills dirs: %s", exc)
     return dirs
 
 
 def wire_skills_dirs() -> None:
-    """Idempotently add every integration's ``skills/`` dir to
+    """Idempotently add every source's ``skills/`` dir to
     ``skills.external_dirs`` so resolver skills enter the system-prompt index.
 
     Failures are swallowed + logged: a broken/managed config must not take the
@@ -82,7 +80,7 @@ def wire_skills_dirs() -> None:
             )
             return
 
-        hermes_home = USER_INTEGRATIONS_DIR.parent
+        hermes_home = USER_SOURCES_DIR.parent
         resolved_existing: set = set()
         for entry in existing:
             try:
@@ -108,6 +106,6 @@ def wire_skills_dirs() -> None:
         skills_section["external_dirs"] = existing
         config["skills"] = skills_section
         save_config(config)
-        logger.info("Added integration skills dirs to skills.external_dirs: %s", added)
+        logger.info("Added mention-source skills dirs to skills.external_dirs: %s", added)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to wire integration skills dirs into config.yaml: %s", exc)
+        logger.warning("Failed to wire mention-source skills dirs into config.yaml: %s", exc)
