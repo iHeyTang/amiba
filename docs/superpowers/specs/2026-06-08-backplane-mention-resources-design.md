@@ -53,7 +53,7 @@ its job.
    a publicly-installed one cannot).
 7. **Distribution — git-installable.** `hermes integration install` gains a
    git source so an integration can live as its own repo. `lark` becomes
-   `hermes-x-integration-lark` (repo creation/push is the operator's manual
+   `amiba-integration-lark` (repo creation/push is the operator's manual
    distribution step, per the ecosystem distribution phases).
 
 ## Architecture
@@ -196,11 +196,11 @@ core unchanged.
 - `tests/` — add coverage for aggregation, git-install, preset removal,
   external_dirs extension.
 
-**`hermes-x-integration-lark`** (new standalone package; repo push = operator)
+**`amiba-integration-lark`** (new standalone package; repo push = operator)
 - `integration.yaml` (+ `mention_resources`), `__init__.py`, `handler.py`
   (search dispatch on `type`), `lark_cli.py`, `skills/lark-resolve.md`.
 
-**`hermes-x` (TS monorepo)**
+**`amiba` (TS monorepo)**
 - `packages/ui/src/chat/composer/serialize.ts` — registry-driven decode.
 - `packages/ui/src/chat/composer/providers/` — generic registry provider
   builder; `types.ts` `MentionType` widened to `string` for registry keys.
@@ -239,15 +239,15 @@ HTTP entirely.
 ```
 hermes-agent plugin system
   ▲ register(ctx)
-hermes-x-plugin-integrations   = the integration protocol + `hermes integration`
+amiba-plugin-integrations   = the integration protocol + `hermes integration`
                                  CLI + loader + in-process capability registry +
                                  resolver-skill external_dirs wiring. NO HTTP.
   ▲ integration protocol (search + manifest + skill)
-~/.hermes/integrations/<name>/  e.g. hermes-x-integration-lark
+~/.hermes/integrations/<name>/  e.g. amiba-integration-lark
                                  = async search(rtype,q,limit)->{ok,items} +
                                    integration.yaml(mention_resources) + skills/
 
-hermes-x-plugin-http-backplane = pure HTTP adapter. /hermes/* (compat over core)
+amiba-plugin-http-backplane = pure HTTP adapter. /hermes/* (compat over core)
                                  + integrations_gateway: /integrations/<name>/search
                                  (calls the integration's in-process search),
                                  /hermes/mention-resources, /hermes/integrations*
@@ -272,7 +272,7 @@ known `search` capability). This is intentional — it sharpens the boundary:
 capability-shaped → integration; needs bespoke HTTP / tools / hooks → a full
 Hermes plugin.
 
-**Repo deltas:** new `hermes-x-plugin-integrations` (loader/manager/cli/registry
+**Repo deltas:** new `amiba-plugin-integrations` (loader/manager/cli/registry
 + integration-management skill); backplane loses `runtime/api.py`,
 `runtime/dispatch.py`, `cli.py`, `runtime/features/integrations/`,
 `integrations_admin`, `mention_resources`, and gains

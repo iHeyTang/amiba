@@ -3,7 +3,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "../primitives";
 import { Button } from "../primitives";
 import { Switch } from "../primitives";
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 
 interface ListItem {
   id: string;

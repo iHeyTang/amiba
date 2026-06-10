@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermes-x-backplane"
+name = "amiba-backplane"
 version = "0.1.0"
-description = "Local HTTP backend server for hermes-x desktop (standalone; not a hermes plugin) — hosts /hermes/* + /integrations/{name}/* and reverse-proxies /v1/* to the gateway."
+description = "Local HTTP backend server for amiba desktop (standalone; not a hermes plugin) — hosts /hermes/* + /integrations/{name}/* and reverse-proxies /v1/* to the gateway."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -27,15 +27,15 @@ dev = [
 # standalone HTTP server desktop spawns + supervises — see __init__.py.
 
 [project.scripts]
-hermes-x-backplane = "hermes_x_backplane.runtime.server:main"
+amiba-backplane = "amiba_backplane.runtime.server:main"
 
-# src-layout: the package is backend/hermes_x_backplane/, so subpackages are
+# src-layout: the package is backend/amiba_backplane/, so subpackages are
 # AUTO-DISCOVERED — no hand-maintained list to drift (a stale list used to ship
 # an incomplete tree and crash the server at import).
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["hermes_x_backplane*"]
+include = ["amiba_backplane*"]
 
 # Non-Python data shipped inside packages (the agent-facing management skill).
 [tool.setuptools.package-data]
-"hermes_x_backplane.runtime.mention_sources" = ["management_skill/*.md"]
+"amiba_backplane.runtime.mention_sources" = ["management_skill/*.md"]

@@ -2,8 +2,8 @@ import { History, Plus, Settings as SettingsIcon, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../primitives";
-import { useT } from "@hermes-x/i18n";
-import type { SessionMeta } from "@hermes-x/core";
+import { useT } from "@amiba/i18n";
+import type { SessionMeta } from "@amiba/core";
 import { cn } from "../primitives";
 import { ChannelChip } from "./internal/ChannelChip";
 

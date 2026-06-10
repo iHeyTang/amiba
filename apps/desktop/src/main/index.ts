@@ -12,9 +12,9 @@ import {
   shell,
   systemPreferences,
 } from "electron"
-import { setPlatform } from "@hermes-x/platform"
-import { getHermesSession, listHermesSessions } from "@hermes-x/core"
-import { bootMainExtensionHost, registerExtHttpChannel } from "@hermes-x/extension-host/main"
+import { setPlatform } from "@amiba/platform"
+import { getHermesSession, listHermesSessions } from "@amiba/core"
+import { bootMainExtensionHost, registerExtHttpChannel } from "@amiba/extension-host/main"
 import { startExtHttpServer } from "./ext-http-server"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
@@ -69,15 +69,15 @@ const IS_MAC = process.platform === "darwin"
 
 /**
  * Return the absolute path to the extensions root directory (where marketplace
- * installs land). The env override HERMES_X_DEV_EXTENSIONS_PATH is still
- * honoured so `HERMES_X_DEV_EXTENSIONS_PATH=... pnpm dev:desktop` can test
+ * installs land). The env override AMIBA_DEV_EXTENSIONS_PATH is still
+ * honoured so `AMIBA_DEV_EXTENSIONS_PATH=... pnpm dev:desktop` can test
  * marketplace-style installs against a custom directory.
  *
  * The directory is created if it does not yet exist.
  */
 function getExtensionsRoot(): string {
   const dir =
-    process.env.HERMES_X_DEV_EXTENSIONS_PATH ??
+    process.env.AMIBA_DEV_EXTENSIONS_PATH ??
     join(app.getPath("userData"), "extensions")
   mkdirSync(dir, { recursive: true })
   return dir
@@ -388,7 +388,7 @@ function createWindow() {
 }
 
 // Single-instance lock. Without this, win/linux protocol launches
-// (`hermes-x://...` from the OS) spawn a fresh Electron process every
+// (`amiba://...` from the OS) spawn a fresh Electron process every
 // time — the second copy has no hotkey, no chat engine, no shared
 // store. With the lock held, every retry funnels through the
 // `second-instance` event on the original process, which is exactly
@@ -397,7 +397,7 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   // Another Hermes instance already owns this user's session — its
   // `second-instance` handler will pick up our argv (including any
-  // hermes-x:// URL) and surface the prompt over there. Bail.
+  // amiba:// URL) and surface the prompt over there. Bail.
   app.quit()
 } else {
   attachSecondInstanceHandler(summonWindow)
@@ -499,7 +499,7 @@ if (!gotSingleInstanceLock) {
       },
       // Backs host.hermes.getSession for extensions. Goes through the
       // backplane (`/hermes/sessions/{id}` reverse-proxies upstream
-      // `/api/sessions/{id}`), with auth already wired by the @hermes-x/core
+      // `/api/sessions/{id}`), with auth already wired by the @amiba/core
       // wrapper. Returns null on 404 / network failure / non-200 so the
       // extension treats "no data" and "unreachable" the same way.
       getSession: async (sessionId: string) => {
@@ -557,7 +557,7 @@ if (!gotSingleInstanceLock) {
           const img = nativeImage.createFromPath(iconPath())
           if (!img.isEmpty()) app.dock!.setIcon(img)
         } catch (err) {
-          console.warn("[hermes-x] dock icon load failed:", err)
+          console.warn("[amiba] dock icon load failed:", err)
         }
       }
       pinDockIcon()
@@ -587,7 +587,7 @@ if (!gotSingleInstanceLock) {
     // pendingPrompt.
     void startHotkeyManager(summonQuickAskFromHotkey, summonWindow)
 
-    // External entry points: OS-level `hermes-x://` URLs and the local
+    // External entry points: OS-level `amiba://` URLs and the local
     // Unix socket inbox. Both write `home.pendingPrompt` and summon the
     // window; the renderer's existing watcher routes to chat.
     registerProtocolHandler(summonWindow)

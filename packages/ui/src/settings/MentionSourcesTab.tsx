@@ -4,11 +4,11 @@ import {
   removeMentionSource,
   updateMentionSource,
   type MentionSourceInfo,
-} from "@hermes-x/core"
+} from "@amiba/core"
 import { RefreshCw, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
-import { useT } from "@hermes-x/i18n"
+import { useT } from "@amiba/i18n"
 import { Button, Input, cn } from "../primitives"
 
 type State =

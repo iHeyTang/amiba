@@ -14,7 +14,7 @@ import {
   type StreamEvent,
   type StreamedToolCall,
   type SubmitPayload
-} from "@hermes-x/core"
+} from "@amiba/core"
 import { BrowserWindow, ipcMain } from "electron"
 
 import { sendToNotifier } from "../notifier-window"
@@ -179,7 +179,7 @@ async function handleSubmit(payload: SubmitPayload) {
   // INSERT-OR-IGNORE and caches per-process so the cost is one round-trip
   // per new id over the lifetime of the main process.
   //
-  // Every local hermes-x submit — main window, Quick-Ask, and the
+  // Every local amiba submit — main window, Quick-Ask, and the
   // extension — writes the same canonical "local" source; the optional
   // ``source`` on SubmitPayload is a future-proofing hook for surfaces
   // that genuinely warrant their own channel, not used today.

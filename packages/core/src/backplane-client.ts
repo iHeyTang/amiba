@@ -12,7 +12,7 @@
  * reverse-proxies those to the Hermes gateway internally).
  */
 
-import { getPlatform } from "@hermes-x/platform"
+import { getPlatform } from "@amiba/platform"
 
 import { BACKPLANE_HTTP_BASE, BACKPLANE_KEY_STORAGE_KEY } from "./config"
 

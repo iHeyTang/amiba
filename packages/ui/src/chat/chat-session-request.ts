@@ -38,8 +38,8 @@ import {
   HOME_PENDING_PROMPT_KEY,
   useSessions,
   type SessionsController,
-} from "@hermes-x/core"
-import { getPlatform } from "@hermes-x/platform"
+} from "@amiba/core"
+import { getPlatform } from "@amiba/platform"
 
 import type { PendingPromptAttachment } from "./internal/capabilities"
 

@@ -1,5 +1,5 @@
 {
-  "name": "@hermes-x/tailwind-preset",
+  "name": "@amiba/tailwind-preset",
   "version": "0.1.0",
   "description": "Shared Tailwind preset — shadcn HSL color tokens, radius, font stack, darkMode class strategy.",
   "main": "index.js",

@@ -23,8 +23,8 @@ import {
   resolveChannel,
   SOURCE_LOCAL,
   type SessionMeta,
-} from "@hermes-x/core";
-import { useT, type MessageKey } from "@hermes-x/i18n";
+} from "@amiba/core";
+import { useT, type MessageKey } from "@amiba/i18n";
 import { Input, cn } from "../primitives";
 import {
   ResizableSectionList,

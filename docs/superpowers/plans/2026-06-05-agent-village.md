@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** A hermes-x desktop extension (`io.hermes.agent-village`) that renders a Stardew-Valley-style pixel "village" showing what the current agent (and its sub-agents) are doing in real time, plus a pixel-styled stats panel.
+**Goal:** A amiba desktop extension (`io.hermes.agent-village`) that renders a Stardew-Valley-style pixel "village" showing what the current agent (and its sub-agents) are doing in real time, plus a pixel-styled stats panel.
 
 **Architecture:** Clean split between **"算什么" (main-side logic, unit-tested)** and **"怎么画" (PixiJS renderer, consumes WorldState)**. Main subscribes to `host.chat.onEvent` (live main-agent activity) + polls `host.hermes.listSessions()` (village population incl. parent/child sub-agents), synthesizes a `WorldState`, and exposes it + aggregated `VillageStats` via IPC. The webview polls (~800ms; pauses on `document.hidden`), a PixiJS ticker tweens villagers toward their target stations. **v1 art = procedural placeholder graphics** (Pixi `Graphics`, zero external assets) behind an `assets-manifest` seam so CC0 sprite packs can drop in later.
 
-**Tech Stack:** TypeScript, React 18, PixiJS ^8 (bundled into the UI), `@hermes-x/ui` (Heatmap/ChipSwitcher/Button/ScrollArea/cn — available in-monorepo via `workspace:*`), vitest, Vite (main+ui), Tailwind preset.
+**Tech Stack:** TypeScript, React 18, PixiJS ^8 (bundled into the UI), `@amiba/ui` (Heatmap/ChipSwitcher/Button/ScrollArea/cn — available in-monorepo via `workspace:*`), vitest, Vite (main+ui), Tailwind preset.
 
 **Branch:** `feat/agent-village` (rebased onto current `main` with WS1+WS2). **Spec:** `docs/superpowers/specs/2026-06-05-agent-village-design.md`.
 
@@ -63,7 +63,7 @@ extensions/agent-village/
 Create `extensions/agent-village/` with these files, copied from `extensions/tool-meter/` and adjusted:
 - `tsconfig.json` — IDENTICAL to tool-meter's.
 - `postcss.config.cjs`, `tailwind.config.cjs` — IDENTICAL to tool-meter's.
-- `vite.main.config.ts` — IDENTICAL to tool-meter's (lib cjs → dist/main.cjs; external electron/@hermes-x/node).
+- `vite.main.config.ts` — IDENTICAL to tool-meter's (lib cjs → dist/main.cjs; external electron/@amiba/node).
 - `vite.ui.config.ts` — like tool-meter's BUT add a second rollup input for `settings` (so both `main` and `settings` HTML entries build, mirroring how knowledge-base does two UI entries). Inputs: `main: src/ui/main/index.html`, `settings: src/ui/settings/index.html`.
 - `src/shared/hermes-bridge.ts` — IDENTICAL to tool-meter's (typed `window.hermes`).
 - `src/shared/i18n.ts` — IDENTICAL to tool-meter's (useT/useTheme reading catalogs + hermes.on).
@@ -75,29 +75,29 @@ Create `extensions/agent-village/package.json`:
 
 ```json
 {
-  "name": "@hermes-x/ext-agent-village",
+  "name": "@amiba/ext-agent-village",
   "version": "0.1.0",
   "private": true,
-  "description": "Stardew-Valley-style live agent activity village for hermes-x.",
+  "description": "Stardew-Valley-style live agent activity village for amiba.",
   "main": "dist/main.cjs",
   "exports": { ".": { "main": "./dist/main.cjs" }, "./manifest.json": "./manifest.json" },
   "scripts": {
     "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.ui.config.ts",
-    "dev": "hermes-x-ext dev",
-    "pack": "hermes-x-ext pack",
+    "dev": "amiba-ext dev",
+    "pack": "amiba-ext pack",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@hermes-x/extension-api": "workspace:*",
-    "@hermes-x/ui": "workspace:*",
+    "@amiba/extension-api": "workspace:*",
+    "@amiba/ui": "workspace:*",
     "lucide-react": "^0.460.0",
     "pixi.js": "^8.5.0"
   },
   "peerDependencies": { "electron": "*", "react": "^18.0.0", "react-dom": "^18.0.0" },
   "devDependencies": {
-    "@hermes-x/extension-cli": "workspace:*",
-    "@hermes-x/tailwind-preset": "workspace:*",
+    "@amiba/extension-cli": "workspace:*",
+    "@amiba/tailwind-preset": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
@@ -121,7 +121,7 @@ Create `extensions/agent-village/package.json`:
   "name": "Agent Village",
   "version": "0.1.0",
   "apiVersion": 1,
-  "engines": { "hermes-x": "^0.1.0" },
+  "engines": { "amiba": "^0.1.0" },
   "entries": { "main": "dist/main.cjs" },
   "contributes": {
     "main": {
@@ -147,7 +147,7 @@ Create minimal `src/ui/main/{index.html,main.tsx,App.tsx}` and `src/ui/settings/
 
 - [ ] **Step 5: Install + build**
 
-Run: `pnpm install` (repo root; picks up pixi.js + the new workspace package), then `pnpm -F @hermes-x/ext-agent-village build` and `pnpm -F @hermes-x/ext-agent-village typecheck`.
+Run: `pnpm install` (repo root; picks up pixi.js + the new workspace package), then `pnpm -F @amiba/ext-agent-village build` and `pnpm -F @amiba/ext-agent-village typecheck`.
 Expected: install succeeds (pixi.js fetched), build emits `dist/main.cjs` + `dist/ui/main/index.html` + `dist/ui/settings/index.html`, tsc exit 0.
 
 - [ ] **Step 6: Commit**
@@ -202,7 +202,7 @@ describe("toolToActivity", () => {
 })
 ```
 
-- [ ] **Step 2: Run → FAIL.** `pnpm -F @hermes-x/ext-agent-village exec vitest run __tests__/activity-map.test.ts`.
+- [ ] **Step 2: Run → FAIL.** `pnpm -F @amiba/ext-agent-village exec vitest run __tests__/activity-map.test.ts`.
 
 - [ ] **Step 3: Implement `src/shared/types.ts`:**
 
@@ -287,7 +287,7 @@ export function toolToActivity(tool: string | undefined): AgentActivity {
 }
 ```
 
-- [ ] **Step 5: Run → PASS.** Same vitest command. Then `pnpm -F @hermes-x/ext-agent-village typecheck` (exit 0).
+- [ ] **Step 5: Run → PASS.** Same vitest command. Then `pnpm -F @amiba/ext-agent-village typecheck` (exit 0).
 
 - [ ] **Step 6: Commit** — `feat(ext/agent-village): WorldState/VillageStats types + tool→activity map (tested)`.
 
@@ -479,7 +479,7 @@ describe("buildStatsFromSessions", () => {
   - `host.ipc.expose("village.stats", async () => { const sessions = await host.hermes.listSessions({ limit: 200 }); const base = buildStatsFromSessions(sessions, Date.now()); const events = await readRecentDays(host, 14); return { ...base, generatedAt: Date.now(), byTool: aggregateByTool(events), recentLog: recentLog(events, 30) } })`.
   - Guard the active-session id: if `liveMain.sessionId` is still undefined (no event yet), fall back to the most-recently-active top-level session from `listSessions` so the village isn't empty on first open.
 
-- [ ] **Step 2: Typecheck + build** — `pnpm -F @hermes-x/ext-agent-village typecheck` (exit 0); `pnpm -F @hermes-x/ext-agent-village build` (main.cjs emitted). Run the suite: `pnpm -F @hermes-x/ext-agent-village test` (Tasks 2-5 tests still pass).
+- [ ] **Step 2: Typecheck + build** — `pnpm -F @amiba/ext-agent-village typecheck` (exit 0); `pnpm -F @amiba/ext-agent-village build` (main.cjs emitted). Run the suite: `pnpm -F @amiba/ext-agent-village test` (Tasks 2-5 tests still pass).
 
 - [ ] **Step 3: Commit** — `feat(ext/agent-village): main runner wires events + listSessions to village.world/stats IPC`.
 
@@ -505,15 +505,15 @@ describe("buildStatsFromSessions", () => {
 
 ---
 
-## Task 8: Stats panel (DOM, @hermes-x/ui)
+## Task 8: Stats panel (DOM, @amiba/ui)
 
-**Files:** `src/ui/stats/StatsPanel.tsx`. Mirror `extensions/tool-meter/src/ui/main/App.tsx`'s vocabulary (Section/HeroCard/SparkBar/ToolRow + `Heatmap` from `@hermes-x/ui`).
+**Files:** `src/ui/stats/StatsPanel.tsx`. Mirror `extensions/tool-meter/src/ui/main/App.tsx`'s vocabulary (Section/HeroCard/SparkBar/ToolRow + `Heatmap` from `@amiba/ui`).
 
 - [ ] **Step 1: Implement `StatsPanel({ stats }: { stats: VillageStats | null })`** — Hero trio (active agents / today calls / today cost), an in-scene roster is separate (Task 9); here: trend SparkBars, by-tool ToolRows, `<Heatmap cells={stats.heatmap} .../>`, and a "village log" list of `recentLog` (`{emoji} {tool} {durationMs}ms`). Label the by-tool section "desktop-session tools" per spec §6 caveat. Use `useT`/`useTheme` from shared.
 
-- [ ] **Step 2: Typecheck + build** (exit 0). Confirm `@hermes-x/ui` exports `Heatmap`, `ScrollArea`, `Button`, `cn` resolve.
+- [ ] **Step 2: Typecheck + build** (exit 0). Confirm `@amiba/ui` exports `Heatmap`, `ScrollArea`, `Button`, `cn` resolve.
 
-- [ ] **Step 3: Commit** — `feat(ext/agent-village): pixel-styled stats panel (reuses @hermes-x/ui Heatmap)`.
+- [ ] **Step 3: Commit** — `feat(ext/agent-village): pixel-styled stats panel (reuses @amiba/ui Heatmap)`.
 
 ---
 
@@ -527,7 +527,7 @@ describe("buildStatsFromSessions", () => {
 
 - [ ] **Step 3: i18n** — fill `en.json` + `zh-CN.json` with the labels used (title, hero labels, section titles, settings labels, activity names). Keys parallel in both.
 
-- [ ] **Step 4: Full build + typecheck + tests** — `pnpm -F @hermes-x/ext-agent-village build && pnpm -F @hermes-x/ext-agent-village typecheck && pnpm -F @hermes-x/ext-agent-village test`. All green; `dist/ui/main/index.html` + `dist/ui/settings/index.html` emitted.
+- [ ] **Step 4: Full build + typecheck + tests** — `pnpm -F @amiba/ext-agent-village build && pnpm -F @amiba/ext-agent-village typecheck && pnpm -F @amiba/ext-agent-village test`. All green; `dist/ui/main/index.html` + `dist/ui/settings/index.html` emitted.
 
 - [ ] **Step 5: Commit** — `feat(ext/agent-village): compose scene+stats, polling loop, settings page, i18n`.
 
@@ -539,7 +539,7 @@ describe("buildStatsFromSessions", () => {
 
 - [ ] **Step 1:** Create `assets/CREDITS.md` documenting: v1 uses procedural placeholder art (no third-party assets); when CC0 sprite packs are added, log each here with source + license (CC0/Kenney etc.); star­dew本体素材 forbidden. (No binary assets shipped in v1.)
 
-- [ ] **Step 2: Whole-extension verify** — from repo root: `pnpm -F @hermes-x/ext-agent-village test && pnpm -F @hermes-x/ext-agent-village typecheck && pnpm -F @hermes-x/ext-agent-village build`. Also confirm the monorepo still builds the other extensions: `pnpm -F @hermes-x/extension-host test` (unaffected). `git status` clean (dist ignored).
+- [ ] **Step 2: Whole-extension verify** — from repo root: `pnpm -F @amiba/ext-agent-village test && pnpm -F @amiba/ext-agent-village typecheck && pnpm -F @amiba/ext-agent-village build`. Also confirm the monorepo still builds the other extensions: `pnpm -F @amiba/extension-host test` (unaffected). `git status` clean (dist ignored).
 
 - [ ] **Step 3: Commit** — `docs(ext/agent-village): asset credits + placeholder-art note`.
 
@@ -547,7 +547,7 @@ describe("buildStatsFromSessions", () => {
 
 ## Final Verification & Self-Review
 
-- [ ] **Build/test gate:** `pnpm -F @hermes-x/ext-agent-village test` (all unit suites pass), `typecheck` exit 0, `build` emits main.cjs + both UI entries.
+- [ ] **Build/test gate:** `pnpm -F @amiba/ext-agent-village test` (all unit suites pass), `typecheck` exit 0, `build` emits main.cjs + both UI entries.
 - [ ] **Pixi v8 sanity:** scene compiles against pixi.js ^8 (Application.init async, Graphics chainable API).
 - [ ] **Honest status (for the report):** logic unit-tested + builds green; **art is placeholder**, **visual/runtime verification pending the user running the desktop app** (`pnpm dev:desktop`, open the Village activity item).
 

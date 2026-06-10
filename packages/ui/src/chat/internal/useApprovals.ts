@@ -7,7 +7,7 @@ import {
   type ChatEngineClient,
   type HermesApprovalDecision,
   type HermesApprovalRequest,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 import type { UiMessage } from "./types";
 

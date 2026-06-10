@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type HTMLAttributes } from "react";
-import { getPlatform } from "@hermes-x/platform";
-import { useSessions } from "@hermes-x/core";
+import { getPlatform } from "@amiba/platform";
+import { useSessions } from "@amiba/core";
 
 /**
  * "Workspace binding" is the desktop-only feature where the user

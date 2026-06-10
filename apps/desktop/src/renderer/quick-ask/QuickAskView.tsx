@@ -33,16 +33,16 @@
  * by the main-process chat engine, so Quick-Ask conversations show up in
  * the main window's history drawer alongside everything else.
  */
-import { useSessions } from "@hermes-x/core"
-import { useResolvedTheme } from "@hermes-x/ui"
-import { ChatSurface } from "@hermes-x/ui"
-import { cn } from "@hermes-x/ui"
+import { useSessions } from "@amiba/core"
+import { useResolvedTheme } from "@amiba/ui"
+import { ChatSurface } from "@amiba/ui"
+import { cn } from "@amiba/ui"
 import type {
   PendingPromptResult,
   ChatSurfaceCapabilities,
-} from "@hermes-x/ui"
-import { useT } from "@hermes-x/i18n"
-import { getPlatform } from "@hermes-x/platform"
+} from "@amiba/ui"
+import { useT } from "@amiba/i18n"
+import { getPlatform } from "@amiba/platform"
 import { Clock, X } from "lucide-react"
 import {
   useCallback,

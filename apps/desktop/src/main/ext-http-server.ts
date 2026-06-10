@@ -8,7 +8,7 @@
 import http from "node:http"
 import fs from "node:fs"
 import path from "node:path"
-import { findEntry } from "@hermes-x/extension-host/main"
+import { findEntry } from "@amiba/extension-host/main"
 
 // ---------------------------------------------------------------------------
 // MIME map — intentionally minimal; default is application/octet-stream.

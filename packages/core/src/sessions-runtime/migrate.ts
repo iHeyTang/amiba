@@ -34,8 +34,8 @@
  * until migration completes).
  */
 
-import { getPlatform } from "@hermes-x/platform";
-import { shortId } from "@hermes-x/utils";
+import { getPlatform } from "@amiba/platform";
+import { shortId } from "@amiba/utils";
 
 import {
   appendHermesMessage,
@@ -54,7 +54,7 @@ import {
 
 // Legacy ``chrome.storage.local`` data only ever existed inside the
 // browser extension — migrated rows are tagged with the unified
-// ``local`` source like everything else hermes-x writes. (In practice
+// ``local`` source like everything else amiba writes. (In practice
 // the desktop app never has this data; the migration is a no-op
 // there.)
 const SOURCE_TAG = SOURCE_LOCAL;

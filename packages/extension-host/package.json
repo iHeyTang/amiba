@@ -1,8 +1,8 @@
 {
-  "name": "@hermes-x/extension-host",
+  "name": "@amiba/extension-host",
   "version": "0.1.0",
   "private": true,
-  "description": "Loader, registry, and host APIs for hermes-x desktop extensions.",
+  "description": "Loader, registry, and host APIs for amiba desktop extensions.",
   "main": "src/main/index.ts",
   "types": "src/main/index.ts",
   "exports": {
@@ -17,8 +17,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@hermes-x/extension-api": "workspace:*",
-    "@hermes-x/i18n": "workspace:*",
+    "@amiba/extension-api": "workspace:*",
+    "@amiba/i18n": "workspace:*",
     "tar": "^7.0.0"
   },
   "peerDependencies": {

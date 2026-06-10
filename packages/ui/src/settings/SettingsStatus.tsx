@@ -23,7 +23,7 @@ import {
   getHermesStatus,
   restartHermesGateway,
   updateHermes,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 const STATUS_POLL_MS = 10_000;
 const ACTION_POLL_MS = 1_000;
@@ -34,9 +34,9 @@ const ACTION_POLL_MS = 1_000;
  * shouldn't be translated.
  */
 const INSTALL_COMMANDS = [
-  "hermes plugins install iHeyTang/hermes-x-plugin-browser-tools",
+  "hermes plugins install amiba-desktop/amiba-plugin-browser-tools",
   "hermes gateway                  # Hermes agent (chat / LLM / tools)",
-  "hermes-x-backplane --port 9394  # local backend on :9394 (the desktop app spawns this for you)",
+  "amiba-backplane --port 9394  # local backend on :9394 (the desktop app spawns this for you)",
 ];
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -121,7 +121,7 @@ function OnboardingGate({
           Backplane 没连上
         </h3>
         <p className="text-xs text-muted-foreground">
-          需要本地 Hermes Agent + backplane server(`hermes-x-backplane`)跑起来,外加
+          需要本地 Hermes Agent + backplane server(`amiba-backplane`)跑起来,外加
           browser-tools 插件。桌面版会自动配置;手动设置按下面三步:
         </p>
       </div>

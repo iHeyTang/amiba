@@ -12,7 +12,7 @@
     "apiVersion": { "type": "integer", "minimum": 1 },
     "engines": {
       "type": "object",
-      "properties": { "hermes-x": { "type": "string" } },
+      "properties": { "amiba": { "type": "string" } },
       "additionalProperties": false
     },
     "entries": {

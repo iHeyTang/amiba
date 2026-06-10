@@ -18,7 +18,7 @@ import {
   type HermesApprovalRequest,
   type HermesToolProgress,
 } from "~lib/chat/hermes-client";
-import { shortId } from "@hermes-x/utils";
+import { shortId } from "@amiba/utils";
 
 import { state as bgState } from "../state";
 import { broadcast } from "./port";

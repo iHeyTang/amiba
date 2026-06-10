@@ -1,6 +1,6 @@
 # HTTP API Parity — backplane plugin vs. Hermes Agent dashboard
 
-跟踪本插件 (`hermes-x-backplane`) 的 `/hermes/*` HTTP 表面，
+跟踪本插件 (`amiba-backplane`) 的 `/hermes/*` HTTP 表面，
 对比 Hermes Agent 官方 dashboard 服务的 `/api/*` 表面，记录三类状态：
 
 - **A. 共有 (aligned)** —— 双方都有；payload + method 需要严格对齐，
@@ -246,7 +246,7 @@ grep -nE '^@app\.(get|post|put|delete|patch|websocket)' \
 | | `POST /hermes/integrations/reload?name=` | no | 同上 |
 | | `DELETE /hermes/integrations/{name}` | no | 同上 |
 | Mention resources | `GET /hermes/mention-resources` | no | 聚合各集成 `mention_resources` 声明，供 composer 的 `@` 提及（这个插件独有） |
-| Integrations gateway | `GET /integrations/{name}/search` | no | 进程内调集成的 `search` 能力（hermes-x-plugin-integrations 提供），适配成 HTTP |
+| Integrations gateway | `GET /integrations/{name}/search` | no | 进程内调集成的 `search` 能力（amiba-plugin-integrations 提供），适配成 HTTP |
 
 ---
 

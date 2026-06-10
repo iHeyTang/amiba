@@ -5,23 +5,23 @@ How to ship a new version of the Hermes Browser Extension.
 Distribution model: **GitHub Releases sideload** — the extension source lives
 here in the monorepo (`apps/browser-extension`, built with Plasmo); the built
 `.zip` is published as a GitHub Release on the dedicated distribution repo
-[`iHeyTang/hermes-x-browser-extension`](https://github.com/iHeyTang/hermes-x-browser-extension).
+[`amiba-desktop/amiba-browser-extension`](https://github.com/amiba-desktop/amiba-browser-extension).
 The GitHub Pages download page at
-`https://iheytang.github.io/hermes-x-browser-extension/` auto-picks up the
+`https://iheytang.github.io/amiba-browser-extension/` auto-picks up the
 latest release via the GitHub Releases API. No Chrome Web Store submission —
 that path is deferred until / if we ever want it.
 
 ## Cutting a release
 
-All steps run from the **monorepo root** (`iHeyTang/hermes-x`):
+All steps run from the **monorepo root** (`amiba-desktop/amiba`):
 
 ```bash
 # 1. Bump version in the browser-extension package.json
 $EDITOR apps/browser-extension/package.json   # change "version": "X.Y.Z"
 
 # 2. Build + package
-pnpm -F @hermes-x/browser-extension build
-pnpm -F @hermes-x/browser-extension package
+pnpm -F @amiba/browser-extension build
+pnpm -F @amiba/browser-extension package
 # Produces the packaged zip (check pnpm output for exact path).
 # If `package` is not a defined script, zip manually:
 #   cd apps/browser-extension/build/chrome-mv3-prod
@@ -34,13 +34,13 @@ git push origin main vX.Y.Z
 
 # 4. Publish the zip as a GitHub Release on the dist repo
 gh release create vX.Y.Z apps/browser-extension/build/hermes-extension-vX.Y.Z.zip \
-  -R iHeyTang/hermes-x-browser-extension \
+  -R amiba-desktop/amiba-browser-extension \
   --title "Hermes Browser Extension vX.Y.Z" \
   --generate-notes
 ```
 
 When step 4 completes, the release is at
-`https://github.com/iHeyTang/hermes-x-browser-extension/releases/tag/vX.Y.Z`
+`https://github.com/amiba-desktop/amiba-browser-extension/releases/tag/vX.Y.Z`
 with `hermes-extension-vX.Y.Z.zip` attached. The download page
 auto-picks it up on next page-load (it queries the GitHub Releases API).
 
@@ -48,7 +48,7 @@ auto-picks it up on next page-load (it queries the GitHub Releases API).
 
 ```bash
 # Download the asset just published
-gh release download vX.Y.Z -p '*.zip' -R iHeyTang/hermes-x-browser-extension
+gh release download vX.Y.Z -p '*.zip' -R amiba-desktop/amiba-browser-extension
 unzip hermes-extension-vX.Y.Z.zip -d /tmp/hermes-ext-test
 
 # Load in Chrome
@@ -59,7 +59,7 @@ unzip hermes-extension-vX.Y.Z.zip -d /tmp/hermes-ext-test
 ```
 
 If smoke test fails, the right move is **delete the GitHub release** on the
-dist repo (`iHeyTang/hermes-x-browser-extension`), fix the source here,
+dist repo (`amiba-desktop/amiba-browser-extension`), fix the source here,
 bump to the next patch version, and re-tag — Chrome users who already
 downloaded won't auto-update without manual action anyway, so a yanked zip
 just stops new installs.
@@ -78,7 +78,7 @@ Output: `apps/browser-extension/hermes-extension-dev.zip` (about 7 MB).
 ## Future: swap to a self-hosted artifact registry
 
 The download page reads its release source from a single config block at
-the top of the dist repo's [`docs/index.html`](https://github.com/iHeyTang/hermes-x-browser-extension/blob/main/docs/index.html).
+the top of the dist repo's [`docs/index.html`](https://github.com/amiba-desktop/amiba-browser-extension/blob/main/docs/index.html).
 To point users at your own host instead of GitHub Releases:
 
 1. Set up your registry to serve a `latest.json` manifest like:

@@ -32,10 +32,10 @@ import {
   useSessions,
   type ChatEngineClient,
   type SessionMeta,
-} from "@hermes-x/core";
+} from "@amiba/core";
 import type { TriggerProvider } from "./composer/providers/types";
-import { useT } from "@hermes-x/i18n";
-import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
+import { useT } from "@amiba/i18n";
+import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
@@ -52,7 +52,7 @@ import { ToolsView } from "../tools/ToolsView";
 import {
   ExtensionWebView,
   useExtensionMains,
-} from "@hermes-x/extension-host/renderer";
+} from "@amiba/extension-host/renderer";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -325,7 +325,7 @@ function FullScreenChatViewInner({
     externalTitleOverride ||
     activeCronTitle ||
     activeChatTitle ||
-    "Hermes X";
+    "Amiba";
 
   useEffect(() => {
     let cancelled = false;

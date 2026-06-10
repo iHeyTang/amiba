@@ -2,7 +2,7 @@ const path = require("path")
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  presets: [require("@hermes-x/tailwind-preset")],
+  presets: [require("@amiba/tailwind-preset")],
   content: [
     "./src/renderer/**/*.{ts,tsx,html}",
     path.join(__dirname, "../../packages/ui/src/**/*.{ts,tsx}"),

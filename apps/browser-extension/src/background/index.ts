@@ -564,7 +564,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Side-panel attachment cleanup → backplane HTTP.
     //
     // Uploads, deletes, and per-session purges all hit the same lane
-    // (`/hermes/attachments*` on hermes-x-plugin-http-backplane). The WS bridge no
+    // (`/hermes/attachments*` on amiba-plugin-http-backplane). The WS bridge no
     // longer carries `attachment.*` messages — that responsibility lives
     // entirely on the HTTP backplane plugin now.
     // ---------------------------------------------------------------------

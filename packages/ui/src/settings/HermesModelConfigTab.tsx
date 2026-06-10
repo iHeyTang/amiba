@@ -15,7 +15,7 @@ import { Button } from "../primitives";
 import { Input } from "../primitives";
 import { Label } from "../primitives";
 import { ScrollArea } from "../primitives";
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
@@ -36,7 +36,7 @@ import {
   type HermesCatalogModelEntry,
   type HermesModelCatalogResponse,
   type HermesProviderCredentialField,
-} from "@hermes-x/core";
+} from "@amiba/core";
 import { cn } from "../primitives";
 /** Sidebar selection: special "model-config" panel or a provider slug. */
 type SidebarSection = "model-config" | string;

@@ -1,4 +1,4 @@
-import { getHermesCommands } from "@hermes-x/core"
+import { getHermesCommands } from "@amiba/core"
 import { $getSelection, $isRangeSelection, type LexicalEditor } from "lexical"
 import type { MenuItem, TriggerProvider } from "./types"
 import { slashKindFor } from "./slash-ui-actions"

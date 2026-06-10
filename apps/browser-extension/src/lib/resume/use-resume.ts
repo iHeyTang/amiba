@@ -1,2 +1,2 @@
-// Lifted to @hermes-x/core/resume/use-resume.ts.
-export * from "@hermes-x/core";
+// Lifted to @amiba/core/resume/use-resume.ts.
+export * from "@amiba/core";

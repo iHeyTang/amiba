@@ -1,8 +1,8 @@
-# {{NAME}} — hermes-x mention source
+# {{NAME}} — amiba mention source
 
 {{DESCRIPTION}}
 
-A **mention source**: it lets the hermes-x desktop composer `@`-mention
+A **mention source**: it lets the amiba desktop composer `@`-mention
 {{NAME}} resources. It is NOT a hermes plugin — it only feeds the composer's
 @-mention discovery (search) and ships a resolver skill so the agent can act on
 what you picked.

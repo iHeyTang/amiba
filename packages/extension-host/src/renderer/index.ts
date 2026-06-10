@@ -16,7 +16,7 @@ export {
 // useExtensionRegistry is used by the SettingsExtensions tab to list installed
 // extensions and their status.
 import { useEffect, useState } from "react"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 type HermesWindowShape = {
   extensions: {

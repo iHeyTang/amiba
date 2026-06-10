@@ -8,7 +8,7 @@
  * The extension never embeds binary payloads in the chat completion request
  * and never uses OpenAI's multimodal `image_url` content parts. Instead,
  * every attached file is uploaded over HTTP to the backplane plugin
- * (`POST /hermes/attachments`), which writes it under `~/.hermes/hermes-x/inbox/<session>/`
+ * (`POST /hermes/attachments`), which writes it under `~/.hermes/amiba/inbox/<session>/`
  * and returns the absolute path. The chat prompt references that path
  * inside a `<file-attachment>` text block appended to the user message
  * content. The agent uses its own server-side tools (`vision_analyze` /
@@ -60,7 +60,7 @@ interface AttachmentBase {
   kind: AttachmentKind;
   /**
    * Absolute path to the file on disk where Python wrote it (typically
-   * `~/.hermes/hermes-x/inbox/<session>/<id>_<name>`).
+   * `~/.hermes/amiba/inbox/<session>/<id>_<name>`).
    *
    * Optional only because intake may fail (bridge disconnected, write
    * error, etc.) — in that case we surface the error to the user and the

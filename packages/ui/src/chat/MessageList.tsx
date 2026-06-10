@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@hermes-x/core"
+import type { ChatMessage } from "@amiba/core"
 import { ScrollArea } from "../primitives"
 import { cn } from "../primitives"
 import { useEffect, useRef } from "react"

@@ -185,8 +185,8 @@ export interface MenuCommand {
 }
 
 // ---------------------------------------------------------------------------
-// Chat — re-exported from @hermes-x/core so extension & desktop share one
+// Chat — re-exported from @amiba/core so extension & desktop share one
 // canonical definition. Local consumers still import from "~lib/types".
 // ---------------------------------------------------------------------------
 
-export { type ChatRole, type ChatMessage } from "@hermes-x/core";
+export { type ChatRole, type ChatMessage } from "@amiba/core";

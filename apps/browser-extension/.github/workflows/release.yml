@@ -1,13 +1,13 @@
 name: Release
 
 # NOTE: This workflow file is REFERENCE-ONLY. It lives under
-# apps/browser-extension/.github/workflows/ inside the hermes-x monorepo and
+# apps/browser-extension/.github/workflows/ inside the amiba monorepo and
 # will NOT be picked up by GitHub Actions, which only reads workflows from the
 # repo-root .github/workflows/ directory. To make it active, copy it to the
-# root .github/workflows/ of the relevant repo (e.g. iHeyTang/hermes-x-browser-extension).
+# root .github/workflows/ of the relevant repo (e.g. amiba-desktop/amiba-browser-extension).
 #
 # Builds the Plasmo production bundle and uploads it as a GitHub Release
-# asset on iHeyTang/hermes-x-browser-extension whenever a ``vX.Y.Z`` tag
+# asset on amiba-desktop/amiba-browser-extension whenever a ``vX.Y.Z`` tag
 # is pushed. The download page (docs/index.html in the dist repo, served via
 # GitHub Pages) reads the latest release through the GitHub Releases API,
 # so no further plumbing is needed for users to pick up the new version.
@@ -78,7 +78,7 @@ jobs:
           fi
 
       # Tag push → real release with notes auto-generated from the commit log
-      # Published on the dist repo: iHeyTang/hermes-x-browser-extension
+      # Published on the dist repo: amiba-desktop/amiba-browser-extension
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

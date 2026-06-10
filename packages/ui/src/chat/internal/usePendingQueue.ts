@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPlatform } from "@hermes-x/platform";
-import { useT } from "@hermes-x/i18n";
-import { shortId } from "@hermes-x/utils";
+import { getPlatform } from "@amiba/platform";
+import { useT } from "@amiba/i18n";
+import { shortId } from "@amiba/utils";
 import {
   deleteAttachmentFile,
   useSessions,
   type Attachment,
   type ChatEngineClient,
   type TurnMetadata,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 import type { NavigateOpenPolicy, PageContextCapability } from "./capabilities";
 import { pickSendText } from "./pickSendText";

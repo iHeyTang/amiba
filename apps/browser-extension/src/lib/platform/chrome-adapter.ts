@@ -1,4 +1,4 @@
-import type { PlatformAdapter, StorageChangeMap } from "@hermes-x/platform"
+import type { PlatformAdapter, StorageChangeMap } from "@amiba/platform"
 
 /**
  * Maps the runtime-agnostic PlatformAdapter to MV3 chrome.* APIs.

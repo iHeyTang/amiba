@@ -54,8 +54,8 @@ import {
   type HermesToolProvider,
   type HermesToolset,
   type HermesToolsetDetail,
-} from "@hermes-x/core";
-import { useT } from "@hermes-x/i18n";
+} from "@amiba/core";
+import { useT } from "@amiba/i18n";
 
 import {
   Badge,

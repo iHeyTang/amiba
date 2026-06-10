@@ -1,8 +1,8 @@
 """Coverage for /hermes/plugins: route mounted, list degrades, toggle logic."""
 
-from hermes_x_backplane.runtime.features.hermes_proxy.plugins_routes.routes import apply_toggle
-from hermes_x_backplane.runtime.features.hermes_proxy.plugins_routes import routes as plugins_routes
-from hermes_x_backplane.runtime.http_app import build_http_app
+from amiba_backplane.runtime.features.hermes_proxy.plugins_routes.routes import apply_toggle
+from amiba_backplane.runtime.features.hermes_proxy.plugins_routes import routes as plugins_routes
+from amiba_backplane.runtime.http_app import build_http_app
 
 
 def test_routes_mounted():

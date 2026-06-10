@@ -1,7 +1,7 @@
 // packages/extension-host/src/main/index.ts
 import { join } from "node:path"
 import { readFileSync } from "node:fs"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 import { createExtensionRegistry } from "./registry"
 import {
   broadcastExtensionsChanged,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSlashProvider } from "../providers/slash"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesCommands: vi.fn().mockResolvedValue({
     ok: true,
     commands: [

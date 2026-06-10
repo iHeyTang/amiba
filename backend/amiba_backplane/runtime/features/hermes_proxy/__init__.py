@@ -10,7 +10,7 @@ Sub-modules:
   ``hermes_state.SessionDB`` (the canonical conversation log)
 - ``attachments``: ``/hermes/attachments*`` — upload/delete conversation
   attachments, persisted under
-  ``<hermes_home>/hermes-x/inbox/<session>/``
+  ``<hermes_home>/amiba/inbox/<session>/``
 - ``mention_sources_gateway``: HTTP adapter over the mention-source registry
   (``runtime/mention_sources``) — ``/mention-sources/<name>/search`` (calls the
   source's in-process ``search`` capability), ``/hermes/mention-resources``

@@ -6,15 +6,15 @@ const APP_NAME = "Hermes" // matches apps/desktop/package.json's build.productNa
 /**
  * Resolve where the desktop reads its extensions from at runtime.
  *
- * Honours HERMES_X_DEV_EXTENSIONS_PATH override (same env var the desktop
+ * Honours AMIBA_DEV_EXTENSIONS_PATH override (same env var the desktop
  * itself respects), otherwise uses Electron's standard userData location:
  *   macOS:   ~/Library/Application Support/Hermes/extensions/
  *   Linux:   ~/.config/Hermes/extensions/
  *   Windows: %APPDATA%/Hermes/extensions/
  */
 export function resolveExtensionsDir(): string {
-  if (process.env.HERMES_X_DEV_EXTENSIONS_PATH) {
-    return process.env.HERMES_X_DEV_EXTENSIONS_PATH
+  if (process.env.AMIBA_DEV_EXTENSIONS_PATH) {
+    return process.env.AMIBA_DEV_EXTENSIONS_PATH
   }
   const home = homedir()
   const plat = platform()

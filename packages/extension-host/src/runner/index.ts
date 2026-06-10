@@ -22,7 +22,7 @@ import type {
   IpcContext,
   MainHost,
   MainModule,
-} from "@hermes-x/extension-api"
+} from "@amiba/extension-api"
 import { HOST_API_VERSION } from "../version"
 
 // Typed accessor for parentPort (Electron augments NodeJS.Process).

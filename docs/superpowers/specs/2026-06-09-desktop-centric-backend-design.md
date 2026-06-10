@@ -92,7 +92,7 @@ desktop  (Electron; process supervisor)
    server design works either way (desktop spawns from whichever Python env has
    hermes-agent). This is the heaviest decision (bundling Python + owning its
    update story) — own spec when we get there.
-2. **Code location.** Does the backplane Python code **move into the hermes-x
+2. **Code location.** Does the backplane Python code **move into the amiba
    monorepo** (accepting the Python-in-pnpm-repo toolchain mix the prior memo
    warned about) or stay a **separate repo** desktop vendors/spawns at build
    time? The de-plugin-ification can land in its own repo first regardless.
@@ -119,19 +119,19 @@ desktop  (Electron; process supervisor)
 ## Amendment (2026-06-09): code location + rename resolved
 
 Open decision #2 (code location) is decided: the backplane is **internalized
-into the monorepo at `hermes-x/backend/`** as a Python subpackage (NOT a pnpm
+into the monorepo at `amiba/backend/`** as a Python subpackage (NOT a pnpm
 workspace package — pnpm ignores it; it has its own `pyproject.toml`). The
-separate `hermes-x-plugin-http-backplane` repo is retired (was never pushed).
+separate `amiba-plugin-http-backplane` repo is retired (was never pushed).
 
-- Import package renamed `hermes_plugin_http_backplane` → **`hermes_x_backplane`**;
-  distribution `hermes-x-plugin-http-backplane` → **`hermes-x-backplane`**. The
-  console script `hermes-x-backplane` (what desktop spawns) is unchanged.
+- Import package renamed `hermes_plugin_http_backplane` → **`amiba_backplane`**;
+  distribution `amiba-plugin-http-backplane` → **`amiba-backplane`**. The
+  console script `amiba-backplane` (what desktop spawns) is unchanged.
 - This also resolves the install **source** (open decision #1's sibling): it's
   **local/bundled** — desktop ships `backend/` as an electron-builder
   `extraResources`, and onboarding `pip install`s it into the hermes Python env
-  (creating `hermes-x-backplane` in that env's bin, which `hermes-runtime.ts`
+  (creating `amiba-backplane` in that env's bin, which `hermes-runtime.ts`
   already spawns). Dev: `pip install -e backend` into the hermes env. (Bundle-vs-
   external Python — open decision #1 proper — is still deferred; external for now.)
 
 Remaining to close the runtime gap: add the `pip install backend/` step to
-desktop onboarding so `hermes-x-backplane` exists before the spawn.
+desktop onboarding so `amiba-backplane` exists before the spawn.

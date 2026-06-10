@@ -1,4 +1,4 @@
-import type { HermesToolProgress } from "@hermes-x/core"
+import type { HermesToolProgress } from "@amiba/core"
 import { cn } from "../../primitives"
 import { useEffect, useState } from "react"
 

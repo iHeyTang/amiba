@@ -9,8 +9,8 @@
  * and disabled-state visuals are owned here; consumers supply only the
  * resolved action list + a click handler + a "can apply" gate.
  */
-import type { ResolvedQuickAction } from "@hermes-x/core"
-import { useT } from "@hermes-x/i18n"
+import type { ResolvedQuickAction } from "@amiba/core"
+import { useT } from "@amiba/i18n"
 import { cn } from "../primitives"
 import { Sparkles } from "lucide-react"
 

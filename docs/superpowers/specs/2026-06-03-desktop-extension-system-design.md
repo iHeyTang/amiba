@@ -56,7 +56,7 @@
                             └── src/i18n/{zh-CN,en}.json
 ```
 
-核心想法：把"加载器 / 注册表 / slot 协议"做成一个独立包 `@hermes-x/extension-host`（main / preload / renderer 三个 entry），desktop 仅负责挂载 SlotOutlet 和把生命周期接到 Electron 的启动顺序上。
+核心想法：把"加载器 / 注册表 / slot 协议"做成一个独立包 `@amiba/extension-host`（main / preload / renderer 三个 entry），desktop 仅负责挂载 SlotOutlet 和把生命周期接到 Electron 的启动顺序上。
 
 ## 3. 扩展目录结构与 manifest
 
@@ -64,7 +64,7 @@
 
 ```
 extensions/<id>/
-├── package.json              # @hermes-x/ext-<id>，仅 build / 类型依赖
+├── package.json              # @amiba/ext-<id>，仅 build / 类型依赖
 ├── manifest.json             # 静态贡献声明，loader 在不执行扩展代码前提下可读
 ├── src/
 │   ├── main/index.ts         # export activate(host): void | Promise<void>
@@ -84,11 +84,11 @@ extensions/<id>/
 
 ```jsonc
 {
-  "$schema": "@hermes-x/extension-host/manifest.schema.json",
+  "$schema": "@amiba/extension-host/manifest.schema.json",
   "id": "io.hermes.knowledge-base",   // 反向域名；ipc / settings / storage 全用它做 namespace
   "name": "Knowledge Base",
   "version": "0.1.0",
-  "engines": { "hermes-x": "^0.1.0" }, // 一阶段只读不强制
+  "engines": { "amiba": "^0.1.0" }, // 一阶段只读不强制
 
   "entries": {
     "main":     "dist/main.cjs",
@@ -131,13 +131,13 @@ extensions/<id>/
 
 1. **manifest 必须是静态 JSON**，禁止 `.js`/`.ts`。Loader 在不 `require()` 扩展代码前就能拿到所有贡献点，"加载失败的扩展"也能把它的 activityBar item 灰显出来，方便排错。
 2. **双入口可选**：纯 renderer 扩展可以没有 `entries.main`；纯后台扩展可以没有 `entries.renderer`。
-3. **i18n 文件是 JSON**，加载器在 desktop 启动早期就把它合并进 `@hermes-x/i18n` 的运行时表，所有 key 自动加 `ext.<id>.` 前缀（manifest 里写"完整 key"以保持引用一致性）。
+3. **i18n 文件是 JSON**，加载器在 desktop 启动早期就把它合并进 `@amiba/i18n` 的运行时表，所有 key 自动加 `ext.<id>.` 前缀（manifest 里写"完整 key"以保持引用一致性）。
 4. **`permissions` 第一阶段只声明不强制**。这是给二期 prompt 留口的字段。
 5. **`hermesPlugins.required: true` 时**，扩展激活前 host 检测到缺失会直接禁用该扩展（标记 failed）；`required: false` 时只发出一次 `host.notify` 提醒。
 
 ## 4. Host API
 
-`@hermes-x/extension-host` 暴露给扩展两个对象：`MainHost`（传给 `src/main/index.ts` 的 `activate`）、`RendererHost`（传给 `src/renderer/index.ts` 的 `activate`）。两者共享部分语义，但作用域不同。
+`@amiba/extension-host` 暴露给扩展两个对象：`MainHost`（传给 `src/main/index.ts` 的 `activate`）、`RendererHost`（传给 `src/renderer/index.ts` 的 `activate`）。两者共享部分语义，但作用域不同。
 
 ### 4.1 MainHost (main 进程)
 
@@ -286,7 +286,7 @@ Core desktop 第一阶段提供以下 slot anchor，扩展通过 manifest 的 `c
 | 卸载/安装 UI | 仅 enable/disable | 增加 install/uninstall/update |
 | 沙箱 | 无 | （仍同进程，但加 permission prompt） |
 
-`@hermes-x/extension-host` 的对外 API 在两阶段间保持一致 —— 二期只换 discover() 内部实现。
+`@amiba/extension-host` 的对外 API 在两阶段间保持一致 —— 二期只换 discover() 内部实现。
 
 ## 9. 知识库扩展迁移（具体清单）
 

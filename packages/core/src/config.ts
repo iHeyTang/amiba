@@ -2,8 +2,8 @@
  * Endpoints + storage keys shared by extension and desktop.
  *
  * Both apps talk to the same local Hermes infrastructure:
- *   - hermes-x-backplane server      (BACKPLANE_HTTP_BASE)
- *   - hermes-x-plugin-browser-tools  (BRIDGE_URL — websocket hub)
+ *   - amiba-backplane server      (BACKPLANE_HTTP_BASE)
+ *   - amiba-plugin-browser-tools  (BRIDGE_URL — websocket hub)
  *   - hermes-agent gateway           (DEFAULT_HERMES_API_BASE)
  *
  * Storage keys are platform-neutral strings; each app reads/writes them
@@ -12,7 +12,7 @@
 
 /**
  * WebSocket hub for `my_browser_*` tool calls. Hosted by the
- * `hermes-x-plugin-browser-tools` plugin (env `HERMES_BROWSER_TOOLS_PORT`,
+ * `amiba-plugin-browser-tools` plugin (env `HERMES_BROWSER_TOOLS_PORT`,
  * default 9393). Users can override the URL in settings; the override
  * lives in storage under `BRIDGE_URL_STORAGE_KEY`.
  */
@@ -20,7 +20,7 @@ export const BRIDGE_URL = "ws://127.0.0.1:9393"
 export const BRIDGE_URL_STORAGE_KEY = "settings.bridge.url"
 
 /**
- * Local HTTP base for the `hermes-x-backplane` server (env
+ * Local HTTP base for the `amiba-backplane` server (env
  * `HERMES_BACKPLANE_PORT`, default 9394; spawned + supervised by the desktop
  * app — it is NOT a hermes plugin). Hosts three lanes:
  *   - `/hermes/*`              — proxies to Hermes core

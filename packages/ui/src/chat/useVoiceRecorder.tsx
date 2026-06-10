@@ -5,7 +5,7 @@
  *
  * Click once to start (allocates MediaRecorder + requests mic
  * permission), click again to stop. `stop()` resolves with the recorded
- * Blob, ready to be POSTed to `transcribeAudio` from `@hermes-x/core`.
+ * Blob, ready to be POSTed to `transcribeAudio` from `@amiba/core`.
  *
  * The hook intentionally keeps the captured stream alive only for the
  * duration of a recording — tracks are stopped on `stop()` / unmount so
@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { useT } from "@hermes-x/i18n"
+import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
 import { cn } from "../primitives"
 import { Loader2, Mic } from "lucide-react"

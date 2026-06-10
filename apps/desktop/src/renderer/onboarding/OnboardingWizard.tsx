@@ -22,16 +22,16 @@
  *  The wizard's chrome reserves the macOS traffic-light area and is a
  *  drag region so the OS lights don't visually crash into the title.
  */
-import { getHermesStatus } from "@hermes-x/core"
-import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n"
-import { useDocumentTheme } from "@hermes-x/ui"
+import { getHermesStatus } from "@amiba/core"
+import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n"
+import { useDocumentTheme } from "@amiba/ui"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, Copy, Loader2, RefreshCw, Sparkles } from "lucide-react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
 
-import { HermesLogo } from "@hermes-x/ui"
+import { HermesLogo } from "@amiba/ui"
 
 const MAX_LOG_LINES = 600
 const BACKPLANE_POLL_INTERVAL_MS = 1200
@@ -328,7 +328,7 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
     // 3. Bring the backplane server up. Try STARTING what's there first — for a
     //    returning user it's already installed, so this is just a quick spawn +
     //    probe with no pip step ("直接可用"). Only if it doesn't answer do we run
-    //    the one-time pip install (the `hermes-x-backplane` command lands in the
+    //    the one-time pip install (the `amiba-backplane` command lands in the
     //    hermes env) and start again.
     if (!det.backplane.running) {
       setActiveAction({ itemKey: "backplane" })
@@ -916,7 +916,7 @@ const TERM_THEMES = {
  *
  * Theme follows the app: xterm's `options.theme` is swapped whenever
  * the document theme flips (auto / light / dark from
- * `@hermes-x/theme`). The container background is bound to the same
+ * `@amiba/theme`). The container background is bound to the same
  * palette so there's no white edge around a dark terminal (or vice
  * versa) while xterm repaints.
  *

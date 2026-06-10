@@ -4,7 +4,7 @@
 
 **Goal:** Define a host "extension API contract level" (monotonic integer), expose it to extensions at runtime, let a manifest declare the minimum level it needs (`manifest.apiVersion`), and enforce it at activation and marketplace-install so incompatible extensions are skipped gracefully (never crash).
 
-**Architecture:** A single integer `API_VERSION` lives in `@hermes-x/extension-api`; the host re-exports it as `HOST_API_VERSION` (what this desktop implements). A pure `checkCompat(required, host)` decides compatibility. `validateManifest` learns to read/validate `apiVersion`. `activateOne` (covers initial discovery + hot-reload) and `installFromRelease` (marketplace) gate on it; incompatible extensions get registry status `"incompatible"` + a reason, which already flows out through the existing `extensions:status` IPC channel. Extensions can read the host's level via `host.hostInfo.apiVersion` (main) and `window.hermes.apiVersion` (webview) to degrade gracefully.
+**Architecture:** A single integer `API_VERSION` lives in `@amiba/extension-api`; the host re-exports it as `HOST_API_VERSION` (what this desktop implements). A pure `checkCompat(required, host)` decides compatibility. `validateManifest` learns to read/validate `apiVersion`. `activateOne` (covers initial discovery + hot-reload) and `installFromRelease` (marketplace) gate on it; incompatible extensions get registry status `"incompatible"` + a reason, which already flows out through the existing `extensions:status` IPC channel. Extensions can read the host's level via `host.hostInfo.apiVersion` (main) and `window.hermes.apiVersion` (webview) to degrade gracefully.
 
 **Tech Stack:** TypeScript, vitest (already configured in `packages/extension-host`), pnpm workspace.
 
@@ -80,7 +80,7 @@ describe("checkCompat", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm -F @hermes-x/extension-host exec vitest run src/__tests__/compat.test.ts`
+Run: `pnpm -F @amiba/extension-host exec vitest run src/__tests__/compat.test.ts`
 Expected: FAIL — `Failed to resolve import "../compat"` / "checkCompat is not a function".
 
 - [ ] **Step 3: Create the API_VERSION constant in extension-api**
@@ -114,10 +114,10 @@ Create `packages/extension-host/src/version.ts`:
 
 ```ts
 // The extension-API level THIS host implements. It equals the API_VERSION
-// of the @hermes-x/extension-api the host ships, so re-export keeps them in
+// of the @amiba/extension-api the host ships, so re-export keeps them in
 // lockstep automatically. Extensions built against a newer SDK declare a
 // higher manifest.apiVersion and are gated off until the host catches up.
-export { API_VERSION as HOST_API_VERSION } from "@hermes-x/extension-api"
+export { API_VERSION as HOST_API_VERSION } from "@amiba/extension-api"
 ```
 
 - [ ] **Step 5: Implement `checkCompat`**
@@ -150,12 +150,12 @@ export function checkCompat(
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `pnpm -F @hermes-x/extension-host exec vitest run src/__tests__/compat.test.ts`
+Run: `pnpm -F @amiba/extension-host exec vitest run src/__tests__/compat.test.ts`
 Expected: PASS (4 passed).
 
 - [ ] **Step 7: Typecheck both packages**
 
-Run: `pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: exit 0.
 
 - [ ] **Step 8: Commit**
@@ -211,7 +211,7 @@ Append inside the `describe("validateManifest", …)` block in `packages/extensi
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm -F @hermes-x/extension-host exec vitest run src/__tests__/manifest.test.ts`
+Run: `pnpm -F @amiba/extension-host exec vitest run src/__tests__/manifest.test.ts`
 Expected: FAIL — the "rejects apiVersion 0 / non-integer / string" cases fail because `validateManifest` does not yet check `apiVersion`.
 
 - [ ] **Step 3: Add the field to the manifest type**
@@ -252,12 +252,12 @@ In `packages/extension-host/src/main/discover.ts`, add this block immediately af
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pnpm -F @hermes-x/extension-host exec vitest run src/__tests__/manifest.test.ts`
+Run: `pnpm -F @amiba/extension-host exec vitest run src/__tests__/manifest.test.ts`
 Expected: PASS (all original + 5 new cases).
 
 - [ ] **Step 7: Typecheck**
 
-Run: `pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: exit 0.
 
 - [ ] **Step 8: Commit**
@@ -302,7 +302,7 @@ In `packages/extension-api/src/webview.ts`, inside `export interface WebViewHost
 
 In `packages/extension-host/src/runner/index.ts`:
 
-(a) Add the value import after the existing `import type { … } from "@hermes-x/extension-api"` block (around line 25):
+(a) Add the value import after the existing `import type { … } from "@amiba/extension-api"` block (around line 25):
 
 ```ts
 import { HOST_API_VERSION } from "../version"
@@ -318,7 +318,7 @@ import { HOST_API_VERSION } from "../version"
 
 In `packages/extension-host/src/webview-preload/index.ts`:
 
-(a) Add the value import after the `import type { … } from "@hermes-x/extension-api"` block (around line 23):
+(a) Add the value import after the `import type { … } from "@amiba/extension-api"` block (around line 23):
 
 ```ts
 import { HOST_API_VERSION } from "../version"
@@ -334,12 +334,12 @@ import { HOST_API_VERSION } from "../version"
 
 - [ ] **Step 5: Typecheck**
 
-Run: `pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: exit 0. (If it fails complaining the runner/preload `host`/`api` objects miss a member, the additions in Steps 3-4 were not applied to the right object.)
 
 - [ ] **Step 6: Run the full extension-host test suite (no regressions)**
 
-Run: `pnpm -F @hermes-x/extension-host test`
+Run: `pnpm -F @amiba/extension-host test`
 Expected: PASS (all suites).
 
 - [ ] **Step 7: Commit**
@@ -403,12 +403,12 @@ with:
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: exit 0.
 
 - [ ] **Step 5: Run the full test suite**
 
-Run: `pnpm -F @hermes-x/extension-host test`
+Run: `pnpm -F @amiba/extension-host test`
 Expected: PASS (no regressions; existing discover/registry tests still green).
 
 - [ ] **Step 6: Commit**
@@ -449,12 +449,12 @@ In `installFromRelease`, immediately after the block that throws on manifest-id 
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: exit 0.
 
 - [ ] **Step 4: Run the full test suite**
 
-Run: `pnpm -F @hermes-x/extension-host test`
+Run: `pnpm -F @amiba/extension-host test`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -481,7 +481,7 @@ In each of the three `manifest.json` files, add `"apiVersion": 1,` immediately a
   "name": "Tool Activity",
   "version": "0.1.0",
   "apiVersion": 1,
-  "engines": { "hermes-x": "^0.1.0" },
+  "engines": { "amiba": "^0.1.0" },
 ```
 
 (Apply the same one-line insertion to token-meter and knowledge-base.)
@@ -499,7 +499,7 @@ Each extension declares the minimum host extension-API level it needs:
 { "id": "...", "version": "0.1.0", "apiVersion": 1 }
 ```
 
-`apiVersion` is a monotonic integer matching the `@hermes-x/extension-api`
+`apiVersion` is a monotonic integer matching the `@amiba/extension-api`
 `API_VERSION` the extension built against. The desktop implements a level
 (`HOST_API_VERSION`); it loads an extension only when
 `apiVersion <= HOST_API_VERSION`. Otherwise the extension is marked
@@ -510,7 +510,7 @@ to `1` for backward compatibility.
 
 - [ ] **Step 3: Verify the stamped manifests still validate**
 
-Run: `pnpm -F @hermes-x/extension-host test`
+Run: `pnpm -F @amiba/extension-host test`
 Expected: PASS. Then sanity-check the JSON parses:
 
 Run: `node -e "for (const p of ['tool-meter','token-meter','knowledge-base']) { const m = require('./extensions/'+p+'/manifest.json'); if (m.apiVersion !== 1) throw new Error(p+': apiVersion not 1'); } console.log('ok')"`
@@ -530,7 +530,7 @@ git commit -m "chore(extensions+docs): stamp apiVersion:1 and document API gatin
 
 - [ ] **Run the whole extension-host suite + typecheck once more**
 
-Run: `pnpm -F @hermes-x/extension-host test && pnpm -F @hermes-x/extension-host exec tsc --noEmit`
+Run: `pnpm -F @amiba/extension-host test && pnpm -F @amiba/extension-host exec tsc --noEmit`
 Expected: all tests PASS, tsc exit 0.
 
 - [ ] **Manual integration smoke (optional but recommended)**

@@ -1,5 +1,5 @@
 """
-hermes-x-backplane — the local HTTP backend server for hermes-x desktop.
+amiba-backplane — the local HTTP backend server for amiba desktop.
 
 A **standalone HTTP server, NOT a hermes plugin.** Desktop spawns + supervises
 it as a child process (desktop is the process supervisor). It is the single
@@ -13,7 +13,7 @@ front door on ``127.0.0.1:9394`` and fans out internally:
   ``/hermes/mention-resources`` + lifecycle admin. The integrations *framework*
   lives here now (``runtime/integrations/``): the backplane loads
   ``~/.hermes/integrations/`` at startup, serves the composer, and owns
-  lifecycle. It used to be a separate ``hermes-x-plugin-integrations`` hermes
+  lifecycle. It used to be a separate ``amiba-plugin-integrations`` hermes
   plugin, but that plugin registered no agent tools — only the backplane ever
   read its registry — so it was a composer/backplane concern wearing a plugin
   costume, and moved in (see ``runtime/integrations/__init__.py``).
@@ -22,8 +22,8 @@ front door on ``127.0.0.1:9394`` and fans out internally:
 
 Run it::
 
-    python -m hermes_x_backplane.server --port 9394   # or the
-    hermes-x-backplane                                          # console script
+    python -m amiba_backplane.server --port 9394   # or the
+    amiba-backplane                                          # console script
 
 It *used* to be loaded as a hermes plugin (``register(ctx)`` + ``plugin.yaml``)
 purely to co-locate inside the gateway process — the only door into that

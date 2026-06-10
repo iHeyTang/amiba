@@ -7,7 +7,7 @@ extension is the first caller, but desktop/CLI/mobile clients would
 hit the same endpoints.
 
 Persists uploads under
-``<hermes_home>/hermes-x/inbox/<session>/``.
+``<hermes_home>/amiba/inbox/<session>/``.
 """
 
 from __future__ import annotations

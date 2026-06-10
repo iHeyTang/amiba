@@ -5,8 +5,8 @@ import {
   getHermesPlugins,
   setPluginEnabled,
   type HermesPlugin,
-} from "@hermes-x/core"
-import { useT, type MessageKey } from "@hermes-x/i18n"
+} from "@amiba/core"
+import { useT, type MessageKey } from "@amiba/i18n"
 
 import { Button, ScrollArea, Switch } from "../primitives"
 import { useStartAgentTask } from "./agent-task"
@@ -72,7 +72,7 @@ export interface FeaturedFeature {
 /**
  * Browser control — registers `my_browser_*` tools + a local WebSocket hub the
  * companion Chrome extension connects to. Backed by the
- * `hermes-x-plugin-browser-tools` plugin (matched loosely to survive the
+ * `amiba-plugin-browser-tools` plugin (matched loosely to survive the
  * hyphen/underscore dist-vs-import naming split).
  */
 const BROWSER_FEATURE: FeaturedFeature = {
@@ -82,7 +82,7 @@ const BROWSER_FEATURE: FeaturedFeature = {
   subtitleKey: "options.feature.browser.subtitle",
   match: (p) =>
     /browser[-_]tools/.test(p.name) || /browser[-_]tools/.test(p.key),
-  installRef: "iHeyTang/hermes-x-plugin-browser-tools",
+  installRef: "amiba-desktop/amiba-plugin-browser-tools",
   Body: BrowserFeatureBody,
 }
 

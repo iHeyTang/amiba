@@ -22,9 +22,9 @@
 import { BookOpen, Clock, MessageSquare, Sparkles, Wallet, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
-import type { MainContribution } from "@hermes-x/extension-host/renderer";
+import type { MainContribution } from "@amiba/extension-host/renderer";
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,

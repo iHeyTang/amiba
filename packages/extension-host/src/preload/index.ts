@@ -1,6 +1,6 @@
 // packages/extension-host/src/preload/index.ts
 import { ipcRenderer } from "electron"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface MarketplaceEntry {
   id: string
@@ -14,7 +14,7 @@ export interface MarketplaceEntry {
 }
 
 export interface MarketplaceBridge {
-  /** Returns the current marketplace index URL (respects HERMES_X_MARKETPLACE_INDEX_URL). */
+  /** Returns the current marketplace index URL (respects AMIBA_MARKETPLACE_INDEX_URL). */
   getIndexUrl(): Promise<string>
   list(): Promise<
     | { ok: true; entries: MarketplaceEntry[] }

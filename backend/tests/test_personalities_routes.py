@@ -1,10 +1,10 @@
 import pytest
 from aiohttp import web
 
-from hermes_x_backplane.runtime.features.hermes_proxy.settings.personalities_service import (
+from amiba_backplane.runtime.features.hermes_proxy.settings.personalities_service import (
     list_personalities_response,
 )
-from hermes_x_backplane.runtime.features.hermes_proxy.settings.personalities_routes import (
+from amiba_backplane.runtime.features.hermes_proxy.settings.personalities_routes import (
     register_personalities_routes,
 )
 

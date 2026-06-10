@@ -1,5 +1,5 @@
-import { SessionsProvider } from "@hermes-x/core"
-import { setPlatform } from "@hermes-x/platform"
+import { SessionsProvider } from "@amiba/core"
+import { setPlatform } from "@amiba/platform"
 import React from "react"
 import { createRoot } from "react-dom/client"
 

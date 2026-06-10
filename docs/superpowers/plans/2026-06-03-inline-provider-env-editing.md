@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let users edit each gbrain provider's API keys / env-style config directly from the Settings → Brain panel, with the values persisted by hermes-x (encrypted via Electron `safeStorage`) and injected into `gbrain serve --http` at spawn time.
+**Goal:** Let users edit each gbrain provider's API keys / env-style config directly from the Settings → Brain panel, with the values persisted by amiba (encrypted via Electron `safeStorage`) and injected into `gbrain serve --http` at spawn time.
 
-**Architecture:** gbrain remains untouched. hermes-x owns a parallel env-override store under `~/.hermes/provider-env.json`: a `{ providerId: { envKey: encryptedBase64 } }` map encrypted with Electron's `safeStorage` (OS keychain-derived). The launcher merges decrypted overrides on top of `process.env` when spawning gbrain. Each `ProviderRow` becomes an expandable card; on expand, the renderer fetches that provider's required/optional env list via a new `gbrain providers env <id>` CLI bridge, then renders one Input + per-key Save button. Edits don't take effect until gbrain is restarted (existing restart button covers this).
+**Architecture:** gbrain remains untouched. amiba owns a parallel env-override store under `~/.hermes/provider-env.json`: a `{ providerId: { envKey: encryptedBase64 } }` map encrypted with Electron's `safeStorage` (OS keychain-derived). The launcher merges decrypted overrides on top of `process.env` when spawning gbrain. Each `ProviderRow` becomes an expandable card; on expand, the renderer fetches that provider's required/optional env list via a new `gbrain providers env <id>` CLI bridge, then renders one Input + per-key Save button. Edits don't take effect until gbrain is restarted (existing restart button covers this).
 
-**Tech Stack:** Electron `safeStorage`, Node `fs/promises`, Electron IPC (`ipcMain.handle` / `contextBridge`), React 18 with existing `Input` / `Button` primitives, existing i18n tables in `@hermes-x/i18n`.
+**Tech Stack:** Electron `safeStorage`, Node `fs/promises`, Electron IPC (`ipcMain.handle` / `contextBridge`), React 18 with existing `Input` / `Button` primitives, existing i18n tables in `@amiba/i18n`.
 
 ---
 
@@ -40,7 +40,7 @@ Create `apps/desktop/src/main/gbrain/provider-env.ts`:
 
 ```typescript
 /**
- * Per-provider env-var overrides, persisted by hermes-x outside gbrain.
+ * Per-provider env-var overrides, persisted by amiba outside gbrain.
  *
  * gbrain's gateway reads API keys from `process.env` at startup. We want
  * the UI to set those values without asking the user to maintain shell
@@ -165,14 +165,14 @@ export async function mergedEnv(
 
 - [ ] **Step 2: Type-check the new module**
 
-Run: `cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm exec tsc --noEmit`
+Run: `cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm exec tsc --noEmit`
 
 Expected: PASS (no diagnostics from `provider-env.ts`). If `electron` import isn't resolvable, confirm `apps/desktop/tsconfig.node.json` (or whichever covers `src/main/**`) has it — it should, given `launcher.ts` already imports `child_process` and other Node-only modules without issue.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add apps/desktop/src/main/gbrain/provider-env.ts
 git commit -m "feat(desktop): encrypted provider-env store backed by safeStorage"
 ```
@@ -387,7 +387,7 @@ Confirm the stdout matches the format expected by `parseEnvOutput` (the `Require
 - [ ] **Step 4: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm exec tsc --noEmit
 ```
 
 Expected: PASS.
@@ -395,7 +395,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add apps/desktop/src/main/gbrain/recipe-schema.ts apps/desktop/src/main/gbrain/cli.ts
 git commit -m "feat(desktop): bridge \`gbrain providers env <id>\` for per-provider schema"
 ```
@@ -467,7 +467,7 @@ with:
 - [ ] **Step 3: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm exec tsc --noEmit
 ```
 
 Expected: PASS.
@@ -477,7 +477,7 @@ Expected: PASS.
 With no `~/.hermes/provider-env.json` present yet, start the app:
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm dev
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm dev
 ```
 
 Open Settings → Brain → confirm the connection still comes up green and the existing Providers list still renders. We're only validating that `mergedEnv` returns a copy of `process.env` when the store file is absent — no regression in the no-override path.
@@ -487,7 +487,7 @@ Stop dev server when verified (Ctrl-C in the terminal).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add apps/desktop/src/main/gbrain/launcher.ts
 git commit -m "feat(desktop): inject decrypted provider-env overrides into gbrain spawn"
 ```
@@ -576,7 +576,7 @@ Insert these immediately after the existing `ipcMain.handle("gbrain:providers:li
 - [ ] **Step 3: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm exec tsc --noEmit
 ```
 
 Expected: PASS.
@@ -584,7 +584,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add apps/desktop/src/main/gbrain/ipc.ts
 git commit -m "feat(desktop): IPC handlers for provider env schema + overrides"
 ```
@@ -669,12 +669,12 @@ Edit `apps/desktop/src/preload/index.ts`. Replace the existing `providers: { lis
 
 Open `apps/desktop/src/renderer/global.d.ts`. Locate the `gbrain.providers` shape (mirrors the preload). Replace it with the same shape used in Step 1 (the `list` entry plus the new `env` and `overrides` entries).
 
-If `global.d.ts` declares the shape inline, copy the type literal from Step 1 verbatim. If it imports a type from `@hermes-x/...`, keep the import structure and extend the type definition there instead.
+If `global.d.ts` declares the shape inline, copy the type literal from Step 1 verbatim. If it imports a type from `@amiba/...`, keep the import structure and extend the type definition there instead.
 
 - [ ] **Step 3: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm exec tsc --noEmit
 ```
 
 Expected: PASS.
@@ -682,7 +682,7 @@ Expected: PASS.
 - [ ] **Step 4: Verify the bridge from devtools**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm dev
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm dev
 ```
 
 Open the main window's devtools (Cmd-Option-I). In the console:
@@ -712,7 +712,7 @@ Stop dev server.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add apps/desktop/src/preload/index.ts apps/desktop/src/renderer/global.d.ts
 git commit -m "feat(desktop): expose provider env + overrides over preload bridge"
 ```
@@ -768,7 +768,7 @@ In `packages/i18n/src/zh-CN.ts`, insert the matching keys near the existing `opt
 - [ ] **Step 3: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x && pnpm -r exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba && pnpm -r exec tsc --noEmit
 ```
 
 Expected: PASS across all workspaces. If i18n uses a typed dictionary that requires keys in both locales, ensure both files have identical key sets.
@@ -776,7 +776,7 @@ Expected: PASS across all workspaces. If i18n uses a typed dictionary that requi
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add packages/i18n/src/en.ts packages/i18n/src/zh-CN.ts
 git commit -m "i18n: strings for inline provider env editing"
 ```
@@ -796,7 +796,7 @@ Edit the file-top docstring. Replace the "No file-plane editor" paragraph (lines
  *   3. **Providers** — dynamic enumeration of gbrain's recipe registry
  *      via the `gbrain providers list` CLI subprocess, with each row
  *      expandable into an inline editor that writes per-provider env
- *      values into hermes-x's encrypted override store (`safeStorage`
+ *      values into amiba's encrypted override store (`safeStorage`
  *      → `~/.hermes/provider-env.json`). The launcher merges those on
  *      top of `process.env` when spawning gbrain, so edits apply on
  *      the next restart without asking the user to maintain shell
@@ -1158,7 +1158,7 @@ In the providers `.map(...)` (around line 575), pass the new props:
 - [ ] **Step 6: Type-check**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x && pnpm -r exec tsc --noEmit
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba && pnpm -r exec tsc --noEmit
 ```
 
 Expected: PASS across `packages/ui` and `apps/desktop`.
@@ -1166,7 +1166,7 @@ Expected: PASS across `packages/ui` and `apps/desktop`.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add packages/ui/src/settings/SettingsBrainConfig.tsx
 git commit -m "feat(ui): inline editor for per-provider env values"
 ```
@@ -1180,7 +1180,7 @@ git commit -m "feat(ui): inline editor for per-provider env values"
 - [ ] **Step 1: Boot the desktop in dev mode**
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x/apps/desktop && pnpm dev
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba/apps/desktop && pnpm dev
 ```
 
 - [ ] **Step 2: Confirm clean state**
@@ -1232,7 +1232,7 @@ To sanity-check the safeStorage round-trip, set a value, kill the desktop fully,
 No code changes — but make sure the plan checkboxes above are all ticked in this file. Then:
 
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba
 git add docs/superpowers/plans/2026-06-03-inline-provider-env-editing.md
 git commit -m "docs: mark inline provider env editing plan as verified"
 ```

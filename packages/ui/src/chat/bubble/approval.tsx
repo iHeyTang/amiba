@@ -4,8 +4,8 @@ import {
   type ApprovalRecord,
   type HermesApprovalDecision,
   type HermesApprovalRequest
-} from "@hermes-x/core"
-import { type TranslateFn, useT } from "@hermes-x/i18n"
+} from "@amiba/core"
+import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
 import { Brain, Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"

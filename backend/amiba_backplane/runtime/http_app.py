@@ -41,7 +41,7 @@ def _version() -> str:
     try:
         from importlib.metadata import version
 
-        return version("hermes-x-backplane")
+        return version("amiba-backplane")
     except Exception:
         return "unknown"
 

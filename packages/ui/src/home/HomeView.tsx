@@ -31,7 +31,7 @@ import {
   useVoicePrefs,
   useWallpaper,
   type WallpaperController,
-} from "@hermes-x/core";
+} from "@amiba/core";
 import {
   Composer,
   queueChatPrompt,
@@ -41,8 +41,8 @@ import {
   WallpaperCredit,
   type ComposerHandle,
 } from "../chat";
-import { shortId } from "@hermes-x/utils";
-import { useT } from "@hermes-x/i18n";
+import { shortId } from "@amiba/utils";
+import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
 import { HermesLogo } from "../primitives";
 import { cn } from "../primitives";

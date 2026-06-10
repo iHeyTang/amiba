@@ -18,8 +18,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { MessageKey, TranslateFn } from "@hermes-x/i18n";
-import { getPlatform } from "@hermes-x/platform";
+import type { MessageKey, TranslateFn } from "@amiba/i18n";
+import { getPlatform } from "@amiba/platform";
 
 export const QUICK_ACTIONS_STORAGE_KEY = "settings.composer.quickActions";
 

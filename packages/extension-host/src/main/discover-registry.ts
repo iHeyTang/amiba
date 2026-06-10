@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { validateManifest } from "./discover"
 import { loadRegistry, type RegistryEntry } from "./registry-store"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface DiscoveredEntry {
   manifest: ExtensionManifest

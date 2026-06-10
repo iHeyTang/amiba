@@ -32,19 +32,19 @@ importers:
       '@codemirror/view':
         specifier: ^6.34.1
         version: 6.43.0
-      '@hermes-x/core':
+      '@amiba/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@hermes-x/i18n':
+      '@amiba/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@hermes-x/platform':
+      '@amiba/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@hermes-x/ui':
+      '@amiba/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@hermes-x/utils':
+      '@amiba/utils':
         specifier: workspace:*
         version: link:../../packages/utils
       '@radix-ui/react-checkbox':
@@ -108,7 +108,7 @@ importers:
         specifier: ^2.5.4
         version: 2.6.1
     devDependencies:
-      '@hermes-x/tailwind-preset':
+      '@amiba/tailwind-preset':
         specifier: workspace:*
         version: link:../../packages/tailwind-preset
       '@ianvs/prettier-plugin-sort-imports':
@@ -157,7 +157,7 @@ importers:
         specifier: ^7.0.0
         version: 7.5.16
     devDependencies:
-      '@hermes-x/extension-api':
+      '@amiba/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api
       '@types/node':
@@ -175,25 +175,25 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@hermes-x/core':
+      '@amiba/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@hermes-x/extension-api':
+      '@amiba/extension-api':
         specifier: workspace:*
         version: link:../../packages/extension-api
-      '@hermes-x/extension-host':
+      '@amiba/extension-host':
         specifier: workspace:*
         version: link:../../packages/extension-host
-      '@hermes-x/i18n':
+      '@amiba/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@hermes-x/platform':
+      '@amiba/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@hermes-x/ui':
+      '@amiba/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@hermes-x/utils':
+      '@amiba/utils':
         specifier: workspace:*
         version: link:../../packages/utils
       '@radix-ui/react-checkbox':
@@ -269,7 +269,7 @@ importers:
         specifier: ^1.5.4
         version: 1.5.5
     devDependencies:
-      '@hermes-x/tailwind-preset':
+      '@amiba/tailwind-preset':
         specifier: workspace:*
         version: link:../../packages/tailwind-preset
       '@types/node':
@@ -314,13 +314,13 @@ importers:
 
   packages/core:
     dependencies:
-      '@hermes-x/i18n':
+      '@amiba/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@hermes-x/platform':
+      '@amiba/platform':
         specifier: workspace:*
         version: link:../platform
-      '@hermes-x/utils':
+      '@amiba/utils':
         specifier: workspace:*
         version: link:../utils
       react:
@@ -352,10 +352,10 @@ importers:
 
   packages/extension-host:
     dependencies:
-      '@hermes-x/extension-api':
+      '@amiba/extension-api':
         specifier: workspace:*
         version: link:../extension-api
-      '@hermes-x/i18n':
+      '@amiba/i18n':
         specifier: workspace:*
         version: link:../i18n
       electron:
@@ -383,7 +383,7 @@ importers:
 
   packages/i18n:
     dependencies:
-      '@hermes-x/platform':
+      '@amiba/platform':
         specifier: workspace:*
         version: link:../platform
       react:
@@ -422,19 +422,19 @@ importers:
       '@codemirror/view':
         specifier: ^6.34.1
         version: 6.43.0
-      '@hermes-x/core':
+      '@amiba/core':
         specifier: workspace:*
         version: link:../core
-      '@hermes-x/extension-host':
+      '@amiba/extension-host':
         specifier: workspace:*
         version: link:../extension-host
-      '@hermes-x/i18n':
+      '@amiba/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@hermes-x/platform':
+      '@amiba/platform':
         specifier: workspace:*
         version: link:../platform
-      '@hermes-x/utils':
+      '@amiba/utils':
         specifier: workspace:*
         version: link:../utils
       '@lexical/react':

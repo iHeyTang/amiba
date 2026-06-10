@@ -3,7 +3,7 @@
  * every extension WebView page by the host's webview-bridge preload.
  *
  * This is the single source of truth for the renderer-side extension
- * API. The webview-preload implementation in `@hermes-x/extension-host`
+ * API. The webview-preload implementation in `@amiba/extension-host`
  * declares its exposed object against `WebViewHostAPI`; extensions
  * type-check their own UI code against the same interface via the
  * ambient `Window.hermes` augmentation at the bottom of this file.
@@ -93,7 +93,7 @@ export type WebViewEvent = "language" | "theme"
 
 /**
  * The full `window.hermes` surface for an extension WebView. Imported
- * by `@hermes-x/extension-host`'s webview-bridge for the implementation
+ * by `@amiba/extension-host`'s webview-bridge for the implementation
  * declarations and by extension authors as a type-only import.
  */
 export interface WebViewHostAPI {

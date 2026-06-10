@@ -510,7 +510,7 @@ def trigger_auto_title_response(
     caller is the chat client right after a stream finishes — running the
     LLM call synchronously keeps the wire shape simple (no polling, no
     refresh signal) at the cost of an extra second on the response. The
-    hermes-x frontend treats this as a fire-and-forget after the assistant
+    amiba frontend treats this as a fire-and-forget after the assistant
     bubble lands, so the visible latency is post-stream.
     """
     del body  # No options today — accepted for forward compatibility.

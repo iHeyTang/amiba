@@ -1,5 +1,5 @@
 import { Button } from "../primitives"
-import { useT } from "@hermes-x/i18n"
+import { useT } from "@amiba/i18n"
 import { MessageSquarePlus } from "lucide-react"
 
 interface Props {

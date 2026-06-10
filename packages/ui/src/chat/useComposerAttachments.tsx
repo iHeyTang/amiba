@@ -28,11 +28,11 @@ import {
   isAttachmentReadOk,
   readFileAsAttachment,
   type Attachment,
-} from "@hermes-x/core"
-import { useT } from "@hermes-x/i18n"
+} from "@amiba/core"
+import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
 import { cn } from "../primitives"
-import { shortId } from "@hermes-x/utils"
+import { shortId } from "@amiba/utils"
 import { Paperclip } from "lucide-react"
 import {
   useCallback,

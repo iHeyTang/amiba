@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import { createExtensionsBridge, createWebviewPreloadBridge } from "@hermes-x/extension-host/preload"
+import { createExtensionsBridge, createWebviewPreloadBridge } from "@amiba/extension-host/preload"
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Hermes window
 // stacks more than that on a few high-fan-out IPC channels (storage,
@@ -20,7 +20,7 @@ type WorkspaceChange =
   | { kind: "bound"; sessionId: string; path: string }
   | { kind: "unbound"; sessionId: string }
 
-// Mirrors @hermes-x/core protocol types — kept loose here so preload
+// Mirrors @amiba/core protocol types — kept loose here so preload
 // stays runtime-only without pulling the core package into the browser
 // context's preload classpath.
 type ChatClientMessage = unknown

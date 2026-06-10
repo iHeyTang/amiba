@@ -16,7 +16,7 @@ interface InstallOptions {
 }
 
 /**
- * `hermes-x install owner/repo[@tag]`
+ * `amiba install owner/repo[@tag]`
  *
  * Fetches the named (or latest) GitHub Release, finds the `extension.tgz`
  * asset, downloads, extracts, validates manifest, and installs into
@@ -123,7 +123,7 @@ export async function installCommand(repoArg: string, opts: InstallOptions) {
     console.log(kleur.dim(`  path:     ${target}`))
     console.log(kleur.dim(`  registry: ${registryPath}`))
     console.log(
-      kleur.dim("  (Hermes Desktop will hot-reload this extension if it's running.)"),
+      kleur.dim("  (Amiba Desktop will hot-reload this extension if it's running.)"),
     )
   } finally {
     rmSync(stagingRoot, { recursive: true, force: true })

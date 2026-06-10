@@ -3,16 +3,16 @@
 - 日期：2026-06-05
 - 范围：新增 `extensions/agent-village/`（不改动任何 core 包 / apps）
 - 灵感来源：[ringhyacinth/Star-Office-UI](https://github.com/ringhyacinth/Star-Office-UI)
-- 一句话：一个 hermes-x 扩展，用星露谷式像素村庄**实时展示"当前 agent 正在做什么"**，下半部配像素风统计面板。
+- 一句话：一个 amiba 扩展，用星露谷式像素村庄**实时展示"当前 agent 正在做什么"**，下半部配像素风统计面板。
 
 ## 1. 目标与非目标
 
 ### 目标
 
-- 在 hermes-x 既有扩展系统里新增一个**自包含扩展** `io.hermes.agent-village`，形态对齐现有 `tool-meter` / `token-meter`：一个 ActivityBar 图标 + 一个 webview 主面板 + 一个轻量设置页。
+- 在 amiba 既有扩展系统里新增一个**自包含扩展** `io.hermes.agent-village`，形态对齐现有 `tool-meter` / `token-meter`：一个 ActivityBar 图标 + 一个 webview 主面板 + 一个轻量设置页。
 - **两者并重**的体验：
   - 上半部 = **实时活场景**——PixiJS 渲染的像素村庄，agent 化身村民，跟着工具调用走到对应"工位"做星露谷式动作（读文件=看书、跑命令=敲铁砧、搜索=钓鱼……）。
-  - 下半部 = **像素风统计面板**——复用 `@hermes-x/ui` 的图表，展示调用趋势、热力图、按工具占比、成本、在场会话列表、村庄事件日志。
+  - 下半部 = **像素风统计面板**——复用 `@amiba/ui` 的图表，展示调用趋势、热力图、按工具占比、成本、在场会话列表、村庄事件日志。
 - **多 agent 村庄**：利用 hermes-agent 的 `parent/child session` 关系，主会话 = 主角村民，每个子会话 = 一个村民，表达"谁在忙 / 谁在等 / 谁收工 / 谁出错"。
 - **方案 A：自包含 · 轮询驱动**——不碰 `packages/extension-api` / `extension-host` / `apps/*`，全部能力在扩展内用既有 host API 实现。
 
@@ -43,7 +43,7 @@
 │  <App>                                                        │
 │   ├─ <VillageScene>  ← PixiJS：把 WorldState 渲染成村庄        │
 │   │       Pixi ticker 60fps 补间，村民走向对应工位            │
-│   └─ <StatsPanel>    ← DOM：复用 @hermes-x/ui（Heatmap 等）     │
+│   └─ <StatsPanel>    ← DOM：复用 @amiba/ui（Heatmap 等）     │
 └──────────────────────────────────────────────────────────────┘
 
 extensions/agent-village/
@@ -64,7 +64,7 @@ extensions/agent-village/
   "id": "io.hermes.agent-village",
   "name": "Agent Village",
   "version": "0.1.0",
-  "engines": { "hermes-x": "^0.1.0" },
+  "engines": { "amiba": "^0.1.0" },
   "entries": { "main": "dist/main.cjs" },
   "contributes": {
     "main": {
@@ -84,7 +84,7 @@ extensions/agent-village/
 }
 ```
 
-- 包名 `@hermes-x/ext-agent-village`。
+- 包名 `@amiba/ext-agent-village`。
 - `contributes.settings` 用独立 HTML 入口（`src/ui/settings/`），由 `vite.ui.config.ts` 的 `rollupOptions.input` 多入口产出（`main` + `settings`）。
 - `chat.onEvent` / `hermes.listSessions` 在 Phase 1 不需要单独权限 token（沿用 tool-meter 写法）。
 
@@ -222,7 +222,7 @@ interface ToolEventRecord {
 
 ## 6. 统计面板
 
-DOM 实现，复用 `@hermes-x/ui` 的 `Heatmap` / SparkBar / ToolRow（仿 `tool-meter/src/ui/main/App.tsx`）。与场景上下分栏（或 tab 切换）。
+DOM 实现，复用 `@amiba/ui` 的 `Heatmap` / SparkBar / ToolRow（仿 `tool-meter/src/ui/main/App.tsx`）。与场景上下分栏（或 tab 切换）。
 
 | 区块 | 数据口径 | 来源 |
 |---|---|---|
@@ -279,15 +279,15 @@ extensions/agent-village/
 ## 9. 构建 / 依赖 / 许可
 
 - 双 Vite 配置照搬 tool-meter：
-  - `vite.main.config.ts` → `dist/main.cjs`（lib/cjs；external `@hermes-x/*`、`electron`、`node:*` 等）。
+  - `vite.main.config.ts` → `dist/main.cjs`（lib/cjs；external `@amiba/*`、`electron`、`node:*` 等）。
   - `vite.ui.config.ts`（`base:"./"`，root `src/ui`）→ `dist/ui`，**多入口**（`rollupOptions.input` = `main` + `settings`，分别产出 `dist/ui/main/index.html`、`dist/ui/settings/index.html`）。**PixiJS 打进 ui bundle**（external 只作用于 main 侧）。
 - 素材：`import url from "../../../assets/..."` → Vite 指纹化 + `base:"./"` 相对路径 → Pixi `Assets.load(url)`。
 - 依赖：
-  - deps：`@hermes-x/extension-api`、`@hermes-x/ui`、`lucide-react`、`pixi.js`
+  - deps：`@amiba/extension-api`、`@amiba/ui`、`lucide-react`、`pixi.js`
   - peer：`electron`、`react`、`react-dom`
-  - dev：`@hermes-x/extension-cli`、`@hermes-x/tailwind-preset`、`@vitejs/plugin-react`、`tailwindcss`、`postcss`、`autoprefixer`、`typescript`、`vite`、`vitest`、`@types/*`
+  - dev：`@amiba/extension-cli`、`@amiba/tailwind-preset`、`@vitejs/plugin-react`、`tailwindcss`、`postcss`、`autoprefixer`、`typescript`、`vite`、`vitest`、`@types/*`
 - **许可合规**：`assets/CREDITS.md` 逐项登记每个第三方素材的来源 + 许可；混合策略下每个第三方素材**必须可再分发**（CC0 最稳；手搓补的素材标注自有）。星露谷本体素材**禁止**直接使用。
-- dev：`hermes-x-ext dev`；pack：`hermes-x-ext pack`（照搬 package.json scripts）。
+- dev：`amiba-ext dev`；pack：`amiba-ext pack`（照搬 package.json scripts）。
 
 ## 10. 测试与验收
 
@@ -296,7 +296,7 @@ extensions/agent-village/
   - `world`：给定 `liveMain` + `listSessions` mock → 期望 `WorldState`（亲子分组、status 推断、cap 折叠）。
   - `events-store` / `stats`：事件天桶 → by-tool / 热力图分级；`listSessions` → 天桶 / 成本累加。
 - **不对 Pixi 渲染做单测**——靠 `WorldState` 纯函数边界保证逻辑正确，渲染器只消费它。
-- **构建自检**：`tsc --noEmit` exit=0；`vite build`（两配置）exit=0；`hermes-x-ext pack` 产物可被宿主加载。
+- **构建自检**：`tsc --noEmit` exit=0；`vite build`（两配置）exit=0；`amiba-ext pack` 产物可被宿主加载。
 - **人工验收**：桌面端跑一个会话 → 主角实时走到对应工位做动作；派生子 agent → 村庄出现新村民；会话结束 → 村民收工；统计面板数字与 `listSessions` 一致。
 
 ## 11. 后续（v2+）

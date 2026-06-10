@@ -1,6 +1,6 @@
 /**
  * Background SW configuration. Endpoints + storage keys + default model
- * are sourced from @hermes-x/core (shared with desktop). Extension-only
+ * are sourced from @amiba/core (shared with desktop). Extension-only
  * constants (alarms, heartbeat timing, agent-window config, userscript
  * update cadence) live in this file.
  */
@@ -12,7 +12,7 @@ export {
   ATTACHMENT_HTTP_BASE,
   DEFAULT_HERMES_API_BASE,
   DEFAULT_HERMES_MODEL,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 export const RECONNECT_MS = 3000;
 

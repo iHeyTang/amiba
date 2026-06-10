@@ -17,10 +17,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { ExtensionWebView, useExtensionSettings } from "@hermes-x/extension-host/renderer";
+import { ExtensionWebView, useExtensionSettings } from "@amiba/extension-host/renderer";
 import { resolveExtensionIcon } from "../chat/ActivityBar";
 
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
 import {
   Button,

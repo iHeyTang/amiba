@@ -1,8 +1,8 @@
 import { Loader2, PlugZap } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { useT } from "@hermes-x/i18n";
-import { Button } from "@hermes-x/ui";
+import { useT } from "@amiba/i18n";
+import { Button } from "@amiba/ui";
 
 import type { ConnectionState } from "~lib/types";
 

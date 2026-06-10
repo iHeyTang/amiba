@@ -2,7 +2,7 @@
  * STT client — posts an audio blob to the backplane's
  * ``/hermes/stt`` endpoint and returns the transcribed text.
  *
- * The ``hermes-x-backplane`` server hosts this route and lazy-imports
+ * The ``amiba-backplane`` server hosts this route and lazy-imports
  * ``tools.transcription_tools.transcribe_audio`` from the upstream
  * hermes-agent runtime in the same Python process. That keeps the wire
  * contract self-contained on the backplane side — the renderer never

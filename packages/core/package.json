@@ -1,5 +1,5 @@
 {
-  "name": "@hermes-x/core",
+  "name": "@amiba/core",
   "version": "0.1.0",
   "private": true,
   "description": "Shared chat domain types + ChatEngineClient interface (transport-agnostic).",
@@ -14,9 +14,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@hermes-x/i18n": "workspace:*",
-    "@hermes-x/platform": "workspace:*",
-    "@hermes-x/utils": "workspace:*"
+    "@amiba/i18n": "workspace:*",
+    "@amiba/platform": "workspace:*",
+    "@amiba/utils": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0"

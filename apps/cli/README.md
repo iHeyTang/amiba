@@ -1,6 +1,6 @@
-# @hermes-x/cli
+# @amiba/cli
 
-The **hermes-x CLI** (command: `hermes-x`) — scaffolding and tooling for the hermes-x ecosystem. It
+The **amiba CLI** (command: `amiba`) — scaffolding and tooling for the amiba ecosystem. It
 started as the extension CLI and has grown beyond that; today it covers:
 
 - **Extensions** — scaffold / dev / build / pack / install desktop extensions
@@ -12,29 +12,29 @@ started as the extension CLI and has grown beyond that; today it covers:
 ## Installation
 
 ```sh
-pnpm add -g @hermes-x/cli   # installs the `hermes-x` command
+pnpm add -g @amiba/cli   # installs the `amiba` command
 # or, from a local checkout:
 node apps/cli/dist/cli.js --help
 ```
 
 ## Commands
 
-### `hermes-x create [name]`
+### `amiba create [name]`
 
 Scaffold a new desktop **extension** from the built-in template.
 
 ```sh
-hermes-x create my-extension --id com.example.my-extension
+amiba create my-extension --id com.example.my-extension
 ```
 
-### `hermes-x create-mention-source [name]`
+### `amiba create-mention-source [name]`
 
 Scaffold a **mention source** — a composer `@`-mention provider for an external
 system. Produces the four-piece source (`source.py` + `mention-source.yaml` +
 `skills/resolve.md` + `__init__.py`) as a ready git repo.
 
 ```sh
-hermes-x create-mention-source notion --description "Notion pages"
+amiba create-mention-source notion --description "Notion pages"
 ```
 
 See `backend/docs/mention-sources.md` for the author guide.
@@ -67,14 +67,14 @@ my-extension/
         └── zh-CN.json
 ```
 
-### `hermes-x dev`
+### `amiba dev`
 
 Build the extension in watch mode. Spawns two parallel Vite watch processes
 (main + UI) and touches `manifest.json` on any output change so the running
 desktop app hot-reloads the extension automatically.
 
 ```sh
-hermes-x dev
+amiba dev
 ```
 
 Recommended workflow:
@@ -90,13 +90,13 @@ Options:
 |------|-------------|
 | `--no-symlink` | Accepted for backward compatibility; has no effect |
 
-### `hermes-x build`
+### `amiba build`
 
 Production build — runs `vite build -c vite.main.config.ts` followed by
 `vite build -c vite.ui.config.ts`. Validates `manifest.json` first.
 
 ```sh
-hermes-x build
+amiba build
 ```
 
 Output:
@@ -111,15 +111,15 @@ dist/
     └── assets/               # shared JS chunks
 ```
 
-### `hermes-x pack`
+### `amiba pack`
 
 Produce `extension.tgz` ready for attaching to a GitHub Release.
 Tarballs `manifest.json` + `dist/` (which contains `main.cjs` and
 `ui/<surface>/index.html`).
 
 ```sh
-hermes-x pack
-hermes-x pack -o dist/extension.tgz
+amiba pack
+amiba pack -o dist/extension.tgz
 ```
 
 Options:
@@ -128,20 +128,20 @@ Options:
 |------|-------------|
 | `-o, --output <path>` | Output tarball path (default: `extension.tgz`) |
 
-### `hermes-x install <repo>`
+### `amiba install <repo>`
 
 Install an extension directly from a GitHub Release into
 `<userData>/extensions/<id>/`.
 
 ```sh
 # Install the latest release
-hermes-x install owner/repo
+amiba install owner/repo
 
 # Install a specific tag
-hermes-x install owner/repo@v1.2.3
+amiba install owner/repo@v1.2.3
 
 # Install and verify the tarball checksum
-hermes-x install owner/repo --sha256 <hex>
+amiba install owner/repo --sha256 <hex>
 ```
 
 Arguments:
@@ -164,14 +164,14 @@ The command:
 4. Extracts and validates `manifest.json` at the archive root.
 5. Moves the directory into `<userData>/extensions/<id>/`.
 
-If Hermes Desktop is running, it will hot-reload the newly installed extension
+If Amiba Desktop is running, it will hot-reload the newly installed extension
 automatically via its manifest-watcher.
 
-The install path honours the `HERMES_X_DEV_EXTENSIONS_PATH` environment variable
+The install path honours the `AMIBA_DEV_EXTENSIONS_PATH` environment variable
 (same override the desktop itself uses).
 
 This command re-implements the GitHub-release-to-disk flow in pure Node rather
-than delegating to `@hermes-x/extension-host/main`, which depends on Electron
+than delegating to `@amiba/extension-host/main`, which depends on Electron
 and is therefore unavailable in a plain Node CLI process.
 
 ## Extension architecture

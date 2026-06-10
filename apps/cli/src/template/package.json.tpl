@@ -2,11 +2,11 @@
   "name": "@{{AUTHOR}}/{{NAME}}",
   "version": "0.1.0",
   "private": true,
-  "description": "A hermes-x extension.",
+  "description": "A amiba extension.",
   "scripts": {
     "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.ui.config.ts",
-    "dev": "hermes-x dev",
-    "pack": "hermes-x pack",
+    "dev": "amiba dev",
+    "pack": "amiba pack",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -15,9 +15,9 @@
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
-    "@hermes-x/extension-api": "^0.1.0",
-    "@hermes-x/cli": "^0.1.0",
-    "@hermes-x/tailwind-preset": "^0.1.0",
+    "@amiba/extension-api": "^0.1.0",
+    "@amiba/cli": "^0.1.0",
+    "@amiba/tailwind-preset": "^0.1.0",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",

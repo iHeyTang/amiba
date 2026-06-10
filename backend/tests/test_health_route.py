@@ -2,8 +2,8 @@
 import pytest
 from aiohttp import web
 
-from hermes_x_backplane.runtime.http_app import build_http_app
-from hermes_x_backplane.runtime.protocol import PROTOCOL_VERSION
+from amiba_backplane.runtime.http_app import build_http_app
+from amiba_backplane.runtime.protocol import PROTOCOL_VERSION
 
 
 @pytest.fixture

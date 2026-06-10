@@ -1,6 +1,6 @@
 # Mention sources — author guide
 
-A **mention source** lets the hermes-x desktop composer `@`-mention an external
+A **mention source** lets the amiba desktop composer `@`-mention an external
 system's resources (a Feishu doc, a Notion page, a Jira ticket…). The user picks
 a resource from a typeahead; it's inserted into the message as a self-describing
 handle; the agent resolves that handle on demand.
@@ -29,7 +29,7 @@ A mention source only does **discovery for the composer** (`search`) plus a thin
 Scaffold them with the CLI:
 
 ```bash
-pnpm hermes-x create-mention-source notion --description "Notion pages"
+pnpm amiba create-mention-source notion --description "Notion pages"
 ```
 
 That produces a directory (a git repo) with:
@@ -119,7 +119,7 @@ curl -XPOST 127.0.0.1:9394/hermes/mention-sources \
 
 # install from a published repo (versioned via git):
 curl -XPOST 127.0.0.1:9394/hermes/mention-sources \
-  -d '{"from_git":"https://github.com/you/hermes-x-source-notion"}'
+  -d '{"from_git":"https://github.com/you/amiba-source-notion"}'
 
 # update (dispatches on the recorded method) / remove:
 curl -XPOST   "127.0.0.1:9394/hermes/mention-sources/update?name=notion"

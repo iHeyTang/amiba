@@ -20,7 +20,7 @@
  *                                 it on mount.
  */
 
-import type { ChatMessage } from "@hermes-x/core"
+import type { ChatMessage } from "@amiba/core"
 
 // ---------------------------------------------------------------------------
 // page-context
@@ -133,9 +133,9 @@ export interface NavigateOpenPolicyCapability {
 /**
  * The composer's approval banner needs to POST decisions back to the gateway
  * (`/v1/runs/{runId}/approval`). Both apps share `postHermesApprovalDecision`
- * from @hermes-x/core, but they bind it differently — extension reaches
+ * from @amiba/core, but they bind it differently — extension reaches
  * through the same backplane the SW uses; desktop reaches through main's
- * backplane. Default impl provided in @hermes-x/core is fine for both,
+ * backplane. Default impl provided in @amiba/core is fine for both,
  * so this isn't a capability — just noting it lives in core.
  */
 

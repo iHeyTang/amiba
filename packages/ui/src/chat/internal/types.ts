@@ -1,7 +1,7 @@
 /**
  * UI-level message shape used by the chat bubble renderer.
  *
- * Distinct from the wire-protocol types in @hermes-x/core:
+ * Distinct from the wire-protocol types in @amiba/core:
  *
  *   - `ChatRuntimeState` (core) — what the engine sends on the port.
  *   - `UiMessage` (here)        — what the React component renders, which
@@ -19,7 +19,7 @@ import type {
   AttachmentBadge,
   ChatMessage,
   HermesToolProgress
-} from "@hermes-x/core"
+} from "@amiba/core"
 
 export interface UiMessage extends ChatMessage {
   uiId: string
@@ -76,7 +76,7 @@ export interface UiMessage extends ChatMessage {
 
 /**
  * Interleaved text + tool + approval items in the order they streamed in.
- * Matches `AssistantTimelineItem` in @hermes-x/core, but kept locally so the
+ * Matches `AssistantTimelineItem` in @amiba/core, but kept locally so the
  * UI can extend it later without breaking the wire protocol.
  */
 export type AssistantTimelineItem =

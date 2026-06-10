@@ -92,7 +92,7 @@ export const zhCN: Messages = {
 
   // Mention sources —— composer 的可插拔 @ 提及来源
   "options.mentionSources.title": "可以在对话里 @ 提及的外部来源（如飞书文档）。每个是一个 git 仓，填 URL 安装、更新即 git pull。它不是 hermes 插件 —— agent 动作/触发归 hermes 的 plugins/mcp/platforms。",
-  "options.mentionSources.installPlaceholder": "git URL，如 https://github.com/you/hermes-x-source-notion",
+  "options.mentionSources.installPlaceholder": "git URL，如 https://github.com/you/amiba-source-notion",
   "options.mentionSources.install": "安装",
   "options.mentionSources.installing": "安装中…",
   "options.mentionSources.loading": "加载来源中…",
@@ -218,7 +218,7 @@ export const zhCN: Messages = {
     "首次启用双击模式时，macOS 会弹窗请求「辅助功能」权限，授权后才能监听全局按键。",
 
   // 首次启动 onboarding 向导
-  "onboarding.title": "Hermes X",
+  "onboarding.title": "Amiba",
   "onboarding.tagline":
     "Hermes Agent 的原生桌面客户端。\n随时双击 Command 键唤起对话，让 Hermes 始终在你触手可及处。",
   "onboarding.subtitle":

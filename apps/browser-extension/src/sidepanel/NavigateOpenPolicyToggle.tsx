@@ -6,9 +6,9 @@
 import { Bot, MousePointerClick, PlusSquare, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 import type { NavigateOpenPolicy } from "~lib/types";
-import { cn } from "@hermes-x/ui";
+import { cn } from "@amiba/ui";
 interface NavigateOpenPolicyToggleProps {
   policy: NavigateOpenPolicy;
   onChange: (next: NavigateOpenPolicy) => void;

@@ -492,7 +492,7 @@ export interface RunAgentOptions {
    * Per-turn read-only context for tool handlers (e.g. frozen browser-tab
    * snapshot). PUT to the backplane's ``/hermes/turn-metadata`` side
    * channel BEFORE the ``/v1/runs`` POST and looked up by tool handlers
-   * over loopback (see ``hermes-x-plugin-browser-tools`` →
+   * over loopback (see ``amiba-plugin-browser-tools`` →
    * ``_fetch_turn_metadata``). The lookup key is the same session key
    * api_server resolves as its ``approval_session_key``:
    * ``sessionKey`` header > ``sessionId`` body. Never lands in the

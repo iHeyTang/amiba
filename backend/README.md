@@ -1,12 +1,12 @@
-# hermes-x-backplane
+# amiba-backplane
 
-hermes-x desktop 的**本地 HTTP 后端 server**(独立进程,**不是 hermes plugin**)。
+amiba desktop 的**本地 HTTP 后端 server**(独立进程,**不是 hermes plugin**)。
 由 desktop spawn + 监管(desktop 是进程主管),把 Hermes core(以及内置的
 **mention-sources 框架**)的能力暴露成本机客户端(浏览器扩展、桌面渲染端)能消费的
 HTTP。默认监听 `127.0.0.1:9394`(用 `HERMES_BACKPLANE_PORT` 覆盖)。
 
-启动:`python -m hermes_x_backplane.server --port 9394`(或 console
-script `hermes-x-backplane`)。
+启动:`python -m amiba_backplane.server --port 9394`(或 console
+script `amiba-backplane`)。
 
 ## 定位:独立 server,不是 plugin
 
@@ -20,18 +20,18 @@ script `hermes-x-backplane`)。
 东西:一个 HTTP server。`register(ctx)` / `plugin.yaml` / `hermes_agent.plugins`
 entry-point 都已删除。
 
-> 对比:`hermes-x-plugin-browser-tools`(注册 `my_browser_*` tools + WS hub)**仍是
+> 对比:`amiba-plugin-browser-tools`(注册 `my_browser_*` tools + WS hub)**仍是
 > 真 plugin** —— 它确实给 agent 加能力。
 >
 > 而 **mention-sources 框架在本仓**(`runtime/mention_sources/`)。它**不是** hermes
 > 意义上的 "integration"/连接器 —— 真连接器(agent 动作 / 入站触发 / 鉴权)是 hermes
 > 自己的 `plugins` / `mcp` / `platforms`。mention source 只填 hermes 填不了的那个洞:
-> **给桌面 composer 的 @ 提及发现(search)**。曾经它叫 `hermes-x-plugin-integrations`
+> **给桌面 composer 的 @ 提及发现(search)**。曾经它叫 `amiba-plugin-integrations`
 > 插件,但 `provides_tools: []`、`hooks: []` —— 是个 composer/backplane 的事穿了插件
 > 马甲,已脱掉搬进本仓。源**实例**(如 lark)仍是可插拔的独立 **git 仓**,装在
 > `~/.hermes/mention-sources/`。作者指南见 [`docs/mention-sources.md`](docs/mention-sources.md)。
 
-设计见 hermes-x 仓 `docs/superpowers/specs/2026-06-09-desktop-centric-backend-design.md`。
+设计见 amiba 仓 `docs/superpowers/specs/2026-06-09-desktop-centric-backend-design.md`。
 
 ## 仓库关系
 
@@ -40,8 +40,8 @@ entry-point 都已删除。
 | Repo | 角色 |
 |---|---|
 | **this repo** | 本地 HTTP server：`/hermes/*` + mention-sources gateway（`/mention-sources/<name>/search`、`/hermes/mention-resources`、`/hermes/mention-sources*`）+ **内置 mention-sources 框架**（`runtime/mention_sources/`：loader/manager + skills 接线） |
-| `~/.hermes/mention-sources/<name>/`（如 [hermes-x-integration-lark](https://github.com/iHeyTang/hermes-x-integration-lark)） | 可插拔的源**实例**（git 仓：`search` + `mention-source.yaml` + resolver skill）；由本仓的框架经 git 加载/管理 |
-| [hermes-x-plugin-browser-tools](https://github.com/iHeyTang/hermes-x-plugin-browser-tools) | 给 agent 的 browser 工具（screenshot / navigate / inbox 等），通过 WS bridge 连扩展（**仍是真 plugin**） |
+| `~/.hermes/mention-sources/<name>/`（如 [amiba-integration-lark](https://github.com/amiba-desktop/amiba-integration-lark)） | 可插拔的源**实例**（git 仓：`search` + `mention-source.yaml` + resolver skill）；由本仓的框架经 git 加载/管理 |
+| [amiba-plugin-browser-tools](https://github.com/amiba-desktop/amiba-plugin-browser-tools) | 给 agent 的 browser 工具（screenshot / navigate / inbox 等），通过 WS bridge 连扩展（**仍是真 plugin**） |
 | [hermes-my-browser-extension](https://github.com/iHeyTang/hermes-my-browser-extension) | Chrome 扩展前端，调本插件的 `/hermes/*` 端点 |
 
 本仓本身就提供 `/hermes/*` 全套 + `/mention-sources/*`(框架自己加载
@@ -51,7 +51,7 @@ entry-point 都已删除。
 ```bash
 # 它现在是独立 server,由 desktop spawn(开发期手动起):
 pip install -e .                       # 装本地副本(需要 hermes-agent 可 import)
-hermes-x-backplane --port 9394         # 或 python -m hermes_x_backplane.server
+amiba-backplane --port 9394         # 或 python -m amiba_backplane.server
 # 聊天用的 gateway 另起(desktop 会一并 spawn+监管这两个进程):
 hermes gateway run
 ```
@@ -95,11 +95,11 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
 
 万一框架不可用，这几条路由优雅降级（空注册表 / 503），backplane 其余部分不受影响。
 **写一个源** 见作者指南 [`docs/mention-sources.md`](docs/mention-sources.md)
-（或 `hermes-x create-mention-source <name>` 一键生成模板）。
+（或 `amiba create-mention-source <name>` 一键生成模板）。
 
 ## 关键设计点
 
-- **独立 server,不是 plugin**：由 desktop spawn(`hermes-x-backplane` /
+- **独立 server,不是 plugin**：由 desktop spawn(`amiba-backplane` /
   `python -m …server`),不再有 `register(ctx)` / `plugin.yaml` /
   `_is_agent_invocation` 那套 plugin-mode 机制 —— 见开头「定位」一节。
 - **自己加载源**：启动时 `server.py:_load_mention_sources()` 调内置框架的
@@ -116,9 +116,9 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
   对照（共有 / 官方独有 / 我们独有 / 全局残留 / 变更日志）。**持续维护，
   每次改 backplane 或 upstream 升级要同步更新。**
 - 怎么写一个源（`search` + `mention-source.yaml` + resolver skill）—— 见作者指南
-  [`docs/mention-sources.md`](docs/mention-sources.md)、`hermes-x
+  [`docs/mention-sources.md`](docs/mention-sources.md)、`amiba
   create-mention-source` 脚手架,和参考实现
-  [`hermes-x-integration-lark`](https://github.com/iHeyTang/hermes-x-integration-lark)。
+  [`amiba-integration-lark`](https://github.com/amiba-desktop/amiba-integration-lark)。
 
 ## 配置
 
@@ -138,12 +138,12 @@ curl http://127.0.0.1:9394/hermes/sessions   # smoke test
 
 文件布局：
 
-src-layout —— 包就是 `hermes_x_backplane/`,子包**自动发现**(`packages.find`),
+src-layout —— 包就是 `amiba_backplane/`,子包**自动发现**(`packages.find`),
 不再手维护清单:
 
 ```
-pyproject.toml                      # 包元数据 + console script `hermes-x-backplane`
-hermes_x_backplane/
+pyproject.toml                      # 包元数据 + console script `amiba-backplane`
+amiba_backplane/
   __init__.py
   runtime/
     server.py                       # 启动入口：load 源 + 起 aiohttp
@@ -158,7 +158,7 @@ docs/mention-sources.md             # 源作者指南
 docs/api-parity.md                  # 与官方 API 对照
 ```
 
-（**框架**在 `hermes_x_backplane/runtime/mention_sources/`；源**实例**（如 lark）是独立
+（**框架**在 `amiba_backplane/runtime/mention_sources/`；源**实例**（如 lark）是独立
 可插拔的 git 仓,装在 `~/.hermes/mention-sources/`。)
 
 ## License

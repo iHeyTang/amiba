@@ -32,7 +32,7 @@ import {
   listHermesSessions,
   parseCronSessionJobId,
   type HermesSession,
-} from "@hermes-x/core"
+} from "@amiba/core"
 
 import { sendToNotifier } from "./notifier-window"
 

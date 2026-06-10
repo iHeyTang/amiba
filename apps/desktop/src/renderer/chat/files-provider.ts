@@ -1,6 +1,6 @@
 import type { LexicalEditor } from "lexical"
-import { insertMentionAtTrigger } from "@hermes-x/ui"
-import type { MenuItem, MentionData, TriggerProvider } from "@hermes-x/ui"
+import { insertMentionAtTrigger } from "@amiba/ui"
+import type { MenuItem, MentionData, TriggerProvider } from "@amiba/ui"
 
 /**
  * Desktop `@file` mention provider. Lists the active session's bound

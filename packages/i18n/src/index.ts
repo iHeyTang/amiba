@@ -1,4 +1,4 @@
-import { getPlatform } from "@hermes-x/platform"
+import { getPlatform } from "@amiba/platform"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { en, type MessageKey } from "./en"

@@ -11,7 +11,7 @@
  *
  * Internally each folder owns a barrel (``./<folder>/index.ts``); this
  * root re-exports the lot so consumers always say
- * ``import { … } from "@hermes-x/ui"`` regardless of which domain a
+ * ``import { … } from "@amiba/ui"`` regardless of which domain a
  * symbol comes from. Tree-shaking handles the unused branches.
  */
 export * from "./primitives"

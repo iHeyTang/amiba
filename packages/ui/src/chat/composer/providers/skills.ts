@@ -1,4 +1,4 @@
-import { getHermesSkills } from "@hermes-x/core"
+import { getHermesSkills } from "@amiba/core"
 import { $getSelection, $isRangeSelection, type LexicalEditor } from "lexical"
 import { $createMentionNode } from "../MentionNode"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"

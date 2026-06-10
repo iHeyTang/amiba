@@ -5,7 +5,7 @@ import type {
   SnapshotFrame,
   StreamEvent,
   SubmitPayload
-} from "@hermes-x/core"
+} from "@amiba/core"
 
 type SnapshotListener = (frame: SnapshotFrame) => void
 type StreamListener = (sessionId: string, event: StreamEvent) => void

@@ -1,6 +1,6 @@
-# hermes-x
+# amiba
 
-Multi-target workspace for Hermes:
+**Amiba** — a desktop client + browser extension built on the [Hermes agent](https://github.com/NousResearch/hermes-agent). Multi-target workspace:
 
 - `apps/browser-extension` — browser extension (Plasmo, copied from `hermes-my-browser-extension`)
 - `apps/desktop` — desktop app (Electron + Vite + React)
@@ -11,12 +11,12 @@ Multi-target workspace for Hermes:
 - `packages/theme` — `useStoredThemePreference` / `useResolvedTheme` / `useDocumentTheme`, persists via adapter
 - `packages/tailwind-preset` — shared Tailwind preset (shadcn color tokens, radius, font stack, `darkMode: class`)
 
-The four sibling directories at the parent (`hermes-agent`, `hermes-my-browser-extension`, `hermes-x-plugin-browser-tools`, `hermes-x-plugin-http-backplane`) are **not** part of this workspace and remain untouched.
+The four sibling directories at the parent (`hermes-agent`, `hermes-my-browser-extension`, `amiba-plugin-browser-tools`, `amiba-plugin-http-backplane`) are **not** part of this workspace and remain untouched.
 
 ## Layout
 
 ```
-hermes-x/
+amiba/
 ├── apps/
 │   ├── extension/        # Plasmo Chrome extension
 │   └── desktop/          # Electron app
@@ -81,14 +81,14 @@ The adapter surface lives at `apps/desktop/src/renderer/platform/adapter.ts` (wi
 
 Phase 1 — scaffolding (done):
 - [x] Monorepo root (`pnpm-workspace.yaml`, root `package.json`)
-- [x] `apps/browser-extension` = verbatim copy of original extension (renamed to `@hermes-x/browser-extension`)
+- [x] `apps/browser-extension` = verbatim copy of original extension (renamed to `@amiba/browser-extension`)
 - [x] `apps/desktop` = Electron + Vite + React shell with placeholder Chat/Settings routes
 - [x] `PlatformAdapter` interface + Electron implementation skeleton
 
 Phase 2a — foundation extraction (done, strangler-fig: extension still has its originals):
 - [x] `packages/platform` — `PlatformAdapter` interface, including `storage.watch()` for live updates.
 - [x] `packages/utils` — `cn`, `formatBytes`, `shortId`, `safeJsonStringify`.
-- [x] `packages/ui` — 14 shadcn primitives (Button, Card, Select, …). `cn` resolved via `@hermes-x/utils`.
+- [x] `packages/ui` — 14 shadcn primitives (Button, Card, Select, …). `cn` resolved via `@amiba/utils`.
 - [x] `packages/i18n` — `en` + `zh-CN` catalogs + `useT()`. Persists via `getPlatform().storage`.
 - [x] Desktop IPC: `storage.watch()` backed by main-process broadcast on every `storage:set` / `storage:remove`.
 - [x] `apps/desktop` consumes all four packages; Settings page edits language live, Chat page reacts via `storage.watch()`.
@@ -100,11 +100,11 @@ Phase 2b-1 — UI shell parity (done):
 - [x] `apps/desktop` consumes preset + tokens, calls `useResolvedTheme()` at the app root, pages use semantic tokens (`bg-background`, `text-foreground`, `text-muted-foreground`, `bg-sidebar`, `border-border`). Settings page exposes Language + Theme selectors.
 
 Phase 2b-2 — migrate extension to consume packages (done):
-- [x] `apps/browser-extension/package.json` adds `@hermes-x/{platform,utils,ui,i18n,theme,tailwind-preset}` workspace deps.
+- [x] `apps/browser-extension/package.json` adds `@amiba/{platform,utils,ui,i18n,theme,tailwind-preset}` workspace deps.
 - [x] `apps/browser-extension/src/lib/platform/chrome-adapter.ts` maps `PlatformAdapter` → `chrome.*`; `init.ts` calls `setPlatform()` once.
 - [x] Every entry (`sidepanel/index.tsx`, `options/index.tsx`, `newtab/index.tsx`, `tabs/chat.tsx`) imports `~lib/platform/init` as its first line.
-- [x] 26 files codemodded to import from `@hermes-x/*`. Zero `~lib/utils` / `~components/ui/*` / `~lib/i18n` / `~lib/theme` references remain.
-- [x] `apps/browser-extension/tailwind.config.js` is now just `presets + content`. `style.css` is `@tailwind` + `@import "@hermes-x/ui/styles/tokens.css"` + surface-specific blocks.
+- [x] 26 files codemodded to import from `@amiba/*`. Zero `~lib/utils` / `~components/ui/*` / `~lib/i18n` / `~lib/theme` references remain.
+- [x] `apps/browser-extension/tailwind.config.js` is now just `presets + content`. `style.css` is `@tailwind` + `@import "@amiba/ui/styles/tokens.css"` + surface-specific blocks.
 - [x] Duplicated sources deleted: `components/ui/*`, `lib/utils.ts`, `lib/i18n/`, `lib/theme.ts`.
 
 Phase 2c-1 — refactor storage-portable lib modules in place (done):
@@ -121,7 +121,7 @@ Phase 2c-2 — extension-only modules stay on chrome.*:
 Phase 3a — chat domain layer (done):
 - [x] `packages/core` with chat domain types: `ChatMessage`, `SessionMeta`, gateway wire protocol (`HermesToolProgress`, `HermesApprovalRequest`, …), engine ↔ UI protocol (`SubmitPayload`, `StreamEvent`, `SnapshotFrame`, `ChatRuntimeState`, …).
 - [x] `ChatEngineClient` interface — transport-agnostic surface the UI uses to talk to its engine.
-- [x] Extension's `lib/types.ts` / `lib/chat/hermes-client.ts` / `background/chat/types.ts` re-export from `@hermes-x/core` for back-compat.
+- [x] Extension's `lib/types.ts` / `lib/chat/hermes-client.ts` / `background/chat/types.ts` re-export from `@amiba/core` for back-compat.
 
 Phase 3b — chat-ui (done, lightweight desktop-ready shell):
 - [x] `packages/chat-ui` with `TabBar`, `SessionDrawer`, `MessageList`, `Composer`, `EmptyState`, and a composing `ChatView`.
@@ -163,7 +163,7 @@ Phase 3f — Options/Settings 1:1 lift (done):
   - `ScriptEditor` (168) + `ScriptList` (88) — userscript management UI (capability-gated).
   - `SettingsView.tsx` — main tab container (sidebar nav + content router). Scripts tab hides when `userscripts` capability absent.
   - `capabilities.ts` — `BridgeCapability` + `UserScriptCapability` + composed `OptionsCapabilities`.
-- [x] Additional lifts to `@hermes-x/core` to support settings-ui: `fetch-models` + `quick-actions` (chrome.storage → getPlatform().storage including `.watch()`).
+- [x] Additional lifts to `@amiba/core` to support settings-ui: `fetch-models` + `quick-actions` (chrome.storage → getPlatform().storage including `.watch()`).
 - [x] `apps/browser-extension/src/options/index.tsx` reduced from 507 → 20 LOC (`<SettingsView capabilities={chromeOptionsCapabilities} />`).
 - [x] `apps/browser-extension/src/lib/options/chrome-capabilities.ts` — `chrome.runtime.sendMessage` impls for userscript CRUD + `bridge.refresh`.
 - [x] `apps/desktop/src/renderer/options.tsx` (29 LOC) — `<SettingsView capabilities={{}} />`. Scripts tab + bridge refresh hidden automatically.

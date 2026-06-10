@@ -4,8 +4,8 @@ Backplane HTTP server — the launch entry point.
 This is THE way to run the backplane (it is a standalone server, not a hermes
 plugin). Desktop spawns + supervises it::
 
-    python -m hermes_x_backplane.server --port 9394   # or the
-    hermes-x-backplane                                          # console script
+    python -m amiba_backplane.server --port 9394   # or the
+    amiba-backplane                                          # console script
 
 Lanes (see ``features/__init__.py``):
 - ``/hermes/*``     — file-backed views over ``~/.hermes/`` (hermes-agent libs)
@@ -30,7 +30,7 @@ def _load_mention_sources() -> None:
     """Load mention sources + wire their resolver skills.
 
     The mention-sources framework is owned by the backplane (see
-    :mod:`hermes_x_backplane.runtime.mention_sources`). We load
+    :mod:`amiba_backplane.runtime.mention_sources`). We load
     ``~/.hermes/mention-sources/`` here so ``/mention-sources/*`` +
     ``/hermes/mention-resources`` work, and wire each source's ``skills/`` into
     the agent config. A failure degrades to an empty registry; the rest of the
@@ -62,7 +62,7 @@ async def _main(port: int) -> None:
     site = web.TCPSite(runner, "127.0.0.1", port)
     await site.start()
     logger.info(
-        "hermes-x-backplane HTTP on http://127.0.0.1:%d — "
+        "amiba-backplane HTTP on http://127.0.0.1:%d — "
         "/hermes/*, /mention-sources/{name}/search, /v1/* (-> gateway)",
         port,
     )
@@ -80,7 +80,7 @@ def main() -> None:
         apply_plugin_dotenv()
     except Exception:
         pass
-    parser = argparse.ArgumentParser(description="hermes-x-backplane HTTP server")
+    parser = argparse.ArgumentParser(description="amiba-backplane HTTP server")
     parser.add_argument("--port", type=int, default=9394, help="HTTP listen port")
     args = parser.parse_args()
     asyncio.run(_main(args.port))

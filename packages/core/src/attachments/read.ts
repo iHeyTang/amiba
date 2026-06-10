@@ -26,8 +26,8 @@
  * every type.
  */
 
-import { getPlatform } from "@hermes-x/platform";
-import { shortId } from "@hermes-x/utils";
+import { getPlatform } from "@amiba/platform";
+import { shortId } from "@amiba/utils";
 
 import { backplaneFetch } from "../backplane-client";
 
@@ -187,7 +187,7 @@ export function isAttachmentReadOk(
 export interface AttachmentReadOptions {
   /**
    * UUID of the side-panel chat session this attachment belongs to. Used
-   * by Python to group uploads in `~/.hermes/hermes-x/inbox/<id>/`
+   * by Python to group uploads in `~/.hermes/amiba/inbox/<id>/`
    * so we can GC them when the chat is deleted. Pass `"default"` (or
    * anything stable) if you don't have a session id yet.
    */

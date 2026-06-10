@@ -2,7 +2,7 @@ import {
   getMentionResources,
   searchMentionResource,
   type MentionResource,
-} from "@hermes-x/core"
+} from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { registerMentionType } from "../serialize"
 import { insertMentionAtTrigger } from "./skills"

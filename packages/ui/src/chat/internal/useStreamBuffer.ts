@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
-import { shortId } from "@hermes-x/utils";
+import { shortId } from "@amiba/utils";
 import {
   useSessions,
   type ChatRuntimeState,
   type HermesToolProgress,
   type StreamedToolCall,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 import type { AssistantTimelineItem, UiMessage } from "./types";
 

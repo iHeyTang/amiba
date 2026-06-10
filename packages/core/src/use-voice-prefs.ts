@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 
-import { getPlatform } from "@hermes-x/platform"
+import { getPlatform } from "@amiba/platform"
 
 import {
   DEFAULT_VOICE_PREFS,

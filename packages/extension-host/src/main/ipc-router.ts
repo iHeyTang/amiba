@@ -2,7 +2,7 @@
 import { BrowserWindow, dialog, ipcMain, shell, webContents } from "electron"
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join, resolve } from "node:path"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 import { validateManifest } from "./discover"
 import {
   fetchIndex,
@@ -131,7 +131,7 @@ export function registerWebViewChannels(opts: {
 
   /**
    * Backing implementation of `hermes.chat.startSession({ text })`
-   * from `@hermes-x/extension-api`. Hand a prompt off to the main
+   * from `@amiba/extension-api`. Hand a prompt off to the main
    * desktop window's chat surface and pass control back.
    *
    * The actual orchestration runs in the renderer because session

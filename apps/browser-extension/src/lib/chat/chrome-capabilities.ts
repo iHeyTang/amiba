@@ -12,7 +12,7 @@ import type {
   PendingPromptCapability,
   PendingPromptResult,
   ChatSurfaceCapabilities,
-} from "@hermes-x/ui";
+} from "@amiba/ui";
 
 import {
   capturePageContext,

@@ -12,8 +12,8 @@ import {
   type SttConfig,
   type SttConfigResult,
   type SttProvider,
-} from "@hermes-x/core"
-import { useT, type MessageKey } from "@hermes-x/i18n"
+} from "@amiba/core"
+import { useT, type MessageKey } from "@amiba/i18n"
 import {
   Button,
   Input,

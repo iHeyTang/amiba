@@ -1,10 +1,10 @@
 {
-  "name": "@hermes-x/cli",
+  "name": "@amiba/cli",
   "version": "0.1.0",
-  "description": "The hermes-x CLI (bin: hermes-x) — scaffold extensions and mention sources, and more.",
+  "description": "The amiba CLI (bin: amiba) — scaffold extensions and mention sources, and more.",
   "type": "module",
   "bin": {
-    "hermes-x": "dist/cli.js"
+    "amiba": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "exports": {
@@ -27,7 +27,7 @@
     "tar": "^7.0.0"
   },
   "devDependencies": {
-    "@hermes-x/extension-api": "workspace:*",
+    "@amiba/extension-api": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/prompts": "^2.4.9",
     "@types/tar": "^6.1.0",

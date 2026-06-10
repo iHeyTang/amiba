@@ -2,8 +2,8 @@ import "~lib/platform/init";
 
 import "~style.css";
 
-import { SessionsProvider } from "@hermes-x/core";
-import { HomeView } from "@hermes-x/ui";
+import { SessionsProvider } from "@amiba/core";
+import { HomeView } from "@amiba/ui";
 
 import { chromeHomeCapabilities } from "~lib/home/chrome-capabilities";
 

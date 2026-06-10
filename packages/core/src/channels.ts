@@ -8,11 +8,11 @@
  * This module is the single source of
  * truth for "what do we know about that source string" — display label
  * (i18n key), an icon hint that chat-ui maps to a Lucide component, and
- * whether hermes-x considers it a *local* channel (i.e. one we own and
+ * whether amiba considers it a *local* channel (i.e. one we own and
  * may write into) versus a *remote* channel (read-only window onto
  * someone else's engine).
  *
- * All hermes-x surfaces (extension + desktop main window + Quick-Ask)
+ * All amiba surfaces (extension + desktop main window + Quick-Ask)
  * share a single ``source="local"`` tag — the backplane folds legacy
  * ``"browser-extension"`` / ``"desktop"`` values onto it on boot.
  *
@@ -25,7 +25,7 @@
 // Source string constants
 // ---------------------------------------------------------------------------
 //
-// SessionDB ``source`` values that hermes-x itself writes. Kept here next
+// SessionDB ``source`` values that amiba itself writes. Kept here next
 // to the registry so any consumer (renderer, main process, tooling) can
 // import the canonical strings instead of hand-typing them. Only one
 // value today; if a future surface earns its own channel, add the
@@ -33,7 +33,7 @@
 // ``LOCAL_CHANNEL_SOURCES`` if it's locally writable.
 
 /**
- * Canonical "this machine" source tag, written by every local hermes-x
+ * Canonical "this machine" source tag, written by every local amiba
  * surface (browser extension sidepanel/options/newtab, desktop main
  * window, and Quick-Ask). One value across the board — the surface
  * that wrote a row isn't a user-visible distinction and so doesn't
@@ -90,11 +90,11 @@ export interface ChannelDescriptor {
   /** Icon hint — chat-ui maps this to a concrete component. */
   icon: ChannelIconTag;
   /**
-   * Whether hermes-x is the writing engine for sessions on this
+   * Whether amiba is the writing engine for sessions on this
    * channel. Local channels show the normal composer; remote channels
    * render the read-only banner instead.
    *
-   * "Local" here means: this hermes-x instance (extension or desktop)
+   * "Local" here means: this amiba instance (extension or desktop)
    * is the one that writes new turns. CLI / TUI / cron / gateway-driven
    * channels are not local even when running on the same machine —
    * they have their own engine that we must not race against.
@@ -103,8 +103,8 @@ export interface ChannelDescriptor {
 }
 
 /**
- * Sources hermes-x itself classifies as local. Single canonical value
- * — the backplane migration folds legacy hermes-x source tags onto
+ * Sources amiba itself classifies as local. Single canonical value
+ * — the backplane migration folds legacy amiba source tags onto
  * this one before the renderer ever sees them.
  */
 export const LOCAL_CHANNEL_SOURCES = new Set<string>([SOURCE_LOCAL]);
@@ -121,7 +121,7 @@ const REGISTRY: ChannelDescriptor[] = [
   },
 
   // ── Adjacent engines (same machine, different writer) ──
-  // Read-only from hermes-x's perspective: a CLI / TUI process owns the
+  // Read-only from amiba's perspective: a CLI / TUI process owns the
   // session; sending from desktop would race the other engine.
   {
     id: "cli",
@@ -337,7 +337,7 @@ export function resolveChannel(
 }
 
 /**
- * True when hermes-x is the writing engine for sessions tagged with
+ * True when amiba is the writing engine for sessions tagged with
  * this source. Drives the read-only banner gating in ChatSurface.
  */
 export function isLocalChannel(source: string | null | undefined): boolean {
@@ -351,8 +351,8 @@ export function listChannels(): readonly ChannelDescriptor[] {
 }
 
 /**
- * Resolve the SessionDB ``source`` tag for the current hermes-x surface.
- * Returns the single canonical local source for every hermes-x app
+ * Resolve the SessionDB ``source`` tag for the current amiba surface.
+ * Returns the single canonical local source for every amiba app
  * (extension + desktop main window + Quick-Ask) — they're all just
  * "this machine" from the user's perspective, so the on-disk tag is
  * uniform. Legacy ``"browser-extension"`` / ``"desktop"`` rows are

@@ -2,9 +2,9 @@ import "~lib/platform/init";
 
 import "~style.css";
 
-import { SessionsProvider } from "@hermes-x/core";
-import { ChatSurface } from "@hermes-x/ui";
-import { HomeView } from "@hermes-x/ui";
+import { SessionsProvider } from "@amiba/core";
+import { ChatSurface } from "@amiba/ui";
+import { HomeView } from "@amiba/ui";
 import { useMemo } from "react";
 
 import { ChromeChatEngineClient } from "~lib/chat/chrome-engine-client";
@@ -18,7 +18,7 @@ import { BridgeStatusBar } from "./BridgeStatusBar";
 import { EmptyStateBridgeGate } from "./EmptyStateBridgeGate";
 import { NavigateOpenPolicyToggle } from "./NavigateOpenPolicyToggle";
 
-export type { MessagesMaxWidth, ChatSurfaceProps as SidePanelProps } from "@hermes-x/ui";
+export type { MessagesMaxWidth, ChatSurfaceProps as SidePanelProps } from "@amiba/ui";
 
 /**
  * Extension side-panel entry.
@@ -26,7 +26,7 @@ export type { MessagesMaxWidth, ChatSurfaceProps as SidePanelProps } from "@herm
  * This file is a thin wrapper around `<ChatSurface>` (shared between
  * extension and desktop). Everything visible — the TabBar, message bubbles,
  * composer, attachment chips, approval banner, session drawer — lives in
- * `@hermes-x/chat-ui`.
+ * `@amiba/chat-ui`.
  *
  * What stays here is purely the extension-side wiring:
  *   - `ChromeChatEngineClient` — wraps `chrome.runtime.connect`

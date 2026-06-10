@@ -10,14 +10,14 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 import {
   getHermesCronJobs,
   parseCronSessionJobId,
   useCronSessions,
   type HermesCronJob,
   type HermesSession,
-} from "@hermes-x/core";
+} from "@amiba/core";
 import { cn } from "../primitives";
 /* ─────────────────────────── Top-level section header */
 

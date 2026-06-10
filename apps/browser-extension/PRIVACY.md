@@ -106,4 +106,4 @@ with a new "Last updated" date.
 
 ## Contact
 
-Issues: <https://github.com/iHeyTang/hermes-x-browser-extension/issues>
+Issues: <https://github.com/amiba-desktop/amiba-browser-extension/issues>

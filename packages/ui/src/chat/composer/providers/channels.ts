@@ -1,4 +1,4 @@
-import { listChannels } from "@hermes-x/core"
+import { listChannels } from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"

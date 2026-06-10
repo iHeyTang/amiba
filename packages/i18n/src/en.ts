@@ -97,7 +97,7 @@ export const en = {
 
   // Mention sources — pluggable @-mention sources for the composer
   "options.mentionSources.title": "Sources you can @-mention in chat (e.g. Feishu docs). Each is a git repo; install by URL, update pulls latest. Not a hermes plugin — agent actions/triggers belong to hermes plugins/mcp/platforms.",
-  "options.mentionSources.installPlaceholder": "git URL, e.g. https://github.com/you/hermes-x-source-notion",
+  "options.mentionSources.installPlaceholder": "git URL, e.g. https://github.com/you/amiba-source-notion",
   "options.mentionSources.install": "Install",
   "options.mentionSources.installing": "Installing…",
   "options.mentionSources.loading": "Loading sources…",
@@ -233,7 +233,7 @@ export const en = {
     "First time you turn double-tap on, macOS asks for Accessibility access; the hook can only see global key presses after you grant it.",
 
   // First-run onboarding wizard
-  "onboarding.title": "Hermes X",
+  "onboarding.title": "Amiba",
   "onboarding.tagline":
     "A native desktop client for Hermes Agent.\nDouble-tap ⌘ from anywhere to summon a chat — Hermes stays within reach.",
   "onboarding.subtitle":

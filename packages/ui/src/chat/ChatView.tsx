@@ -1,4 +1,4 @@
-import type { ChatEngineClient, SessionMeta } from "@hermes-x/core"
+import type { ChatEngineClient, SessionMeta } from "@amiba/core"
 import { ScrollArea } from "../primitives"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 

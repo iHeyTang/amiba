@@ -92,7 +92,7 @@ function loadUiohook(): UiohookModule | null {
     uiohookModule = require("uiohook-napi") as UiohookModule
   } catch (err) {
     console.warn(
-      "[hermes-x] uiohook-napi unavailable — double-tap hotkey disabled. " +
+      "[amiba] uiohook-napi unavailable — double-tap hotkey disabled. " +
         "Falling back to accelerator-only mode.",
       err,
     )
@@ -139,7 +139,7 @@ function attachDoubleTap(modifier: SummonModifier): boolean {
     const trusted = systemPreferences.isTrustedAccessibilityClient(true)
     if (!trusted) {
       console.warn(
-        "[hermes-x] Accessibility access not granted yet. macOS will only " +
+        "[amiba] Accessibility access not granted yet. macOS will only " +
           "deliver global key events to Hermes after you allow it in " +
           "System Settings → Privacy & Security → Accessibility and " +
           "restart the app. (In `pnpm dev`, the binary asking for the " +
@@ -154,7 +154,7 @@ function attachDoubleTap(modifier: SummonModifier): boolean {
   const codes = new Set(modifierKeycodes(uio.UiohookKey, modifier))
   if (codes.size === 0) {
     console.warn(
-      `[hermes-x] uiohook-napi has no keycode for modifier '${modifier}'.`,
+      `[amiba] uiohook-napi has no keycode for modifier '${modifier}'.`,
     )
     return false
   }
@@ -193,7 +193,7 @@ function attachDoubleTap(modifier: SummonModifier): boolean {
       try {
         summonCallback()
       } catch (err) {
-        console.error("[hermes-x] summon callback threw:", err)
+        console.error("[amiba] summon callback threw:", err)
       }
       return
     }
@@ -205,7 +205,7 @@ function attachDoubleTap(modifier: SummonModifier): boolean {
       uio.uIOhook.start()
       uiohookStarted = true
     } catch (err) {
-      console.error("[hermes-x] uiohook start() failed:", err)
+      console.error("[amiba] uiohook start() failed:", err)
       return false
     }
   }
@@ -246,13 +246,13 @@ function applyHotkey(next: SummonHotkey) {
       ok = globalShortcut.register(next.accelerator, summonCallback)
     } catch (err) {
       console.warn(
-        `[hermes-x] Accelerator '${next.accelerator}' rejected by Electron:`,
+        `[amiba] Accelerator '${next.accelerator}' rejected by Electron:`,
         (err as Error)?.message,
       )
     }
     if (!ok) {
       console.warn(
-        `[hermes-x] Failed to register accelerator '${next.accelerator}'. ` +
+        `[amiba] Failed to register accelerator '${next.accelerator}'. ` +
           "It's likely already claimed by another app or the OS.",
       )
     }
@@ -263,7 +263,7 @@ function applyHotkey(next: SummonHotkey) {
   const ok = attachDoubleTap(next.modifier)
   if (!ok) {
     console.warn(
-      "[hermes-x] Double-tap mode unavailable; the hotkey is effectively off. " +
+      "[amiba] Double-tap mode unavailable; the hotkey is effectively off. " +
         "Pick an accelerator binding from Preferences as a fallback.",
     )
   }
@@ -310,7 +310,7 @@ function handleSnipHotkey(): void {
         snipSummonCallback,
       )
     } catch (err) {
-      console.error("[hermes-x] snip hotkey failed:", err)
+      console.error("[amiba] snip hotkey failed:", err)
     } finally {
       snipInFlight = false
     }
@@ -328,13 +328,13 @@ function registerSnip(): void {
     ok = globalShortcut.register(SNIP_ACCELERATOR, handleSnipHotkey)
   } catch (err) {
     console.warn(
-      `[hermes-x] Snip accelerator '${SNIP_ACCELERATOR}' rejected by Electron:`,
+      `[amiba] Snip accelerator '${SNIP_ACCELERATOR}' rejected by Electron:`,
       (err as Error)?.message,
     )
   }
   if (!ok) {
     console.warn(
-      `[hermes-x] Failed to register snip accelerator '${SNIP_ACCELERATOR}'. ` +
+      `[amiba] Failed to register snip accelerator '${SNIP_ACCELERATOR}'. ` +
         "It's likely already claimed by another app or the OS.",
     )
     return
@@ -347,7 +347,7 @@ function unregisterSnip(): void {
   try {
     globalShortcut.unregister(SNIP_ACCELERATOR)
   } catch (err) {
-    console.warn("[hermes-x] unregister snip failed:", err)
+    console.warn("[amiba] unregister snip failed:", err)
   }
   snipRegistered = false
 }
@@ -413,7 +413,7 @@ export function stopHotkeyManager() {
     try {
       uio?.uIOhook.stop()
     } catch (err) {
-      console.warn("[hermes-x] uiohook stop() failed:", err)
+      console.warn("[amiba] uiohook stop() failed:", err)
     }
     uiohookStarted = false
   }

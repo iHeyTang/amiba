@@ -1,4 +1,4 @@
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export type ValidationResult =
   | { ok: true; manifest: ExtensionManifest }

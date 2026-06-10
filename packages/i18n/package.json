@@ -1,8 +1,8 @@
 {
-  "name": "@hermes-x/i18n",
+  "name": "@amiba/i18n",
   "version": "0.1.0",
   "private": true,
-  "description": "Locale catalogs + useT() hook (platform-agnostic, persists preference via @hermes-x/platform).",
+  "description": "Locale catalogs + useT() hook (platform-agnostic, persists preference via @amiba/platform).",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hermes-x/platform": "workspace:*"
+    "@amiba/platform": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0"

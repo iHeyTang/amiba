@@ -27,8 +27,8 @@ import {
   getHermesLogs,
   type HermesLogFile,
   type HermesLogLevel,
-} from "@hermes-x/core";
-import { useT, type TranslateFn } from "@hermes-x/i18n";
+} from "@amiba/core";
+import { useT, type TranslateFn } from "@amiba/i18n";
 import { cn } from "../primitives";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";

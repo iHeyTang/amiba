@@ -12,8 +12,8 @@
 import { ImageIcon as ImageBadgeIcon, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
-import type { Wallpaper, WallpaperController } from "@hermes-x/core";
-import { useT } from "@hermes-x/i18n";
+import type { Wallpaper, WallpaperController } from "@amiba/core";
+import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
 interface WallpaperBackdropProps {
   controller: WallpaperController;

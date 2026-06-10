@@ -45,8 +45,8 @@
  * first ``saveIndex`` doesn't try to re-create everything.
  */
 
-import { getPlatform } from "@hermes-x/platform";
-import { shortId } from "@hermes-x/utils";
+import { getPlatform } from "@amiba/platform";
+import { shortId } from "@amiba/utils";
 
 import {
   createHermesSession,

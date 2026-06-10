@@ -1,2 +1,2 @@
-// Lifted to @hermes-x/core/fetch-models.ts.
-export * from "@hermes-x/core";
+// Lifted to @amiba/core/fetch-models.ts.
+export * from "@amiba/core";

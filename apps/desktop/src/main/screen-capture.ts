@@ -58,7 +58,7 @@ export interface ScreenCaptureResult {
 }
 
 /** Filename prefix shared by every snip artefact so the startup sweep can find them. */
-const SNIP_PREFIX = "hermes-x-snip-"
+const SNIP_PREFIX = "amiba-snip-"
 
 /**
  * Directory under `userData` where snip PNGs land. We move them out of
@@ -107,8 +107,8 @@ interface SelectionRect {
 
 // Unique channel names so the snip flow can't clash with anything else
 // the main process exposes over ipcMain.
-const COMPLETE_CHANNEL = "hermes-x:screen-capture:complete"
-const CANCEL_CHANNEL = "hermes-x:screen-capture:cancel"
+const COMPLETE_CHANNEL = "amiba:screen-capture:complete"
+const CANCEL_CHANNEL = "amiba:screen-capture:cancel"
 
 // Minimum draggable region — anything smaller is almost certainly a
 // stray click and we treat it as a cancel rather than producing a 1px
@@ -248,7 +248,7 @@ export async function startScreenCapture(): Promise<ScreenCaptureResult | null> 
       overlay.once("closed", () => resolve(null))
     })
   } catch (err) {
-    console.error("[hermes-x] screen-capture overlay failed:", err)
+    console.error("[amiba] screen-capture overlay failed:", err)
     rect = null
   } finally {
     detach()

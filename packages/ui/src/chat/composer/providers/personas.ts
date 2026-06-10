@@ -1,4 +1,4 @@
-import { getHermesPersonalities } from "@hermes-x/core"
+import { getHermesPersonalities } from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"

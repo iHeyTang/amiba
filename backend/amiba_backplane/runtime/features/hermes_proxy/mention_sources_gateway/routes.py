@@ -1,7 +1,7 @@
 """HTTP adapter over the backplane's mention-source registry.
 
 The backplane is the only thing that speaks HTTP. Mention sources are
-HTTP-agnostic domain logic (see :mod:`hermes_x_backplane.runtime.mention_sources`)
+HTTP-agnostic domain logic (see :mod:`amiba_backplane.runtime.mention_sources`)
 that let the desktop composer @-mention an external system's resources. This
 module exposes the front-end-relevant slices as a web API:
 

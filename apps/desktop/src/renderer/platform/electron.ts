@@ -1,4 +1,4 @@
-import type { PlatformAdapter, StorageChangeMap } from "@hermes-x/platform"
+import type { PlatformAdapter, StorageChangeMap } from "@amiba/platform"
 
 const notImpl = (name: string) => () =>
   Promise.reject(new Error(`[ElectronAdapter] ${name} not implemented yet`))

@@ -20,11 +20,11 @@ import { contextBridge, ipcRenderer } from "electron"
 import type {
   ChatStartSessionPayload,
   WebViewHostAPI,
-} from "@hermes-x/extension-api"
+} from "@amiba/extension-api"
 import { HOST_API_VERSION } from "../version"
 
 // Side-effect import only: the `declare global { Window.hermes }`
-// augmentation lives in @hermes-x/extension-api/src/webview.ts so
+// augmentation lives in @amiba/extension-api/src/webview.ts so
 // extensions and the preload share one source of truth for the shape.
 
 // ---------------------------------------------------------------------------

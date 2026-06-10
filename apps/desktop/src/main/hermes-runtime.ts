@@ -17,7 +17,7 @@
  *
  *   3. Supervise the two long-running backend processes: the gateway
  *      (`hermes gateway` — the agent that runs chat/LLM/tools) and the
- *      backplane server (`hermes-x-backplane` — the 9394 front door that
+ *      backplane server (`amiba-backplane` — the 9394 front door that
  *      serves /hermes/* + /integrations/* and proxies /v1/* to the gateway).
  *      Both killed on app quit so the next launch isn't blocked by a stale
  *      9394 listener. (The backplane used to be a plugin loaded *inside* the
@@ -211,7 +211,7 @@ async function fileExists(p: string): Promise<boolean> {
  * downstream consumer that treats the path as a FILE rather than doing its own
  * PATH lookup — `resolveHermesPython` reads the binary to sniff its shebang,
  * and `resolveBackplaneCmd` derives a sibling path from it. With a bare name
- * both fall back to bare `python3` / `hermes-x-backplane`, and the backplane
+ * both fall back to bare `python3` / `amiba-backplane`, and the backplane
  * console script (which lives in the venv bin, NOT on PATH) then ENOENTs.
  */
 async function resolveOnPath(name: string): Promise<string | null> {
@@ -575,7 +575,7 @@ async function resolveHermesPython(hermesBinary: string): Promise<string> {
 
 /**
  * Install the backplane server into the hermes Python env (creates the
- * `hermes-x-backplane` command that {@link startBackend} spawns). Idempotent —
+ * `amiba-backplane` command that {@link startBackend} spawns). Idempotent —
  * `pip install --upgrade` re-installs cleanly if already present.
  */
 async function startInstallBackplane(hermesBinary: string) {
@@ -585,7 +585,7 @@ async function startInstallBackplane(hermesBinary: string) {
 }
 
 /**
- * The backplane server's launch command. The `hermes-x-backplane` console
+ * The backplane server's launch command. The `amiba-backplane` console
  * script is pip-installed alongside the **env python** (the venv `bin/`), which
  * is NOT necessarily the dir holding the `hermes` launcher — `hermes` is
  * commonly a symlink in `~/.local/bin` pointing into a venv elsewhere. So we
@@ -596,7 +596,7 @@ async function startInstallBackplane(hermesBinary: string) {
 async function resolveBackplaneCmd(
   hermesBinary: string,
 ): Promise<{ cmd: string; args: string[] }> {
-  const name = IS_WIN ? "hermes-x-backplane.exe" : "hermes-x-backplane"
+  const name = IS_WIN ? "amiba-backplane.exe" : "amiba-backplane"
   const python = await resolveHermesPython(hermesBinary)
   const cmd = path.isAbsolute(python)
     ? path.join(path.dirname(python), name)
@@ -607,7 +607,7 @@ async function resolveBackplaneCmd(
 /**
  * Start (and supervise) the backend: two long-running processes —
  *   - the **gateway** (`hermes gateway`): the agent that runs chat/LLM/tools;
- *   - the **backplane server** (`hermes-x-backplane`): the 9394 front door that
+ *   - the **backplane server** (`amiba-backplane`): the 9394 front door that
  *     serves /hermes/* + /integrations/* and proxies /v1/* to the gateway.
  * Either order is fine — the backplane's /v1/* just 502s until the gateway is
  * up. The returned `id` is the backplane server's job (that's what serves 9394,

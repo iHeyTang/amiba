@@ -8,7 +8,7 @@
 import type {
   ClientToEngineMessage,
   EngineToClientMessage
-} from "@hermes-x/core"
+} from "@amiba/core"
 
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
@@ -100,7 +100,7 @@ interface HermesBridgeApi {
     onPtyData(cb: (msg: HermesPtyDataMsg) => void): () => void
   }
   extensions: {
-    listManifests(): Promise<Array<{ manifest: import("@hermes-x/extension-api").ExtensionManifest; path: string }>>
+    listManifests(): Promise<Array<{ manifest: import("@amiba/extension-api").ExtensionManifest; path: string }>>
     invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
     i18nResources(
       extensionId: string,
@@ -114,11 +114,11 @@ interface HermesBridgeApi {
     marketplace: {
       getIndexUrl(): Promise<string>
       list(): Promise<
-        | { ok: true; entries: import("@hermes-x/extension-host/preload").MarketplaceEntry[] }
+        | { ok: true; entries: import("@amiba/extension-host/preload").MarketplaceEntry[] }
         | { ok: false; error: string }
       >
       install(
-        entry: import("@hermes-x/extension-host/preload").MarketplaceEntry,
+        entry: import("@amiba/extension-host/preload").MarketplaceEntry,
       ): Promise<
         | { ok: true; id: string; version: string }
         | { ok: false; error: string }

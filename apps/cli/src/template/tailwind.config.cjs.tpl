@@ -1,4 +1,4 @@
-const preset = require("@hermes-x/tailwind-preset")
+const preset = require("@amiba/tailwind-preset")
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {

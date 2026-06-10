@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 hermes-agent CLI 的「`/` 唤起命令、`@` 唤起引用」体验带到 hermes-x 的 web/desktop/扩展 聊天输入框。
+**Goal:** 把 hermes-agent CLI 的「`/` 唤起命令、`@` 唤起引用」体验带到 amiba 的 web/desktop/扩展 聊天输入框。
 
 **Architecture:** 用 Lexical 富文本编辑器替换 Composer 内部的 `<textarea>`，对外保持 `value:string` / `onChange(string)` 契约不变（5 个界面零改动）。`@` 引用是原子芯片节点，序列化成规范 token 串 `@[type:payload]`；`/` 命令是行首文本，发送时整行路由（多数发后端，少数触发 UI 动作）。命令与 personas 列表由 backplane 新增的两个只读接口实时下发（与 CLI 同一份 source of truth）。Provider 抽象：内置 5 个（slash/skills/sessions/personas/channels），桌面注入 Files、扩展注入 Page-context。
 
-**Tech Stack:** React 18 + TypeScript + Lexical + Radix + Tailwind（packages/ui）；vitest（ui/core 测试，新增）；aiohttp + pytest（hermes-x-plugin-http-backplane，新增 pytest）；pnpm 9 workspace。
+**Tech Stack:** React 18 + TypeScript + Lexical + Radix + Tailwind（packages/ui）；vitest（ui/core 测试，新增）；aiohttp + pytest（amiba-plugin-http-backplane，新增 pytest）；pnpm 9 workspace。
 
 **Spec:** [docs/superpowers/specs/2026-06-05-composer-slash-and-mentions-design.md](../specs/2026-06-05-composer-slash-and-mentions-design.md)
 
@@ -14,8 +14,8 @@
 
 ## 重要约定（每个 Task 都适用）
 
-- 所有 `pnpm` 命令在 monorepo 根 `/Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x` 执行。
-- 所有 `pytest` 命令在 `/Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane` 执行。
+- 所有 `pnpm` 命令在 monorepo 根 `/Users/zhangdehui/Documents/CodeRepo/amiba/amiba` 执行。
+- 所有 `pytest` 命令在 `/Users/zhangdehui/Documents/CodeRepo/amiba/amiba-plugin-http-backplane` 执行。
 - Git 身份：commit 用 `iHeyTang <dehui1012@gmail.com>`。每个 Task 末尾 commit。
 - 分支：`feat/composer-slash-and-mentions`（已创建）。
 - backplane base URL：`http://127.0.0.1:9394`；core 用 `backplaneFetch`（已带 Bearer 鉴权）。
@@ -27,16 +27,16 @@
 - Create: `packages/core/vitest.config.ts`
 - Modify: `packages/ui/package.json`（+vitest、@testing-library、jsdom、lexical 全家桶、test script）
 - Create: `packages/ui/vitest.config.ts`、`packages/ui/src/test/setup.ts`
-- Modify: `hermes-x-plugin-http-backplane/pyproject.toml`（+dev deps）
-- Create: `hermes-x-plugin-http-backplane/pytest.ini`、`hermes-x-plugin-http-backplane/tests/conftest.py`
+- Modify: `amiba-plugin-http-backplane/pyproject.toml`（+dev deps）
+- Create: `amiba-plugin-http-backplane/pytest.ini`、`amiba-plugin-http-backplane/tests/conftest.py`
 
 **Part 1 — 后端接口 + core 客户端**
-- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_service.py`
-- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_routes.py`
-- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_service.py`
-- Create: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_routes.py`
-- Modify: `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/__init__.py`
-- Create: `hermes-x-plugin-http-backplane/tests/test_commands_routes.py`、`tests/test_personalities_routes.py`
+- Create: `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_service.py`
+- Create: `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/commands_routes.py`
+- Create: `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_service.py`
+- Create: `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/personalities_routes.py`
+- Modify: `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/__init__.py`
+- Create: `amiba-plugin-http-backplane/tests/test_commands_routes.py`、`tests/test_personalities_routes.py`
 - Create: `packages/core/src/hermes-commands.ts`、`packages/core/src/hermes-personalities.ts`
 - Modify: `packages/core/src/index.ts`（导出）
 - Create: `packages/core/src/__tests__/hermes-commands.test.ts`、`hermes-personalities.test.ts`
@@ -118,7 +118,7 @@ describe("core test infra", () => {
 
 - [ ] **Step 4: 安装并跑测试**
 
-Run: `pnpm install && pnpm --filter @hermes-x/core test`
+Run: `pnpm install && pnpm --filter @amiba/core test`
 Expected: 1 passed。
 
 - [ ] **Step 5: Commit**
@@ -179,7 +179,7 @@ describe("ui test infra", () => {
 
 - [ ] **Step 4: 安装并跑**
 
-Run: `pnpm install && pnpm --filter @hermes-x/ui test`
+Run: `pnpm install && pnpm --filter @amiba/ui test`
 Expected: 1 passed。
 
 - [ ] **Step 5: Commit**
@@ -191,8 +191,8 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "test:
 ### Task 0.3: 给 backplane 加 pytest
 
 **Files:**
-- Modify: `hermes-x-plugin-http-backplane/pyproject.toml`
-- Create: `hermes-x-plugin-http-backplane/pytest.ini`、`tests/conftest.py`、`tests/test_smoke.py`
+- Modify: `amiba-plugin-http-backplane/pyproject.toml`
+- Create: `amiba-plugin-http-backplane/pytest.ini`、`tests/conftest.py`、`tests/test_smoke.py`
 
 - [ ] **Step 1: pyproject dev deps**
 
@@ -239,12 +239,12 @@ def test_smoke():
 
 - [ ] **Step 4: 跑测试**
 
-Run: `cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane && python -m pytest tests/test_smoke.py -v`
+Run: `cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba-plugin-http-backplane && python -m pytest tests/test_smoke.py -v`
 Expected: 1 passed。（若缺 pytest：先 `python -m pip install -e ".[dev]"`）
 
 - [ ] **Step 5: Commit**
 ```bash
-cd /Users/zhangdehui/Documents/CodeRepo/hermes-x/hermes-x-plugin-http-backplane
+cd /Users/zhangdehui/Documents/CodeRepo/amiba/amiba-plugin-http-backplane
 git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -am "test: add pytest infra to backplane"
 ```
 > 注：backplane 是独立 git 仓库时在其目录内 commit；若与主仓同管则统一在主仓 commit。先 `git rev-parse --show-toplevel` 确认。
@@ -629,7 +629,7 @@ describe("getHermesCommands", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/core test -- src/__tests__/hermes-commands.test.ts`
+Run: `pnpm --filter @amiba/core test -- src/__tests__/hermes-commands.test.ts`
 Expected: FAIL（找不到模块）。
 
 - [ ] **Step 3: 实现客户端**
@@ -671,7 +671,7 @@ export async function getHermesCommands(): Promise<HermesCommandsResponse> {
 - [ ] **Step 4: 导出 + 跑测试**
 
 修改 `packages/core/src/index.ts` 增加 `export * from "./hermes-commands"`（紧挨现有 `export * from "./hermes-skills"`）。
-Run: `pnpm --filter @hermes-x/core test -- src/__tests__/hermes-commands.test.ts`
+Run: `pnpm --filter @amiba/core test -- src/__tests__/hermes-commands.test.ts`
 Expected: 3 passed。
 
 - [ ] **Step 5: Commit**
@@ -717,7 +717,7 @@ describe("getHermesPersonalities", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/core test -- src/__tests__/hermes-personalities.test.ts`
+Run: `pnpm --filter @amiba/core test -- src/__tests__/hermes-personalities.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现客户端**
@@ -756,7 +756,7 @@ export async function getHermesPersonalities(): Promise<HermesPersonalitiesRespo
 - [ ] **Step 4: 导出 + 跑测试**
 
 `packages/core/src/index.ts` 增加 `export * from "./hermes-personalities"`。
-Run: `pnpm --filter @hermes-x/core test -- src/__tests__/hermes-personalities.test.ts`
+Run: `pnpm --filter @amiba/core test -- src/__tests__/hermes-personalities.test.ts`
 Expected: 2 passed。
 
 - [ ] **Step 5: Commit**
@@ -821,7 +821,7 @@ describe("RichComposerEditor", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: FAIL（找不到模块）。
 
 - [ ] **Step 3: lexical 配置**
@@ -960,7 +960,7 @@ export function RichComposerEditor(props: RichComposerEditorProps) {
 
 - [ ] **Step 6: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: 2 passed。
 
 - [ ] **Step 7: Commit**
@@ -992,7 +992,7 @@ it("caps height at maxHeightPx and switches to scroll", async () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: FAIL（`maxHeightPx` 未支持 / overflowY 未设置）。
 
 - [ ] **Step 3: AutoGrowPlugin**
@@ -1027,7 +1027,7 @@ export function AutoGrowPlugin({ maxHeightPx }: { maxHeightPx: number }) {
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: all passed。
 
 - [ ] **Step 6: Commit**
@@ -1063,7 +1063,7 @@ it("Enter submits, Shift+Enter inserts newline, IME-composing Enter does not sub
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: FAIL（`onSubmitChord` 未实现）。
 
 - [ ] **Step 3: ImeEnterPlugin**
@@ -1129,7 +1129,7 @@ export function ImeEnterPlugin({
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: all passed。
 > 说明：jsdom 下 userEvent 的 Enter 不带 isComposing，IME 分支由后续手测覆盖；此处先验证发送/换行分流。
 
@@ -1158,7 +1158,7 @@ it("exposes focus() imperative handle", async () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: FAIL（ref 无 focus）。
 
 - [ ] **Step 3: 实现 handle**
@@ -1205,7 +1205,7 @@ export function ImperativeHandlePlugin({ handleRef }: { handleRef: Ref<RichCompo
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/RichComposerEditor.test.tsx`
 Expected: all passed。
 
 - [ ] **Step 5: Commit**
@@ -1255,12 +1255,12 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -am "feat
 
 - [ ] **Step 2: typecheck**
 
-Run: `pnpm --filter @hermes-x/ui typecheck`
+Run: `pnpm --filter @amiba/ui typecheck`
 Expected: 0 errors。（如 onKeyDownExtra 的事件类型不兼容，用 `as never` 暂时桥接，Part 3 收口时统一类型。）
 
 - [ ] **Step 3: 跑全部 ui 测试**
 
-Run: `pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui test`
 Expected: 全绿（含 RichComposerEditor 套件 + smoke）。
 
 - [ ] **Step 4: 手动回归（必须）**
@@ -1322,7 +1322,7 @@ describe("token serialize/parse", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/serialize.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/serialize.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 类型**
@@ -1430,7 +1430,7 @@ export function parseTokens(value: string): ParsedPart[] {
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/serialize.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/serialize.test.ts`
 Expected: 3 passed。
 
 - [ ] **Step 6: Commit**
@@ -1471,7 +1471,7 @@ describe("MentionNode", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/MentionNode.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/MentionNode.test.tsx`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现 MentionNode（DecoratorNode）**
@@ -1548,7 +1548,7 @@ export function $isMentionNode(node: unknown): node is MentionNode {
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/MentionNode.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/MentionNode.test.tsx`
 Expected: 2 passed。
 
 - [ ] **Step 6: Commit**
@@ -1582,7 +1582,7 @@ describe("mention value sync", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/MentionSerialize.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/MentionSerialize.test.tsx`
 Expected: FAIL（无芯片，ValueSyncPlugin 只渲染纯文本）。
 
 - [ ] **Step 3: 实现 MentionSerializePlugin**
@@ -1646,8 +1646,8 @@ export function MentionSerializePlugin({
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/MentionSerialize.test.tsx`
-并跑回归：`pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/MentionSerialize.test.tsx`
+并跑回归：`pnpm --filter @amiba/ui test`
 Expected: 全绿（纯文本往返仍通过，新增芯片渲染通过）。
 
 - [ ] **Step 6: Commit**
@@ -1688,7 +1688,7 @@ describe("detectTrigger", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/trigger-detect.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/trigger-detect.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现 detectTrigger + 插件**
@@ -1740,7 +1740,7 @@ export function TriggerPlugin({ onTrigger }: { onTrigger: (s: TriggerState | nul
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/trigger-detect.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/trigger-detect.test.ts`
 Expected: 4 passed。
 
 - [ ] **Step 5: Commit**
@@ -1793,7 +1793,7 @@ describe("TriggerMenu", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/TriggerMenu.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/TriggerMenu.test.tsx`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现 TriggerMenu**
@@ -1860,7 +1860,7 @@ export function TriggerMenu({ items, loading, error, onSelect, onClose, anchorCl
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/TriggerMenu.test.tsx`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/TriggerMenu.test.tsx`
 Expected: 3 passed。
 
 - [ ] **Step 5: Commit**
@@ -1884,7 +1884,7 @@ Create `packages/ui/src/chat/composer/__tests__/skills-provider.test.ts`：
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSkillsProvider } from "../providers/skills"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesSkills: vi.fn().mockResolvedValue({
     ok: true,
     skills: [
@@ -1913,14 +1913,14 @@ describe("skills provider", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/skills-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/skills-provider.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: Skills provider**
 
 Create `packages/ui/src/chat/composer/providers/skills.ts`：
 ```typescript
-import { getHermesSkills } from "@hermes-x/core"
+import { getHermesSkills } from "@amiba/core"
 import { $getSelection, $isRangeSelection, type LexicalEditor } from "lexical"
 import { $createMentionNode } from "../MentionNode"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
@@ -2074,7 +2074,7 @@ export function TriggerMenuPlugin({ extraProviders }: { extraProviders?: Trigger
 
 - [ ] **Step 6: 跑 provider 单测 + 全量回归**
 
-Run: `pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui test`
 Expected: 全绿。
 
 - [ ] **Step 7: 手动验证**
@@ -2125,7 +2125,7 @@ describe("expandMentions", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/expandMentions.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/expandMentions.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现**
@@ -2156,7 +2156,7 @@ export function expandMentions(value: string, providers: TriggerProvider[]): str
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/expandMentions.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/expandMentions.test.ts`
 Expected: 2 passed。
 
 - [ ] **Step 5: Commit**
@@ -2180,7 +2180,7 @@ Create `packages/ui/src/chat/composer/__tests__/slash-provider.test.ts`：
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSlashProvider } from "../providers/slash"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesCommands: vi.fn().mockResolvedValue({
     ok: true,
     commands: [
@@ -2208,7 +2208,7 @@ describe("slash provider", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/slash-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/slash-provider.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: UI 动作覆盖表 + slash provider**
@@ -2240,7 +2240,7 @@ export function runUiAction(name: string, ctx: SlashUiActionContext): boolean {
 
 Create `packages/ui/src/chat/composer/providers/slash.ts`：
 ```typescript
-import { getHermesCommands } from "@hermes-x/core"
+import { getHermesCommands } from "@amiba/core"
 import { $getSelection, $isRangeSelection, type LexicalEditor } from "lexical"
 import type { MenuItem, TriggerProvider } from "./types"
 import { slashKindFor } from "./slash-ui-actions"
@@ -2304,7 +2304,7 @@ export { slashKindFor }
 - [ ] **Step 4: 注册到 registry + 跑 provider 测试**
 
 修改 `providers/registry.ts`：`import { makeSlashProvider } from "./slash"`，`builtin` 数组加 `makeSlashProvider()`。
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/slash-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/slash-provider.test.ts`
 Expected: 2 passed。
 
 - [ ] **Step 5: 命令路由测试**
@@ -2354,7 +2354,7 @@ export function routeSubmit(
 }
 ```
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/command-routing.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/command-routing.test.ts`
 Expected: 3 passed。
 
 - [ ] **Step 6: 接进 Composer.onSubmit**
@@ -2373,7 +2373,7 @@ function handleSend(overrideText?: string) {
 
 - [ ] **Step 7: typecheck + 全量测试 + 手测**
 
-Run: `pnpm --filter @hermes-x/ui typecheck && pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui typecheck && pnpm --filter @amiba/ui test`
 Expected: 全绿。
 手测：行首输入 `/mod` → 菜单含 model → 选中插入 `/model ` 文本；发送 `/model xxx` 整行发出；`@translate` 芯片发送时展开成 `(skill: translate)`。
 
@@ -2416,7 +2416,7 @@ it("returns empty for a command without subcommands at second level", async () =
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/slash-provider.test.ts src/chat/composer/__tests__/trigger-detect.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/slash-provider.test.ts src/chat/composer/__tests__/trigger-detect.test.ts`
 Expected: 新增用例 FAIL（一级 search 把 "reasoning hi" 当名字过滤，返回空或错配）。
 
 - [ ] **Step 3: 实现二级分支 + 整行替换**
@@ -2474,7 +2474,7 @@ function replaceLineWith(editor: LexicalEditor, text: string) {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/slash-provider.test.ts src/chat/composer/__tests__/trigger-detect.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/slash-provider.test.ts src/chat/composer/__tests__/trigger-detect.test.ts`
 Expected: 全部 passed。
 
 - [ ] **Step 5: 手测**
@@ -2499,7 +2499,7 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "feat(
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSessionsProvider } from "../providers/sessions"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   listHermesSessions: vi.fn().mockResolvedValue({
     sessions: [{ id: "a1", title: "登录重构", updated_at: "2026-06-01" }],
   }),
@@ -2517,14 +2517,14 @@ Create at `packages/ui/src/chat/composer/__tests__/sessions-provider.test.ts`.
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/sessions-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/sessions-provider.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现**
 
 Create `packages/ui/src/chat/composer/providers/sessions.ts`：
 ```typescript
-import { listHermesSessions } from "@hermes-x/core"
+import { listHermesSessions } from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
@@ -2563,7 +2563,7 @@ export function makeSessionsProvider(): TriggerProvider {
 - [ ] **Step 4: 注册 + 跑测试通过**
 
 `registry.ts` builtin 加 `makeSessionsProvider()`。
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/sessions-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/sessions-provider.test.ts`
 Expected: 1 passed。
 
 - [ ] **Step 5: Commit**
@@ -2586,7 +2586,7 @@ Create `packages/ui/src/chat/composer/__tests__/personas-provider.test.ts`：
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makePersonasProvider } from "../providers/personas"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesPersonalities: vi.fn().mockResolvedValue({
     ok: true,
     personalities: [{ key: "concise", builtin: true, preview: "Keep it brief" }],
@@ -2604,14 +2604,14 @@ describe("personas provider", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/personas-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/personas-provider.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现**
 
 Create `packages/ui/src/chat/composer/providers/personas.ts`：
 ```typescript
-import { getHermesPersonalities } from "@hermes-x/core"
+import { getHermesPersonalities } from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
@@ -2657,7 +2657,7 @@ export function makePersonasProvider(): TriggerProvider {
 - [ ] **Step 4: 注册 + 跑测试通过**
 
 `registry.ts` builtin 加 `makePersonasProvider()`。
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/personas-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/personas-provider.test.ts`
 Expected: 1 passed。
 
 - [ ] **Step 5: Commit**
@@ -2680,7 +2680,7 @@ Create `packages/ui/src/chat/composer/__tests__/channels-provider.test.ts`：
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeChannelsProvider } from "../providers/channels"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   listChannels: () => [
     { id: "cli", fallbackLabel: "CLI", labelKey: "channel.cli", isLocal: true },
     { id: "telegram", fallbackLabel: "Telegram", labelKey: "channel.telegram", isLocal: false },
@@ -2698,14 +2698,14 @@ describe("channels provider", () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/channels-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/channels-provider.test.ts`
 Expected: FAIL。
 
 - [ ] **Step 3: 实现**
 
 Create `packages/ui/src/chat/composer/providers/channels.ts`：
 ```typescript
-import { listChannels } from "@hermes-x/core"
+import { listChannels } from "@amiba/core"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
@@ -2742,12 +2742,12 @@ export function makeChannelsProvider(): TriggerProvider {
 - [ ] **Step 4: 注册 + 跑测试通过**
 
 `registry.ts` builtin 加 `makeChannelsProvider()`。
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/channels-provider.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/channels-provider.test.ts`
 Expected: 1 passed。
 
 - [ ] **Step 5: 全量回归 + 手测多 provider 共存**
 
-Run: `pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui test`
 手测 `@` 菜单分组显示 Skills / Sessions / Personas / Channels（各组若干条）。
 
 - [ ] **Step 6: Commit**
@@ -2790,7 +2790,7 @@ describe("registry injection", () => {
 
 - [ ] **Step 2: 跑测试确认失败/通过**
 
-Run: `pnpm --filter @hermes-x/ui test -- src/chat/composer/__tests__/registry-injection.test.ts`
+Run: `pnpm --filter @amiba/ui test -- src/chat/composer/__tests__/registry-injection.test.ts`
 Expected: 若 Task 3.6 的 registry 已支持 extra，应直接 PASS；否则补 `extra` 合并逻辑使其通过。
 
 - [ ] **Step 3: 注入接口类型**
@@ -2816,7 +2816,7 @@ export interface MentionProvidersInput {
 
 - [ ] **Step 5: typecheck + 测试**
 
-Run: `pnpm --filter @hermes-x/ui typecheck && pnpm --filter @hermes-x/ui test`
+Run: `pnpm --filter @amiba/ui typecheck && pnpm --filter @amiba/ui test`
 Expected: 全绿。
 
 - [ ] **Step 6: Commit**
@@ -2879,8 +2879,8 @@ Create `apps/desktop/src/renderer/chat/files-provider.ts`：
 import type { LexicalEditor } from "lexical"
 import {
   insertMentionAtTrigger,
-} from "@hermes-x/ui/chat/composer/providers/skills"  // 若无子路径导出，则从 ui 顶层导出 insertMentionAtTrigger
-import type { MenuItem, MentionData, TriggerProvider } from "@hermes-x/ui"
+} from "@amiba/ui/chat/composer/providers/skills"  // 若无子路径导出，则从 ui 顶层导出 insertMentionAtTrigger
+import type { MenuItem, MentionData, TriggerProvider } from "@amiba/ui"
 
 export function makeDesktopFilesProvider(getSessionId: () => string): TriggerProvider {
   return {
@@ -2907,7 +2907,7 @@ export function makeDesktopFilesProvider(getSessionId: () => string): TriggerPro
   }
 }
 ```
-> 需要 `insertMentionAtTrigger` 可被 desktop import：在 `packages/ui` 顶层 `index.ts` 导出 `export { insertMentionAtTrigger } from "./chat/composer/providers/skills"`，desktop 改为 `import { insertMentionAtTrigger } from "@hermes-x/ui"`。同时 `TriggerProvider/MenuItem/MentionData` 也从 `@hermes-x/ui` 导出。
+> 需要 `insertMentionAtTrigger` 可被 desktop import：在 `packages/ui` 顶层 `index.ts` 导出 `export { insertMentionAtTrigger } from "./chat/composer/providers/skills"`，desktop 改为 `import { insertMentionAtTrigger } from "@amiba/ui"`。同时 `TriggerProvider/MenuItem/MentionData` 也从 `@amiba/ui` 导出。
 
 - [ ] **Step 4: 挂载注入**
 
@@ -2915,7 +2915,7 @@ export function makeDesktopFilesProvider(getSessionId: () => string): TriggerPro
 
 - [ ] **Step 5: typecheck + 手测**
 
-Run: `pnpm --filter @hermes-x/desktop typecheck`（若无该 script，跑 `pnpm build:desktop` 的 tsc 阶段）。
+Run: `pnpm --filter @amiba/desktop typecheck`（若无该 script，跑 `pnpm build:desktop` 的 tsc 阶段）。
 手测：桌面绑定一个工作区后，`@` 菜单出现 Files 分组，输入文件名前缀能补全，选中插入 `@<filename>` 芯片；发送时展开成路径。
 
 - [ ] **Step 6: Commit**
@@ -2936,8 +2936,8 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "feat(
 Create `apps/browser-extension/src/lib/chat/page-context-provider.ts`：
 ```typescript
 import type { LexicalEditor } from "lexical"
-import { insertMentionAtTrigger } from "@hermes-x/ui"
-import type { MenuItem, MentionData, TriggerProvider } from "@hermes-x/ui"
+import { insertMentionAtTrigger } from "@amiba/ui"
+import type { MenuItem, MentionData, TriggerProvider } from "@amiba/ui"
 import { chromePageContext } from "./chrome-capabilities"
 
 export function makePageContextProvider(): TriggerProvider {
@@ -2980,7 +2980,7 @@ export function makePageContextProvider(): TriggerProvider {
 
 - [ ] **Step 3: typecheck + 手测**
 
-Run: `pnpm --filter @hermes-x/browser-extension build`（或其 typecheck）。
+Run: `pnpm --filter @amiba/browser-extension build`（或其 typecheck）。
 手测：扩展侧栏 `@` 菜单出现 Page 分组，选「Current page」插入芯片；扩展端 `@` 不出现 Files 分组（优雅降级）。
 
 - [ ] **Step 4: Commit**
@@ -2993,8 +2993,8 @@ git -c user.name="iHeyTang" -c user.email="dehui1012@gmail.com" commit -m "feat(
 
 ## 收尾验证（全部 Task 完成后）
 
-- [ ] **全量测试**：`pnpm --filter @hermes-x/core test && pnpm --filter @hermes-x/ui test`，以及 `cd ../hermes-x-plugin-http-backplane && python -m pytest -q`。全绿。
-- [ ] **typecheck**：`pnpm --filter @hermes-x/core typecheck && pnpm --filter @hermes-x/ui typecheck && pnpm --filter @hermes-x/desktop typecheck`（或各自 build 的 tsc 阶段）。
+- [ ] **全量测试**：`pnpm --filter @amiba/core test && pnpm --filter @amiba/ui test`，以及 `cd ../amiba-plugin-http-backplane && python -m pytest -q`。全绿。
+- [ ] **typecheck**：`pnpm --filter @amiba/core typecheck && pnpm --filter @amiba/ui typecheck && pnpm --filter @amiba/desktop typecheck`（或各自 build 的 tsc 阶段）。
 - [ ] **桌面手测全链路**：`/` 命令（含 subcommand 菜单、ui-action 如 `/config` 开设置、send 类整行发送）、`@` 五类（Skills/Sessions/Personas/Channels/Files）插芯片+发送展开、IME/Enter/Shift+Enter/附件/快捷动作/麦克风/占位 无回归。
 - [ ] **扩展手测**：`@` 四类内置 + Page 分组；无 Files 分组。
 - [ ] **回归确认**：5 个消费界面（ChatView / ChatSurface / Quick-Ask / 扩展侧栏 / 桌面主窗）输入与发送均正常。

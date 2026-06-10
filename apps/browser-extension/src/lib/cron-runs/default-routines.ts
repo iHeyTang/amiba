@@ -1,2 +1,2 @@
-// Lifted to @hermes-x/core/cron-runs/default-routines.ts.
-export * from "@hermes-x/core";
+// Lifted to @amiba/core/cron-runs/default-routines.ts.
+export * from "@amiba/core";

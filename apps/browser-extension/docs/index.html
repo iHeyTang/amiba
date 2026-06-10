@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hermes Browser Extension — Download</title>
   <meta name="description" content="Chrome extension that drives Hermes Agent from your browser. Download the latest zip and install via developer mode.">
-  <link rel="icon" href="https://raw.githubusercontent.com/iHeyTang/hermes-x-browser-extension/main/assets/icon128.png">
+  <link rel="icon" href="https://raw.githubusercontent.com/amiba-desktop/amiba-browser-extension/main/assets/icon128.png">
   <style>
     :root {
       --bg: #fafafa;
@@ -133,7 +133,7 @@
 <body>
   <div class="container">
     <header>
-      <img src="https://raw.githubusercontent.com/iHeyTang/hermes-x-browser-extension/main/assets/icon128.png" alt="">
+      <img src="https://raw.githubusercontent.com/amiba-desktop/amiba-browser-extension/main/assets/icon128.png" alt="">
       <div>
         <h1>Hermes Browser Extension</h1>
         <p class="lead">Drive Hermes Agent from your browser — side panel, agent-controlled tabs, userscripts, all running locally.</p>
@@ -154,8 +154,8 @@
             companion plugins this extension needs, then start it:</p>
           <div class="code-block">
             <pre id="install-cmds"><code>pip install hermes-agent
-hermes plugins install iHeyTang/hermes-x-plugin-http-backplane
-hermes plugins install iHeyTang/hermes-x-plugin-browser-tools
+hermes plugins install amiba-desktop/amiba-plugin-http-backplane
+hermes plugins install amiba-desktop/amiba-plugin-browser-tools
 hermes chat</code></pre>
             <button class="copy-btn" data-copy="install-cmds">copy</button>
           </div>
@@ -182,7 +182,7 @@ hermes chat</code></pre>
       </div>
       <p style="margin-top: 14px; font-size: 12px; color: var(--fg-mute);">
         Past versions:
-        <a href="https://github.com/iHeyTang/hermes-x-browser-extension/releases" style="color: inherit;">GitHub Releases</a>
+        <a href="https://github.com/amiba-desktop/amiba-browser-extension/releases" style="color: inherit;">GitHub Releases</a>
       </p>
     </section>
 
@@ -202,15 +202,15 @@ hermes chat</code></pre>
     </section>
 
     <div class="footer">
-      <a href="https://github.com/iHeyTang/hermes-x-browser-extension">Source on GitHub</a>
+      <a href="https://github.com/amiba-desktop/amiba-browser-extension">Source on GitHub</a>
       <span class="sep">·</span>
-      <a href="https://github.com/iHeyTang/hermes-x-browser-extension/blob/main/PRIVACY.md">Privacy</a>
+      <a href="https://github.com/amiba-desktop/amiba-browser-extension/blob/main/PRIVACY.md">Privacy</a>
       <span class="sep">·</span>
-      <a href="https://github.com/iHeyTang/hermes-x-browser-extension/issues">Issues</a>
+      <a href="https://github.com/amiba-desktop/amiba-browser-extension/issues">Issues</a>
       <span class="sep">·</span>
-      <a href="https://github.com/iHeyTang/hermes-x-plugin-http-backplane">backplane plugin</a>
+      <a href="https://github.com/amiba-desktop/amiba-plugin-http-backplane">backplane plugin</a>
       <span class="sep">·</span>
-      <a href="https://github.com/iHeyTang/hermes-x-plugin-browser-tools">browser-tools plugin</a>
+      <a href="https://github.com/amiba-desktop/amiba-plugin-browser-tools">browser-tools plugin</a>
     </div>
   </div>
 
@@ -226,11 +226,11 @@ hermes chat</code></pre>
    */
   const RELEASE_SOURCE = {
     type: 'github',
-    owner: 'iHeyTang',
-    repo: 'hermes-x-browser-extension',
+    owner: 'amiba-desktop',
+    repo: 'amiba-browser-extension',
     // For custom hosting (later):
     // type: 'custom',
-    // manifestUrl: 'https://hermes-x.iheytang.com/releases/latest.json',
+    // manifestUrl: 'https://amiba.iheytang.com/releases/latest.json',
   };
 
   async function getLatestRelease() {
@@ -290,7 +290,7 @@ hermes chat</code></pre>
     } catch (e) {
       ver.textContent = 'Latest release unavailable';
       sub.textContent = 'Falling back to GitHub Releases page.';
-      btn.href = 'https://github.com/iHeyTang/hermes-x-browser-extension/releases';
+      btn.href = 'https://github.com/amiba-desktop/amiba-browser-extension/releases';
       btn.removeAttribute('aria-disabled');
       btn.textContent = 'Browse releases';
       err.hidden = false;

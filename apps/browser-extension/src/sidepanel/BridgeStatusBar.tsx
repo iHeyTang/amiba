@@ -27,10 +27,10 @@
 import { AppWindow, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Button } from "@hermes-x/ui";
-import { useT } from "@hermes-x/i18n";
+import { Button } from "@amiba/ui";
+import { useT } from "@amiba/i18n";
 import type { ConnectionState } from "~lib/types";
-import { cn } from "@hermes-x/ui";
+import { cn } from "@amiba/ui";
 interface StatusResponse {
   state?: ConnectionState;
   agentAlive?: boolean;

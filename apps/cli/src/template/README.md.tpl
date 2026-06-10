@@ -1,11 +1,11 @@
 # {{NAME}}
 
-A hermes-x desktop extension (`{{ID}}`).
+A amiba desktop extension (`{{ID}}`).
 
 ## Develop
 
 ```bash
-pnpm install            # installs the @hermes-x/* SDK from GitHub Release tarballs
+pnpm install            # installs the @amiba/* SDK from GitHub Release tarballs
 pnpm dev                # watch-build; load it in the Hermes desktop app
 ```
 

@@ -148,7 +148,7 @@ export function createQuickAskWindow(): BrowserWindow {
     try {
       app.setActivationPolicy("regular")
     } catch (err) {
-      console.warn("[hermes-x] setActivationPolicy failed:", err)
+      console.warn("[amiba] setActivationPolicy failed:", err)
     }
   }
 
@@ -219,15 +219,15 @@ export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
     // log on every double-tap and the popup is invisible, it means
     // a previous blur missed clearing visibility state and we're
     // toggling at the wrong cadence.
-    console.log("[hermes-x] summonQuickAsk: already visible → hide")
+    console.log("[amiba] summonQuickAsk: already visible → hide")
     win.hide()
     return
   }
-  console.log("[hermes-x] summonQuickAsk: showing")
+  console.log("[amiba] summonQuickAsk: showing")
   const cursor = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursor)
   console.log(
-    "[hermes-x] cursor=%o display.bounds=%o display.workArea=%o",
+    "[amiba] cursor=%o display.bounds=%o display.workArea=%o",
     cursor,
     display.bounds,
     display.workArea,
@@ -250,7 +250,7 @@ export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
     height: current.height || target.height,
   }
   console.log(
-    "[hermes-x] setBounds=%o (was=%o, alwaysOnTop=%s, opacity=%s)",
+    "[amiba] setBounds=%o (was=%o, alwaysOnTop=%s, opacity=%s)",
     next,
     current,
     win.isAlwaysOnTop(),
@@ -272,7 +272,7 @@ export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
     win!.focus()
     const b = win!.getBounds()
     console.log(
-      "[hermes-x] after show/focus bounds=%o visible=%s focused=%s minimized=%s",
+      "[amiba] after show/focus bounds=%o visible=%s focused=%s minimized=%s",
       b,
       win!.isVisible(),
       win!.isFocused(),

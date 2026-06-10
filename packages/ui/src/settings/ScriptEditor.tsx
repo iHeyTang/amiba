@@ -6,7 +6,7 @@ import { defaultKeymap } from "@codemirror/commands";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../primitives";
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 import { useDocumentTheme } from "../theme";
 
 interface Props {

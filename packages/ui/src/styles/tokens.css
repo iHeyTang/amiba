@@ -6,7 +6,7 @@
  *   1. `:root` defines the light palette (also the SSR-time fallback).
  *   2. `@media (prefers-color-scheme: dark)` rewrites the tokens to the dark
  *      palette unless the document explicitly opted into light via `.light`.
- *   3. The explicit `.dark` / `.light` classes (set by @hermes-x/theme's
+ *   3. The explicit `.dark` / `.light` classes (set by @amiba/theme's
  *      `useResolvedTheme`) always win — lets the user pin a theme regardless
  *      of OS preference.
  *
@@ -144,7 +144,7 @@
 }
 
 /*
- * Radix ScrollArea fixes — shared by every consumer of @hermes-x/ui because
+ * Radix ScrollArea fixes — shared by every consumer of @amiba/ui because
  * they ship with the ScrollArea primitive.
  *
  * - Stop scroll chaining at the viewport so wheel-at-edge doesn't bounce

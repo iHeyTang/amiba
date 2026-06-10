@@ -1,9 +1,9 @@
 import { FolderOpen, RefreshCw, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { useExtensionRegistry } from "@hermes-x/extension-host/renderer"
-import type { ExtensionsBridge } from "@hermes-x/extension-host/preload"
-import { useT } from "@hermes-x/i18n"
+import { useExtensionRegistry } from "@amiba/extension-host/renderer"
+import type { ExtensionsBridge } from "@amiba/extension-host/preload"
+import { useT } from "@amiba/i18n"
 import { PluginsTab } from "./PluginsTab"
 import {
   Button,

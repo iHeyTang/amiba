@@ -17,7 +17,7 @@ extensions ≠ plugins:
 
 | | desktop **extension** | hermes **plugin** |
 |---|---|---|
-| runtime | Electron renderer (`@hermes-x/extension-host`) | hermes agent process (Python) |
+| runtime | Electron renderer (`@amiba/extension-host`) | hermes agent process (Python) |
 | data | `window.hermes.extensions` (IPC) | new `/hermes/plugins` (backplane) |
 | install | marketplace | `hermes plugins` / `~/.hermes/plugins/` + config |
 | where | desktop only | wherever the backplane runs (web / ext / desktop) |

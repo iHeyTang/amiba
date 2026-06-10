@@ -1,2 +1,2 @@
-// Lifted to @hermes-x/core/wallpaper/use-wallpaper.ts.
-export * from "@hermes-x/core";
+// Lifted to @amiba/core/wallpaper/use-wallpaper.ts.
+export * from "@amiba/core";

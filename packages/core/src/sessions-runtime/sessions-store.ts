@@ -43,7 +43,7 @@
  *   - Per-call ``markSelfWriteActiveId`` ceremony → gone.
  */
 
-import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
+import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 
 import { appendHermesMessage, createHermesSession } from "../hermes-sessions";
 import { getLocalSource } from "../channels";

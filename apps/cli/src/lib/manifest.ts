@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export function readExtensionManifest(cwd: string): ExtensionManifest {
   const p = join(cwd, "manifest.json")

@@ -1,5 +1,5 @@
 import { shell } from "electron"
-import type { PlatformAdapter, StorageChangeMap } from "@hermes-x/platform"
+import type { PlatformAdapter, StorageChangeMap } from "@amiba/platform"
 
 import { mainStore } from "./storage"
 import { workspaceManager } from "./workspace"
@@ -11,7 +11,7 @@ const notImpl = (name: string) => () =>
  * PlatformAdapter for the Electron main process.
  *
  * - **storage** is real (backed by `mainStore`, the same file the renderer
- *   sees through IPC). Lets shared code in @hermes-x/core (`backplaneFetch`,
+ *   sees through IPC). Lets shared code in @amiba/core (`backplaneFetch`,
  *   `HermesClient`) read settings.* keys from main without round-tripping
  *   IPC back to itself.
  * - **shell.openExternal** uses Electron's built-in shell module.

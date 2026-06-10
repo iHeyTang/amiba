@@ -23,7 +23,7 @@
  * the whole hook before any network call.
  */
 
-import { getPlatform } from "@hermes-x/platform";
+import { getPlatform } from "@amiba/platform";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const BING_HOST = "https://www.bing.com";

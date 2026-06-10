@@ -1,11 +1,11 @@
-import { getPlatform } from "@hermes-x/platform"
+import { getPlatform } from "@amiba/platform"
 import { useEffect, useState } from "react"
 
 /**
  * Theme handling for Hermes UI surfaces.
  *
  * Surfaces never paint custom backgrounds — every panel inherits the shadcn
- * HSL tokens defined in `@hermes-x/ui/styles/tokens.css`, which flip between
+ * HSL tokens defined in `@amiba/ui/styles/tokens.css`, which flip between
  * a light and dark palette. This module decides which palette to apply.
  *
  * Preferences:

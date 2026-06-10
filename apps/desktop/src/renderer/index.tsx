@@ -1,4 +1,4 @@
-import { setPlatform } from "@hermes-x/platform"
+import { setPlatform } from "@amiba/platform"
 import React from "react"
 import { createRoot } from "react-dom/client"
 

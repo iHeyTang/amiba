@@ -4,9 +4,9 @@
 
 **Goal:** Build a pluggable desktop extension system (Obsidian-style) and migrate all gbrain/knowledge-base surface area out of the core desktop into the first extension.
 
-**Architecture:** `@hermes-x/extension-api` (types-only) + `@hermes-x/extension-host` (main / preload / renderer sub-entries) + `extensions/<id>/` extensions with `manifest.json` + dual entries (main/renderer). First-phase loader is compile-time glob via Vite's `import.meta.glob` so extensions ship inside the desktop bundle; the same Host API survives a runtime FS loader in phase 2.
+**Architecture:** `@amiba/extension-api` (types-only) + `@amiba/extension-host` (main / preload / renderer sub-entries) + `extensions/<id>/` extensions with `manifest.json` + dual entries (main/renderer). First-phase loader is compile-time glob via Vite's `import.meta.glob` so extensions ship inside the desktop bundle; the same Host API survives a runtime FS loader in phase 2.
 
-**Tech Stack:** TypeScript 5.6, Electron-Vite, React 18, pnpm workspaces, Vitest (introduced for `extension-host` unit tests), lucide-react icons, Tailwind preset shared via `@hermes-x/ui`.
+**Tech Stack:** TypeScript 5.6, Electron-Vite, React 18, pnpm workspaces, Vitest (introduced for `extension-host` unit tests), lucide-react icons, Tailwind preset shared via `@amiba/ui`.
 
 **Reference spec:** `docs/superpowers/specs/2026-06-03-desktop-extension-system-design.md` — keep it open while executing.
 
@@ -55,7 +55,7 @@ packages/extension-host/
     │   ├── make-renderer-host.ts  # builds the RendererHost
     │   ├── slot-registry.ts  # slot Map + observe()
     │   ├── slot-outlet.tsx   # <SlotOutlet name=... />
-    │   └── i18n-merge.ts     # merge ext.<id>.* tables into @hermes-x/i18n
+    │   └── i18n-merge.ts     # merge ext.<id>.* tables into @amiba/i18n
     └── __tests__/
         ├── manifest.test.ts
         ├── slot-registry.test.ts
@@ -94,7 +94,7 @@ extensions/knowledge-base/
 ### Modified files
 
 - `pnpm-workspace.yaml` — already covers `packages/*`; we add `extensions/*` glob.
-- `apps/desktop/package.json` — add deps `@hermes-x/extension-host`, `@hermes-x/ext-knowledge-base`.
+- `apps/desktop/package.json` — add deps `@amiba/extension-host`, `@amiba/ext-knowledge-base`.
 - `apps/desktop/src/main/index.ts` — replace gbrain init with extension-host init.
 - `apps/desktop/src/preload/index.ts` — delete `gbrain` namespace, add extensions bridge.
 - `apps/desktop/src/renderer/App.tsx` — wrap in `<ExtensionsProvider>`; mount renderer host.
@@ -119,7 +119,7 @@ extensions/knowledge-base/
 
 ---
 
-# Phase 0 — `@hermes-x/extension-api` (types only)
+# Phase 0 — `@amiba/extension-api` (types only)
 
 Goal: A types-only package both extension authors and `extension-host` depend on. No runtime code, no JSX, no electron import.
 
@@ -134,10 +134,10 @@ Goal: A types-only package both extension authors and `extension-host` depend on
 
 ```json
 {
-  "name": "@hermes-x/extension-api",
+  "name": "@amiba/extension-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Type-only contract between hermes-x extensions and the extension host.",
+  "description": "Type-only contract between amiba extensions and the extension host.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
@@ -219,7 +219,7 @@ export interface ExtensionManifest {
   /** Semver — must match `package.json`. */
   version: string
   /** Host version constraint. Phase 1: read but not enforced. */
-  engines?: { "hermes-x"?: string }
+  engines?: { "amiba"?: string }
   /** Relative bundle paths (each optional — pure renderer / pure main allowed). */
   entries: {
     main?: string
@@ -286,7 +286,7 @@ export type Permission =
     "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
     "engines": {
       "type": "object",
-      "properties": { "hermes-x": { "type": "string" } },
+      "properties": { "amiba": { "type": "string" } },
       "additionalProperties": false
     },
     "entries": {
@@ -384,7 +384,7 @@ export type Permission =
 
 - [ ] **Step 3: Verify typecheck**
 
-Run: `pnpm --filter @hermes-x/extension-api typecheck`
+Run: `pnpm --filter @amiba/extension-api typecheck`
 Expected: PASS, no errors.
 
 - [ ] **Step 4: Commit**
@@ -572,7 +572,7 @@ export interface SettingsSchema {
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @hermes-x/extension-api typecheck`
+Run: `pnpm --filter @amiba/extension-api typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -584,7 +584,7 @@ git commit -m "feat(extension-api): host / slot / settings types"
 
 ---
 
-# Phase 1 — `@hermes-x/extension-host` skeleton
+# Phase 1 — `@amiba/extension-host` skeleton
 
 Goal: A loadable host that scans `extensions/*`, validates manifests, activates main entries, exposes preload bridge, and provides SlotOutlet to renderer. Vitest covers the pure-logic units.
 
@@ -599,10 +599,10 @@ Goal: A loadable host that scans `extensions/*`, validates manifests, activates 
 
 ```json
 {
-  "name": "@hermes-x/extension-host",
+  "name": "@amiba/extension-host",
   "version": "0.1.0",
   "private": true,
-  "description": "Loader, registry, and host APIs for hermes-x desktop extensions.",
+  "description": "Loader, registry, and host APIs for amiba desktop extensions.",
   "main": "src/main/index.ts",
   "types": "src/main/index.ts",
   "exports": {
@@ -616,8 +616,8 @@ Goal: A loadable host that scans `extensions/*`, validates manifests, activates 
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@hermes-x/extension-api": "workspace:*",
-    "@hermes-x/i18n": "workspace:*"
+    "@amiba/extension-api": "workspace:*",
+    "@amiba/i18n": "workspace:*"
   },
   "peerDependencies": {
     "electron": "*",
@@ -740,14 +740,14 @@ describe("validateManifest", () => {
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: FAIL with "Cannot find module '../main/discover'".
 
 - [ ] **Step 3: Write minimal `discover.ts` to make the test pass**
 
 ```ts
 // packages/extension-host/src/main/discover.ts
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export type ValidationResult =
   | { ok: true; manifest: ExtensionManifest }
@@ -794,7 +794,7 @@ export function validateManifest(raw: unknown): ValidationResult {
 
 - [ ] **Step 4: Run tests, verify PASS**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: 5 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -867,14 +867,14 @@ reg.register("activityBar.item", { extensionId: "a", entryId: "x", order: 20, co
 
 - [ ] **Step 2: Run test, verify it fails**
 
-Run: `pnpm --filter @hermes-x/extension-host test slot-registry`
+Run: `pnpm --filter @amiba/extension-host test slot-registry`
 Expected: FAIL with "Cannot find module".
 
 - [ ] **Step 3: Write `slot-registry.ts`**
 
 ```ts
 // packages/extension-host/src/renderer/slot-registry.ts
-import type { Disposable, SlotEntry, SlotName } from "@hermes-x/extension-api"
+import type { Disposable, SlotEntry, SlotName } from "@amiba/extension-api"
 
 type Listener = () => void
 
@@ -922,7 +922,7 @@ export function createSlotRegistry(): SlotRegistry {
 
 - [ ] **Step 4: Run tests, verify PASS**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: All tests pass.
 
 - [ ] **Step 5: Commit**
@@ -944,7 +944,7 @@ git commit -m "feat(extension-host): slot registry"
 ```ts
 // packages/extension-host/src/__tests__/activate.test.ts
 import { describe, expect, it, vi } from "vitest"
-import type { ExtensionManifest, MainHost } from "@hermes-x/extension-api"
+import type { ExtensionManifest, MainHost } from "@amiba/extension-api"
 import { activateMainExtensions } from "../main/activate"
 
 const fakeHost = (id: string): MainHost => ({
@@ -1015,14 +1015,14 @@ describe("activateMainExtensions", () => {
 
 - [ ] **Step 2: Run, verify FAIL**
 
-Run: `pnpm --filter @hermes-x/extension-host test activate`
+Run: `pnpm --filter @amiba/extension-host test activate`
 Expected: FAIL "Cannot find module '../main/activate'".
 
 - [ ] **Step 3: Write `registry.ts`**
 
 ```ts
 // packages/extension-host/src/main/registry.ts
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface RuntimeExtension {
   id: string
@@ -1055,7 +1055,7 @@ import type {
   ExtensionManifest,
   MainHost,
   MainModule,
-} from "@hermes-x/extension-api"
+} from "@amiba/extension-api"
 
 export interface ActivateOptions {
   manifests: ExtensionManifest[]
@@ -1116,7 +1116,7 @@ export async function activateMainExtensions(
 
 - [ ] **Step 5: Run tests, verify PASS**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: All activate tests pass.
 
 - [ ] **Step 6: Commit**
@@ -1167,7 +1167,7 @@ describe("mergeExtensionTables", () => {
 
 - [ ] **Step 2: Run, verify FAIL**
 
-Run: `pnpm --filter @hermes-x/extension-host test i18n-merge`
+Run: `pnpm --filter @amiba/extension-host test i18n-merge`
 Expected: FAIL.
 
 - [ ] **Step 3: Write `i18n-merge.ts`**
@@ -1198,7 +1198,7 @@ export function mergeExtensionTables(opts: {
 
 - [ ] **Step 4: Run, verify PASS**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: All tests pass.
 
 - [ ] **Step 5: Commit**
@@ -1338,7 +1338,7 @@ git commit -m "feat(i18n): extension overlay registry + string keys"
 
 ```ts
 // packages/extension-host/src/renderer/discover.ts
-import type { ExtensionManifest, RendererModule } from "@hermes-x/extension-api"
+import type { ExtensionManifest, RendererModule } from "@amiba/extension-api"
 import { validateManifest } from "../main/discover"
 
 /**
@@ -1465,7 +1465,7 @@ describe("discoverRendererExtensions", () => {
 
 - [ ] **Step 3: Run tests**
 
-Run: `pnpm --filter @hermes-x/extension-host test`
+Run: `pnpm --filter @amiba/extension-host test`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
@@ -1488,7 +1488,7 @@ git commit -m "feat(extension-host): compile-time renderer discovery"
 ```ts
 // packages/extension-host/src/main/make-main-host.ts
 import { ipcMain } from "electron"
-import type { Disposable, MainHost } from "@hermes-x/extension-api"
+import type { Disposable, MainHost } from "@amiba/extension-api"
 
 export interface MainHostDeps {
   /** Reads / writes the shared main-process settings store. */
@@ -1563,7 +1563,7 @@ export function makeMainHost(extensionId: string, deps: MainHostDeps): MainHost 
 ```ts
 // packages/extension-host/src/main/ipc-router.ts
 import { ipcMain } from "electron"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 /**
  * The renderer talks to extensions through a single bridge channel
@@ -1739,7 +1739,7 @@ export function createExtensionStorage() {
 
 ```ts
 // packages/extension-host/src/main/index.ts
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 import { activateMainExtensions } from "./activate"
 import { createExtensionRegistry, type RuntimeExtension } from "./registry"
 import {
@@ -1847,7 +1847,7 @@ export { validateManifest } from "./discover"
 
 - [ ] **Step 6: Typecheck**
 
-Run: `pnpm --filter @hermes-x/extension-host typecheck`
+Run: `pnpm --filter @amiba/extension-host typecheck`
 Expected: PASS (may need `@types/node`, electron types).
 
 - [ ] **Step 7: If types missing, add to `packages/extension-host/package.json`**
@@ -1865,7 +1865,7 @@ Expected: PASS (may need `@types/node`, electron types).
 
 (Use the same electron version desktop uses — check `apps/desktop/package.json`.)
 
-Run: `pnpm install && pnpm --filter @hermes-x/extension-host typecheck`
+Run: `pnpm install && pnpm --filter @amiba/extension-host typecheck`
 
 - [ ] **Step 8: Commit**
 
@@ -1884,7 +1884,7 @@ git commit -m "feat(extension-host): main-side host + ipc router + boot"
 ```ts
 // packages/extension-host/src/preload/index.ts
 import { ipcRenderer } from "electron"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface ExtensionsBridge {
   listManifests(): Promise<ExtensionManifest[]>
@@ -1911,7 +1911,7 @@ export function createExtensionsBridge(): ExtensionsBridge {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter @hermes-x/extension-host typecheck`
+Run: `pnpm --filter @amiba/extension-host typecheck`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -1932,7 +1932,7 @@ git commit -m "feat(extension-host): preload bridge"
 
 ```ts
 // packages/extension-host/src/renderer/make-renderer-host.ts
-import type { RendererHost, SlotEntry, SlotName } from "@hermes-x/extension-api"
+import type { RendererHost, SlotEntry, SlotName } from "@amiba/extension-api"
 import type { SlotRegistry } from "./slot-registry"
 import type { ExtensionsBridge } from "../preload/index"
 
@@ -1945,7 +1945,7 @@ export interface RendererHostDeps {
     set(key: string, value: unknown): Promise<void>
     watch(key: string, cb: (v: unknown) => void): () => void
   }
-  /** Translator from @hermes-x/i18n. */
+  /** Translator from @amiba/i18n. */
   translate: (key: string, params?: Record<string, unknown>) => string
   /** notify dispatcher (toast / banner). */
   notify: (kind: "info" | "warn" | "error", message: string) => void
@@ -2014,7 +2014,7 @@ Note on `commands` and `settings.define`: stubbed for phase 1 — knowledge-base
 ```tsx
 // packages/extension-host/src/renderer/slot-outlet.tsx
 import { createContext, useContext, useEffect, useState, type ReactElement } from "react"
-import type { SlotEntry, SlotName } from "@hermes-x/extension-api"
+import type { SlotEntry, SlotName } from "@amiba/extension-api"
 import type { SlotRegistry } from "./slot-registry"
 
 const SlotRegistryContext = createContext<SlotRegistry | null>(null)
@@ -2087,7 +2087,7 @@ export { makeRendererHost } from "./make-renderer-host"
 export { discoverRendererExtensions } from "./discover"
 export { mergeExtensionTables, prefixTable } from "./i18n-merge"
 
-import { registerExtensionMessages } from "@hermes-x/i18n"
+import { registerExtensionMessages } from "@amiba/i18n"
 import type { DiscoveredExtension } from "./discover"
 import { prefixTable } from "./i18n-merge"
 
@@ -2099,7 +2099,7 @@ import { prefixTable } from "./i18n-merge"
  */
 export async function bootRendererExtensions(opts: {
   extensions: DiscoveredExtension[]
-  makeHostFor: (id: string) => import("@hermes-x/extension-api").RendererHost
+  makeHostFor: (id: string) => import("@amiba/extension-api").RendererHost
 }): Promise<{
   activated: string[]
   failed: Array<{ id: string; error: string }>
@@ -2130,7 +2130,7 @@ export async function bootRendererExtensions(opts: {
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @hermes-x/extension-host typecheck`
+Run: `pnpm --filter @amiba/extension-host typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2156,8 +2156,8 @@ Goal: Desktop boots through extension-host successfully — even with zero exten
 Already have desktop package.json open. Add to `dependencies`:
 
 ```json
-"@hermes-x/extension-host": "workspace:*",
-"@hermes-x/extension-api": "workspace:*"
+"@amiba/extension-host": "workspace:*",
+"@amiba/extension-api": "workspace:*"
 ```
 
 - [ ] **Step 2: Install**
@@ -2208,7 +2208,7 @@ git commit -m "chore(workspace): register extensions/* glob"
 In `apps/desktop/src/main/index.ts`, immediately AFTER `registerGBrainHandlers()` and `autoStartGBrainServeHttp()` (around line 397-403), add:
 
 ```ts
-import { bootMainExtensionHost } from "@hermes-x/extension-host/main"
+import { bootMainExtensionHost } from "@amiba/extension-host/main"
 // (group near other imports — alphabetize as the file's convention)
 ```
 
@@ -2267,7 +2267,7 @@ git commit -m "feat(desktop): boot empty extension host (no extensions yet)"
 In `apps/desktop/src/preload/index.ts`, after the `hermesRuntime` block and before any closing `}` of the api object, insert:
 
 ```ts
-import { createExtensionsBridge } from "@hermes-x/extension-host/preload"
+import { createExtensionsBridge } from "@amiba/extension-host/preload"
 // (with other imports at top)
 ```
 
@@ -2285,7 +2285,7 @@ Inside `HermesBridgeApi`, add:
 
 ```ts
 extensions: {
-  listManifests(): Promise<import("@hermes-x/extension-api").ExtensionManifest[]>
+  listManifests(): Promise<import("@amiba/extension-api").ExtensionManifest[]>
   invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
   rendererBundleUrl(extensionId: string): Promise<string | null>
   i18nResources(
@@ -2297,7 +2297,7 @@ extensions: {
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @hermes-x/desktop typecheck`
+Run: `pnpm --filter @amiba/desktop typecheck`
 Expected: PASS.
 
 - [ ] **Step 4: Run dev mode and verify bridge available**
@@ -2332,9 +2332,9 @@ import {
   createSlotRegistry,
   discoverRendererExtensions,
   makeRendererHost,
-} from "@hermes-x/extension-host/renderer"
-import type { RendererHost } from "@hermes-x/extension-api"
-import { getPlatform } from "@hermes-x/platform"
+} from "@amiba/extension-host/renderer"
+import type { RendererHost } from "@amiba/extension-api"
+import { getPlatform } from "@amiba/platform"
 
 // Compile-time glob: vite expands these at build. Paths are RELATIVE to
 // this file (apps/desktop/src/renderer/) — adjust if the file moves.
@@ -2397,8 +2397,8 @@ export async function bootExtensions(translate: (k: string, p?: Record<string, u
 Add at the top:
 
 ```tsx
-import { SlotRegistryProvider } from "@hermes-x/extension-host/renderer"
-import { useT } from "@hermes-x/i18n"
+import { SlotRegistryProvider } from "@amiba/extension-host/renderer"
+import { useT } from "@amiba/i18n"
 import { bootExtensions, slotRegistry } from "./extensions-boot"
 ```
 
@@ -2508,7 +2508,7 @@ Drop the `ActivityViewId` import from `BookOpen` line as needed — keep `BookOp
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter @hermes-x/ui typecheck`
+Run: `pnpm --filter @amiba/ui typecheck`
 Expected: This may flag callers that pass `ActivityViewId`. Phase 3 reconnects callers; for now, **export `ActivityViewId` widened to `string`**:
 
 ```ts
@@ -2552,7 +2552,7 @@ Replace the `sidebarView === "knowledge"` arm with:
 ```tsx
 {/* Extension-provided sidebar views are routed by activity id. */}
 {(() => {
-  const { SingleSlotOutlet } = require("@hermes-x/extension-host/renderer") as typeof import("@hermes-x/extension-host/renderer")
+  const { SingleSlotOutlet } = require("@amiba/extension-host/renderer") as typeof import("@amiba/extension-host/renderer")
   return <SingleSlotOutlet name="sidebar.view" activeId={sidebarView} />
 })() ?? null}
 ```
@@ -2560,7 +2560,7 @@ Replace the `sidebarView === "knowledge"` arm with:
 Actually, to avoid `require()` at the call site, import at top:
 
 ```tsx
-import { SingleSlotOutlet } from "@hermes-x/extension-host/renderer";
+import { SingleSlotOutlet } from "@amiba/extension-host/renderer";
 ```
 
 And change the branch:
@@ -2673,13 +2673,13 @@ import { useContext, useSyncExternalStore } from "react"
 
 import {
   SlotRegistryProvider as _SlotRegistryProvider, // imported just to type the context
-} from "@hermes-x/extension-host/renderer"
+} from "@amiba/extension-host/renderer"
 ```
 
 Actually simpler — expose a helper from extension-host: `useActivityBarItems()`. Adjust task to add this in the next sub-step. For now, in `FullScreenChatView`, fetch ActivityBar items via a hook the host exposes:
 
 ```tsx
-import { useActivityBarItems } from "@hermes-x/extension-host/renderer"
+import { useActivityBarItems } from "@amiba/extension-host/renderer"
 // later, inside FullScreenChatView:
 const extensionActivityItems = useActivityBarItems()
 // pass into <ActivityBar extensionItems={extensionActivityItems} />
@@ -2769,7 +2769,7 @@ Delete the `useState(false)` for `showBrainHint`, its `useEffect`, and the JSX b
 Add at top:
 
 ```tsx
-import { SlotOutlet } from "@hermes-x/extension-host/renderer";
+import { SlotOutlet } from "@amiba/extension-host/renderer";
 ```
 
 In the composer area where the old `{showBrainHint && (...)}` was, insert:
@@ -2786,7 +2786,7 @@ In the composer area where the old `{showBrainHint && (...)}` was, insert:
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @hermes-x/ui typecheck`
+Run: `pnpm --filter @amiba/ui typecheck`
 Expected: PASS. (One warning likely: `language` may not be in scope — capture from useT().)
 
 - [ ] **Step 4: Run dev**
@@ -2817,7 +2817,7 @@ Read existing tab dispatch code (around lines 60-200 — `ALL_TABS`, `mainTabFro
 Then add at top:
 
 ```tsx
-import { useExtensionSettingsTabs, SlotOutlet } from "@hermes-x/extension-host/renderer";
+import { useExtensionSettingsTabs, SlotOutlet } from "@amiba/extension-host/renderer";
 ```
 
 (see step 2 for the hook.)
@@ -2890,7 +2890,7 @@ git commit -m "refactor(ui): SettingsView renders extension settings tabs via sl
 
 ---
 
-# Phase 3 — `@hermes-x/ext-knowledge-base` (the migration)
+# Phase 3 — `@amiba/ext-knowledge-base` (the migration)
 
 Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. Desktop core's grep is clean.
 
@@ -2906,7 +2906,7 @@ Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. D
 
 ```json
 {
-  "name": "@hermes-x/ext-knowledge-base",
+  "name": "@amiba/ext-knowledge-base",
   "version": "0.1.0",
   "private": true,
   "description": "Hermes desktop knowledge-base extension (gbrain bridge + UI).",
@@ -2924,10 +2924,10 @@ Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. D
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hermes-x/extension-api": "workspace:*",
-    "@hermes-x/i18n": "workspace:*",
-    "@hermes-x/platform": "workspace:*",
-    "@hermes-x/ui": "workspace:*",
+    "@amiba/extension-api": "workspace:*",
+    "@amiba/i18n": "workspace:*",
+    "@amiba/platform": "workspace:*",
+    "@amiba/ui": "workspace:*",
     "lucide-react": "0.451.0",
     "streamdown": "^1.0.0"
   },
@@ -2944,7 +2944,7 @@ Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. D
 }
 ```
 
-(Match existing react/streamdown/lucide-react versions used by `@hermes-x/ui`.)
+(Match existing react/streamdown/lucide-react versions used by `@amiba/ui`.)
 
 - [ ] **Step 2: Write `manifest.json`**
 
@@ -2954,7 +2954,7 @@ Goal: All gbrain/knowledge surface area lives in `extensions/knowledge-base/`. D
   "id": "io.hermes.knowledge-base",
   "name": "Knowledge Base",
   "version": "0.1.0",
-  "engines": { "hermes-x": "^0.1.0" },
+  "engines": { "amiba": "^0.1.0" },
   "entries": {
     "main": "dist/main.cjs",
     "renderer": "dist/renderer.js"
@@ -3050,7 +3050,7 @@ export default defineConfig({
         "electron",
         "react",
         "react-dom",
-        /^@hermes-x\//,
+        /^@amiba\//,
         /^node:/,
       ],
     },
@@ -3080,7 +3080,7 @@ export default defineConfig({
       fileName: () => "main.cjs",
     },
     rollupOptions: {
-      external: ["electron", /^@hermes-x\//, /^node:/],
+      external: ["electron", /^@amiba\//, /^node:/],
     },
   },
 })
@@ -3105,7 +3105,7 @@ export default defineConfig({
       fileName: () => "renderer.js",
     },
     rollupOptions: {
-      external: ["react", "react-dom", /^@hermes-x\//],
+      external: ["react", "react-dom", /^@amiba\//],
     },
   },
 })
@@ -3161,7 +3161,7 @@ cp apps/desktop/src/main/gbrain/recipe-schema.ts extensions/knowledge-base/src/m
 
 - [ ] **Step 2: Fix imports in copied files**
 
-In `cli.ts`, `launcher.ts`, `provider-env.ts`, `recipe-schema.ts`: replace any `import ... from "../storage"` or `from "@hermes-x/core"` paths with extension-local equivalents:
+In `cli.ts`, `launcher.ts`, `provider-env.ts`, `recipe-schema.ts`: replace any `import ... from "../storage"` or `from "@amiba/core"` paths with extension-local equivalents:
 
 - `BRAIN_URL_STORAGE_KEY` / `BRAIN_TOKEN_STORAGE_KEY` / `BRAIN_DEFAULT_URL`: these are removed from core in Task 3.5. Inline them in the extension. Add to a new file `extensions/knowledge-base/src/main/lib/constants.ts`:
 
@@ -3177,7 +3177,7 @@ export const BRAIN_TOKEN_KEY = "brain.token"
 export const BRAIN_DEFAULT_URL = "http://127.0.0.1:3131"
 ```
 
-In each lib file that imported from `@hermes-x/core`, replace with `from "./constants"`. The `mainStore` import in `client.ts` / `cli.ts` referenced desktop's main-side store — replace with a host-provided settings ref passed in at construction. Pattern:
+In each lib file that imported from `@amiba/core`, replace with `from "./constants"`. The `mainStore` import in `client.ts` / `cli.ts` referenced desktop's main-side store — replace with a host-provided settings ref passed in at construction. Pattern:
 
 In `cli.ts` (if it reads settings), change to accept a `getSetting<T>(key, fallback)` function as constructor arg.
 
@@ -3189,7 +3189,7 @@ In `provider-env.ts`, it uses `safeStorage` from electron — keep as-is. Check 
 
 ```ts
 // extensions/knowledge-base/src/main/index.ts
-import type { MainActivate, MainHost } from "@hermes-x/extension-api"
+import type { MainActivate, MainHost } from "@amiba/extension-api"
 
 import { GBrainClient, type GBrainHealthResult } from "./lib/client"
 import { runProvidersList } from "./lib/cli"
@@ -3310,19 +3310,19 @@ export const activate: MainActivate = async (host) => {
 
 - [ ] **Step 4: Typecheck the extension**
 
-Run: `pnpm --filter @hermes-x/ext-knowledge-base typecheck`
+Run: `pnpm --filter @amiba/ext-knowledge-base typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Build the extension**
 
-Run: `pnpm --filter @hermes-x/ext-knowledge-base build`
+Run: `pnpm --filter @amiba/ext-knowledge-base build`
 Expected: `dist/main.cjs`, `dist/renderer.js` (will be empty for now — renderer not written), `dist/i18n/*.json` (empty for now).
 
 If renderer build fails because `src/renderer/index.ts` doesn't exist yet, create an empty stub:
 
 ```ts
 // extensions/knowledge-base/src/renderer/index.ts
-import type { RendererActivate } from "@hermes-x/extension-api"
+import type { RendererActivate } from "@amiba/extension-api"
 export const activate: RendererActivate = (_host) => {
   // populated in 3.3
 }
@@ -3362,7 +3362,7 @@ cp packages/ui/src/settings/SettingsBrain.tsx extensions/knowledge-base/src/rend
 
 Edit `KnowledgePanel.tsx`:
 
-- Replace imports from `@hermes-x/core` for `BRAIN_*`: import from a new local `./brain-storage.ts` instead.
+- Replace imports from `@amiba/core` for `BRAIN_*`: import from a new local `./brain-storage.ts` instead.
 - Replace all calls to `window.hermes.gbrain.*` with `host.ipc.invoke(...)` — see step 4 for the wiring pattern.
 - Replace `getPlatform().storage.get(BRAIN_URL_STORAGE_KEY)` with `host.settings.get("brain.url", "")`.
 
@@ -3391,7 +3391,7 @@ Same edits as KnowledgePanel: re-route gbrain calls through `host.ipc.invoke`, s
 cp packages/ui/src/settings/brain-install.ts extensions/knowledge-base/src/renderer/views/brain-install.ts
 ```
 
-Edit to remove `BRAIN_*_KEY` import from `@hermes-x/core` — replace with local values from `brain-storage.ts`. Drop `hasGBrainBridge()` (no longer needed — extension only loads when host present). Drop `ensureBrainDefaultUrl()` if it's no longer called; if used in the disconnected hint, keep but route through `host.settings`.
+Edit to remove `BRAIN_*_KEY` import from `@amiba/core` — replace with local values from `brain-storage.ts`. Drop `hasGBrainBridge()` (no longer needed — extension only loads when host present). Drop `ensureBrainDefaultUrl()` if it's no longer called; if used in the disconnected hint, keep but route through `host.settings`.
 
 - [ ] **Step 5: Create `BrainDisconnectedHint.tsx`**
 
@@ -3400,7 +3400,7 @@ The existing HomeView brain hint JSX block (around lines 466-490 of HomeView bef
 ```tsx
 // extensions/knowledge-base/src/renderer/views/BrainDisconnectedHint.tsx
 import { useEffect, useState } from "react"
-import type { RendererHost } from "@hermes-x/extension-api"
+import type { RendererHost } from "@amiba/extension-api"
 import { buildBrainInstallPrompt } from "./brain-install"
 import { BRAIN_URL_KEY, BRAIN_DEFAULT_URL } from "./brain-storage"
 
@@ -3451,7 +3451,7 @@ export function makeBrainDisconnectedHint(host: RendererHost) {
 Rewrite `extensions/knowledge-base/src/renderer/index.ts`:
 
 ```ts
-import type { RendererActivate } from "@hermes-x/extension-api"
+import type { RendererActivate } from "@amiba/extension-api"
 import { makeKnowledgePanel } from "./views/KnowledgePanel"
 import { makeSettingsKnowledgeTab } from "./views/SettingsKnowledgeTab"
 import { makeBrainDisconnectedHint } from "./views/BrainDisconnectedHint"
@@ -3581,8 +3581,8 @@ And `useActivityBarItems` reads `icon` (string) instead of `iconKey`.
 Run:
 
 ```
-pnpm --filter @hermes-x/ext-knowledge-base typecheck
-pnpm --filter @hermes-x/ext-knowledge-base build
+pnpm --filter @amiba/ext-knowledge-base typecheck
+pnpm --filter @amiba/ext-knowledge-base build
 ```
 
 Expected: PASS.
@@ -3649,12 +3649,12 @@ Mirror in `en.json` with the English values from `packages/i18n/src/en.ts`.
 
 Search each migrated component for `t("options.brain.X")` / `t("options.brainConfig.X")` / `t("newtab.brainHint")` and replace with the new keys (`host.i18n.t("connection.title")` etc.). Note: the `t` you call from a host context auto-prepends `ext.io.hermes.knowledge-base.`, so use the SUFFIX.
 
-For components imported from `@hermes-x/ui` primitives that still call `useT()` directly — those resolve through the global registry, which now contains the prefixed keys. So if a primitive renders `t("options.brain.title")`, that key is GONE. Make sure every brain-related `t(...)` call is migrated.
+For components imported from `@amiba/ui` primitives that still call `useT()` directly — those resolve through the global registry, which now contains the prefixed keys. So if a primitive renders `t("options.brain.title")`, that key is GONE. Make sure every brain-related `t(...)` call is migrated.
 
 - [ ] **Step 4: Build + typecheck**
 
 ```
-pnpm --filter @hermes-x/ext-knowledge-base build
+pnpm --filter @amiba/ext-knowledge-base build
 pnpm -r typecheck
 ```
 
@@ -3724,7 +3724,7 @@ function discoverBuiltinExtensions(): Array<{
   const ids = ["knowledge-base"] // explicit list — phase 3 only has one
   for (const id of ids) {
     try {
-      const manifestPath = require.resolve(`@hermes-x/ext-${id}/manifest.json`)
+      const manifestPath = require.resolve(`@amiba/ext-${id}/manifest.json`)
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ExtensionManifest
       const rootDir = join(manifestPath, "..")
       result.push({ manifest, rootDir })
@@ -3848,7 +3848,7 @@ Update `global.d.ts` to match.
 // in packages/extension-host/src/renderer/index.ts
 export function useExtensionRegistry() {
   const [items, setItems] = useState<
-    Array<{ id: string; status: string; error?: string; manifest: import("@hermes-x/extension-api").ExtensionManifest }>
+    Array<{ id: string; status: string; error?: string; manifest: import("@amiba/extension-api").ExtensionManifest }>
   >([])
   useEffect(() => {
     void Promise.all([
@@ -3894,8 +3894,8 @@ git commit -m "feat(extension-host): expose extension registry status via IPC"
 
 ```tsx
 // packages/ui/src/settings/SettingsExtensions.tsx
-import { useExtensionRegistry } from "@hermes-x/extension-host/renderer"
-import { useT } from "@hermes-x/i18n"
+import { useExtensionRegistry } from "@amiba/extension-host/renderer"
+import { useT } from "@amiba/i18n"
 import { cn } from "../primitives"
 
 export function SettingsExtensions() {
@@ -4080,7 +4080,7 @@ Expected: PASS in every workspace package.
 - [ ] **Step 2: Run extension-host tests**
 
 ```bash
-pnpm --filter @hermes-x/extension-host test
+pnpm --filter @amiba/extension-host test
 ```
 
 Expected: All tests pass.

@@ -4,7 +4,7 @@
 - 范围：
   - packages/ui（主体：Lexical 编辑器 + 触发引擎 + 全部 provider）
   - packages/core（新增 `getHermesCommands()` / `getHermesPersonalities()` 客户端）
-  - hermes-x-plugin-http-backplane（新增 `GET /hermes/commands` + `GET /hermes/personalities` 接口）
+  - amiba-plugin-http-backplane（新增 `GET /hermes/commands` + `GET /hermes/personalities` 接口）
   - apps/desktop（注入 Files provider：Electron IPC 列工作区文件）
   - apps/browser-extension（注入 Page-context provider：`@page` / `@tab`，复用现有 `chromePageContext`）
 - 目标：把 hermes-agent CLI 的「`/` 唤起命令、`@` 唤起引用」体验带到 web/desktop/扩展 聊天输入框
@@ -87,7 +87,7 @@ Composer (对外 props 不变: value:string / onChange / onSubmit(overrideText?)
         - @[skill|session|persona|channel|file|page|tab]: 各 provider.serialize() 展开
 
 数据后端 (新增 2 个只读接口)
-   hermes-x-plugin-http-backplane (.../settings/)
+   amiba-plugin-http-backplane (.../settings/)
    ├─ GET /hermes/commands       ──serialize──> COMMAND_REGISTRY (hermes_cli.commands)
    │                                            复用 _is_gateway_available() + 剔除消息平台专用命令
    └─ GET /hermes/personalities  ──serialize──> load_config().agent.personalities (内置14 + 用户自定义)
@@ -102,7 +102,7 @@ Composer (对外 props 不变: value:string / onChange / onSubmit(overrideText?)
   - `RichComposerEditor.tsx`、`plugins/*`、`MentionNode.tsx`、`TriggerMenu.tsx`、`serialize.ts`、`parse.ts`
   - `providers/`：`types.ts`（接口）、`slash.ts`、`skills.ts`、`sessions.ts`、`personas.ts`、`channels.ts`
 - `packages/core/src/hermes-commands.ts` / `hermes-personalities.ts`：新增客户端（参照 `hermes-skills.ts`），从 core 导出。
-- `hermes-x-plugin-http-backplane/runtime/features/hermes_proxy/settings/`：新增 `commands_routes.py`、`personalities_routes.py`（+ 必要时同名 `_service.py`），在 `__init__.py` 的 `register()` 里挂载。
+- `amiba-plugin-http-backplane/runtime/features/hermes_proxy/settings/`：新增 `commands_routes.py`、`personalities_routes.py`（+ 必要时同名 `_service.py`），在 `__init__.py` 的 `register()` 里挂载。
 - `Composer.tsx`：内部把 `<Textarea>` 换成 `<RichComposerEditor>`，props 不变；新增**可选**的 provider 注入点（`mentionProviders?` prop），各 app 传入 Files / Page-context provider。
 - `apps/desktop`：新增「列工作区文件」IPC（main 进程 fs），renderer 侧包成 Files provider 注入。
 - `apps/browser-extension`：用 `chromePageContext` 包成 Page-context provider 注入。
@@ -157,7 +157,7 @@ interface MentionData {
 
 ## 6. 后端新增接口（实时下发，无漂移）
 
-两个接口都落在 `hermes-x-plugin-http-backplane/.../settings/`，与 `skills_routes.py` 同范式（aiohttp `web.get` + `web.json_response`），在 `settings/__init__.py` 的 `register()` 中挂载；只读、无写操作。backplane 已普遍 `from hermes_cli.* import ...`，可直接复用其数据。
+两个接口都落在 `amiba-plugin-http-backplane/.../settings/`，与 `skills_routes.py` 同范式（aiohttp `web.get` + `web.json_response`），在 `settings/__init__.py` 的 `register()` 中挂载；只读、无写操作。backplane 已普遍 `from hermes_cli.* import ...`，可直接复用其数据。
 
 ### 6.1 `GET /hermes/commands`
 

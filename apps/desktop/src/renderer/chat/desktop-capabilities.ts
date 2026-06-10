@@ -12,7 +12,7 @@
  *   - HomeView (in the same renderer) — text prompt
  *   - Quick-Ask Spotlight — text + sourceApp
  *   - Region Snip — image attachment + best-effort OCR text
- *   - `hermes-x://` URL handler — text prompt
+ *   - `amiba://` URL handler — text prompt
  *   - Unix socket inbox — text + optional attachments
  * Everything funnels through the same `home.pendingPrompt` key with the
  * shape `{ text?, attachments?, sourceApp? }`.
@@ -21,8 +21,8 @@ import type {
   PendingPromptAttachment,
   PendingPromptResult,
   ChatSurfaceCapabilities,
-} from "@hermes-x/ui"
-import { getPlatform } from "@hermes-x/platform"
+} from "@amiba/ui"
+import { getPlatform } from "@amiba/platform"
 
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"
 

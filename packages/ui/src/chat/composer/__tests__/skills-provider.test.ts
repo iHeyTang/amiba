@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSkillsProvider } from "../providers/skills"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesSkills: vi.fn().mockResolvedValue({
     ok: true,
     skills: [

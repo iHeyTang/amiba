@@ -9,15 +9,15 @@ import {
   type LanguagePreference,
   useStoredLanguagePreference,
   useT,
-} from "@hermes-x/i18n";
-import type { MessageKey, TranslateFn } from "@hermes-x/i18n";
+} from "@amiba/i18n";
+import type { MessageKey, TranslateFn } from "@amiba/i18n";
 import {
   BUILTIN_IDS,
   useQuickActionsController,
   type BuiltinId,
   type CustomQuickAction,
-} from "@hermes-x/core";
-import { getPlatform } from "@hermes-x/platform";
+} from "@amiba/core";
+import { getPlatform } from "@amiba/platform";
 import {
   type ThemePreference,
   useStoredThemePreference,

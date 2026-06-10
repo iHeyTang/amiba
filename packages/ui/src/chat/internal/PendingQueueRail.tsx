@@ -1,5 +1,5 @@
 import { Pencil, Send, Trash2 } from "lucide-react";
-import { useT } from "@hermes-x/i18n";
+import { useT } from "@amiba/i18n";
 
 import { cn } from "../../primitives";
 

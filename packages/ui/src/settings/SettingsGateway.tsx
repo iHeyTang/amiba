@@ -11,9 +11,9 @@ import {
   BRIDGE_URL_STORAGE_KEY,
   DEFAULT_HERMES_MODEL,
   fetchHermesModelIds,
-} from "@hermes-x/core";
-import { useT } from "@hermes-x/i18n";
-import { getPlatform } from "@hermes-x/platform";
+} from "@amiba/core";
+import { useT } from "@amiba/i18n";
+import { getPlatform } from "@amiba/platform";
 
 import type { BridgeCapability } from "./capabilities";
 

@@ -1,12 +1,12 @@
 {
-  "name": "@hermes-x/browser-extension",
+  "name": "@amiba/browser-extension",
   "displayName": "Hermes Browser Extension",
   "version": "0.3.0",
   "description": "Hermes Agent operates in a dedicated background window — runs Tampermonkey-compatible userscripts, exposes scripts to the agent, and embeds a Hermes chat side panel.",
   "author": "iHeyTang",
   "repository": {
     "type": "git",
-    "url": "https://github.com/iHeyTang/hermes-x.git"
+    "url": "https://github.com/amiba-desktop/amiba.git"
   },
   "private": true,
   "scripts": {
@@ -16,11 +16,11 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
-    "@hermes-x/core": "workspace:*",
-    "@hermes-x/i18n": "workspace:*",
-    "@hermes-x/platform": "workspace:*",
-    "@hermes-x/ui": "workspace:*",
-    "@hermes-x/utils": "workspace:*",
+    "@amiba/core": "workspace:*",
+    "@amiba/i18n": "workspace:*",
+    "@amiba/platform": "workspace:*",
+    "@amiba/ui": "workspace:*",
+    "@amiba/utils": "workspace:*",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/state": "^6.4.1",
     "@codemirror/theme-one-dark": "^6.1.2",
@@ -50,7 +50,7 @@
     "packageExports": true
   },
   "devDependencies": {
-    "@hermes-x/tailwind-preset": "workspace:*",
+    "@amiba/tailwind-preset": "workspace:*",
     "@ianvs/prettier-plugin-sort-imports": "4.4.0",
     "@types/chrome": "0.0.281",
     "@types/node": "22.9.0",

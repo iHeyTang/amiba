@@ -32,8 +32,8 @@ import {
   type HermesSkillFileResponse,
   type HermesSkillOrigin,
   type HermesSkillsResponse,
-} from "@hermes-x/core";
-import { useT } from "@hermes-x/i18n";
+} from "@amiba/core";
+import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
 
 const ALL_KEY = "__all__";

@@ -1,8 +1,8 @@
 /**
  * External entry points that let other programs hand Hermes a prompt:
  *
- *   1. Custom URL protocol — `hermes-x://prompt?text=...` (or
- *      `hermes-x://?text=...`, or anything with a `text` query param).
+ *   1. Custom URL protocol — `amiba://prompt?text=...` (or
+ *      `amiba://?text=...`, or anything with a `text` query param).
  *      The OS hands the URL back via `open-url` (mac) or as an argv tail
  *      on the second-instance launch (win/linux).
  *
@@ -28,7 +28,7 @@ import { app } from "electron"
 import { mainStore } from "./storage"
 
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"
-export const PROTOCOL_SCHEME = "hermes-x"
+export const PROTOCOL_SCHEME = "amiba"
 
 /** Max bytes for a single URL `?text=` value or one socket line. */
 const MAX_PAYLOAD_BYTES = 64 * 1024
@@ -85,10 +85,10 @@ export async function deliverPrompt(
 }
 
 /**
- * Pull a prompt out of a `hermes-x://...` URL. Accepts `?text=...`
- * anywhere (`hermes-x://prompt?text=...`, `hermes-x://?text=...`, etc).
+ * Pull a prompt out of a `amiba://...` URL. Accepts `?text=...`
+ * anywhere (`amiba://prompt?text=...`, `amiba://?text=...`, etc).
  * As a convenience, falls back to the URL path itself when no query is
- * present — `hermes-x://hello%20world` works.
+ * present — `amiba://hello%20world` works.
  *
  * Returns `null` for invalid URLs, unrelated schemes, or when the
  * payload exceeds `MAX_PAYLOAD_BYTES` (so a 10MB prompt URL can't
@@ -107,7 +107,7 @@ export function extractPromptFromUrl(raw: string): string | null {
   if (q && q.trim()) {
     text = q
   } else {
-    // host + pathname fallback: `hermes-x://hello%20world` → "hello world"
+    // host + pathname fallback: `amiba://hello%20world` → "hello world"
     const tail = decodeURIComponent(`${parsed.hostname}${parsed.pathname}`).trim()
     text = tail || null
   }
@@ -124,7 +124,7 @@ export function extractPromptFromUrl(raw: string): string | null {
 }
 
 /**
- * Scan a process argv list for the first `hermes-x://...` token. Used
+ * Scan a process argv list for the first `amiba://...` token. Used
  * for win/linux cold-start and second-instance launches, where the OS
  * appends the URL to argv rather than firing `open-url`.
  */
@@ -138,7 +138,7 @@ export function findProtocolUrlInArgv(argv: readonly string[]): string | null {
 }
 
 /**
- * Register `hermes-x://` as a protocol handler with the OS and start
+ * Register `amiba://` as a protocol handler with the OS and start
  * listening for incoming URLs. Idempotent across calls.
  *
  * macOS routes URLs through `app.on("open-url")`. Windows + Linux push
@@ -237,7 +237,7 @@ function coerceAttachment(raw: unknown): DeliverPromptAttachment | null {
  * connection is closed so a misbehaving client can't OOM us.
  *
  * Windows has no AF_UNIX sockets in any portable form — we'd need
- * named pipes (`\\.\pipe\hermes-x-inbox`) instead. For now this just
+ * named pipes (`\\.\pipe\amiba-inbox`) instead. For now this just
  * no-ops on win32; the protocol handler still works there.
  */
 export async function startUnixSocketInbox(

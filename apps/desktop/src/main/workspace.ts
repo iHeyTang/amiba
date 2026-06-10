@@ -19,7 +19,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import chokidar from "chokidar"
-import type { WorkspaceChange } from "@hermes-x/platform"
+import type { WorkspaceChange } from "@amiba/platform"
 
 import { mainStore } from "./storage"
 

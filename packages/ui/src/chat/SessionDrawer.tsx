@@ -9,12 +9,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../primitives";
 import { ScrollArea } from "../primitives";
-import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
+import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
 import {
   resolveChannel,
   SOURCE_LOCAL,
   type SessionMeta,
-} from "@hermes-x/core";
+} from "@amiba/core";
 import { cn } from "../primitives";
 import { ScheduledSection, TopSection } from "./SessionGroups";
 

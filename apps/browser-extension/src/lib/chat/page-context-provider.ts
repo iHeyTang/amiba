@@ -1,6 +1,6 @@
 import type { LexicalEditor } from "lexical"
-import { insertMentionAtTrigger } from "@hermes-x/ui"
-import type { MenuItem, MentionData, TriggerProvider } from "@hermes-x/ui"
+import { insertMentionAtTrigger } from "@amiba/ui"
+import type { MenuItem, MentionData, TriggerProvider } from "@amiba/ui"
 import { chromePageContext } from "./chrome-capabilities"
 
 export function makePageContextProvider(): TriggerProvider {

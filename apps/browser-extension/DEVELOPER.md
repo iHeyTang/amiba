@@ -4,7 +4,7 @@ Audience: contributors and anyone debugging packaging or the bridge to Hermes.
 
 This repo is the **Chrome extension only**. The matching Hermes Python
 plugin (WebSocket hub + tools) lives at
-[`iHeyTang/hermes-x-plugin-browser-tools`](https://github.com/iHeyTang/hermes-x-plugin-browser-tools).
+[`amiba-desktop/amiba-plugin-browser-tools`](https://github.com/amiba-desktop/amiba-plugin-browser-tools).
 
 ## Layout
 

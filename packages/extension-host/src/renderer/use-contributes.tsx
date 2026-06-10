@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useState } from "react"
-import { getCurrentLanguage, subscribeLanguage } from "@hermes-x/i18n"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import { getCurrentLanguage, subscribeLanguage } from "@amiba/i18n"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 // ---------------------------------------------------------------------------
 // Internal manifest entry type (what listManifests now returns)

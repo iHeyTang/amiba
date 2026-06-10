@@ -5,8 +5,8 @@
  * spec, so it lives above the `@tailwind` directives even though Tailwind
  * is what makes the `@apply` rules inside tokens.css resolvable.
  */
-@import "@hermes-x/ui/styles/tokens.css";
-@import "@hermes-x/ui/styles/chat.css";
+@import "@amiba/ui/styles/tokens.css";
+@import "@amiba/ui/styles/chat.css";
 
 @tailwind base;
 @tailwind components;

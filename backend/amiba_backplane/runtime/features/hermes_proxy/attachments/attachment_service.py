@@ -2,8 +2,8 @@
 Attachment upload service.
 
 Owns both the request-level validation and the on-disk persistence layout
-under ``<hermes_home>/hermes-x/inbox/<session>/``. Lives under the shared
-``hermes-x/inbox`` root (not the plugin's own subtree) so every uploaded
+under ``<hermes_home>/amiba/inbox/<session>/``. Lives under the shared
+``amiba/inbox`` root (not the plugin's own subtree) so every uploaded
 asset — regardless of which client surface produced it — ends up in one
 predictable place users can browse, back up, or clean out.
 """
@@ -18,18 +18,18 @@ from typing import Any, Dict, Optional
 
 from ....adapters.hermes_core import hermes_home
 
-PLUGIN_NAME = "hermes-x-backplane"
+PLUGIN_NAME = "amiba-backplane"
 MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _SESSION_ID_SAFE_RE = re.compile(r"[^A-Za-z0-9_-]+")
 
 
 def _attachments_root() -> Path:
-    # Unified inbox under <hermes_home>/hermes-x/inbox/. Was previously
+    # Unified inbox under <hermes_home>/amiba/inbox/. Was previously
     # nested under plugins/<plugin>/attachments/; old files there remain
     # readable (the absolute paths stored in session history still point
     # at them), but new uploads land here.
-    root = hermes_home() / "hermes-x" / "inbox"
+    root = hermes_home() / "amiba" / "inbox"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

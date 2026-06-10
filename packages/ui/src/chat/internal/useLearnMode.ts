@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import type { TranslateFn } from "@hermes-x/i18n";
-import { shortId } from "@hermes-x/utils";
+import type { TranslateFn } from "@amiba/i18n";
+import { shortId } from "@amiba/utils";
 import {
   classify,
   isAttachmentReadOk,
@@ -8,7 +8,7 @@ import {
   type Attachment,
   type AttachmentReadResult,
   useSessions,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 import type { ChatSurfaceCapabilities } from "./capabilities";
 

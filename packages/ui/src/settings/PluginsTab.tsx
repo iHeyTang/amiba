@@ -1,8 +1,8 @@
-import { getHermesPlugins, setPluginEnabled, type HermesPlugin } from "@hermes-x/core"
+import { getHermesPlugins, setPluginEnabled, type HermesPlugin } from "@amiba/core"
 import { Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { useT } from "@hermes-x/i18n"
+import { useT } from "@amiba/i18n"
 import { Button, Switch, cn } from "../primitives"
 import { useStartAgentTask } from "./agent-task"
 import { featuredFeatureForPlugin, openFeaturedFeature } from "./featured-features"

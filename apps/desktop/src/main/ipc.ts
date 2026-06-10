@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 
 import { BrowserWindow, ipcMain, shell } from "electron"
-import type { WorkspaceChange } from "@hermes-x/platform"
+import type { WorkspaceChange } from "@amiba/platform"
 
 import { mainStore, type StorageChangeMap } from "./storage"
 import { workspaceManager } from "./workspace"

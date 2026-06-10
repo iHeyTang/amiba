@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makePersonasProvider } from "../providers/personas"
 
-vi.mock("@hermes-x/core", () => ({
+vi.mock("@amiba/core", () => ({
   getHermesPersonalities: vi.fn().mockResolvedValue({
     ok: true,
     personalities: [{ key: "concise", builtin: true, preview: "Keep it brief" }],

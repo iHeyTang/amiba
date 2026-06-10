@@ -1,4 +1,4 @@
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface RuntimeExtension {
   id: string

@@ -18,7 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install
       - run: pnpm build
-      - run: pnpm hermes-x pack -o extension.tgz
+      - run: pnpm amiba pack -o extension.tgz
       - uses: softprops/action-gh-release@v2
         with:
           files: extension.tgz

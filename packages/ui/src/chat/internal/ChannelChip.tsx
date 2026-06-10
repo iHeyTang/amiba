@@ -5,7 +5,7 @@
  *  - ``inline`` (default): icon + label, used in SessionDrawer rows.
  *  - ``compact``: icon-only, used in the TabBar where space is scarce.
  *
- * Icon mapping lives here (not in @hermes-x/core) so the registry stays
+ * Icon mapping lives here (not in @amiba/core) so the registry stays
  * renderer-free. Adding a new ``ChannelIconTag`` in the registry
  * requires adding a case to ``iconFor`` below.
  */
@@ -36,8 +36,8 @@ import {
   resolveChannel,
   type ChannelDescriptor,
   type ChannelIconTag,
-} from "@hermes-x/core";
-import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
+} from "@amiba/core";
+import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
 import { cn } from "../../primitives";
 /**
  * Map an icon tag to a Lucide component. ``MessageCircle`` is a safe

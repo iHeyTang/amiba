@@ -2,7 +2,7 @@ import type {
   FaviconCapability,
   HomeCapabilities,
   HomeShortcutsCapability,
-} from "@hermes-x/ui";
+} from "@amiba/ui";
 
 import { useHomeShortcuts } from "~lib/home-shortcuts/use-home-shortcuts";
 

@@ -1,4 +1,4 @@
-import type { MainActivate } from "@hermes-x/extension-api"
+import type { MainActivate } from "@amiba/extension-api"
 
 export const activate: MainActivate = async (host) => {
   host.logger.info("[{{ID}}] activated")

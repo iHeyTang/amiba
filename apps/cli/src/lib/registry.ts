@@ -1,7 +1,7 @@
 // apps/cli/src/lib/registry.ts
 //
 // Standalone registry CRUD for the CLI. Cannot import from
-// @hermes-x/extension-host/main because that module pulls in Electron deps.
+// @amiba/extension-host/main because that module pulls in Electron deps.
 // Duplicates the ~40-LOC core from packages/extension-host/src/main/registry-store.ts.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"

@@ -17,7 +17,7 @@ import { validateManifest } from "./discover"
 import { checkCompat } from "../compat"
 import { HOST_API_VERSION } from "../version"
 import { addEntry } from "./registry-store"
-import type { ExtensionManifest } from "@hermes-x/extension-api"
+import type { ExtensionManifest } from "@amiba/extension-api"
 
 export interface MarketplaceEntry {
   id: string
@@ -46,10 +46,10 @@ export interface ResolvedRelease {
 }
 
 const DEFAULT_INDEX_URL =
-  "https://raw.githubusercontent.com/iHeyTang/hermes-x-marketplace/main/community-plugins.json"
+  "https://raw.githubusercontent.com/amiba-desktop/amiba-marketplace/main/community-plugins.json"
 
 export function getIndexUrl(): string {
-  return process.env.HERMES_X_MARKETPLACE_INDEX_URL || DEFAULT_INDEX_URL
+  return process.env.AMIBA_MARKETPLACE_INDEX_URL || DEFAULT_INDEX_URL
 }
 
 export async function fetchIndex(): Promise<MarketplaceEntry[]> {

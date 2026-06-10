@@ -12,10 +12,10 @@ const storage = {
   remove: vi.fn(async () => {}),
   watch: vi.fn(() => () => {}),
 }
-vi.mock("@hermes-x/platform", () => ({
+vi.mock("@amiba/platform", () => ({
   getPlatform: () => ({ storage }),
 }))
-vi.mock("@hermes-x/i18n", () => ({
+vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (k: string) => k }),
 }))
 

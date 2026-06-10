@@ -18,14 +18,14 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { useT, type MessageKey, type TranslateFn } from "@hermes-x/i18n";
-import { getPlatform, type StorageChangeMap } from "@hermes-x/platform";
+import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
+import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 import { useResolvedTheme } from "../theme";
 import { Button, HermesLogo, ScrollArea } from "../primitives";
 import { cn } from "../primitives";
-import { shortId } from "@hermes-x/utils";
+import { shortId } from "@amiba/utils";
 // Wire-protocol types + engine + helpers — everything that was previously
-// imported from extension-local paths now lives in @hermes-x/core.
+// imported from extension-local paths now lives in @amiba/core.
 import {
   attachmentToBadge,
   classify,
@@ -59,7 +59,7 @@ import {
   type StreamEvent,
   type StreamedToolCall,
   type TurnMetadata,
-} from "@hermes-x/core";
+} from "@amiba/core";
 
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
@@ -116,7 +116,7 @@ const SETTINGS_KEYS = {
 // NavigateOpenPolicyCapability — chrome.runtime/windows/tabs all live there.
 
 // UiMessage / AssistantTimelineItem / ChatError / COMPOSER_TEXTAREA_MAX_PX
-// now live in @hermes-x/chat-ui (alongside the rendering components).
+// now live in @amiba/chat-ui (alongside the rendering components).
 // Imported below in the consolidated import block.
 
 // PendingChatTurn / previewPendingTurn / pendingQueueStorageKey now
@@ -127,7 +127,7 @@ const SETTINGS_KEYS = {
 // concrete chrome.windows + chrome.tabs implementation; ChatSurface
 // receives it as the `openAgentDestination` prop.
 
-// ChatError moved to @hermes-x/chat-ui (see consolidated import block).
+// ChatError moved to @amiba/chat-ui (see consolidated import block).
 
 /**
  * Layout variants:
@@ -145,7 +145,7 @@ const SETTINGS_KEYS = {
  * Width preset for the messages column in `variant="fullscreen"`. The
  * composer keeps a fixed cap regardless; only the message flow above it
  * resizes. Ignored in `variant="sidebar"` (the side panel is already a
- * narrow column). Re-exported from @hermes-x/chat-ui so external surfaces
+ * narrow column). Re-exported from @amiba/chat-ui so external surfaces
  * (e.g. tabs/chat.tsx) that import it from `~sidepanel/index` still work.
  */
 // (MessagesMaxWidth type itself is imported in the consolidated block at the
@@ -525,7 +525,7 @@ export default function ChatSurface({
 
   // Pick up a prompt handed off from the new-tab Home launcher or from
   // an external surface (Quick-Ask Spotlight selection, Region Snip
-  // screenshot, `hermes-x://...` URL, Unix socket inbox). Each surface
+  // screenshot, `amiba://...` URL, Unix socket inbox). Each surface
   // writes `{ text?, attachments?, sourceApp? }` into storage and opens
   // the chat view; we drain that key here, prefill the composer with
   // whichever fields are populated, and flag the turn for auto-send.
@@ -1472,7 +1472,7 @@ export default function ChatSurface({
   // Read-only mode: the active session originates from another channel
   // (Feishu, Telegram, …) that owns the writing engine. We render the
   // history but replace the composer with a notice; sending here would
-  // race that engine because hermes-x has no outbound delivery path
+  // race that engine because amiba has no outbound delivery path
   // back to those platforms.
   const activeSession = hasActive
     ? sessions.sessions.find((s) => s.id === sessions.activeId)
@@ -1653,7 +1653,7 @@ export default function ChatSurface({
 
   // Read-only notice — shown instead of ``composerNode`` when the
   // active session originates from a non-local channel. Single-line,
-  // no actions: hermes-x has no outbound path to deliver a reply back
+  // no actions: amiba has no outbound path to deliver a reply back
   // to Feishu / Telegram / etc., so we don't pretend the composer is
   // safe to use here. Users continue the conversation on the
   // originating platform.
