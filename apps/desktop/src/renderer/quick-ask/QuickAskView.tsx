@@ -7,9 +7,10 @@
  * tool progress, etc. are guaranteed-identical to what the user sees
  * inside the main BrowserWindow. The only differences are:
  *
- *   - **Outer shell**: drag region, Esc-to-dismiss, ⌘K-new-conversation.
- *     Window geometry is fixed (full-display transparent stage); the card
- *     sizes itself via CSS — no resize IPC.
+ *   - **Outer shell**: drag region, Esc-to-dismiss, ⌘K-new-conversation,
+ *     and the window-resize coordination (compact → hugs the composer,
+ *     expanded → snaps to ``EXPANDED_HEIGHT_PX`` so streaming chunks
+ *     scroll inside the messages region without jittering the window).
  *   - **Empty state**: ``emptyState="composer-only"`` on ChatSurface
  *     skips the logo+greeting hero, flips ``quickActions={true}`` on the
  *     composer, and lets the body shrink to the composer's natural height
@@ -46,6 +47,7 @@ import { Clock, X } from "lucide-react"
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -54,6 +56,14 @@ import {
 import { ElectronChatEngineClient } from "../chat/electron-engine-client"
 
 type QuickAskPrefill = { text?: string; sourceApp?: string }
+
+/**
+ * Window height locked to as soon as the conversation has anything to
+ * show. Streaming content scrolls inside the ChatSurface's internal
+ * ScrollArea so the window itself never resizes during a stream —
+ * eliminating per-chunk jitter.
+ */
+const EXPANDED_HEIGHT_PX = 480
 
 export function QuickAskView() {
   // Each BrowserWindow is its own renderer process, so the theme hook
@@ -185,6 +195,42 @@ export function QuickAskView() {
     return () => document.removeEventListener("keydown", onKey)
   }, [bridge, sessions])
 
+  // Window-resize strategy: same two-mode design the previous Quick-Ask
+  // used. Compact mode follows the inner content height via
+  // ResizeObserver (fires AFTER layout so the textarea's auto-grow is
+  // captured accurately); expanded snaps once to EXPANDED_HEIGHT_PX so
+  // streaming chunks never cause the window itself to resize.
+  useLayoutEffect(() => {
+    if (expanded) {
+      void bridge.quickAsk.resize(EXPANDED_HEIGHT_PX)
+      return
+    }
+    const el = rootRef.current
+    if (!el) return
+    let raf = 0
+    let lastSent = -1
+    const measure = () => {
+      raf = 0
+      if (!el) return
+      const target = el.scrollHeight + 12
+      if (target === lastSent) return
+      lastSent = target
+      void bridge.quickAsk.resize(target)
+    }
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measure)
+    })
+    observer.observe(el)
+    // First fire — observers don't reliably callback on initial
+    // observation in all browsers.
+    measure()
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
+  }, [expanded, bridge])
+
   // Resolve the active session's last-update timestamp for the
   // continuation hint. The sessions index is shared cross-window via
   // SessionDB so the desktop main window's edits propagate here too.
@@ -198,79 +244,70 @@ export function QuickAskView() {
     summonMessageCount !== null &&
     messages.length === summonMessageCount
 
-  // Modal dismiss: a mousedown anywhere on the transparent backdrop (i.e.
-  // NOT on the card) closes the stage — the Spotlight/Raycast convention.
-  // The card stops propagation so interacting with it never dismisses.
-  // Electron transparent windows don't pass clicks through by default, so
-  // the backdrop reliably receives this event.
-  const onBackdropMouseDown = useCallback(() => {
-    void bridge.quickAsk.dismiss()
-  }, [bridge])
-
   return (
     <div
       ref={rootRef}
-      onMouseDown={onBackdropMouseDown}
-      // Full-window transparent backdrop. No dim/blur — the stage looks
-      // like just a floating card, matching Spotlight/Raycast. Clicking
-      // the blank area dismisses; the card below stops propagation.
-      className="fixed inset-0 flex items-start justify-center"
+      className={cn(
+        // ``h-full`` in expanded mode lets ChatSurface fill the entire
+        // window. In compact mode the card is content-sized so the popup
+        // hugs the input row. No CSS shadow — main/quick-ask-window.ts
+        // sets ``hasShadow: true`` and macOS paints the shadow outside
+        // the BrowserWindow where it can't be clipped at the edge.
+        //
+        // ``overflow-hidden`` clips the inner ChatSurface's
+        // ``bg-background`` rectangle to the rounded shape — without it
+        // the composer's square bottom edge paints over the outer
+        // ``rounded-xl`` and the popup looks half-rounded.
+        "animate-notifier-in relative mx-auto flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground",
+        expanded && "h-full",
+      )}
     >
+      {/* Drag handle. Sits above all content so the user always has a
+          predictable region to grab the borderless window from. The
+          visible strip is only 12px so it reads as discreet chrome,
+          but the ``after:`` pseudo-element extends the hit region 10px
+          further down — invisibly — so the hover animation fires as
+          the cursor *approaches* the grip rather than only on direct
+          contact. The pseudo is part of the parent's box, so:
+            · it inherits ``app-drag-region`` (more area to grab)
+            · ``group-hover:`` on the grip glyph below picks up hover
+              in the extended zone, since the parent IS the group
+          On hover the grip widens + darkens — the iOS modal-grip
+          convention, and the only visual feedback this borderless
+          window has to communicate "you can drag me".
+          The global CSS rule auto opts buttons/textareas out, so the
+          chips and composer below are unaffected. */}
       <div
-        onMouseDown={(e) => e.stopPropagation()}
-        className={cn(
-          // The visible card. Centered horizontally, pushed down ~22vh so
-          // there's headroom ABOVE for the slash/@ menu (TriggerMenu opens
-          // upward via bottom-full) and a large area BELOW for downward
-          // dropdowns/selects. CSS shadow (not native — transparent
-          // windows don't get one; hasShadow is false).
-          // overflow-hidden is NOT in the base string — in compact mode we
-          // intentionally omit it so the slash/@ menu and other upward
-          // popups can escape into the transparent stage; rounded corners
-          // are preserved because ChatSurface's root div carries
-          // rounded-xl when isComposerOnlyEmpty is true. In
-          // expanded mode overflow-hidden is restored — popups already fit
-          // inside the 480 px card and clipping keeps the corners clean.
-          "animate-notifier-in mt-[22vh] flex w-full max-w-[640px] flex-col rounded-xl bg-background text-foreground shadow-2xl",
-          // expanded → fixed height so ChatSurface fills it and streaming
-          // scrolls INSIDE its own ScrollArea (no window resize, ever).
-          // compact → hug the composer, capped so a stray tall empty state
-          // can't run off-screen.
-          expanded ? "h-[480px] overflow-hidden" : "max-h-[480px]",
-        )}
+        className="app-drag-region group relative flex h-3 w-full shrink-0 items-center justify-center after:absolute after:inset-x-0 after:top-full after:h-2.5 after:content-['']"
+        title="Drag to reposition"
       >
-        {/*
-          Invariant: `expanded` here and ChatSurface's `isComposerOnlyEmpty`
-          are complements — when a turn exists, expanded=true and
-          isComposerOnlyEmpty=false, so both sides restore overflow-hidden +
-          flex-1 together. They derive from the same (hasActive, messages)
-          signals, so they can't diverge; keep them in sync if either changes.
-        */}
-        <ChatSurface
-          variant="fullscreen"
-          emptyState="composer-only"
-          composerAutoFocus
-          client={client}
-          capabilities={capabilities}
-          openSettings={() => {}}
-          openAgentDestination={openExternal}
+        <span
+          aria-hidden
+          className="h-0.5 w-8 rounded-full bg-border/70 transition-[width,background-color,opacity] duration-150 ease-out group-hover:w-12 group-hover:bg-foreground/40"
         />
-
-        {showContinuationHint && (
-          <ContinuationHint
-            label={t("quickAsk.continuation.label", {
-              time: formatRelativeTime(
-                activeSession?.updatedAt ?? Date.now(),
-                t,
-              ),
-            })}
-            newLabel={t("quickAsk.continuation.new")}
-            dismissLabel={t("quickAsk.continuation.dismiss")}
-            onNew={() => void sessions.deselect()}
-            onDismiss={() => setHintDismissed(true)}
-          />
-        )}
       </div>
+
+      <ChatSurface
+        variant="fullscreen"
+        emptyState="composer-only"
+        composerAutoFocus
+        client={client}
+        capabilities={capabilities}
+        openSettings={() => {}}
+        openAgentDestination={openExternal}
+      />
+
+      {showContinuationHint && (
+        <ContinuationHint
+          label={t("quickAsk.continuation.label", {
+            time: formatRelativeTime(activeSession?.updatedAt ?? Date.now(), t),
+          })}
+          newLabel={t("quickAsk.continuation.new")}
+          dismissLabel={t("quickAsk.continuation.dismiss")}
+          onNew={() => void sessions.deselect()}
+          onDismiss={() => setHintDismissed(true)}
+        />
+      )}
     </div>
   )
 }
