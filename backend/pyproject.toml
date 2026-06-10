@@ -58,3 +58,7 @@ packages = [
     "hermes_x_backplane.runtime.features.hermes_proxy.stt",
     "hermes_x_backplane.runtime.features.hermes_proxy.turn_metadata",
 ]
+
+# Non-Python data shipped inside packages (the agent-facing management skill).
+[tool.setuptools.package-data]
+"hermes_x_backplane.runtime.mention_sources" = ["management_skill/*.md"]

@@ -25,9 +25,18 @@ logger = logging.getLogger(__name__)
 _SKILLS_DIRNAME = "skills"
 
 
+def _management_skill_dir() -> Path:
+    """The backplane's own ``management_skill/`` dir — the skill that teaches the
+    agent to install/update/remove sources via the loopback admin API."""
+    return (Path(__file__).resolve().parent / "management_skill").resolve()
+
+
 def _collect_skills_dirs() -> List[Path]:
-    """Every installed source's ``skills/`` dir that exists on disk."""
+    """The management skill + every installed source's ``skills/`` dir on disk."""
     dirs: List[Path] = []
+    mgmt = _management_skill_dir()
+    if mgmt.is_dir():
+        dirs.append(mgmt)
     try:
         if USER_SOURCES_DIR.is_dir():
             for entry in sorted(USER_SOURCES_DIR.iterdir()):
