@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander"
 import { createCommand } from "./commands/create.js"
+import { createMentionSourceCommand } from "./commands/create-mention-source.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
 import { packCommand } from "./commands/pack.js"
@@ -20,6 +21,14 @@ program
   .option("--id <id>", "reverse-DNS extension id (e.g. com.example.my-ext)")
   .option("--no-install", "skip pnpm install after scaffold")
   .action(createCommand)
+
+program
+  .command("create-mention-source")
+  .description("Scaffold a mention source (lets the composer @-mention an external system)")
+  .argument("[name]", "source name (lowercase slug, e.g. notion)")
+  .option("--description <text>", "one-line description")
+  .option("--author <name>", "author")
+  .action(createMentionSourceCommand)
 
 program
   .command("dev")
