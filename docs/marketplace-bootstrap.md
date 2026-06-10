@@ -55,8 +55,8 @@ A plugin lives in its own GitHub repo (e.g. `iHeyTang/hermes-x-ext-knowledge-bas
 ### Initial scaffold
 
 ```bash
-npm install -g hermes-x
-hermes-x-ext create my-plugin
+npm install -g @hermes-x/cli   # provides the `hermes-x` command
+hermes-x create my-plugin
 cd my-plugin
 git init && git add . && git commit -m "initial"
 gh repo create <author>/hermes-x-ext-my-plugin --public --source=.

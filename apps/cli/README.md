@@ -1,6 +1,6 @@
-# hermes-x
+# @hermes-x/cli
 
-The **hermes-x CLI** — scaffolding and tooling for the hermes-x ecosystem. It
+The **hermes-x CLI** (command: `hermes-x`) — scaffolding and tooling for the hermes-x ecosystem. It
 started as the extension CLI and has grown beyond that; today it covers:
 
 - **Extensions** — scaffold / dev / build / pack / install desktop extensions
@@ -12,7 +12,7 @@ started as the extension CLI and has grown beyond that; today it covers:
 ## Installation
 
 ```sh
-pnpm add -g hermes-x
+pnpm add -g @hermes-x/cli   # installs the `hermes-x` command
 # or, from a local checkout:
 node apps/cli/dist/cli.js --help
 ```

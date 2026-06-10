@@ -12,7 +12,7 @@ API_VERSION=$(node -p "require('./packages/extension-api/package.json').version"
 CLI_VERSION=$(node -p "require('./apps/cli/package.json').version")
 PRESET_VERSION=$(node -p "require('./packages/tailwind-preset/package.json').version")
 API_TGZ="$ROOT/sdk-dist/hermes-x-extension-api-${API_VERSION}.tgz"
-CLI_TGZ="$ROOT/sdk-dist/hermes-x-${CLI_VERSION}.tgz"
+CLI_TGZ="$ROOT/sdk-dist/hermes-x-cli-${CLI_VERSION}.tgz"
 PRESET_TGZ="$ROOT/sdk-dist/hermes-x-tailwind-preset-${PRESET_VERSION}.tgz"
 for f in "$API_TGZ" "$CLI_TGZ" "$PRESET_TGZ"; do test -f "$f" || { echo "missing $f"; exit 1; }; done
 
@@ -27,7 +27,7 @@ node -e "
 const fs=require('fs'), p='$EXT/package.json';
 const j=JSON.parse(fs.readFileSync(p,'utf8'));
 j.devDependencies['@hermes-x/extension-api']='file:$API_TGZ';
-j.devDependencies['hermes-x']='file:$CLI_TGZ';
+j.devDependencies['@hermes-x/cli']='file:$CLI_TGZ';
 j.devDependencies['@hermes-x/tailwind-preset']='file:$PRESET_TGZ';
 fs.writeFileSync(p, JSON.stringify(j,null,2));
 "

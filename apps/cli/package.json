@@ -1,7 +1,7 @@
 {
-  "name": "hermes-x",
+  "name": "@hermes-x/cli",
   "version": "0.1.0",
-  "description": "The hermes-x CLI — scaffold extensions and mention sources, and more.",
+  "description": "The hermes-x CLI (bin: hermes-x) — scaffold extensions and mention sources, and more.",
   "type": "module",
   "bin": {
     "hermes-x": "dist/cli.js"

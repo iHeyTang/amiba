@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@hermes-x/extension-api": "^0.1.0",
-    "hermes-x": "^0.1.0",
+    "@hermes-x/cli": "^0.1.0",
     "@hermes-x/tailwind-preset": "^0.1.0",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",
