@@ -95,7 +95,7 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
 
 万一框架不可用，这几条路由优雅降级（空注册表 / 503），backplane 其余部分不受影响。
 **写一个源** 见作者指南 [`docs/mention-sources.md`](docs/mention-sources.md)
-（或 `hermes-x-ext create-mention-source <name>` 一键生成模板）。
+（或 `hermes-x create-mention-source <name>` 一键生成模板）。
 
 ## 关键设计点
 
@@ -116,7 +116,7 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
   对照（共有 / 官方独有 / 我们独有 / 全局残留 / 变更日志）。**持续维护，
   每次改 backplane 或 upstream 升级要同步更新。**
 - 怎么写一个源（`search` + `mention-source.yaml` + resolver skill）—— 见作者指南
-  [`docs/mention-sources.md`](docs/mention-sources.md)、`hermes-x-ext
+  [`docs/mention-sources.md`](docs/mention-sources.md)、`hermes-x
   create-mention-source` 脚手架,和参考实现
   [`hermes-x-integration-lark`](https://github.com/iHeyTang/hermes-x-integration-lark)。
 

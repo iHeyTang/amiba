@@ -5,8 +5,8 @@
   "description": "A hermes-x extension.",
   "scripts": {
     "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.ui.config.ts",
-    "dev": "hermes-x-ext dev",
-    "pack": "hermes-x-ext pack",
+    "dev": "hermes-x dev",
+    "pack": "hermes-x pack",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@hermes-x/extension-api": "^0.1.0",
-    "@hermes-x/extension-cli": "^0.1.0",
+    "hermes-x": "^0.1.0",
     "@hermes-x/tailwind-preset": "^0.1.0",
     "@types/node": "^20.0.0",
     "@types/react": "18.3.12",

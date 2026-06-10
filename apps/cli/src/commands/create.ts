@@ -92,7 +92,7 @@ export async function createCommand(name: string | undefined, opts: CreateOption
 
   console.log(kleur.bold("\nNext steps:"))
   console.log("  ", kleur.cyan(`cd ${finalName}`))
-  console.log("  ", kleur.cyan("pnpm hermes-x-ext dev"))
+  console.log("  ", kleur.cyan("pnpm hermes-x dev"))
   console.log(
     "    └─ Make sure Hermes desktop is running; you'll see your extension load instantly.",
   )

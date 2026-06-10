@@ -1,4 +1,4 @@
-// apps/extension-cli/src/lib/registry.ts
+// apps/cli/src/lib/registry.ts
 //
 // Standalone registry CRUD for the CLI. Cannot import from
 // @hermes-x/extension-host/main because that module pulls in Electron deps.

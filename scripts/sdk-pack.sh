@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 OUT="$PWD/sdk-dist"
 rm -rf "$OUT"
 mkdir -p "$OUT"
-for dir in packages/extension-api packages/tailwind-preset apps/extension-cli; do
+for dir in packages/extension-api packages/tailwind-preset apps/cli; do
   echo "packing ${dir}..."
   pnpm -C "$dir" pack --pack-destination "$OUT"
 done

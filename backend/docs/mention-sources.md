@@ -29,7 +29,7 @@ A mention source only does **discovery for the composer** (`search`) plus a thin
 Scaffold them with the CLI:
 
 ```bash
-pnpm hermes-x-ext create-mention-source notion --description "Notion pages"
+pnpm hermes-x create-mention-source notion --description "Notion pages"
 ```
 
 That produces a directory (a git repo) with:

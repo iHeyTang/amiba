@@ -1,29 +1,43 @@
-# @hermes-x/extension-cli
+# hermes-x
 
-CLI for developing and distributing Hermes Desktop extensions.
+The **hermes-x CLI** — scaffolding and tooling for the hermes-x ecosystem. It
+started as the extension CLI and has grown beyond that; today it covers:
 
-Extensions follow the **WebView model**: each UI surface (sidebar, settings, etc.)
-is an independent HTML page served via the `hermes-ext://` protocol into an
-Electron `<webview>`. Extensions ship `manifest.json` + `dist/main.cjs` (Node/main
-process) + `dist/ui/<surface>/index.html` (self-contained React pages).
+- **Extensions** — scaffold / dev / build / pack / install desktop extensions
+  (the WebView model: `manifest.json` + `dist/main.cjs` + self-contained React
+  UI pages served via `hermes-ext://` into an Electron `<webview>`).
+- **Mention sources** — scaffold a composer `@`-mention source
+  (`create-mention-source`).
 
 ## Installation
 
 ```sh
-pnpm add -g @hermes-x/extension-cli
+pnpm add -g hermes-x
 # or, from a local checkout:
-node apps/extension-cli/dist/cli.js --help
+node apps/cli/dist/cli.js --help
 ```
 
 ## Commands
 
-### `hermes-x-ext create [name]`
+### `hermes-x create [name]`
 
-Scaffold a new extension from the built-in template.
+Scaffold a new desktop **extension** from the built-in template.
 
 ```sh
-hermes-x-ext create my-extension --id com.example.my-extension
+hermes-x create my-extension --id com.example.my-extension
 ```
+
+### `hermes-x create-mention-source [name]`
+
+Scaffold a **mention source** — a composer `@`-mention provider for an external
+system. Produces the four-piece source (`source.py` + `mention-source.yaml` +
+`skills/resolve.md` + `__init__.py`) as a ready git repo.
+
+```sh
+hermes-x create-mention-source notion --description "Notion pages"
+```
+
+See `backend/docs/mention-sources.md` for the author guide.
 
 The scaffold produces:
 
@@ -53,14 +67,14 @@ my-extension/
         └── zh-CN.json
 ```
 
-### `hermes-x-ext dev`
+### `hermes-x dev`
 
 Build the extension in watch mode. Spawns two parallel Vite watch processes
 (main + UI) and touches `manifest.json` on any output change so the running
 desktop app hot-reloads the extension automatically.
 
 ```sh
-hermes-x-ext dev
+hermes-x dev
 ```
 
 Recommended workflow:
@@ -76,13 +90,13 @@ Options:
 |------|-------------|
 | `--no-symlink` | Accepted for backward compatibility; has no effect |
 
-### `hermes-x-ext build`
+### `hermes-x build`
 
 Production build — runs `vite build -c vite.main.config.ts` followed by
 `vite build -c vite.ui.config.ts`. Validates `manifest.json` first.
 
 ```sh
-hermes-x-ext build
+hermes-x build
 ```
 
 Output:
@@ -97,15 +111,15 @@ dist/
     └── assets/               # shared JS chunks
 ```
 
-### `hermes-x-ext pack`
+### `hermes-x pack`
 
 Produce `extension.tgz` ready for attaching to a GitHub Release.
 Tarballs `manifest.json` + `dist/` (which contains `main.cjs` and
 `ui/<surface>/index.html`).
 
 ```sh
-hermes-x-ext pack
-hermes-x-ext pack -o dist/extension.tgz
+hermes-x pack
+hermes-x pack -o dist/extension.tgz
 ```
 
 Options:
@@ -114,20 +128,20 @@ Options:
 |------|-------------|
 | `-o, --output <path>` | Output tarball path (default: `extension.tgz`) |
 
-### `hermes-x-ext install <repo>`
+### `hermes-x install <repo>`
 
 Install an extension directly from a GitHub Release into
 `<userData>/extensions/<id>/`.
 
 ```sh
 # Install the latest release
-hermes-x-ext install owner/repo
+hermes-x install owner/repo
 
 # Install a specific tag
-hermes-x-ext install owner/repo@v1.2.3
+hermes-x install owner/repo@v1.2.3
 
 # Install and verify the tarball checksum
-hermes-x-ext install owner/repo --sha256 <hex>
+hermes-x install owner/repo --sha256 <hex>
 ```
 
 Arguments:

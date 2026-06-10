@@ -10,8 +10,8 @@ import { installCommand } from "./commands/install.js"
 const program = new Command()
 
 program
-  .name("hermes-x-ext")
-  .description("CLI for hermes-x desktop extensions")
+  .name("hermes-x")
+  .description("The hermes-x CLI — extensions, mention sources, and more")
   .version("0.1.0")
 
 program

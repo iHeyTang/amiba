@@ -16,7 +16,7 @@ interface InstallOptions {
 }
 
 /**
- * `hermes-x-ext install owner/repo[@tag]`
+ * `hermes-x install owner/repo[@tag]`
  *
  * Fetches the named (or latest) GitHub Release, finds the `extension.tgz`
  * asset, downloads, extracts, validates manifest, and installs into

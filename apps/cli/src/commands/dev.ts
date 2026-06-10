@@ -9,7 +9,7 @@ interface DevOptions {
 }
 
 /**
- * `hermes-x-ext dev` is purely a build/watch helper. It does NOT touch the
+ * `hermes-x dev` is purely a build/watch helper. It does NOT touch the
  * desktop's extension registry — that belongs to the desktop UI, just like
  * Chrome's `chrome://extensions` → "Load unpacked" owns adding unpacked
  * extensions, not your bundler.
@@ -32,7 +32,7 @@ export async function devCommand(_opts: DevOptions) {
   const cwd = resolve(process.cwd())
   const manifest = readExtensionManifest(cwd)
 
-  console.log(kleur.bold(`hermes-x-ext dev — ${kleur.cyan(manifest.id)}`))
+  console.log(kleur.bold(`hermes-x dev — ${kleur.cyan(manifest.id)}`))
   console.log(kleur.dim(`  ${cwd}`))
   console.log(
     kleur.dim(
@@ -65,7 +65,7 @@ export async function devCommand(_opts: DevOptions) {
       try {
         const now = new Date()
         utimesSync(manifestPath, now, now)
-        console.log(kleur.dim(`[hermes-x-ext] manifest touched → desktop reload (if added)`))
+        console.log(kleur.dim(`[hermes-x] manifest touched → desktop reload (if added)`))
       } catch { /* manifest may not exist yet on first build */ }
     }, 200)
   }
@@ -86,7 +86,7 @@ export async function devCommand(_opts: DevOptions) {
   }
 
   process.on("SIGINT", () => {
-    console.log(kleur.dim("\n[hermes-x-ext] Stopping build watchers."))
+    console.log(kleur.dim("\n[hermes-x] Stopping build watchers."))
     cleanup()
     process.exit(0)
   })

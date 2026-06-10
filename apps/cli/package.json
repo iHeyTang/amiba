@@ -1,10 +1,10 @@
 {
-  "name": "@hermes-x/extension-cli",
+  "name": "hermes-x",
   "version": "0.1.0",
-  "description": "CLI for developing hermes-x desktop extensions.",
+  "description": "The hermes-x CLI — scaffold extensions and mention sources, and more.",
   "type": "module",
   "bin": {
-    "hermes-x-ext": "dist/cli.js"
+    "hermes-x": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "exports": {
