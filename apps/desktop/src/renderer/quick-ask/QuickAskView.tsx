@@ -7,10 +7,9 @@
  * tool progress, etc. are guaranteed-identical to what the user sees
  * inside the main BrowserWindow. The only differences are:
  *
- *   - **Outer shell**: drag region, Esc-to-dismiss, ⌘K-new-conversation,
- *     and the window-resize coordination (compact → hugs the composer,
- *     expanded → snaps to ``EXPANDED_HEIGHT_PX`` so streaming chunks
- *     scroll inside the messages region without jittering the window).
+ *   - **Outer shell**: drag region, Esc-to-dismiss, ⌘K-new-conversation.
+ *     Window geometry is fixed (full-display transparent stage); the card
+ *     sizes itself via CSS — no resize IPC.
  *   - **Empty state**: ``emptyState="composer-only"`` on ChatSurface
  *     skips the logo+greeting hero, flips ``quickActions={true}`` on the
  *     composer, and lets the body shrink to the composer's natural height
@@ -47,7 +46,6 @@ import { Clock, X } from "lucide-react"
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -56,14 +54,6 @@ import {
 import { ElectronChatEngineClient } from "../chat/electron-engine-client"
 
 type QuickAskPrefill = { text?: string; sourceApp?: string }
-
-/**
- * Window height locked to as soon as the conversation has anything to
- * show. Streaming content scrolls inside the ChatSurface's internal
- * ScrollArea so the window itself never resizes during a stream —
- * eliminating per-chunk jitter.
- */
-const EXPANDED_HEIGHT_PX = 480
 
 export function QuickAskView() {
   // Each BrowserWindow is its own renderer process, so the theme hook
@@ -194,42 +184,6 @@ export function QuickAskView() {
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [bridge, sessions])
-
-  // Window-resize strategy: same two-mode design the previous Quick-Ask
-  // used. Compact mode follows the inner content height via
-  // ResizeObserver (fires AFTER layout so the textarea's auto-grow is
-  // captured accurately); expanded snaps once to EXPANDED_HEIGHT_PX so
-  // streaming chunks never cause the window itself to resize.
-  useLayoutEffect(() => {
-    if (expanded) {
-      void bridge.quickAsk.resize(EXPANDED_HEIGHT_PX)
-      return
-    }
-    const el = rootRef.current
-    if (!el) return
-    let raf = 0
-    let lastSent = -1
-    const measure = () => {
-      raf = 0
-      if (!el) return
-      const target = el.scrollHeight + 12
-      if (target === lastSent) return
-      lastSent = target
-      void bridge.quickAsk.resize(target)
-    }
-    const observer = new ResizeObserver(() => {
-      if (raf) cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(measure)
-    })
-    observer.observe(el)
-    // First fire — observers don't reliably callback on initial
-    // observation in all browsers.
-    measure()
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-      observer.disconnect()
-    }
-  }, [expanded, bridge])
 
   // Resolve the active session's last-update timestamp for the
   // continuation hint. The sessions index is shared cross-window via

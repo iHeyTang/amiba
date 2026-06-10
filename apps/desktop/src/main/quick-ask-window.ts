@@ -7,8 +7,10 @@
  *   - Positioned on the display under the **mouse cursor**, NOT the
  *     primary screen — multi-monitor users get the popup on the screen
  *     they were just using.
- *   - 640px wide, height starts compact (input-only) and grows as the
- *     renderer asks for more room (setContentSize on stream).
+ *   - Full work-area transparent stage: the OS window is always sized
+ *     to the cursor display's entire work area. The visible card is
+ *     positioned purely via CSS — popups never get clipped at the
+ *     BrowserWindow edge.
  *   - Focusable so typing works; auto-hides on blur and on Esc.
  *   - Pre-filled with the user's current text selection + source app
  *     when available (captured before summon, sent over IPC).
@@ -40,18 +42,50 @@ const IS_MAC = process.platform === "darwin"
 const BLUR_GRACE_MS = 400
 let lastSummonAt = 0
 
-const QUICK_ASK_WIDTH = 640
 /**
- * Compact height when only the input is showing. The window grows
- * vertically (via `quick-ask:resize` IPC) once a response is streaming
- * so the user gets enough room for the answer without the empty state
- * taking half the screen.
+ * Presentation mode of the Quick-Ask stage. The OS window is ALWAYS a
+ * full-display transparent canvas; the mode only flips event/dismiss
+ * policy, never geometry. Only `modal` exists today — `pinned`
+ * (click-through stage that stays on blur) and `promoted` (hand the
+ * session to a real window) slot into MODE_POLICY + applyMode without a
+ * rewrite. See the design spec for how each future mode maps in.
  */
-const QUICK_ASK_INITIAL_HEIGHT = 84
-/** Hard ceiling so a runaway response can't grow the window past 1 screen. */
-const QUICK_ASK_MAX_HEIGHT = 540
-/** Vertical offset from the top of the active display's work area. */
-const QUICK_ASK_TOP_OFFSET_RATIO = 0.22
+export type QuickAskMode = "modal"
+
+interface ModePolicy {
+  /** OS window draggable. Modal stages are fixed, like Spotlight. */
+  movable: boolean
+  /**
+   * Whether blank (transparent) regions pass clicks through to the apps
+   * behind. Modal must CAPTURE clicks so the renderer's backdrop can
+   * dismiss on outside-click. (`pinned` will flip this to true.)
+   */
+  ignoreMouseEvents: boolean
+  /** Hide the stage when it loses key status (user clicked another app). */
+  hideOnBlur: boolean
+}
+
+const MODE_POLICY: Record<QuickAskMode, ModePolicy> = {
+  modal: { movable: false, ignoreMouseEvents: false, hideOnBlur: true },
+}
+
+let currentMode: QuickAskMode = "modal"
+
+/**
+ * Apply a presentation mode's window-level policy. Geometry is NOT
+ * touched here — the stage is always the full work area (see
+ * `computeBounds`). Today only `modal` is wired.
+ */
+function applyMode(win: BrowserWindow, mode: QuickAskMode): void {
+  currentMode = mode
+  const policy = MODE_POLICY[mode]
+  win.setMovable(policy.movable)
+  // `forward: true` is a no-op while ignore=false (modal), but is what a
+  // future `pinned` mode needs so mouse-move still reaches the renderer's
+  // hover handlers that toggle ignore-state over the card. Pass it
+  // unconditionally so the seam is correct for every mode.
+  win.setIgnoreMouseEvents(policy.ignoreMouseEvents, { forward: true })
+}
 
 let quickAskWindow: BrowserWindow | null = null
 
@@ -61,10 +95,11 @@ export interface QuickAskPrefill {
 }
 
 /**
- * Compute window position centered on whichever display currently has
- * the mouse cursor. We deliberately use cursor position (not the focused
- * window) because the cursor is the most reliable single-signal "where
- * the user is" indicator across heterogeneous app focus states.
+ * The stage fills the entire work area of whichever display currently
+ * holds the mouse cursor. Cursor (not focused window) is the most
+ * reliable "where the user is" signal across heterogeneous focus states.
+ * A full-work-area transparent canvas is what gives popups room to paint
+ * — nothing renders outside a BrowserWindow's pixel rect.
  */
 function computeBounds(): {
   x: number
@@ -75,9 +110,7 @@ function computeBounds(): {
   const cursor = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursor)
   const wa = display.workArea
-  const x = wa.x + Math.round((wa.width - QUICK_ASK_WIDTH) / 2)
-  const y = wa.y + Math.round(wa.height * QUICK_ASK_TOP_OFFSET_RATIO)
-  return { x, y, width: QUICK_ASK_WIDTH, height: QUICK_ASK_INITIAL_HEIGHT }
+  return { x: wa.x, y: wa.y, width: wa.width, height: wa.height }
 }
 
 /**
@@ -95,28 +128,20 @@ export function createQuickAskWindow(): BrowserWindow {
     x,
     y,
     frame: false,
-    // Re-enabled now that the NSPanel + skipTransformProcessType +
-    // no-app.focus combination has the focus path working without
-    // tripping the screen-saver-layer composition bug. Transparent
-    // window lets the renderer's rounded card paint with macOS's
-    // native window shadow rounding the corners — no black band
-    // below the content like with `transparent: false`.
+    // Transparent so the renderer's rounded card shows through without the
+    // black band that `transparent: false` paints below the content. The
+    // shadow is the card's own CSS now — `hasShadow` is false (a native
+    // shadow is a no-op on a transparent window anyway).
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
-    movable: true,
+    movable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    // hasShadow=true so macOS draws the popup shadow OUTSIDE the
-    // window. With transparent: true + frame: false, the shadow
-    // follows the opaque rounded shape we render inside. Doing it
-    // here (instead of with a tailwind `shadow-2xl` on the React
-    // tree) avoids the shadow being clipped at the window edge —
-    // which manifested as a visible horizontal strip at the bottom
-    // of the popup.
-    hasShadow: true,
+    // hasShadow:false — transparent windows don't get a native shadow; the card paints its own CSS shadow.
+    hasShadow: false,
     focusable: true,
     show: false,
     backgroundColor: "#00000000",
@@ -175,6 +200,9 @@ export function createQuickAskWindow(): BrowserWindow {
     skipTransformProcessType: true,
   })
 
+  // Establish the default (and currently only) presentation policy.
+  applyMode(win, "modal")
+
   // Auto-dismiss when the user clicks away. Esc-to-dismiss is handled in
   // the renderer (sends `quick-ask:dismiss` back). The grace window
   // suppresses blurs that arrive in the first few frames after summon,
@@ -182,6 +210,7 @@ export function createQuickAskWindow(): BrowserWindow {
   // selection-capture pass yet.
   win.on("blur", () => {
     if (Date.now() - lastSummonAt < BLUR_GRACE_MS) return
+    if (!MODE_POLICY[currentMode].hideOnBlur) return
     if (!win.isDestroyed() && win.isVisible()) win.hide()
   })
 
@@ -233,30 +262,11 @@ export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
     display.workArea,
   )
 
-  // Reposition on every summon so multi-monitor users always get the
-  // popup on their current display, and so dock / display arrangement
-  // changes don't leave us stranded off-screen. The HEIGHT, however,
-  // is preserved from the previous session — the renderer is the
-  // source of truth on what size the popup should be (it knows whether
-  // there's a conversation showing). If we resnapped to the construction
-  // default here, every summon would briefly flash short before the
-  // renderer asked for the right size.
-  const target = computeBounds()
-  const current = win.getBounds()
-  const next = {
-    x: target.x,
-    y: target.y,
-    width: target.width,
-    height: current.height || target.height,
-  }
-  console.log(
-    "[amiba] setBounds=%o (was=%o, alwaysOnTop=%s, opacity=%s)",
-    next,
-    current,
-    win.isAlwaysOnTop(),
-    win.getOpacity(),
-  )
-  win.setBounds(next)
+  // The stage always fills the cursor display's work area, so multi-
+  // monitor users get it on their current screen and a display-arrangement
+  // change can never strand it off-screen. No height preservation: window
+  // geometry is constant — the card sizes itself via CSS.
+  win.setBounds(computeBounds())
 
   const deliver = () => {
     if (win!.isDestroyed()) return
@@ -296,28 +306,6 @@ export function hideQuickAsk(): void {
   const win = quickAskWindow
   if (!win || win.isDestroyed()) return
   if (win.isVisible()) win.hide()
-}
-
-/**
- * Resize the window to fit the renderer's target content height.
- * Clamped to `QUICK_ASK_MAX_HEIGHT` so a runaway answer never grows
- * past one screen.
- *
- * macOS gets `animate: true` so the (rare) compact↔expanded transition
- * the renderer triggers on submit / new-conversation is smoothed by the
- * OS's built-in window animation (~200ms ease-out) rather than
- * snapping abruptly. On Windows / Linux the flag is a no-op.
- */
-export function resizeQuickAsk(contentHeightPx: number): void {
-  const win = quickAskWindow
-  if (!win || win.isDestroyed()) return
-  const clamped = Math.max(
-    QUICK_ASK_INITIAL_HEIGHT,
-    Math.min(Math.round(contentHeightPx), QUICK_ASK_MAX_HEIGHT),
-  )
-  const bounds = win.getBounds()
-  if (bounds.height === clamped) return
-  win.setBounds({ ...bounds, height: clamped }, IS_MAC)
 }
 
 export function destroyQuickAskWindow(): void {

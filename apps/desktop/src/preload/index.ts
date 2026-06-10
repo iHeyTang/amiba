@@ -94,7 +94,7 @@ const api = {
   /**
    * Spotlight-style Quick-Ask popup bridge. Main fires `prefill` after
    * summon (with the captured selection + source app name); renderer
-   * sends `dismiss` / `resize` back. `submit` / `abort` go through the
+   * sends `dismiss` back. `submit` / `abort` go through the
    * existing `chat.*` channel — the popup uses the same chat engine as
    * the main window, just with its own session id.
    */
@@ -110,8 +110,6 @@ const api = {
       return () => ipcRenderer.off("quick-ask:prefill", handler)
     },
     dismiss: () => ipcRenderer.invoke("quick-ask:dismiss"),
-    resize: (contentHeightPx: number) =>
-      ipcRenderer.invoke("quick-ask:resize", contentHeightPx),
   },
 
   /**

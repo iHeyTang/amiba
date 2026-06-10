@@ -40,7 +40,6 @@ import {
   createQuickAskWindow,
   destroyQuickAskWindow,
   hideQuickAsk,
-  resizeQuickAsk,
   summonQuickAsk,
 } from "./quick-ask-window"
 import {
@@ -303,19 +302,14 @@ function registerNotifierIpcHandlers(summon: () => void): void {
 }
 
 /**
- * Quick-Ask Spotlight popup back-channels: dismiss + dynamic resize.
- * The popup gets streaming chat via the existing `chat:client-to-engine`
- * IPC like any other surface, so we only need to expose the window-
- * level ops here.
+ * Quick-Ask Spotlight popup back-channel: dismiss. The popup gets
+ * streaming chat via the existing `chat:client-to-engine` IPC like any
+ * other surface; window sizing is now fully CSS-driven (the stage is a
+ * fixed full-screen transparent canvas), so there is no resize channel.
  */
 function registerQuickAskIpcHandlers(): void {
   ipcMain.handle("quick-ask:dismiss", () => {
     hideQuickAsk()
-  })
-  ipcMain.handle("quick-ask:resize", (_e, contentHeightPx: number) => {
-    if (typeof contentHeightPx === "number" && Number.isFinite(contentHeightPx)) {
-      resizeQuickAsk(contentHeightPx)
-    }
   })
 }
 
