@@ -1683,7 +1683,7 @@ export default function ChatSurface({
         // the popup body has no explicit height in compact mode.
         variant === "fullscreen"
           ? isComposerOnlyEmpty
-            ? ""
+            ? "rounded-xl"
             : "min-h-0 flex-1"
           : "h-screen",
       )}
@@ -1710,13 +1710,17 @@ export default function ChatSurface({
       */}
       <div
         className={cn(
-          "relative min-w-0 overflow-hidden pt-2",
+          "relative min-w-0 pt-2",
           // ``flex-1`` makes this body region fill the rest of the column
           // in the normal "hero" / populated paths. Quick-Ask's
           // composer-only empty mode opts out so the wrapper sizes to the
           // composer's natural height (a flex-1 child inside a content-
           // sized parent would collapse to 0 and hide the composer).
-          !isComposerOnlyEmpty && "flex-1",
+          // ``overflow-hidden`` is kept for those same non-empty paths so
+          // the messages area clips normally; in composer-only mode we
+          // drop it so the upward slash/@ menu can escape into the
+          // transparent stage.
+          !isComposerOnlyEmpty && "flex-1 overflow-hidden",
           // Only fullscreen variant honors the messages-width preset; the
           // sidebar variant is already a narrow column and shouldn't be
           // capped further. `full` evaluates to "" so messages span the

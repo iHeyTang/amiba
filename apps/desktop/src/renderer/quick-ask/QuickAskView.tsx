@@ -223,16 +223,29 @@ export function QuickAskView() {
           // there's headroom ABOVE for the slash/@ menu (TriggerMenu opens
           // upward via bottom-full) and a large area BELOW for downward
           // dropdowns/selects. CSS shadow (not native — transparent
-          // windows don't get one; hasShadow is false). overflow-hidden
-          // clips the inner ChatSurface to the rounded shape.
-          "animate-notifier-in mt-[22vh] flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-2xl",
+          // windows don't get one; hasShadow is false).
+          // overflow-hidden is NOT in the base string — in compact mode we
+          // intentionally omit it so the slash/@ menu and other upward
+          // popups can escape into the transparent stage; rounded corners
+          // are preserved because ChatSurface's root div carries
+          // rounded-xl when isComposerOnlyEmpty is true. In
+          // expanded mode overflow-hidden is restored — popups already fit
+          // inside the 480 px card and clipping keeps the corners clean.
+          "animate-notifier-in mt-[22vh] flex w-full max-w-[640px] flex-col rounded-xl bg-background text-foreground shadow-2xl",
           // expanded → fixed height so ChatSurface fills it and streaming
           // scrolls INSIDE its own ScrollArea (no window resize, ever).
           // compact → hug the composer, capped so a stray tall empty state
           // can't run off-screen.
-          expanded ? "h-[480px]" : "max-h-[480px]",
+          expanded ? "h-[480px] overflow-hidden" : "max-h-[480px]",
         )}
       >
+        {/*
+          Invariant: `expanded` here and ChatSurface's `isComposerOnlyEmpty`
+          are complements — when a turn exists, expanded=true and
+          isComposerOnlyEmpty=false, so both sides restore overflow-hidden +
+          flex-1 together. They derive from the same (hasActive, messages)
+          signals, so they can't diverge; keep them in sync if either changes.
+        */}
         <ChatSurface
           variant="fullscreen"
           emptyState="composer-only"
