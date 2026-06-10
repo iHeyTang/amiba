@@ -26,7 +26,9 @@ export function TriggerMenu({ items, loading, error, onSelect, onClose, anchorCl
   }, [items, active, onSelect, onClose])
 
   return (
-    <div className={cn(
+    <div
+      data-composer-overlay=""
+      className={cn(
       "absolute left-0 right-0 bottom-full z-50 mb-1 max-h-64 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
       anchorClassName,
     )}>

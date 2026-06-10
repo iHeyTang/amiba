@@ -89,10 +89,16 @@ export function QuickAskView() {
 
   const messages = sessions.activeMessages
   const hasActive = !!sessions.activeId
-  // ``expanded`` flips the moment we have a session with content; until
-  // then the window hugs the composer. The transition is smoothed by
-  // macOS's animated setBounds in main/quick-ask-window.ts.
-  const expanded = hasActive && messages.length > 0
+  // True while a composer overlay (slash/@ TriggerMenu, tagged with
+  // data-composer-overlay) is open. Drives expansion so the upward menu
+  // has room. See the MutationObserver effect below.
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  // ``expanded`` flips the moment we have a session with content, OR
+  // when a composer overlay (slash/@ TriggerMenu) is open — the upward
+  // menu needs vertical room that the compact window doesn't have.
+  // The transition is smoothed by macOS's animated setBounds in
+  // main/quick-ask-window.ts.
+  const expanded = (hasActive && messages.length > 0) || overlayOpen
 
   // Continuation hint state (A+D). Snapshotted ON summon so we can hide
   // the strip the moment the user actually sends a turn (message count
@@ -195,6 +201,24 @@ export function QuickAskView() {
     return () => document.removeEventListener("keydown", onKey)
   }, [bridge, sessions])
 
+  // Watch for a composer overlay (slash/@ TriggerMenu) opening inside the
+  // popup. The menu opens upward and the compact window is too short for
+  // it, so when one appears we flip `overlayOpen` → `expanded`, which
+  // grows the window to EXPANDED_HEIGHT_PX and switches ChatSurface to the
+  // bottom-pinned composer layout (room above for the menu). The overlay
+  // is tagged with `data-composer-overlay`; any future composer popup that
+  // wants this treatment can carry the same attribute.
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const sync = () =>
+      setOverlayOpen(!!el.querySelector("[data-composer-overlay]"))
+    const observer = new MutationObserver(sync)
+    observer.observe(el, { childList: true, subtree: true })
+    sync()
+    return () => observer.disconnect()
+  }, [])
+
   // Window-resize strategy: same two-mode design the previous Quick-Ask
   // used. Compact mode follows the inner content height via
   // ResizeObserver (fires AFTER layout so the textarea's auto-grow is
@@ -291,6 +315,7 @@ export function QuickAskView() {
         variant="fullscreen"
         emptyState="composer-only"
         composerAutoFocus
+        composerOverlayActive={overlayOpen}
         client={client}
         capabilities={capabilities}
         openSettings={() => {}}
