@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Hermes-x Extension Manifest",
+  "title": "Amiba Extension Manifest",
   "type": "object",
   "required": ["id", "name", "version", "entries"],
   "additionalProperties": false,
