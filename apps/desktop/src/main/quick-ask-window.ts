@@ -225,6 +225,23 @@ export function createQuickAskWindow(): BrowserWindow {
   }
 
   quickAskWindow = win
+
+  // Warm the window-server realization once, invisibly. The window is
+  // created hidden at the STARTUP display's bounds. Without a prior
+  // realization, macOS paints the first `orderFront` of a never-shown
+  // window at that stale startup frame for one compositor pass before
+  // applying the summon's pre-show `setBounds` — producing a visible flash
+  // on the startup display when the first summon lands on a DIFFERENT
+  // display. One invisible (opacity-0, nonactivating) show/hide cycle now
+  // puts the window in the same "already realized" state it has after any
+  // later summon — and later summons demonstrably don't flash — so the
+  // first real summon is clean. opacity is set to 0 BEFORE showInactive so
+  // the warm-up itself never paints a visible frame, then restored.
+  win.setOpacity(0)
+  win.showInactive()
+  win.hide()
+  win.setOpacity(1)
+
   return win
 }
 
