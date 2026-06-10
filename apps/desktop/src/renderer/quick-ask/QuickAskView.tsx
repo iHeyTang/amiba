@@ -198,70 +198,66 @@ export function QuickAskView() {
     summonMessageCount !== null &&
     messages.length === summonMessageCount
 
+  // Modal dismiss: a mousedown anywhere on the transparent backdrop (i.e.
+  // NOT on the card) closes the stage — the Spotlight/Raycast convention.
+  // The card stops propagation so interacting with it never dismisses.
+  // Electron transparent windows don't pass clicks through by default, so
+  // the backdrop reliably receives this event.
+  const onBackdropMouseDown = useCallback(() => {
+    void bridge.quickAsk.dismiss()
+  }, [bridge])
+
   return (
     <div
       ref={rootRef}
-      className={cn(
-        // ``h-full`` in expanded mode lets ChatSurface fill the entire
-        // window. In compact mode the card is content-sized so the popup
-        // hugs the input row. No CSS shadow — main/quick-ask-window.ts
-        // sets ``hasShadow: true`` and macOS paints the shadow outside
-        // the BrowserWindow where it can't be clipped at the edge.
-        //
-        // ``overflow-hidden`` clips the inner ChatSurface's
-        // ``bg-background`` rectangle to the rounded shape — without it
-        // the composer's square bottom edge paints over the outer
-        // ``rounded-xl`` and the popup looks half-rounded.
-        "animate-notifier-in relative mx-auto flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground",
-        expanded && "h-full",
-      )}
+      onMouseDown={onBackdropMouseDown}
+      // Full-window transparent backdrop. No dim/blur — the stage looks
+      // like just a floating card, matching Spotlight/Raycast. Clicking
+      // the blank area dismisses; the card below stops propagation.
+      className="fixed inset-0 flex items-start justify-center"
     >
-      {/* Drag handle. Sits above all content so the user always has a
-          predictable region to grab the borderless window from. The
-          visible strip is only 12px so it reads as discreet chrome,
-          but the ``after:`` pseudo-element extends the hit region 10px
-          further down — invisibly — so the hover animation fires as
-          the cursor *approaches* the grip rather than only on direct
-          contact. The pseudo is part of the parent's box, so:
-            · it inherits ``app-drag-region`` (more area to grab)
-            · ``group-hover:`` on the grip glyph below picks up hover
-              in the extended zone, since the parent IS the group
-          On hover the grip widens + darkens — the iOS modal-grip
-          convention, and the only visual feedback this borderless
-          window has to communicate "you can drag me".
-          The global CSS rule auto opts buttons/textareas out, so the
-          chips and composer below are unaffected. */}
       <div
-        className="app-drag-region group relative flex h-3 w-full shrink-0 items-center justify-center after:absolute after:inset-x-0 after:top-full after:h-2.5 after:content-['']"
-        title="Drag to reposition"
+        onMouseDown={(e) => e.stopPropagation()}
+        className={cn(
+          // The visible card. Centered horizontally, pushed down ~22vh so
+          // there's headroom ABOVE for the slash/@ menu (TriggerMenu opens
+          // upward via bottom-full) and a large area BELOW for downward
+          // dropdowns/selects. CSS shadow (not native — transparent
+          // windows don't get one; hasShadow is false). overflow-hidden
+          // clips the inner ChatSurface to the rounded shape.
+          "animate-notifier-in mt-[22vh] flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-2xl",
+          // expanded → fixed height so ChatSurface fills it and streaming
+          // scrolls INSIDE its own ScrollArea (no window resize, ever).
+          // compact → hug the composer, capped so a stray tall empty state
+          // can't run off-screen.
+          expanded ? "h-[480px]" : "max-h-[480px]",
+        )}
       >
-        <span
-          aria-hidden
-          className="h-0.5 w-8 rounded-full bg-border/70 transition-[width,background-color,opacity] duration-150 ease-out group-hover:w-12 group-hover:bg-foreground/40"
+        <ChatSurface
+          variant="fullscreen"
+          emptyState="composer-only"
+          composerAutoFocus
+          client={client}
+          capabilities={capabilities}
+          openSettings={() => {}}
+          openAgentDestination={openExternal}
         />
+
+        {showContinuationHint && (
+          <ContinuationHint
+            label={t("quickAsk.continuation.label", {
+              time: formatRelativeTime(
+                activeSession?.updatedAt ?? Date.now(),
+                t,
+              ),
+            })}
+            newLabel={t("quickAsk.continuation.new")}
+            dismissLabel={t("quickAsk.continuation.dismiss")}
+            onNew={() => void sessions.deselect()}
+            onDismiss={() => setHintDismissed(true)}
+          />
+        )}
       </div>
-
-      <ChatSurface
-        variant="fullscreen"
-        emptyState="composer-only"
-        composerAutoFocus
-        client={client}
-        capabilities={capabilities}
-        openSettings={() => {}}
-        openAgentDestination={openExternal}
-      />
-
-      {showContinuationHint && (
-        <ContinuationHint
-          label={t("quickAsk.continuation.label", {
-            time: formatRelativeTime(activeSession?.updatedAt ?? Date.now(), t),
-          })}
-          newLabel={t("quickAsk.continuation.new")}
-          dismissLabel={t("quickAsk.continuation.dismiss")}
-          onNew={() => void sessions.deselect()}
-          onDismiss={() => setHintDismissed(true)}
-        />
-      )}
     </div>
   )
 }
