@@ -1,7 +1,7 @@
 import pytest
 from aiohttp import web
 
-from runtime.features.hermes_proxy.settings.commands_routes import (
+from hermes_x_backplane.runtime.features.hermes_proxy.settings.commands_routes import (
     register_commands_routes,
 )
 

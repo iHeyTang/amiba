@@ -138,23 +138,28 @@ curl http://127.0.0.1:9394/hermes/sessions   # smoke test
 
 文件布局：
 
+src-layout —— 包就是 `hermes_x_backplane/`,子包**自动发现**(`packages.find`),
+不再手维护清单:
+
 ```
-__init__.py                       # 仅包 docstring（已无 plugin 机制）
-pyproject.toml                    # 包元数据 + console script `hermes-x-backplane`
-runtime/
-  server.py                       # 启动入口：load 源 + 起 aiohttp（python -m …server）
-  http_app.py                     # aiohttp Application 工厂
-  common.py                       # json_error / strip_ok / read_json_object
-  adapters/                       # 适配 Hermes core 的薄包装
-  mention_sources/                # 内置的 mention-sources 框架（loader / manager / skills 接线）
-  features/
-    hermes_proxy/                 # 全部路由：/hermes/* + mention_sources_gateway
-docs/api-parity.md                # 与官方 API 对照
-docs/mention-sources.md           # 源作者指南
+pyproject.toml                      # 包元数据 + console script `hermes-x-backplane`
+hermes_x_backplane/
+  __init__.py
+  runtime/
+    server.py                       # 启动入口：load 源 + 起 aiohttp
+    http_app.py                     # aiohttp Application 工厂
+    common.py                       # json_error / strip_ok / read_json_object
+    adapters/                       # 适配 Hermes core 的薄包装
+    mention_sources/                # 内置框架（loader / manager / skills 接线 + management_skill/）
+    features/
+      hermes_proxy/                 # 全部路由：/hermes/* + mention_sources_gateway
+tests/                              # pytest（无需 conftest 桩，src-layout 原生可跑）
+docs/mention-sources.md             # 源作者指南
+docs/api-parity.md                  # 与官方 API 对照
 ```
 
-（**框架**在本仓 `runtime/mention_sources/`；源**实例**（如 lark）是独立可插拔的 git 仓，
-装在 `~/.hermes/mention-sources/`。)
+（**框架**在 `hermes_x_backplane/runtime/mention_sources/`；源**实例**（如 lark）是独立
+可插拔的 git 仓,装在 `~/.hermes/mention-sources/`。)
 
 ## License
 

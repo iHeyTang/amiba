@@ -1,4 +1,4 @@
-from runtime.features.hermes_proxy.settings.commands_service import (
+from hermes_x_backplane.runtime.features.hermes_proxy.settings.commands_service import (
     list_commands_response,
 )
 
