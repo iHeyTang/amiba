@@ -38,16 +38,19 @@ List what's installed:
 curl -s 127.0.0.1:9394/hermes/mention-sources
 ```
 
-Install from a git URL (or a local path for dev):
+Install from a git URL (`git clone`), or a local path (an **editable symlink**,
+for dev):
 
 ```bash
 curl -s -XPOST 127.0.0.1:9394/hermes/mention-sources \
   -H 'content-type: application/json' \
   -d '{"from_git":"<url the user gave>"}'
-# local path:  -d '{"from_path":"<dir>","name":"<name>"}'
+# local path:  -d '{"from_path":"<dir the user gave>","name":"<name>"}'
 ```
 
-Update (git pull) / remove:
+Update / remove. `update` dispatches on how the source was installed — `git
+pull` for a git install, a live reload for a local-path (symlink) install — so
+you don't need to know which; just call it:
 
 ```bash
 curl -s -XPOST   "127.0.0.1:9394/hermes/mention-sources/update?name=<name>"

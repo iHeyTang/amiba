@@ -10,6 +10,16 @@
 
 import { backplaneFetch } from "./backplane-client";
 
+/** How a source was installed (recorded in the registry). */
+export interface MentionSourceOrigin {
+  /** `git` = a `git clone` (update = git pull). `path` = a local symlink
+   *  (editable; update = reload). */
+  method: "git" | "path";
+  url?: string;
+  ref?: string | null;
+  path?: string;
+}
+
 /** One row from `GET /hermes/mention-sources`. */
 export interface MentionSourceInfo {
   name: string;
@@ -19,8 +29,8 @@ export interface MentionSourceInfo {
   description?: string | null;
   /** Whether the source exposes a `search` capability (false ⇒ misconfigured). */
   has_search: boolean;
-  /** Whether the install is a git checkout (⇒ updatable via `git pull`). */
-  is_git: boolean;
+  /** Install provenance, or null for legacy installs predating the registry. */
+  origin?: MentionSourceOrigin | null;
 }
 
 export interface MentionSourcesResponse {

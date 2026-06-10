@@ -151,10 +151,24 @@ function SourceRow({
               {t("options.mentionSources.noSearch")}
             </span>
           )}
-          {s.is_git ? (
-            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">git</span>
+          {s.origin?.method === "git" ? (
+            <span
+              className="shrink-0 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-600"
+              title={s.origin.url ?? ""}
+            >
+              git
+            </span>
+          ) : s.origin?.method === "path" ? (
+            <span
+              className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600"
+              title={t("options.mentionSources.localHint", { path: s.origin.path ?? "" })}
+            >
+              {t("options.mentionSources.local")}
+            </span>
           ) : (
-            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">local</span>
+            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {t("options.mentionSources.legacy")}
+            </span>
           )}
         </div>
         {s.description && (
@@ -164,20 +178,29 @@ function SourceRow({
           {s.name}
           {s.version ? ` · v${s.version}` : ""}
         </code>
+        {(s.origin?.url || s.origin?.path) && (
+          <code className="truncate text-[11px] text-muted-foreground/70">
+            ↪ {s.origin.url ?? s.origin.path}
+          </code>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1 pt-0.5">
-        {s.is_git && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={onUpdate}
-            title={t("options.mentionSources.update")}
-          >
-            <RefreshCw />
-            {t("options.mentionSources.update")}
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={onUpdate}
+          title={
+            s.origin?.method === "path"
+              ? t("options.mentionSources.reload")
+              : t("options.mentionSources.update")
+          }
+        >
+          <RefreshCw />
+          {s.origin?.method === "path"
+            ? t("options.mentionSources.reload")
+            : t("options.mentionSources.update")}
+        </Button>
         <Button
           variant="ghost"
           size="sm"

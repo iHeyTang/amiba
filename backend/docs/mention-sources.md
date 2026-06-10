@@ -102,27 +102,33 @@ the agent's `skills.external_dirs` automatically on load.
 from .source import search  # noqa: F401
 ```
 
-## Install + maintain (it's a git repo)
+## Install + maintain
 
-Maintenance **is git** — there is no bespoke package manager. The backplane's
-admin routes wrap `git clone` / `git pull` / `rm`:
+There are **two install methods**, recorded per-source in
+`~/.hermes/mention-sources/.registry.json` so `update` does the right thing:
+
+| Method | What it does | `update` |
+|---|---|---|
+| **`from_path`** (dev) | **symlinks** to your local repo — editable, like `pip install -e`. Edits are live. | **reload** (re-import the live code; no git) |
+| **`from_git`** | `git clone` into the dir (a real checkout). | **`git pull`** |
 
 ```bash
-# local dev — install your working copy:
+# editable dev install (symlink — edit the repo, then Reload):
 curl -XPOST 127.0.0.1:9394/hermes/mention-sources \
   -d '{"from_path":"'$PWD'","name":"notion"}'
 
-# install from a published repo (stays a git checkout → updatable):
+# install from a published repo (versioned via git):
 curl -XPOST 127.0.0.1:9394/hermes/mention-sources \
   -d '{"from_git":"https://github.com/you/hermes-x-source-notion"}'
 
-# update / remove:
-curl -XPOST   127.0.0.1:9394/hermes/mention-sources/update?name=notion
+# update (dispatches on the recorded method) / remove:
+curl -XPOST   "127.0.0.1:9394/hermes/mention-sources/update?name=notion"
 curl -XDELETE 127.0.0.1:9394/hermes/mention-sources/notion
 ```
 
-Sources live under `~/.hermes/mention-sources/<name>/`. The desktop Settings UI
-drives the same routes.
+Sources live under `~/.hermes/mention-sources/<name>/` (a symlink for a
+`from_path` install). The desktop **Settings → Mention Sources** panel drives the
+same routes and shows each source's origin + a Reload/Update button.
 
 ## Verify
 
