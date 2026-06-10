@@ -111,3 +111,17 @@
 - 多显示器(含副屏)下唤起,出现在光标所在屏顶部 ~22%,显示与点击正常。
 - 流式输出时窗口不再逐帧抖动(内容在卡片内部滚动)。
 - `quick-ask:resize` 全链路已移除,无残留引用。
+
+## 9. 执行期补充:弹层裁切的 CSS 维度(Task 3)
+
+实现期间代码审查发现:**「整屏窗口」是必要但不充分条件**。弹层除了被 OS 窗口边界裁,还会被 CSS `overflow-hidden` 祖先裁。本设计原先只解决了窗口维度。
+
+- **展开态(有对话,卡片 480px)**:弹层在卡片内放得下,完全 OK。
+- **紧凑态(空 composer,默认唤起态)**:卡片贴合 composer 很矮,弹层(向上的 `TriggerMenu`、向下的下拉)被两层 `overflow-hidden` 裁掉——① 唤起卡片自身(为圆角);② 共享组件 `ChatSurface` 的 body 容器(`ChatSurface.tsx` ~1713)。
+
+**修法(仅作用于紧凑态,主窗口零影响):**
+1. `ChatSurface` body 容器的 `overflow-hidden` 门控为 `!isComposerOnlyEmpty`(`isComposerOnlyEmpty` 仅快速唤起触发)。
+2. `ChatSurface` 根节点在 `isComposerOnlyEmpty` 时加 `rounded-xl`,使其 `bg-background` 自带圆角——这样去掉卡片的 `overflow-hidden` 也不会露出方角。
+3. 唤起卡片的 `overflow-hidden` 改为仅 `expanded` 时存在;紧凑态不裁,弹层得以溢出到透明舞台。
+
+不变式:`expanded`(QuickAskView)与 `isComposerOnlyEmpty`(ChatSurface)互为补集,二者同源于 `(hasActive, messages)`,不会发散;已在调用处加注释固化。

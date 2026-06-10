@@ -411,3 +411,44 @@ git -c user.email=dehui1012@gmail.com -c user.name=iHeyTang commit -m "feat(desk
 **Placeholder scan:** 无 TBD/TODO;每个改码步骤均给出确切 old→new 代码或确切命令。
 **Type consistency:** `QuickAskMode` / `MODE_POLICY` / `currentMode` / `applyMode` 命名在 1.1/1.3/1.4 间一致;`onBackdropMouseDown` 仅 2.1 定义并使用;`expanded` 在 1.9 之后仍被 2.1 使用。
 **说明(偏离 TDD):** `apps/desktop` 无测试框架(已核实),不为本次窗口/CSS 改动新引入测试栈;以 `pnpm typecheck`(捕获全部删除引用)+ `pnpm build:desktop` + 手动多屏验证作为验证门,符合既有工程实践。
+
+---
+
+## Task 3:紧凑态弹层 CSS 裁切修复(执行期新增,源于代码审查)
+
+**背景:** Task 2 完成后代码审查发现「整屏窗口」必要但不充分——紧凑态(空 composer)下弹层仍被两层 `overflow-hidden` 裁切(唤起卡片 + 共享 `ChatSurface` body 容器)。见设计 spec §9。
+
+**Files:**
+- Modify: `packages/ui/src/chat/ChatSurface.tsx`(共享组件,改动以 `isComposerOnlyEmpty` 门控,等效仅影响快速唤起)
+- Modify: `apps/desktop/src/renderer/quick-ask/QuickAskView.tsx`
+
+**三处改动:**
+1. `ChatSurface` 根节点 fullscreen 分支的 `isComposerOnlyEmpty` 臂 `"" → "rounded-xl"`,使其 `bg-background` 自带圆角。
+2. `ChatSurface` body 容器(~1713):`overflow-hidden` 从常驻 base 移入 `!isComposerOnlyEmpty && "flex-1 overflow-hidden"`。
+3. 唤起卡片:`overflow-hidden` 从 base 移入 `expanded ? "h-[480px] overflow-hidden" : "max-h-[480px]"`。
+
+**验证门:** `pnpm --filter @amiba/ui typecheck` + `apps/desktop pnpm typecheck` + `pnpm build:desktop` 全绿;grep 确认卡片→菜单链路无其它 `overflow-hidden` 祖先。主窗口路径 class 集合证明等价(spec 审查确认)。
+
+**评审结论:** spec ✅ 合规且主窗口 class 集合逐字等价;代码质量 ✅(裁切移除完整、展开态不变)。两处注释清理(去掉泄漏的 "(Edit 1)" 标签 + 补 `expanded`⇄`isComposerOnlyEmpty` 不变式注释)已 amend。
+
+**提交:** `4ef2800`(含注释清理)。
+
+**仍待人工验证(GUI):** 圆角观感、紧凑态斜杠/@ 菜单与下拉完整可见——见下方验收。
+
+---
+
+## 提交记录(main)
+
+- `e976060` Task 1:整屏透明舞台 + 模式缝 + 拆 resize 链路(含审查修复 forward:true / 注释)
+- `c191eaa` Task 2:卡片 CSS 定位 + backdrop 点击关闭(含 items-start 修复)
+- `4ef2800` Task 3:紧凑态弹层 overflow 裁切修复(含注释清理)
+
+## 人工验收清单(需在运行的 app 上确认)
+
+- [ ] 双击 ⌘ 唤起:卡片在光标屏顶部 ~22%,周围完全透明(无整屏实色层),圆角正常。
+- [ ] 紧凑态输入 `/` 或 `@`:菜单向上完整可见,不被裁。
+- [ ] 紧凑态触发向下的下拉:完整可见,不被裁。
+- [ ] 展开态(有对话)同样不被裁;流式输出窗口不抖动。
+- [ ] 点卡片外空白 / 点别的应用 / Esc:三种方式都能关闭。
+- [ ] 多显示器(尤其负 Y 副屏):唤起位置与点击关闭正常。
+- [ ] 暗色主题下确认无方角/异色露出。
