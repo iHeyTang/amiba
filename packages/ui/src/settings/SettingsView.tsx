@@ -1,5 +1,6 @@
 import {
   Activity,
+  AtSign,
   Bot,
   Boxes,
   BrainCircuit,
@@ -45,6 +46,7 @@ import { SettingsLogs } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { AgentTaskProvider } from "./agent-task";
+import { MentionSourcesTab } from "./MentionSourcesTab";
 import { SettingsExtensions } from "./SettingsExtensions";
 import {
   FEATURED_FEATURES,
@@ -75,6 +77,7 @@ const ALL_TABS = [
   "cron",
   "logs",
   "extensions",
+  "mention-sources",
 ] as const;
 type CoreTab = (typeof ALL_TABS)[number];
 /** MainTab is widened to string so extension tab IDs are also accepted. */
@@ -347,6 +350,7 @@ export function SettingsView({
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
+            <NavBtn icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.mentionSources")} active={mainTab === "mention-sources"} onClick={() => onMainTabChange("mention-sources")} />
             {FEATURED_FEATURES.length > 0 && (
               <>
                 <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
@@ -415,6 +419,15 @@ export function SettingsView({
           <SettingsStatus />
         ) : mainTab === "logs" ? (
           <SettingsLogs />
+        ) : mainTab === "mention-sources" ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <SettingsPaneHeader title={t("options.nav.mentionSources")} />
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="p-6">
+                <MentionSourcesTab />
+              </div>
+            </ScrollArea>
+          </div>
         ) : mainTab === "extensions" ? (
           <SettingsExtensions />
         ) : (
