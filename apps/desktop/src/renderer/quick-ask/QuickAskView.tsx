@@ -93,12 +93,27 @@ export function QuickAskView() {
   // data-composer-overlay) is open. Drives expansion so the upward menu
   // has room. See the MutationObserver effect below.
   const [overlayOpen, setOverlayOpen] = useState(false)
+  // Collapse animation. `resizeQuickAsk` animates the window both ways,
+  // but on collapse the compact layout reverts instantly — the composer
+  // snaps from the bottom (expanded) to the top before the window finishes
+  // shrinking, so the motion reads as "no animation". We hold the tall
+  // layout (composer bottom-pinned + `h-full`) for the shrink's duration
+  // so the composer rides UP with the window edge, symmetric with expand.
+  const [collapsing, setCollapsing] = useState(false)
+  // Last measured compact (content) height. Used as the collapse target
+  // because while `collapsing` the layout is still tall — measuring
+  // `rootRef` would return the window height, not the composer height.
+  const compactHeightRef = useRef(84)
+  const prevExpandedRef = useRef(false)
   // ``expanded`` flips the moment we have a session with content, OR
   // when a composer overlay (slash/@ TriggerMenu) is open — the upward
   // menu needs vertical room that the compact window doesn't have.
   // The transition is smoothed by macOS's animated setBounds in
   // main/quick-ask-window.ts.
   const expanded = (hasActive && messages.length > 0) || overlayOpen
+  // Drives layout fill + composer bottom-pin: true while expanded AND
+  // throughout the collapse animation.
+  const tall = expanded || collapsing
 
   // Continuation hint state (A+D). Snapshotted ON summon so we can hide
   // the strip the moment the user actually sends a turn (message count
@@ -219,6 +234,20 @@ export function QuickAskView() {
     return () => observer.disconnect()
   }, [])
 
+  // When we drop from expanded → compact, hold the tall layout for the
+  // window-shrink animation (~macOS 200ms) so the collapse is animated:
+  // the composer stays bottom-pinned and rides UP with the shrinking
+  // window instead of snapping to the top.
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current
+    prevExpandedRef.current = expanded
+    if (wasExpanded && !expanded) {
+      setCollapsing(true)
+      const t = setTimeout(() => setCollapsing(false), 260)
+      return () => clearTimeout(t)
+    }
+  }, [expanded])
+
   // Window-resize strategy: same two-mode design the previous Quick-Ask
   // used. Compact mode follows the inner content height via
   // ResizeObserver (fires AFTER layout so the textarea's auto-grow is
@@ -229,6 +258,14 @@ export function QuickAskView() {
       void bridge.quickAsk.resize(EXPANDED_HEIGHT_PX)
       return
     }
+    // Collapsing → animate down to the last measured compact height while
+    // the layout is still tall (composer rides the shrinking window up).
+    // Use the remembered height, not a fresh measure: the tall layout
+    // would make rootRef report the window height, not the content.
+    if (collapsing) {
+      void bridge.quickAsk.resize(compactHeightRef.current)
+      return
+    }
     const el = rootRef.current
     if (!el) return
     let raf = 0
@@ -237,6 +274,7 @@ export function QuickAskView() {
       raf = 0
       if (!el) return
       const target = el.scrollHeight + 12
+      compactHeightRef.current = target
       if (target === lastSent) return
       lastSent = target
       void bridge.quickAsk.resize(target)
@@ -253,7 +291,7 @@ export function QuickAskView() {
       if (raf) cancelAnimationFrame(raf)
       observer.disconnect()
     }
-  }, [expanded, bridge])
+  }, [expanded, collapsing, bridge])
 
   // Resolve the active session's last-update timestamp for the
   // continuation hint. The sessions index is shared cross-window via
@@ -283,7 +321,7 @@ export function QuickAskView() {
         // the composer's square bottom edge paints over the outer
         // ``rounded-xl`` and the popup looks half-rounded.
         "animate-notifier-in relative mx-auto flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground",
-        expanded && "h-full",
+        tall && "h-full",
       )}
     >
       {/* Drag handle. Sits above all content so the user always has a
@@ -315,7 +353,7 @@ export function QuickAskView() {
         variant="fullscreen"
         emptyState="composer-only"
         composerAutoFocus
-        composerOverlayActive={overlayOpen}
+        composerOverlayActive={overlayOpen || collapsing}
         client={client}
         capabilities={capabilities}
         openSettings={() => {}}
