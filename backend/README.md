@@ -40,7 +40,7 @@ entry-point 都已删除。
 | Repo | 角色 |
 |---|---|
 | **this repo** | 本地 HTTP server：`/hermes/*` + mention-sources gateway（`/mention-sources/<name>/search`、`/hermes/mention-resources`、`/hermes/mention-sources*`）+ **内置 mention-sources 框架**（`runtime/mention_sources/`：loader/manager + skills 接线） |
-| `~/.hermes/mention-sources/<name>/`（如 [amiba-integration-lark](https://github.com/amiba-desktop/amiba-integration-lark)） | 可插拔的源**实例**（git 仓：`search` + `mention-source.yaml` + resolver skill）；由本仓的框架经 git 加载/管理 |
+| `~/.hermes/mention-sources/<name>/`（如 [amiba-mention-source-lark](https://github.com/amiba-desktop/amiba-mention-source-lark)） | 可插拔的源**实例**（git 仓：`search` + `mention-source.yaml` + resolver skill）；由本仓的框架经 git 加载/管理 |
 | [amiba-plugin-browser-tools](https://github.com/amiba-desktop/amiba-plugin-browser-tools) | 给 agent 的 browser 工具（screenshot / navigate / inbox 等），通过 WS bridge 连扩展（**仍是真 plugin**） |
 | [hermes-my-browser-extension](https://github.com/iHeyTang/hermes-my-browser-extension) | Chrome 扩展前端，调本插件的 `/hermes/*` 端点 |
 
@@ -118,7 +118,7 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
 - 怎么写一个源（`search` + `mention-source.yaml` + resolver skill）—— 见作者指南
   [`docs/mention-sources.md`](docs/mention-sources.md)、`amiba
   create-mention-source` 脚手架,和参考实现
-  [`amiba-integration-lark`](https://github.com/amiba-desktop/amiba-integration-lark)。
+  [`amiba-mention-source-lark`](https://github.com/amiba-desktop/amiba-mention-source-lark)。
 
 ## 配置
 

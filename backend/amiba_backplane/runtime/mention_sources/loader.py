@@ -225,9 +225,19 @@ def mention_resources() -> List[Dict[str, Any]]:
     """
     out: List[Dict[str, Any]] = []
     for entry in _state.loaded:
-        decls = (entry.meta or {}).get("mention_resources")
+        meta = entry.meta or {}
+        decls = meta.get("mention_resources")
         if not isinstance(decls, list):
             continue
+        # Group resolution: a per-resource ``group`` wins; else the source's
+        # top-level ``group`` default; else the source name. The ``group`` is
+        # the composer @-menu section header (clustered by exact string), so a
+        # source can file its types under a shared/new section or match another
+        # source's string to join it.
+        src_group = meta.get("group")
+        default_group = (
+            src_group if isinstance(src_group, str) and src_group else entry.name
+        )
         for decl in decls:
             if not isinstance(decl, dict):
                 continue
@@ -255,7 +265,7 @@ def mention_resources() -> List[Dict[str, Any]]:
                     ),
                     "serialize": serialize if isinstance(serialize, str) else "",
                     "search": f"/mention-sources/{entry.name}/search?type={rtype}",
-                    "group": group if isinstance(group, str) and group else entry.name,
+                    "group": group if isinstance(group, str) and group else default_group,
                 }
             )
     return out

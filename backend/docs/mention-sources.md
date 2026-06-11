@@ -70,11 +70,14 @@ subprocess).
 name: notion
 version: 0.1.0
 description: Notion pages
+group: Notion                       # optional: default @-menu section for this source's types
 
 mention_resources:
   - type: page                      # → search(rtype="page", ...) ; /mention-sources/notion/search?type=page
     label: Notion 页面
     icon: notion-page
+    group: Notion 页面               # optional: this type's @-menu section (overrides the source-level default)
+    trigger: "@"                    # optional: "@" (default) or "/"
     fields: [url, title]            # ← must match the keys in each item's `payload`
     serialize: "[Notion] {title} — {url}"   # the handle inserted on pick
 
@@ -87,6 +90,14 @@ requires:
 `serialize` interpolates `{field}` from the payload. When the user picks a
 candidate, the composer expands `serialize` into the message — that line is the
 handle the agent resolves.
+
+**Grouping (`group`).** The composer's `@`-menu clusters candidates into
+sections by a raw label string. A type's section is resolved in order: its own
+`group` → the source-level `group` default → the source name. Types that
+resolve to the **same string** — even across different sources — share one
+section, so set `group` to a new string to open your own section, or match an
+existing section's string to file into it. `trigger` selects which menu a type
+appears under: `@` (default) or `/`.
 
 ### 3. `skills/resolve.md` — bridge the handle to an action
 
