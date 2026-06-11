@@ -19,13 +19,23 @@ export interface MentionResource {
   label: string;
   icon?: string | null;
   trigger: "@" | "/";
-  /** Payload field order for the `@[key:a|b]` token body. */
+  /**
+   * Payload field order for the `@[key:a|b]` token body. Also the source of the
+   * "handles" in the agent-visible reference line — the composer owns that
+   * format (`(label: name · handle…)`), the source just declares the fields.
+   */
   fields: string[];
-  /** `{field}` template expanded into the agent-visible reference line. */
-  serialize: string;
   /** Path to the integration's search endpoint, with `?type=` pre-filled. */
   search: string;
   group: string;
+  /**
+   * This type's search needs a non-empty query — it can't list a default set
+   * (e.g. Feishu doc/contact search). The composer shows `empty_hint` as the
+   * category's empty state instead of an empty/absent group.
+   */
+  requires_query?: boolean;
+  /** Empty-state prompt for a `requires_query` type (source-authored). */
+  empty_hint?: string | null;
 }
 
 export interface MentionResourcesResponse {

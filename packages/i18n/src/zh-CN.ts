@@ -104,6 +104,7 @@ export const zhCN: Messages = {
   "options.mentionSources.local": "本地",
   "options.mentionSources.localHint": "可编辑软链 → {path}(改源仓后点重载即可)",
   "options.mentionSources.legacy": "旧版",
+  "options.mentionSources.unavailable": "不可用",
   "options.mentionSources.noSearch": "无 search",
   "options.mentionSources.noSearchHint": "导入了但没暴露 `search` —— 它的 @ 提及搜不出东西。检查 __init__.py 是否 re-export 了 `search`。",
   "options.mentionSources.removeConfirm": "移除「{name}」提及来源？会删除它的目录。",
@@ -139,6 +140,8 @@ export const zhCN: Messages = {
   "composer.voice.permissionDenied": "麦克风权限被拒绝。请在系统设置中允许后再使用语音输入。",
   "composer.voice.unsupported": "当前环境不支持语音输入。",
   "composer.voice.transcribeFailed": "语音转写失败：{error}",
+  "composer.mention.typeToSearch": "输入关键词搜索",
+  "composer.mention.noResults": "无匹配结果",
 
   // Voice settings page
   "options.voice.title": "语音输入",

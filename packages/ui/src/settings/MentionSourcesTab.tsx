@@ -138,12 +138,23 @@ function SourceRow({
   onRemove: () => void
 }) {
   const { t } = useT()
+  // In the registry but its target can't be found/loaded (dangling symlink,
+  // deleted dir, import error). Reload/Update would just error — only Remove.
+  const unavailable = s.status === "missing" || s.status === "failed"
   return (
     <li className={cn("flex items-start justify-between gap-2 p-3", busy && "opacity-50")}>
       <div className="flex min-w-0 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{s.name}</span>
-          {!s.has_search && (
+          <span className={cn("font-medium", unavailable && "text-muted-foreground")}>{s.name}</span>
+          {unavailable && (
+            <span
+              className="shrink-0 rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive"
+              title={s.error ?? ""}
+            >
+              {t("options.mentionSources.unavailable")}
+            </span>
+          )}
+          {!unavailable && !s.has_search && (
             <span
               className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600"
               title={t("options.mentionSources.noSearchHint")}
@@ -183,24 +194,29 @@ function SourceRow({
             ↪ {s.origin.url ?? s.origin.path}
           </code>
         )}
+        {unavailable && s.error && (
+          <span className="text-[11px] text-destructive">{s.error}</span>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1 pt-0.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onClick={onUpdate}
-          title={
-            s.origin?.method === "path"
+        {!unavailable && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onUpdate}
+            title={
+              s.origin?.method === "path"
+                ? t("options.mentionSources.reload")
+                : t("options.mentionSources.update")
+            }
+          >
+            <RefreshCw />
+            {s.origin?.method === "path"
               ? t("options.mentionSources.reload")
-              : t("options.mentionSources.update")
-          }
-        >
-          <RefreshCw />
-          {s.origin?.method === "path"
-            ? t("options.mentionSources.reload")
-            : t("options.mentionSources.update")}
-        </Button>
+              : t("options.mentionSources.update")}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

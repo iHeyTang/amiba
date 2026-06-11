@@ -8,18 +8,15 @@ import { registerMentionType } from "../serialize"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
 
-/** Expand a `{field}` template against a mention's payload. Missing -> "". */
-function applyTemplate(template: string, payload: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (_, key) => payload[key] ?? "")
-}
-
 /**
  * Build one generic `@`-provider from a backplane mention-resource entry.
  *
  * The provider is fully data-driven: it searches the integration's endpoint,
- * inserts a chip whose `type` is the registry key, and on send expands via the
- * declared `serialize` template into a self-describing reference line the agent
- * resolves with the integration's resolver skill. No per-integration UI code.
+ * inserts a chip whose `type` is the registry key, and on send expands into a
+ * self-describing reference line the agent resolves with the integration's
+ * resolver skill. The reference-line FORMAT is owned here (host), not by the
+ * source — the source only declares `label` + `fields`, so every external
+ * mention serializes identically and can't drift. No per-integration UI code.
  */
 export function makeMentionResourceProvider(entry: MentionResource): TriggerProvider {
   // Keep the token <-> payload field mapping in lockstep with the backend.
@@ -29,9 +26,14 @@ export function makeMentionResourceProvider(entry: MentionResource): TriggerProv
     id: `mention-resource:${entry.key}`,
     group: entry.group || entry.integration,
     ownsType: entry.key,
+    requiresQuery: entry.requires_query === true,
+    emptyHint: entry.empty_hint ?? undefined,
+    persistent: true, // a stable category: stay visible even with no results
     match: () => true,
     async search(query: string): Promise<MenuItem[]> {
-      const items = await searchMentionResource(entry.search, query, 12)
+      // Up to 50: types that can list a default set (e.g. lark chats) return
+      // a useful batch on an empty query; searches return the top matches.
+      const items = await searchMentionResource(entry.search, query, 50)
       return items.map((it) => ({
         id: `${entry.key}:${it.id}`,
         label: it.title || it.id,
@@ -48,7 +50,13 @@ export function makeMentionResourceProvider(entry: MentionResource): TriggerProv
       insertMentionAtTrigger(editor, item.insert)
     },
     serialize(m: MentionData): string {
-      return entry.serialize ? applyTemplate(entry.serialize, m.payload) : m.display || ""
+      // Host-owned uniform format: "(<label>: <name> · <handle…>)". The name is
+      // the chip's display; the handles are the remaining declared field values
+      // (e.g. url / chat_id). The source fills the blanks; it never sets format.
+      const handles = entry.fields
+        .map((f) => m.payload[f])
+        .filter((v): v is string => !!v && v !== m.display)
+      return `(${entry.label}: ${[m.display, ...handles].filter(Boolean).join(" · ")})`
     },
   }
 }

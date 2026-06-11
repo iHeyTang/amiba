@@ -35,4 +35,31 @@ export interface TriggerProvider {
   search(query: string): Promise<MenuItem[]>
   onSelect(item: MenuItem, editor: LexicalEditor): void
   serialize?(mention: MentionData): string
+  /**
+   * This provider's search needs a non-empty query — it can't list a default
+   * set. With an empty query the menu skips the search and shows `emptyHint`
+   * as the category's empty state instead of dropping the group.
+   */
+  requiresQuery?: boolean
+  /** Empty-state prompt shown for a `requiresQuery` provider with no query. */
+  emptyHint?: string
+  /**
+   * Keep this provider's category in the menu even when it has no results —
+   * the content pane shows an empty state ("no results") instead of the group
+   * vanishing. Used for stable mention-source categories; built-in providers
+   * stay query-filtered so empty ones don't clutter the menu.
+   */
+  persistent?: boolean
+}
+
+/**
+ * One @/slash menu category. The plugin builds these (clustered by provider
+ * `group`); `TriggerMenu` renders the sidebar from them. A group with no
+ * `items` but a `hint` is a "needs a query" category — its right pane shows the
+ * hint instead of results.
+ */
+export interface MenuGroup {
+  label: string
+  items: MenuItem[]
+  hint?: string
 }

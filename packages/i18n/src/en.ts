@@ -109,6 +109,7 @@ export const en = {
   "options.mentionSources.local": "local",
   "options.mentionSources.localHint": "Editable symlink → {path} (edit the repo; Reload picks it up)",
   "options.mentionSources.legacy": "legacy",
+  "options.mentionSources.unavailable": "unavailable",
   "options.mentionSources.noSearch": "no search",
   "options.mentionSources.noSearchHint": "Imported but exposes no `search` — its @-mentions return nothing. Check its __init__.py re-exports `search`.",
   "options.mentionSources.removeConfirm": "Remove the \"{name}\" mention source? This deletes its folder.",
@@ -146,6 +147,8 @@ export const en = {
   "composer.voice.unsupported":
     "Voice input is not supported in this environment.",
   "composer.voice.transcribeFailed": "Voice transcription failed: {error}",
+  "composer.mention.typeToSearch": "Type a keyword to search",
+  "composer.mention.noResults": "No results",
 
   // Voice settings page
   "options.voice.title": "Voice input",

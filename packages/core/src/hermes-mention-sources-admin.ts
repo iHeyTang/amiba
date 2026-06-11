@@ -20,6 +20,15 @@ export interface MentionSourceOrigin {
   path?: string;
 }
 
+/**
+ * Load state of an installed source.
+ * - `loaded`  — imported cleanly; its `search` is live.
+ * - `failed`  — on disk but raised while importing.
+ * - `missing` — in the registry but its target can't be found/loaded (dangling
+ *   symlink, deleted dir). Surfaced so it doesn't silently vanish; Remove it.
+ */
+export type MentionSourceStatus = "loaded" | "failed" | "missing";
+
 /** One row from `GET /hermes/mention-sources`. */
 export interface MentionSourceInfo {
   name: string;
@@ -31,6 +40,10 @@ export interface MentionSourceInfo {
   has_search: boolean;
   /** Install provenance, or null for legacy installs predating the registry. */
   origin?: MentionSourceOrigin | null;
+  /** Load state. Older backplanes omit it ⇒ treat as `loaded`. */
+  status?: MentionSourceStatus;
+  /** Human hint for a `failed`/`missing` source (why, and what to do). */
+  error?: string | null;
 }
 
 export interface MentionSourcesResponse {
