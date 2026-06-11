@@ -6,10 +6,10 @@ export interface TriggerMenuProps {
   items: MenuItem[]
   /**
    * Parallel to `items`: the group label for each item (e.g. "Skills",
-   * "Commands", or an integration name). When provided AND there is more
-   * than one group, the menu switches to a two-pane layout — a group
-   * sidebar on the left, the current group's items on the right. Omit
-   * (e.g. in tests) or pass a single group to render a flat list.
+   * "Commands", or an integration name). When provided, the menu uses a
+   * two-pane layout — a group sidebar on the left, the current group's
+   * items on the right — even for a single group (consistent layout).
+   * Omit (e.g. in tests) to render a flat list.
    * Keyboard nav: ↑/↓ move within the current group, Tab/Shift+Tab switch
    * groups (←/→ are left alone so they keep moving the text caret), Enter
    * selects, Esc closes.
@@ -49,10 +49,11 @@ export function TriggerMenu({
     return out
   }, [items, groupLabels])
 
-  // Two-pane (group sidebar + current group's list) only when there are
-  // real groups to split by; otherwise a flat list. The flat path is also
-  // what the tests exercise (they pass no groupLabels).
-  const twoPane = groupLabels != null && groups.length > 1
+  // Two-pane (group sidebar + current group's list) whenever the caller
+  // provides group labels — kept even for a SINGLE group so the layout
+  // stays consistent. The flat path is only for callers that pass no
+  // groupLabels (e.g. the tests).
+  const twoPane = groupLabels != null && groups.length >= 1
 
   const [activeGroup, setActiveGroup] = useState(0)
   const [activeItem, setActiveItem] = useState(0)
