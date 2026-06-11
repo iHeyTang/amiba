@@ -198,6 +198,14 @@ export interface ChatSurfaceProps {
   composerOverlayActive?: boolean;
 
   /**
+   * Quick-Ask only. Called whenever the composer draft toggles between
+   * empty and non-empty. Quick-Ask uses it to STAY expanded while a draft
+   * exists, so dismissing the slash/@ menu mid-compose doesn't snap the
+   * window back to compact. Never set by other surfaces (no-op there).
+   */
+  onComposerEmptyChange?: (empty: boolean) => void;
+
+  /**
    * Chat engine the view talks to. Extension provides ChromeChatEngineClient
    * (wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })`); desktop
    * provides ElectronChatEngineClient (IPC to main-process HermesClient).
@@ -274,6 +282,7 @@ export default function ChatSurface({
   emptyState = "hero",
   composerAutoFocus = false,
   composerOverlayActive = false,
+  onComposerEmptyChange,
   client,
   capabilities = {},
   slots,
@@ -291,6 +300,13 @@ export default function ChatSurface({
   const sessions = useSessions();
 
   const [input, setInput] = useState("");
+
+  // Report composer empty/non-empty to hosts that care (Quick-Ask uses it
+  // to stay expanded while there's a draft). No-op when the callback is
+  // omitted, i.e. for every non-Quick-Ask surface.
+  useEffect(() => {
+    onComposerEmptyChange?.(input.trim().length === 0);
+  }, [input, onComposerEmptyChange]);
   // Bumped by the pendingPrompt subscription so the drain effect
   // re-fires on push notifications even when the session id hasn't
   // changed (e.g. the empty-state home composer submitting into an

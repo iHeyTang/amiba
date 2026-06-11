@@ -93,6 +93,18 @@ export function QuickAskView() {
   // data-composer-overlay) is open. Drives expansion so the upward menu
   // has room. See the MutationObserver effect below.
   const [overlayOpen, setOverlayOpen] = useState(false)
+  // Whether the composer has a draft (reported by ChatSurface via
+  // onComposerEmptyChange). Keeps the popup expanded mid-compose.
+  const [composerNonEmpty, setComposerNonEmpty] = useState(false)
+  const onComposerEmptyChange = useCallback(
+    (empty: boolean) => setComposerNonEmpty(!empty),
+    [],
+  )
+  // Sticky expansion: an open overlay SETS it; it releases only once the
+  // composer is empty AND no overlay is open — so dismissing the slash/@
+  // menu while a draft remains keeps the expanded layout instead of
+  // snapping back to compact.
+  const [stuck, setStuck] = useState(false)
   // Collapse animation. `resizeQuickAsk` animates the window both ways,
   // but on collapse the compact layout reverts instantly — the composer
   // snaps from the bottom (expanded) to the top before the window finishes
@@ -110,7 +122,7 @@ export function QuickAskView() {
   // menu needs vertical room that the compact window doesn't have.
   // The transition is smoothed by macOS's animated setBounds in
   // main/quick-ask-window.ts.
-  const expanded = (hasActive && messages.length > 0) || overlayOpen
+  const expanded = (hasActive && messages.length > 0) || overlayOpen || stuck
   // Drives layout fill + composer bottom-pin: true while expanded AND
   // throughout the collapse animation.
   const tall = expanded || collapsing
@@ -234,6 +246,14 @@ export function QuickAskView() {
     return () => observer.disconnect()
   }, [])
 
+  // Sticky-expansion latch: an open overlay sets it; it releases only when
+  // the composer is empty AND no overlay is open, so closing the menu with
+  // a draft still present keeps the popup expanded.
+  useEffect(() => {
+    if (overlayOpen) setStuck(true)
+    else if (!composerNonEmpty) setStuck(false)
+  }, [overlayOpen, composerNonEmpty])
+
   // When we drop from expanded → compact, hold the tall layout for the
   // window-shrink animation (~macOS 200ms) so the collapse is animated:
   // the composer stays bottom-pinned and rides UP with the shrinking
@@ -354,6 +374,7 @@ export function QuickAskView() {
         emptyState="composer-only"
         composerAutoFocus
         composerOverlayActive={overlayOpen || collapsing}
+        onComposerEmptyChange={onComposerEmptyChange}
         client={client}
         capabilities={capabilities}
         openSettings={() => {}}
