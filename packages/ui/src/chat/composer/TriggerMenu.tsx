@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { cn } from "../../primitives"
 import type { MenuItem } from "./providers/types"
 
 export interface TriggerMenuProps {
   items: MenuItem[]
+  /**
+   * Parallel to `items`: the group label for each item (e.g. "Skills",
+   * "Commands", or an integration name). When provided, a small section
+   * header is rendered wherever the group changes between adjacent items.
+   * The plugin pre-clusters items by group so each header appears once.
+   * Omit (e.g. in tests) to render a flat list. Keyboard navigation is
+   * unaffected — it still indexes `items` linearly and headers are
+   * non-interactive.
+   */
+  groupLabels?: string[]
   loading: boolean
   error: string | null
   onSelect: (item: MenuItem) => void
@@ -11,7 +21,7 @@ export interface TriggerMenuProps {
   anchorClassName?: string
 }
 
-export function TriggerMenu({ items, loading, error, onSelect, onClose, anchorClassName }: TriggerMenuProps) {
+export function TriggerMenu({ items, groupLabels, loading, error, onSelect, onClose, anchorClassName }: TriggerMenuProps) {
   const [active, setActive] = useState(0)
   useEffect(() => { setActive(0) }, [items])
   useEffect(() => {
@@ -37,22 +47,35 @@ export function TriggerMenu({ items, loading, error, onSelect, onClose, anchorCl
       {!loading && !error && items.length === 0 && (
         <div className="px-2 py-1.5 text-xs text-muted-foreground">No matches</div>
       )}
-      {items.map((item, i) => (
-        <button
-          key={item.id}
-          type="button"
-          onMouseEnter={() => setActive(i)}
-          onClick={() => onSelect(item)}
-          className={cn(
-            "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
-            i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-          )}
-        >
-          {item.icon}
-          <span className="truncate">{item.label}</span>
-          {item.description && <span className="ml-auto truncate text-xs text-muted-foreground">{item.description}</span>}
-        </button>
-      ))}
+      {items.map((item, i) => {
+        const group = groupLabels?.[i]
+        // Header at every group boundary. groupLabels?.[-1] is undefined,
+        // so the first group always gets one. Items stay clustered by group
+        // (the plugin builds them that way), so each header shows once.
+        const showHeader = group != null && group !== groupLabels?.[i - 1]
+        return (
+          <Fragment key={item.id}>
+            {showHeader && (
+              <div className="px-2 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 first:pt-0.5">
+                {group}
+              </div>
+            )}
+            <button
+              type="button"
+              onMouseEnter={() => setActive(i)}
+              onClick={() => onSelect(item)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
+                i === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+              )}
+            >
+              {item.icon}
+              <span className="truncate">{item.label}</span>
+              {item.description && <span className="ml-auto truncate text-xs text-muted-foreground">{item.description}</span>}
+            </button>
+          </Fragment>
+        )
+      })}
     </div>
   )
 }

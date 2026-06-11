@@ -41,12 +41,35 @@ export function TriggerMenuPlugin({ extraProviders }: { extraProviders?: Trigger
     setOwned([])
   }
 
+  // Cluster items by their provider's group (preserving first-seen group
+  // order) so each group is contiguous and TriggerMenu renders one header
+  // per group. `groupLabels` is parallel to `items`.
+  const { items, groupLabels } = useMemo(() => {
+    const byGroup = new Map<string, MenuItem[]>()
+    for (const { item, provider } of owned) {
+      const g = provider.group ?? provider.id
+      const arr = byGroup.get(g)
+      if (arr) arr.push(item)
+      else byGroup.set(g, [item])
+    }
+    const flatItems: MenuItem[] = []
+    const flatGroups: string[] = []
+    for (const [label, arr] of byGroup) {
+      for (const it of arr) {
+        flatItems.push(it)
+        flatGroups.push(label)
+      }
+    }
+    return { items: flatItems, groupLabels: flatGroups }
+  }, [owned])
+
   return (
     <>
       <TriggerPlugin onTrigger={setState} />
       {state && (
         <TriggerMenu
-          items={owned.map((o) => o.item)}
+          items={items}
+          groupLabels={groupLabels}
           loading={loading}
           error={error}
           onSelect={handleSelect}
