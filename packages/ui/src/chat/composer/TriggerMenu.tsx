@@ -95,6 +95,8 @@ export function TriggerMenu({
     return () => window.removeEventListener("keydown", onKey, true)
   }, [twoPane, groups, currentGroup, activeItem, onSelect, onClose])
 
+  // Two-line item: title on top, description/intro below (both truncate).
+  // The icon sits to the left, vertically centred against the block.
   const renderItem = (item: MenuItem, ii: number) => (
     <button
       key={item.id}
@@ -102,19 +104,28 @@ export function TriggerMenu({
       onMouseEnter={() => setActiveItem(ii)}
       onClick={() => onSelect(item)}
       className={cn(
-        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
+        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left",
         ii === activeItem
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50",
       )}
     >
-      {item.icon}
-      <span className="truncate">{item.label}</span>
-      {item.description && (
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {item.description}
-        </span>
-      )}
+      {item.icon && <span className="shrink-0">{item.icon}</span>}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">{item.label}</span>
+        {item.description && (
+          <span
+            className={cn(
+              "block truncate text-xs",
+              ii === activeItem
+                ? "text-accent-foreground/75"
+                : "text-muted-foreground",
+            )}
+          >
+            {item.description}
+          </span>
+        )}
+      </span>
     </button>
   )
 
