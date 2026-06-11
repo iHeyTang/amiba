@@ -161,24 +161,86 @@ def _git_remote_url(dir_: Path) -> Optional[str]:
 # --- lifecycle --------------------------------------------------------------
 
 
+def _diagnose_unloaded(name: str, origin: Optional[Dict[str, Any]]) -> str:
+    """Human hint for a registered source that isn't currently loaded.
+
+    The registry says it's installed but the loader didn't pick it up — usually
+    because the on-disk target moved out from under a symlink. Tells the user
+    what's wrong and that Remove (then re-install) is the way out.
+    """
+    target = USER_SOURCES_DIR / name
+    if target.is_symlink() and not target.exists():
+        try:
+            dest = os.readlink(target)
+        except OSError:
+            dest = "?"
+        return (
+            f"symlink target is gone ({dest}) — the local source was moved or "
+            f"renamed; Remove this and re-install from its new path"
+        )
+    if not target.exists() and not target.is_symlink():
+        recorded = (origin or {}).get("path") or (origin or {}).get("url")
+        where = f" ({recorded})" if recorded else ""
+        return f"install location no longer exists{where} — Remove and re-install"
+    if not (target / "__init__.py").exists():
+        return "source folder has no __init__.py — not a valid mention source"
+    return "registered but not loaded — try Reload, or Remove and re-install"
+
+
 def list_sources() -> Dict[str, Any]:
-    """Snapshot of loaded sources + last-scan failures, annotated with origin."""
+    """Installed-source snapshot, with the **registry** as the source of truth.
+
+    A source counts as installed iff it's in ``.registry.json`` (or present on
+    disk as a legacy install predating the registry). Every row carries a
+    ``status``:
+
+    - ``loaded``  — imported cleanly; ``search`` is live.
+    - ``failed``  — on disk but raised while importing (``error`` has details).
+    - ``missing`` — in the registry but its target can't be found/loaded
+      (dangling symlink, deleted dir, no ``__init__.py``). Surfaced with a hint
+      so it doesn't silently vanish from the UI while still blocking re-install.
+    """
     state = _loader.get_state()
-    loaded = [
-        {
-            "name": e.name,
-            "path": str(e.path),
-            "search_mount": f"/mention-sources/{e.name}/search",
-            "version": (e.meta or {}).get("version"),
-            "description": (e.meta or {}).get("description"),
-            "has_search": e.search is not None,
-            "origin": get_origin(e.name),  # {method: git|path, url?/path?} or None
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def _row(name: str, *, status: str, entry=None, origin=None, error=None) -> Dict[str, Any]:
+        meta = (entry.meta or {}) if entry is not None else {}
+        return {
+            "name": name,
+            "path": str(entry.path) if entry is not None else str(USER_SOURCES_DIR / name),
+            "search_mount": f"/mention-sources/{name}/search",
+            "version": meta.get("version"),
+            "description": meta.get("description"),
+            "has_search": entry.search is not None if entry is not None else False,
+            "origin": origin if origin is not None else get_origin(name),
+            "status": status,
+            **({"error": error} if error else {}),
         }
-        for e in state.loaded
-    ]
+
+    for e in state.loaded:
+        seen.add(e.name)
+        rows.append(_row(e.name, status="loaded", entry=e))
+
+    for f in state.failed:
+        name = f.get("name", "")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        rows.append(_row(name, status="failed", error=f.get("error")))
+
+    # Registry is authoritative: list entries the loader never picked up (e.g. a
+    # dangling symlink) instead of letting them disappear from the snapshot.
+    for name, origin in _read_registry().items():
+        if name in seen:
+            continue
+        seen.add(name)
+        clean = origin if isinstance(origin, dict) else None
+        rows.append(_row(name, status="missing", origin=clean, error=_diagnose_unloaded(name, clean)))
+
     return {
-        "sources": loaded,
-        "failed": list(state.failed),
+        "sources": rows,
+        "failed": list(state.failed),  # kept for backward-compat consumers
         "user_dir": str(USER_SOURCES_DIR),
     }
 

@@ -247,7 +247,10 @@ def mention_resources() -> List[Dict[str, Any]]:
             fields = decl.get("fields")
             trigger = decl.get("trigger")
             group = decl.get("group")
-            serialize = decl.get("serialize")
+            # `requires_query`: this type's search needs a non-empty query (it
+            # can't list a default set). The composer then shows `empty_hint` as
+            # the category's empty state instead of an empty/absent group.
+            empty_hint = decl.get("empty_hint")
             out.append(
                 {
                     "key": f"{entry.name}.{rtype}",
@@ -263,9 +266,10 @@ def mention_resources() -> List[Dict[str, Any]]:
                         if isinstance(fields, list)
                         else []
                     ),
-                    "serialize": serialize if isinstance(serialize, str) else "",
                     "search": f"/mention-sources/{entry.name}/search?type={rtype}",
                     "group": group if isinstance(group, str) and group else default_group,
+                    "requires_query": bool(decl.get("requires_query")),
+                    "empty_hint": empty_hint if isinstance(empty_hint, str) and empty_hint else None,
                 }
             )
     return out
