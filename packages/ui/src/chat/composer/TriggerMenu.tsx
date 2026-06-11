@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../../primitives"
 import type { MenuItem } from "./providers/types"
 
@@ -26,6 +26,9 @@ interface Group {
   label: string
   items: MenuItem[]
 }
+
+const KBD =
+  "rounded border border-border bg-muted/60 px-1 text-[9px] leading-[1.5] text-muted-foreground"
 
 export function TriggerMenu({
   items,
@@ -65,19 +68,38 @@ export function TriggerMenu({
 
   const currentGroup = groups[Math.min(activeGroup, groups.length - 1)]
 
+  // Keep the active item / group scrolled into view during keyboard nav.
+  const activeItemRef = useRef<HTMLButtonElement | null>(null)
+  const activeGroupRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    // `?.scrollIntoView?.` — optional on the method too, so it's a no-op in
+    // non-browser environments (jsdom/SSR) that don't implement it.
+    activeItemRef.current?.scrollIntoView?.({ block: "nearest" })
+  }, [activeItem, activeGroup])
+  useEffect(() => {
+    activeGroupRef.current?.scrollIntoView?.({ block: "nearest" })
+  }, [activeGroup])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // We listen on `window` in the CAPTURE phase, so stopping propagation
+      // here prevents the event from ever reaching the Lexical editor below
+      // — that's what keeps Enter from inserting a newline / submitting, and
+      // ↑/↓/Tab from doing anything in the composer while the menu is open.
       if (e.key === "ArrowDown") {
         e.preventDefault()
+        e.stopPropagation()
         const len = currentGroup?.items.length ?? 0
         setActiveItem((i) => Math.min(i + 1, len - 1))
       } else if (e.key === "ArrowUp") {
         e.preventDefault()
+        e.stopPropagation()
         setActiveItem((i) => Math.max(i - 1, 0))
-      } else if (twoPane && e.key === "Tab") {
+      } else if (twoPane && groups.length > 1 && e.key === "Tab") {
         // Switch group. We deliberately do NOT use ←/→ — those must keep
         // moving the text caret in the composer while the menu is open.
         e.preventDefault()
+        e.stopPropagation()
         const dir = e.shiftKey ? -1 : 1
         setActiveGroup((g) => (g + dir + groups.length) % groups.length)
         setActiveItem(0)
@@ -85,10 +107,12 @@ export function TriggerMenu({
         const item = currentGroup?.items[activeItem]
         if (item) {
           e.preventDefault()
+          e.stopPropagation()
           onSelect(item)
         }
       } else if (e.key === "Escape") {
         e.preventDefault()
+        e.stopPropagation()
         onClose()
       }
     }
@@ -101,6 +125,7 @@ export function TriggerMenu({
   const renderItem = (item: MenuItem, ii: number) => (
     <button
       key={item.id}
+      ref={ii === activeItem ? activeItemRef : null}
       type="button"
       onMouseEnter={() => setActiveItem(ii)}
       onClick={() => onSelect(item)}
@@ -134,7 +159,7 @@ export function TriggerMenu({
     <div
       data-composer-overlay=""
       className={cn(
-        "absolute left-0 right-0 bottom-full z-50 mb-1 rounded-md border border-border bg-popover text-popover-foreground shadow-md",
+        "absolute left-0 right-0 bottom-full z-50 mb-1 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md",
         anchorClassName,
       )}
     >
@@ -158,6 +183,7 @@ export function TriggerMenu({
               {groups.map((g, gi) => (
                 <button
                   key={g.label || gi}
+                  ref={gi === activeGroup ? activeGroupRef : null}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onMouseEnter={() => {
@@ -192,6 +218,26 @@ export function TriggerMenu({
             {items.map(renderItem)}
           </div>
         ))}
+
+      {/* Footer: keyboard hints. */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-3 border-t border-border px-2.5 py-1.5 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <kbd className={KBD}>↑↓</kbd>选择
+          </span>
+          {groups.length > 1 && (
+            <span className="flex items-center gap-1">
+              <kbd className={KBD}>Tab</kbd>切换分组
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <kbd className={KBD}>↵</kbd>引用
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <kbd className={KBD}>esc</kbd>关闭
+          </span>
+        </div>
+      )}
     </div>
   )
 }
