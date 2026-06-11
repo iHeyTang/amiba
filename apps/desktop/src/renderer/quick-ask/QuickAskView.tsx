@@ -373,7 +373,7 @@ export function QuickAskView() {
         variant="fullscreen"
         emptyState="composer-only"
         composerAutoFocus
-        composerOverlayActive={overlayOpen || collapsing}
+        composerOnlyExpanded={tall}
         onComposerEmptyChange={onComposerEmptyChange}
         client={client}
         capabilities={capabilities}

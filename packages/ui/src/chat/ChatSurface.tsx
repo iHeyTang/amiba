@@ -187,15 +187,19 @@ export interface ChatSurfaceProps {
   composerAutoFocus?: boolean;
 
   /**
-   * Quick-Ask only. When a composer overlay (the slash/@ TriggerMenu) is
-   * open in the compact/composer-only state, set this true to expand the
-   * body to a full-height column and pin the composer to the BOTTOM, so
-   * the upward-opening overlay has room instead of clipping against the
-   * shrink-wrapped popup. Never set by the sidebar/main-window surfaces,
-   * so their layout is unchanged. Does NOT alter `isComposerOnlyEmpty`
-   * (kept stable so the composer doesn't remount when the overlay opens).
+   * Quick-Ask only. Set true whenever the host has EXPANDED the popup
+   * (an overlay is open, a draft is being composed, the collapse is
+   * animating, …). It renders the composer-only empty state as a
+   * full-height column with the composer pinned to the BOTTOM — so the
+   * surface reads like a chat (composer at the bottom, room above) instead
+   * of a top-anchored input with dead space below. IMPORTANT: drive it off
+   * the host's expansion state, NOT just "an overlay is open" — otherwise
+   * the composer strands at the top whenever the window is tall for some
+   * other reason (e.g. a lingering draft). Never set by sidebar/main-window
+   * surfaces (their layout is unchanged); does NOT alter `isComposerOnlyEmpty`
+   * (kept stable so the composer never remounts).
    */
-  composerOverlayActive?: boolean;
+  composerOnlyExpanded?: boolean;
 
   /**
    * Quick-Ask only. Called whenever the composer draft toggles between
@@ -281,7 +285,7 @@ export default function ChatSurface({
   messagesMaxWidth = "comfortable",
   emptyState = "hero",
   composerAutoFocus = false,
-  composerOverlayActive = false,
+  composerOnlyExpanded = false,
   onComposerEmptyChange,
   client,
   capabilities = {},
@@ -1497,11 +1501,11 @@ export default function ChatSurface({
   const isComposerOnlyEmpty =
     emptyState === "composer-only" && (!hasActive || messages.length === 0);
 
-  // When a composer overlay is open (Quick-Ask), expand the body column
-  // and (below) pin the composer to the bottom so the upward menu has
-  // room. `expandComposerArea` is exactly `!isComposerOnlyEmpty` unless
-  // the overlay flag is set, so non-Quick-Ask layout is unchanged.
-  const expandComposerArea = !isComposerOnlyEmpty || composerOverlayActive;
+  // When the host has expanded the composer-only surface (Quick-Ask),
+  // make the body fill the column and (below) pin the composer to the
+  // bottom. `expandComposerArea` is exactly `!isComposerOnlyEmpty` unless
+  // the flag is set, so non-Quick-Ask layout is unchanged.
+  const expandComposerArea = !isComposerOnlyEmpty || composerOnlyExpanded;
 
   // Read-only mode: the active session originates from another channel
   // (Feishu, Telegram, …) that owns the writing engine. We render the
@@ -1775,10 +1779,11 @@ export default function ChatSurface({
             <div
               className={cn(
                 "flex flex-col px-2 pb-2",
-                // Overlay open → fill the (now flex-1) body and push the
-                // composer to the bottom so the upward TriggerMenu opens
-                // into the empty space above instead of clipping.
-                composerOverlayActive && "h-full justify-end",
+                // Expanded → fill the (now flex-1) body and push the
+                // composer to the BOTTOM, so a tall popup reads like a chat
+                // (composer at the bottom, room above for an upward menu)
+                // rather than a top-anchored input with dead space below.
+                composerOnlyExpanded && "h-full justify-end",
               )}
             >
               {pendingSourceApp && (
