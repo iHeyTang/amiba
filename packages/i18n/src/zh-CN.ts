@@ -81,7 +81,7 @@ export const zhCN: Messages = {
   "options.extensions.browse.indexUrl": "索引：{url}",
   "options.extplugins.title": "扩展与插件",
   "options.plugins.heading": "插件",
-  "options.plugins.subtitle": "Hermes agent 插件（Python）。开关启用或停用；改动在下次启动 Hermes 时生效。装/删请用 `hermes plugins` 命令。",
+  "options.plugins.subtitle": "Hermes agent 插件（Python）。开关启用或停用、卸载可在此直接操作；改动在下次启动 Hermes 时生效。安装请用 `hermes plugins` 命令。",
   "options.plugins.loading": "加载插件中…",
   "options.plugins.error": "加载插件失败：{error}",
   "options.plugins.empty": "未安装插件。",
@@ -113,9 +113,8 @@ export const zhCN: Messages = {
   "options.mentionSources.removeError": "移除失败：{error}",
   "options.mentionSources.loadWarning": "{name} 已安装，但它没有 search 能力（{warning}）。",
   "options.plugins.uninstallAction": "卸载",
-  "options.plugins.uninstallConfirm": "把卸载「{name}」交给 agent 处理吗？它会打开一个会话帮你完成。",
-  "options.plugins.uninstallPrompt": "请帮我卸载 Hermes 插件 `{name}`（运行 `hermes plugins remove {name}`，或对应的正确命令）。完成后确认已移除，并告诉我是否需要重启 Hermes。",
-  "options.plugins.agentSourceApp": "插件管理",
+  "options.plugins.uninstallConfirm": "确定卸载「{name}」？删除后需重启 Hermes 才完全生效，此操作不可撤销。",
+  "options.plugins.uninstallError": "卸载失败：{error}",
 
   // Featured features —— 被提升为一级设置入口的插件
   "options.feature.enableLabel": "启用",

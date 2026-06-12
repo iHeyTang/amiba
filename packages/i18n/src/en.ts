@@ -86,7 +86,7 @@ export const en = {
   "options.extensions.browse.indexUrl": "Index: {url}",
   "options.extplugins.title": "Extensions & Plugins",
   "options.plugins.heading": "Plugins",
-  "options.plugins.subtitle": "Hermes agent plugins (Python). Toggle to enable or disable; changes apply on the next Hermes start. Install/remove via the `hermes plugins` CLI.",
+  "options.plugins.subtitle": "Hermes agent plugins (Python). Toggle to enable or disable, or uninstall right here; changes apply on the next Hermes start. Install via the `hermes plugins` CLI.",
   "options.plugins.loading": "Loading plugins…",
   "options.plugins.error": "Couldn't load plugins: {error}",
   "options.plugins.empty": "No plugins installed.",
@@ -118,9 +118,8 @@ export const en = {
   "options.mentionSources.removeError": "Remove failed: {error}",
   "options.mentionSources.loadWarning": "{name} installed, but it has no search capability ({warning}).",
   "options.plugins.uninstallAction": "Uninstall",
-  "options.plugins.uninstallConfirm": "Hand off uninstalling \"{name}\" to the agent? It'll open a chat and do it for you.",
-  "options.plugins.uninstallPrompt": "Please uninstall the Hermes plugin `{name}` for me (run `hermes plugins remove {name}`, or the right command for it). When it's done, confirm it's removed and tell me whether Hermes needs a restart.",
-  "options.plugins.agentSourceApp": "Plugin manager",
+  "options.plugins.uninstallConfirm": "Uninstall \"{name}\"? It fully unloads after a Hermes restart. This can't be undone.",
+  "options.plugins.uninstallError": "Couldn't uninstall: {error}",
 
   // Featured features — plugins promoted to a first-class Settings surface
   "options.feature.enableLabel": "Enable",
