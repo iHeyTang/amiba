@@ -1,10 +1,9 @@
-import { getHermesPlugins, setPluginEnabled, type HermesPlugin } from "@amiba/core"
+import { getHermesPlugins, setPluginEnabled, uninstallPlugin, type HermesPlugin } from "@amiba/core"
 import { Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { useT } from "@amiba/i18n"
 import { Button, Switch, cn } from "../primitives"
-import { useStartAgentTask } from "./agent-task"
 
 type State =
   | { kind: "loading" }
@@ -14,15 +13,15 @@ type State =
 /**
  * Hermes-agent plugins (Python) — the "Plugins" type tab, distinct from
  * renderer extensions. Read from the backplane's /hermes/plugins (which mirrors
- * `hermes plugins list`); the only UI action is enable/disable. Install/remove
- * stays with the `hermes plugins` operator CLI, so there are deliberately no
- * install/remove affordances here.
+ * `hermes plugins list`). Enable/disable edits config.yaml only — no hot-reload
+ * — so we flip optimistically and show a "restart to apply" hint. Uninstall is
+ * source-aware on the backplane (user → remove dir; entrypoint → pip uninstall;
+ * bundled/project → refused), so only user/entrypoint rows get a delete button;
+ * on success we drop the row and show the restart hint. Install still lives in
+ * the `hermes plugins` operator CLI — there is no install affordance here.
  *
  * Plugins split naturally into "yours" (user / project / pip) and "bundled"
  * (20+ shipped with hermes-agent), so we group rather than dump a flat list.
- * Enable/disable edits config.yaml only — no hot-reload — so we flip the switch
- * optimistically and show a persistent "restart to apply" hint instead of
- * refetching (which would snap back to the still-loaded state).
  */
 export function PluginsTab() {
   const { t } = useT()
@@ -65,6 +64,21 @@ export function PluginsTab() {
     setRestartHint(true)
   }
 
+  async function onUninstall(p: HermesPlugin) {
+    if (state.kind !== "loaded" || busy) return
+    if (!confirm(t("options.plugins.uninstallConfirm", { name: p.name }))) return
+    setBusy(p.name)
+    setToggleError(null)
+    const res = await uninstallPlugin(p.name)
+    setBusy(null)
+    if (!res.ok) {
+      setToggleError(t("options.plugins.uninstallError", { error: res.error ?? "unknown" }))
+      return
+    }
+    setState({ kind: "loaded", plugins: state.plugins.filter((x) => x.key !== p.key) })
+    setRestartHint(true)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">{t("options.plugins.subtitle")}</p>
@@ -83,7 +97,12 @@ export function PluginsTab() {
         </p>
       )}
       {state.kind === "loaded" && (
-        <PluginGroups plugins={state.plugins} busy={busy} onToggle={onToggle} />
+        <PluginGroups
+          plugins={state.plugins}
+          busy={busy}
+          onToggle={onToggle}
+          onUninstall={onUninstall}
+        />
       )}
     </div>
   )
@@ -99,10 +118,12 @@ function PluginGroups({
   plugins,
   busy,
   onToggle,
+  onUninstall,
 }: {
   plugins: HermesPlugin[]
   busy: string | null
   onToggle: (p: HermesPlugin) => void
+  onUninstall: (p: HermesPlugin) => void
 }) {
   const { t } = useT()
   const yours = sortPlugins(plugins.filter((p) => p.source !== "bundled"))
@@ -116,7 +137,7 @@ function PluginGroups({
         {yours.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("options.plugins.empty")}</p>
         ) : (
-          <PluginList plugins={yours} busy={busy} onToggle={onToggle} />
+          <PluginList plugins={yours} busy={busy} onToggle={onToggle} onUninstall={onUninstall} />
         )}
       </section>
 
@@ -127,7 +148,7 @@ function PluginGroups({
             {t("options.plugins.group.bundled", { count: bundled.length })}
           </summary>
           <div className="mt-1.5">
-            <PluginList plugins={bundled} busy={busy} onToggle={onToggle} />
+            <PluginList plugins={bundled} busy={busy} onToggle={onToggle} onUninstall={onUninstall} />
           </div>
         </details>
       )}
@@ -139,39 +160,49 @@ function PluginList({
   plugins,
   busy,
   onToggle,
+  onUninstall,
 }: {
   plugins: HermesPlugin[]
   busy: string | null
   onToggle: (p: HermesPlugin) => void
+  onUninstall: (p: HermesPlugin) => void
 }) {
   return (
     <ul className="flex flex-col divide-y rounded-md border bg-card">
       {plugins.map((p) => (
-        <PluginRow key={p.key} p={p} busy={busy === p.name} onToggle={() => onToggle(p)} />
+        <PluginRow
+          key={p.key}
+          p={p}
+          busy={busy === p.name}
+          onToggle={() => onToggle(p)}
+          onUninstall={() => onUninstall(p)}
+        />
       ))}
     </ul>
   )
 }
 
-function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onToggle: () => void }) {
+function PluginRow({
+  p,
+  busy,
+  onToggle,
+  onUninstall,
+}: {
+  p: HermesPlugin
+  busy: boolean
+  onToggle: () => void
+  onUninstall: () => void
+}) {
   const { t } = useT()
-  const startAgentTask = useStartAgentTask()
   // Nested/category plugins (e.g. backends) share a `name` across categories —
   // `name` alone isn't unique. The key is path-derived (`image_gen/xai`), so
   // surface the category prefix as a badge to disambiguate same-named plugins.
   const slash = p.key.indexOf("/")
   const category = slash > 0 ? p.key.slice(0, slash) : null
-  // Only user-installed plugins are uninstallable; bundled plugins ship with
-  // hermes-agent. We hand removal to the agent (no terminal for the user) —
-  // gated on the host providing a chat surface.
-  const canUninstall = !!startAgentTask && p.source !== "bundled"
-  function onUninstall() {
-    if (!startAgentTask) return
-    if (!confirm(t("options.plugins.uninstallConfirm", { name: p.name }))) return
-    void startAgentTask(t("options.plugins.uninstallPrompt", { name: p.name }), {
-      sourceApp: t("options.plugins.agentSourceApp"),
-    })
-  }
+  // Only user (directory) and entrypoint (pip) plugins are uninstallable; the
+  // backplane removes them deterministically by source. bundled ships with
+  // hermes-agent and project plugins are repo-owned — neither gets a button.
+  const canUninstall = p.source === "user" || p.source === "entrypoint"
   return (
     <li className="flex items-start justify-between gap-2 p-3">
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -203,6 +234,7 @@ function PluginRow({ p, busy, onToggle }: { p: HermesPlugin; busy: boolean; onTo
           {p.key}
           {p.version ? ` · v${p.version}` : ""}
         </code>
+        {p.dist && <code className="text-[11px] text-muted-foreground">pip: {p.dist}</code>}
       </div>
       <div className={cn("flex shrink-0 items-center gap-1 pt-0.5", busy && "opacity-50")}>
         {canUninstall && (
