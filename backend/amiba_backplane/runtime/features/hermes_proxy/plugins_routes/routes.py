@@ -17,6 +17,7 @@ config only (no hot-reload); the response says ``applies_on_restart``.
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -39,7 +40,7 @@ def _list_plugins() -> Optional[List[Dict[str, Any]]]:
         # + rebuilds, so it's idempotent) so this view stays consistent with
         # `hermes plugins list`, which re-discovers fresh on each invocation.
         mgr.discover_and_load(force=True)
-        return mgr.list_plugins()
+        return _enrich_with_dist(mgr.list_plugins())
     except Exception:
         return None
 
@@ -199,11 +200,113 @@ async def handle_disable(request: web.Request) -> web.Response:
     return web.json_response(body) if status == 200 else json_error(status, body.get("error", "error"))
 
 
+def _pip_uninstall(dist: str) -> Tuple[bool, str]:
+    try:
+        proc = subprocess.run(
+            pip_uninstall_cmd(dist), capture_output=True, text=True, timeout=120
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout or "pip uninstall failed").strip()
+    return True, ""
+
+
+def _find_plugin(name: str) -> Optional[Dict[str, Any]]:
+    plugins = _list_plugins()
+    if not plugins:
+        return None
+    for p in plugins:
+        if p.get("name") == name or p.get("key") == name:
+            return p
+    return None
+
+
+def _clean_config(name: str) -> None:
+    """Drop ``name`` from plugins.enabled / plugins.disabled so an uninstalled
+    plugin leaves no orphaned config entry. Best-effort; never raises."""
+    try:
+        from hermes_cli.config import load_config, save_config
+    except Exception:
+        return
+    try:
+        config = load_config()
+        if not isinstance(config, dict):
+            return
+        plugins_cfg = config.get("plugins")
+        if not isinstance(plugins_cfg, dict):
+            return
+        raw_en = plugins_cfg.get("enabled")
+        raw_dis = plugins_cfg.get("disabled")
+        en = list(raw_en) if isinstance(raw_en, list) else []
+        dis = list(raw_dis) if isinstance(raw_dis, list) else []
+        new_en, new_dis = drop_from_lists(en, dis, name)
+        plugins_cfg["enabled"] = new_en
+        plugins_cfg["disabled"] = new_dis
+        config["plugins"] = plugins_cfg
+        save_config(config)
+    except Exception:
+        return
+
+
+def _uninstall(name: str) -> Tuple[int, Dict[str, Any]]:
+    try:
+        from hermes_cli.plugins_cmd import _plugins_dir, _sanitize_plugin_name
+    except Exception:
+        return 503, {"error": "hermes_cli not available (not in a Hermes process)"}
+
+    plugin = _find_plugin(name)
+    if plugin is None:
+        return 404, {"error": f"plugin '{name}' not found"}
+
+    source = str(plugin.get("source") or "")
+    refusal = uninstall_refusal(source)
+    if refusal is not None:
+        return 409, {"error": refusal}
+
+    ident = plugin.get("key") or plugin.get("name") or name
+    try:
+        if source == "entrypoint":
+            dist = _resolve_entrypoint_dist(plugin.get("name") or name)
+            if not dist:
+                return 500, {"error": f"could not resolve distribution for '{name}'"}
+            ok, err = _pip_uninstall(dist)
+            if not ok:
+                return 500, {"error": f"pip uninstall failed: {err}"}
+        elif source == "user":
+            plugins_dir = _plugins_dir()
+            target = _sanitize_plugin_name(ident, plugins_dir, allow_subdir=True)
+            if not _remove_plugin_dir(target):
+                return 404, {"error": f"'{name}' not found in {plugins_dir}"}
+        else:
+            return 409, {"error": f"unknown source '{source}' — refusing to uninstall"}
+
+        _clean_config(plugin.get("name") or name)
+        return 200, {
+            "ok": True,
+            "name": name,
+            "source": source,
+            "removed": True,
+            "applies_on_restart": True,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"error": f"uninstall failed: {exc}"}
+
+
+async def handle_uninstall(request: web.Request) -> web.Response:
+    name = _ident(request)
+    if not name:
+        return json_error(400, "missing ?name= (or ?key=)")
+    status, body = _uninstall(name)
+    return web.json_response(body) if status == 200 else json_error(status, body.get("error", "error"))
+
+
 def register(app: web.Application) -> None:
     app.add_routes(
         [
             web.get("/hermes/plugins", handle_list),
             web.post("/hermes/plugins/enable", handle_enable),
             web.post("/hermes/plugins/disable", handle_disable),
+            web.post("/hermes/plugins/uninstall", handle_uninstall),
         ]
     )

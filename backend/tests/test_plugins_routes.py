@@ -118,3 +118,18 @@ def test_enrich_with_dist_only_touches_entrypoint():
     out = _enrich_with_dist(rows, resolver=lambda n: "dist-" + n)
     assert "dist" not in out[0]
     assert out[1]["dist"] == "dist-b"
+
+
+def test_uninstall_route_mounted():
+    app = build_http_app()
+    paths = {r.resource.canonical for r in app.router.routes() if r.resource}
+    assert "/hermes/plugins/uninstall" in paths
+
+
+def test_uninstall_degrades_without_hermes_or_404():
+    # Outside a Hermes process hermes_cli isn't importable -> 503. Inside one,
+    # an unknown plugin -> 404. Either is acceptable; assert it never 200s for a
+    # bogus name and never raises.
+    status, body = plugins_routes._uninstall("definitely-not-a-real-plugin-xyz")
+    assert status in (404, 503)
+    assert body.get("ok") is not True
