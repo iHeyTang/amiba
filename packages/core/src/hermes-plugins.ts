@@ -24,6 +24,8 @@ export interface HermesPlugin {
   hooks: number;
   commands: number;
   error?: string | null;
+  /** For entrypoint (pip) plugins: the distribution providing it. Display only. */
+  dist?: string | null;
 }
 
 export interface HermesPluginsResponse {
@@ -65,6 +67,36 @@ export async function setPluginEnabled(
   enabled: boolean,
 ): Promise<PluginToggleResult> {
   const path = `/hermes/plugins/${enabled ? "enable" : "disable"}?name=${encodeURIComponent(name)}`;
+  try {
+    const res = await backplaneFetch(path, { method: "POST" });
+    const data = (await res.json().catch(() => null)) as
+      | { error?: string; applies_on_restart?: boolean }
+      | null;
+    if (!res.ok) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, appliesOnRestart: data?.applies_on_restart ?? true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "request failed" };
+  }
+}
+
+export interface PluginUninstallResult {
+  ok: boolean;
+  /** Backplane refused (bundled/project) or failed — surface to the user. */
+  error?: string;
+  /** Removed from disk/venv; fully unloads on the next Hermes start. */
+  appliesOnRestart?: boolean;
+}
+
+/**
+ * Uninstall a plugin by name. The backplane decides per source: user → remove
+ * its ~/.hermes/plugins dir; entrypoint → pip uninstall its distribution;
+ * bundled/project → refused with a message. Does NOT hot-unload — a removed
+ * plugin disappears from the list immediately but fully unloads on restart.
+ */
+export async function uninstallPlugin(name: string): Promise<PluginUninstallResult> {
+  const path = `/hermes/plugins/uninstall?name=${encodeURIComponent(name)}`;
   try {
     const res = await backplaneFetch(path, { method: "POST" });
     const data = (await res.json().catch(() => null)) as
