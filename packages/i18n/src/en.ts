@@ -52,7 +52,6 @@ export const en = {
   "options.nav.extensions": "Extensions & Plugins",
   "options.nav.mentionSources": "Mention Sources",
   "options.nav.section.core": "General",
-  "options.nav.section.features": "Features",
   "options.nav.section.extensions": "Extensions & Plugins",
 
   // Extensions settings page
@@ -117,8 +116,6 @@ export const en = {
   "options.mentionSources.updateError": "Update failed: {error}",
   "options.mentionSources.removeError": "Remove failed: {error}",
   "options.mentionSources.loadWarning": "{name} installed, but it has no search capability ({warning}).",
-  "options.plugins.featuredBadge": "Featured",
-  "options.plugins.manageInFeature": "Manage in {name} →",
   "options.plugins.uninstallAction": "Uninstall",
   "options.plugins.uninstallConfirm": "Hand off uninstalling \"{name}\" to the agent? It'll open a chat and do it for you.",
   "options.plugins.uninstallPrompt": "Please uninstall the Hermes plugin `{name}` for me (run `hermes plugins remove {name}`, or the right command for it). When it's done, confirm it's removed and tell me whether Hermes needs a restart.",

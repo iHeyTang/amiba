@@ -47,7 +47,6 @@ export const zhCN: Messages = {
   "options.nav.extensions": "扩展与插件",
   "options.nav.mentionSources": "提及来源",
   "options.nav.section.core": "通用",
-  "options.nav.section.features": "高光功能",
   "options.nav.section.extensions": "扩展与插件",
 
   // Extensions settings page
@@ -112,8 +111,6 @@ export const zhCN: Messages = {
   "options.mentionSources.updateError": "更新失败：{error}",
   "options.mentionSources.removeError": "移除失败：{error}",
   "options.mentionSources.loadWarning": "{name} 已安装，但它没有 search 能力（{warning}）。",
-  "options.plugins.featuredBadge": "高光功能",
-  "options.plugins.manageInFeature": "在「{name}」中管理 →",
   "options.plugins.uninstallAction": "卸载",
   "options.plugins.uninstallConfirm": "把卸载「{name}」交给 agent 处理吗？它会打开一个会话帮你完成。",
   "options.plugins.uninstallPrompt": "请帮我卸载 Hermes 插件 `{name}`（运行 `hermes plugins remove {name}`，或对应的正确命令）。完成后确认已移除，并告诉我是否需要重启 Hermes。",
