@@ -1,5 +1,5 @@
 import { FolderOpen, RefreshCw, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 
 import { useExtensionRegistry, desktopBridge } from "@amiba/extension-host/renderer"
 import type { ExtensionsBridge } from "@amiba/extension-host/preload"
@@ -252,50 +252,40 @@ function ExtensionsTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Panel shell: top-level type tabs (Extensions vs Plugins)
+// Panel shells — extensions and plugins are two separate first-level settings
+// panes (no in-page tab switcher). They're genuinely different things:
+// extensions are renderer add-ons (install/remove/reload via the marketplace,
+// desktop-only); plugins are agent-side Python (read + enable/disable +
+// source-aware uninstall).
 // ---------------------------------------------------------------------------
 
-type TopTab = "extensions" | "plugins"
-
-/**
- * Two type tabs — extensions (renderer add-ons: install/remove/reload via the
- * marketplace, desktop-only) and plugins (agent-side, read + enable/disable).
- * They're genuinely different things, so each tab renders its own nature-fit UI.
- */
-export function SettingsExtensions() {
-  const { t } = useT()
-  const [topTab, setTopTab] = useState<TopTab>("extensions")
-
+function SettingsPane({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {/* Pinned header: panel title + top-level type tabs */}
       <div className="flex shrink-0 flex-col gap-3 border-b p-4 pb-3">
-        <h2 className="text-lg font-semibold">{t("options.extplugins.title")}</h2>
-        <div className="flex items-center rounded-md border bg-muted p-1 w-fit gap-1">
-          {(["extensions", "plugins"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setTopTab(tab)}
-              className={cn(
-                "rounded px-3 py-1 text-sm font-medium transition-colors",
-                topTab === tab
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab === "extensions" ? t("options.extensions.title") : t("options.plugins.heading")}
-            </button>
-          ))}
-        </div>
+        <h2 className="text-lg font-semibold">{title}</h2>
       </div>
-
-      {/* Scrollable content */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-4">
-          {topTab === "extensions" ? <ExtensionsTab /> : <PluginsTab />}
-        </div>
+        <div className="p-4">{children}</div>
       </ScrollArea>
     </div>
+  )
+}
+
+export function SettingsExtensions() {
+  const { t } = useT()
+  return (
+    <SettingsPane title={t("options.extensions.title")}>
+      <ExtensionsTab />
+    </SettingsPane>
+  )
+}
+
+export function SettingsPlugins() {
+  const { t } = useT()
+  return (
+    <SettingsPane title={t("options.plugins.heading")}>
+      <PluginsTab />
+    </SettingsPane>
   )
 }
