@@ -27,7 +27,16 @@ def _list_plugins() -> Optional[List[Dict[str, Any]]]:
     try:
         from hermes_cli.plugins import get_plugin_manager
 
-        return get_plugin_manager().list_plugins()
+        mgr = get_plugin_manager()
+        # `get_plugin_manager()` is a module-level singleton whose plugin set is
+        # cached after the first discovery. This backplane is a LONG-LIVED
+        # process, so without a re-scan the list would be frozen at whatever was
+        # on disk when the process started — drifting from reality as the user
+        # installs/removes plugins. Re-discover on every read (force=True clears
+        # + rebuilds, so it's idempotent) so this view stays consistent with
+        # `hermes plugins list`, which re-discovers fresh on each invocation.
+        mgr.discover_and_load(force=True)
+        return mgr.list_plugins()
     except Exception:
         return None
 
