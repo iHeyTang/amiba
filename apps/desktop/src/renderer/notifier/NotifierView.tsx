@@ -45,7 +45,7 @@ export function NotifierView() {
   const [card, setCard] = useState<NotifierCard | null>(null)
 
   useEffect(() => {
-    const bridge = window.hermes.notifier
+    const bridge = window.amiba.notifier
     const off = bridge.onMessage((msg: unknown) => {
       const m = msg as NotifierMessage
       if (m.type === "cron-completed") {
@@ -80,7 +80,7 @@ export function NotifierView() {
         title={card.title}
         summary={card.summary}
         onActivate={() => {
-          window.hermes.notifier.activateMain()
+          window.amiba.notifier.activateMain()
           setCard(null)
         }}
         onDismiss={() => setCard(null)}
@@ -94,11 +94,11 @@ export function NotifierView() {
       command={card.command}
       message={card.message}
       onAllow={() => {
-        window.hermes.notifier.approve(card.approvalId)
+        window.amiba.notifier.approve(card.approvalId)
         setCard(null)
       }}
       onDeny={() => {
-        window.hermes.notifier.deny(card.approvalId)
+        window.amiba.notifier.deny(card.approvalId)
         setCard(null)
       }}
     />

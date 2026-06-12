@@ -193,7 +193,7 @@ export const chromeNavigateOpenPolicy: NavigateOpenPolicyCapability = {
 
   onChange(cb: (policy: NavigateOpenPolicy) => void): () => void {
     const handler = (msg: { type?: string; navigateOpenPolicy?: string }) => {
-      if (msg?.type !== "hermes:navigate-open-policy-changed") return;
+      if (msg?.type !== "amiba:navigate-open-policy-changed") return;
       const p = msg.navigateOpenPolicy;
       if (
         p === "auto" ||

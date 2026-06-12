@@ -228,17 +228,17 @@ export function SettingsVoice() {
       // the user previously denied access in System Settings. Route
       // through the main process first so the native dialog fires on
       // the first attempt and we can surface a more actionable error
-      // when access is explicitly denied. ``window.hermes`` is absent
+      // when access is explicitly denied. ``window.amiba`` is absent
       // in the browser-extension build, so we feature-detect.
       const ensure = (window as unknown as {
-        hermes?: {
+        amiba?: {
           voice?: {
             ensureMicrophoneAccess: () => Promise<
               "granted" | "denied" | "restricted" | "not-determined" | "unknown"
             >
           }
         }
-      }).hermes?.voice?.ensureMicrophoneAccess
+      }).amiba?.voice?.ensureMicrophoneAccess
       if (ensure) {
         const status = await ensure()
         if (status === "denied" || status === "restricted") {

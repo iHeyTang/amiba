@@ -5,7 +5,7 @@ started as the extension CLI and has grown beyond that; today it covers:
 
 - **Extensions** — scaffold / dev / build / pack / install desktop extensions
   (the WebView model: `manifest.json` + `dist/main.cjs` + self-contained React
-  UI pages served via `hermes-ext://` into an Electron `<webview>`).
+  UI pages served via a loopback HTTP server into an Electron `<webview>`).
 - **Mention sources** — scaffold a composer `@`-mention source
   (`create-mention-source`).
 
@@ -52,7 +52,7 @@ my-extension/
     ├── main/index.ts      # activate(host) — registers IPC handlers
     ├── ui/
     │   ├── shared/
-    │   │   ├── hermes-bridge.ts   # typed window.hermes re-export
+    │   │   ├── amiba-bridge.ts    # typed window.amiba re-export
     │   │   └── styles.css
     │   ├── sidebar/
     │   │   ├── index.html
@@ -178,16 +178,16 @@ and is therefore unavailable in a plain Node CLI process.
 
 ```
 Desktop (Electron)
-└── ExtensionWebView src="hermes-ext://<id>/dist/ui/sidebar/index.html"
-        │  served by ext-protocol handler → reads from extension root on disk
+└── ExtensionWebView src="http://127.0.0.1:<port>/extensions/<id>/dist/ui/sidebar/index.html"
+        │  served by ext-http-server (loopback) → reads from extension root on disk
         │
         └── React page
-                └── window.hermes  (injected by webview-bridge preload)
-                        ├── hermes.ipc.invoke(channel, args)
-                        ├── hermes.settings.get/set(key, value)
-                        └── hermes.on("language" | "theme", cb)
+                └── window.amiba  (injected by webview-bridge preload)
+                        ├── amiba.ipc.invoke(channel, args)
+                        ├── amiba.settings.get/set(key, value)
+                        └── amiba.on("language" | "theme", cb)
 ```
 
-The `hermes-ext://` protocol resolves `<id>/<relative-path>` to
+The ext-http-server resolves `/extensions/<id>/<relative-path>` to
 `<extensionRoot>/<relative-path>`, so paths in `manifest.json` like
 `"view": "dist/ui/sidebar/index.html"` map directly to the file on disk.

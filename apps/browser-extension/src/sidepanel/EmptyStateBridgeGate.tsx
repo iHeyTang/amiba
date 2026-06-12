@@ -42,7 +42,7 @@ export function EmptyStateBridgeGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const onMsg = (msg: { type?: string }) => {
-      if (msg?.type === "hermes:status-changed") void refresh();
+      if (msg?.type === "amiba:status-changed") void refresh();
     };
     chrome.runtime.onMessage.addListener(onMsg);
     const id = setInterval(() => void refresh(), 5000);

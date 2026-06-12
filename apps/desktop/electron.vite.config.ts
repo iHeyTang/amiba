@@ -34,9 +34,9 @@ export default defineConfig({
       outDir: "out/preload",
       rollupOptions: {
         input: {
-          // Desktop bridge (window.hermes for the main renderer).
+          // Desktop bridge (window.amiba for the main renderer).
           index: resolve(__dirname, "src/preload/index.ts"),
-          // Webview bridge (window.hermes for extension WebViews).
+          // Webview bridge (window.amiba for extension WebViews).
           "webview-bridge": resolve(__dirname, "src/preload/webview-bridge.ts"),
         },
         output: {

@@ -1,12 +1,13 @@
 /**
- * ExtensionWebView — wraps an Electron `<webview>` tag pointing at a
- * hermes-ext:// URL.
+ * ExtensionWebView — wraps an Electron `<webview>` tag pointing at the
+ * extension's loopback HTTP view URL
+ * (http://127.0.0.1:<port>/extensions/<id>/<view>, served by ext-http-server).
  *
  * The webview preload (`out/preload/webview-bridge.js`) is injected via the
  * `preload` attribute. Its path is fetched once at React boot from
- * `window.hermes.getWebviewPreloadPath()` and cached module-level.
+ * `window.amiba.getWebviewPreloadPath()` and cached module-level.
  *
- * Session is scoped to `persist:hermes-extensions` so extension cookies /
+ * Session is scoped to `persist:amiba-extensions` so extension cookies /
  * localStorage are isolated from the main renderer but shared across all
  * extension webviews in the same app session.
  */
@@ -17,7 +18,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react"
 // Module-level preload path cache
 // ---------------------------------------------------------------------------
 
-type HermesWindowBridge = {
+type AmibaWindowBridge = {
   getWebviewPreloadPath(): Promise<string>
 }
 
@@ -28,7 +29,7 @@ function getPreloadPath(): Promise<string> {
   if (preloadPathCache) return Promise.resolve(preloadPathCache)
   if (preloadPathPromise) return preloadPathPromise
   preloadPathPromise = (
-    (window as unknown as { hermes: HermesWindowBridge }).hermes.getWebviewPreloadPath()
+    (window as unknown as { amiba: AmibaWindowBridge }).amiba.getWebviewPreloadPath()
   ).then((p) => {
     preloadPathCache = p
     return p
@@ -41,7 +42,7 @@ function getPreloadPath(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export interface ExtensionWebViewProps {
-  /** hermes-ext://<extensionId>/<view-path> URL */
+  /** http://127.0.0.1:<port>/extensions/<extensionId>/<view-path> URL */
   src: string
   className?: string
   style?: CSSProperties
@@ -78,7 +79,7 @@ export function ExtensionWebView({ src, className, style }: ExtensionWebViewProp
     wv.setAttribute("nodeintegration", "false")
     wv.setAttribute("contextIsolation", "true")
     wv.setAttribute("allowpopups", "false")
-    wv.setAttribute("partition", "persist:hermes-extensions")
+    wv.setAttribute("partition", "persist:amiba-extensions")
     wv.style.width = "100%"
     wv.style.height = "100%"
     wv.style.border = "none"

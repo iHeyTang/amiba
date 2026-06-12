@@ -25,7 +25,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const FOLDER_ID_CACHE_KEY = "newtab.shortcutsFolderId";
 const FOLDER_PARENT_ID = "2"; // "Other Bookmarks"
-const FOLDER_TITLE = "✱ Hermes Home";
+const FOLDER_TITLE = "✱ Amiba Home";
 
 /**
  * Time budget for the one-shot `<title>` scrape we do when the user adds a
@@ -196,7 +196,7 @@ async function ensureFolder(): Promise<string> {
   }
   // Prefer adopting an existing folder with our title before creating a
   // duplicate. This makes "delete cache + reload" idempotent instead of
-  // spawning a second "✱ Hermes Home" folder every time.
+  // spawning a second "✱ Amiba Home" folder every time.
   try {
     const matches = await chrome.bookmarks.search({ title: FOLDER_TITLE });
     const existing = matches.find(

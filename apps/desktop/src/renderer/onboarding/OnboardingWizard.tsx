@@ -31,7 +31,7 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
 
-import { HermesLogo } from "@amiba/ui"
+import { AmibaLogo } from "@amiba/ui"
 
 const MAX_LOG_LINES = 600
 const BACKPLANE_POLL_INTERVAL_MS = 1200
@@ -140,7 +140,7 @@ function buildSteps(
 
 export function OnboardingWizard({ onReady }: { onReady: () => void }) {
   const { t } = useT()
-  const rt = window.hermes.hermesRuntime
+  const rt = window.amiba.hermesRuntime
 
   const [phase, setPhase] = useState<Phase>("detecting")
   const [detection, setDetection] = useState<Detection | null>(null)
@@ -663,7 +663,7 @@ function SummaryBlock({
      */
     <div className="mx-auto flex w-full max-w-lg flex-1 flex-col overflow-y-auto pb-6 pt-8">
       <header className="flex flex-col items-center gap-4 text-center">
-        <HermesLogo size={64} />
+        <AmibaLogo size={64} />
         <div>
           <h1 className="text-2xl font-medium tracking-tight">
             {t("onboarding.title")}
@@ -928,7 +928,7 @@ function TerminalPanel({ jobId }: { jobId: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
-  const rt = window.hermes.hermesRuntime
+  const rt = window.amiba.hermesRuntime
   const docTheme = useDocumentTheme()
   const palette = useMemo(() => TERM_THEMES[docTheme], [docTheme])
 

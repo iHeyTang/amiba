@@ -6,7 +6,7 @@ import { app } from "electron"
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 export type StorageChangeMap = Record<string, StorageChange>
 
-const storeFile = () => path.join(app.getPath("userData"), "hermes-store.json")
+const storeFile = () => path.join(app.getPath("userData"), "amiba-store.json")
 
 /**
  * Cheap "do these two JSON-safe values have the same content" check.
@@ -60,13 +60,13 @@ class Store extends EventEmitter {
           try {
             await fs.rename(storeFile(), backup)
             console.warn(
-              "[storage] hermes-store.json was corrupted; preserved as %s and starting fresh. Parse error: %s",
+              "[storage] amiba-store.json was corrupted; preserved as %s and starting fresh. Parse error: %s",
               backup,
               (parseErr as Error)?.message,
             )
           } catch {
             console.warn(
-              "[storage] hermes-store.json was corrupted; could not back it up. Starting fresh. Parse error: %s",
+              "[storage] amiba-store.json was corrupted; could not back it up. Starting fresh. Parse error: %s",
               (parseErr as Error)?.message,
             )
           }
@@ -80,7 +80,7 @@ class Store extends EventEmitter {
           // recovery: boot empty rather than wedge the entire app.
           // We don't back up the file here — we couldn't even read it.
           console.warn(
-            "[storage] hermes-store.json read failed; starting empty. Error: %s",
+            "[storage] amiba-store.json read failed; starting empty. Error: %s",
             (err as Error)?.message,
           )
           this.mem = {}

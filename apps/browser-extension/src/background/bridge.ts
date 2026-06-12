@@ -106,7 +106,7 @@ export async function connect() {
   try {
     ws = new WebSocket(url);
   } catch (e) {
-    console.warn("[hermes-bridge] WebSocket constructor threw:", e);
+    console.warn("[amiba-bridge] WebSocket constructor threw:", e);
     state.ws = null;
     syncState();
     scheduleReconnect();
@@ -147,7 +147,7 @@ export async function connect() {
           ? "Code 1006 usually means the TCP connection failed (nothing listening on the port, or the bridge process exited immediately). Restart Hermes after updating the plugin, or run: `python -m bridge.server` from the plugin repo using the Hermes venv Python."
           : "If the bridge is not running, start Hermes with this plugin or run `python -m bridge.server` (Hermes venv) from the plugin repo.";
       console.warn(
-        "[hermes-bridge] WebSocket closed:",
+        "[amiba-bridge] WebSocket closed:",
         {
           code: ev.code,
           reason: ev.reason || undefined,
@@ -173,7 +173,7 @@ export async function connect() {
 
   ws.onerror = () => {
     // Browsers omit the failure reason here; see onclose for code/reason/hint.
-    console.warn("[hermes-bridge] WebSocket error (details usually follow in onclose)");
+    console.warn("[amiba-bridge] WebSocket error (details usually follow in onclose)");
   };
 }
 
@@ -224,7 +224,7 @@ export function startHeartbeat() {
     const idleMs = Date.now() - lastSeenAt;
     if (lastSeenAt > 0 && idleMs > HEARTBEAT_TIMEOUT_MS) {
       console.warn(
-        "[hermes-bridge] No frame from bridge in %dms (> %dms); recycling WS",
+        "[amiba-bridge] No frame from bridge in %dms (> %dms); recycling WS",
         idleMs,
         HEARTBEAT_TIMEOUT_MS,
       );
@@ -238,7 +238,7 @@ export function startHeartbeat() {
     try {
       state.ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
     } catch (e) {
-      console.warn("[hermes-bridge] Heartbeat send failed, recycling WS:", e);
+      console.warn("[amiba-bridge] Heartbeat send failed, recycling WS:", e);
       try {
         state.ws.close();
       } catch {
@@ -280,7 +280,7 @@ async function handleCommand(raw: string) {
   try {
     msg = JSON.parse(raw);
   } catch {
-    console.warn("[hermes-bridge] Invalid JSON from bridge:", raw);
+    console.warn("[amiba-bridge] Invalid JSON from bridge:", raw);
     return;
   }
 
@@ -310,7 +310,7 @@ async function handleCommand(raw: string) {
   }
 
   if (!id || !method) {
-    console.warn("[hermes-bridge] Malformed command:", msg);
+    console.warn("[amiba-bridge] Malformed command:", msg);
     return;
   }
 

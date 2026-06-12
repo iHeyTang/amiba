@@ -21,7 +21,7 @@ export const BRIDGE_URL_STORAGE_KEY = "settings.bridge.url"
 
 /**
  * Local HTTP base for the `amiba-backplane` server (env
- * `HERMES_BACKPLANE_PORT`, default 9394; spawned + supervised by the desktop
+ * `AMIBA_BACKPLANE_PORT`, default 9394; spawned + supervised by the desktop
  * app — it is NOT a hermes plugin). Hosts three lanes:
  *   - `/hermes/*`              — proxies to Hermes core
  *   - `/integrations/<name>/*` — built-in integrations framework routes
@@ -30,7 +30,7 @@ export const BRIDGE_URL_STORAGE_KEY = "settings.bridge.url"
 export const BACKPLANE_HTTP_BASE = "http://127.0.0.1:9394"
 
 /**
- * Storage key for the user's `HERMES_BACKPLANE_KEY` mirror. When set,
+ * Storage key for the user's `AMIBA_BACKPLANE_KEY` mirror. When set,
  * `backplaneFetch` injects it as `Authorization: Bearer …` on every
  * request. Empty → unauthenticated (backplane accepts loopback).
  */

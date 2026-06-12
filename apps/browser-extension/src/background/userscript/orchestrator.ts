@@ -53,7 +53,7 @@ export async function installUserscriptFromSource(
   };
   await putScript(script);
   await cacheScriptResources(script).catch((e) =>
-    console.warn("[hermes-userscript] resource cache failed:", e),
+    console.warn("[amiba-userscript] resource cache failed:", e),
   );
   return script;
 }
@@ -85,7 +85,7 @@ export async function updateUserscript(
   };
   await putScript(updated);
   await cacheScriptResources(updated).catch((e) =>
-    console.warn("[hermes-userscript] resource cache failed:", e),
+    console.warn("[amiba-userscript] resource cache failed:", e),
   );
   return updated;
 }
@@ -166,11 +166,11 @@ export async function runUserscriptOnTab(
       // unavailable (sandboxed pages), this still runs but won't get GM_*.
       try {
         window.postMessage(
-          { type: "hermes:userscript-run", script },
+          { type: "amiba:userscript-run", script },
           window.location.origin,
         );
       } catch (e) {
-        console.warn("[hermes-userscript] forced run dispatch failed", e);
+        console.warn("[amiba-userscript] forced run dispatch failed", e);
       }
       return { dispatched: true };
     },

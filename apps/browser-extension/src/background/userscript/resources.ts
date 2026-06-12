@@ -8,7 +8,7 @@
 
 import type { ResourceCacheEntry, UserScript } from "~lib/types";
 
-const DB_NAME = "hermes-userscript-cache";
+const DB_NAME = "amiba-userscript-cache";
 const DB_VERSION = 1;
 const STORE = "resources";
 const MAX_FETCH_BYTES = 16 * 1024 * 1024; // 16 MB hard ceiling per resource

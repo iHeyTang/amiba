@@ -2,7 +2,7 @@
  * Single fetch entry point for the local backplane plugin
  * (`http://127.0.0.1:9394`).
  *
- * Auth: reads the user's `HERMES_BACKPLANE_KEY` mirror from
+ * Auth: reads the user's `AMIBA_BACKPLANE_KEY` mirror from
  * `getPlatform().storage` and injects it as `Authorization: Bearer …`
  * when present. When empty, no auth header is sent — backplane accepts
  * unauthenticated requests on loopback.

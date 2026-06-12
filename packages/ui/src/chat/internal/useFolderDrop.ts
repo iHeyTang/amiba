@@ -47,14 +47,14 @@ export interface UseFolderDropResult {
 
 /** Electron 33 removed `File.path` from the renderer; the preload
  * bridge exposes `webUtils.getPathForFile()` via
- * `window.hermes.workspaces.getPathForFile`. Returns null when the
+ * `window.amiba.workspaces.getPathForFile`. Returns null when the
  * bridge isn't present (extension / web). */
 function resolveDroppedFolderPath(file: File): string | null {
   const bridge = (
     window as unknown as {
-      hermes?: { workspaces?: { getPathForFile?: (f: File) => string } };
+      amiba?: { workspaces?: { getPathForFile?: (f: File) => string } };
     }
-  ).hermes?.workspaces?.getPathForFile;
+  ).amiba?.workspaces?.getPathForFile;
   if (!bridge) return null;
   try {
     const p = bridge(file);

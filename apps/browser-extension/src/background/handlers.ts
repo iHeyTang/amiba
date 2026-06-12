@@ -371,7 +371,7 @@ const evalHandler: Handler = async (params = {}) => {
       // unsafe-eval.
       const runViaInlineScript = (): Promise<unknown> => {
         return new Promise((resolve, reject) => {
-          const channel = "__hermes_eval_" + Math.random().toString(36).slice(2);
+          const channel = "__amiba_eval_" + Math.random().toString(36).slice(2);
           const timer = setTimeout(() => {
             window.removeEventListener("message", onMsg);
             reject(

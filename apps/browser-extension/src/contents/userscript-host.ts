@@ -42,7 +42,7 @@ interface BootstrapPayload {
 }
 
 const CHANNEL_ID =
-  "hermes-userscript-" +
+  "amiba-userscript-" +
   (typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
     : Math.random().toString(36).slice(2));
@@ -146,7 +146,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 window.addEventListener("message", (e) => {
   const data = e.data;
   if (!data || typeof data !== "object") return;
-  if ((data as { type?: string }).type !== "hermes:userscript-run") return;
+  if ((data as { type?: string }).type !== "amiba:userscript-run") return;
   const payload = (data as { script?: BootstrapScript }).script;
   if (!payload) return;
   injectScript(payload);
@@ -163,7 +163,7 @@ void (async function bootstrap() {
       type: "userscript.bootstrap",
     });
   } catch (e) {
-    console.warn("[hermes-userscript] bootstrap failed:", e);
+    console.warn("[amiba-userscript] bootstrap failed:", e);
     return;
   }
   if (!res || !Array.isArray(res.scripts)) return;
@@ -243,12 +243,12 @@ async function injectScript(script: BootstrapScript) {
   try {
     const el = document.createElement("script");
     el.textContent = wrapped;
-    el.dataset.hermesUserscript = script.id;
+    el.dataset.amibaUserscript = script.id;
     (document.head || document.documentElement).appendChild(el);
     el.remove();
   } catch (e) {
     console.warn(
-      `[hermes-userscript] inline injection failed for ${script.id}; falling back to executeScript`,
+      `[amiba-userscript] inline injection failed for ${script.id}; falling back to executeScript`,
       e,
     );
     // Fallback for sites with strict CSP — ask SW to executeScript.

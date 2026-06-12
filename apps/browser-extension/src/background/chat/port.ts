@@ -1,7 +1,7 @@
 /**
  * Long-lived `chrome.runtime` port hub for the chat engine.
  *
- * Each side panel opens one port (`name: "hermes-chat"`) for its lifetime.
+ * Each side panel opens one port (`name: "amiba-chat"`) for its lifetime.
  * A panel can subscribe to multiple sessions simultaneously (matches the
  * tab bar in the side panel where switching tabs swaps the active session
  * but other open tabs keep streaming in the background).

@@ -21,4 +21,4 @@ export {
 } from "@amiba/core";
 
 /** chrome.runtime.Port channel name used by the extension side panel. */
-export const CHAT_PORT_NAME = "hermes-chat";
+export const CHAT_PORT_NAME = "amiba-chat";

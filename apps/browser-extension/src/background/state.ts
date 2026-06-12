@@ -182,7 +182,7 @@ export async function setNavigateOpenPolicy(policy: unknown) {
 export function broadcastNavigateOpenPolicy() {
   chrome.runtime
     .sendMessage({
-      type: "hermes:navigate-open-policy-changed",
+      type: "amiba:navigate-open-policy-changed",
       navigateOpenPolicy: state.navigateOpenPolicy,
     })
     .catch(() => {});
@@ -194,7 +194,7 @@ export function broadcastRunTarget() {
   // other surface (e.g. an in-flight promotion) changed it.
   chrome.runtime
     .sendMessage({
-      type: "hermes:run-target-changed",
+      type: "amiba:run-target-changed",
       runTarget: state.runTarget,
     })
     .catch(() => {});
@@ -225,6 +225,6 @@ export function syncState() {
 export function broadcastStatus() {
   // No-op when nobody is listening (popup closed); swallow the rejection.
   chrome.runtime
-    .sendMessage({ type: "hermes:status-changed" })
+    .sendMessage({ type: "amiba:status-changed" })
     .catch(() => {});
 }

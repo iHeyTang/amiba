@@ -11,7 +11,7 @@ import {
   DialogClose,
   DialogContent,
   DialogTrigger,
-  HermesLogo,
+  AmibaLogo,
 } from "../../primitives"
 import { cn } from "../../primitives"
 import {
@@ -39,7 +39,7 @@ export function EmptyState({ onNew, onOpenHistory, hasHistory }: EmptyStateProps
   const { t } = useT()
   return (
     <div className="flex flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-      <HermesLogo size={112} />
+      <AmibaLogo size={112} />
       <div className="space-y-1">
         <p className="text-sm font-medium">{t("sidepanel.empty.title")}</p>
         <p className="text-xs text-muted-foreground">

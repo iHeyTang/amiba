@@ -57,7 +57,7 @@ export async function installCommand(repoArg: string, opts: InstallOptions) {
     throw new Error(`install: release ${release.tag_name} has no extension.tgz asset`)
   }
 
-  const stagingRoot = await mkdtemp(join(tmpdir(), "hermes-ext-cli-install-"))
+  const stagingRoot = await mkdtemp(join(tmpdir(), "amiba-cli-install-"))
   try {
     const tarPath = join(stagingRoot, "extension.tgz")
     console.log(kleur.dim(`↓ ${asset.browser_download_url}`))

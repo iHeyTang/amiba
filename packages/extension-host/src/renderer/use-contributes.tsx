@@ -1,7 +1,7 @@
 /**
  * Manifest-driven hooks for desktop UI.
  *
- * All hooks read `window.hermes.extensions.listManifests()` and re-fetch
+ * All hooks read `window.amiba.extensions.listManifests()` and re-fetch
  * whenever `onExtensionsChanged` fires. They never import extension bundles;
  * the manifest alone drives all UI contributions.
  */
@@ -28,7 +28,7 @@ let _baseUrlPromise: Promise<string> | null = null
 
 function getBaseUrl(): Promise<string> {
   if (!_baseUrlPromise) {
-    const bridge = (window as unknown as { hermes: { extensions: { getHttpBaseUrl(): Promise<string> } } }).hermes.extensions
+    const bridge = (window as unknown as { amiba: { extensions: { getHttpBaseUrl(): Promise<string> } } }).amiba.extensions
     _baseUrlPromise = bridge.getHttpBaseUrl()
   }
   return _baseUrlPromise
@@ -65,7 +65,7 @@ export interface SettingsContribution {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-type HermesWindowShape = {
+type AmibaWindowShape = {
   extensions: {
     listManifests(): Promise<ManifestEntry[]>
     onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
@@ -73,8 +73,8 @@ type HermesWindowShape = {
   }
 }
 
-function getExtensionsBridge(): HermesWindowShape["extensions"] {
-  return (window as unknown as { hermes: HermesWindowShape }).hermes.extensions
+function getExtensionsBridge(): AmibaWindowShape["extensions"] {
+  return (window as unknown as { amiba: AmibaWindowShape }).amiba.extensions
 }
 
 /**

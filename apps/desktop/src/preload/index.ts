@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { createExtensionsBridge, createWebviewPreloadBridge } from "@amiba/extension-host/preload"
 
-// Node EventEmitter defaults `maxListeners` to 10. Each Hermes window
+// Node EventEmitter defaults `maxListeners` to 10. Each Amiba window
 // stacks more than that on a few high-fan-out IPC channels (storage,
 // workspace, chat, notifier, quick-ask) because every React hook that
 // observes state — `useQuickActions`, `useCronRuns`, `useWallpaper`,
@@ -140,8 +140,8 @@ const api = {
      * Fire a demo notifier card so the user can confirm the floating
      * window appears and clicks register. Call from the main window's
      * devtools console:
-     *   window.hermes.notifier.demo()                  // cron card
-     *   window.hermes.notifier.demo("approval-pending") // approval card
+     *   window.amiba.notifier.demo()                  // cron card
+     *   window.amiba.notifier.demo("approval-pending") // approval card
      */
     demo: (kind?: "cron-completed" | "approval-pending") =>
       ipcRenderer.invoke("notifier:demo", kind),
@@ -248,6 +248,6 @@ const api = {
   },
 }
 
-contextBridge.exposeInMainWorld("hermes", api)
+contextBridge.exposeInMainWorld("amiba", api)
 
-export type HermesBridge = typeof api
+export type AmibaBridge = typeof api

@@ -8,7 +8,7 @@
  * The extensionId is extracted from `location.pathname` — no query parameter
  * needed. This is consistent with the URL shape produced by use-contributes.
  *
- * Exposes `window.hermes` to the extension page so it can communicate with
+ * Exposes `window.amiba` to the extension page so it can communicate with
  * the desktop host without needing nodeIntegration.
  *
  * This module runs with `contextIsolation: true`. All public API is exposed
@@ -23,7 +23,7 @@ import type {
 } from "@amiba/extension-api"
 import { HOST_API_VERSION } from "../version"
 
-// Side-effect import only: the `declare global { Window.hermes }`
+// Side-effect import only: the `declare global { Window.amiba }`
 // augmentation lives in @amiba/extension-api/src/webview.ts so
 // extensions and the preload share one source of truth for the shape.
 
@@ -38,7 +38,7 @@ function resolveExtensionId(): string {
   const m = window.location.pathname.match(/^\/extensions\/([^/]+)\//)
   if (!m) {
     throw new Error(
-      `[hermes webview preload] Cannot extract extensionId from pathname: ${window.location.pathname}. ` +
+      `[amiba webview preload] Cannot extract extensionId from pathname: ${window.location.pathname}. ` +
       "Extension WebViews must be loaded via http://127.0.0.1:<port>/extensions/<extensionId>/..."
     )
   }
@@ -126,4 +126,4 @@ const api: WebViewHostAPI = {
   },
 }
 
-contextBridge.exposeInMainWorld("hermes", api)
+contextBridge.exposeInMainWorld("amiba", api)

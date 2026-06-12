@@ -52,10 +52,10 @@ function AppInner(): ReactElement {
   // is the only context that can resolve "auto" against navigator.language
   // and prefers-color-scheme.
   useEffect(() => {
-    void window.hermes.setResolvedLanguage(resolvedLanguage)
+    void window.amiba.setResolvedLanguage(resolvedLanguage)
   }, [resolvedLanguage])
   useEffect(() => {
-    void window.hermes.setResolvedTheme(resolvedTheme)
+    void window.amiba.setResolvedTheme(resolvedTheme)
   }, [resolvedTheme])
   const client = useMemo(() => new ElectronChatEngineClient(), [])
   // Desktop `@file` mention source. The provider lists files under the
@@ -93,7 +93,7 @@ function AppInner(): ReactElement {
     [requestNewChat],
   )
   useEffect(() => {
-    return window.hermes.onChatStartSession(({ text }) => {
+    return window.amiba.onChatStartSession(({ text }) => {
       void (async () => {
         try {
           // Mint a fresh session + queue the prompt. ChatSurface's
@@ -127,14 +127,14 @@ function AppInner(): ReactElement {
       if (!signal.cancelled) setPhase("ready")
       return
     }
-    const det = await window.hermes.hermesRuntime.detect()
+    const det = await window.amiba.hermesRuntime.detect()
     if (signal.cancelled) return
     if (!det.installed || !det.binary) {
       setPhase("onboarding")
       return
     }
     setPhase("initializing")
-    const r = await window.hermes.hermesRuntime.ensureBackend({ binary: det.binary })
+    const r = await window.amiba.hermesRuntime.ensureBackend({ binary: det.binary })
     if (!signal.cancelled) setPhase(r.ok ? "ready" : "init-error")
   }, [])
 

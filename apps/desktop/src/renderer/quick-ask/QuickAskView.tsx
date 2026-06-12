@@ -74,7 +74,7 @@ export function QuickAskView() {
   const sessions = useSessions()
   const { t } = useT()
   const client = useMemo(() => new ElectronChatEngineClient(), [])
-  const bridge = useMemo(() => window.hermes, [])
+  const bridge = useMemo(() => window.amiba, [])
   const openExternal = useCallback(
     (url: string) => getPlatform().shell.openExternal(url),
     [],

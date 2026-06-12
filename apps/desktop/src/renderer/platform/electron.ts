@@ -4,7 +4,7 @@ const notImpl = (name: string) => () =>
   Promise.reject(new Error(`[ElectronAdapter] ${name} not implemented yet`))
 
 export function createElectronAdapter(): PlatformAdapter {
-  const bridge = window.hermes
+  const bridge = window.amiba
 
   return {
     kind: "desktop",

@@ -185,7 +185,7 @@ function installPermissionRequestHandler(): void {
  * Renderer-facing IPC: ``voice:ensure-microphone-access`` triggers the
  * native permission flow without yet starting a recording. The renderer
  * calls this immediately before ``getUserMedia`` so that on macOS the
- * "Hermes wants to use the microphone" dialog appears (first call) or
+ * "Amiba wants to use the microphone" dialog appears (first call) or
  * the stored decision is returned (subsequent calls), and the renderer
  * can present a friendly hint when access is denied at the OS level
  * instead of the generic ``Permission denied`` string.
@@ -287,7 +287,7 @@ function registerNotifierIpcHandlers(summon: () => void): void {
   // Manual demo trigger so users can confirm the notifier window
   // appears + clicks register without having to provoke a real
   // approval or wait for a cron run. Exposed via the preload bridge as
-  // `window.hermes.notifier.demo(kind?)`.
+  // `window.amiba.notifier.demo(kind?)`.
   ipcMain.handle(
     "notifier:demo",
     (_e, kind?: "cron-completed" | "approval-pending") => {
@@ -332,7 +332,7 @@ function createWindow() {
     // (see SummaryBlock — `overflow-y-auto` + `mt-auto`), so this
     // doesn't need to inflate to fit the worst case.
     minHeight: 800,
-    title: "Hermes",
+    title: "Amiba",
     backgroundColor: "#0b0b0b",
     icon: IS_MAC ? undefined : iconPath(),
     // Immersive title bar. macOS uses `hidden` (not `hiddenInset`) so we
@@ -376,10 +376,10 @@ function createWindow() {
   if (isDev && RENDERER_DEV_URL) {
     win.loadURL(RENDERER_DEV_URL)
     // DevTools auto-open is opt-in via env so it stays out of the
-    // user's face by default. Set `HERMES_DEVTOOLS=1` in the env to
+    // user's face by default. Set `AMIBA_DEVTOOLS=1` in the env to
     // reopen them automatically; otherwise pop them with
     // ⌘⌥I / Ctrl+Shift+I when you actually need them.
-    if (process.env.HERMES_DEVTOOLS === "1") {
+    if (process.env.AMIBA_DEVTOOLS === "1") {
       win.webContents.openDevTools({ mode: "detach" })
     }
   } else {
@@ -395,7 +395,7 @@ function createWindow() {
 // where we want the URL to land.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
-  // Another Hermes instance already owns this user's session — its
+  // Another Amiba instance already owns this user's session — its
   // `second-instance` handler will pick up our argv (including any
   // amiba:// URL) and surface the prompt over there. Bail.
   app.quit()
@@ -410,7 +410,7 @@ if (!gotSingleInstanceLock) {
     // request time and need the adapter wired up first.
     setPlatform(createMainPlatformAdapter())
     // Workspace restore reads `mainStore` which can fail (corrupted
-    // hermes-store.json, permission denied, etc). DO NOT let that take
+    // amiba-store.json, permission denied, etc). DO NOT let that take
     // the whole app down: a failed restore should still leave the user
     // with a working main window. They can re-bind a workspace by
     // dragging a folder into the chat panel later.
@@ -530,7 +530,7 @@ if (!gotSingleInstanceLock) {
       webviewBridgePath,
     })
 
-    ;(globalThis as { __hermesExtensionHost?: typeof extensionHost }).__hermesExtensionHost = extensionHost
+    ;(globalThis as { __amibaExtensionHost?: typeof extensionHost }).__amibaExtensionHost = extensionHost
 
     // Hand the chat engine a reference to the extension host's broadcaster so
     // per-turn usage events reach subscribers of host.chat.onEvent. Wired
@@ -627,8 +627,8 @@ let _extensionHostShutdownDone = false
 app.on("before-quit", async (event) => {
   if (_extensionHostShutdownDone) return
   event.preventDefault()
-  const host = (globalThis as { __hermesExtensionHost?: { shutdown(): Promise<void> } })
-    .__hermesExtensionHost
+  const host = (globalThis as { __amibaExtensionHost?: { shutdown(): Promise<void> } })
+    .__amibaExtensionHost
   if (host) await host.shutdown()
   if (_extHttpServer) await _extHttpServer.stop().catch(() => { /* ignore shutdown errors */ })
   _extensionHostShutdownDone = true

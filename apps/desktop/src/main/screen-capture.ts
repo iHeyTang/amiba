@@ -64,7 +64,7 @@ const SNIP_PREFIX = "amiba-snip-"
  * Directory under `userData` where snip PNGs land. We move them out of
  * the OS temp dir so (a) the user can find them via the path the agent
  * was given even after a reboot wipes /tmp, and (b) the startup sweep
- * has a stable, hermes-owned scope to clean.
+ * has a stable, amiba-owned scope to clean.
  */
 function snipDir(): string {
   return path.join(app.getPath("userData"), "snips")
@@ -154,7 +154,7 @@ export async function startScreenCapture(): Promise<ScreenCaptureResult | null> 
   // Persist the snapshot + overlay HTML to disk. The overlay backdrop is
   // short-lived (deleted in `finally`) so it lives in OS temp; the
   // cropped result lives in `snipDir()` so the user-visible path stays
-  // stable across reboots and the startup sweep has a hermes-owned dir
+  // stable across reboots and the startup sweep has a amiba-owned dir
   // to clean. We avoid inlining the PNG as a data URL because a 4K
   // retina screenshot can comfortably exceed Electron's data-URL ceiling
   // for `loadURL`.

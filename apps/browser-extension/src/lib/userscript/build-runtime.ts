@@ -66,7 +66,7 @@ export function buildWrappedSource(args: BuildArgs): string {
         runAt: script.meta.runAt,
         grant: script.meta.grant,
       },
-      scriptHandler: "Hermes",
+      scriptHandler: "Amiba",
       version: "0.3.0",
       scriptArgs: script.runtimeArgs ?? null,
     },

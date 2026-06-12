@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
 import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 import { useResolvedTheme } from "../theme";
-import { Button, HermesLogo, ScrollArea } from "../primitives";
+import { Button, AmibaLogo, ScrollArea } from "../primitives";
 import { cn } from "../primitives";
 import { shortId } from "@amiba/utils";
 // Wire-protocol types + engine + helpers — everything that was previously
@@ -1814,7 +1814,7 @@ export default function ChatSurface({
             // the conversation continues seamlessly.
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
               <div className="space-y-1 text-center">
-                <HermesLogo size={56} />
+                <AmibaLogo size={56} />
                 <p className="pt-2 text-sm font-semibold">
                   {t("newtab.greeting")}
                 </p>

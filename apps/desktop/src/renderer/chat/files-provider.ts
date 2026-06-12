@@ -17,7 +17,7 @@ export function makeDesktopFilesProvider(getSessionId: () => string): TriggerPro
     ownsType: "file",
     match: () => true,
     async search(query: string): Promise<MenuItem[]> {
-      const rows = await window.hermes.files.list(getSessionId(), query)
+      const rows = await window.amiba.files.list(getSessionId(), query)
       return rows.map((r) => ({
         id: `files:${r.path}`,
         label: r.path.split("/").pop() || r.path,

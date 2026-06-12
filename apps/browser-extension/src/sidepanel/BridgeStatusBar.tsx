@@ -19,7 +19,7 @@
  *
  * The bar is always visible — unlike the busy-only run-status cluster
  * inlined into the composer's bottom row, this one's job is steady-state
- * telemetry. It refreshes on `hermes:status-changed` broadcasts from the
+ * telemetry. It refreshes on `amiba:status-changed` broadcasts from the
  * SW plus a slow polling loop as a safety net for missed messages after
  * the SW restarts.
  */
@@ -88,7 +88,7 @@ export function BridgeStatusBar({
   useEffect(() => {
     void refreshStatus();
     const onMsg = (msg: { type?: string }) => {
-      if (msg?.type === "hermes:status-changed") {
+      if (msg?.type === "amiba:status-changed") {
         void refreshStatus();
       }
     };

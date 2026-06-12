@@ -1,6 +1,6 @@
 /**
  * Global ambient declarations for the renderer process. Re-declares the
- * Electron-bridged `window.hermes` shape WITHOUT importing from the preload
+ * Electron-bridged `window.amiba` shape WITHOUT importing from the preload
  * source — the preload module's `import { contextBridge } from "electron"`
  * leaks into the renderer's typecheck classpath otherwise.
  */
@@ -37,7 +37,7 @@ interface HermesDetectionResult {
   version?: string
 }
 
-interface HermesBridgeApi {
+interface AmibaBridgeApi {
   storage: {
     get(keys?: string | string[]): Promise<Record<string, unknown>>
     set(patch: Record<string, unknown>): Promise<void>
@@ -158,7 +158,7 @@ interface HermesBridgeApi {
 
 declare global {
   interface Window {
-    hermes: HermesBridgeApi
+    amiba: AmibaBridgeApi
   }
 }
 

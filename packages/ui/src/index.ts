@@ -1,9 +1,9 @@
 /**
- * Hermes UI — single barrel for every renderer-side concern.
+ * Amiba UI — single barrel for every renderer-side concern.
  *
  * Organised into domain folders under ``src/``:
  *   - ``primitives/`` — shadcn-style atoms (Button, Input, Select, …) +
- *                       the Hermes-branded logo
+ *                       the Amiba-branded logo
  *   - ``theme/``      — theme preference + resolution hooks (light/dark/auto)
  *   - ``chat/``       — chat surface (Composer, MessageList, ChatSurface, …)
  *   - ``home/``       — Home page (composer hand-off, recents, shortcuts)

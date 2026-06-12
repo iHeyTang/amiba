@@ -8,7 +8,7 @@ is no "Hermes API server" — just the backplane.
 Auth handling
 -------------
 
-- Inbound: the backplane's ``HERMES_BACKPLANE_KEY`` middleware has
+- Inbound: the backplane's ``AMIBA_BACKPLANE_KEY`` middleware has
   already validated by the time we get here. We **drop** the inbound
   ``Authorization`` header (it's the backplane key, not the gateway
   key — different trust domain).

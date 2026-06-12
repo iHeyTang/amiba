@@ -1,5 +1,5 @@
 /**
- * Hermes Browser Extension — service worker entry point.
+ * Amiba Browser Extension — service worker entry point.
  *
  * Lifecycle: bootstrap on SW startup, periodic keepalive alarm, popup ↔
  * background message channel, userscript runtime IPC, dynamic content script
@@ -81,7 +81,7 @@ chrome.sidePanel
 
 chrome.runtime.onInstalled.addListener(() => {
   // Drop a friendly hint into the SW console.
-  console.log("[hermes-bridge] Installed");
+  console.log("[amiba-bridge] Installed");
   void reapplyAllRegistrations();
   void migrateLegacyStorageKeys();
 });
@@ -127,19 +127,19 @@ async function bootstrap() {
       periodInMinutes: USERSCRIPT_UPDATE_PERIOD_MIN,
     });
   } catch (e) {
-    console.warn("[hermes-bridge] Failed to register alarms:", e);
+    console.warn("[amiba-bridge] Failed to register alarms:", e);
   }
 
   await reapplyAllRegistrations().catch((e) =>
-    console.warn("[hermes-bridge] reapplyAllRegistrations failed:", e),
+    console.warn("[amiba-bridge] reapplyAllRegistrations failed:", e),
   );
 
   await restoreLearnSession().catch((e) =>
-    console.warn("[hermes-bridge] restoreLearnSession failed:", e),
+    console.warn("[amiba-bridge] restoreLearnSession failed:", e),
   );
 
   if (state.desiredConnected) {
-    console.log("[hermes-bridge] Auto-reconnecting (desiredConnected=true)");
+    console.log("[amiba-bridge] Auto-reconnecting (desiredConnected=true)");
     connect();
   }
 
@@ -159,12 +159,12 @@ async function bootstrap() {
 }
 
 bootstrap().catch((e) =>
-  console.warn("[hermes-bridge] bootstrap failed:", e),
+  console.warn("[amiba-bridge] bootstrap failed:", e),
 );
 
 chrome.runtime.onStartup?.addListener(() => {
   bootstrap().catch((e) =>
-    console.warn("[hermes-bridge] startup bootstrap failed:", e),
+    console.warn("[amiba-bridge] startup bootstrap failed:", e),
   );
 });
 
@@ -184,13 +184,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       state.ws.readyState === WebSocket.CLOSED ||
       state.ws.readyState === WebSocket.CLOSING
     ) {
-      console.log("[hermes-bridge] Keepalive: ws gone, reconnecting");
+      console.log("[amiba-bridge] Keepalive: ws gone, reconnecting");
       connect();
     } else if (state.ws.readyState === WebSocket.OPEN) {
       try {
         state.ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
       } catch (e) {
-        console.warn("[hermes-bridge] Keepalive ping failed:", e);
+        console.warn("[amiba-bridge] Keepalive ping failed:", e);
         try {
           state.ws.close();
         } catch {
@@ -204,7 +204,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   if (alarm.name === USERSCRIPT_UPDATE_ALARM) {
     await pollUserscriptUpdates().catch((e) =>
-      console.warn("[hermes-bridge] userscript update poll failed:", e),
+      console.warn("[amiba-bridge] userscript update poll failed:", e),
     );
     return;
   }
@@ -230,13 +230,13 @@ async function pollUserscriptUpdates() {
       const { updateUserscript } = await import("./userscript/orchestrator");
       await updateUserscript(s.id, remoteSource).catch((e) =>
         console.warn(
-          `[hermes-bridge] update failed for ${s.id}:`,
+          `[amiba-bridge] update failed for ${s.id}:`,
           (e as Error)?.message,
         ),
       );
     } catch (e) {
       console.warn(
-        `[hermes-bridge] update poll fetch failed for ${s.id}:`,
+        `[amiba-bridge] update poll fetch failed for ${s.id}:`,
         (e as Error)?.message,
       );
     }
@@ -274,7 +274,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         await ensureAgentWindow();
       } catch (e) {
-        console.warn("[hermes-bridge] ensureAgentWindow failed:", e);
+        console.warn("[amiba-bridge] ensureAgentWindow failed:", e);
       }
       sendResponse({ ok: true });
       return;
@@ -375,7 +375,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             navigatedTo = agentUrl;
           } catch (e) {
             console.warn(
-              "[hermes-bridge] promoteToUser navigate failed:",
+              "[amiba-bridge] promoteToUser navigate failed:",
               e,
             );
           }

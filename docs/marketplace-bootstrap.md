@@ -32,7 +32,7 @@ That's it for the repo. The desktop's default `AMIBA_MARKETPLACE_INDEX_URL` is `
 ```jsonc
 [
   {
-    "id": "io.hermes.knowledge-base",       // must match the plugin's manifest.json `id`
+    "id": "io.amiba.knowledge-base",       // must match the plugin's manifest.json `id`
     "name": "Knowledge Base",                // human-readable
     "description": "GBrain-backed personal knowledge base", // optional
     "author": "iHeyTang",                    // optional
@@ -68,8 +68,8 @@ git push -u origin main
 Manually:
 
 ```bash
-amiba-ext build       # produces dist/main.cjs + dist/renderer.js
-amiba-ext pack        # produces extension.tgz
+amiba build       # produces dist/main.cjs + dist/ui/**
+amiba pack        # produces extension.tgz
 gh release create v0.1.0 extension.tgz \
   --title "v0.1.0" \
   --notes "First release"
@@ -96,8 +96,8 @@ jobs:
         with:
           version: 9
       - run: pnpm install --frozen-lockfile
-      - run: npx amiba-ext build
-      - run: npx amiba-ext pack
+      - run: npx amiba build
+      - run: npx amiba pack
       - run: |
           gh release create "${GITHUB_REF#refs/tags/}" extension.tgz \
             --title "${GITHUB_REF#refs/tags/}" \
@@ -170,7 +170,7 @@ Add to the marketplace entry:
 The CLI's `install` command also supports `--sha256` for ad-hoc installs:
 
 ```bash
-amiba-ext install owner/repo@v1.2.3 --sha256 e3b0c44298fc1c...
+amiba install owner/repo@v1.2.3 --sha256 e3b0c44298fc1c...
 ```
 
 ## Local dev / testing flows
@@ -179,7 +179,7 @@ amiba-ext install owner/repo@v1.2.3 --sha256 e3b0c44298fc1c...
 
 ```bash
 cd amiba-ext-my-plugin
-amiba-ext dev
+amiba dev
 ```
 
 Builds + symlinks `<userData>/extensions/<id>/` to the plugin's cwd, watches `dist/`, touches manifest on each rebuild. Desktop picks up the change and hot-reloads (`extensions/<id>/manifest.json` mtime triggers `reloadExtension(id)`).
@@ -194,7 +194,7 @@ mkdir /tmp/fake-marketplace
 cat > /tmp/fake-marketplace/community-plugins.json <<'JSON'
 [
   {
-    "id": "io.hermes.knowledge-base",
+    "id": "io.amiba.knowledge-base",
     "name": "Knowledge Base (LOCAL)",
     "repo": "amiba-desktop/amiba-ext-knowledge-base"
   }
@@ -214,7 +214,7 @@ Now `Settings → Extensions → Browse` fetches your local index. The install b
 To exercise the install path without publishing to GitHub, you need to fake the GitHub Releases API too. That's beyond the scope of this doc — the simplest path is:
 
 1. Push a `v0.1.0` tag to a throwaway GitHub repo.
-2. Run `amiba-ext pack`.
+2. Run `amiba pack`.
 3. `gh release create v0.1.0 extension.tgz --repo owner/throwaway-repo`.
 4. Point your local marketplace at it (`"repo": "owner/throwaway-repo"`).
 
@@ -244,7 +244,7 @@ the monorepo. The SDK is distributed as GitHub Release tarballs (no public npm y
 **Maintainer — cut an SDK release (once per API-level bump):**
 
 ```bash
-pnpm sdk:pack            # → sdk-dist/amiba-{extension-api,tailwind-preset,extension-cli}-0.1.0.tgz
+pnpm sdk:pack            # → sdk-dist/amiba-{extension-api,tailwind-preset,cli}-0.1.0.tgz
 gh release create sdk-v1 sdk-dist/*.tgz   # tag MUST match the API level (sdk-v<HOST_API_VERSION>)
 ```
 
@@ -255,7 +255,7 @@ You can validate the whole consumption chain offline first with `pnpm sdk:verify
 
 ```bash
 # with the published CLI tarball (or a local checkout of the monorepo CLI):
-amiba-ext create my-ext --id com.example.my-ext
+amiba create my-ext --id com.example.my-ext
 cd my-ext && pnpm install   # pulls @amiba/* from the sdk-v1 release tarballs
 pnpm dev
 ```
@@ -282,7 +282,7 @@ attaches it to the GitHub Release — ready to add to the marketplace index.
                                      ▼
    ┌─────────────────────┐    ┌─────────────────────────┐
    │ Plugin author       │    │ Amiba Desktop        │
-   │  └── amiba-ext   │    │  └── Browse tab         │
+   │  └── amiba       │    │  └── Browse tab         │
    │      pack/release   │    │      → install()        │
    └─────────┬───────────┘    └──────────────┬──────────┘
              │ gh release create              │ api.github.com/.../releases/latest

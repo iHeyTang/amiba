@@ -12,7 +12,7 @@ type StreamListener = (sessionId: string, event: StreamEvent) => void
 
 /**
  * Real ChatEngineClient for desktop. Wraps the preload bridge
- * (`window.hermes.chat`) to talk to the chat engine running in Electron
+ * (`window.amiba.chat`) to talk to the chat engine running in Electron
  * main process. The engine itself calls the same HermesClient gateway
  * code path the extension uses — there's a single source of truth for
  * the HTTP/SSE protocol.
@@ -23,7 +23,7 @@ export class ElectronChatEngineClient implements ChatEngineClient {
   private unsubBridge: (() => void) | null = null
 
   constructor() {
-    this.unsubBridge = window.hermes.chat.onMessage((msg: EngineToClientMessage) => {
+    this.unsubBridge = window.amiba.chat.onMessage((msg: EngineToClientMessage) => {
       if (msg.type === "event") {
         for (const cb of this.streamListeners) cb(msg.sessionId, msg.event)
       } else if (msg.type === "snapshot") {
@@ -33,7 +33,7 @@ export class ElectronChatEngineClient implements ChatEngineClient {
   }
 
   private send(msg: ClientToEngineMessage): void {
-    void window.hermes.chat.send(msg)
+    void window.amiba.chat.send(msg)
   }
 
   subscribe(sessionId: string): void {

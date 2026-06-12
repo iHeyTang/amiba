@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react"
-import { hermes } from "../shared/hermes-bridge"
+import { amiba } from "../shared/amiba-bridge"
 import enCatalog from "../../i18n/en.json"
 import zhCNCatalog from "../../i18n/zh-CN.json"
 
 const CATALOGS = { en: enCatalog, "zh-CN": zhCNCatalog }
 
 function useT() {
-  const [lang, setLang] = useState(hermes.language)
-  useEffect(() => hermes.on("language", setLang), [])
+  const [lang, setLang] = useState(amiba.language)
+  useEffect(() => amiba.on("language", setLang), [])
   const catalog = (CATALOGS as Record<string, Record<string, string>>)[lang] ?? CATALOGS.en
   return (key: string) => catalog[key] ?? key
 }

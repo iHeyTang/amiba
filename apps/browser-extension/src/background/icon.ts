@@ -4,7 +4,7 @@
  * Earlier revisions used a `"ON" / "..." / ""` badge-text overlay, but that
  * eats most of the 16-px toolbar slot. We now composite a small circular
  * status dot — green / amber / red — onto the bottom-right corner of the
- * Hermes glyph using an `OffscreenCanvas`, and clear the text badge entirely.
+ * Amiba glyph using an `OffscreenCanvas`, and clear the text badge entirely.
  *
  * Plasmo content-hashes asset filenames at build time, so we can't reach the
  * logo via `chrome.runtime.getURL("assets/icon128.png")`. We instead inline
@@ -13,7 +13,7 @@
  * change.
  */
 
-import logoUrl from "data-base64:~assets/hermes-logo-light.png";
+import logoUrl from "data-base64:~assets/amiba-logo-light.png";
 
 import type { ConnectionState } from "~lib/types";
 
@@ -24,9 +24,9 @@ const DOT_COLOR: Record<ConnectionState, string> = {
 };
 
 const TITLE: Record<ConnectionState, string> = {
-  connected: "Hermes Browser Extension — connected",
-  connecting: "Hermes Browser Extension — connecting…",
-  disconnected: "Hermes Browser Extension — disconnected",
+  connected: "Amiba Browser Extension — connected",
+  connecting: "Amiba Browser Extension — connecting…",
+  disconnected: "Amiba Browser Extension — disconnected",
 };
 
 // Sizes Chrome asks for in the toolbar / extensions menu. We render each
@@ -43,7 +43,7 @@ function loadBase(): Promise<ImageBitmap | null> {
         const blob = await (await fetch(logoUrl)).blob();
         return await createImageBitmap(blob);
       } catch (e) {
-        console.warn("[hermes-icon] failed to decode logo:", e);
+        console.warn("[amiba-icon] failed to decode logo:", e);
         return null;
       }
     })();
@@ -52,7 +52,7 @@ function loadBase(): Promise<ImageBitmap | null> {
 }
 
 /**
- * Composite the Hermes glyph + a coloured status dot at every size Chrome
+ * Composite the Amiba glyph + a coloured status dot at every size Chrome
  * needs. Returns `null` when canvas/bitmap APIs are unavailable so callers
  * can fall back to the legacy badge-text path.
  */
@@ -72,7 +72,7 @@ async function composeIcons(
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Hermes glyph fills the slot. The source PNG already has a small
+    // Amiba glyph fills the slot. The source PNG already has a small
     // visual inset, so we don't add one here.
     ctx.drawImage(base, 0, 0, size, size);
 
@@ -134,7 +134,7 @@ export function applyIcon(state: ConnectionState): void {
       try {
         await chrome.action.setIcon({ imageData });
       } catch (e) {
-        console.warn("[hermes-icon] setIcon failed; falling back:", e);
+        console.warn("[amiba-icon] setIcon failed; falling back:", e);
         applyBadgeFallback(state);
       }
     })();

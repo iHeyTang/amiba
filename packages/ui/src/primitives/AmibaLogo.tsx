@@ -1,10 +1,11 @@
 import { useDocumentTheme } from "../theme"
 import { cn } from "./cn"
-import { logoDarkBg, logoLightBg } from "./hermes-logo-assets"
+import { logoDarkBg, logoLightBg } from "./amiba-logo-assets"
 
 /**
  * Brand mark for Hermes Agent surfaces. Two PNG variants are inlined as
- * base64 data URIs (see `hermes-logo-assets.ts`):
+ * base64 data URIs (see `amiba-logo-assets.ts`, sourced from
+ * `amiba-logo-{light,dark}.png`):
  *
  *   - `light-bg` — render the dark-glyph artwork on a light surface
  *   - `dark-bg`  — render the light-glyph artwork on a dark surface
@@ -15,7 +16,7 @@ import { logoDarkBg, logoLightBg } from "./hermes-logo-assets"
  * track the document theme (e.g. a logo placed on top of a fixed-colour
  * gradient).
  */
-export interface HermesLogoProps {
+export interface AmibaLogoProps {
   /** CSS size override; ignored when `width`/`height` are set via className. */
   size?: number
   /** Force a specific variant regardless of the resolved theme. */
@@ -24,12 +25,12 @@ export interface HermesLogoProps {
   alt?: string
 }
 
-export function HermesLogo({
+export function AmibaLogo({
   size = 24,
   variant = "auto",
   className,
   alt = "Hermes Agent"
-}: HermesLogoProps) {
+}: AmibaLogoProps) {
   const theme = useDocumentTheme()
   // `light-bg` means "render so it looks good on a light surface" — i.e.
   // pick the dark-glyph artwork. We expose the prop in the surface-oriented

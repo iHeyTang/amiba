@@ -1,15 +1,15 @@
 /**
- * Formal type contract for the `window.hermes` global injected into
+ * Formal type contract for the `window.amiba` global injected into
  * every extension WebView page by the host's webview-bridge preload.
  *
  * This is the single source of truth for the renderer-side extension
  * API. The webview-preload implementation in `@amiba/extension-host`
  * declares its exposed object against `WebViewHostAPI`; extensions
  * type-check their own UI code against the same interface via the
- * ambient `Window.hermes` augmentation at the bottom of this file.
+ * ambient `Window.amiba` augmentation at the bottom of this file.
  *
  * Capability namespacing convention:
- *   `hermes.<domain>.<method>` — flat domain buckets (`ipc`, `settings`,
+ *   `amiba.<domain>.<method>` — flat domain buckets (`ipc`, `settings`,
  *   `shell`, `chat`). New host capabilities should pick the bucket that
  *   matches their domain rather than nest under an umbrella namespace.
  */
@@ -92,7 +92,7 @@ export interface WebViewChat {
 export type WebViewEvent = "language" | "theme"
 
 /**
- * The full `window.hermes` surface for an extension WebView. Imported
+ * The full `window.amiba` surface for an extension WebView. Imported
  * by `@amiba/extension-host`'s webview-bridge for the implementation
  * declarations and by extension authors as a type-only import.
  */
@@ -114,10 +114,10 @@ export interface WebViewHostAPI {
   on(event: WebViewEvent, cb: (value: string) => void): () => void
 }
 
-// NOTE: extension authors that want an ambient `window.hermes` typed as
+// NOTE: extension authors that want an ambient `window.amiba` typed as
 // WebViewHostAPI should declare it locally in their own `global.d.ts`
-// (or equivalent) — see `extensions/knowledge-base/src/ui/shared/
-// hermes-bridge.ts` for the pattern. We intentionally do NOT
+// (or equivalent) — see `amiba-ext-knowledge-base/src/ui/shared/
+// amiba-bridge.ts` for the pattern. We intentionally do NOT
 // `declare global` here because the desktop renderer's own
-// `window.hermes` is a different, larger surface (storage / workspaces
+// `window.amiba` is a different, larger surface (storage / workspaces
 // / quickAsk / hermesRuntime / ...) and the two would conflict.

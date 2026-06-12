@@ -5,9 +5,9 @@ import react from "@vitejs/plugin-react"
 export default defineConfig({
   root: resolve(__dirname, "src/ui"),
   // Use relative base so asset references in the built HTML are relative paths
-  // (e.g. "../assets/...") rather than absolute ("/assets/..."). Absolute paths
-  // break the hermes-ext:// protocol handler which resolves URLs relative to the
-  // extension root, not dist/ui/.
+  // (e.g. "../assets/...") rather than absolute ("/assets/..."). The view HTML is
+  // served from the loopback HTTP path /extensions/<id>/<view>/, so absolute
+  // ("/assets/...") refs would escape that prefix and 404.
   base: "./",
   plugins: [react()],
   build: {

@@ -3,7 +3,7 @@ import { validateManifest } from "../main/discover"
 
 describe("validateManifest", () => {
   const base = {
-    id: "io.hermes.example",
+    id: "io.amiba.example",
     name: "Example",
     version: "0.1.0",
     entries: { main: "dist/main.js" },

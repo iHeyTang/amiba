@@ -133,14 +133,14 @@ function attachDoubleTap(modifier: SummonModifier): boolean {
   // returns the current trust state AND, on first call per binary,
   // pops the system dialog inviting the user to add the running app to
   // the trusted list. Trust takes effect on the next process launch —
-  // we log a clear hint so the user knows to restart Hermes after
+  // we log a clear hint so the user knows to restart Amiba after
   // granting (or to grant their IDE in dev mode).
   if (IS_MAC) {
     const trusted = systemPreferences.isTrustedAccessibilityClient(true)
     if (!trusted) {
       console.warn(
         "[amiba] Accessibility access not granted yet. macOS will only " +
-          "deliver global key events to Hermes after you allow it in " +
+          "deliver global key events to Amiba after you allow it in " +
           "System Settings → Privacy & Security → Accessibility and " +
           "restart the app. (In `pnpm dev`, the binary asking for the " +
           "permission is the IDE that spawned Electron — grant it there " +

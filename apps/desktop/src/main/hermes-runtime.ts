@@ -530,10 +530,10 @@ function startInstallPlugin(binary: string, pluginId: string) {
  * Where the backplane Python source lives — it ships inside the app and gets
  * pip-installed into the hermes env (it's NOT a plugin). Packaged builds put it
  * under `resources/backend` (electron-builder extraResources); in dev it's the
- * monorepo's top-level `backend/`. `HERMES_BACKPLANE_SOURCE` overrides both.
+ * monorepo's top-level `backend/`. `AMIBA_BACKPLANE_SOURCE` overrides both.
  */
 function resolveBackplaneSource(): string {
-  if (process.env.HERMES_BACKPLANE_SOURCE) return process.env.HERMES_BACKPLANE_SOURCE
+  if (process.env.AMIBA_BACKPLANE_SOURCE) return process.env.AMIBA_BACKPLANE_SOURCE
   const candidates = [
     path.join(process.resourcesPath, "backend"),
     path.resolve(app.getAppPath(), "..", "..", "backend"),

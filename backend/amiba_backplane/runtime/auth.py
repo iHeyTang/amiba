@@ -1,6 +1,6 @@
 """HTTP Bearer auth middleware for the backplane.
 
-Reads ``HERMES_BACKPLANE_KEY`` from the environment per request. When
+Reads ``AMIBA_BACKPLANE_KEY`` from the environment per request. When
 set, every request must carry ``Authorization: Bearer <key>``; on
 mismatch the middleware returns 401. When the env is unset, all
 requests are accepted — preserves the loopback-implicit-trust behaviour
@@ -22,7 +22,7 @@ from aiohttp import web
 
 from .common import json_error
 
-BACKPLANE_KEY_ENV = "HERMES_BACKPLANE_KEY"
+BACKPLANE_KEY_ENV = "AMIBA_BACKPLANE_KEY"
 
 _AUTH_EXEMPT_PATHS = frozenset({"/health"})
 
@@ -49,5 +49,5 @@ async def auth_middleware(request: web.Request, handler):
         return await handler(request)
     presented = _extract_bearer(request.headers.get("Authorization", ""))
     if presented != expected:
-        return json_error(401, "missing or invalid HERMES_BACKPLANE_KEY")
+        return json_error(401, "missing or invalid AMIBA_BACKPLANE_KEY")
     return await handler(request)

@@ -33,7 +33,7 @@ describe("registry-store", () => {
     tmps.push(root)
     const registryPath = join(root, "extensions-registry.json")
     const entry: RegistryEntry = {
-      id: "io.hermes.test",
+      id: "io.amiba.test",
       source: "local",
       path: "/some/path",
       addedAt: "2024-01-01T00:00:00.000Z",
@@ -50,12 +50,12 @@ describe("registry-store", () => {
     tmps.push(root)
     const registryPath = join(root, "extensions-registry.json")
 
-    const entry1: RegistryEntry = { id: "io.hermes.test", source: "local", path: "/old/path" }
+    const entry1: RegistryEntry = { id: "io.amiba.test", source: "local", path: "/old/path" }
     addEntry(registryPath, entry1)
-    const entry2: RegistryEntry = { id: "io.hermes.test", source: "local", path: "/new/path" }
+    const entry2: RegistryEntry = { id: "io.amiba.test", source: "local", path: "/new/path" }
     const reg = addEntry(registryPath, entry2)
 
-    expect(reg.entries.filter((e) => e.id === "io.hermes.test")).toHaveLength(1)
+    expect(reg.entries.filter((e) => e.id === "io.amiba.test")).toHaveLength(1)
     expect(reg.entries[0]!.path).toBe("/new/path")
   })
 
@@ -64,12 +64,12 @@ describe("registry-store", () => {
     tmps.push(root)
     const registryPath = join(root, "extensions-registry.json")
 
-    addEntry(registryPath, { id: "io.hermes.a", source: "local", path: "/a" })
-    addEntry(registryPath, { id: "io.hermes.b", source: "local", path: "/b" })
-    const reg = removeEntry(registryPath, "io.hermes.a")
+    addEntry(registryPath, { id: "io.amiba.a", source: "local", path: "/a" })
+    addEntry(registryPath, { id: "io.amiba.b", source: "local", path: "/b" })
+    const reg = removeEntry(registryPath, "io.amiba.a")
 
-    expect(reg.entries.find((e) => e.id === "io.hermes.a")).toBeUndefined()
-    expect(reg.entries.find((e) => e.id === "io.hermes.b")).toBeDefined()
+    expect(reg.entries.find((e) => e.id === "io.amiba.a")).toBeUndefined()
+    expect(reg.entries.find((e) => e.id === "io.amiba.b")).toBeDefined()
   })
 
   it("4. atomic write: no .tmp file left behind after success", () => {
@@ -103,13 +103,13 @@ describe("registry-store", () => {
     tmps.push(root)
     const registryPath = join(root, "extensions-registry.json")
 
-    addEntry(registryPath, { id: "io.hermes.a", source: "marketplace", path: "/a", version: "1.0.0" })
-    addEntry(registryPath, { id: "io.hermes.b", source: "local", path: "/b" })
+    addEntry(registryPath, { id: "io.amiba.a", source: "marketplace", path: "/a", version: "1.0.0" })
+    addEntry(registryPath, { id: "io.amiba.b", source: "local", path: "/b" })
 
-    const entry = findEntry(registryPath, "io.hermes.a")
+    const entry = findEntry(registryPath, "io.amiba.a")
     expect(entry).toBeDefined()
     expect(entry!.source).toBe("marketplace")
     expect(entry!.version).toBe("1.0.0")
-    expect(findEntry(registryPath, "io.hermes.not-found")).toBeUndefined()
+    expect(findEntry(registryPath, "io.amiba.not-found")).toBeUndefined()
   })
 })

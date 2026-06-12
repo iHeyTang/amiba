@@ -1,8 +1,8 @@
-// shadcn-style primitives + Hermes-branded logo. All visual identity
+// shadcn-style primitives + Amiba-branded logo. All visual identity
 // lives here; every other UI module (chat/, home/, settings/) builds
 // on this layer.
 export * from "./cn"
-export * from "./HermesLogo"
+export * from "./AmibaLogo"
 export * from "./badge"
 export * from "./button"
 export * from "./card"

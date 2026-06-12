@@ -18,7 +18,7 @@ export {
 import { useEffect, useState } from "react"
 import type { ExtensionManifest } from "@amiba/extension-api"
 
-type HermesWindowShape = {
+type AmibaWindowShape = {
   extensions: {
     // The actual IPC payload is { manifest, path } per row — the preload
     // signature lines up with `getManifestEntries()` on the main side.
@@ -41,7 +41,7 @@ export function useExtensionRegistry(refreshKey: number = 0) {
     }>
   >([])
   useEffect(() => {
-    const { extensions } = (window as unknown as { hermes: HermesWindowShape }).hermes
+    const { extensions } = (window as unknown as { amiba: AmibaWindowShape }).amiba
     void Promise.all([
       extensions.listManifests(),
       extensions.status(),

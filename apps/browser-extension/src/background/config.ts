@@ -32,7 +32,7 @@ export const HEARTBEAT_MS = 20_000;
  */
 export const HEARTBEAT_TIMEOUT_MS = HEARTBEAT_MS * 3;
 
-export const KEEPALIVE_ALARM = "hermes-keepalive";
+export const KEEPALIVE_ALARM = "amiba-keepalive";
 export const KEEPALIVE_PERIOD_MIN = 0.5;
 
 export interface AgentWindowConfig {
@@ -52,5 +52,5 @@ export const DEFAULT_AGENT_WINDOW: AgentWindowConfig = {
 };
 
 // Userscript update polling cadence. Chrome alarms minimum is 0.5 min.
-export const USERSCRIPT_UPDATE_ALARM = "hermes-userscript-update";
+export const USERSCRIPT_UPDATE_ALARM = "amiba-userscript-update";
 export const USERSCRIPT_UPDATE_PERIOD_MIN = 60 * 6; // every 6 hours

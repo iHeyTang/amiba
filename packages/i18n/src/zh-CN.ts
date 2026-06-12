@@ -27,7 +27,7 @@ export const zhCN: Messages = {
   "common.untitled": "未命名",
 
   // App shell
-  "app.title": "Hermes",
+  "app.title": "Amiba",
   "app.subtitle": "扩展控制台",
   "app.initializing": "正在启动本地服务…",
   "app.initError": "本地服务启动失败。请确认已安装 Hermes 后重试。",
@@ -129,9 +129,9 @@ export const zhCN: Messages = {
   "options.feature.agentSourceApp": "设置",
   "options.feature.backplaneError": "无法连接 backplane 读取此功能的状态。",
   "options.feature.browser.title": "浏览器",
-  "options.feature.browser.subtitle": "通过配套的 Chrome 扩展，让 Hermes 查看并操作你的浏览器。",
+  "options.feature.browser.subtitle": "通过配套的 Chrome 扩展，让 Amiba 查看并操作你的浏览器。",
   "options.feature.browser.how.title": "工作方式",
-  "options.feature.browser.how.body": "启用后，Hermes 会注册浏览器操作工具并运行一个本地 WebSocket 中枢。安装配套的 Chrome 扩展后会自动连接 —— 之后 Hermes 即可读取标签页、导航、点击、输入并在浏览器中运行脚本。",
+  "options.feature.browser.how.body": "启用后，Amiba 会注册浏览器操作工具并运行一个本地 WebSocket 中枢。安装配套的 Chrome 扩展后会自动连接 —— 之后 Amiba 即可读取标签页、导航、点击、输入并在浏览器中运行脚本。",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",
@@ -204,7 +204,7 @@ export const zhCN: Messages = {
   "options.preference.section.chat": "对话",
   "options.preference.section.hotkey": "快捷键",
   "options.preference.hotkey.label": "唤起快捷键",
-  "options.preference.hotkey.desc": "在任意 App 中触发后把 Hermes 切换到前台。",
+  "options.preference.hotkey.desc": "在任意 App 中触发后把 Amiba 切换到前台。",
   "options.preference.hotkey.mode.disabled": "关闭",
   "options.preference.hotkey.mode.doubleTap": "双击修饰键",
   "options.preference.hotkey.mode.accelerator": "组合键",
@@ -223,7 +223,7 @@ export const zhCN: Messages = {
   // 首次启动 onboarding 向导
   "onboarding.title": "Amiba",
   "onboarding.tagline":
-    "Hermes Agent 的原生桌面客户端。\n随时双击 Command 键唤起对话，让 Hermes 始终在你触手可及处。",
+    "Hermes Agent 的原生桌面客户端。\n随时双击 Command 键唤起对话，让 Amiba 始终在你触手可及处。",
   "onboarding.subtitle":
     "我们会一步步帮你装好 Hermes、加载所需插件、启动本地服务。\n整个过程大约 5–10 分钟，你不需要预先准备任何东西。",
   "onboarding.step.install": "安装核心",
@@ -237,7 +237,7 @@ export const zhCN: Messages = {
   "onboarding.install.manualStep.install": "1. 安装 Hermes 核心",
   "onboarding.install.manualStep.plugin": "{n}. 加载插件 {id}",
   "onboarding.ready.title": "一切就绪",
-  "onboarding.ready.subtitle": "马上进入 Hermes。",
+  "onboarding.ready.subtitle": "马上进入 Amiba。",
   "onboarding.error.install": "安装失败，下方终端有详细日志。",
   "onboarding.error.plugin": "插件加载失败",
   "onboarding.error.backplane": "本地服务启动超时",
@@ -323,15 +323,15 @@ export const zhCN: Messages = {
   "options.gateway.subtitle.tooltip":
     "侧边栏聊天 → hermes-agent-gateway（兼容 OpenAI 的 HTTP）",
   "options.gateway.baseUrl": "网关地址",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8765",
+  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8642/v1",
   "options.gateway.baseUrl.desc":
-    "桥接服务监听此地址。如果 hermes-bridge 运行在其他端口或主机上，请在此覆盖。",
+    "网关监听此地址。如果 `hermes chat` 运行在其他端口或主机上，请在此覆盖。",
   "options.gateway.test": "测试连接",
   "options.gateway.testing": "测试中…",
   "options.gateway.test.ok": "已连接，桥接服务可达。",
   "options.gateway.test.fail": "无法连接到桥接服务：{error}",
   "options.gateway.startHint":
-    "桥接服务未运行？请通过 Hermes CLI 运行 `hermes-bridge` 启动。",
+    "网关未运行？请通过 Hermes CLI 运行 `hermes chat` 启动。",
   "options.gateway.section.chat": "侧边栏聊天",
   "options.gateway.model.label": "聊天模型 ID",
   "options.gateway.model.fromGateway": "从网关获取",
@@ -341,9 +341,9 @@ export const zhCN: Messages = {
   "options.gateway.saved": "已保存。",
   "options.gateway.backplaneKey.title": "Backplane 访问",
   "options.gateway.backplaneKey.label": "访问密钥（可选）",
-  "options.gateway.backplaneKey.placeholder": "未设置 HERMES_BACKPLANE_KEY 时留空",
+  "options.gateway.backplaneKey.placeholder": "未设置 AMIBA_BACKPLANE_KEY 时留空",
   "options.gateway.backplaneKey.help":
-    "通常留空即可。如想加鉴权，把 HERMES_BACKPLANE_KEY 写到 ~/.hermes/.env，重启 Hermes 后把同一个值贴到这里。",
+    "通常留空即可。如想加鉴权，把 AMIBA_BACKPLANE_KEY 写到 ~/.hermes/.env，重启 Hermes 后把同一个值贴到这里。",
   "options.gateway.bridge.title": "桥接服务",
   "options.gateway.bridge.url.label": "桥接地址",
   "options.gateway.bridge.url.help":
@@ -370,7 +370,7 @@ export const zhCN: Messages = {
   // Models / Hermes model config
   "options.models.title": "模型",
   "options.models.subtitle":
-    "Hermes 在对话、嵌入和工具调用中使用的供应商与模型。",
+    "Amiba 在对话、嵌入和工具调用中使用的供应商与模型。",
   "options.models.catalog.loading": "加载中…",
   "options.models.catalog.ready": "目录已就绪",
   "options.models.catalog.unavailable": "目录不可用",
@@ -380,7 +380,7 @@ export const zhCN: Messages = {
 
   // Skills
   "options.skills.title": "技能",
-  "options.skills.subtitle": "Hermes 可按需加载的技能包。逐会话切换启用。",
+  "options.skills.subtitle": "Amiba 可按需加载的技能包。逐会话切换启用。",
   "options.skills.subtitle.summary": "当前代理可用的技能（{enabled} / {total}）",
   "options.skills.subtitle.platform": "  ·  平台={platform}",
   "options.skills.refresh": "刷新",
@@ -429,7 +429,7 @@ export const zhCN: Messages = {
   "sidepanel.tabbar.menu.closeOthers": "关闭其他",
   "sidepanel.tabbar.menu.closeRight": "关闭右侧",
   "sidepanel.tabbar.menu.closeAll": "全部关闭",
-  "sidepanel.placeholder": "向 Hermes 提问…",
+  "sidepanel.placeholder": "向 Amiba 提问…",
   "sidepanel.placeholder.uploading": "等待附件上传完成…",
   "sidepanel.placeholder.withAttachments": "对你的文件提问…",
   "sidepanel.placeholder.withPinned": "对附带的页面提问…",
@@ -522,13 +522,13 @@ export const zhCN: Messages = {
   "sidepanel.attachment.previewAria": "放大预览 {name}",
   "sidepanel.empty.title": "暂无打开的对话",
   "sidepanel.empty.withHistory": "开始新对话或从历史中挑选一个。",
-  "sidepanel.empty.firstChat": "开始你与 Hermes 的第一次对话。",
+  "sidepanel.empty.firstChat": "开始你与 Amiba 的第一次对话。",
   "sidepanel.empty.newChat": "新建对话",
   "sidepanel.empty.openHistory": "从历史打开",
   "sidepanel.empty.settings": "设置",
   // Empty-state connect prompt — shown in place of the composer when
   // the bridge isn't reachable. Submitting a prompt would just error.
-  "sidepanel.empty.notConnected.title": "未连接到 Hermes",
+  "sidepanel.empty.notConnected.title": "未连接到 Amiba",
   "sidepanel.empty.notConnected.description":
     "需要先连接 Hermes 桥接服务才能开始对话。",
   "sidepanel.empty.notConnected.button": "连接",
@@ -542,15 +542,15 @@ export const zhCN: Messages = {
   "sidepanel.status.tooltip.online":
     "Hermes 桥接服务可达。点击打开网关设置。",
   "sidepanel.status.tooltip.offline":
-    "无法连接到 Hermes 桥接服务。请启动 `hermes-bridge` 并检查网关地址。",
+    "无法连接到 Hermes 网关。请启动 `hermes chat` 并检查网关地址。",
   "sidepanel.status.tooltip.connecting": "正在连接 Hermes 桥接服务…",
-  "sidepanel.status.tooltipBase": "Hermes 浏览器扩展 · {state}",
+  "sidepanel.status.tooltipBase": "Amiba 浏览器扩展 · {state}",
   "sidepanel.status.tooltip.agentRunning":
     "代理窗口：#{windowId} · 标签页 {tabId}",
   "sidepanel.status.tooltip.agentDown": "代理窗口：未运行",
   "sidepanel.status.tooltip.clickConnect": "点击连接",
   "sidepanel.status.tooltip.clickDisconnect": "点击断开",
-  "sidepanel.status.aria.bar": "Hermes 浏览器扩展 {label}。{action}。",
+  "sidepanel.status.aria.bar": "Amiba 浏览器扩展 {label}。{action}。",
   "sidepanel.status.showAgentWindow": "显示代理窗口",
   "sidepanel.status.showAgentWindow.disabled":
     "代理窗口未运行 — 请先连接",
@@ -624,7 +624,7 @@ export const zhCN: Messages = {
   "newtab.placeholder.example.5": "用 Python 实现一个快速排序",
   "newtab.send": "发送",
   "newtab.send.tooltip": "发送（Enter）",
-  "newtab.openOptions": "打开 Hermes 设置",
+  "newtab.openOptions": "打开 Amiba 设置",
   "newtab.history": "历史",
   "newtab.latest": "最新",
   "newtab.recentChats": "最近对话",
@@ -640,11 +640,11 @@ export const zhCN: Messages = {
   "newtab.continueInChat.prompt":
     "下面是定时任务「{name}」在 {time} 的输出。帮我读一下：哪些值得立即处理，哪些可以等等，是否有需要跟进的事项？\n\n---\n\n{content}",
   "newtab.empty.installed": "已启用例行任务",
-  "newtab.empty.headline": "让 Hermes 为你工作起来",
+  "newtab.empty.headline": "让 Amiba 为你工作起来",
   "newtab.empty.installedDesc":
     "下次运行后会在这里显示。可以继续添加，或等待首次输出。",
   "newtab.empty.headlineDesc":
-    "挑选一个例行任务 — Hermes 会按计划运行，输出会落到这里。",
+    "挑选一个例行任务 — Amiba 会按计划运行，输出会落到这里。",
   "newtab.empty.customCron": "设置自定义定时任务 →",
   "newtab.install.failed": "安装失败",
   "newtab.relative.justNow": "刚刚",
@@ -681,11 +681,11 @@ export const zhCN: Messages = {
   "newtab.wallpaper.cycle": "换一张壁纸",
 
   // Chat tab
-  "chat.title": "Hermes 聊天",
+  "chat.title": "Amiba 聊天",
   "chat.goHome": "返回首页",
   "chat.newChat": "开始新对话",
   "chat.placeholder": "发送消息…",
-  "chat.openOptions": "打开 Hermes 设置",
+  "chat.openOptions": "打开 Amiba 设置",
   "chat.searchPlaceholder": "搜索会话…",
   "chat.searchClear": "清除搜索",
   "chat.untitled": "未命名对话",

@@ -29,7 +29,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  HermesLogo,
+  AmibaLogo,
   Input,
   Label,
   ScrollArea,
@@ -329,7 +329,7 @@ export function SettingsView({
           </div>
         ) : (
           <div className={`${OPTIONS_SHELL_HEADER_ROW} gap-2.5 px-3`}>
-            <HermesLogo size={28} className="shrink-0" />
+            <AmibaLogo size={28} className="shrink-0" />
             <p className="truncate text-sm font-semibold tracking-tight">{t("app.title")}</p>
           </div>
         )}

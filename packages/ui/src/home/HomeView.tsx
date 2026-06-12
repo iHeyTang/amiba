@@ -44,7 +44,7 @@ import {
 import { shortId } from "@amiba/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
-import { HermesLogo } from "../primitives";
+import { AmibaLogo } from "../primitives";
 import { cn } from "../primitives";
 import type {
   FaviconCapability,
@@ -370,7 +370,7 @@ function Home({
             // render, so the home composer reads as "Hermes here, type
             // below" instead of an out-of-context wordmark + tagline.
             <div className="flex flex-col items-center gap-2 text-center">
-              <HermesLogo size={56} />
+              <AmibaLogo size={56} />
               <p className="max-w-[40ch] text-xs text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
@@ -1046,7 +1046,7 @@ function TopBar({
     : wallpaperController?.mode === "light"
       ? "text-neutral-900/75 hover:text-neutral-900"
       : "text-white/80 hover:text-white";
-  // HermesLogo is a raster PNG, not a currentColor SVG, so it can't
+  // AmibaLogo is a raster PNG, not a currentColor SVG, so it can't
   // inherit `wordmarkClass`. Pick the contrasting variant explicitly
   // from the wallpaper mode (when ambient) or fall back to the document
   // theme (when not). Mode "light" = light photograph behind it →
@@ -1073,7 +1073,7 @@ function TopBar({
           wordmarkClass,
         )}
       >
-        <HermesLogo size={22} variant={logoVariant} />
+        <AmibaLogo size={22} variant={logoVariant} />
         <p className="text-sm font-semibold tracking-tight">
           {t("app.title")}
         </p>

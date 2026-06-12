@@ -18,7 +18,7 @@ import {
 } from "../primitives"
 
 function getExtensions(): ExtensionsBridge {
-  return (window as unknown as { hermes: { extensions: ExtensionsBridge } }).hermes.extensions
+  return (window as unknown as { amiba: { extensions: ExtensionsBridge } }).amiba.extensions
 }
 
 // ---------------------------------------------------------------------------

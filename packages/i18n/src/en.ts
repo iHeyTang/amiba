@@ -32,7 +32,7 @@ export const en = {
   "common.untitled": "Untitled",
 
   // App shell
-  "app.title": "Hermes",
+  "app.title": "Amiba",
   "app.subtitle": "Extension console",
   "app.initializing": "Starting the local service…",
   "app.initError": "Couldn't start the local service. Make sure Hermes is installed and try again.",
@@ -134,9 +134,9 @@ export const en = {
   "options.feature.agentSourceApp": "Settings",
   "options.feature.backplaneError": "Couldn't reach the backplane to read this feature's status.",
   "options.feature.browser.title": "Browser",
-  "options.feature.browser.subtitle": "Let Hermes see and control your browser through the companion Chrome extension.",
+  "options.feature.browser.subtitle": "Let Amiba see and control your browser through the companion Chrome extension.",
   "options.feature.browser.how.title": "How it works",
-  "options.feature.browser.how.body": "When enabled, Hermes registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Hermes can then read tabs, navigate, click, type, and run scripts in your browser.",
+  "options.feature.browser.how.body": "When enabled, Amiba registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Amiba can then read tabs, navigate, click, type, and run scripts in your browser.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
@@ -218,7 +218,7 @@ export const en = {
   "options.preference.section.hotkey": "Hotkey",
   "options.preference.hotkey.label": "Summon hotkey",
   "options.preference.hotkey.desc":
-    "Bring Hermes to the front from any app when this binding fires.",
+    "Bring Amiba to the front from any app when this binding fires.",
   "options.preference.hotkey.mode.disabled": "Off",
   "options.preference.hotkey.mode.doubleTap": "Double-tap modifier",
   "options.preference.hotkey.mode.accelerator": "Key combo",
@@ -238,7 +238,7 @@ export const en = {
   // First-run onboarding wizard
   "onboarding.title": "Amiba",
   "onboarding.tagline":
-    "A native desktop client for Hermes Agent.\nDouble-tap ⌘ from anywhere to summon a chat — Hermes stays within reach.",
+    "A native desktop client for Hermes Agent.\nDouble-tap ⌘ from anywhere to summon a chat — Amiba stays within reach.",
   "onboarding.subtitle":
     "We'll install Hermes, load the plugins it needs, and boot the local service for you.\nAbout 5–10 minutes from here — nothing to prepare on your end.",
   "onboarding.step.install": "Install core",
@@ -252,7 +252,7 @@ export const en = {
   "onboarding.install.manualStep.install": "1. Install Hermes core",
   "onboarding.install.manualStep.plugin": "{n}. Load plugin {id}",
   "onboarding.ready.title": "You're all set",
-  "onboarding.ready.subtitle": "Heading into Hermes…",
+  "onboarding.ready.subtitle": "Heading into Amiba…",
   "onboarding.error.install":
     "Install failed — the terminal below has the details.",
   "onboarding.error.plugin": "Failed to load a plugin",
@@ -343,15 +343,15 @@ export const en = {
   "options.gateway.subtitle.tooltip":
     "Side panel chat → hermes-agent-gateway (OpenAI-compatible HTTP)",
   "options.gateway.baseUrl": "Gateway base URL",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8765",
+  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8642/v1",
   "options.gateway.baseUrl.desc":
-    "The bridge listens on this URL. Override it if you ran hermes-bridge on a different port or host.",
+    "The gateway listens on this URL. Override it if you ran `hermes chat` on a different port or host.",
   "options.gateway.test": "Test connection",
   "options.gateway.testing": "Testing…",
   "options.gateway.test.ok": "Connected. Bridge is reachable.",
   "options.gateway.test.fail": "Could not reach the bridge: {error}",
   "options.gateway.startHint":
-    "Bridge not running? Start it with `hermes-bridge` from the Hermes CLI.",
+    "Gateway not running? Start it with `hermes chat` from the Hermes CLI.",
   "options.gateway.section.chat": "Side panel chat",
   "options.gateway.model.label": "Chat model id",
   "options.gateway.model.fromGateway": "From gateway",
@@ -363,9 +363,9 @@ export const en = {
   "options.gateway.backplaneKey.title": "Backplane access",
   "options.gateway.backplaneKey.label": "Access key (optional)",
   "options.gateway.backplaneKey.placeholder":
-    "leave empty unless you've set HERMES_BACKPLANE_KEY",
+    "leave empty unless you've set AMIBA_BACKPLANE_KEY",
   "options.gateway.backplaneKey.help":
-    "Usually leave empty. If you want to require auth, set HERMES_BACKPLANE_KEY in ~/.hermes/.env, restart Hermes, then paste the same value here.",
+    "Usually leave empty. If you want to require auth, set AMIBA_BACKPLANE_KEY in ~/.hermes/.env, restart Hermes, then paste the same value here.",
   "options.gateway.bridge.title": "Bridge",
   "options.gateway.bridge.url.label": "Bridge URL",
   "options.gateway.bridge.url.help":
@@ -395,7 +395,7 @@ export const en = {
   // Models / Hermes model config
   "options.models.title": "Models",
   "options.models.subtitle":
-    "Which providers and models Hermes uses for chat, embedding, and tool calls.",
+    "Which providers and models Amiba uses for chat, embedding, and tool calls.",
   "options.models.catalog.loading": "Loading…",
   "options.models.catalog.ready": "Catalog ready",
   "options.models.catalog.unavailable": "Catalog unavailable",
@@ -406,7 +406,7 @@ export const en = {
   // Skills
   "options.skills.title": "Skills",
   "options.skills.subtitle":
-    "Skill packs Hermes can load on demand. Toggle to enable per session.",
+    "Skill packs Amiba can load on demand. Toggle to enable per session.",
   "options.skills.subtitle.summary":
     "Skills available to the current agent ({enabled} / {total})",
   "options.skills.subtitle.platform": "  ·  platform={platform}",
@@ -458,7 +458,7 @@ export const en = {
   "sidepanel.tabbar.menu.closeOthers": "Close others",
   "sidepanel.tabbar.menu.closeRight": "Close to the right",
   "sidepanel.tabbar.menu.closeAll": "Close all",
-  "sidepanel.placeholder": "Message Hermes…",
+  "sidepanel.placeholder": "Message Amiba…",
   "sidepanel.placeholder.uploading":
     "Waiting for attachment upload to finish…",
   "sidepanel.placeholder.withAttachments": "Add a question about your file(s)…",
@@ -559,13 +559,13 @@ export const en = {
   "sidepanel.empty.title": "No conversation open",
   "sidepanel.empty.withHistory":
     "Start a new chat or pick one up from History.",
-  "sidepanel.empty.firstChat": "Start your first chat with Hermes.",
+  "sidepanel.empty.firstChat": "Start your first chat with Amiba.",
   "sidepanel.empty.newChat": "New chat",
   "sidepanel.empty.openHistory": "Open from History",
   "sidepanel.empty.settings": "Settings",
   // Empty-state connect prompt — shown in place of the composer when
   // the bridge isn't reachable. Submitting a prompt would just error.
-  "sidepanel.empty.notConnected.title": "Not connected to Hermes",
+  "sidepanel.empty.notConnected.title": "Not connected to Amiba",
   "sidepanel.empty.notConnected.description":
     "Connect to the Hermes bridge first to start chatting.",
   "sidepanel.empty.notConnected.button": "Connect",
@@ -579,17 +579,17 @@ export const en = {
   "sidepanel.status.tooltip.online":
     "Hermes bridge is reachable. Click to open Gateway settings.",
   "sidepanel.status.tooltip.offline":
-    "Hermes bridge is not reachable. Start `hermes-bridge` and check the Gateway URL.",
+    "Hermes gateway is not reachable. Start `hermes chat` and check the Gateway URL.",
   "sidepanel.status.tooltip.connecting":
     "Connecting to the Hermes bridge…",
-  "sidepanel.status.tooltipBase": "Hermes Browser Extension · {state}",
+  "sidepanel.status.tooltipBase": "Amiba Browser Extension · {state}",
   "sidepanel.status.tooltip.agentRunning":
     "Agent window: #{windowId} · tab {tabId}",
   "sidepanel.status.tooltip.agentDown": "Agent window: not running",
   "sidepanel.status.tooltip.clickConnect": "Click to connect",
   "sidepanel.status.tooltip.clickDisconnect": "Click to disconnect",
   "sidepanel.status.aria.bar":
-    "Hermes Browser Extension {label}. {action}.",
+    "Amiba Browser Extension {label}. {action}.",
   "sidepanel.status.showAgentWindow": "Show agent window",
   "sidepanel.status.showAgentWindow.disabled":
     "Agent window not running — connect first",
@@ -670,7 +670,7 @@ export const en = {
   "newtab.placeholder.example.5": "Implement quicksort in Python",
   "newtab.send": "Send",
   "newtab.send.tooltip": "Send (Enter)",
-  "newtab.openOptions": "Open Hermes options",
+  "newtab.openOptions": "Open Amiba options",
   "newtab.history": "History",
   "newtab.latest": "Latest",
   "newtab.recentChats": "Recent chats",
@@ -686,11 +686,11 @@ export const en = {
   "newtab.continueInChat.prompt":
     "Below is the output from cron job \"{name}\" at {time}. Help me read it: what's worth handling right away, what can wait, and is there anything I need to follow up on?\n\n---\n\n{content}",
   "newtab.empty.installed": "Routine enabled",
-  "newtab.empty.headline": "Get Hermes working for you",
+  "newtab.empty.headline": "Get Amiba working for you",
   "newtab.empty.installedDesc":
     "It'll show up here after its next run. Add more, or wait for the first output.",
   "newtab.empty.headlineDesc":
-    "Pick a routine — Hermes runs it on a schedule and the output lands here.",
+    "Pick a routine — Amiba runs it on a schedule and the output lands here.",
   "newtab.empty.customCron": "Set up a custom cron job →",
   "newtab.install.failed": "Failed to install",
   "newtab.relative.justNow": "just now",
@@ -730,11 +730,11 @@ export const en = {
   "newtab.wallpaper.cycle": "Next wallpaper",
 
   // Chat tab
-  "chat.title": "Hermes chat",
+  "chat.title": "Amiba chat",
   "chat.goHome": "Back to home",
   "chat.newChat": "Start a new chat",
   "chat.placeholder": "Send a message…",
-  "chat.openOptions": "Open Hermes options",
+  "chat.openOptions": "Open Amiba options",
   "chat.searchPlaceholder": "Search sessions…",
   "chat.searchClear": "Clear search",
   "chat.untitled": "Untitled chat",

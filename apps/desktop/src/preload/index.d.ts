@@ -1,8 +1,8 @@
-import type { HermesBridge } from "./index"
+import type { AmibaBridge } from "./index"
 
 declare global {
   interface Window {
-    hermes: HermesBridge
+    amiba: AmibaBridge
   }
 }
 

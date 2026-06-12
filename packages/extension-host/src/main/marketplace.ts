@@ -117,7 +117,7 @@ export async function installFromRelease(
   extensionsDir: string,
   registryPath?: string,
 ): Promise<ExtensionManifest> {
-  const stagingRoot = await mkdtemp(join(tmpdir(), "hermes-ext-install-"))
+  const stagingRoot = await mkdtemp(join(tmpdir(), "amiba-ext-install-"))
   try {
     // Download tarball
     const res = await fetch(release.tarballUrl)

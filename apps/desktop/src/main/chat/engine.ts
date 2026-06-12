@@ -102,7 +102,7 @@ export async function resolveApproval(
 }
 
 function shouldSuppressNotifier(): boolean {
-  // When the user is staring at a real (focusable) Hermes window, the
+  // When the user is staring at a real (focusable) Amiba window, the
   // in-panel approval bubble is already visible — surfacing a second
   // floating card on top would be noise. The notifier window itself is
   // `focusable: false`, so it never gets `isFocused()` and never

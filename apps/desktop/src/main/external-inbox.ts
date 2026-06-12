@@ -1,5 +1,5 @@
 /**
- * External entry points that let other programs hand Hermes a prompt:
+ * External entry points that let other programs hand Amiba a prompt:
  *
  *   1. Custom URL protocol — `amiba://prompt?text=...` (or
  *      `amiba://?text=...`, or anything with a `text` query param).
@@ -249,7 +249,7 @@ export async function startUnixSocketInbox(
   // Stale sockets from a previous crashed run will make `listen()` fail
   // with EADDRINUSE. Probe by attempting to connect; if nothing answers
   // we can safely unlink. (Plain `unlink` would race against a healthy
-  // sibling Hermes process, but we hold a single-instance lock above so
+  // sibling Amiba process, but we hold a single-instance lock above so
   // that can't actually happen — still, the connect probe keeps us
   // honest if someone disables the lock later.)
   await fs.mkdir(path.dirname(socketPath), { recursive: true })

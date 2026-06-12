@@ -98,7 +98,7 @@ export function createExtensionsBridge(): ExtensionsBridge {
 /**
  * Returns the absolute file:// path of the compiled webview bridge preload
  * bundle. The desktop renderer passes this to `<webview preload="...">` so
- * extension pages get `window.hermes` injected.
+ * extension pages get `window.amiba` injected.
  */
 export function createWebviewPreloadBridge() {
   return {
