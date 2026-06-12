@@ -16,7 +16,9 @@ config only (no hot-reload); the response says ``applies_on_restart``.
 
 from __future__ import annotations
 
+import shutil
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiohttp import web
@@ -98,6 +100,51 @@ def drop_from_lists(
 def pip_uninstall_cmd(dist: str) -> List[str]:
     """Argv to uninstall ``dist`` from the interpreter running this backplane."""
     return [sys.executable, "-m", "pip", "uninstall", "-y", dist]
+
+
+def _remove_plugin_dir(target: Path) -> bool:
+    """Remove a user plugin at ``target``. Symlink-aware: unlinks a symlink
+    (so the real source dir is preserved — upstream ``hermes plugins remove``
+    rmtree's and would raise on a symlink), rmtree's a real dir. Returns
+    whether anything was removed."""
+    if target.is_symlink():
+        target.unlink()
+        return True
+    if target.is_dir():
+        shutil.rmtree(target)
+        return True
+    return False
+
+
+def _resolve_entrypoint_dist(name: str) -> Optional[str]:
+    """Map an entrypoint plugin name to the distribution that provides it
+    (group ``hermes_agent.plugins``). Works even when the module fails to
+    import — it reads package metadata, not the module."""
+    try:
+        import importlib.metadata as md
+    except Exception:
+        return None
+    try:
+        for dist in md.distributions():
+            try:
+                eps = dist.entry_points
+            except Exception:
+                continue
+            for ep in eps:
+                if getattr(ep, "group", "") == "hermes_agent.plugins" and ep.name == name:
+                    return dist.metadata["Name"]
+    except Exception:
+        return None
+    return None
+
+
+def _enrich_with_dist(rows, resolver=_resolve_entrypoint_dist):
+    """Attach a ``dist`` field to each entrypoint row (display only). Other
+    sources are left untouched. ``resolver`` is injectable for testing."""
+    for row in rows:
+        if row.get("source") == "entrypoint":
+            row["dist"] = resolver(row.get("name") or "")
+    return rows
 
 
 def _toggle(name: str, enable: bool) -> Tuple[int, Dict[str, Any]]:

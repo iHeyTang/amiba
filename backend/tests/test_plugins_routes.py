@@ -8,6 +8,11 @@ from amiba_backplane.runtime.features.hermes_proxy.plugins_routes.routes import 
     drop_from_lists,
     pip_uninstall_cmd,
 )
+from amiba_backplane.runtime.features.hermes_proxy.plugins_routes.routes import (
+    _remove_plugin_dir,
+    _resolve_entrypoint_dist,
+    _enrich_with_dist,
+)
 from amiba_backplane.runtime.features.hermes_proxy.plugins_routes import routes as plugins_routes
 from amiba_backplane.runtime.http_app import build_http_app
 
@@ -74,3 +79,42 @@ def test_drop_from_lists_absent_is_noop():
 
 def test_pip_uninstall_cmd_shape():
     assert pip_uninstall_cmd("pkg-x") == [sys.executable, "-m", "pip", "uninstall", "-y", "pkg-x"]
+
+
+def test_remove_plugin_dir_unlinks_symlink_keeps_target(tmp_path):
+    target = tmp_path / "real"
+    target.mkdir()
+    (target / "keep.txt").write_text("x")
+    link = tmp_path / "link"
+    link.symlink_to(target)
+
+    assert _remove_plugin_dir(link) is True
+    assert not link.exists()  # symlink gone
+    assert target.exists()  # target preserved (NOT rmtree'd through the link)
+    assert (target / "keep.txt").exists()
+
+
+def test_remove_plugin_dir_rmtree_real_dir(tmp_path):
+    d = tmp_path / "plug"
+    d.mkdir()
+    (d / "f").write_text("x")
+    assert _remove_plugin_dir(d) is True
+    assert not d.exists()
+
+
+def test_remove_plugin_dir_missing_returns_false(tmp_path):
+    assert _remove_plugin_dir(tmp_path / "nope") is False
+
+
+def test_resolve_entrypoint_dist_unknown_returns_none():
+    assert _resolve_entrypoint_dist("definitely-not-a-real-plugin-xyz") is None
+
+
+def test_enrich_with_dist_only_touches_entrypoint():
+    rows = [
+        {"name": "a", "source": "bundled"},
+        {"name": "b", "source": "entrypoint"},
+    ]
+    out = _enrich_with_dist(rows, resolver=lambda n: "dist-" + n)
+    assert "dist" not in out[0]
+    assert out[1]["dist"] == "dist-b"
