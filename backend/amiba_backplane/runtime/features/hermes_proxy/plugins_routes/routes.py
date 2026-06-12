@@ -16,6 +16,7 @@ config only (no hot-reload); the response says ``applies_on_restart``.
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiohttp import web
@@ -71,6 +72,32 @@ def apply_toggle(
         if name not in disabled:
             disabled.append(name)
     return enabled, disabled
+
+
+# Sources whose lifecycle this endpoint does NOT own. Bundled ships with
+# hermes-agent; project plugins live in the user's repo. Both are refused
+# (the user can disable bundled instead). user/entrypoint return None = OK.
+_UNINSTALL_REFUSALS: Dict[str, str] = {
+    "bundled": "bundled plugin ships with hermes-agent and can't be uninstalled — disable it instead",
+    "project": "project plugin is owned by your repo's ./.hermes/plugins — remove it there",
+}
+
+
+def uninstall_refusal(source: str) -> Optional[str]:
+    """Refusal message for sources we don't own, else None."""
+    return _UNINSTALL_REFUSALS.get(source)
+
+
+def drop_from_lists(
+    enabled: List[str], disabled: List[str], name: str
+) -> Tuple[List[str], List[str]]:
+    """Remove ``name`` from both lists. Pure; inputs untouched."""
+    return [e for e in enabled if e != name], [d for d in disabled if d != name]
+
+
+def pip_uninstall_cmd(dist: str) -> List[str]:
+    """Argv to uninstall ``dist`` from the interpreter running this backplane."""
+    return [sys.executable, "-m", "pip", "uninstall", "-y", dist]
 
 
 def _toggle(name: str, enable: bool) -> Tuple[int, Dict[str, Any]]:
