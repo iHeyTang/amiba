@@ -14,13 +14,11 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 
+import { desktopBridge } from "./bridge"
+
 // ---------------------------------------------------------------------------
 // Module-level preload path cache
 // ---------------------------------------------------------------------------
-
-type AmibaWindowBridge = {
-  getWebviewPreloadPath(): Promise<string>
-}
 
 let preloadPathCache: string | null = null
 let preloadPathPromise: Promise<string> | null = null
@@ -29,7 +27,7 @@ function getPreloadPath(): Promise<string> {
   if (preloadPathCache) return Promise.resolve(preloadPathCache)
   if (preloadPathPromise) return preloadPathPromise
   preloadPathPromise = (
-    (window as unknown as { amiba: AmibaWindowBridge }).amiba.getWebviewPreloadPath()
+    desktopBridge().getWebviewPreloadPath()
   ).then((p) => {
     preloadPathCache = p
     return p

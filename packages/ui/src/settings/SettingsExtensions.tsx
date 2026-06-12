@@ -1,7 +1,7 @@
 import { FolderOpen, RefreshCw, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { useExtensionRegistry } from "@amiba/extension-host/renderer"
+import { useExtensionRegistry, desktopBridge } from "@amiba/extension-host/renderer"
 import type { ExtensionsBridge } from "@amiba/extension-host/preload"
 import { useT } from "@amiba/i18n"
 import { PluginsTab } from "./PluginsTab"
@@ -18,7 +18,7 @@ import {
 } from "../primitives"
 
 function getExtensions(): ExtensionsBridge {
-  return (window as unknown as { amiba: { extensions: ExtensionsBridge } }).amiba.extensions
+  return desktopBridge().extensions
 }
 
 // ---------------------------------------------------------------------------

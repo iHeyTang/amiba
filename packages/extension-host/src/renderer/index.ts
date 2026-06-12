@@ -7,6 +7,11 @@
 
 export { ExtensionWebView } from "./extension-webview"
 export {
+  desktopBridge,
+  maybeDesktopBridge,
+  type AmibaRendererBridge,
+} from "./bridge"
+export {
   useExtensionMains,
   useExtensionSettings,
   type MainContribution,
@@ -17,18 +22,7 @@ export {
 // extensions and their status.
 import { useEffect, useState } from "react"
 import type { ExtensionManifest } from "@amiba/extension-api"
-
-type AmibaWindowShape = {
-  extensions: {
-    // The actual IPC payload is { manifest, path } per row — the preload
-    // signature lines up with `getManifestEntries()` on the main side.
-    // The renderer type used to mis-declare this as ExtensionManifest[]
-    // which made every consumer reach into undefined for name/id/version
-    // and render blank chrome.
-    listManifests(): Promise<Array<{ manifest: ExtensionManifest; path: string }>>
-    status(): Promise<Array<{ id: string; status: string; error?: string; source?: string }>>
-  }
-}
+import { desktopBridge } from "./bridge"
 
 export function useExtensionRegistry(refreshKey: number = 0) {
   const [items, setItems] = useState<
@@ -41,7 +35,7 @@ export function useExtensionRegistry(refreshKey: number = 0) {
     }>
   >([])
   useEffect(() => {
-    const { extensions } = (window as unknown as { amiba: AmibaWindowShape }).amiba
+    const { extensions } = desktopBridge()
     void Promise.all([
       extensions.listManifests(),
       extensions.status(),

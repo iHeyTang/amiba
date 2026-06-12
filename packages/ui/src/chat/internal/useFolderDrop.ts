@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type HTMLAttributes } from "react";
 import { getPlatform } from "@amiba/platform";
 import { useSessions } from "@amiba/core";
+import { maybeDesktopBridge } from "@amiba/extension-host/renderer";
 
 /**
  * "Workspace binding" is the desktop-only feature where the user
@@ -50,11 +51,7 @@ export interface UseFolderDropResult {
  * `window.amiba.workspaces.getPathForFile`. Returns null when the
  * bridge isn't present (extension / web). */
 function resolveDroppedFolderPath(file: File): string | null {
-  const bridge = (
-    window as unknown as {
-      amiba?: { workspaces?: { getPathForFile?: (f: File) => string } };
-    }
-  ).amiba?.workspaces?.getPathForFile;
+  const bridge = maybeDesktopBridge()?.workspaces?.getPathForFile;
   if (!bridge) return null;
   try {
     const p = bridge(file);

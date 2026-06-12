@@ -1,5 +1,6 @@
 import { CheckCircle2, Download, Loader2, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { maybeDesktopBridge } from "@amiba/extension-host/renderer"
 
 import {
   downloadLocalModel,
@@ -230,15 +231,7 @@ export function SettingsVoice() {
       // the first attempt and we can surface a more actionable error
       // when access is explicitly denied. ``window.amiba`` is absent
       // in the browser-extension build, so we feature-detect.
-      const ensure = (window as unknown as {
-        amiba?: {
-          voice?: {
-            ensureMicrophoneAccess: () => Promise<
-              "granted" | "denied" | "restricted" | "not-determined" | "unknown"
-            >
-          }
-        }
-      }).amiba?.voice?.ensureMicrophoneAccess
+      const ensure = maybeDesktopBridge()?.voice?.ensureMicrophoneAccess
       if (ensure) {
         const status = await ensure()
         if (status === "denied" || status === "restricted") {

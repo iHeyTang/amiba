@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react"
 import { getCurrentLanguage, subscribeLanguage } from "@amiba/i18n"
 import type { ExtensionManifest } from "@amiba/extension-api"
+import { desktopBridge } from "./bridge"
 
 // ---------------------------------------------------------------------------
 // Internal manifest entry type (what listManifests now returns)
@@ -28,7 +29,7 @@ let _baseUrlPromise: Promise<string> | null = null
 
 function getBaseUrl(): Promise<string> {
   if (!_baseUrlPromise) {
-    const bridge = (window as unknown as { amiba: { extensions: { getHttpBaseUrl(): Promise<string> } } }).amiba.extensions
+    const bridge = desktopBridge().extensions
     _baseUrlPromise = bridge.getHttpBaseUrl()
   }
   return _baseUrlPromise
@@ -65,16 +66,8 @@ export interface SettingsContribution {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-type AmibaWindowShape = {
-  extensions: {
-    listManifests(): Promise<ManifestEntry[]>
-    onExtensionsChanged(cb: (extensionId: string | null) => void): () => void
-    getHttpBaseUrl(): Promise<string>
-  }
-}
-
-function getExtensionsBridge(): AmibaWindowShape["extensions"] {
-  return (window as unknown as { amiba: AmibaWindowShape }).amiba.extensions
+function getExtensionsBridge() {
+  return desktopBridge().extensions
 }
 
 /**
