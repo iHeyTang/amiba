@@ -3,6 +3,7 @@ import {
   AtSign,
   Bot,
   Boxes,
+  Puzzle,
   BrainCircuit,
   Clock,
   Code2,
@@ -49,7 +50,7 @@ import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { AgentTaskProvider } from "./agent-task";
 import { MentionSourcesTab } from "./MentionSourcesTab";
-import { SettingsExtensions } from "./SettingsExtensions";
+import { SettingsExtensions, SettingsPlugins } from "./SettingsExtensions";
 import { SettingsBrowser } from "./SettingsBrowser";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
@@ -75,6 +76,7 @@ const ALL_TABS = [
   "cron",
   "logs",
   "extensions",
+  "plugins",
   "mention-sources",
   "browser",
 ] as const;
@@ -353,6 +355,7 @@ export function SettingsView({
             <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
+            <NavBtn icon={<Puzzle className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.plugins")} active={mainTab === "plugins"} onClick={() => onMainTabChange("plugins")} />
             <NavBtn icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.mentionSources")} active={mainTab === "mention-sources"} onClick={() => onMainTabChange("mention-sources")} />
             <NavBtn icon={<Globe className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.feature.browser.title")} active={mainTab === "browser"} onClick={() => onMainTabChange("browser")} />
             {extensionSettings.length > 0 && (
@@ -418,6 +421,8 @@ export function SettingsView({
           </div>
         ) : mainTab === "extensions" ? (
           <SettingsExtensions />
+        ) : mainTab === "plugins" ? (
+          <SettingsPlugins />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {mainTab === "scripts" && userscripts ? (
