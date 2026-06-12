@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Keyboard, MessageSquare, Palette } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Label } from "../primitives";
 import { Switch } from "../primitives";
@@ -46,32 +45,9 @@ const SUMMON_HOTKEY_KEY = "settings.desktop.summonHotkey";
 // to the chat surface via the shared storage.watch subscription.
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
-// Active sub-tab inside the Preferences pane — persisted so the page
-// re-opens where the user left off.
-const PREFERENCES_SUBTAB_KEY = "settings.preferences.subtab";
 
 function isMessagesMaxWidth(v: unknown): v is MessagesMaxWidth {
   return v === "narrow" || v === "comfortable" || v === "full";
-}
-
-type PreferenceSubTab = "appearance" | "chat" | "hotkey";
-
-const DEFAULT_SUBTAB: PreferenceSubTab = "appearance";
-
-const SUBTAB_LABEL_I18N: Record<PreferenceSubTab, MessageKey> = {
-  appearance: "options.preference.section.appearance",
-  chat: "options.preference.section.chat",
-  hotkey: "options.preference.section.hotkey",
-};
-
-const SUBTAB_ICONS: Record<PreferenceSubTab, ReactNode> = {
-  appearance: <Palette className="h-4 w-4 shrink-0 opacity-70" />,
-  chat: <MessageSquare className="h-4 w-4 shrink-0 opacity-70" />,
-  hotkey: <Keyboard className="h-4 w-4 shrink-0 opacity-70" />,
-};
-
-function isPreferenceSubTab(v: unknown): v is PreferenceSubTab {
-  return v === "appearance" || v === "chat" || v === "hotkey";
 }
 
 type SummonModifier = "Meta" | "Control" | "Alt" | "Shift";
@@ -101,8 +77,12 @@ function parseSummonHotkey(raw: unknown): SummonHotkey {
   return DEFAULT_SUMMON_HOTKEY;
 }
 
-/** Extension UI preferences (theme, language, etc.) — not gateway or Hermes CLI. */
-export function SettingsPreferences() {
+/**
+ * Appearance settings — a top-level tab. Merges what used to be the
+ * "Appearance" + "Chat" preference sub-tabs into one page (language, theme,
+ * wallpaper, message width, stream details, quick actions).
+ */
+export function SettingsAppearance() {
   const { t } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
   const [langPref, setLangPref] = useStoredLanguagePreference();
@@ -110,23 +90,10 @@ export function SettingsPreferences() {
   // Default `true` matches the new-tab page's runtime default (see
   // `useWallpaper`).
   const [wallpaperEnabled, setWallpaperEnabled] = useState(true);
-  const [summonHotkey, setSummonHotkey] = useState<SummonHotkey>(
-    DEFAULT_SUMMON_HOTKEY,
-  );
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
   );
-  const [subTab, setSubTab] = useState<PreferenceSubTab>(DEFAULT_SUBTAB);
   const isDesktop = getPlatform().kind === "desktop";
-
-  // Hotkey sub-tab only exists when running inside Electron — that's
-  // where the summon hotkey actually fires. Skip it everywhere else so
-  // the sidebar doesn't show a dead row.
-  const navItems = useMemo<PreferenceSubTab[]>(() => {
-    const base: PreferenceSubTab[] = ["appearance", "chat"];
-    if (isDesktop) base.push("hotkey");
-    return base;
-  }, [isDesktop]);
 
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: "auto", label: t("options.preference.language.auto") },
@@ -149,153 +116,142 @@ export function SettingsPreferences() {
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
-    void storage
-      .get([
-        SHOW_STREAM_DETAILS_KEY,
-        NEWTAB_WALLPAPER_KEY,
-        SUMMON_HOTKEY_KEY,
-        MESSAGES_WIDTH_KEY,
-        PREFERENCES_SUBTAB_KEY,
-      ])
-      .then((r) => {
-        if (cancelled) return;
-        const stream = r[SHOW_STREAM_DETAILS_KEY];
-        if (typeof stream === "boolean") setShowStreamDetails(stream);
-        const wp = r[NEWTAB_WALLPAPER_KEY];
-        if (typeof wp === "boolean") setWallpaperEnabled(wp);
-        if (SUMMON_HOTKEY_KEY in r) {
-          setSummonHotkey(parseSummonHotkey(r[SUMMON_HOTKEY_KEY]));
-        }
-        const w = r[MESSAGES_WIDTH_KEY];
-        if (isMessagesMaxWidth(w)) setMessagesWidth(w);
-        const st = r[PREFERENCES_SUBTAB_KEY];
-        if (isPreferenceSubTab(st)) setSubTab(st);
-      });
-    const unsub = storage.watch(
-      [
-        SHOW_STREAM_DETAILS_KEY,
-        NEWTAB_WALLPAPER_KEY,
-        SUMMON_HOTKEY_KEY,
-        MESSAGES_WIDTH_KEY,
-        PREFERENCES_SUBTAB_KEY,
-      ],
-      (changes) => {
-        const hk = changes[SUMMON_HOTKEY_KEY];
-        if (hk) setSummonHotkey(parseSummonHotkey(hk.newValue));
-        const stream = changes[SHOW_STREAM_DETAILS_KEY];
-        if (stream && typeof stream.newValue === "boolean") {
-          setShowStreamDetails(stream.newValue);
-        }
-        const wp = changes[NEWTAB_WALLPAPER_KEY];
-        if (wp && typeof wp.newValue === "boolean") {
-          setWallpaperEnabled(wp.newValue);
-        }
-        const w = changes[MESSAGES_WIDTH_KEY];
-        if (w && isMessagesMaxWidth(w.newValue)) setMessagesWidth(w.newValue);
-        const st = changes[PREFERENCES_SUBTAB_KEY];
-        if (st && isPreferenceSubTab(st.newValue)) setSubTab(st.newValue);
-      },
-    );
+    const keys = [
+      SHOW_STREAM_DETAILS_KEY,
+      NEWTAB_WALLPAPER_KEY,
+      MESSAGES_WIDTH_KEY,
+    ];
+    void storage.get(keys).then((r) => {
+      if (cancelled) return;
+      const stream = r[SHOW_STREAM_DETAILS_KEY];
+      if (typeof stream === "boolean") setShowStreamDetails(stream);
+      const wp = r[NEWTAB_WALLPAPER_KEY];
+      if (typeof wp === "boolean") setWallpaperEnabled(wp);
+      const w = r[MESSAGES_WIDTH_KEY];
+      if (isMessagesMaxWidth(w)) setMessagesWidth(w);
+    });
+    const unsub = storage.watch(keys, (changes) => {
+      const stream = changes[SHOW_STREAM_DETAILS_KEY];
+      if (stream && typeof stream.newValue === "boolean") {
+        setShowStreamDetails(stream.newValue);
+      }
+      const wp = changes[NEWTAB_WALLPAPER_KEY];
+      if (wp && typeof wp.newValue === "boolean") {
+        setWallpaperEnabled(wp.newValue);
+      }
+      const w = changes[MESSAGES_WIDTH_KEY];
+      if (w && isMessagesMaxWidth(w.newValue)) setMessagesWidth(w.newValue);
+    });
     return () => {
       cancelled = true;
       unsub();
     };
   }, []);
 
-  // Fall back if a persisted sub-tab disappears (e.g. user opens the
-  // page on web after previously selecting "desktop" on Electron).
-  const activeTab: PreferenceSubTab = navItems.includes(subTab)
-    ? subTab
-    : DEFAULT_SUBTAB;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <SettingsPaneHeader
+        title={t("options.nav.appearance")}
+        subtitle={t("options.preference.subtitle")}
+      />
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-6">
+          <div className="mx-auto w-full max-w-2xl space-y-8">
+            <AppearanceSection
+              t={t}
+              langPref={langPref}
+              themePref={themePref}
+              languageOptions={languageOptions}
+              themeOptions={themeOptions}
+              onLangChange={(v) => void setLangPref(v)}
+              onThemeChange={(v) => void setThemePref(v)}
+              // Wallpaper backdrop is rendered by the extension's new-tab
+              // surface; the desktop home doesn't surface it, so we hide
+              // the toggle there to avoid a no-op control.
+              showWallpaper={!isDesktop}
+              wallpaperEnabled={wallpaperEnabled}
+              onWallpaperChange={(next) => {
+                setWallpaperEnabled(next);
+                void getPlatform().storage.set({
+                  [NEWTAB_WALLPAPER_KEY]: next,
+                });
+              }}
+            />
+            <ChatSection
+              t={t}
+              messagesWidth={messagesWidth}
+              widthOptions={widthOptions}
+              showStreamDetails={showStreamDetails}
+              onWidthChange={(v) => {
+                setMessagesWidth(v);
+                void getPlatform().storage.set({
+                  [MESSAGES_WIDTH_KEY]: v,
+                });
+              }}
+              onStreamChange={(next) => {
+                setShowStreamDetails(next);
+                void getPlatform().storage.set({
+                  [SHOW_STREAM_DETAILS_KEY]: next,
+                });
+              }}
+            />
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
 
-  function onSubTabChange(next: PreferenceSubTab) {
-    setSubTab(next);
-    void getPlatform().storage.set({ [PREFERENCES_SUBTAB_KEY]: next });
-  }
+/**
+ * Keyboard shortcuts — a top-level tab. Desktop-only: the summon hotkey only
+ * fires inside Electron. SettingsView hides the nav entry elsewhere.
+ */
+export function SettingsShortcuts() {
+  const { t } = useT();
+  const [summonHotkey, setSummonHotkey] = useState<SummonHotkey>(
+    DEFAULT_SUMMON_HOTKEY,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const storage = getPlatform().storage;
+    void storage.get([SUMMON_HOTKEY_KEY]).then((r) => {
+      if (cancelled) return;
+      if (SUMMON_HOTKEY_KEY in r) {
+        setSummonHotkey(parseSummonHotkey(r[SUMMON_HOTKEY_KEY]));
+      }
+    });
+    const unsub = storage.watch([SUMMON_HOTKEY_KEY], (changes) => {
+      const hk = changes[SUMMON_HOTKEY_KEY];
+      if (hk) setSummonHotkey(parseSummonHotkey(hk.newValue));
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      {/* Title-less header: keeps the desktop drag region intact but
-          renders no visible label — the sub-sidebar already identifies
-          where the user is, so a redundant "Preferences" heading was
-          just chrome on chrome. */}
-      <SettingsPaneHeader />
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <aside className="flex min-h-0 w-44 shrink-0 flex-col border-r border-border/40 bg-muted/30">
-          <ScrollArea className="min-h-0 flex-1">
-            <nav className="flex flex-col gap-0.5 p-2">
-              {navItems.map((id) => (
-                <SubNavBtn
-                  key={id}
-                  icon={SUBTAB_ICONS[id]}
-                  label={t(SUBTAB_LABEL_I18N[id])}
-                  active={activeTab === id}
-                  onClick={() => onSubTabChange(id)}
-                />
-              ))}
-            </nav>
-          </ScrollArea>
-        </aside>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="p-6">
-            <div className="mx-auto w-full max-w-2xl">
-              {activeTab === "appearance" && (
-                <AppearanceSection
-                  t={t}
-                  langPref={langPref}
-                  themePref={themePref}
-                  languageOptions={languageOptions}
-                  themeOptions={themeOptions}
-                  onLangChange={(v) => void setLangPref(v)}
-                  onThemeChange={(v) => void setThemePref(v)}
-                  // Wallpaper backdrop is rendered by the extension's new-tab
-                  // surface; the desktop home doesn't surface it, so we hide
-                  // the toggle there to avoid a no-op control.
-                  showWallpaper={!isDesktop}
-                  wallpaperEnabled={wallpaperEnabled}
-                  onWallpaperChange={(next) => {
-                    setWallpaperEnabled(next);
-                    void getPlatform().storage.set({
-                      [NEWTAB_WALLPAPER_KEY]: next,
-                    });
-                  }}
-                />
-              )}
-              {activeTab === "chat" && (
-                <ChatSection
-                  t={t}
-                  messagesWidth={messagesWidth}
-                  widthOptions={widthOptions}
-                  showStreamDetails={showStreamDetails}
-                  onWidthChange={(v) => {
-                    setMessagesWidth(v);
-                    void getPlatform().storage.set({
-                      [MESSAGES_WIDTH_KEY]: v,
-                    });
-                  }}
-                  onStreamChange={(next) => {
-                    setShowStreamDetails(next);
-                    void getPlatform().storage.set({
-                      [SHOW_STREAM_DETAILS_KEY]: next,
-                    });
-                  }}
-                />
-              )}
-              {activeTab === "hotkey" && isDesktop && (
-                <HotkeySection
-                  summonHotkey={summonHotkey}
-                  onSummonHotkeyChange={(next) => {
-                    setSummonHotkey(next);
-                    void getPlatform().storage.set({
-                      [SUMMON_HOTKEY_KEY]: next,
-                    });
-                  }}
-                />
-              )}
-            </div>
+      <SettingsPaneHeader
+        title={t("options.nav.shortcuts")}
+        subtitle={t("options.preference.hotkey.desc")}
+      />
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-6">
+          <div className="mx-auto w-full max-w-2xl">
+            <HotkeySection
+              summonHotkey={summonHotkey}
+              onSummonHotkeyChange={(next) => {
+                setSummonHotkey(next);
+                void getPlatform().storage.set({
+                  [SUMMON_HOTKEY_KEY]: next,
+                });
+              }}
+            />
           </div>
-        </ScrollArea>
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -405,30 +361,6 @@ function HotkeySection({
     <div className="space-y-3">
       <SummonHotkeyRow value={summonHotkey} onChange={onSummonHotkeyChange} />
     </div>
-  );
-}
-
-function SubNavBtn({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? "secondary" : "ghost"}
-      className="w-full justify-start gap-2 font-normal"
-      onClick={onClick}
-    >
-      {icon}
-      {label}
-    </Button>
   );
 }
 

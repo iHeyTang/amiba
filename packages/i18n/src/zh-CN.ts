@@ -34,7 +34,8 @@ export const zhCN: Messages = {
   "app.initRetry": "重试",
 
   // Options nav
-  "options.nav.preference": "偏好设置",
+  "options.nav.appearance": "外观",
+  "options.nav.shortcuts": "快捷键",
   "options.nav.scripts": "用户脚本",
   "options.nav.gateway": "网关",
   "options.nav.models": "模型",
@@ -195,11 +196,7 @@ export const zhCN: Messages = {
   "options.voice.status.retry": "重试",
 
   // Preference page
-  "options.preference.title": "偏好设置",
   "options.preference.subtitle": "扩展界面与行为",
-  "options.preference.section.appearance": "外观",
-  "options.preference.section.chat": "对话",
-  "options.preference.section.hotkey": "快捷键",
   "options.preference.hotkey.label": "唤起快捷键",
   "options.preference.hotkey.desc": "在任意 App 中触发后把 Amiba 切换到前台。",
   "options.preference.hotkey.mode.disabled": "关闭",

@@ -39,7 +39,8 @@ export const en = {
   "app.initRetry": "Retry",
 
   // Options nav
-  "options.nav.preference": "Preference",
+  "options.nav.appearance": "Appearance",
+  "options.nav.shortcuts": "Shortcuts",
   "options.nav.scripts": "Userscripts",
   "options.nav.gateway": "Gateway",
   "options.nav.models": "Models",
@@ -208,11 +209,7 @@ export const en = {
   "options.voice.status.retry": "Retry",
 
   // Preference page
-  "options.preference.title": "Preference",
   "options.preference.subtitle": "Extension UI and behavior",
-  "options.preference.section.appearance": "Appearance",
-  "options.preference.section.chat": "Chat",
-  "options.preference.section.hotkey": "Hotkey",
   "options.preference.hotkey.label": "Summon hotkey",
   "options.preference.hotkey.desc":
     "Bring Amiba to the front from any app when this binding fires.",

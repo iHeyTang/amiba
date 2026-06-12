@@ -10,12 +10,14 @@ import {
   FileText,
   Globe,
   Home,
+  Keyboard,
   Mic,
   Palette,
   RadioTower,
   RefreshCw,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { getPlatform } from "@amiba/platform";
 
 import { ExtensionWebView, useExtensionSettings } from "@amiba/extension-host/renderer";
 import { resolveExtensionIcon } from "../chat/ActivityBar";
@@ -49,7 +51,7 @@ import { AgentTaskProvider } from "./agent-task";
 import { MentionSourcesTab } from "./MentionSourcesTab";
 import { SettingsExtensions } from "./SettingsExtensions";
 import { SettingsBrowser } from "./SettingsBrowser";
-import { SettingsPreferences } from "./SettingsPreferences";
+import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
 
@@ -63,7 +65,8 @@ import { SettingsVoice } from "./SettingsVoice";
  */
 const ALL_TABS = [
   "status",
-  "preference",
+  "appearance",
+  "shortcuts",
   "scripts",
   "gateway",
   "models",
@@ -165,6 +168,7 @@ export function SettingsView({
   const { t } = useT();
 
   const showScriptsTab = !!capabilities.userscripts;
+  const isDesktop = getPlatform().kind === "desktop";
   const extensionSettings = useExtensionSettings();
 
   const [mainTab, setMainTab] = useState<MainTab>(() => {
@@ -335,7 +339,10 @@ export function SettingsView({
               {t("options.nav.section.core")}
             </div>
             <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
-            <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.preference")} active={mainTab === "preference"} onClick={() => onMainTabChange("preference")} />
+            <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.appearance")} active={mainTab === "appearance"} onClick={() => onMainTabChange("appearance")} />
+            {isDesktop && (
+              <NavBtn icon={<Keyboard className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.shortcuts")} active={mainTab === "shortcuts"} onClick={() => onMainTabChange("shortcuts")} />
+            )}
             {showScriptsTab && (
               <NavBtn icon={<Code2 className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.scripts")} active={mainTab === "scripts"} onClick={() => onMainTabChange("scripts")} />
             )}
@@ -488,8 +495,10 @@ export function SettingsView({
                   </div>
                 </ScrollArea>
               </>
-            ) : mainTab === "preference" ? (
-              <SettingsPreferences />
+            ) : mainTab === "appearance" ? (
+              <SettingsAppearance />
+            ) : mainTab === "shortcuts" ? (
+              <SettingsShortcuts />
             ) : isCoreTab(mainTab) ? (
               <>
                 <SettingsPaneHeader
