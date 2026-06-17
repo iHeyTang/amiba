@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Wallet,
   Wrench,
   X,
 } from "lucide-react";
@@ -31,7 +32,7 @@ export type ActivityViewId = string;
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
-  "clock": <Clock className="h-4 w-4" />,
+  "wallet": <Wallet className="h-4 w-4" />,
   "wrench": <Wrench className="h-4 w-4" />,
 };
 
