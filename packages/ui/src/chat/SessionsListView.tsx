@@ -290,8 +290,8 @@ function SessionRow({
     return (
       <div
         className={cn(
-          "group flex items-center gap-1 px-3 py-1.5",
-          active && "bg-muted/70",
+          "group flex items-center gap-2 rounded-md px-2 py-1",
+          active && "bg-foreground/10",
         )}
       >
         <StatusDot />
@@ -312,10 +312,10 @@ function SessionRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        "group flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+        "group flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors",
         active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60",
+          ? "bg-foreground/10 text-foreground"
+          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
     >
       <StatusDot />
@@ -369,11 +369,16 @@ function SessionRow({
  * stable.
  */
 function StatusDot() {
+  // Wrapped in an h-4 w-4 slot so the dot occupies the same leading-icon
+  // column as the sidebar nav rows and the section-header chevrons — the
+  // row titles then line up vertically across the whole sidebar.
   return (
     <span
       aria-hidden
-      className="h-2 w-2 shrink-0 rounded-full border border-muted-foreground/40"
-    />
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+    >
+      <span className="h-1.5 w-1.5 rounded-full border border-muted-foreground/40" />
+    </span>
   );
 }
 

@@ -64,31 +64,36 @@ export function TopSection({
   // upper section's bottom-border IS the lower section's top-border).
   // The rail container adds a single ``border-t`` to crown the very
   // first section.
-  const headerCls =
-    variant === "rail"
-      ? "px-3 py-1.5 text-[10px]"
-      : "px-2 py-1.5 text-xs";
+  const isRail = variant === "rail";
+  // Rail headers read as quiet group labels that share the sidebar's row
+  // language (rounded hover, soft-foreground tint, same x-inset as the nav
+  // rows above). Drawer headers keep their original uppercase micro-label
+  // look — that surface is unchanged.
+  const headerWrapCls = isRail
+    ? "group/topsection relative flex w-full shrink-0 items-center rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
+    : cn(
+        "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
+        "px-2 py-1.5 text-xs",
+      );
   // Header is a `<div>` (not a button) because `actions` may contain
   // nested buttons, and `<button>` inside `<button>` is invalid HTML.
-  // The clickable chevron+label area is its own inner button.
+  // The clickable chevron+label area is its own inner button. The chevron
+  // sits in an h-4 w-4 slot so the label lines up with the nav rows' labels.
   const header = (
-    <div
-      className={cn(
-        "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
-        headerCls,
-      )}
-    >
+    <div className={headerWrapCls}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
         aria-expanded={!collapsed}
       >
-        {collapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-        )}
+        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </span>
         <span className="flex-1 truncate">{label}</span>
       </button>
       {typeof count === "number" && count > 0 && (
@@ -124,7 +129,11 @@ export function TopSection({
     return (
       <section
         className={cn(
-          "flex min-h-0 flex-col border-b border-border/60",
+          "flex min-h-0 flex-col",
+          // Rail sections live inside the unified sidebar — no hard divider
+          // (the quiet header + spacing carry the grouping). Drawer keeps the
+          // shared bottom-border so stacked sections read as one divider.
+          !isRail && "border-b border-border/60",
           collapsed ? "shrink-0" : "flex-1",
         )}
       >
@@ -136,7 +145,7 @@ export function TopSection({
     );
   }
   return (
-    <section className="border-b border-border/60">
+    <section className={cn(!isRail && "border-b border-border/60")}>
       {header}
       {!collapsed && <div>{children}</div>}
     </section>
