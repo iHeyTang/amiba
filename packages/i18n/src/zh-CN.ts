@@ -681,6 +681,8 @@ export const zhCN: Messages = {
   "chat.openOptions": "打开 Amiba 设置",
   "chat.searchPlaceholder": "搜索会话…",
   "chat.searchClear": "清除搜索",
+  "chat.search": "搜索",
+  "chat.settings": "设置",
   "chat.untitled": "未命名对话",
   "chat.rename": "重命名",
   "chat.delete": "删除",

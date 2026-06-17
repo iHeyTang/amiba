@@ -730,6 +730,8 @@ export const en = {
   "chat.openOptions": "Open Amiba options",
   "chat.searchPlaceholder": "Search sessions…",
   "chat.searchClear": "Clear search",
+  "chat.search": "Search",
+  "chat.settings": "Settings",
   "chat.untitled": "Untitled chat",
   "chat.rename": "Rename",
   "chat.delete": "Delete",
