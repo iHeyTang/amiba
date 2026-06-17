@@ -38,13 +38,13 @@ export function SidebarItem({
       aria-current={active ? "page" : undefined}
       data-testid={`sidebar-item-${id}`}
       className={cn(
-        "app-no-drag group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+        "app-no-drag group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
         active
           ? "bg-foreground/10 text-foreground"
-          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+          : "text-foreground/80 hover:bg-foreground/5 hover:text-foreground",
       )}
     >
-      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+      <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{label}</span>

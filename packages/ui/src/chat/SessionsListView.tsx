@@ -290,7 +290,7 @@ function SessionRow({
     return (
       <div
         className={cn(
-          "group flex items-center gap-2 rounded-md px-2 py-1",
+          "group flex items-center gap-2.5 rounded-md px-2 py-1.5",
           active && "bg-foreground/10",
         )}
       >
@@ -301,7 +301,7 @@ function SessionRow({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKey}
           onBlur={commit}
-          className="h-6 min-w-0 flex-1 px-1.5 text-xs"
+          className="h-7 min-w-0 flex-1 px-1.5 text-sm"
         />
       </div>
     );
@@ -312,14 +312,14 @@ function SessionRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors",
+        "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
         active
           ? "bg-foreground/10 text-foreground"
-          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+          : "text-foreground/80 hover:bg-foreground/5 hover:text-foreground",
       )}
     >
       <StatusDot />
-      <span className="min-w-0 flex-1 truncate text-xs font-medium">
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">
         {session.title?.trim() || t("chat.untitled")}
       </span>
       <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
@@ -354,7 +354,7 @@ function SessionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[9px] tabular-nums text-muted-foreground/70 group-hover:hidden">
+      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
         {formatRelativeShort(session.updatedAt)}
       </span>
     </button>
@@ -375,9 +375,9 @@ function StatusDot() {
   return (
     <span
       aria-hidden
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center"
     >
-      <span className="h-1.5 w-1.5 rounded-full border border-muted-foreground/40" />
+      <span className="h-2 w-2 rounded-full border border-muted-foreground/40" />
     </span>
   );
 }

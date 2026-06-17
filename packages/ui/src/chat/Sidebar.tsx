@@ -31,9 +31,9 @@ import { SessionsListView } from "./SessionsListView";
 export type ActivityViewId = string;
 
 const ICON_MAP: Record<string, ReactNode> = {
-  "book-open": <BookOpen className="h-4 w-4" />,
-  "wallet": <Wallet className="h-4 w-4" />,
-  "wrench": <Wrench className="h-4 w-4" />,
+  "book-open": <BookOpen className="h-[18px] w-[18px]" />,
+  "wallet": <Wallet className="h-[18px] w-[18px]" />,
+  "wrench": <Wrench className="h-[18px] w-[18px]" />,
 };
 
 export function resolveExtensionIcon(name: string): ReactNode | null {
@@ -92,26 +92,26 @@ export function Sidebar({
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
-      icon: <Clock className="h-4 w-4" />,
+      icon: <Clock className="h-[18px] w-[18px]" />,
       label: t("sidepanel.sessions.group.scheduled"),
       order: 1,
     },
     {
       id: "skills",
-      icon: <Sparkles className="h-4 w-4" />,
+      icon: <Sparkles className="h-[18px] w-[18px]" />,
       label: t("sidepanel.sessions.group.skills"),
       order: 2,
     },
     {
       id: "tools",
-      icon: <Wrench className="h-4 w-4" />,
+      icon: <Wrench className="h-[18px] w-[18px]" />,
       label: t("sidepanel.sessions.group.tools"),
       order: 3,
     },
   ];
   const extNav: NavRow[] = (extensionItems ?? []).map((e) => ({
     id: e.extensionId,
-    icon: resolveExtensionIcon(e.icon) ?? <BookOpen className="h-4 w-4" />,
+    icon: resolveExtensionIcon(e.icon) ?? <BookOpen className="h-[18px] w-[18px]" />,
     label: e.label,
     order: e.order,
   }));
@@ -137,13 +137,13 @@ export function Sidebar({
       {/* Top (fixed): new-chat + search + nav rows */}
       <SidebarItem
         id="new-chat"
-        icon={<Plus className="h-4 w-4" />}
+        icon={<Plus className="h-[18px] w-[18px]" />}
         label={t("chat.newChat")}
         onClick={onNewChat}
       />
       <SidebarItem
         id="search"
-        icon={<Search className="h-4 w-4" />}
+        icon={<Search className="h-[18px] w-[18px]" />}
         label={t("chat.search")}
         active={searchOpen}
         onClick={() => (searchOpen ? closeSearch() : openSearch())}
@@ -204,7 +204,7 @@ export function Sidebar({
       <div className="mt-1 border-t border-border/40 pt-1">
         <SidebarItem
           id="settings"
-          icon={<Settings className="h-4 w-4" />}
+          icon={<Settings className="h-[18px] w-[18px]" />}
           label={t("chat.settings")}
           title={t("chat.openOptions")}
           onClick={onOpenSettings}
