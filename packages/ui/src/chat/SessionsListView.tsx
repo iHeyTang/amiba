@@ -319,7 +319,7 @@ function SessionRow({
       )}
     >
       <StatusDot />
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+      <span className="min-w-0 flex-1 truncate text-sm font-normal">
         {session.title?.trim() || t("chat.untitled")}
       </span>
       <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">

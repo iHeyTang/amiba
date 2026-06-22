@@ -47,7 +47,7 @@ export function SidebarItem({
       <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
         {icon}
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      <span className="min-w-0 flex-1 truncate font-normal">{label}</span>
       {trailing}
     </button>
   );
