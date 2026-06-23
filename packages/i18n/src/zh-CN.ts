@@ -597,6 +597,7 @@ export const zhCN: Messages = {
   "sidepanel.sessions.scheduled.empty": "暂无定时任务。在聊天中创建一个试试。",
   "sidepanel.sessions.scheduled.error": "无法加载定时任务，请检查后台服务。",
   "sidepanel.sessions.scheduled.noRuns": "暂无运行记录。",
+  "sidepanel.sessions.scheduled.selectRun": "选择一条运行查看输出。",
   "sidepanel.sessions.scheduled.trigger": "立即触发",
   "sidepanel.sessions.scheduled.triggerConfirm":
     "立即运行「{name}」吗？将在下一次调度 tick 时执行。",
@@ -681,6 +682,8 @@ export const zhCN: Messages = {
   "chat.openOptions": "打开 Amiba 设置",
   "chat.searchPlaceholder": "搜索会话…",
   "chat.searchClear": "清除搜索",
+  "chat.search": "搜索",
+  "chat.settings": "设置",
   "chat.untitled": "未命名对话",
   "chat.rename": "重命名",
   "chat.delete": "删除",

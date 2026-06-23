@@ -290,8 +290,8 @@ function SessionRow({
     return (
       <div
         className={cn(
-          "group flex items-center gap-1 px-3 py-1.5",
-          active && "bg-muted/70",
+          "group flex items-center gap-2.5 rounded-md px-2 py-1.5",
+          active && "bg-foreground/10",
         )}
       >
         <StatusDot />
@@ -301,7 +301,7 @@ function SessionRow({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKey}
           onBlur={commit}
-          className="h-6 min-w-0 flex-1 px-1.5 text-xs"
+          className="h-7 min-w-0 flex-1 px-1.5 text-sm"
         />
       </div>
     );
@@ -312,14 +312,14 @@ function SessionRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        "group flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+        "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
         active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60",
+          ? "bg-foreground/10 text-foreground"
+          : "text-foreground/80 hover:bg-foreground/5 hover:text-foreground",
       )}
     >
       <StatusDot />
-      <span className="min-w-0 flex-1 truncate text-xs font-medium">
+      <span className="min-w-0 flex-1 truncate text-sm font-normal">
         {session.title?.trim() || t("chat.untitled")}
       </span>
       <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
@@ -354,7 +354,7 @@ function SessionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[9px] tabular-nums text-muted-foreground/70 group-hover:hidden">
+      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
         {formatRelativeShort(session.updatedAt)}
       </span>
     </button>
@@ -369,11 +369,16 @@ function SessionRow({
  * stable.
  */
 function StatusDot() {
+  // Wrapped in an h-4 w-4 slot so the dot occupies the same leading-icon
+  // column as the sidebar nav rows and the section-header chevrons — the
+  // row titles then line up vertically across the whole sidebar.
   return (
     <span
       aria-hidden
-      className="h-2 w-2 shrink-0 rounded-full border border-muted-foreground/40"
-    />
+      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center"
+    >
+      <span className="h-2 w-2 rounded-full border border-muted-foreground/40" />
+    </span>
   );
 }
 

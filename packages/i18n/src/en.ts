@@ -642,6 +642,7 @@ export const en = {
   "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
   "sidepanel.sessions.scheduled.error": "Couldn't load scheduled tasks. Check that the backplane is running.",
   "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
+  "sidepanel.sessions.scheduled.selectRun": "Select a run to view its output.",
   "sidepanel.sessions.scheduled.trigger": "Trigger now",
   "sidepanel.sessions.scheduled.triggerConfirm":
     "Run \"{name}\" now? It will fire on the next scheduler tick.",
@@ -730,6 +731,8 @@ export const en = {
   "chat.openOptions": "Open Amiba options",
   "chat.searchPlaceholder": "Search sessions…",
   "chat.searchClear": "Clear search",
+  "chat.search": "Search",
+  "chat.settings": "Settings",
   "chat.untitled": "Untitled chat",
   "chat.rename": "Rename",
   "chat.delete": "Delete",

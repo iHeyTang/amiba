@@ -21,7 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getPlatform } from "@amiba/platform";
 
 import { ExtensionWebView, useExtensionSettings } from "@amiba/extension-host/renderer";
-import { resolveExtensionIcon } from "../chat/ActivityBar";
+import { resolveExtensionIcon } from "../chat/Sidebar";
 
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
