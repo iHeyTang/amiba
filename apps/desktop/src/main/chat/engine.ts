@@ -1,8 +1,8 @@
 import {
   ensureHermesSession,
   postHermesApprovalDecision,
+  runHermesAgent,
   SOURCE_LOCAL,
-  streamChat,
   type AssistantTimelineItem,
   type ChatRuntimeError,
   type ChatRuntimeState,
@@ -12,7 +12,6 @@ import {
   type HermesToolProgress,
   type SnapshotFrame,
   type StreamEvent,
-  type StreamedToolCall,
   type SubmitPayload
 } from "@amiba/core"
 import { BrowserWindow, ipcMain } from "electron"
@@ -171,13 +170,13 @@ async function handleSubmit(payload: SubmitPayload) {
   const { sessionId, assistantUiId, model, history } = payload
 
   // Make sure the SessionDB row exists with the correct ``source`` BEFORE
-  // ``streamChat`` opens the SSE stream. Otherwise the first
-  // ``/v1/chat/completions`` for a never-seen sessionId triggers
-  // api_server's fallback path which auto-creates the row tagged
-  // ``source="api_server"`` — that's how Quick-Ask sessions ended up in
-  // the wrong channel before this fix. ``ensureHermesSession`` is
-  // INSERT-OR-IGNORE and caches per-process so the cost is one round-trip
-  // per new id over the lifetime of the main process.
+  // ``runHermesAgent`` opens the run. Otherwise the first ``/v1/runs`` for a
+  // never-seen sessionId triggers api_server's fallback path which
+  // auto-creates the row tagged ``source="api_server"`` — that's how
+  // Quick-Ask sessions ended up in the wrong channel before this fix.
+  // ``ensureHermesSession`` is INSERT-OR-IGNORE and caches per-process so
+  // the cost is one round-trip per new id over the lifetime of the main
+  // process.
   //
   // Every local amiba submit — main window, Quick-Ask, and the
   // extension — writes the same canonical "local" source; the optional
@@ -222,161 +221,218 @@ async function handleSubmit(payload: SubmitPayload) {
     return fresh
   }
 
-  try {
-    await streamChat(augmentedHistory, { model, sessionId, signal: controller.signal }, {
-      onChunk: (delta) => {
-        state.assistantText += delta
-        const item = ensureLastTextItem()
-        item.text += delta
-        state.updatedAt = Date.now()
-        emitEvent(sessionId, { kind: "chunk", text: delta })
-      },
-      onReasoningChunk: (delta) => {
-        state.reasoning += delta
-        state.updatedAt = Date.now()
-        emitEvent(sessionId, { kind: "reasoning", text: delta })
-      },
-      onUsage: (usage) => {
-        // Fan out token usage to extension runners. Fires exactly once
-        // per turn (final chat.completion.chunk before [DONE], see
-        // hermes-agent api_server.py). model + sessionId come from the
-        // submit payload that started this run; usage shape is the
-        // OpenAI-standard prompt/completion/total triple.
-        publishChatEvent("run.completed", {
-          sessionId,
-          model,
-          usage,
-        })
-      },
-      onToolCallsState: (calls: StreamedToolCall[]) => {
-        state.toolCalls = calls
-        state.updatedAt = Date.now()
-        emitEvent(sessionId, { kind: "toolCalls", calls })
-      },
-      onHermesToolProgress: (event: HermesToolProgress) => {
-        const stamped: HermesToolProgress = {
-          ...event,
-          startedAt: event.status === "running" ? Date.now() : event.startedAt,
-          durationMs:
-            event.status === "completed"
-              ? event.durationMs ??
-                (() => {
-                  const prior = state.hermesToolProgress.find(
-                    (e) => e.toolCallId === event.toolCallId && e.status === "running"
-                  )
-                  return prior?.startedAt ? Date.now() - prior.startedAt : undefined
-                })()
-              : event.durationMs
-        }
-        const existingIdx = state.hermesToolProgress.findIndex(
-          (e) => e.toolCallId === event.toolCallId
-        )
-        if (existingIdx >= 0) state.hermesToolProgress[existingIdx] = stamped
-        else state.hermesToolProgress.push(stamped)
-        if (!state.hermesOrder.includes(stamped.toolCallId)) {
-          state.hermesOrder.push(stamped.toolCallId)
-        }
-        // Append a tool item to the timeline on the first sighting.
-        if (stamped.status === "running" && existingIdx < 0) {
-          state.timeline.push({
-            kind: "tool",
-            id: `tl_${Date.now()}_${state.timeline.length}`,
-            toolCallId: stamped.toolCallId
-          })
-        }
-        state.updatedAt = Date.now()
-        emitEvent(sessionId, { kind: "hermesToolProgress", event: stamped })
+  // The /v1/runs surface reports tool progress as bare started/completed
+  // events that carry only a tool name (no toolCallId, label, or emoji —
+  // unlike the chat-completions `hermes.tool.progress` channel). Synthesize
+  // a stable id per `tool.started` and pair each `tool.completed` back FIFO
+  // by tool name (the agent reports completions in start order), so the
+  // trace UI — which keys all of its state on toolCallId — keeps working.
+  let toolSeq = 0
+  const runningToolIds = new Map<string, string[]>()
 
-        // Fan out to extension runners via host.chat.onEvent. We split
-        // the gateway's "running"/"completed" status into two distinct
-        // event names so a subscriber that only cares about completions
-        // doesn't have to branch on status. runId comes from the
-        // session state because hermes-agent's tool-progress payload
-        // doesn't carry it directly — it's the same runId the chat
-        // engine cached from the X-Hermes-Run-Id header at turn start.
-        if (stamped.status === "running") {
-          publishChatEvent("tool.started", {
-            sessionId,
-            runId: state.runId,
-            tool: stamped.tool,
-            toolCallId: stamped.toolCallId,
-            startedAt: stamped.startedAt,
-            label: stamped.label,
-            emoji: stamped.emoji,
-          })
-        } else if (stamped.status === "completed") {
-          publishChatEvent("tool.completed", {
-            sessionId,
-            runId: state.runId,
-            tool: stamped.tool,
-            toolCallId: stamped.toolCallId,
-            startedAt: stamped.startedAt,
-            durationMs: stamped.durationMs,
-            label: stamped.label,
-            emoji: stamped.emoji,
-          })
-        }
+  function applyToolProgress(event: HermesToolProgress) {
+    const prior = state.hermesToolProgress.find(
+      (e) => e.toolCallId === event.toolCallId,
+    )
+    const startedAt =
+      event.status === "running" ? Date.now() : event.startedAt ?? prior?.startedAt
+    const durationMs =
+      event.status === "completed"
+        ? event.durationMs ?? (startedAt ? Date.now() - startedAt : undefined)
+        : event.durationMs
+    const stamped: HermesToolProgress = { ...event, startedAt, durationMs }
+
+    const existingIdx = state.hermesToolProgress.findIndex(
+      (e) => e.toolCallId === event.toolCallId,
+    )
+    if (existingIdx >= 0) state.hermesToolProgress[existingIdx] = stamped
+    else state.hermesToolProgress.push(stamped)
+    if (!state.hermesOrder.includes(stamped.toolCallId)) {
+      state.hermesOrder.push(stamped.toolCallId)
+    }
+    // Append a tool item to the timeline on the first sighting.
+    if (stamped.status === "running" && existingIdx < 0) {
+      state.timeline.push({
+        kind: "tool",
+        id: `tl_${Date.now()}_${state.timeline.length}`,
+        toolCallId: stamped.toolCallId
+      })
+    }
+    state.updatedAt = Date.now()
+    emitEvent(sessionId, { kind: "hermesToolProgress", event: stamped })
+
+    // Fan out to extension runners via host.chat.onEvent, splitting
+    // running/completed into two event names so subscribers don't branch on
+    // status. runId comes from session state (hermes-agent's tool events
+    // don't carry it) — the same runId captured from POST /v1/runs.
+    if (stamped.status === "running") {
+      publishChatEvent("tool.started", {
+        sessionId,
+        runId: state.runId,
+        tool: stamped.tool,
+        toolCallId: stamped.toolCallId,
+        startedAt: stamped.startedAt,
+        label: stamped.label,
+        emoji: stamped.emoji,
+      })
+    } else if (stamped.status === "completed") {
+      publishChatEvent("tool.completed", {
+        sessionId,
+        runId: state.runId,
+        tool: stamped.tool,
+        toolCallId: stamped.toolCallId,
+        startedAt: stamped.startedAt,
+        durationMs: stamped.durationMs,
+        label: stamped.label,
+        emoji: stamped.emoji,
+      })
+    }
+  }
+
+  try {
+    // Drive the turn through the `/v1/runs` surface (not `/v1/chat/
+    // completions`): only the runs surface registers the server-side
+    // approval callback, so dangerous-command / execute_code prompts can
+    // actually surface to the user instead of dead-ending as an
+    // unactionable "Asking the user for approval" error (see
+    // packages/core/src/hermes-client.ts and hermes-agent
+    // api_server.py:_handle_runs / tools/approval.py).
+    await runHermesAgent(
+      augmentedHistory,
+      {
+        model,
+        sessionId,
+        signal: controller.signal,
+        onRun: (runId) => {
+          state.runId = runId
+          emitEvent(sessionId, { kind: "run", runId })
+          // The runs surface keys continuity off the session_id we POSTed,
+          // so echo it back for parity with the old X-Hermes-Session-Id
+          // header path the renderer reconciles against.
+          emitEvent(sessionId, { kind: "session", sessionId })
+        },
       },
-      onApprovalRequest: (request: HermesApprovalRequest) => {
-        const seen = state.pendingApprovals.some(
-          (p) => p.approvalId === request.approvalId,
-        )
-        if (!seen) {
-          state.pendingApprovals.push(request)
-          state.timeline.push({
-            kind: "approval",
-            id: `tl_${Date.now()}_${state.timeline.length}`,
-            approvalId: request.approvalId
+      {
+        onMessageDelta: (delta) => {
+          state.assistantText += delta
+          const item = ensureLastTextItem()
+          item.text += delta
+          state.updatedAt = Date.now()
+          emitEvent(sessionId, { kind: "chunk", text: delta })
+        },
+        onReasoning: (text) => {
+          // Runs delivers reasoning as one consolidated block rather than
+          // streamed deltas; append it whole.
+          if (!text) return
+          state.reasoning += text
+          state.updatedAt = Date.now()
+          emitEvent(sessionId, { kind: "reasoning", text })
+        },
+        onToolStarted: ({ tool, preview }) => {
+          const toolCallId = `rt_${state.runId ?? sessionId}_${toolSeq++}`
+          const queue = runningToolIds.get(tool) ?? []
+          queue.push(toolCallId)
+          runningToolIds.set(tool, queue)
+          applyToolProgress({
+            tool,
+            toolCallId,
+            status: "running",
+            label: preview || undefined,
           })
-        }
-        // Track the request so the Heads-up Notifier (and any other
-        // out-of-session decision surface) can POST a verdict back
-        // without re-reading per-session state. The runId comes from the
-        // request itself when present; we fall back to whatever the
-        // session most recently observed via the X-Hermes-Run-Id header.
-        const runId = request.runId || state.runId || ""
-        if (runId) {
-          pendingApprovalsById.set(request.approvalId, {
-            runId,
-            sessionId,
-            request,
+        },
+        onToolCompleted: ({ tool, duration }) => {
+          const queue = runningToolIds.get(tool)
+          const toolCallId =
+            queue && queue.length
+              ? queue.shift()!
+              : `rt_${state.runId ?? sessionId}_${toolSeq++}`
+          applyToolProgress({
+            tool,
+            toolCallId,
+            status: "completed",
+            durationMs:
+              typeof duration === "number" ? Math.round(duration * 1000) : undefined,
           })
-        }
-        // Push to the Heads-up Notifier so users with the main window
-        // backgrounded see the request immediately. Suppressed when the
-        // main window is already focused — the in-panel approval bubble
-        // takes precedence then.
-        if (!seen && !shouldSuppressNotifier()) {
-          sendToNotifier({
-            type: "approval-pending",
-            approvalId: request.approvalId,
-            tool: request.tool,
-            command: request.command,
-            message:
-              request.description ||
-              request.reason ||
-              request.command ||
-              "Hermes is requesting approval to continue.",
-            timestamp: Date.now(),
-          })
-        }
-        emitEvent(sessionId, { kind: "approvalRequest", request })
+        },
+        onApprovalRequest: (request: HermesApprovalRequest) => {
+          const seen = state.pendingApprovals.some(
+            (p) => p.approvalId === request.approvalId,
+          )
+          if (!seen) {
+            state.pendingApprovals.push(request)
+            state.timeline.push({
+              kind: "approval",
+              id: `tl_${Date.now()}_${state.timeline.length}`,
+              approvalId: request.approvalId
+            })
+          }
+          // Track the request so the Heads-up Notifier (and any other
+          // out-of-session decision surface) can POST a verdict back
+          // without re-reading per-session state. The runId comes from the
+          // request itself (the runs surface always sets it); we fall back
+          // to whatever the session most recently observed.
+          const runId = request.runId || state.runId || ""
+          if (runId) {
+            pendingApprovalsById.set(request.approvalId, {
+              runId,
+              sessionId,
+              request,
+            })
+          }
+          // Push to the Heads-up Notifier so users with the main window
+          // backgrounded see the request immediately. Suppressed when the
+          // main window is already focused — the in-panel approval bubble
+          // takes precedence then.
+          if (!seen && !shouldSuppressNotifier()) {
+            sendToNotifier({
+              type: "approval-pending",
+              approvalId: request.approvalId,
+              tool: request.tool,
+              command: request.command,
+              message:
+                request.description ||
+                request.reason ||
+                request.command ||
+                "Amiba is requesting approval to continue.",
+              timestamp: Date.now(),
+            })
+          }
+          emitEvent(sessionId, { kind: "approvalRequest", request })
+        },
+        onApprovalResponded: () => {
+          // The runs surface's `approval.responded` carries the choice and a
+          // resolved-count but no approvalId, so reconcile FIFO: settle the
+          // oldest still-pending approval for this session. (The user's own
+          // click already dropped it optimistically via resolveApproval /
+          // clearApproval, so this is usually a confirming no-op.)
+          const next = state.pendingApprovals[0]
+          if (!next) return
+          const approvalId = next.approvalId
+          state.pendingApprovals = state.pendingApprovals.filter(
+            (p) => p.approvalId !== approvalId,
+          )
+          dropApprovalLocally(approvalId)
+          emitEvent(sessionId, { kind: "approvalResolved", approvalId })
+        },
+        onRunCompleted: ({ usage }) => {
+          // Fan out token usage to extension runners (parity with the old
+          // onUsage path). Runs reports input/output/total; the
+          // run.completed extension event expects the OpenAI-standard
+          // prompt/completion/total triple.
+          if (usage) {
+            publishChatEvent("run.completed", {
+              sessionId,
+              model,
+              usage: {
+                prompt_tokens: usage.input_tokens ?? 0,
+                completion_tokens: usage.output_tokens ?? 0,
+                total_tokens: usage.total_tokens ?? 0,
+              },
+            })
+          }
+        },
       },
-      onApprovalResolved: (approvalId: string) => {
-        state.pendingApprovals = state.pendingApprovals.filter(
-          (p) => p.approvalId !== approvalId
-        )
-        dropApprovalLocally(approvalId)
-        emitEvent(sessionId, { kind: "approvalResolved", approvalId })
-      },
-      onSession: (sid) => {
-        emitEvent(sessionId, { kind: "session", sessionId: sid })
-      },
-      onRun: (runId) => {
-        state.runId = runId
-        emitEvent(sessionId, { kind: "run", runId })
-      }
-    })
+    )
 
     state.streaming = false
     state.updatedAt = Date.now()
