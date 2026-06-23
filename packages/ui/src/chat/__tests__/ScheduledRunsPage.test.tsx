@@ -32,4 +32,28 @@ describe("ScheduledRunsPage", () => {
     await userEvent.click(row)
     expect(onOpenRun).toHaveBeenCalledWith("cron_job1_1")
   })
+
+  it("shows the empty-detail placeholder when no detail is provided", async () => {
+    render(<ScheduledRunsPage query="" activeId="" onOpenRun={vi.fn()} />)
+    // List still renders alongside the placeholder (master/detail layout).
+    expect(await screen.findByText("Jun 17, 09:00")).toBeInTheDocument()
+    expect(
+      screen.getByText("Select a run to view its output."),
+    ).toBeInTheDocument()
+  })
+
+  it("renders the provided detail node instead of the placeholder", async () => {
+    render(
+      <ScheduledRunsPage
+        query=""
+        activeId="cron_job1_1"
+        onOpenRun={vi.fn()}
+        detail={<div>run-detail-content</div>}
+      />,
+    )
+    expect(await screen.findByText("run-detail-content")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Select a run to view its output."),
+    ).not.toBeInTheDocument()
+  })
 })

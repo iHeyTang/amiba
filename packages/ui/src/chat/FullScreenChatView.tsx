@@ -255,15 +255,31 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  // Scheduled-page run click: open the run and swap the main pane to the chat
-  // surface so the user watches it like any other session.
+  // Scheduled-page run click: activate the run as the active session and
+  // STAY on the scheduled page — the run's conversation renders inline in
+  // the page's detail pane (the master/detail layout). Clicking the active
+  // run again deselects it (mirrors `onOpenSession`), dropping the detail
+  // pane back to its placeholder.
   const onOpenRun = useCallback(
     async (id: string) => {
       if (!sessions.ready) return;
+      if (id === sessions.activeId) {
+        await sessions.deselect();
+        return;
+      }
       await sessions.openTab(id);
-      onSidebarViewChange("chats");
     },
-    [sessions, onSidebarViewChange],
+    [sessions],
+  );
+
+  // Whether the active session is one of the cron runs — gates whether the
+  // scheduled page's detail pane shows the ChatSurface (a run is selected)
+  // or its "select a run" placeholder (active session is a chat, or none).
+  const activeRunSelected = useMemo(
+    () =>
+      !!sessions.activeId &&
+      scheduled.runs.some((r) => r.id === sessions.activeId),
+    [sessions.activeId, scheduled.runs],
   );
 
   // Layout: a single thin top bar spans the full window width (mac traffic
@@ -307,6 +323,20 @@ function FullScreenChatViewInner({
               query={query}
               activeId={sessions.activeId}
               onOpenRun={(id) => void onOpenRun(id)}
+              detail={
+                activeRunSelected ? (
+                  <ChatSurface
+                    variant="fullscreen"
+                    messagesMaxWidth={messagesWidth}
+                    client={client}
+                    capabilities={capabilities}
+                    slots={slots}
+                    openSettings={openSettings}
+                    openAgentDestination={openAgentDestination}
+                    mentionProviders={mentionProviders}
+                  />
+                ) : undefined
+              }
             />
           ) : sidebarView === "chats" ? (
             <ChatSurface
