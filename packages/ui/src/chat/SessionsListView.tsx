@@ -354,7 +354,7 @@ function SessionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
+      <span className="inline-flex shrink-0 items-center justify-end whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
         {formatRelativeShort(session.updatedAt)}
       </span>
     </button>
@@ -389,8 +389,8 @@ function formatRelativeShort(ms: number | undefined): string {
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
   if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d`;
-  return new Date(ms).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  const d = new Date(ms);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}-${dd}`;
 }
