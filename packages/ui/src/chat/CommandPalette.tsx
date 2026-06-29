@@ -40,6 +40,10 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
+        // `data-amiba-command-palette` scopes the open/close zoom-origin fix in
+        // chat.css (pins the tw-animate enter/exit translate to -50% so the
+        // card scales from center instead of sliding up from the corner).
+        data-amiba-command-palette="true"
         // Spacing for cmdk's internal nodes is declared here (shadcn
         // CommandDialog pattern) so groups/headings/items get consistent
         // horizontal insets regardless of cmdk's own DOM structure.

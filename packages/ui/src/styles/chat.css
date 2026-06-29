@@ -432,3 +432,25 @@
   [data-streamdown="table-cell"] {
   border-bottom-color: hsl(var(--border) / 0.4);
 }
+
+/*
+ * Command palette open/close zoom origin.
+ *
+ * DialogContent centers itself with `translate(-50%, -50%)`, but
+ * tailwindcss-animate's enter/exit keyframes rebuild `transform` from the
+ * `--tw-(enter|exit)-translate-*` vars (default 0), dropping the centering
+ * translate for the duration of the animation. The card then starts with its
+ * top-left at screen center (offset down-right) and slides up-left into place —
+ * reads as "rising from the bottom-right corner".
+ *
+ * Pin those translate vars to -50% so the keyframes keep the card centered and
+ * only the scale (zoom-in/out-95) + opacity animate: a clean zoom from the true
+ * center. `!important` beats `.animate-in`'s reset of these vars to `initial`.
+ * Scoped to the palette via its data attribute.
+ */
+[data-amiba-command-palette] {
+  --tw-enter-translate-x: -50% !important;
+  --tw-enter-translate-y: -50% !important;
+  --tw-exit-translate-x: -50% !important;
+  --tw-exit-translate-y: -50% !important;
+}
