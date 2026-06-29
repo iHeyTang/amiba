@@ -40,18 +40,20 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
-        className="max-w-xl gap-0 overflow-hidden p-0"
+        className="max-w-xl gap-0 overflow-hidden rounded-xl p-0"
         aria-label={t("commandPalette.placeholder")}
       >
-        <Command className="flex max-h-[60vh] flex-col">
-          <Command.Input
-            autoFocus
-            data-testid="command-palette-input"
-            placeholder={t("commandPalette.placeholder")}
-            className="h-12 w-full border-b border-border bg-transparent px-4 text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <Command.List className="overflow-y-auto p-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground">
-            <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
+        <Command className="flex max-h-[60vh] w-full flex-col">
+          <div className="border-b border-border px-4 py-3.5">
+            <Command.Input
+              autoFocus
+              data-testid="command-palette-input"
+              placeholder={t("commandPalette.placeholder")}
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <Command.List className="overflow-y-auto p-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground">
+            <Command.Empty className="px-3 py-8 text-center text-sm text-muted-foreground">
               {t("commandPalette.empty")}
             </Command.Empty>
 
@@ -113,7 +115,7 @@ function PaletteRow({
       value={value ?? label}
       onSelect={onSelect}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm text-foreground",
+        "flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground",
         "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
       )}
     >
