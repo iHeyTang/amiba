@@ -40,19 +40,28 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
-        className="max-w-xl gap-0 overflow-hidden rounded-xl p-0"
+        // Spacing for cmdk's internal nodes is declared here (shadcn
+        // CommandDialog pattern) so groups/headings/items get consistent
+        // horizontal insets regardless of cmdk's own DOM structure.
+        className={cn(
+          "max-w-xl gap-0 overflow-hidden rounded-xl p-0",
+          "[&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1",
+          "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+          "[&_[cmdk-item]]:flex [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:overflow-hidden [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground",
+          "[&_[cmdk-item][data-selected=true]]:bg-accent [&_[cmdk-item][data-selected=true]]:text-accent-foreground",
+        )}
         aria-label={t("commandPalette.placeholder")}
       >
         <Command className="flex max-h-[60vh] w-full flex-col">
-          <div className="border-b border-border px-4 py-3.5">
+          <div className="flex items-center border-b border-border px-4">
             <Command.Input
               autoFocus
               data-testid="command-palette-input"
               placeholder={t("commandPalette.placeholder")}
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
-          <Command.List className="overflow-y-auto p-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground">
+          <Command.List className="overflow-y-auto p-2">
             <Command.Empty className="px-3 py-8 text-center text-sm text-muted-foreground">
               {t("commandPalette.empty")}
             </Command.Empty>
@@ -97,6 +106,11 @@ export function CommandPalette({
   )
 }
 
+/**
+ * One palette row. Layout (flex/padding/hover) lives on the cmdk-item
+ * selectors in the parent's className; this just supplies the content so the
+ * icon, truncating label, and right-aligned shortcut stay inside the row.
+ */
 function PaletteRow({
   icon,
   label,
@@ -111,18 +125,11 @@ function PaletteRow({
   onSelect: () => void
 }) {
   return (
-    <Command.Item
-      value={value ?? label}
-      onSelect={onSelect}
-      className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground",
-        "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
-      )}
-    >
-      <span className="text-muted-foreground">{icon}</span>
+    <Command.Item value={value ?? label} onSelect={onSelect}>
+      <span className="shrink-0 text-muted-foreground">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {shortcut && (
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        <span className="shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {shortcut}
         </span>
       )}
