@@ -1,7 +1,7 @@
 /**
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
- *   • top (fixed):   new-chat, search (toggles an inline filter), then the
+ *   • top (fixed):   new-chat, search (opens the command palette), then the
  *                    built-in + extension nav rows.
  *   • middle (flex): the conversation-history list (channel-grouped, collapsible).
  *   • bottom (fixed): the settings row.
@@ -13,17 +13,15 @@ import {
   Plus,
   Search,
   Settings,
-  Sparkles,
   Wallet,
   Wrench,
-  X,
 } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import type { MainContribution } from "@amiba/extension-host/renderer";
-import { Input, cn } from "../primitives";
+import { cn } from "../primitives";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
 
@@ -52,8 +50,7 @@ export interface SidebarProps {
   onSelectView: (id: string) => void;
   onNewChat: () => void;
   extensionItems?: MainContribution[];
-  query: string;
-  onQueryChange: (q: string) => void;
+  onOpenCommandPalette: () => void;
   sessions: SessionMeta[];
   activeSessionId: string;
   sessionsReady: boolean;
@@ -70,8 +67,7 @@ export function Sidebar({
   onSelectView,
   onNewChat,
   extensionItems,
-  query,
-  onQueryChange,
+  onOpenCommandPalette,
   sessions,
   activeSessionId,
   sessionsReady,
@@ -83,30 +79,18 @@ export function Sidebar({
   className,
 }: SidebarProps) {
   const { t } = useT();
-  const [searchOpen, setSearchOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Built-in non-chat destinations get implicit orders 1–3 so extension items
+  // Built-in non-chat destinations get low implicit orders so extension items
   // (manifest default order 100) sort after them, while an extension that sets
-  // order=0 can still sort first.
+  // order=0 can still sort first. Skills + Tools used to live here as built-in
+  // rows; they're now shipped as bundled extensions (io.amiba.skills,
+  // io.amiba.tool-meter) and arrive via `extNav` like any other extension.
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
       icon: <Clock className="h-[18px] w-[18px]" />,
       label: t("sidepanel.sessions.group.scheduled"),
       order: 1,
-    },
-    {
-      id: "skills",
-      icon: <Sparkles className="h-[18px] w-[18px]" />,
-      label: t("sidepanel.sessions.group.skills"),
-      order: 2,
-    },
-    {
-      id: "tools",
-      icon: <Wrench className="h-[18px] w-[18px]" />,
-      label: t("sidepanel.sessions.group.tools"),
-      order: 3,
     },
   ];
   const extNav: NavRow[] = (extensionItems ?? []).map((e) => ({
@@ -116,15 +100,6 @@ export function Sidebar({
     order: e.order,
   }));
   const navRows = [...coreNav, ...extNav].sort((a, b) => a.order - b.order);
-
-  function openSearch() {
-    setSearchOpen(true);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }
-  function closeSearch() {
-    setSearchOpen(false);
-    onQueryChange("");
-  }
 
   return (
     <nav
@@ -145,36 +120,8 @@ export function Sidebar({
         id="search"
         icon={<Search className="h-[18px] w-[18px]" />}
         label={t("chat.search")}
-        active={searchOpen}
-        onClick={() => (searchOpen ? closeSearch() : openSearch())}
+        onClick={onOpenCommandPalette}
       />
-      {searchOpen && (
-        <div className="px-1 py-1">
-          <div className="relative flex items-center">
-            <Input
-              ref={inputRef}
-              data-testid="sidebar-search-input"
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") closeSearch();
-              }}
-              placeholder={t("chat.searchPlaceholder")}
-              className="h-7 w-full pr-7 text-xs"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => onQueryChange("")}
-                aria-label={t("chat.searchClear")}
-                className="absolute right-1 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
       {navRows.map((row) => (
         <SidebarItem
           key={row.id}
@@ -192,7 +139,7 @@ export function Sidebar({
           sessions={sessions}
           activeId={activeSessionId}
           ready={sessionsReady}
-          query={query}
+          query=""
           onOpen={onOpenSession}
           onRename={onRenameSession}
           onDelete={onDeleteSession}

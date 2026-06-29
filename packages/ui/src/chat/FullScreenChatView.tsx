@@ -8,7 +8,8 @@
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
  * The main pane renders by `sidebarView`: the chat surface ("chats"), the
- * scheduled-runs page ("scheduled"), Skills, Tools, or an extension webview.
+ * scheduled-runs page ("scheduled"), or an extension webview (Skills and
+ * Tools are now bundled extensions, not built-in panes).
  *
  * Extension uses this as the standalone ``tabs/chat.html`` page; desktop uses
  * it as the chat view inside the main BrowserWindow.
@@ -35,6 +36,8 @@ import { cn } from "../primitives";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
 import { Sidebar, type ActivityViewId } from "./Sidebar";
+import { CommandPalette } from "./CommandPalette";
+import { useCommandPalette } from "./useCommandPalette";
 import { ScheduledRunsPage } from "./ScheduledRunsPage";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import {
@@ -42,8 +45,6 @@ import {
   useSessionTitle,
 } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
-import { SettingsSkills } from "../settings/SettingsSkills";
-import { ToolsView } from "../tools/ToolsView";
 import {
   ExtensionWebView,
   useExtensionMains,
@@ -148,7 +149,7 @@ function FullScreenChatViewInner({
   useResolvedTheme();
   const sessions = useSessions();
   const scheduled = useScheduledRuns();
-  const [query, setQuery] = useState("");
+  const palette = useCommandPalette();
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
   );
@@ -302,8 +303,7 @@ function FullScreenChatViewInner({
           onSelectView={onSidebarViewChange}
           onNewChat={() => void onNewChatAndShow()}
           extensionItems={extensionMains}
-          query={query}
-          onQueryChange={setQuery}
+          onOpenCommandPalette={() => palette.setOpen(true)}
           sessions={chatSessions}
           activeSessionId={sessions.activeId}
           sessionsReady={sessions.ready}
@@ -314,13 +314,9 @@ function FullScreenChatViewInner({
           onOpenSettings={() => openSettings()}
         />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {sidebarView === "skills" ? (
-            <SettingsSkills />
-          ) : sidebarView === "tools" ? (
-            <ToolsView />
-          ) : sidebarView === "scheduled" ? (
+          {sidebarView === "scheduled" ? (
             <ScheduledRunsPage
-              query={query}
+              query=""
               activeId={sessions.activeId}
               onOpenRun={(id) => void onOpenRun(id)}
               detail={
@@ -359,6 +355,14 @@ function FullScreenChatViewInner({
           })()}
         </main>
       </div>
+      <CommandPalette
+        open={palette.open}
+        onOpenChange={palette.setOpen}
+        sessions={chatSessions}
+        onOpenSession={(id) => void onOpenSession(id)}
+        onNewChat={() => void onNewChatAndShow()}
+        onOpenSettings={() => openSettings()}
+      />
     </div>
   );
 }

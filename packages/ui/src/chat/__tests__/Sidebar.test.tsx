@@ -9,8 +9,7 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     onSelectView: vi.fn(),
     onNewChat: vi.fn(),
     extensionItems: [],
-    query: "",
-    onQueryChange: vi.fn(),
+    onOpenCommandPalette: vi.fn(),
     sessions: [
       { id: "s1", title: "First chat", createdAt: 1, updatedAt: 1, messageCount: 1 },
     ],
@@ -36,8 +35,8 @@ describe("Sidebar", () => {
 
   it("selects a built-in nav view", async () => {
     const props = setup()
-    await userEvent.click(screen.getByTestId("sidebar-item-skills"))
-    expect(props.onSelectView).toHaveBeenCalledWith("skills")
+    await userEvent.click(screen.getByTestId("sidebar-item-scheduled"))
+    expect(props.onSelectView).toHaveBeenCalledWith("scheduled")
   })
 
   it("selects an extension nav view by its extensionId", async () => {
@@ -50,12 +49,10 @@ describe("Sidebar", () => {
     expect(props.onSelectView).toHaveBeenCalledWith("village")
   })
 
-  it("toggles the search input and drives onQueryChange", async () => {
+  it("opens the command palette from the search row", async () => {
     const props = setup()
     await userEvent.click(screen.getByTestId("sidebar-item-search"))
-    const input = await screen.findByTestId("sidebar-search-input")
-    await userEvent.type(input, "abc")
-    expect(props.onQueryChange).toHaveBeenCalled()
+    expect(props.onOpenCommandPalette).toHaveBeenCalledTimes(1)
   })
 
   it("opens settings from the footer row", async () => {
