@@ -396,14 +396,6 @@ export const en = {
   "options.models.refreshCatalog": "Refresh catalog",
   "options.models.loadingSettings": "Loading settings…",
 
-  // Skills
-  "options.skills.title": "Skills",
-  "options.skills.subtitle":
-    "Skill packs Amiba can load on demand. Toggle to enable per session.",
-  "options.skills.subtitle.summary":
-    "Skills available to the current agent ({enabled} / {total})",
-  "options.skills.subtitle.platform": "  ·  platform={platform}",
-  "options.skills.refresh": "Refresh",
 
   // Cron
   "options.cron.title": "Cron",
@@ -635,8 +627,6 @@ export const en = {
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Scheduled tasks",
-  "sidepanel.sessions.group.skills": "Skills",
-  "sidepanel.sessions.group.tools": "Tools",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
@@ -749,6 +739,11 @@ export const en = {
   "chat.loadingSessions": "Loading sessions…",
   "chat.noMatches": "No matches.",
   "chat.noSessions": "No saved sessions yet.",
+  "commandPalette.placeholder": "Search chats or run commands",
+  "commandPalette.empty": "No results",
+  "commandPalette.group.recommended": "Recommended",
+  "commandPalette.group.conversations": "Conversations",
+  "commandPalette.cmd.newChat": "New Chat",
 
   // Composer quick actions — chip strip
   "composer.quick.empty.tooltip":
@@ -807,45 +802,6 @@ export const en = {
   "sidepanel.sessions.readOnlyBadge": "Read-only",
   "sidepanel.sessions.readOnlyNotice":
     "This conversation lives on {name}. Continue there to send a new message.",
-
-  "tools.empty": "No configurable toolsets were found.",
-  "tools.loadFailed": "Failed to load toolsets.",
-  "tools.toggleFailed": "Toggle failed, please try again.",
-  "tools.badge.notConfigured": "Not configured",
-  "tools.toggle.enable": "Enable {name}",
-  "tools.toggle.disable": "Disable {name}",
-  "tools.search.placeholder": "Search toolsets…",
-  "tools.search.empty": "No matching toolsets.",
-  "tools.group.builtin": "Built-in",
-  "tools.group.installedMcps": "Installed (MCP)",
-  "tools.installedMcps.empty":
-    "No MCP servers installed yet. Ask the assistant to find and install one for you.",
-  "tools.installedMcp.curated": "Curated",
-  "tools.installedMcp.manual": "Manual",
-  "tools.installedMcp.source": "Source",
-  "tools.installedMcp.transport": "Transport",
-  "tools.installedMcp.cliHeading": "CLI",
-  "tools.installedMcp.cliHint":
-    "Manage this server via the CLI — probe, reconfigure, or remove.",
-  "tools.detail.loadFailed": "Failed to load detail.",
-  "tools.detail.placeholder": "Select a toolset on the left to view its details.",
-  "tools.detail.tab.overview": "Overview",
-  "tools.detail.tab.tools": "Tools",
-  "tools.detail.tab.providers": "Providers",
-  "tools.detail.overview.status": "Status",
-  "tools.detail.overview.configured": "Configuration",
-  "tools.detail.overview.toolCount": "Tools registered",
-  "tools.detail.overview.providerCount": "Providers",
-  "tools.detail.overview.noProviders": "No providers",
-  "tools.detail.overview.persistsHint":
-    "Changes write to ~/.hermes/config.yaml (platform_toolsets.cli) and take effect on the next agent session.",
-  "tools.detail.tools.empty": "No tools resolved for this toolset.",
-  "tools.detail.providers.empty": "No providers configured for this toolset.",
-  "tools.detail.provider.noKeysNeeded": "No keys needed",
-  "tools.detail.provider.configured": "Configured",
-  "tools.detail.provider.missingKeys": "Keys missing",
-  "tools.detail.envVar.set": "Set",
-  "tools.detail.envVar.missing": "Missing",
 } as const;
 
 export type MessageKey = keyof typeof en;
