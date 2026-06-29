@@ -8,6 +8,9 @@
     "./styles/tokens.css": "./styles/tokens.css"
   },
   "files": ["index.js", "styles"],
+  "dependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  },
   "publishConfig": {
     "access": "public"
   }

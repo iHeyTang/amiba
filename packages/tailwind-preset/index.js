@@ -51,5 +51,9 @@ module.exports = {
       }
     }
   },
-  plugins: []
+  // tailwindcss-animate provides the `animate-in` / `fade-*` / `zoom-*`
+  // enter/exit utilities the Radix dialog/overlay components rely on. Without
+  // it those classes are no-ops and every dialog (incl. the command palette)
+  // pops in/out with no transition.
+  plugins: [require("tailwindcss-animate")]
 }
