@@ -44,7 +44,12 @@ export function CommandPalette({
         // CommandDialog pattern) so groups/headings/items get consistent
         // horizontal insets regardless of cmdk's own DOM structure.
         className={cn(
-          "max-w-xl gap-0 overflow-hidden rounded-xl p-0",
+          // `block` overrides DialogContent's default `display: grid`: a grid
+          // auto-track sizes to its content's max-content, so a long no-wrap
+          // chat title blows the width past max-w-xl and overflow-hidden clips
+          // it. As a block the width is locked to max-w-xl and the inner
+          // `truncate` ellipsizes correctly.
+          "block max-w-xl gap-0 overflow-hidden rounded-xl p-0",
           "[&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1",
           "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
           "[&_[cmdk-item]]:flex [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:overflow-hidden [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground",
@@ -52,7 +57,7 @@ export function CommandPalette({
         )}
         aria-label={t("commandPalette.placeholder")}
       >
-        <Command className="flex max-h-[60vh] w-full flex-col">
+        <Command className="flex max-h-[60vh] w-full min-w-0 flex-col">
           <div className="flex items-center border-b border-border px-4">
             <Command.Input
               autoFocus
