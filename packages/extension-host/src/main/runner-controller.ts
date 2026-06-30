@@ -54,6 +54,16 @@ export interface RunnerManagerOpts {
     offset?: number
     source?: string
   }) => Promise<unknown[]>
+  /**
+   * Authenticated backplane fetch — backs host.hermes.backplaneFetch.
+   * Optional; runner throws "not wired" when absent. Desktop main wires
+   * this to @amiba/core's backplaneFetch, returning a serializable
+   * { ok, status, body } envelope (the raw Response can't cross RPC).
+   */
+  backplaneFetch?: (
+    path: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string },
+  ) => Promise<{ ok: boolean; status: number; body: string }>
   /** Activation timeout in ms (default 10_000) */
   activateTimeoutMs?: number
   /** Graceful shutdown timeout in ms before SIGKILL (default 5_000) */
@@ -413,6 +423,16 @@ export function createRunnerManagerWithRpc(opts: RunnerManagerOpts) {
         case "hermes.listSessions":
           if (!opts.listSessions) return []
           return opts.listSessions(a.opts as Record<string, unknown> | undefined)
+        case "hermes.backplaneFetch":
+          if (!opts.backplaneFetch) {
+            throw new Error("hermes.backplaneFetch not wired")
+          }
+          return opts.backplaneFetch(
+            a.path as string,
+            a.init as
+              | { method?: string; headers?: Record<string, string>; body?: string }
+              | undefined,
+          )
         default:
           throw new Error(`unknown RPC method: ${method}`)
       }

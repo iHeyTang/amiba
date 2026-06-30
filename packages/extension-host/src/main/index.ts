@@ -16,7 +16,7 @@ import { createExtensionStorage } from "./storage-fs"
 import { validateManifest } from "./discover"
 import { watchManifests } from "./manifest-watcher"
 import { discoverFromRegistry } from "./discover-registry"
-import { findEntry } from "./registry-store"
+import { findEntry, type ExtensionSource } from "./registry-store"
 import { createRunnerManagerWithRpc } from "./runner-controller"
 import { checkCompat } from "../compat"
 import { HOST_API_VERSION } from "../version"
@@ -62,6 +62,17 @@ export interface MainBootOptions {
     offset?: number
     source?: string
   }) => Promise<unknown[]>
+  /**
+   * Authenticated backplane fetch backing `host.hermes.backplaneFetch`.
+   * Desktop main implements this via `@amiba/core`'s `backplaneFetch`,
+   * reading the response to text and returning a serializable
+   * `{ ok, status, body }` envelope. Optional; extensions calling
+   * `backplaneFetch` get a "not wired" error when absent.
+   */
+  backplaneFetch?: (
+    path: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string },
+  ) => Promise<{ ok: boolean; status: number; body: string }>
   /** Async loader for an extension's i18n JSON (per locale). */
   getI18n: (
     extensionId: string,
@@ -120,6 +131,7 @@ export async function bootMainExtensionHost(
     callTool: opts.callTool,
     getSession: opts.getSession,
     listSessions: opts.listSessions,
+    backplaneFetch: opts.backplaneFetch,
   })
 
   // Discover extensions from registry.
@@ -129,7 +141,7 @@ export async function bootMainExtensionHost(
   }
 
   // Mutable manifests list — mutated on reload.
-  const manifestEntries: Array<{ manifest: ExtensionManifest; rootDir: string; source: "marketplace" | "local" }> = discovered.map(
+  const manifestEntries: Array<{ manifest: ExtensionManifest; rootDir: string; source: ExtensionSource }> = discovered.map(
     (e) => ({ manifest: e.manifest, rootDir: e.rootDir, source: e.source }),
   )
   const getManifests = () => manifestEntries.map((m) => m.manifest)
@@ -349,3 +361,5 @@ export type { DiscoveredEntry } from "./discover-registry"
 export { loadRegistry, saveRegistry, addEntry, removeEntry, findEntry } from "./registry-store"
 export type { RegistryEntry, Registry, ExtensionSource } from "./registry-store"
 export { registerExtHttpChannel } from "./ipc-router"
+export { seedBundledExtensions } from "./seed-bundled"
+export type { BundledExtSpec, SeedBundledResult } from "./seed-bundled"

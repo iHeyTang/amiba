@@ -74,7 +74,7 @@
     "permissions": {
       "type": "array",
       "items": {
-        "enum": ["ipc", "settings", "storage", "i18n", "lifecycle.boot", "hermes.callTool"]
+        "enum": ["ipc", "settings", "storage", "i18n", "lifecycle.boot", "hermes.callTool", "hermes.backplane"]
       }
     }
   }

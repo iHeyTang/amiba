@@ -82,6 +82,30 @@ export type ChatEventName =
   | "tool.started"
   | "tool.completed"
 
+/**
+ * Request shape for `host.hermes.backplaneFetch`. A serializable subset of
+ * the DOM `RequestInit` — the full object can't cross the utility-process
+ * RPC boundary, so `body` must already be a string (callers
+ * `JSON.stringify` their payload) and `headers` a plain record.
+ */
+export interface BackplaneFetchInit {
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+}
+
+/**
+ * Result of `host.hermes.backplaneFetch`. The raw `Response` can't be sent
+ * across the RPC boundary, so the host reads the body to text and returns
+ * this serializable envelope; callers `JSON.parse(body)` as needed. On a
+ * network error the host returns `{ ok: false, status: 0, body: "" }`.
+ */
+export interface BackplaneFetchResult {
+  ok: boolean
+  status: number
+  body: string
+}
+
 export interface MainHost {
   readonly id: string
   /**
@@ -147,6 +171,22 @@ export interface MainHost {
       offset?: number
       source?: string
     }): Promise<HermesSessionInfo[]>
+    /**
+     * Authenticated fetch against the local backplane — the same surface
+     * the main app's `@amiba/core` client uses. `path` is a backplane
+     * route like `/hermes/skills` or `/hermes/tools/toolsets`; the host
+     * injects the `Authorization` bearer and resolves the loopback base
+     * URL. Use this to reach backplane endpoints that have no dedicated
+     * bridge method (skills, tools, cron, …).
+     *
+     * Returns a serializable envelope (not a `Response`): `{ ok, status,
+     * body }` where `body` is the raw response text. Gated by the
+     * `hermes.backplane` manifest permission.
+     */
+    backplaneFetch(
+      path: string,
+      init?: BackplaneFetchInit,
+    ): Promise<BackplaneFetchResult>
   }
   /**
    * Subscribe to chat-engine events broadcast from the desktop main

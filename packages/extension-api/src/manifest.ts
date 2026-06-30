@@ -66,3 +66,4 @@ export type Permission =
   | "i18n"
   | "lifecycle.boot"
   | "hermes.callTool"
+  | "hermes.backplane"

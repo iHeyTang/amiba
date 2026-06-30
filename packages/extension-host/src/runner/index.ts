@@ -16,6 +16,7 @@
  */
 
 import type {
+  BackplaneFetchResult,
   ChatEventName,
   Disposable,
   HermesSessionInfo,
@@ -201,6 +202,8 @@ const host: MainHost = {
       rpc("hermes.getSession", { sessionId }) as Promise<HermesSessionInfo | null>,
     listSessions: (opts) =>
       rpc("hermes.listSessions", { opts }) as Promise<HermesSessionInfo[]>,
+    backplaneFetch: (path, init) =>
+      rpc("hermes.backplaneFetch", { path, init }) as Promise<BackplaneFetchResult>,
   },
 
   chat: {

@@ -13,8 +13,8 @@ import {
   systemPreferences,
 } from "electron"
 import { setPlatform } from "@amiba/platform"
-import { getHermesSession, listHermesSessions } from "@amiba/core"
-import { bootMainExtensionHost, registerExtHttpChannel } from "@amiba/extension-host/main"
+import { backplaneFetch, getHermesSession, listHermesSessions } from "@amiba/core"
+import { bootMainExtensionHost, registerExtHttpChannel, seedBundledExtensions } from "@amiba/extension-host/main"
 import { startExtHttpServer } from "./ext-http-server"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
@@ -89,6 +89,36 @@ function getExtensionsRoot(): string {
  */
 function getRegistryPath(): string {
   return join(app.getPath("userData"), "extensions-registry.json")
+}
+
+/**
+ * Extensions that ship WITH the app (default-installed). Each is built from
+ * its own sibling repo; `dir` is both the sibling repo folder name (dev) and
+ * the packaged resources subfolder name. Seeded into the registry at boot
+ * (source: "bundled") so users get them without a marketplace install.
+ */
+const BUNDLED_EXTS: { id: string; dir: string }[] = [
+  { id: "io.amiba.skills", dir: "amiba-ext-skills" },
+  { id: "io.amiba.tool-meter", dir: "amiba-ext-tool-meter" },
+]
+
+/**
+ * Resolve a bundled extension's root dir (the folder with manifest.json +
+ * dist/). Packaged: `resources/bundled-extensions/<dir>` (populated by
+ * electron-builder `extraResources` — not yet wired; see the bundling TODO).
+ * Dev: the sibling ext repo next to the `amiba` monorepo
+ * (`<…>/amiba-ext-skills`), overridable via AMIBA_DEV_BUNDLED_EXTS_DIR for
+ * non-standard checkouts. app.getAppPath() in dev is `amiba/apps/desktop`, so
+ * three levels up is the directory that holds both `amiba/` and the ext repos.
+ */
+function resolveBundledExtRoot(dir: string): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, "bundled-extensions", dir)
+  }
+  const base =
+    process.env.AMIBA_DEV_BUNDLED_EXTS_DIR ??
+    join(app.getAppPath(), "..", "..", "..")
+  return join(base, dir)
 }
 
 /**
@@ -432,6 +462,15 @@ if (!gotSingleInstanceLock) {
     const extensionsRoot = getExtensionsRoot()
     const registryPath = getRegistryPath()
 
+    // Seed default-bundled extensions into the registry BEFORE the host
+    // discovers it, so first launch (empty registry) still loads them.
+    // Idempotent + version-aware; preserves the user's enable/disable choice.
+    const seedResult = seedBundledExtensions(
+      registryPath,
+      BUNDLED_EXTS.map((b) => ({ id: b.id, root: resolveBundledExtRoot(b.dir) })),
+    )
+    console.info("[main] bundled-ext seed:", JSON.stringify(seedResult))
+
     // Start the local HTTP server that serves extension WebView assets.
     // Bound to loopback only (127.0.0.1), OS-assigned port.
     const extHttpServer = await startExtHttpServer({ registryPath })
@@ -522,6 +561,23 @@ if (!gotSingleInstanceLock) {
           return []
         } catch {
           return []
+        }
+      },
+      // Backs host.hermes.backplaneFetch — the generic backplane channel
+      // for extensions (skills / tools / cron endpoints have no dedicated
+      // bridge method). Reuses @amiba/core's backplaneFetch (auth bearer +
+      // loopback base URL already wired), then reads the Response to a
+      // serializable { ok, status, body } envelope since the raw Response
+      // can't cross the utility-process RPC boundary. Network failures
+      // collapse to { ok:false, status:0, body:"" } so the extension's
+      // client treats "unreachable" and "errored" uniformly.
+      backplaneFetch: async (path, init) => {
+        try {
+          const res = await backplaneFetch(path, init ?? {})
+          const body = await res.text()
+          return { ok: res.ok, status: res.status, body }
+        } catch {
+          return { ok: false, status: 0, body: "" }
         }
       },
       getI18n: async (_extensionId, _locale) => ({}),

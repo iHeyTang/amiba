@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-export type ExtensionSource = "marketplace" | "local"
+export type ExtensionSource = "marketplace" | "local" | "bundled"
 
 export interface RegistryEntry {
   id: string
@@ -41,7 +41,7 @@ function isValidEntry(e: unknown): e is RegistryEntry {
   return (
     typeof r.id === "string" &&
     typeof r.path === "string" &&
-    (r.source === "marketplace" || r.source === "local")
+    (r.source === "marketplace" || r.source === "local" || r.source === "bundled")
   )
 }
 
