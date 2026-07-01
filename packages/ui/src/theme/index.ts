@@ -77,6 +77,104 @@ export function useStoredThemePreference() {
   return [pref, update] as const
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Accent (brand colour) — an axis orthogonal to light/dark.
+ *
+ * Each accent only re-points the brand trio (`--primary`,
+ * `--primary-foreground`, `--ring`) in `tokens.css`; the neutral palette is
+ * shared, so one accent reads correctly on either light or dark. The choice
+ * is applied as a single `.accent-<id>` class on `<html>`, alongside the
+ * existing `.dark` / `.light` class.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type AccentPreference = "violet" | "coral" | "cyan" | "lime" | "graphite"
+
+export interface AccentDef {
+  id: AccentPreference
+  /** Representative hex for the settings swatch picker (display only — the
+   *  real colours live in `tokens.css`). */
+  swatch: string
+}
+
+/** Registry that drives both the CSS class set and the settings picker. */
+export const ACCENTS: readonly AccentDef[] = [
+  { id: "violet", swatch: "#6D5EF6" },
+  { id: "coral", swatch: "#FF5A3C" },
+  { id: "cyan", swatch: "#00B8D9" },
+  { id: "lime", swatch: "#C4F000" },
+  { id: "graphite", swatch: "#3F3F46" },
+]
+
+export const ACCENT_PREF_STORAGE_KEY = "settings.ui.accent"
+export const DEFAULT_ACCENT_PREFERENCE: AccentPreference = "violet"
+
+const ACCENT_IDS = ACCENTS.map((a) => a.id)
+
+export function normalizeStoredAccent(v: unknown): AccentPreference {
+  return (ACCENT_IDS as string[]).includes(v as string)
+    ? (v as AccentPreference)
+    : DEFAULT_ACCENT_PREFERENCE
+}
+
+export async function loadAccentPreference(): Promise<AccentPreference> {
+  try {
+    const r = await getPlatform().storage.get([ACCENT_PREF_STORAGE_KEY])
+    return normalizeStoredAccent(r[ACCENT_PREF_STORAGE_KEY])
+  } catch {
+    return DEFAULT_ACCENT_PREFERENCE
+  }
+}
+
+export async function saveAccentPreference(pref: AccentPreference): Promise<void> {
+  await getPlatform().storage.set({ [ACCENT_PREF_STORAGE_KEY]: pref })
+}
+
+export function useStoredAccentPreference() {
+  const [pref, setPref] = useState<AccentPreference>(DEFAULT_ACCENT_PREFERENCE)
+
+  useEffect(() => {
+    let mounted = true
+    void loadAccentPreference().then((p) => {
+      if (mounted) setPref(p)
+    })
+    const unsub = getPlatform().storage.watch([ACCENT_PREF_STORAGE_KEY], (changes) => {
+      const c = changes[ACCENT_PREF_STORAGE_KEY]
+      if (!c || c.newValue === undefined) return
+      setPref(normalizeStoredAccent(c.newValue))
+    })
+    return () => {
+      mounted = false
+      unsub()
+    }
+  }, [])
+
+  const update = async (p: AccentPreference) => {
+    setPref(p)
+    await saveAccentPreference(p)
+  }
+
+  return [pref, update] as const
+}
+
+/** Swaps the active `.accent-<id>` class on `<html>`, leaving `.dark` /
+ *  `.light` (and anything else) in place. */
+export function applyAccentClass(accent: AccentPreference) {
+  if (typeof document === "undefined") return
+  const root = document.documentElement
+  for (const id of ACCENT_IDS) root.classList.remove(`accent-${id}`)
+  root.classList.add(`accent-${accent}`)
+}
+
+/** Reactive reader of the persisted accent that also keeps `<html>` in sync.
+ *  Folded into {@link useResolvedTheme} so every surface gets it for free. */
+export function useResolvedAccent(): AccentPreference {
+  const [accent] = useStoredAccentPreference()
+  useEffect(() => {
+    applyAccentClass(accent)
+  }, [accent])
+  return accent
+}
+
 /** Reactive `prefers-color-scheme` reader. Tracks browser/OS changes. */
 export function useBrowserTheme(): ResolvedTheme {
   const [theme, setTheme] = useState<ResolvedTheme>(() => {
@@ -158,6 +256,9 @@ export function useResolvedTheme(): {
 } {
   const [pref] = useStoredThemePreference()
   const browser = useBrowserTheme()
+  // Apply the accent class on the same entry hook so every surface that
+  // already calls useResolvedTheme() gets the brand colour with no extra wiring.
+  useResolvedAccent()
 
   const resolved: ResolvedTheme = pref === "light" ? "light" : pref === "dark" ? "dark" : browser
 

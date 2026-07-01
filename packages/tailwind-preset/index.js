@@ -47,7 +47,34 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)"
       },
       fontFamily: {
+        // Native UI stack — SF on macOS, Segoe on Windows, CJK fallbacks.
+        // Mirrors the body font-family in tokens.css so `font-sans` utilities
+        // resolve to the same face. No web font is shipped on purpose.
+        sans: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "system-ui",
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei",
+          "Noto Sans CJK SC",
+          "Source Han Sans SC",
+          "sans-serif",
+          "Apple Color Emoji",
+          "Segoe UI Emoji"
+        ],
         mono: ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"]
+      },
+      // Soft, multi-layer elevation for floating surfaces. Replaces the harsh
+      // single-layer Tailwind defaults on overlays so they read as "lifted"
+      // rather than "outlined". `popover` = dropdowns/selects/tooltips;
+      // `overlay` = dialogs/command palette (more lift).
+      boxShadow: {
+        popover:
+          "0 1px 2px -1px rgb(0 0 0 / 0.04), 0 4px 12px -2px rgb(0 0 0 / 0.10)",
+        overlay:
+          "0 4px 8px -2px rgb(0 0 0 / 0.06), 0 16px 36px -8px rgb(0 0 0 / 0.16)"
       }
     }
   },

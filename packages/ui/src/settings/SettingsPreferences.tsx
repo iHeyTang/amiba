@@ -18,7 +18,10 @@ import {
 } from "@amiba/core";
 import { getPlatform } from "@amiba/platform";
 import {
+  ACCENTS,
+  type AccentPreference,
   type ThemePreference,
+  useStoredAccentPreference,
   useStoredThemePreference,
 } from "../theme";
 import { cn } from "../primitives";
@@ -36,6 +39,14 @@ const BUILTIN_TOOLTIP_I18N: Record<BuiltinId, MessageKey> = {
   summarize: "composer.quick.summarize.tooltip",
   polish: "composer.quick.polish.tooltip",
   explain: "composer.quick.explain.tooltip",
+};
+
+const ACCENT_LABEL_I18N: Record<AccentPreference, MessageKey> = {
+  violet: "options.preference.accent.violet",
+  coral: "options.preference.accent.coral",
+  cyan: "options.preference.accent.cyan",
+  lime: "options.preference.accent.lime",
+  graphite: "options.preference.accent.graphite",
 };
 
 const SHOW_STREAM_DETAILS_KEY = "settings.chat.showStreamDetails";
@@ -85,6 +96,7 @@ function parseSummonHotkey(raw: unknown): SummonHotkey {
 export function SettingsAppearance() {
   const { t } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
+  const [accentPref, setAccentPref] = useStoredAccentPreference();
   const [langPref, setLangPref] = useStoredLanguagePreference();
   const [showStreamDetails, setShowStreamDetails] = useState(false);
   // Default `true` matches the new-tab page's runtime default (see
@@ -161,10 +173,12 @@ export function SettingsAppearance() {
               t={t}
               langPref={langPref}
               themePref={themePref}
+              accentPref={accentPref}
               languageOptions={languageOptions}
               themeOptions={themeOptions}
               onLangChange={(v) => void setLangPref(v)}
               onThemeChange={(v) => void setThemePref(v)}
+              onAccentChange={(v) => void setAccentPref(v)}
               // Wallpaper backdrop is rendered by the extension's new-tab
               // surface; the desktop home doesn't surface it, so we hide
               // the toggle there to avoid a no-op control.
@@ -262,10 +276,12 @@ function AppearanceSection({
   t,
   langPref,
   themePref,
+  accentPref,
   languageOptions,
   themeOptions,
   onLangChange,
   onThemeChange,
+  onAccentChange,
   showWallpaper,
   wallpaperEnabled,
   onWallpaperChange,
@@ -273,10 +289,12 @@ function AppearanceSection({
   t: TranslateFn;
   langPref: LanguagePreference;
   themePref: ThemePreference;
+  accentPref: AccentPreference;
   languageOptions: { value: LanguagePreference; label: string }[];
   themeOptions: { value: ThemePreference; label: string }[];
   onLangChange: (v: LanguagePreference) => void;
   onThemeChange: (v: ThemePreference) => void;
+  onAccentChange: (v: AccentPreference) => void;
   showWallpaper: boolean;
   wallpaperEnabled: boolean;
   onWallpaperChange: (next: boolean) => void;
@@ -297,6 +315,7 @@ function AppearanceSection({
         options={themeOptions}
         onChange={onThemeChange}
       />
+      <AccentRow t={t} value={accentPref} onChange={onAccentChange} />
       {showWallpaper && (
         <SwitchRow
           id="prefs-newtab-wallpaper"
@@ -431,6 +450,57 @@ function SwitchRow({
         disabled={disabled}
         onCheckedChange={onChange}
       />
+    </div>
+  );
+}
+
+/**
+ * Brand-accent picker — a row of colour swatches. Selecting one writes the
+ * accent preference; `useResolvedTheme` then swaps the `.accent-*` class on
+ * `<html>` and every `--primary` / `--ring` surface recolours live.
+ */
+function AccentRow({
+  t,
+  value,
+  onChange,
+}: {
+  t: TranslateFn;
+  value: AccentPreference;
+  onChange: (next: AccentPreference) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <Label className="text-sm font-normal">
+        {t("options.preference.accent")}
+      </Label>
+      <div
+        className="inline-flex items-center gap-3.5"
+        role="radiogroup"
+        aria-label={t("options.preference.accent")}
+      >
+        {ACCENTS.map((a) => {
+          const active = value === a.id;
+          const label = t(ACCENT_LABEL_I18N[a.id]);
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={label}
+              title={label}
+              onClick={() => onChange(a.id)}
+              className={cn(
+                "h-5 w-5 rounded-full ring-offset-2 ring-offset-background transition-transform hover:scale-110",
+                active
+                  ? "scale-110 ring-2 ring-foreground"
+                  : "ring-1 ring-black/10 dark:ring-white/15",
+              )}
+              style={{ backgroundColor: a.swatch }}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

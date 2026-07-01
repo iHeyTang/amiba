@@ -426,7 +426,7 @@ function SlimTopBar({
       {/* Centre: active title. ``pointer-events-none`` so window-drag still
           works across the whole bar. */}
       <div className="pointer-events-none absolute inset-x-0 flex h-full items-center justify-center">
-        <span className="truncate px-2 text-xs font-medium text-muted-foreground">
+        <span className="truncate px-2 text-xs font-medium tracking-tight text-foreground/65">
           {title}
         </span>
       </div>
