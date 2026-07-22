@@ -19,6 +19,13 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     onRenameSession: vi.fn(),
     onDeleteSession: vi.fn(),
     onRefreshSessions: vi.fn(),
+    scheduledSessions: [],
+    scheduledReady: true,
+    onOpenScheduledSession: vi.fn(),
+    onRefreshScheduledSessions: vi.fn(),
+    scheduledLabelFor: vi.fn((source: string) => source),
+    historyLayout: "timeline" as const,
+    onHistoryLayoutChange: vi.fn(),
     onOpenSettings: vi.fn(),
     ...overrides,
   }
@@ -65,5 +72,53 @@ describe("Sidebar", () => {
     const props = setup()
     await userEvent.click(screen.getByText("First chat"))
     expect(props.onOpenSession).toHaveBeenCalledWith("s1")
+  })
+
+  it("keeps chats and scheduled runs together in the timeline layout", async () => {
+    const props = setup({
+      scheduledSessions: [
+        {
+          id: "cron_daily_1",
+          title: "Jul 22, 11:30",
+          createdAt: 2,
+          updatedAt: 2,
+          messageCount: 1,
+          source: "daily",
+        },
+      ],
+      scheduledLabelFor: () => "Daily report",
+    })
+
+    expect(screen.getByText("First chat")).toBeInTheDocument()
+    await userEvent.click(screen.getByText("Daily report · Jul 22, 11:30"))
+    expect(props.onOpenScheduledSession).toHaveBeenCalledWith("cron_daily_1")
+  })
+
+  it("renders separate chat and scheduled sections in grouped layout", () => {
+    setup({
+      historyLayout: "grouped",
+      scheduledSessions: [
+        {
+          id: "cron_daily_1",
+          title: "Jul 22, 11:30",
+          createdAt: 2,
+          updatedAt: 2,
+          messageCount: 1,
+          source: "daily",
+        },
+      ],
+      scheduledLabelFor: () => "Daily report",
+    })
+
+    expect(screen.getByText("Chats")).toBeInTheDocument()
+    expect(screen.getAllByText("Scheduled tasks").length).toBeGreaterThan(0)
+  })
+
+  it("switches history layout from the header controls", async () => {
+    const props = setup()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Group chats and scheduled tasks" }),
+    )
+    expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped")
   })
 })

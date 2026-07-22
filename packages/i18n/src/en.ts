@@ -708,6 +708,10 @@ export const en = {
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Scheduled tasks",
+  "sidepanel.sessions.history.empty": "No chats or scheduled runs yet.",
+  "sidepanel.sessions.layout.aria": "History layout",
+  "sidepanel.sessions.layout.timeline": "All by time",
+  "sidepanel.sessions.layout.grouped": "Group chats and scheduled tasks",
   "sidepanel.nav.section.workspace": "Workspace",
   "sidepanel.sessions.showMore": "Show {count} more",
   "sidepanel.sessions.showLess": "Show less",

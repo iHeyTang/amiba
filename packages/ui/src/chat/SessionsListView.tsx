@@ -1,9 +1,8 @@
 /**
- * Channel-grouped session list — the shared body shared by the Chats
- * and Scheduled-tasks activity views. The two surfaces differ only in
- * their data source (chats: `useSessions` with cron excluded; scheduled:
- * `useCronSessions` converted to `SessionMeta`). UI, sectioning, date
- * buckets, hover affordances are identical.
+ * Reusable session history list. By default it groups rows by channel; callers
+ * may provide a custom grouping key or hide section headers to render a single
+ * time-ordered stream. This lets the main sidebar mix chats and scheduled runs
+ * without maintaining two competing list implementations.
  *
  * Search and new-chat are NOT rendered here — both live in the top bar
  * now (VSCode command-center style). The host passes the active query
@@ -62,6 +61,16 @@ export interface SessionsListViewProps {
    * per cron-job group.
    */
   sectionActionsFor?: (source: string) => ReactNode;
+  /** Override the grouping key. Defaults to the session's channel source. */
+  groupKeyFor?: (session: SessionMeta) => string;
+  /** Stable section order when `groupKeyFor` is supplied. */
+  sectionOrder?: string[];
+  /** Hide section chrome for a single, time-ordered flat history. */
+  showSectionHeaders?: boolean;
+  /** Optional leading icon used to distinguish mixed history row types. */
+  rowIconFor?: (session: SessionMeta) => ReactNode;
+  /** Disable rename/delete affordances for read-only rows such as cron runs. */
+  allowActionsFor?: (session: SessionMeta) => boolean;
 }
 
 export function SessionsListView({
@@ -77,6 +86,11 @@ export function SessionsListView({
   noMatchesLabel,
   sectionLabelFor,
   sectionActionsFor,
+  groupKeyFor,
+  sectionOrder,
+  showSectionHeaders = true,
+  rowIconFor,
+  allowActionsFor,
 }: SessionsListViewProps) {
   const { t } = useT();
 
@@ -103,7 +117,7 @@ export function SessionsListView({
 
     const bySource = new Map<string, SessionMeta[]>();
     for (const s of matching) {
-      const src = s.source ?? SOURCE_LOCAL;
+      const src = groupKeyFor?.(s) ?? s.source ?? SOURCE_LOCAL;
       const arr = bySource.get(src) ?? [];
       arr.push(s);
       bySource.set(src, arr);
@@ -132,23 +146,47 @@ export function SessionsListView({
       return t("sidepanel.sessions.group.channelChats", { name: channelName });
     };
     const labelFor = sectionLabelFor ?? defaultLabelFor;
-    const localItems = bySource.get(SOURCE_LOCAL);
-    if (localItems && localItems.length) {
-      sections.push({
-        source: SOURCE_LOCAL,
-        label: labelFor(SOURCE_LOCAL),
-        items: localItems,
-        isLocal: true,
-      });
-    }
-    const remote = Array.from(bySource.entries())
-      .filter(([src]) => src !== SOURCE_LOCAL)
-      .sort((a, b) => b[1].length - a[1].length);
-    for (const [src, items] of remote) {
-      sections.push({ source: src, label: labelFor(src), items, isLocal: false });
+    if (groupKeyFor) {
+      const orderedKeys = [
+        ...(sectionOrder ?? []).filter((key) => bySource.has(key)),
+        ...Array.from(bySource.keys()).filter(
+          (key) => !(sectionOrder ?? []).includes(key),
+        ),
+      ];
+      for (const source of orderedKeys) {
+        const items = bySource.get(source);
+        if (!items?.length) continue;
+        sections.push({
+          source,
+          label: labelFor(source),
+          items,
+          isLocal: false,
+        });
+      }
+    } else {
+      const localItems = bySource.get(SOURCE_LOCAL);
+      if (localItems && localItems.length) {
+        sections.push({
+          source: SOURCE_LOCAL,
+          label: labelFor(SOURCE_LOCAL),
+          items: localItems,
+          isLocal: true,
+        });
+      }
+      const remote = Array.from(bySource.entries())
+        .filter(([src]) => src !== SOURCE_LOCAL)
+        .sort((a, b) => b[1].length - a[1].length);
+      for (const [src, items] of remote) {
+        sections.push({
+          source: src,
+          label: labelFor(src),
+          items,
+          isLocal: false,
+        });
+      }
     }
     return sections;
-  }, [sessions, query, t, sectionLabelFor]);
+  }, [sessions, query, t, sectionLabelFor, groupKeyFor, sectionOrder]);
 
   const totalMatching = useMemo(
     () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
@@ -182,23 +220,29 @@ export function SessionsListView({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
       {totalMatching === 0 ? (
-        <TopSection
-          label={t("sidepanel.sessions.group.channelChats", {
-            name: (() => {
-              const d = resolveChannel(SOURCE_LOCAL);
-              const tr = t(d.labelKey as MessageKey);
-              return tr === d.labelKey ? d.fallbackLabel : tr;
-            })(),
-          })}
-          count={0}
-          collapsed={!!topCollapsed[SOURCE_LOCAL]}
-          onToggle={() => toggleTop(SOURCE_LOCAL)}
-          variant="rail"
-        >
+        showSectionHeaders ? (
+          <TopSection
+            label={t("sidepanel.sessions.group.channelChats", {
+              name: (() => {
+                const d = resolveChannel(SOURCE_LOCAL);
+                const tr = t(d.labelKey as MessageKey);
+                return tr === d.labelKey ? d.fallbackLabel : tr;
+              })(),
+            })}
+            count={0}
+            collapsed={!!topCollapsed[SOURCE_LOCAL]}
+            onToggle={() => toggleTop(SOURCE_LOCAL)}
+            variant="rail"
+          >
+            <p className="px-2.5 py-3 text-xs leading-relaxed text-muted-foreground">
+              {emptyText}
+            </p>
+          </TopSection>
+        ) : (
           <p className="px-2.5 py-3 text-xs leading-relaxed text-muted-foreground">
             {emptyText}
           </p>
-        </TopSection>
+        )
       ) : (
         channelSections.map((sec) => {
           const activeIsOlder = sec.items.some(
@@ -210,16 +254,8 @@ export function SessionsListView({
             ? sec.items
             : sec.items.slice(0, COLLAPSED_SECTION_LIMIT);
           const hiddenCount = sec.items.length - visible.length;
-          return (
-            <TopSection
-              key={sec.source}
-              label={sec.label}
-              count={sec.items.length}
-              collapsed={!!topCollapsed[sec.source]}
-              onToggle={() => toggleTop(sec.source)}
-              variant="rail"
-              actions={sectionActionsFor?.(sec.source)}
-            >
+          const rows = (
+            <>
               <nav className="flex flex-col gap-0.5">
                 {visible.map((s) => (
                   <SessionRow
@@ -229,6 +265,8 @@ export function SessionsListView({
                     onOpen={() => onOpen(s.id)}
                     onRename={(title) => onRename(s.id, title)}
                     onDelete={() => onDelete(s.id)}
+                    icon={rowIconFor?.(s)}
+                    allowActions={allowActionsFor?.(s) ?? true}
                   />
                 ))}
               </nav>
@@ -249,7 +287,24 @@ export function SessionsListView({
                   {t("sidepanel.sessions.showLess")}
                 </button>
               ) : null}
+            </>
+          );
+          return showSectionHeaders ? (
+            <TopSection
+              key={sec.source}
+              label={sec.label}
+              count={sec.items.length}
+              collapsed={!!topCollapsed[sec.source]}
+              onToggle={() => toggleTop(sec.source)}
+              variant="rail"
+              actions={sectionActionsFor?.(sec.source)}
+            >
+              {rows}
             </TopSection>
+          ) : (
+            <div key={sec.source} className="pt-1">
+              {rows}
+            </div>
           );
         })
       )}
@@ -263,6 +318,8 @@ interface SessionRowProps {
   onOpen: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
+  icon?: ReactNode;
+  allowActions: boolean;
 }
 
 function SessionRow({
@@ -271,6 +328,8 @@ function SessionRow({
   onOpen,
   onRename,
   onDelete,
+  icon,
+  allowActions,
 }: SessionRowProps) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
@@ -331,45 +390,58 @@ function SessionRow({
         onClick={onOpen}
         className="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left focus-visible:outline-none"
       >
+        {icon ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">
+            {icon}
+          </span>
+        ) : null}
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
-        <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+        <span
+          className={cn(
+            "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity",
+            allowActions &&
+              "group-hover:opacity-0 group-focus-within:opacity-0",
+          )}
+        >
           {formatRelativeShort(session.updatedAt)}
         </span>
       </button>
-      <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditing(true);
-          }}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
-          title={t("chat.rename")}
-          aria-label={t("chat.rename")}
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (
-              confirm(
-                `Delete "${session.title?.trim() || "this chat"}"? This removes it from history.`,
-              )
-            ) {
-              onDelete();
-            }
-          }}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
-          title={t("chat.delete")}
-          aria-label={t("chat.delete")}
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </span>
+      {allowActions ? (
+        <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing(true);
+            }}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
+            title={t("chat.rename")}
+            aria-label={t("chat.rename")}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (
+                confirm(
+                  `Delete "${session.title?.trim() || "this chat"}"? This removes it from history.`,
+                )
+              ) {
+                onDelete();
+              }
+            }}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
+            title={t("chat.delete")}
+            aria-label={t("chat.delete")}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }

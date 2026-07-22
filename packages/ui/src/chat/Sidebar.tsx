@@ -3,20 +3,24 @@
  * `w-72` session-list aside. Three vertical regions:
  *   • top (fixed):   new-chat, search (opens the command palette), then the
  *                    built-in + extension nav rows.
- *   • middle (flex): the conversation-history list (channel-grouped, collapsible).
+ *   • middle (flex): unified chat + scheduled-run history, switchable between
+ *                    a time-ordered stream and two explicit groups.
  *   • bottom (fixed): the settings row.
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
 import {
   BookOpen,
   Clock,
+  List,
+  ListTree,
+  MessageSquare,
   Plus,
   Search,
   Settings,
   Wallet,
   Wrench,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
@@ -28,6 +32,11 @@ import { SessionsListView } from "./SessionsListView";
 
 /** Extension ids are arbitrary strings; no compile-time union needed. */
 export type ActivityViewId = string;
+export type HistoryLayout = "timeline" | "grouped";
+
+const HISTORY_ALL_GROUP = "__history_all__";
+const HISTORY_CHAT_GROUP = "__history_chats__";
+const HISTORY_SCHEDULED_GROUP = "__history_scheduled__";
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
@@ -59,13 +68,14 @@ export interface SidebarProps {
   onRenameSession: (id: string, title: string) => void;
   onDeleteSession: (id: string) => void;
   onRefreshSessions: () => void | Promise<void>;
+  scheduledSessions: SessionMeta[];
+  scheduledReady: boolean;
+  onOpenScheduledSession: (id: string) => void;
+  onRefreshScheduledSessions: () => void | Promise<void>;
+  scheduledLabelFor: (source: string) => string;
+  historyLayout: HistoryLayout;
+  onHistoryLayoutChange: (layout: HistoryLayout) => void;
   onOpenSettings: () => void;
-  /**
-   * Optional context list for non-chat destinations. Scheduled tasks use
-   * this slot so their run history replaces chat history in the same rail
-   * instead of opening a second sidebar beside it.
-   */
-  historyContent?: ReactNode;
   /**
    * Explicit column width in px (user-resizable via the drag handle in
    * `FullScreenChatView`). Overrides the `w-60` fallback when provided.
@@ -87,12 +97,34 @@ export function Sidebar({
   onRenameSession,
   onDeleteSession,
   onRefreshSessions,
+  scheduledSessions,
+  scheduledReady,
+  onOpenScheduledSession,
+  onRefreshScheduledSessions,
+  scheduledLabelFor,
+  historyLayout,
+  onHistoryLayoutChange,
   onOpenSettings,
-  historyContent,
   widthPx,
   className,
 }: SidebarProps) {
   const { t } = useT();
+
+  const scheduledIds = useMemo(
+    () => new Set(scheduledSessions.map((session) => session.id)),
+    [scheduledSessions],
+  );
+  const historySessions = useMemo(
+    () =>
+      [
+        ...sessions,
+        ...scheduledSessions.map((session) => ({
+          ...session,
+          title: `${scheduledLabelFor(session.source ?? "")} · ${session.title}`,
+        })),
+      ].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    [sessions, scheduledSessions, scheduledLabelFor],
+  );
 
   // Built-in non-chat destinations get low implicit orders so extension items
   // (manifest default order 100) sort after them, while an extension that sets
@@ -153,20 +185,73 @@ export function Sidebar({
         ))}
       </div>
 
-      {/* Middle (flex): conversation history */}
+      {/* Middle (flex): chats and scheduled runs always remain visible. */}
       <div className="flex min-h-0 flex-1 flex-col px-2">
-        {historyContent ?? (
-          <SessionsListView
-            sessions={sessions}
-            activeId={activeSessionId}
-            ready={sessionsReady}
-            query=""
-            onOpen={onOpenSession}
-            onRename={onRenameSession}
-            onDelete={onDeleteSession}
-            onRefresh={onRefreshSessions}
-          />
-        )}
+        <div className="flex h-8 shrink-0 items-center px-2.5 pt-1">
+          <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+            {t("sidepanel.sessions.title")}
+          </span>
+          <div
+            role="group"
+            aria-label={t("sidepanel.sessions.layout.aria")}
+            className="flex items-center gap-0.5"
+          >
+            <HistoryLayoutButton
+              active={historyLayout === "timeline"}
+              label={t("sidepanel.sessions.layout.timeline")}
+              onClick={() => onHistoryLayoutChange("timeline")}
+            >
+              <List className="h-3.5 w-3.5" />
+            </HistoryLayoutButton>
+            <HistoryLayoutButton
+              active={historyLayout === "grouped"}
+              label={t("sidepanel.sessions.layout.grouped")}
+              onClick={() => onHistoryLayoutChange("grouped")}
+            >
+              <ListTree className="h-3.5 w-3.5" />
+            </HistoryLayoutButton>
+          </div>
+        </div>
+        <SessionsListView
+          sessions={historySessions}
+          activeId={activeSessionId}
+          ready={sessionsReady}
+          query=""
+          onOpen={(id) =>
+            scheduledIds.has(id)
+              ? onOpenScheduledSession(id)
+              : onOpenSession(id)
+          }
+          onRename={onRenameSession}
+          onDelete={onDeleteSession}
+          onRefresh={() => {
+            void onRefreshSessions();
+            void onRefreshScheduledSessions();
+          }}
+          emptyLabel={
+            scheduledReady
+              ? t("sidepanel.sessions.history.empty")
+              : t("sidepanel.sessions.scheduled.loading")
+          }
+          groupKeyFor={(session) =>
+            historyLayout === "timeline"
+              ? HISTORY_ALL_GROUP
+              : scheduledIds.has(session.id)
+                ? HISTORY_SCHEDULED_GROUP
+                : HISTORY_CHAT_GROUP
+          }
+          sectionOrder={[HISTORY_CHAT_GROUP, HISTORY_SCHEDULED_GROUP]}
+          sectionLabelFor={(source) =>
+            source === HISTORY_SCHEDULED_GROUP
+              ? t("sidepanel.sessions.group.scheduled")
+              : t("sidepanel.sessions.group.chats")
+          }
+          showSectionHeaders={historyLayout === "grouped"}
+          rowIconFor={(session) =>
+            scheduledIds.has(session.id) ? <Clock /> : <MessageSquare />
+          }
+          allowActionsFor={(session) => !scheduledIds.has(session.id)}
+        />
       </div>
 
       {/* Bottom (fixed): settings */}
@@ -180,5 +265,35 @@ export function Sidebar({
         />
       </div>
     </nav>
+  );
+}
+
+function HistoryLayoutButton({
+  active,
+  label,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
+        active
+          ? "bg-secondary text-secondary-foreground"
+          : "hover:bg-accent/70 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }

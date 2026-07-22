@@ -3,8 +3,8 @@
  * (the single-level sidebar on the left, the main pane on the right).
  *
  * The sidebar (`<Sidebar>`) is one column with three regions: a fixed top
- * (new-chat / search / built-in + extension nav rows), the conversation-history
- * list, and a settings row pinned at the bottom. It replaces the old icon
+ * (new-chat / search / built-in + extension nav rows), unified chat + scheduled
+ * history, and a settings row pinned at the bottom. It replaces the old icon
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
  * The main pane renders by `sidebarView`: the chat surface ("chats"), the
@@ -37,11 +37,10 @@ import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
-import { Sidebar, type ActivityViewId } from "./Sidebar";
+import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { ScheduledRunsPage } from "./ScheduledRunsPage";
-import { SessionsListView } from "./SessionsListView";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import {
   SessionTitleProvider,
@@ -64,6 +63,9 @@ const DEFAULT_SIDEBAR_WIDTH = 240; // matches the `w-60` fallback
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 420;
 
+const HISTORY_LAYOUT_KEY = "settings.chat.historyLayout";
+const DEFAULT_HISTORY_LAYOUT: HistoryLayout = "timeline";
+
 function clampSidebarWidth(v: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(v)));
 }
@@ -74,6 +76,10 @@ function isSidebarWidth(v: unknown): v is number {
 
 function isSidebarView(v: unknown): v is ActivityViewId {
   return typeof v === "string" && v.length > 0;
+}
+
+function isHistoryLayout(v: unknown): v is HistoryLayout {
+  return v === "timeline" || v === "grouped";
 }
 
 function isMessagesMaxWidth(v: unknown): v is MessagesMaxWidth {
@@ -173,6 +179,9 @@ function FullScreenChatViewInner({
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
+    DEFAULT_HISTORY_LAYOUT,
+  );
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
 
@@ -248,6 +257,24 @@ function FullScreenChatViewInner({
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
+    void storage.get(HISTORY_LAYOUT_KEY).then((r) => {
+      if (cancelled) return;
+      const v = r[HISTORY_LAYOUT_KEY];
+      if (isHistoryLayout(v)) setHistoryLayout(v);
+    });
+    const unsub = storage.watch([HISTORY_LAYOUT_KEY], (changes: StorageChangeMap) => {
+      const ch = changes[HISTORY_LAYOUT_KEY];
+      if (ch && isHistoryLayout(ch.newValue)) setHistoryLayout(ch.newValue);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const storage = getPlatform().storage;
     void storage.get(SIDEBAR_WIDTH_KEY).then((r) => {
       if (cancelled) return;
       const v = r[SIDEBAR_WIDTH_KEY];
@@ -298,6 +325,11 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }, []);
 
+  const onHistoryLayoutChange = useCallback((next: HistoryLayout) => {
+    setHistoryLayout(next);
+    void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
+  }, []);
+
   // New-chat row: mint a session AND land the main pane on the chat surface
   // (the row is reachable from any view, not just Chats).
   const onNewChatAndShow = useCallback(async () => {
@@ -335,8 +367,9 @@ function FullScreenChatViewInner({
         return;
       }
       await sessions.openTab(id);
+      onSidebarViewChange("scheduled");
     },
-    [sessions],
+    [sessions, onSidebarViewChange],
   );
 
   // Whether the active session is one of the cron runs — gates whether the
@@ -377,24 +410,14 @@ function FullScreenChatViewInner({
           onRenameSession={(id, title) => void sessions.rename(id, title)}
           onDeleteSession={(id) => void sessions.remove(id)}
           onRefreshSessions={() => void sessions.refresh()}
+          scheduledSessions={scheduled.runs}
+          scheduledReady={scheduled.ready}
+          onOpenScheduledSession={(id) => void onOpenRun(id)}
+          onRefreshScheduledSessions={scheduled.refresh}
+          scheduledLabelFor={scheduled.labelFor}
+          historyLayout={historyLayout}
+          onHistoryLayoutChange={onHistoryLayoutChange}
           onOpenSettings={() => openSettings()}
-          historyContent={
-            sidebarView === "scheduled" ? (
-              <SessionsListView
-                sessions={scheduled.runs}
-                activeId={sessions.activeId}
-                ready={scheduled.ready}
-                query=""
-                onOpen={(id) => void onOpenRun(id)}
-                onRename={() => {}}
-                onDelete={() => {}}
-                onRefresh={scheduled.refresh}
-                emptyLabel={t("sidepanel.sessions.scheduled.empty")}
-                sectionLabelFor={scheduled.labelFor}
-                sectionActionsFor={scheduled.actionsFor}
-              />
-            ) : undefined
-          }
           widthPx={sidebarWidth}
         />
         {/* Resize divider: invisible 4px hit area straddling the sidebar
