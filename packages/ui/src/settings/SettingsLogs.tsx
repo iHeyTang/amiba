@@ -1,6 +1,7 @@
 /**
- * Logs tab — tail Hermes Agent log files (agent / errors / gateway) with
- * level + component filters, free-text search, and optional 5s auto-poll.
+ * Logs tab — tail Hermes Agent log files (agent / errors / gateway) and
+ * lifecycle output such as the Hermes updater. File logs support level +
+ * component filters; every source supports search and optional auto-poll.
  *
  * Mirrors upstream dashboard's LogsPage but uses the extension's own
  * components (no @nous-research/ui in extension scope). Pulls data from
@@ -24,7 +25,9 @@ import {
 import { Switch } from "../primitives";
 
 import {
+  getActionStatus,
   getHermesLogs,
+  type ActionStatusResponse,
   type HermesLogFile,
   type HermesLogLevel,
 } from "@amiba/core";
@@ -33,7 +36,14 @@ import { cn } from "../primitives";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
 
-const FILES: readonly HermesLogFile[] = ["agent", "errors", "gateway"] as const;
+export type SettingsLogSource = HermesLogFile | "hermes-update";
+
+const SOURCES: readonly SettingsLogSource[] = [
+  "agent",
+  "errors",
+  "gateway",
+  "hermes-update",
+] as const;
 const LEVELS: readonly HermesLogLevel[] = [
   "ALL",
   "DEBUG",
@@ -64,14 +74,16 @@ const LINE_COLORS: Record<LineKind, string> = {
   debug: "text-muted-foreground",
 };
 
-function fileLabel(t: TranslateFn, file: HermesLogFile): string {
-  switch (file) {
+function sourceLabel(t: TranslateFn, source: SettingsLogSource): string {
+  switch (source) {
     case "agent":
       return t("options.logs.file.agent");
     case "errors":
       return t("options.logs.file.errors");
     case "gateway":
       return t("options.logs.file.gateway");
+    case "hermes-update":
+      return t("options.logs.file.hermesUpdate");
   }
 }
 
@@ -95,9 +107,21 @@ function componentLabel(
   }
 }
 
-export function SettingsLogs() {
+export interface SettingsLogsProps {
+  /** Controlled log source, used by SettingsView for deep-link navigation. */
+  source?: SettingsLogSource;
+  onSourceChange?: (source: SettingsLogSource) => void;
+}
+
+export function SettingsLogs({
+  source: controlledSource,
+  onSourceChange,
+}: SettingsLogsProps = {}) {
   const { t } = useT();
-  const [file, setFile] = useState<HermesLogFile>("agent");
+  const [internalSource, setInternalSource] =
+    useState<SettingsLogSource>("agent");
+  const source = controlledSource ?? internalSource;
+  const isUpdateLog = source === "hermes-update";
   const [level, setLevel] = useState<HermesLogLevel>("ALL");
   const [component, setComponent] =
     useState<(typeof COMPONENTS)[number]>("all");
@@ -109,6 +133,8 @@ export function SettingsLogs() {
   const [lines, setLines] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] =
+    useState<ActionStatusResponse | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const reqRef = useRef(0);
@@ -126,21 +152,46 @@ export function SettingsLogs() {
     const reqId = ++reqRef.current;
     setLoading(true);
     setError(null);
-    const r = await getHermesLogs({
-      file,
-      lines: lineCount,
-      level,
-      component,
-      search: debouncedSearch || undefined,
-    });
-    if (reqId !== reqRef.current) return; // newer request superseded us
-    setLoading(false);
-    if (!r.ok) {
-      setError(r.error || t("options.logs.failedToLoad"));
-      setLines([]);
-      return;
+
+    let nextLines: string[] = [];
+    if (isUpdateLog) {
+      const r = await getActionStatus("hermes-update", lineCount);
+      if (reqId !== reqRef.current) return; // newer request superseded us
+      setActionStatus(r);
+      if (!r.ok) {
+        setLoading(false);
+        setError(r.error || t("options.logs.failedToLoad"));
+        setLines([]);
+        return;
+      }
+      nextLines = r.lines ?? [];
+      if (debouncedSearch) {
+        const needle = debouncedSearch.toLocaleLowerCase();
+        nextLines = nextLines.filter((line) =>
+          line.toLocaleLowerCase().includes(needle),
+        );
+      }
+    } else {
+      const r = await getHermesLogs({
+        file: source,
+        lines: lineCount,
+        level,
+        component,
+        search: debouncedSearch || undefined,
+      });
+      if (reqId !== reqRef.current) return; // newer request superseded us
+      setActionStatus(null);
+      if (!r.ok) {
+        setLoading(false);
+        setError(r.error || t("options.logs.failedToLoad"));
+        setLines([]);
+        return;
+      }
+      nextLines = r.lines;
     }
-    setLines(r.lines);
+
+    setLoading(false);
+    setLines(nextLines);
     // Pin the view to the tail — the user usually wants the freshest line
     // visible without scrolling. defer to next frame so the DOM has the
     // updated content before we read scrollHeight.
@@ -149,7 +200,7 @@ export function SettingsLogs() {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     });
-  }, [file, lineCount, level, component, debouncedSearch, t]);
+  }, [source, isUpdateLog, lineCount, level, component, debouncedSearch, t]);
 
   useEffect(() => {
     void fetchLogs();
@@ -157,9 +208,20 @@ export function SettingsLogs() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = window.setInterval(() => void fetchLogs(), AUTO_REFRESH_MS);
+    const refreshMs = isUpdateLog ? 1_000 : AUTO_REFRESH_MS;
+    const id = window.setInterval(() => void fetchLogs(), refreshMs);
     return () => window.clearInterval(id);
-  }, [autoRefresh, fetchLogs]);
+  }, [autoRefresh, fetchLogs, isUpdateLog]);
+
+  const changeSource = useCallback(
+    (next: SettingsLogSource) => {
+      setInternalSource(next);
+      setLines([]);
+      setActionStatus(null);
+      onSourceChange?.(next);
+    },
+    [onSourceChange],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -209,59 +271,63 @@ export function SettingsLogs() {
           <div className="flex flex-wrap items-end gap-3">
             <FilterField label={t("options.logs.file.label")}>
               <Select
-                value={file}
-                onValueChange={(v) => setFile(v as HermesLogFile)}
+                value={source}
+                onValueChange={(v) => changeSource(v as SettingsLogSource)}
               >
-                <SelectTrigger className="h-8 w-32 text-xs">
+                <SelectTrigger className="h-8 w-40 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {FILES.map((f) => (
-                    <SelectItem key={f} value={f} className="text-xs">
-                      {fileLabel(t, f)}
+                  {SOURCES.map((item) => (
+                    <SelectItem key={item} value={item} className="text-xs">
+                      {sourceLabel(t, item)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </FilterField>
 
-            <FilterField label={t("options.logs.level.label")}>
-              <Select
-                value={level}
-                onValueChange={(v) => setLevel(v as HermesLogLevel)}
-              >
-                <SelectTrigger className="h-8 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LEVELS.map((lv) => (
-                    <SelectItem key={lv} value={lv} className="text-xs">
-                      {lv}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterField>
+            {!isUpdateLog && (
+              <>
+                <FilterField label={t("options.logs.level.label")}>
+                  <Select
+                    value={level}
+                    onValueChange={(v) => setLevel(v as HermesLogLevel)}
+                  >
+                    <SelectTrigger className="h-8 w-28 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LEVELS.map((lv) => (
+                        <SelectItem key={lv} value={lv} className="text-xs">
+                          {lv}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FilterField>
 
-            <FilterField label={t("options.logs.component.label")}>
-              <Select
-                value={component}
-                onValueChange={(v) =>
-                  setComponent(v as (typeof COMPONENTS)[number])
-                }
-              >
-                <SelectTrigger className="h-8 w-32 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMPONENTS.map((c) => (
-                    <SelectItem key={c} value={c} className="text-xs">
-                      {componentLabel(t, c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterField>
+                <FilterField label={t("options.logs.component.label")}>
+                  <Select
+                    value={component}
+                    onValueChange={(v) =>
+                      setComponent(v as (typeof COMPONENTS)[number])
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-32 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMPONENTS.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">
+                          {componentLabel(t, c)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FilterField>
+              </>
+            )}
 
             <FilterField label={t("options.logs.lines.label")}>
               <Select
@@ -301,15 +367,36 @@ export function SettingsLogs() {
             <header className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-2">
               <div className="flex items-center gap-2 text-xs">
                 <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">{file}.log</span>
+                <span className="font-mono">
+                  {isUpdateLog ? "hermes-update.log" : `${source}.log`}
+                </span>
+                {isUpdateLog && actionStatus?.running && (
+                  <Badge variant="outline" className="gap-1 text-[10px]">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {t("options.logs.action.running")}
+                    {actionStatus.pid != null ? ` · pid ${actionStatus.pid}` : ""}
+                  </Badge>
+                )}
+                {isUpdateLog &&
+                  !actionStatus?.running &&
+                  actionStatus?.exit_code != null && (
+                    <Badge
+                      variant={
+                        actionStatus.exit_code === 0 ? "default" : "destructive"
+                      }
+                      className="text-[10px]"
+                    >
+                      exit {actionStatus.exit_code}
+                    </Badge>
+                  )}
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                {level !== "ALL" && (
+                {!isUpdateLog && level !== "ALL" && (
                   <Badge variant="outline" className="text-[10px]">
                     {level}
                   </Badge>
                 )}
-                {component !== "all" && (
+                {!isUpdateLog && component !== "all" && (
                   <Badge variant="outline" className="text-[10px]">
                     {componentLabel(t, component)}
                   </Badge>
@@ -332,7 +419,11 @@ export function SettingsLogs() {
             >
               {lines.length === 0 && !loading && !error && (
                 <p className="py-8 text-center text-muted-foreground">
-                  {t("options.logs.empty")}
+                  {t(
+                    isUpdateLog
+                      ? "options.logs.action.empty"
+                      : "options.logs.empty",
+                  )}
                 </p>
               )}
               {lines.map((line, i) => {

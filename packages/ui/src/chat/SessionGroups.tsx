@@ -70,7 +70,7 @@ export function TopSection({
   // rows above). Drawer headers keep their original uppercase micro-label
   // look — that surface is unchanged.
   const headerWrapCls = isRail
-    ? "group/topsection relative flex w-full shrink-0 items-center rounded-md px-2 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+    ? "group/topsection relative flex w-full shrink-0 items-center rounded-md px-2 py-1.5 text-sm font-normal text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
     : cn(
         "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
         "px-2 py-1.5 text-xs",
@@ -105,7 +105,7 @@ export function TopSection({
         // the row jitter on every hover.
         <span
           className={cn(
-            "pr-1 text-[11px] font-normal normal-case tabular-nums text-muted-foreground",
+            "pr-1 text-xs font-normal normal-case tabular-nums text-muted-foreground",
             actions && "group-hover/topsection:invisible",
           )}
         >

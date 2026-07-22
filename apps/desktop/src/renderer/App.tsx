@@ -191,6 +191,10 @@ function AppInner(): ReactElement {
         sidebarHeaderClassName="app-drag-region"
         paneHeaderClassName="app-drag-region"
         paneHeaderChromeHeightPx={TITLE_BAR_HEIGHT}
+        toolActivitySource={{
+          read: (days) => window.amiba.toolActivity.read(days),
+          onChanged: (cb) => window.amiba.toolActivity.onChanged(cb),
+        }}
       />
     )
   }

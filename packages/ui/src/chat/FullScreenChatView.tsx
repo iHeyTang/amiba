@@ -8,8 +8,9 @@
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
  * The main pane renders by `sidebarView`: the chat surface ("chats"), the
- * scheduled-runs page ("scheduled"), or an extension webview (Skills and
- * Tools are now bundled extensions, not built-in panes).
+ * scheduled-runs page ("scheduled"), or an extension webview for
+ * extension-contributed main panels. (Skills / Tokens / Tools live in
+ * the Settings window as settings panes.)
  *
  * Extension uses this as the standalone ``tabs/chat.html`` page; desktop uses
  * it as the chat view inside the main BrowserWindow.
@@ -20,6 +21,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -55,6 +57,19 @@ const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
+
+const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
+const DEFAULT_SIDEBAR_WIDTH = 240; // matches the `w-60` fallback
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 420;
+
+function clampSidebarWidth(v: number): number {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(v)));
+}
+
+function isSidebarWidth(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
 
 function isSidebarView(v: unknown): v is ActivityViewId {
   return typeof v === "string" && v.length > 0;
@@ -147,6 +162,7 @@ function FullScreenChatViewInner({
   mentionProviders,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
+  const { t } = useT();
   const sessions = useSessions();
   const scheduled = useScheduledRuns();
   const palette = useCommandPalette();
@@ -155,6 +171,9 @@ function FullScreenChatViewInner({
   );
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
 
   // Chats data: drop archived rows AND any cron-emitted session. We also
   // filter by id prefix even though core's loadIndex already passes
@@ -224,6 +243,52 @@ function FullScreenChatViewInner({
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const storage = getPlatform().storage;
+    void storage.get(SIDEBAR_WIDTH_KEY).then((r) => {
+      if (cancelled) return;
+      const v = r[SIDEBAR_WIDTH_KEY];
+      if (isSidebarWidth(v)) setSidebarWidth(clampSidebarWidth(v));
+    });
+    const unsub = storage.watch([SIDEBAR_WIDTH_KEY], (changes: StorageChangeMap) => {
+      const ch = changes[SIDEBAR_WIDTH_KEY];
+      if (ch && isSidebarWidth(ch.newValue))
+        setSidebarWidth(clampSidebarWidth(ch.newValue));
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  // Sidebar resize: pointer-drag on the divider between the sidebar and the
+  // main pane. Width applies live during the drag; persisted once on release.
+  const onSidebarResizeStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      const startX = e.clientX;
+      const startWidth = sidebarWidthRef.current;
+      let width = startWidth;
+      const onMove = (ev: PointerEvent) => {
+        width = clampSidebarWidth(startWidth + (ev.clientX - startX));
+        setSidebarWidth(width);
+      };
+      const onUp = () => {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        void getPlatform().storage.set({ [SIDEBAR_WIDTH_KEY]: width });
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    },
+    [],
+  );
 
   const extensionMains = useExtensionMains();
 
@@ -312,7 +377,20 @@ function FullScreenChatViewInner({
           onDeleteSession={(id) => void sessions.remove(id)}
           onRefreshSessions={() => void sessions.refresh()}
           onOpenSettings={() => openSettings()}
+          widthPx={sidebarWidth}
         />
+        {/* Resize divider: invisible 4px hit area straddling the sidebar
+            edge; shows an accent line on hover / while dragging. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("chat.resizeSidebar")}
+          data-testid="sidebar-resize-handle"
+          onPointerDown={onSidebarResizeStart}
+          className="group relative -ml-1 w-1 shrink-0 cursor-col-resize touch-none"
+        >
+          <div className="absolute inset-y-0 right-0 w-px bg-transparent transition-colors group-hover:bg-border group-active:bg-primary/30" />
+        </div>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {sidebarView === "scheduled" ? (
             <ScheduledRunsPage

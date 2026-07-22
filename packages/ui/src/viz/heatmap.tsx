@@ -187,7 +187,7 @@ export function Heatmap<T extends HeatmapCellBase>({
 
   if (!layout) {
     return (
-      <p className="text-[11px] text-muted-foreground/70">
+      <p className="text-xs text-muted-foreground/70">
         {emptyStateLabel ?? emptyLabel}
       </p>
     )
@@ -214,7 +214,7 @@ export function Heatmap<T extends HeatmapCellBase>({
           {/* Sticky day-of-week labels (placeholder row for the month
               axis at top, then 7 dow rows). */}
           <div
-            className="sticky left-0 z-[1] flex flex-col bg-background pr-1 text-[9px] uppercase tracking-wide text-muted-foreground/60"
+            className="sticky left-0 z-[1] flex flex-col bg-background pr-1 text-xs uppercase tracking-wide text-muted-foreground/60"
             style={{ width: dowLabelWidth }}
           >
             <div style={{ height: cellSize + 4 }} />
@@ -241,7 +241,7 @@ export function Heatmap<T extends HeatmapCellBase>({
           <div>
             {/* Month axis */}
             <div
-              className="flex select-none gap-[3px] pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
+              className="flex select-none gap-[3px] pb-1 text-xs uppercase tracking-wide text-muted-foreground/70"
               style={{ height: cellSize + 4 }}
             >
               {monthLabels.map((m, ci) => (
@@ -309,7 +309,7 @@ export function Heatmap<T extends HeatmapCellBase>({
       )}
 
       {/* Legend */}
-      <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground/70">
+      <div className="mt-2 flex items-center justify-end gap-1.5 text-xs text-muted-foreground/70">
         <span>{legend.less}</span>
         {[0, 1, 2, 3, 4].map((lvl) => (
           <div
@@ -357,7 +357,7 @@ function Popover<T extends HeatmapCellBase>({
 
   return createPortal(
     <div
-      className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/80 bg-popover px-2.5 py-1.5 text-[10px] text-popover-foreground shadow-md"
+      className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/80 bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md"
       style={{ left: x, top: y }}
       role="tooltip"
     >

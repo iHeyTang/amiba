@@ -35,6 +35,10 @@ export interface HermesSession {
   last_active?: number;
   /** Computed by the backplane: `ended_at IS NULL && last_active within 5min`. */
   is_active?: boolean;
+  /** Aggregate prompt tokens across the session (upstream `/api/sessions`). */
+  input_tokens?: number;
+  /** Aggregate completion tokens across the session. */
+  output_tokens?: number;
 }
 
 /**

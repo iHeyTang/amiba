@@ -42,7 +42,7 @@ export function ChipSwitcher<T extends string | number>({
             type="button"
             onClick={() => onChange(opt)}
             className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+              "rounded px-1.5 py-0.5 text-xs font-medium transition-colors",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

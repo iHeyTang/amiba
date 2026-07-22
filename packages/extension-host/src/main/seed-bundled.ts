@@ -20,7 +20,13 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { addEntry, findEntry, type RegistryEntry } from "./registry-store"
+import {
+  addEntry,
+  findEntry,
+  loadRegistry,
+  removeEntry,
+  type RegistryEntry,
+} from "./registry-store"
 
 export interface BundledExtSpec {
   /** Reverse-DNS extension id, e.g. "io.amiba.skills". */
@@ -34,13 +40,38 @@ export interface SeedBundledResult {
   updated: string[]
   skipped: string[]
   failed: { id: string; error: string }[]
+  /** `source: "bundled"` entries removed because the app no longer ships them. */
+  pruned: string[]
 }
 
 export function seedBundledExtensions(
   registryPath: string,
   specs: BundledExtSpec[],
 ): SeedBundledResult {
-  const result: SeedBundledResult = { seeded: [], updated: [], skipped: [], failed: [] }
+  const result: SeedBundledResult = {
+    seeded: [],
+    updated: [],
+    skipped: [],
+    failed: [],
+    pruned: [],
+  }
+
+  // Prune bundled entries the app no longer ships. Only `source: "bundled"`
+  // rows are candidates — marketplace/local installs are the user's own and
+  // never touched here. Without this, an id dropped from the bundled set
+  // (e.g. an ext promoted to a built-in page) would linger in the registry
+  // pointing at a deleted directory and surface as a dead extension.
+  try {
+    const shipped = new Set(specs.map((s) => s.id))
+    for (const entry of loadRegistry(registryPath).entries) {
+      if (entry.source === "bundled" && !shipped.has(entry.id)) {
+        removeEntry(registryPath, entry.id)
+        result.pruned.push(entry.id)
+      }
+    }
+  } catch (e) {
+    result.failed.push({ id: "(prune)", error: String((e as Error)?.message || e) })
+  }
 
   for (const spec of specs) {
     try {

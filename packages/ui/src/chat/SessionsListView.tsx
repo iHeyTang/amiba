@@ -166,7 +166,7 @@ export function SessionsListView({
 
   if (!ready) {
     return (
-      <div className="px-3 py-3 text-[11px] text-muted-foreground">
+      <div className="px-3 py-3 text-xs text-muted-foreground">
         {t("chat.loadingSessions")}
       </div>
     );
@@ -202,7 +202,7 @@ export function SessionsListView({
                 variant="rail"
                 flex
               >
-                <p className="px-3 py-3 text-[11px] text-muted-foreground">
+                <p className="px-3 py-3 text-xs text-muted-foreground">
                   {emptyText}
                 </p>
               </TopSection>
@@ -354,7 +354,7 @@ function SessionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="inline-flex shrink-0 items-center justify-end whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/80 group-hover:hidden">
+      <span className="inline-flex shrink-0 items-center justify-end whitespace-nowrap text-xs tabular-nums text-muted-foreground/80 group-hover:hidden">
         {formatRelativeShort(session.updatedAt)}
       </span>
     </button>

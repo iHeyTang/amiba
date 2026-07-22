@@ -56,6 +56,7 @@ import {
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
+import { recordToolActivityEvent, registerToolActivity } from "./tool-activity"
 import { cleanupOldSnips } from "./screen-capture"
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace"
 import { mainStore } from "./storage"
@@ -96,20 +97,22 @@ function getRegistryPath(): string {
  * its own sibling repo; `dir` is both the sibling repo folder name (dev) and
  * the packaged resources subfolder name. Seeded into the registry at boot
  * (source: "bundled") so users get them without a marketplace install.
+ *
+ * Currently empty — Skills and Usage (ex skills / token-meter / tool-meter
+ * extensions) are built-in native pages now (packages/ui/src/skills and
+ * /usage). The seeding + pruning mechanism stays for future bundled exts;
+ * ids removed from this list are pruned from the registry at boot.
  */
-const BUNDLED_EXTS: { id: string; dir: string }[] = [
-  { id: "io.amiba.skills", dir: "amiba-ext-skills" },
-  { id: "io.amiba.tool-meter", dir: "amiba-ext-tool-meter" },
-]
+const BUNDLED_EXTS: { id: string; dir: string }[] = []
 
 /**
  * Resolve a bundled extension's root dir (the folder with manifest.json +
  * dist/). Packaged: `resources/bundled-extensions/<dir>` (populated by
  * electron-builder `extraResources` — not yet wired; see the bundling TODO).
- * Dev: the sibling ext repo next to the `amiba` monorepo
- * (`<…>/amiba-ext-skills`), overridable via AMIBA_DEV_BUNDLED_EXTS_DIR for
- * non-standard checkouts. app.getAppPath() in dev is `amiba/apps/desktop`, so
- * three levels up is the directory that holds both `amiba/` and the ext repos.
+ * Dev: the sibling ext repo next to the `amiba` monorepo, overridable via
+ * AMIBA_DEV_BUNDLED_EXTS_DIR for non-standard checkouts. app.getAppPath()
+ * in dev is `amiba/apps/desktop`, so three levels up is the directory that
+ * holds both `amiba/` and any sibling ext repos.
  */
 function resolveBundledExtRoot(dir: string): string {
   if (app.isPackaged) {
@@ -458,6 +461,7 @@ if (!gotSingleInstanceLock) {
     registerIpcHandlers()
     registerChatHandlers()
     registerHermesRuntimeHandlers()
+    registerToolActivity()
 
     const extensionsRoot = getExtensionsRoot()
     const registryPath = getRegistryPath()
@@ -588,10 +592,14 @@ if (!gotSingleInstanceLock) {
 
     ;(globalThis as { __amibaExtensionHost?: typeof extensionHost }).__amibaExtensionHost = extensionHost
 
-    // Hand the chat engine a reference to the extension host's broadcaster so
-    // per-turn usage events reach subscribers of host.chat.onEvent. Wired
-    // here (not in registerChatHandlers) because the host has to exist first.
-    setChatEventPublisher(extensionHost.publishChatEvent)
+    // Fan chat-engine events out to both sinks: the extension host's
+    // broadcaster (host.chat.onEvent subscribers) and the built-in
+    // tool-activity recorder behind the Usage page. Wired here (not in
+    // registerChatHandlers) because the host has to exist first.
+    setChatEventPublisher((event, payload) => {
+      extensionHost.publishChatEvent(event, payload)
+      recordToolActivityEvent(event, payload)
+    })
 
     createWindow()
     createNotifierWindow()

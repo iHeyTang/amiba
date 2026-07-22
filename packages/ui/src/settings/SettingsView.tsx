@@ -3,7 +3,6 @@ import {
   AtSign,
   Bot,
   Boxes,
-  Puzzle,
   BrainCircuit,
   Clock,
   Code2,
@@ -14,11 +13,14 @@ import {
   Keyboard,
   Mic,
   Palette,
-  RadioTower,
   RefreshCw,
+  Sparkles,
+  Wallet,
+  Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getPlatform } from "@amiba/platform";
+import type { ToolActivitySource } from "@amiba/core";
 
 import { ExtensionWebView, useExtensionSettings } from "@amiba/extension-host/renderer";
 import { resolveExtensionIcon } from "../chat/Sidebar";
@@ -44,51 +46,64 @@ import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { ScriptEditor } from "./ScriptEditor";
 import { ScriptList } from "./ScriptList";
 import { SettingsCron } from "./SettingsCron";
-import { SettingsGateway } from "./SettingsGateway";
-import { SettingsLogs } from "./SettingsLogs";
+import {
+  SettingsLogs,
+  type SettingsLogSource,
+} from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { AgentTaskProvider } from "./agent-task";
 import { MentionSourcesTab } from "./MentionSourcesTab";
-import { SettingsExtensions, SettingsPlugins } from "./SettingsExtensions";
-import { SettingsBrowser } from "./SettingsBrowser";
+import { SettingsExtensions } from "./SettingsExtensions";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
+import { SkillsPage } from "../skills";
+import { TokensPage, ToolsPage } from "../usage";
 
 /**
- * Sidebar order (two groups):
- *   Extension:  Preference → Userscripts (hidden when userscripts capability absent)
- *   Hermes:     Gateway → Models → Memory → Voice → Cron → Logs
- *
- * Skills and extension-provided features have been promoted to extensions —
- * top-level destinations on the chat surface's activity bar.
+ * Sidebar order — four groups along the beginner→advanced axis:
+ *   General:     Appearance → Shortcuts            (safe, everyday)
+ *   Agent:       Skills → Tools → Memory → Cron → Tokens → Voice
+ *                                                  (daily agent stuff, safe to touch)
+ *   Advanced:    Models (incl. Connection) → Mention sources → Extensions
+ *                (incl. Plugins) → Userscripts     (know-what-you're-doing config)
+ *   Diagnostics: Status → Logs                     (when something's wrong)
+ * plus the trailing extension-contributed group.
  */
 const ALL_TABS = [
   "status",
   "appearance",
   "shortcuts",
   "scripts",
-  "gateway",
   "models",
+  "skills",
+  "tokens",
+  "tools",
   "memory",
   "voice",
   "cron",
   "logs",
   "extensions",
-  "plugins",
   "mention-sources",
-  "browser",
 ] as const;
+
+/**
+ * Panes that were merged away keep their old hash ids working:
+ *   gateway → models (Connection section), browser → tools (rail entry),
+ *   plugins → extensions (in-pane tab).
+ */
+const TAB_ALIASES: Record<string, (typeof ALL_TABS)[number]> = {
+  gateway: "models",
+  browser: "tools",
+  plugins: "extensions",
+};
 type CoreTab = (typeof ALL_TABS)[number];
 /** MainTab is widened to string so extension tab IDs are also accepted. */
 type MainTab = CoreTab | (string & {});
 
 const TAB_SET = new Set<string>(ALL_TABS);
 
-function isCoreTab(tab: MainTab): tab is CoreTab {
-  return (ALL_TABS as readonly string[]).includes(tab)
-}
 
 function mainTabFromLocation(): MainTab {
   const raw =
@@ -98,13 +113,34 @@ function mainTabFromLocation(): MainTab {
   if (raw && TAB_SET.has(raw)) {
     return raw as MainTab;
   }
+  if (raw && TAB_ALIASES[raw]) {
+    return TAB_ALIASES[raw];
+  }
   if (raw === "settings") {
     return "preference";
   }
   if (raw === "hermes-model") {
     return "models";
   }
-  return "status";
+  return "appearance";
+}
+
+function logSourceFromLocation(): SettingsLogSource {
+  if (typeof window === "undefined") return "agent";
+  const query = window.location.hash.replace(/^#/, "").split("?")[1];
+  const source = new URLSearchParams(query ?? "").get("source");
+  if (
+    source === "errors" ||
+    source === "gateway" ||
+    source === "hermes-update"
+  ) {
+    return source;
+  }
+  return "agent";
+}
+
+function logsHash(source: SettingsLogSource): string {
+  return source === "agent" ? "#logs" : `#logs?source=${source}`;
 }
 
 export interface SettingsViewProps {
@@ -155,6 +191,12 @@ export interface SettingsViewProps {
    * header then keeps the natural pt-5/pb-3 spacing.
    */
   paneHeaderChromeHeightPx?: number;
+  /**
+   * Desktop-injected source for the local tool-activity ledger (backs
+   * the Tools pane's Activity view). Hosts without a main-process
+   * recorder omit it and the view shows its empty state.
+   */
+  toolActivitySource?: ToolActivitySource;
 }
 
 export function SettingsView({
@@ -165,6 +207,7 @@ export function SettingsView({
   sidebarHeaderClassName,
   paneHeaderClassName,
   paneHeaderChromeHeightPx,
+  toolActivitySource,
 }: SettingsViewProps = {}) {
   useResolvedTheme();
   const { t } = useT();
@@ -176,9 +219,12 @@ export function SettingsView({
   const [mainTab, setMainTab] = useState<MainTab>(() => {
     const fromHash = mainTabFromLocation();
     // Don't land on scripts tab if the capability isn't available.
-    if (fromHash === "scripts" && !showScriptsTab) return "status";
+    if (fromHash === "scripts" && !showScriptsTab) return "appearance";
     return fromHash;
   });
+  const [logsSource, setLogsSource] = useState<SettingsLogSource>(() =>
+    logSourceFromLocation(),
+  );
 
   const [scripts, setScripts] = useState<UserScriptSummary[]>([]);
   const [editing, setEditing] = useState<UserScriptSummary | null>(null);
@@ -204,7 +250,8 @@ export function SettingsView({
   useEffect(() => {
     const onHash = () => {
       const t = mainTabFromLocation();
-      if (t === "scripts" && !showScriptsTab) setMainTab("status");
+      if (t === "logs") setLogsSource(logSourceFromLocation());
+      if (t === "scripts" && !showScriptsTab) setMainTab("appearance");
       else setMainTab(t);
     };
     window.addEventListener("hashchange", onHash);
@@ -216,15 +263,32 @@ export function SettingsView({
     // TAB_SET), or fall back to "status".
     const isExtensionTab = extensionSettings.some((s) => s.extensionId === v);
     const next: MainTab =
-      TAB_SET.has(v) || isExtensionTab ? v : "status";
+      TAB_SET.has(v) || isExtensionTab ? v : TAB_ALIASES[v] ?? "appearance";
     if (next === "scripts" && !showScriptsTab) return;
     setMainTab(next);
     const base = window.location.pathname + window.location.search;
     if (next === "scripts") {
       window.history.replaceState(null, "", base);
     } else {
-      window.history.replaceState(null, "", `${base}#${next}`);
+      window.history.replaceState(
+        null,
+        "",
+        next === "logs" ? `${base}${logsHash(logsSource)}` : `${base}#${next}`,
+      );
     }
+  }
+
+  function showLogs(source: SettingsLogSource) {
+    setLogsSource(source);
+    setMainTab("logs");
+    const base = window.location.pathname + window.location.search;
+    window.history.replaceState(null, "", `${base}${logsHash(source)}`);
+  }
+
+  function onLogSourceChange(source: SettingsLogSource) {
+    setLogsSource(source);
+    const base = window.location.pathname + window.location.search;
+    window.history.replaceState(null, "", `${base}${logsHash(source)}`);
   }
 
   async function onToggle(id: string, enabled: boolean) {
@@ -337,30 +401,47 @@ export function SettingsView({
         )}
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
-            <div className="px-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-              {t("options.nav.section.core")}
+            {/* ── General — safe, everyday app settings ── */}
+            <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t("options.nav.section.general")}
             </div>
-            <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
             <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.appearance")} active={mainTab === "appearance"} onClick={() => onMainTabChange("appearance")} />
             {isDesktop && (
               <NavBtn icon={<Keyboard className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.shortcuts")} active={mainTab === "shortcuts"} onClick={() => onMainTabChange("shortcuts")} />
             )}
+
+            {/* ── Agent — daily agent capabilities, all safe to touch ── */}
+            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t("options.nav.section.agent")}
+            </div>
+            <NavBtn icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.skills")} active={mainTab === "skills"} onClick={() => onMainTabChange("skills")} />
+            <NavBtn icon={<Wrench className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.tools")} active={mainTab === "tools"} onClick={() => onMainTabChange("tools")} />
+            <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
+            <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
+            <NavBtn icon={<Wallet className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.tokens")} active={mainTab === "tokens"} onClick={() => onMainTabChange("tokens")} />
+            <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
+
+            {/* ── Advanced — know-what-you're-doing configuration ── */}
+            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t("options.nav.section.advanced")}
+            </div>
+            <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
+            <NavBtn icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.mentionSources")} active={mainTab === "mention-sources"} onClick={() => onMainTabChange("mention-sources")} />
+            <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
             {showScriptsTab && (
               <NavBtn icon={<Code2 className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.scripts")} active={mainTab === "scripts"} onClick={() => onMainTabChange("scripts")} />
             )}
-            <NavBtn icon={<RadioTower className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.gateway")} active={mainTab === "gateway"} onClick={() => onMainTabChange("gateway")} />
-            <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
-            <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
-            <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
-            <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
+
+            {/* ── Diagnostics — when something's wrong ── */}
+            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t("options.nav.section.diagnostics")}
+            </div>
+            <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
-            <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
-            <NavBtn icon={<Puzzle className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.plugins")} active={mainTab === "plugins"} onClick={() => onMainTabChange("plugins")} />
-            <NavBtn icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.mentionSources")} active={mainTab === "mention-sources"} onClick={() => onMainTabChange("mention-sources")} />
-            <NavBtn icon={<Globe className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.feature.browser.title")} active={mainTab === "browser"} onClick={() => onMainTabChange("browser")} />
+
             {extensionSettings.length > 0 && (
               <>
-                <div className="mt-2 px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                   {t("options.nav.section.extensions")}
                 </div>
                 {extensionSettings.map((s) => (
@@ -386,10 +467,14 @@ export function SettingsView({
       </aside>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {mainTab === "browser" ? (
-          <SettingsBrowser />
-        ) : mainTab === "models" ? (
-          <HermesModelConfigTab />
+        {mainTab === "models" ? (
+          <HermesModelConfigTab bridge={capabilities.bridge} />
+        ) : mainTab === "skills" ? (
+          <SkillsPage />
+        ) : mainTab === "tokens" ? (
+          <TokensPage />
+        ) : mainTab === "tools" ? (
+          <ToolsPage toolActivitySource={toolActivitySource} />
         ) : mainTab === "memory" ? (
           <SettingsMemory />
         ) : mainTab === "voice" ? (
@@ -407,9 +492,12 @@ export function SettingsView({
         ) : mainTab === "cron" ? (
           <SettingsCron />
         ) : mainTab === "status" ? (
-          <SettingsStatus />
+          <SettingsStatus onViewUpdateLogs={() => showLogs("hermes-update")} />
         ) : mainTab === "logs" ? (
-          <SettingsLogs />
+          <SettingsLogs
+            source={logsSource}
+            onSourceChange={onLogSourceChange}
+          />
         ) : mainTab === "mention-sources" ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SettingsPaneHeader title={t("options.nav.mentionSources")} />
@@ -421,8 +509,6 @@ export function SettingsView({
           </div>
         ) : mainTab === "extensions" ? (
           <SettingsExtensions />
-        ) : mainTab === "plugins" ? (
-          <SettingsPlugins />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {mainTab === "scripts" && userscripts ? (
@@ -504,19 +590,6 @@ export function SettingsView({
               <SettingsAppearance />
             ) : mainTab === "shortcuts" ? (
               <SettingsShortcuts />
-            ) : isCoreTab(mainTab) ? (
-              <>
-                <SettingsPaneHeader
-                  title={t("options.gateway.title")}
-                  subtitle={t("options.gateway.subtitle")}
-                  subtitleTooltip={t("options.gateway.subtitle.tooltip")}
-                />
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="p-6">
-                    <SettingsGateway bridge={capabilities.bridge} />
-                  </div>
-                </ScrollArea>
-              </>
             ) : (() => {
               // Extension-contributed settings tab — render via WebView.
               // The settings tab id IS the extensionId.

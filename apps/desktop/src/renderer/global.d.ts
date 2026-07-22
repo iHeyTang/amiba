@@ -51,6 +51,10 @@ interface AmibaBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>
   }
+  toolActivity: {
+    read(days: number): Promise<import("@amiba/core").ToolActivityReadResult>
+    onChanged(cb: () => void): () => void
+  }
   workspaces: {
     bind(sessionId: string, path: string): Promise<void>
     unbind(sessionId: string): Promise<void>

@@ -7,7 +7,7 @@
  * tail-poll ``GET /hermes/actions/<name>/status`` until ``running=false``.
  */
 
-import { Copy, Loader2, RefreshCw } from "lucide-react";
+import { Copy, FileText, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "../primitives";
@@ -24,6 +24,7 @@ import {
   restartHermesGateway,
   updateHermes,
 } from "@amiba/core";
+import { useT } from "@amiba/i18n";
 
 const STATUS_POLL_MS = 10_000;
 const ACTION_POLL_MS = 1_000;
@@ -264,7 +265,15 @@ function ActionLog({
   );
 }
 
-export function SettingsStatus() {
+export interface SettingsStatusProps {
+  /** Opens the central Logs pane with the Hermes update log selected. */
+  onViewUpdateLogs?: () => void;
+}
+
+export function SettingsStatus({
+  onViewUpdateLogs,
+}: SettingsStatusProps = {}) {
+  const { t } = useT();
   const [status, setStatus] = useState<HermesStatusResponse | null>(null);
   const [statusErr, setStatusErr] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -560,10 +569,32 @@ export function SettingsStatus() {
                 )}
                 Update Hermes
               </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5"
+                onClick={onViewUpdateLogs}
+                disabled={!onViewUpdateLogs}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {t("options.status.viewUpdateLogs")}
+              </Button>
               <UpdateHint status={status} />
+              {!updState.running && updState.exitCode != null && (
+                <Badge
+                  variant={updState.exitCode === 0 ? "default" : "destructive"}
+                  className="text-[10px]"
+                >
+                  exit {updState.exitCode}
+                </Badge>
+              )}
+              {updState.error && (
+                <span className="text-[11px] text-destructive">
+                  {updState.error}
+                </span>
+              )}
             </div>
             <ActionLog actionName="gateway-restart" state={gwState} />
-            <ActionLog actionName="hermes-update" state={updState} />
           </section>
         </div>
       </div>

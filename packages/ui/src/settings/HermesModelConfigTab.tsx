@@ -19,6 +19,8 @@ import { useT } from "@amiba/i18n";
 
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
+import { SettingsGateway } from "./SettingsGateway";
+import type { BridgeCapability } from "./capabilities";
 import {
   AUXILIARY_SLOT_LABELS,
   AUXILIARY_SLOT_NAMES,
@@ -206,7 +208,12 @@ function formatTokenCount(v: unknown): string {
   return String(v);
 }
 
-export function HermesModelConfigTab() {
+export function HermesModelConfigTab({
+  bridge,
+}: {
+  /** Forwarded to the Connection section (SettingsGateway body). */
+  bridge?: BridgeCapability;
+} = {}) {
   const { t } = useT();
   // ── Shared / catalog state ─────────────────────────────────────────────
   const [catalog, setCatalog] = useState<HermesModelCatalogResponse | null>(null);
@@ -843,6 +850,27 @@ export function HermesModelConfigTab() {
               </span>
             </Button>
 
+            {/* Connection entry — the ex-Gateway pane (bridge URL, backplane
+                key, default chat model), folded in here since "which model,
+                connected how" is one mental model. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-auto min-h-0 w-full flex-col items-stretch gap-1 rounded-none border-0 border-b border-border/50 px-3 py-2.5 text-left font-normal shadow-none",
+                section === "connection"
+                  ? "bg-muted text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+              )}
+              onClick={() => setSection("connection")}
+            >
+              <span className="text-[11px] font-semibold">Connection</span>
+              <span className="line-clamp-1 text-left text-[10px] leading-snug text-muted-foreground">
+                Bridge URL, backplane key
+              </span>
+            </Button>
+
             {/* Provider list — small section label inside the list, not a full h-14 shell row */}
             <ScrollArea className="min-h-0 flex-1">
               <nav className="flex flex-col">
@@ -902,7 +930,11 @@ export function HermesModelConfigTab() {
 
           {/* ── Right panel ── */}
           <ScrollArea className="min-h-0 min-w-0 flex-1">
-            {section === "model-config" ? (
+            {section === "connection" ? (
+              <div className="p-6">
+                <SettingsGateway bridge={bridge} />
+              </div>
+            ) : section === "model-config" ? (
               <ModelConfigPanel
                 catalog={catalog}
                 diskProvider={diskProvider}

@@ -59,6 +59,11 @@ export interface SidebarProps {
   onDeleteSession: (id: string) => void;
   onRefreshSessions: () => void | Promise<void>;
   onOpenSettings: () => void;
+  /**
+   * Explicit column width in px (user-resizable via the drag handle in
+   * `FullScreenChatView`). Overrides the `w-60` fallback when provided.
+   */
+  widthPx?: number;
   className?: string;
 }
 
@@ -76,15 +81,16 @@ export function Sidebar({
   onDeleteSession,
   onRefreshSessions,
   onOpenSettings,
+  widthPx,
   className,
 }: SidebarProps) {
   const { t } = useT();
 
   // Built-in non-chat destinations get low implicit orders so extension items
   // (manifest default order 100) sort after them, while an extension that sets
-  // order=0 can still sort first. Skills + Tools used to live here as built-in
-  // rows; they're now shipped as bundled extensions (io.amiba.skills,
-  // io.amiba.tool-meter) and arrive via `extNav` like any other extension.
+  // order=0 can still sort first. Skills / Tokens / Tools live in the
+  // Settings window (packages/ui/src/skills and /usage as settings panes),
+  // not here.
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
@@ -108,6 +114,7 @@ export function Sidebar({
         "flex min-h-0 w-60 shrink-0 flex-col gap-0.5 bg-muted/40 px-2 py-2",
         className,
       )}
+      style={widthPx !== undefined ? { width: widthPx } : undefined}
     >
       {/* Top (fixed): new-chat + search + nav rows */}
       <SidebarItem

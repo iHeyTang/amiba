@@ -14,6 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
   ScrollArea,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   cn,
 } from "../primitives"
 
@@ -252,11 +256,10 @@ function ExtensionsTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Panel shells — extensions and plugins are two separate first-level settings
-// panes (no in-page tab switcher). They're genuinely different things:
-// extensions are renderer add-ons (install/remove/reload via the marketplace,
-// desktop-only); plugins are agent-side Python (read + enable/disable +
-// source-aware uninstall).
+// Panel shell — extensions and plugins share ONE first-level settings pane
+// with an in-page tab switcher. To the user both are "installable capability
+// packages"; the runtime split (renderer add-ons vs agent-side Python) is an
+// implementation detail the tab labels carry.
 // ---------------------------------------------------------------------------
 
 function SettingsPane({ title, children }: { title: string; children: ReactNode }) {
@@ -274,18 +277,25 @@ function SettingsPane({ title, children }: { title: string; children: ReactNode 
 
 export function SettingsExtensions() {
   const { t } = useT()
+  const [tab, setTab] = useState<"extensions" | "plugins">("extensions")
   return (
     <SettingsPane title={t("options.extensions.title")}>
-      <ExtensionsTab />
-    </SettingsPane>
-  )
-}
-
-export function SettingsPlugins() {
-  const { t } = useT()
-  return (
-    <SettingsPane title={t("options.plugins.heading")}>
-      <PluginsTab />
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v === "plugins" ? "plugins" : "extensions")}
+        className="flex min-h-0 flex-col"
+      >
+        <TabsList className="mb-4 shrink-0 self-start">
+          <TabsTrigger value="extensions">{t("options.nav.extensions")}</TabsTrigger>
+          <TabsTrigger value="plugins">{t("options.nav.plugins")}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="extensions">
+          <ExtensionsTab />
+        </TabsContent>
+        <TabsContent value="plugins">
+          <PluginsTab />
+        </TabsContent>
+      </Tabs>
     </SettingsPane>
   )
 }
