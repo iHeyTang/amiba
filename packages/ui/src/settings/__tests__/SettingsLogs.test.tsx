@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -77,6 +77,28 @@ describe("Hermes update logs", () => {
     expect(
       screen.queryByText("Hermes update complete"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps lifecycle actions next to the status they affect", async () => {
+    render(<SettingsStatus onViewUpdateLogs={vi.fn()} />);
+
+    const runtimeCard = (await screen.findByText("Hermes runtime")).closest(
+      "section",
+    );
+    const gatewayCard = screen.getByText("Local gateway").closest("section");
+
+    expect(runtimeCard).not.toBeNull();
+    expect(gatewayCard).not.toBeNull();
+    expect(
+      within(runtimeCard!).getByRole("button", { name: "Update Hermes" }),
+    ).toBeInTheDocument();
+    expect(
+      within(runtimeCard!).getByRole("button", { name: "View update logs" }),
+    ).toBeInTheDocument();
+    expect(
+      within(gatewayCard!).getByRole("button", { name: "Restart gateway" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Maintenance")).not.toBeInTheDocument();
   });
 
   it("surfaces an offline gateway as the primary health conclusion", async () => {

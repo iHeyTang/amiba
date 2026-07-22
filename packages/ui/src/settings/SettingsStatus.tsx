@@ -2,9 +2,10 @@
  * Runtime health dashboard and lifecycle actions for Hermes Desktop.
  *
  * The page deliberately leads with a health conclusion, then progressively
- * reveals runtime details and maintenance controls. Long updater output lives
- * in the central Logs pane; gateway-restart output stays collapsed here as a
- * low-frequency diagnostic detail.
+ * reveals runtime details and lifecycle controls. Each action is colocated
+ * with the state it affects: Hermes update belongs to runtime/version status,
+ * while gateway restart belongs to gateway/process status. Long updater output
+ * lives in the central Logs pane; gateway-restart output stays collapsed here.
  */
 
 import {
@@ -764,15 +765,22 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
               )}
 
               <div className="grid gap-4 lg:grid-cols-2">
-                <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-                  <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Gauge className="h-4 w-4" />
-                    </span>
-                    <SectionHeading
-                      title={t("options.status.runtime.title")}
-                      subtitle={t("options.status.runtime.subtitle")}
-                    />
+                <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Gauge className="h-4 w-4" />
+                      </span>
+                      <SectionHeading
+                        title={t("options.status.runtime.title")}
+                        subtitle={t("options.status.runtime.subtitle")}
+                      />
+                    </div>
+                    {updateAvailable && (
+                      <Badge variant="warning" className="shrink-0 text-[9px]">
+                        {t("options.status.actions.update.available")}
+                      </Badge>
+                    )}
                   </div>
                   <div className="px-5 py-3">
                     <InfoRow label={t("options.status.runtime.release")}>
@@ -804,6 +812,69 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       {status.active_sessions ?? 0}
                     </InfoRow>
                   </div>
+                  <div
+                    className={cn(
+                      "border-t border-border/60 px-5 py-4",
+                      updateAvailable && "bg-amber-500/[0.035]",
+                    )}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span
+                          className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                            updateAvailable
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-xs font-semibold text-foreground">
+                              {updateSummary}
+                            </p>
+                            <ActionStateBadge state={updState} t={t} />
+                          </div>
+                          <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {t("options.status.actions.update.description")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant={updateAvailable ? "default" : "outline"}
+                          className="h-8"
+                          onClick={() => void triggerUpdate()}
+                          disabled={updState.running || triggering.upd}
+                        >
+                          {updState.running || triggering.upd ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          {t("options.status.actions.update.button")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8"
+                          onClick={onViewUpdateLogs}
+                          disabled={!onViewUpdateLogs}
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          {t("options.status.viewUpdateLogs")}
+                        </Button>
+                      </div>
+                    </div>
+                    {updState.error && (
+                      <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                        {updState.error}
+                      </p>
+                    )}
+                  </div>
                   <div className="grid gap-2.5 border-t border-border/60 px-5 py-4">
                     <PathRow
                       label={t("options.status.runtime.hermesHome")}
@@ -820,7 +891,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                   </div>
                 </section>
 
-                <section className="rounded-xl border border-border/70 bg-card shadow-sm">
+                <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
                   <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
                     <div className="flex items-start gap-3">
                       <span
@@ -897,39 +968,23 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       </div>
                     </div>
                   )}
-                </section>
-              </div>
-
-              <section className="space-y-3">
-                <SectionHeading
-                  title={t("options.status.actions.title")}
-                  subtitle={t("options.status.actions.subtitle")}
-                />
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                        <RotateCw className="h-4 w-4" />
-                      </span>
-                      <ActionStateBadge state={gwState} t={t} />
-                    </div>
-                    <div className="mt-4 space-y-1">
-                      <h4 className="text-sm font-semibold text-foreground">
-                        {t("options.status.actions.restart.title")}
-                      </h4>
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        {t("options.status.actions.restart.description")}
-                      </p>
-                    </div>
-                    {gwState.error && (
-                      <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
-                        {gwState.error}
-                      </p>
-                    )}
-                    <div className="mt-5">
+                  <div className="border-t border-border/60 px-5 py-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-semibold text-foreground">
+                            {t("options.status.actions.restart.title")}
+                          </p>
+                          <ActionStateBadge state={gwState} t={t} />
+                        </div>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                          {t("options.status.actions.restart.description")}
+                        </p>
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"
+                        className="h-8 shrink-0"
                         onClick={() => void triggerGateway()}
                         disabled={gwState.running || triggering.gw}
                       >
@@ -943,88 +998,8 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                     </div>
                     <GatewayActionDetails state={gwState} t={t} />
                   </div>
-
-                  <div
-                    className={cn(
-                      "relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm",
-                      updateAvailable
-                        ? "border-amber-500/30"
-                        : "border-border/70",
-                    )}
-                  >
-                    {updateAvailable && (
-                      <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-amber-400/10 blur-3xl" />
-                    )}
-                    <div className="relative flex items-start justify-between gap-3">
-                      <span
-                        className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                          updateAvailable
-                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                            : "bg-primary/10 text-primary",
-                        )}
-                      >
-                        <Download className="h-4 w-4" />
-                      </span>
-                      <ActionStateBadge state={updState} t={t} />
-                    </div>
-                    <div className="relative mt-4 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-sm font-semibold text-foreground">
-                          {t("options.status.actions.update.title")}
-                        </h4>
-                        {updateAvailable && (
-                          <Badge variant="warning" className="text-[9px]">
-                            {t("options.status.actions.update.available")}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        {t("options.status.actions.update.description")}
-                      </p>
-                      <p
-                        className={cn(
-                          "pt-1 text-[11px] font-medium",
-                          updateAvailable
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {updateSummary}
-                      </p>
-                    </div>
-                    {updState.error && (
-                      <p className="relative mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
-                        {updState.error}
-                      </p>
-                    )}
-                    <div className="relative mt-5 flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={updateAvailable ? "default" : "outline"}
-                        onClick={() => void triggerUpdate()}
-                        disabled={updState.running || triggering.upd}
-                      >
-                        {updState.running || triggering.upd ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                        {t("options.status.actions.update.button")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={onViewUpdateLogs}
-                        disabled={!onViewUpdateLogs}
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        {t("options.status.viewUpdateLogs")}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                </section>
+              </div>
             </>
           )}
         </div>
