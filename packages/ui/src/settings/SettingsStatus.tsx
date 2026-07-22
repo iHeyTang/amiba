@@ -100,7 +100,7 @@ function StatusLine({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="grid min-h-12 items-center gap-2 border-t border-border/50 px-4 py-2.5 first:border-t-0 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
+    <div className="grid min-h-11 items-center gap-2 px-4 py-2 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
       <span className="text-[11px] text-muted-foreground">{label}</span>
       <span className="min-w-0 text-xs font-medium text-foreground">
         {children}
@@ -131,7 +131,7 @@ function PathRow({
   }
 
   return (
-    <div className="group flex min-h-9 items-center gap-3 border-b border-border/50 py-2 last:border-b-0">
+    <div className="group flex min-h-9 items-center gap-3 py-2">
       <span className="w-20 shrink-0 text-[10px] text-muted-foreground">
         {label}
       </span>
@@ -208,7 +208,7 @@ function GatewayActionDetails({
   }
   return (
     <details
-      className="group border-t border-border/50 px-4 py-2.5"
+      className="group px-4 py-2.5"
       open={state.running || !!state.error}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground transition hover:text-foreground">
@@ -387,9 +387,9 @@ function ProtocolMismatchBanner({
 function StatusSkeleton() {
   return (
     <div className="animate-pulse space-y-7">
-      <div className="h-16 border-b border-border/60 bg-muted/10" />
-      <div className="h-44 border-y border-border/60 bg-muted/10" />
-      <div className="h-52 border-y border-border/60 bg-muted/10" />
+      <div className="h-16 bg-muted/10" />
+      <div className="h-44 bg-muted/10" />
+      <div className="h-52 bg-muted/10" />
     </div>
   );
 }
@@ -685,7 +685,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       {t("options.status.runtime.title")}
                     </h3>
                   </div>
-                  <div className="border-y border-border/60">
+                  <div className="space-y-0.5">
                     <StatusLine
                       label={t("options.status.runtime.release")}
                       actions={
@@ -755,12 +755,12 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       </span>
                     </StatusLine>
                     {updState.error && (
-                      <p className="border-t border-border/50 bg-destructive/[0.045] px-4 py-2 text-[11px] text-destructive sm:pl-[8.75rem]">
+                      <p className="mx-4 rounded-md bg-destructive/[0.045] px-3 py-2 text-[11px] text-destructive sm:ml-[8.75rem]">
                         {updState.error}
                       </p>
                     )}
-                    <details className="group border-t border-border/50">
-                      <summary className="grid min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[11px] transition hover:bg-muted/20 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
+                    <details className="group">
+                      <summary className="grid min-h-11 cursor-pointer list-none items-center gap-2 rounded-md px-4 py-2 text-[11px] transition hover:bg-muted/20 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
                         <span className="text-muted-foreground">
                           {t("options.status.runtime.paths")}
                         </span>
@@ -769,7 +769,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                         </span>
                         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="border-t border-border/50 bg-muted/[0.16] px-4 py-1.5 sm:pl-[8.75rem]">
+                      <div className="mt-1 rounded-md bg-muted/[0.16] px-4 py-1.5 sm:pl-[8.75rem]">
                         <PathRow
                           label={t("options.status.runtime.hermesHome")}
                           value={status.hermes_home}
@@ -799,7 +799,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       {fmtTimestamp(status.gateway_updated_at)}
                     </span>
                   </div>
-                  <div className="border-y border-border/60">
+                  <div className="space-y-0.5">
                     <StatusLine
                       label={t("options.status.gateway.state")}
                       actions={
