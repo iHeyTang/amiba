@@ -229,9 +229,9 @@ export interface ComposerProps {
   // Frame
   /**
    * Visual identity of the frame:
-   *   - "default" (the chat surface, Quick-Ask, ChatView): a compact,
-   *     borderless rounded-2xl surface over solid bg-background.
-   *   - "hero" (homepage empty state): a borderless glass surface — 24px
+   *   - "default" (the chat surface, Quick-Ask, ChatView): a compact
+   *     rounded-2xl surface with a quiet, focus-stable edge.
+   *   - "hero" (homepage empty state): a softly edged glass surface — 24px
    *     radius, translucent bg-card, soft elevation, larger
    *     textarea padding. Use when the composer is the focal point of
    *     the page rather than a tool bar at the bottom.
@@ -607,15 +607,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           className={cn(
             "relative flex flex-col transition-colors",
             frameVariant === "hero"
-              ? // Hero: a borderless glass surface. A diffuse ambient shadow
-                // describes the shape without drawing a hard outline.
+              ? // Hero: the same quiet, focus-stable edge at a larger scale.
+                // Diffuse ambient shadow keeps the surface approachable.
                 // Used by the
                 // homepage empty state where the composer is THE focal
                 // point of the page.
-                "rounded-[24px] bg-card/85 shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.2)] backdrop-blur-2xl dark:shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.6)]"
-              : // Default: the same borderless treatment at a tighter scale.
-                // Shallow ambient depth keeps it legible on the chat surface.
-                "rounded-2xl bg-background shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.22)] dark:shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.56)]",
+                "rounded-[24px] border border-border/30 bg-card/85 shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.2)] backdrop-blur-2xl dark:shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.6)]"
+              : // Default: a low-contrast static edge restores the input's
+                // boundary without becoming stronger when the editor focuses.
+                "rounded-2xl border border-border/30 bg-background shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.22)] dark:shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.56)]",
             flatTop && "rounded-t-none",
             frameClassName,
           )}
