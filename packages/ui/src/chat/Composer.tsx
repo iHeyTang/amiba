@@ -232,7 +232,7 @@ export interface ComposerProps {
    *   - "default" (the chat surface, Quick-Ask, ChatView): softly bordered
    *     rounded-2xl over solid bg-background.
    *   - "hero" (homepage empty state): a glass card — 24px radius,
-   *     translucent bg-card, backdrop-blur, big drop shadow, larger
+   *     translucent bg-card, backdrop-blur, soft elevation, larger
    *     textarea padding. Use when the composer is the focal point of
    *     the page rather than a tool bar at the bottom.
    */
@@ -607,13 +607,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           className={cn(
             "relative flex flex-col transition-colors",
             frameVariant === "hero"
-              ? // Hero: glass card. 24px radius, translucent bg, backdrop
-                // blur, big drop shadow, soft focus tint. Used by the
+              ? // Hero: glass card. A very low-contrast edge carries the
+                // shape while shallow ambient shadow supplies the depth.
+                // Used by the
                 // homepage empty state where the composer is THE focal
                 // point of the page.
-                "rounded-[24px] bg-card/70 shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.18)] backdrop-blur-2xl duration-200 focus-within:bg-card/85 dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]"
-              : // Default: solid bordered surface for chat/quick-ask.
-                "rounded-2xl border border-input bg-background shadow-sm focus-within:border-ring/25",
+                "rounded-[24px] border border-border/30 bg-card/80 shadow-[0_8px_28px_-18px_rgb(0_0_0_/_0.28)] backdrop-blur-2xl duration-200 focus-within:border-ring/15 focus-within:bg-card/90 dark:shadow-[0_8px_28px_-18px_rgb(0_0_0_/_0.62)]"
+              : // Default: a quiet edge plus shallow elevation keeps the
+                // project/chat composer distinct without reading as a hard
+                // outlined control.
+                "rounded-2xl border border-border/45 bg-background shadow-[0_4px_14px_-8px_rgb(0_0_0_/_0.24)] focus-within:border-ring/20 dark:shadow-[0_4px_16px_-8px_rgb(0_0_0_/_0.55)]",
             flatTop && "rounded-t-none",
             frameClassName,
           )}
