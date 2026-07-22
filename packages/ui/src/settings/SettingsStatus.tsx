@@ -1,5 +1,5 @@
 /**
- * Runtime health dashboard and lifecycle actions for Hermes Desktop.
+ * Runtime health settings and lifecycle actions for Hermes Desktop.
  *
  * The page deliberately leads with a health conclusion, then progressively
  * reveals runtime details and lifecycle controls. Each action is colocated
@@ -9,7 +9,6 @@
  */
 
 import {
-  Activity,
   Check,
   ChevronDown,
   CircleCheck,
@@ -24,8 +23,6 @@ import {
   Server,
   Terminal,
   TriangleAlert,
-  UsersRound,
-  Wifi,
   WifiOff,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -93,73 +90,26 @@ function fmtTimestamp(value: unknown): string {
   return "—";
 }
 
-function SectionHeading({
-  title,
-  subtitle,
-}: {
-  title: React.ReactNode;
-  subtitle?: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <h3 className="text-sm font-semibold tracking-tight text-foreground">
-        {title}
-      </h3>
-      {subtitle && (
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          {subtitle}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function OverviewPill({
-  icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: React.ReactNode;
-  label: React.ReactNode;
-  value: React.ReactNode;
-  tone?: "default" | "success" | "warning" | "destructive";
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-      <span
-        className={cn(
-          "shrink-0 text-muted-foreground",
-          tone === "success" && "text-[hsl(var(--success))]",
-          tone === "warning" && "text-amber-600 dark:text-amber-400",
-          tone === "destructive" && "text-destructive",
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-        {label}
-        <span className="ml-1.5 font-semibold text-foreground">{value}</span>
-      </span>
-    </div>
-  );
-}
-
-function InfoRow({
+function StatusLine({
   label,
   children,
+  actions,
 }: {
   label: React.ReactNode;
   children: React.ReactNode;
+  actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-8 items-center justify-between gap-4 border-b border-border/55 py-2 last:border-b-0">
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        {label}
-      </span>
-      <span className="min-w-0 text-right text-xs font-medium text-foreground">
+    <div className="grid min-h-12 items-center gap-2 border-t border-border/50 px-4 py-2.5 first:border-t-0 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-xs font-medium text-foreground">
         {children}
       </span>
+      {actions && (
+        <span className="flex flex-wrap items-center gap-1.5 sm:justify-self-end">
+          {actions}
+        </span>
+      )}
     </div>
   );
 }
@@ -258,7 +208,7 @@ function GatewayActionDetails({
   }
   return (
     <details
-      className="group mt-4 border-t border-border/60 pt-3"
+      className="group border-t border-border/50 px-4 py-2.5"
       open={state.running || !!state.error}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground transition hover:text-foreground">
@@ -436,13 +386,7 @@ function ProtocolMismatchBanner({
 
 function StatusSkeleton() {
   return (
-    <div className="space-y-5 animate-pulse">
-      <div className="h-56 rounded-2xl border border-border/60 bg-muted/25" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="h-80 rounded-xl border border-border/60 bg-muted/20" />
-        <div className="h-80 rounded-xl border border-border/60 bg-muted/20" />
-      </div>
-    </div>
+    <div className="h-96 animate-pulse rounded-xl border border-border/60 bg-muted/20" />
   );
 }
 
@@ -646,30 +590,10 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
       <SettingsPaneHeader
         title={t("options.status.title")}
         subtitle={t("options.status.subtitle")}
-      >
-        <div className="flex items-center gap-3">
-          <span className="hidden text-[10px] text-muted-foreground sm:inline">
-            {t("options.status.lastChecked", { time: lastCheckedLabel })}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => void refreshStatus({ forceUpdateCheck: true })}
-            disabled={statusLoading}
-          >
-            {statusLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            {t("options.status.refresh")}
-          </Button>
-        </div>
-      </SettingsPaneHeader>
+      />
 
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-8 pt-3">
-        <div className="mx-auto w-full max-w-6xl space-y-4">
+        <div className="w-full max-w-[880px] space-y-3">
           {statusErr ? (
             <OnboardingGate
               error={statusErr}
@@ -681,65 +605,6 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
             <StatusSkeleton />
           ) : (
             <>
-              <section className="relative overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-primary/[0.07] blur-3xl" />
-                <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-                        healthConfig.iconClass,
-                      )}
-                    >
-                      <HealthIcon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                          {healthConfig.title}
-                        </h3>
-                        {updateAvailable && (
-                          <Badge variant="warning" className="text-[10px]">
-                            {t("options.status.metric.updateAvailable")}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="max-w-lg text-[11px] leading-relaxed text-muted-foreground">
-                        {healthConfig.subtitle}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <OverviewPill
-                      icon={
-                        status.gateway_running ? (
-                          <Wifi className="h-3.5 w-3.5" />
-                        ) : (
-                          <WifiOff className="h-3.5 w-3.5" />
-                        )
-                      }
-                      label={t("options.status.metric.gateway")}
-                      value={t(
-                        status.gateway_running
-                          ? "options.status.metric.online"
-                          : "options.status.metric.offline",
-                      )}
-                      tone={status.gateway_running ? "success" : "destructive"}
-                    />
-                    <OverviewPill
-                      icon={<UsersRound className="h-3.5 w-3.5" />}
-                      label={t("options.status.metric.sessions")}
-                      value={status.active_sessions ?? 0}
-                    />
-                    <OverviewPill
-                      icon={<Activity className="h-3.5 w-3.5" />}
-                      label="Hermes"
-                      value={status.version || "—"}
-                    />
-                  </div>
-                </div>
-              </section>
-
               {status.protocol_mismatch && (
                 <ProtocolMismatchBanner
                   mismatch={status.protocol_mismatch}
@@ -747,35 +612,128 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                 />
               )}
 
-              <div className="grid gap-3 lg:grid-cols-2">
-                <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3.5">
-                    <div className="flex items-start gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Gauge className="h-4 w-4" />
-                      </span>
-                      <SectionHeading
-                        title={t("options.status.runtime.title")}
-                        subtitle={t("options.status.runtime.subtitle")}
-                      />
-                    </div>
-                    {updateAvailable && (
-                      <Badge variant="warning" className="shrink-0 text-[9px]">
-                        {t("options.status.actions.update.available")}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="px-4 py-1.5">
-                    <InfoRow label={t("options.status.runtime.release")}>
-                      <span>{status.version || "—"}</span>
-                      {status.release_date && (
-                        <span className="ml-1.5 font-normal text-muted-foreground">
-                          · {status.release_date}
-                        </span>
+              <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+                <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
+                        healthConfig.iconClass,
                       )}
-                    </InfoRow>
-                    <InfoRow label={t("options.status.runtime.configVersion")}>
-                      <span className="inline-flex items-center justify-end gap-1.5">
+                    >
+                      <HealthIcon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                        {healthConfig.title}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                        {healthConfig.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <span className="hidden text-[10px] text-muted-foreground md:inline">
+                      {t("options.status.lastChecked", {
+                        time: lastCheckedLabel,
+                      })}
+                    </span>
+                    <Badge
+                      variant={
+                        status.gateway_running ? "success" : "destructive"
+                      }
+                      className="gap-1.5 text-[10px]"
+                    >
+                      <CircleDot className="h-3 w-3" />
+                      {t(
+                        status.gateway_running
+                          ? "options.status.metric.online"
+                          : "options.status.metric.offline",
+                      )}
+                    </Badge>
+                    <span className="font-mono text-[11px] font-semibold text-foreground">
+                      Hermes {status.version || "—"}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() =>
+                        void refreshStatus({ forceUpdateCheck: true })
+                      }
+                      disabled={statusLoading}
+                    >
+                      {statusLoading ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      {t("options.status.refresh")}
+                    </Button>
+                  </div>
+                </div>
+
+                <section className="border-t border-border/65">
+                  <div className="flex items-center gap-2 bg-muted/25 px-4 py-2.5">
+                    <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t("options.status.runtime.title")}
+                    </h3>
+                  </div>
+                  <div>
+                    <StatusLine
+                      label={t("options.status.runtime.release")}
+                      actions={
+                        <>
+                          <ActionStateBadge state={updState} t={t} />
+                          <Button
+                            size="sm"
+                            variant={updateAvailable ? "default" : "outline"}
+                            className="h-7 px-2.5 text-[10px]"
+                            onClick={() => void triggerUpdate()}
+                            disabled={updState.running || triggering.upd}
+                          >
+                            {updState.running || triggering.upd ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Download className="h-3 w-3" />
+                            )}
+                            {t("options.status.actions.update.button")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[10px]"
+                            onClick={onViewUpdateLogs}
+                            disabled={!onViewUpdateLogs}
+                          >
+                            <FileText className="h-3 w-3" />
+                            {t("options.status.viewUpdateLogs")}
+                          </Button>
+                        </>
+                      }
+                    >
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono">
+                          {status.version || "—"}
+                        </span>
+                        {status.release_date && (
+                          <span className="font-normal text-muted-foreground">
+                            · {status.release_date}
+                          </span>
+                        )}
+                        <Badge
+                          variant={updateAvailable ? "warning" : "secondary"}
+                          className="text-[9px]"
+                        >
+                          {updateSummary}
+                        </Badge>
+                      </span>
+                    </StatusLine>
+                    <StatusLine
+                      label={t("options.status.runtime.configVersion")}
+                    >
+                      <span className="flex flex-wrap items-center gap-2">
                         <span className="font-mono">
                           {status.config_version ?? "—"}
                         </span>
@@ -790,141 +748,109 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                           </Badge>
                         )}
                       </span>
-                    </InfoRow>
-                    <InfoRow label={t("options.status.runtime.activeSessions")}>
-                      {status.active_sessions ?? 0}
-                    </InfoRow>
-                  </div>
-                  <div
-                    className={cn(
-                      "border-t border-border/60 px-4 py-3",
-                      updateAvailable && "bg-amber-500/[0.035]",
-                    )}
-                  >
-                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span
-                          className={cn(
-                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                            updateAvailable
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <p className="truncate text-[11px] font-medium text-foreground">
-                            {updateSummary}
-                          </p>
-                          <ActionStateBadge state={updState} t={t} />
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant={updateAvailable ? "default" : "outline"}
-                          className="h-8"
-                          onClick={() => void triggerUpdate()}
-                          disabled={updState.running || triggering.upd}
-                        >
-                          {updState.running || triggering.upd ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Download className="h-3.5 w-3.5" />
-                          )}
-                          {t("options.status.actions.update.button")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8"
-                          onClick={onViewUpdateLogs}
-                          disabled={!onViewUpdateLogs}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          {t("options.status.viewUpdateLogs")}
-                        </Button>
-                      </div>
-                    </div>
+                    </StatusLine>
                     {updState.error && (
-                      <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                      <p className="border-t border-border/50 bg-destructive/[0.045] px-4 py-2 text-[11px] text-destructive sm:pl-[8.75rem]">
                         {updState.error}
                       </p>
                     )}
+                    <details className="group border-t border-border/50">
+                      <summary className="grid min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[11px] transition hover:bg-muted/20 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
+                        <span className="text-muted-foreground">
+                          {t("options.status.runtime.paths")}
+                        </span>
+                        <span className="min-w-0 truncate font-mono text-[10px] text-foreground">
+                          {status.hermes_home || "—"}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="border-t border-border/50 bg-muted/[0.16] px-4 py-1.5 sm:pl-[8.75rem]">
+                        <PathRow
+                          label={t("options.status.runtime.hermesHome")}
+                          value={status.hermes_home}
+                        />
+                        <PathRow
+                          label={t("options.status.runtime.configPath")}
+                          value={status.config_path}
+                        />
+                        <PathRow
+                          label={t("options.status.runtime.envPath")}
+                          value={status.env_path}
+                        />
+                      </div>
+                    </details>
                   </div>
-                  <details className="group border-t border-border/60">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-[11px] font-medium text-muted-foreground transition hover:bg-muted/25 hover:text-foreground">
-                      <span className="flex items-center gap-2">
-                        <FileText className="h-3.5 w-3.5" />
-                        {t("options.status.runtime.paths")}
-                      </span>
-                      <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <div className="border-t border-border/50 px-4 py-1.5">
-                      <PathRow
-                        label={t("options.status.runtime.hermesHome")}
-                        value={status.hermes_home}
-                      />
-                      <PathRow
-                        label={t("options.status.runtime.configPath")}
-                        value={status.config_path}
-                      />
-                      <PathRow
-                        label={t("options.status.runtime.envPath")}
-                        value={status.env_path}
-                      />
-                    </div>
-                  </details>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3.5">
-                    <div className="flex items-start gap-3">
-                      <span
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                          status.gateway_running
-                            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                            : "bg-destructive/10 text-destructive",
-                        )}
-                      >
-                        <Server className="h-4 w-4" />
-                      </span>
-                      <SectionHeading
-                        title={t("options.status.gateway.title")}
-                        subtitle={t("options.status.gateway.subtitle")}
-                      />
-                    </div>
-                    <Badge
-                      variant={
-                        status.gateway_running ? "success" : "destructive"
-                      }
-                      className="gap-1.5 text-[10px]"
-                    >
-                      <CircleDot className="h-3 w-3" />
-                      {t(
-                        status.gateway_running
-                          ? "options.status.metric.online"
-                          : "options.status.metric.offline",
-                      )}
-                    </Badge>
+                <section className="border-t border-border/65">
+                  <div className="flex items-center justify-between gap-3 bg-muted/25 px-4 py-2.5">
+                    <span className="flex items-center gap-2">
+                      <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                      <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t("options.status.gateway.title")}
+                      </h3>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {fmtTimestamp(status.gateway_updated_at)}
+                    </span>
                   </div>
-                  <div className="px-4 py-1.5">
-                    <InfoRow label={t("options.status.gateway.state")}>
-                      {status.gateway_state ?? "—"}
-                    </InfoRow>
-                    <InfoRow label={t("options.status.gateway.pid")}>
+                  <div>
+                    <StatusLine
+                      label={t("options.status.gateway.state")}
+                      actions={
+                        <>
+                          <ActionStateBadge state={gwState} t={t} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-[10px]"
+                            onClick={() => void triggerGateway()}
+                            disabled={gwState.running || triggering.gw}
+                          >
+                            {gwState.running || triggering.gw ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCw className="h-3 w-3" />
+                            )}
+                            {t("options.status.actions.restart.button")}
+                          </Button>
+                        </>
+                      }
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            status.gateway_running
+                              ? "bg-[hsl(var(--success))]"
+                              : "bg-destructive",
+                          )}
+                        />
+                        <span>
+                          {t(
+                            status.gateway_running
+                              ? "options.status.metric.online"
+                              : "options.status.metric.offline",
+                          )}
+                        </span>
+                        <span className="font-normal text-muted-foreground">
+                          · {status.gateway_state ?? "—"}
+                        </span>
+                      </span>
+                    </StatusLine>
+                    <StatusLine label={t("options.status.gateway.pid")}>
                       <span className="font-mono">
                         {status.gateway_pid ?? "—"}
                       </span>
-                    </InfoRow>
-                    <InfoRow label={t("options.status.gateway.updatedAt")}>
-                      {fmtTimestamp(status.gateway_updated_at)}
-                    </InfoRow>
-                    <InfoRow label={t("options.status.gateway.platforms")}>
+                    </StatusLine>
+                    <StatusLine
+                      label={t("options.status.runtime.activeSessions")}
+                    >
+                      {status.active_sessions ?? 0}
+                    </StatusLine>
+                    <StatusLine label={t("options.status.gateway.platforms")}>
                       {platformNames.length > 0 ? (
-                        <span className="flex flex-wrap justify-end gap-1">
+                        <span className="flex flex-wrap gap-1">
                           {platformNames.map((name) => (
                             <Badge
                               key={name}
@@ -940,49 +866,17 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                           {t("options.status.gateway.noPlatforms")}
                         </span>
                       )}
-                    </InfoRow>
-                  </div>
-                  {status.gateway_exit_reason && (
-                    <div className="mx-4 mb-3 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/[0.045] px-3 py-2.5">
-                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-medium text-destructive">
-                          {t("options.status.gateway.lastExit")}
-                        </p>
-                        <p className="mt-0.5 break-words text-[11px] text-muted-foreground">
-                          {status.gateway_exit_reason}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  <div className="border-t border-border/60 px-4 py-3">
-                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                          <RotateCw className="h-3.5 w-3.5" />
+                    </StatusLine>
+                    {status.gateway_exit_reason && (
+                      <StatusLine label={t("options.status.gateway.lastExit")}>
+                        <span className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span className="break-words">
+                            {status.gateway_exit_reason}
+                          </span>
                         </span>
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <p className="text-[11px] font-medium text-foreground">
-                            {t("options.status.actions.restart.title")}
-                          </p>
-                          <ActionStateBadge state={gwState} t={t} />
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 shrink-0"
-                        onClick={() => void triggerGateway()}
-                        disabled={gwState.running || triggering.gw}
-                      >
-                        {gwState.running || triggering.gw ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RotateCw className="h-3.5 w-3.5" />
-                        )}
-                        {t("options.status.actions.restart.button")}
-                      </Button>
-                    </div>
+                      </StatusLine>
+                    )}
                     <GatewayActionDetails state={gwState} t={t} />
                   </div>
                 </section>

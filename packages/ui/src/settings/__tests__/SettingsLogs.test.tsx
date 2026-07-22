@@ -89,6 +89,13 @@ describe("Hermes update logs", () => {
 
     expect(runtimeCard).not.toBeNull();
     expect(gatewayCard).not.toBeNull();
+    expect(runtimeCard).not.toBe(gatewayCard);
+    expect(runtimeCard!.parentElement).toBe(gatewayCard!.parentElement);
+    expect(
+      within(runtimeCard!.parentElement!).getByRole("button", {
+        name: "Refresh",
+      }),
+    ).toBeInTheDocument();
     expect(
       within(runtimeCard!).getByRole("button", { name: "Update Hermes" }),
     ).toBeInTheDocument();
