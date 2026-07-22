@@ -4,7 +4,7 @@
  * rows so they share active-state styling and hit-target geometry.
  */
 import type { ReactNode } from "react";
-import { cn } from "../primitives";
+import { NavigationRow } from "../navigation/NavigationRow";
 
 export interface SidebarItemProps {
   /** Stable id — also drives the `sidebar-item-${id}` test hook. */
@@ -30,30 +30,15 @@ export function SidebarItem({
   trailing,
 }: SidebarItemProps) {
   return (
-    <button
-      type="button"
+    <NavigationRow
       onClick={onClick}
       title={title ?? label}
       aria-label={label}
-      aria-current={active ? "page" : undefined}
       data-testid={`sidebar-item-${id}`}
-      className={cn(
-        "app-no-drag group relative flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-        active
-          ? "bg-primary/10 font-medium text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-primary"
-          : "text-foreground/80 hover:bg-foreground/5 hover:text-foreground",
-      )}
-    >
-      <span
-        className={cn(
-          "inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center transition-colors",
-          active && "text-primary",
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-normal">{label}</span>
-      {trailing}
-    </button>
+      icon={icon}
+      label={label}
+      active={active}
+      trailing={trailing}
+    />
   );
 }

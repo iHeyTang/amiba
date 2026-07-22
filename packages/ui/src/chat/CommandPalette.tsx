@@ -4,7 +4,13 @@ import type { ReactNode } from "react"
 
 import type { SessionMeta } from "@amiba/core"
 import { useT } from "@amiba/i18n"
-import { Dialog, DialogContent, cn } from "../primitives"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  cn,
+} from "../primitives"
 
 /** Cap how many recent chats become searchable rows (cmdk filters within). */
 const MAX_SESSION_ITEMS = 50
@@ -58,12 +64,18 @@ export function CommandPalette({
           // same variant — a bare `rounded-2xl` loses at the sm breakpoint.
           "block max-w-xl gap-0 overflow-hidden rounded-2xl p-0 sm:rounded-2xl",
           "[&_[cmdk-group]]:py-1",
-          "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
-          "[&_[cmdk-item]]:flex [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:overflow-hidden [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground",
-          "[&_[cmdk-item][data-selected=true]]:bg-accent [&_[cmdk-item][data-selected=true]]:text-accent-foreground",
+          "[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-muted-foreground/70",
+          "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:w-full [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2 [&_[cmdk-item]]:overflow-hidden [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2.5 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground/80",
+          "[&_[cmdk-item][data-selected=true]]:bg-secondary [&_[cmdk-item][data-selected=true]]:text-secondary-foreground",
         )}
         aria-label={t("commandPalette.placeholder")}
       >
+        <DialogTitle className="sr-only">
+          {t("commandPalette.placeholder")}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("commandPalette.description")}
+        </DialogDescription>
         <Command className="flex max-h-[60vh] w-full min-w-0 flex-col">
           <div className="flex items-center border-b border-border px-4">
             <Command.Input

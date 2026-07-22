@@ -708,6 +708,9 @@ export const en = {
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Scheduled tasks",
+  "sidepanel.nav.section.workspace": "Workspace",
+  "sidepanel.sessions.showMore": "Show {count} more",
+  "sidepanel.sessions.showLess": "Show less",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
@@ -802,6 +805,7 @@ export const en = {
   "chat.openOptions": "Open Amiba options",
   "chat.search": "Search",
   "chat.settings": "Settings",
+  "commandPalette.description": "Search conversations or run common app commands.",
   "chat.resizeSidebar": "Resize sidebar",
   "chat.untitled": "Untitled chat",
   "chat.rename": "Rename",

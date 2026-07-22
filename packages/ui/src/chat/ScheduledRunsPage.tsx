@@ -26,6 +26,11 @@ export interface ScheduledRunsPageProps {
    * page shows its own "select a run" placeholder.
    */
   detail?: ReactNode;
+  /**
+   * Keep true for standalone consumers. FullScreenChatView places the run
+   * list in the shared app sidebar and disables this duplicate column.
+   */
+  showList?: boolean;
 }
 
 export function ScheduledRunsPage({
@@ -33,26 +38,29 @@ export function ScheduledRunsPage({
   activeId,
   onOpenRun,
   detail,
+  showList = true,
 }: ScheduledRunsPageProps) {
   const { t } = useT();
   const scheduled = useScheduledRuns();
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
-      <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r border-border/40">
-        <SessionsListView
-          sessions={scheduled.runs}
-          activeId={activeId}
-          ready={scheduled.ready}
-          query={query}
-          onOpen={onOpenRun}
-          onRename={() => {}}
-          onDelete={() => {}}
-          onRefresh={scheduled.refresh}
-          emptyLabel={t("sidepanel.sessions.scheduled.empty")}
-          sectionLabelFor={scheduled.labelFor}
-          sectionActionsFor={scheduled.actionsFor}
-        />
-      </aside>
+      {showList && (
+        <aside className="flex min-h-0 w-64 shrink-0 flex-col border-r border-border/30 bg-muted/15 px-2">
+          <SessionsListView
+            sessions={scheduled.runs}
+            activeId={activeId}
+            ready={scheduled.ready}
+            query={query}
+            onOpen={onOpenRun}
+            onRename={() => {}}
+            onDelete={() => {}}
+            onRefresh={scheduled.refresh}
+            emptyLabel={t("sidepanel.sessions.scheduled.empty")}
+            sectionLabelFor={scheduled.labelFor}
+            sectionActionsFor={scheduled.actionsFor}
+          />
+        </aside>
+      )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {detail ?? <ScheduledRunsEmptyDetail />}
       </div>

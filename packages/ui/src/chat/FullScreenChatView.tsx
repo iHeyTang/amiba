@@ -41,6 +41,7 @@ import { Sidebar, type ActivityViewId } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { ScheduledRunsPage } from "./ScheduledRunsPage";
+import { SessionsListView } from "./SessionsListView";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import {
   SessionTitleProvider,
@@ -377,6 +378,23 @@ function FullScreenChatViewInner({
           onDeleteSession={(id) => void sessions.remove(id)}
           onRefreshSessions={() => void sessions.refresh()}
           onOpenSettings={() => openSettings()}
+          historyContent={
+            sidebarView === "scheduled" ? (
+              <SessionsListView
+                sessions={scheduled.runs}
+                activeId={sessions.activeId}
+                ready={scheduled.ready}
+                query=""
+                onOpen={(id) => void onOpenRun(id)}
+                onRename={() => {}}
+                onDelete={() => {}}
+                onRefresh={scheduled.refresh}
+                emptyLabel={t("sidepanel.sessions.scheduled.empty")}
+                sectionLabelFor={scheduled.labelFor}
+                sectionActionsFor={scheduled.actionsFor}
+              />
+            ) : undefined
+          }
           widthPx={sidebarWidth}
         />
         {/* Resize divider: invisible 4px hit area straddling the sidebar
@@ -397,6 +415,7 @@ function FullScreenChatViewInner({
               query=""
               activeId={sessions.activeId}
               onOpenRun={(id) => void onOpenRun(id)}
+              showList={false}
               detail={
                 activeRunSelected ? (
                   <ChatSurface

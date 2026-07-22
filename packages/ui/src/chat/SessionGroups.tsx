@@ -66,11 +66,11 @@ export function TopSection({
   // first section.
   const isRail = variant === "rail";
   // Rail headers read as quiet group labels that share the sidebar's row
-  // language (rounded hover, soft-foreground tint, same x-inset as the nav
-  // rows above). Drawer headers keep their original uppercase micro-label
+  // language (settings-style caption, soft hover, same x-inset as the rows
+  // below). Drawer headers keep their original uppercase micro-label
   // look — that surface is unchanged.
   const headerWrapCls = isRail
-    ? "group/topsection relative flex w-full shrink-0 items-center rounded-md px-2 py-1.5 text-sm font-normal text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+    ? "group/topsection relative mt-2 flex h-7 w-full shrink-0 items-center rounded-md px-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
     : cn(
         "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
         "px-2 py-1.5 text-xs",
@@ -84,17 +84,32 @@ export function TopSection({
       <button
         type="button"
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
         aria-expanded={!collapsed}
       >
-        <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </span>
-        <span className="flex-1 truncate">{label}</span>
+        {isRail ? (
+          <>
+            <span className="flex-1 truncate">{label}</span>
+            <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+              {collapsed ? (
+                <ChevronRight className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </span>
+            <span className="flex-1 truncate">{label}</span>
+          </>
+        )}
       </button>
       {typeof count === "number" && count > 0 && (
         // Right-edge count. Rendered in natural text height (no h-6
@@ -105,7 +120,7 @@ export function TopSection({
         // the row jitter on every hover.
         <span
           className={cn(
-            "pr-1 text-xs font-normal normal-case tabular-nums text-muted-foreground",
+            "pr-1 text-[10px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80",
             actions && "group-hover/topsection:invisible",
           )}
         >

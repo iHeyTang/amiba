@@ -26,11 +26,9 @@ import {
 } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 import { Input, cn } from "../primitives";
-import {
-  ResizableSectionList,
-  type ResizableItem,
-} from "./internal/ResizableSectionList";
 import { TopSection } from "./SessionGroups";
+
+const COLLAPSED_SECTION_LIMIT = 8;
 
 export interface SessionsListViewProps {
   sessions: SessionMeta[];
@@ -163,6 +161,11 @@ export function SessionsListView({
   const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({});
   const toggleTop = (k: string) =>
     setTopCollapsed((p) => ({ ...p, [k]: !p[k] }));
+  const [expandedSources, setExpandedSources] = useState<
+    Record<string, boolean>
+  >({});
+  const toggleExpandedSource = (source: string) =>
+    setExpandedSources((p) => ({ ...p, [source]: !p[source] }));
 
   if (!ready) {
     return (
@@ -177,72 +180,80 @@ export function SessionsListView({
     : (emptyLabel ?? t("chat.noSessions"));
 
   return (
-    <ResizableSectionList
-      items={(() => {
-        const items: ResizableItem[] = [];
-        if (totalMatching === 0) {
-          // Single placeholder section — the local channel header with
-          // an empty body so the user has a visible anchor.
-          const localName = (() => {
-            const d = resolveChannel(SOURCE_LOCAL);
-            const tr = t(d.labelKey as MessageKey);
-            return tr === d.labelKey ? d.fallbackLabel : tr;
-          })();
-          items.push({
-            id: SOURCE_LOCAL,
-            collapsed: !!topCollapsed[SOURCE_LOCAL],
-            render: () => (
-              <TopSection
-                label={t("sidepanel.sessions.group.channelChats", {
-                  name: localName,
-                })}
-                count={0}
-                collapsed={!!topCollapsed[SOURCE_LOCAL]}
-                onToggle={() => toggleTop(SOURCE_LOCAL)}
-                variant="rail"
-                flex
-              >
-                <p className="px-3 py-3 text-xs text-muted-foreground">
-                  {emptyText}
-                </p>
-              </TopSection>
-            ),
-          });
-        } else {
-          for (const sec of channelSections) {
-            items.push({
-              id: sec.source,
-              collapsed: !!topCollapsed[sec.source],
-              render: () => (
-                <TopSection
-                  label={sec.label}
-                  count={sec.items.length}
-                  collapsed={!!topCollapsed[sec.source]}
-                  onToggle={() => toggleTop(sec.source)}
-                  variant="rail"
-                  flex
-                  actions={sectionActionsFor?.(sec.source)}
+    <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      {totalMatching === 0 ? (
+        <TopSection
+          label={t("sidepanel.sessions.group.channelChats", {
+            name: (() => {
+              const d = resolveChannel(SOURCE_LOCAL);
+              const tr = t(d.labelKey as MessageKey);
+              return tr === d.labelKey ? d.fallbackLabel : tr;
+            })(),
+          })}
+          count={0}
+          collapsed={!!topCollapsed[SOURCE_LOCAL]}
+          onToggle={() => toggleTop(SOURCE_LOCAL)}
+          variant="rail"
+        >
+          <p className="px-2.5 py-3 text-xs leading-relaxed text-muted-foreground">
+            {emptyText}
+          </p>
+        </TopSection>
+      ) : (
+        channelSections.map((sec) => {
+          const activeIsOlder = sec.items.some(
+            (s, index) =>
+              s.id === activeId && index >= COLLAPSED_SECTION_LIMIT,
+          );
+          const expanded = !!expandedSources[sec.source] || activeIsOlder;
+          const visible = expanded
+            ? sec.items
+            : sec.items.slice(0, COLLAPSED_SECTION_LIMIT);
+          const hiddenCount = sec.items.length - visible.length;
+          return (
+            <TopSection
+              key={sec.source}
+              label={sec.label}
+              count={sec.items.length}
+              collapsed={!!topCollapsed[sec.source]}
+              onToggle={() => toggleTop(sec.source)}
+              variant="rail"
+              actions={sectionActionsFor?.(sec.source)}
+            >
+              <nav className="flex flex-col gap-0.5">
+                {visible.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    session={s}
+                    active={s.id === activeId}
+                    onOpen={() => onOpen(s.id)}
+                    onRename={(title) => onRename(s.id, title)}
+                    onDelete={() => onDelete(s.id)}
+                  />
+                ))}
+              </nav>
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => toggleExpandedSource(sec.source)}
+                  className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
                 >
-                  <nav className="flex flex-col">
-                    {sec.items.map((s) => (
-                      <SessionRow
-                        key={s.id}
-                        session={s}
-                        active={s.id === activeId}
-                        onOpen={() => onOpen(s.id)}
-                        onRename={(title) => onRename(s.id, title)}
-                        onDelete={() => onDelete(s.id)}
-                      />
-                    ))}
-                  </nav>
-                </TopSection>
-              ),
-            });
-          }
-        }
-        return items;
-      })()}
-    />
+                  {t("sidepanel.sessions.showMore", { count: hiddenCount })}
+                </button>
+              ) : expanded && sec.items.length > COLLAPSED_SECTION_LIMIT ? (
+                <button
+                  type="button"
+                  onClick={() => toggleExpandedSource(sec.source)}
+                  className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                >
+                  {t("sidepanel.sessions.showLess")}
+                </button>
+              ) : null}
+            </TopSection>
+          );
+        })
+      )}
+    </div>
   );
 }
 
@@ -290,11 +301,10 @@ function SessionRow({
     return (
       <div
         className={cn(
-          "group flex items-center gap-2.5 rounded-md px-2 py-1.5",
-          active && "bg-foreground/10",
+          "mx-0.5 flex h-8 items-center rounded-md px-2",
+          active && "bg-secondary",
         )}
       >
-        <StatusDot />
         <Input
           autoFocus
           value={draft}
@@ -308,28 +318,34 @@ function SessionRow({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <div
       className={cn(
-        "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
+        "group relative mx-0.5 flex h-8 items-center rounded-md transition-colors",
         active
-          ? "bg-foreground/10 text-foreground"
-          : "text-foreground/80 hover:bg-foreground/5 hover:text-foreground",
+          ? "bg-secondary text-secondary-foreground"
+          : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
       )}
     >
-      <StatusDot />
-      <span className="min-w-0 flex-1 truncate text-sm font-normal">
-        {session.title?.trim() || t("chat.untitled")}
-      </span>
-      <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left focus-visible:outline-none"
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
+          {session.title?.trim() || t("chat.untitled")}
+        </span>
+        <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
+          {formatRelativeShort(session.updatedAt)}
+        </span>
+      </button>
+      <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             setEditing(true);
           }}
-          className="rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
           title={t("chat.rename")}
           aria-label={t("chat.rename")}
         >
@@ -347,38 +363,14 @@ function SessionRow({
               onDelete();
             }
           }}
-          className="rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
           title={t("chat.delete")}
           aria-label={t("chat.delete")}
         >
           <Trash2 className="h-3 w-3" />
         </button>
       </span>
-      <span className="inline-flex shrink-0 items-center justify-end whitespace-nowrap text-xs tabular-nums text-muted-foreground/80 group-hover:hidden">
-        {formatRelativeShort(session.updatedAt)}
-      </span>
-    </button>
-  );
-}
-
-/**
- * Leading status indicator slot for each session row. Renders an empty
- * outlined circle by default; a follow-up pass will colour it (success,
- * error, running, etc.) once per-session status flows through. Sized to
- * match the previous `MessageSquare` icon's gap so row geometry stays
- * stable.
- */
-function StatusDot() {
-  // Wrapped in an h-4 w-4 slot so the dot occupies the same leading-icon
-  // column as the sidebar nav rows and the section-header chevrons — the
-  // row titles then line up vertically across the whole sidebar.
-  return (
-    <span
-      aria-hidden
-      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center"
-    >
-      <span className="h-2 w-2 rounded-full border border-muted-foreground/40" />
-    </span>
+    </div>
   );
 }
 

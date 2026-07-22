@@ -22,6 +22,7 @@ import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import type { MainContribution } from "@amiba/extension-host/renderer";
 import { cn } from "../primitives";
+import { NavigationGroupLabel } from "../navigation/NavigationRow";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
 
@@ -29,9 +30,9 @@ import { SessionsListView } from "./SessionsListView";
 export type ActivityViewId = string;
 
 const ICON_MAP: Record<string, ReactNode> = {
-  "book-open": <BookOpen className="h-[18px] w-[18px]" />,
-  "wallet": <Wallet className="h-[18px] w-[18px]" />,
-  "wrench": <Wrench className="h-[18px] w-[18px]" />,
+  "book-open": <BookOpen className="h-4 w-4" />,
+  "wallet": <Wallet className="h-4 w-4" />,
+  "wrench": <Wrench className="h-4 w-4" />,
 };
 
 export function resolveExtensionIcon(name: string): ReactNode | null {
@@ -60,6 +61,12 @@ export interface SidebarProps {
   onRefreshSessions: () => void | Promise<void>;
   onOpenSettings: () => void;
   /**
+   * Optional context list for non-chat destinations. Scheduled tasks use
+   * this slot so their run history replaces chat history in the same rail
+   * instead of opening a second sidebar beside it.
+   */
+  historyContent?: ReactNode;
+  /**
    * Explicit column width in px (user-resizable via the drag handle in
    * `FullScreenChatView`). Overrides the `w-60` fallback when provided.
    */
@@ -81,6 +88,7 @@ export function Sidebar({
   onDeleteSession,
   onRefreshSessions,
   onOpenSettings,
+  historyContent,
   widthPx,
   className,
 }: SidebarProps) {
@@ -94,7 +102,7 @@ export function Sidebar({
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
-      icon: <Clock className="h-[18px] w-[18px]" />,
+      icon: <Clock className="h-4 w-4" />,
       label: t("sidepanel.sessions.group.scheduled"),
       order: 1,
     },
@@ -111,54 +119,61 @@ export function Sidebar({
     <nav
       aria-label={t("sidepanel.sessions.activityBar.aria")}
       className={cn(
-        "flex min-h-0 w-60 shrink-0 flex-col gap-0.5 bg-muted/40 px-2 py-2",
+        "flex min-h-0 w-60 shrink-0 flex-col bg-muted/30",
         className,
       )}
       style={widthPx !== undefined ? { width: widthPx } : undefined}
     >
       {/* Top (fixed): new-chat + search + nav rows */}
-      <SidebarItem
-        id="new-chat"
-        icon={<Plus className="h-[18px] w-[18px]" />}
-        label={t("chat.newChat")}
-        onClick={onNewChat}
-      />
-      <SidebarItem
-        id="search"
-        icon={<Search className="h-[18px] w-[18px]" />}
-        label={t("chat.search")}
-        onClick={onOpenCommandPalette}
-      />
-      {navRows.map((row) => (
+      <div className="flex shrink-0 flex-col gap-0.5 p-2 pb-1">
+        <NavigationGroupLabel className="pt-0">
+          {t("sidepanel.nav.section.workspace")}
+        </NavigationGroupLabel>
         <SidebarItem
-          key={row.id}
-          id={row.id}
-          icon={row.icon}
-          label={row.label}
-          active={row.id === activeView}
-          onClick={() => onSelectView(row.id)}
+          id="new-chat"
+          icon={<Plus className="h-4 w-4" />}
+          label={t("chat.newChat")}
+          onClick={onNewChat}
         />
-      ))}
+        <SidebarItem
+          id="search"
+          icon={<Search className="h-4 w-4" />}
+          label={t("chat.search")}
+          onClick={onOpenCommandPalette}
+        />
+        {navRows.map((row) => (
+          <SidebarItem
+            key={row.id}
+            id={row.id}
+            icon={row.icon}
+            label={row.label}
+            active={row.id === activeView}
+            onClick={() => onSelectView(row.id)}
+          />
+        ))}
+      </div>
 
       {/* Middle (flex): conversation history */}
-      <div className="mt-2 flex min-h-0 flex-1 flex-col">
-        <SessionsListView
-          sessions={sessions}
-          activeId={activeSessionId}
-          ready={sessionsReady}
-          query=""
-          onOpen={onOpenSession}
-          onRename={onRenameSession}
-          onDelete={onDeleteSession}
-          onRefresh={onRefreshSessions}
-        />
+      <div className="flex min-h-0 flex-1 flex-col px-2">
+        {historyContent ?? (
+          <SessionsListView
+            sessions={sessions}
+            activeId={activeSessionId}
+            ready={sessionsReady}
+            query=""
+            onOpen={onOpenSession}
+            onRename={onRenameSession}
+            onDelete={onDeleteSession}
+            onRefresh={onRefreshSessions}
+          />
+        )}
       </div>
 
       {/* Bottom (fixed): settings */}
-      <div className="mt-1 border-t border-border/40 pt-1">
+      <div className="mt-1 border-t border-border/30 p-2 pt-1.5">
         <SidebarItem
           id="settings"
-          icon={<Settings className="h-[18px] w-[18px]" />}
+          icon={<Settings className="h-4 w-4" />}
           label={t("chat.settings")}
           title={t("chat.openOptions")}
           onClick={onOpenSettings}

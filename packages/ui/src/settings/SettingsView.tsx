@@ -60,6 +60,10 @@ import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
 import { SkillsPage } from "../skills";
 import { TokensPage, ToolsPage } from "../usage";
+import {
+  NavigationGroupLabel,
+  NavigationRow,
+} from "../navigation/NavigationRow";
 
 /**
  * Sidebar order — four groups along the beginner→advanced axis:
@@ -402,18 +406,18 @@ export function SettingsView({
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
             {/* ── General — safe, everyday app settings ── */}
-            <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            <NavigationGroupLabel className="pt-0">
               {t("options.nav.section.general")}
-            </div>
+            </NavigationGroupLabel>
             <NavBtn icon={<Palette className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.appearance")} active={mainTab === "appearance"} onClick={() => onMainTabChange("appearance")} />
             {isDesktop && (
               <NavBtn icon={<Keyboard className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.shortcuts")} active={mainTab === "shortcuts"} onClick={() => onMainTabChange("shortcuts")} />
             )}
 
             {/* ── Agent — daily agent capabilities, all safe to touch ── */}
-            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            <NavigationGroupLabel className="mt-2">
               {t("options.nav.section.agent")}
-            </div>
+            </NavigationGroupLabel>
             <NavBtn icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.skills")} active={mainTab === "skills"} onClick={() => onMainTabChange("skills")} />
             <NavBtn icon={<Wrench className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.tools")} active={mainTab === "tools"} onClick={() => onMainTabChange("tools")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
@@ -422,9 +426,9 @@ export function SettingsView({
             <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
 
             {/* ── Advanced — know-what-you're-doing configuration ── */}
-            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            <NavigationGroupLabel className="mt-2">
               {t("options.nav.section.advanced")}
-            </div>
+            </NavigationGroupLabel>
             <NavBtn icon={<Bot className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.models")} active={mainTab === "models"} onClick={() => onMainTabChange("models")} />
             <NavBtn icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.mentionSources")} active={mainTab === "mention-sources"} onClick={() => onMainTabChange("mention-sources")} />
             <NavBtn icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.extensions")} active={mainTab === "extensions"} onClick={() => onMainTabChange("extensions")} />
@@ -433,17 +437,17 @@ export function SettingsView({
             )}
 
             {/* ── Diagnostics — when something's wrong ── */}
-            <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            <NavigationGroupLabel className="mt-2">
               {t("options.nav.section.diagnostics")}
-            </div>
+            </NavigationGroupLabel>
             <NavBtn icon={<Activity className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.status")} active={mainTab === "status"} onClick={() => onMainTabChange("status")} />
             <NavBtn icon={<FileText className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.logs")} active={mainTab === "logs"} onClick={() => onMainTabChange("logs")} />
 
             {extensionSettings.length > 0 && (
               <>
-                <div className="mt-2 px-2 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                <NavigationGroupLabel className="mt-2">
                   {t("options.nav.section.extensions")}
-                </div>
+                </NavigationGroupLabel>
                 {extensionSettings.map((s) => (
                   <NavBtn
                     key={s.extensionId}
@@ -648,14 +652,11 @@ function NavBtn({
   onClick: () => void;
 }) {
   return (
-    <Button
-      type="button"
-      variant={active ? "secondary" : "ghost"}
-      className="w-full justify-start gap-2 font-normal"
+    <NavigationRow
       onClick={onClick}
-    >
-      {icon}
-      {label}
-    </Button>
+      icon={icon}
+      label={label}
+      active={active}
+    />
   );
 }
