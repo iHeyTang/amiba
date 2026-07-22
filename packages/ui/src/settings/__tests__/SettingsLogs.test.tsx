@@ -99,6 +99,7 @@ describe("Hermes update logs", () => {
       within(gatewayCard!).getByRole("button", { name: "Restart gateway" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Maintenance")).not.toBeInTheDocument();
+    expect(screen.queryByText("gateway restarted")).not.toBeInTheDocument();
   });
 
   it("surfaces an offline gateway as the primary health conclusion", async () => {

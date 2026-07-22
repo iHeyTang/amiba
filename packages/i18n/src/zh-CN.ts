@@ -406,6 +406,7 @@ export const zhCN: Messages = {
   "options.status.runtime.configVersion": "配置版本",
   "options.status.runtime.latest": "最新 {version}",
   "options.status.runtime.activeSessions": "活跃会话",
+  "options.status.runtime.paths": "路径与配置",
   "options.status.runtime.hermesHome": "Hermes 目录",
   "options.status.runtime.configPath": "配置文件",
   "options.status.runtime.envPath": "环境文件",

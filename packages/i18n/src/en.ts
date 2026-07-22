@@ -433,6 +433,7 @@ export const en = {
   "options.status.runtime.configVersion": "Config version",
   "options.status.runtime.latest": "latest {version}",
   "options.status.runtime.activeSessions": "Active sessions",
+  "options.status.runtime.paths": "Paths and configuration",
   "options.status.runtime.hermesHome": "Hermes home",
   "options.status.runtime.configPath": "Config path",
   "options.status.runtime.envPath": "Environment path",
