@@ -1,20 +1,33 @@
 /**
- * Status & lifecycle tab — runtime snapshot + the two long-running ops
- * (restart gateway / self-upgrade) mirrored from upstream's Status page.
+ * Runtime health dashboard and lifecycle actions for Hermes Desktop.
  *
- * Layout follows SettingsGateway: plain ``<section>`` chunks, no cards.
- * Actions fire-and-poll: POST starts a detached subprocess, then we
- * tail-poll ``GET /hermes/actions/<name>/status`` until ``running=false``.
+ * The page deliberately leads with a health conclusion, then progressively
+ * reveals runtime details and maintenance controls. Long updater output lives
+ * in the central Logs pane; gateway-restart output stays collapsed here as a
+ * low-frequency diagnostic detail.
  */
 
-import { Copy, FileText, Loader2, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  Check,
+  CircleCheck,
+  CircleDot,
+  Copy,
+  Download,
+  FileText,
+  Gauge,
+  Loader2,
+  RefreshCw,
+  RotateCw,
+  Server,
+  Terminal,
+  TriangleAlert,
+  UsersRound,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Badge } from "../primitives";
-import { Button } from "../primitives";
-import { Separator } from "../primitives";
-
-import { SettingsPaneHeader } from "./SettingsPaneHeader";
 import {
   type ActionStatusResponse,
   type HermesStatusResponse,
@@ -24,30 +37,19 @@ import {
   restartHermesGateway,
   updateHermes,
 } from "@amiba/core";
-import { useT } from "@amiba/i18n";
+import { useT, type TranslateFn } from "@amiba/i18n";
+
+import { Badge, Button, cn } from "../primitives";
+import { SettingsPaneHeader } from "./SettingsPaneHeader";
 
 const STATUS_POLL_MS = 10_000;
 const ACTION_POLL_MS = 1_000;
 
-/**
- * Commands the user pastes into a terminal to set up the backplane stack.
- * Kept here (instead of i18n) because they're copy/paste literal and
- * shouldn't be translated.
- */
 const INSTALL_COMMANDS = [
   "hermes plugins install amiba-desktop/amiba-plugin-browser-tools",
-  "hermes gateway                  # Hermes agent (chat / LLM / tools)",
-  "amiba-backplane --port 9394  # local backend on :9394 (the desktop app spawns this for you)",
+  "hermes gateway",
+  "amiba-backplane --port 9394",
 ];
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 interface ActionRunState {
   running: boolean;
@@ -65,6 +67,17 @@ const INITIAL_ACTION: ActionRunState = {
   error: null,
 };
 
+type HealthKind = "healthy" | "offline" | "mismatch";
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function fmtTimestamp(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) {
     return new Date(value * 1000).toLocaleString();
@@ -77,22 +90,200 @@ function fmtTimestamp(value: unknown): string {
   return "—";
 }
 
-function Field({
-  label,
-  children,
-  mono,
+function SectionHeading({
+  title,
+  subtitle,
 }: {
-  label: string;
-  children: React.ReactNode;
-  mono?: boolean;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-3 text-xs">
-      <span className="w-32 shrink-0 text-muted-foreground">{label}</span>
-      <span className={`min-w-0 break-all ${mono ? "font-mono" : ""}`}>
+    <div className="space-y-0.5">
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">
+        {title}
+      </h3>
+      {subtitle && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {subtitle}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StatusMetric({
+  icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  value: React.ReactNode;
+  tone?: "default" | "success" | "warning" | "destructive";
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 px-5 py-4">
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background/70",
+          tone === "success" &&
+            "border-[hsl(var(--success))]/25 text-[hsl(var(--success))]",
+          tone === "warning" &&
+            "border-[hsl(var(--warning))]/30 text-amber-600 dark:text-amber-400",
+          tone === "destructive" && "border-destructive/25 text-destructive",
+          tone === "default" && "border-border/70 text-muted-foreground",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
+        <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
+          {value}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  children,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-8 items-center justify-between gap-4 border-b border-border/55 py-2.5 last:border-b-0">
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        {label}
+      </span>
+      <span className="min-w-0 text-right text-xs font-medium text-foreground">
         {children}
       </span>
     </div>
+  );
+}
+
+function PathRow({
+  label,
+  value,
+}: {
+  label: React.ReactNode;
+  value?: string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+  const displayValue = value || "—";
+
+  async function copyValue() {
+    if (!value || !(await copyToClipboard(value))) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_500);
+  }
+
+  return (
+    <div className="group space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          {label}
+        </span>
+        {value && (
+          <button
+            type="button"
+            onClick={() => void copyValue()}
+            className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-[10px] text-muted-foreground opacity-60 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+            aria-label={String(label)}
+          >
+            {copied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </button>
+        )}
+      </div>
+      <p
+        className="truncate font-mono text-[11px] text-foreground"
+        title={displayValue}
+      >
+        {displayValue}
+      </p>
+    </div>
+  );
+}
+
+function ActionStateBadge({
+  state,
+  t,
+}: {
+  state: ActionRunState;
+  t: TranslateFn;
+}) {
+  if (state.running) {
+    return (
+      <Badge variant="warning" className="gap-1.5 text-[10px]">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {t("options.status.actions.running")}
+        {state.pid != null ? ` · PID ${state.pid}` : ""}
+      </Badge>
+    );
+  }
+  if (state.error) {
+    return (
+      <Badge variant="destructive" className="text-[10px]">
+        {t("options.status.actions.failed")}
+      </Badge>
+    );
+  }
+  if (state.exitCode != null) {
+    return (
+      <Badge
+        variant={state.exitCode === 0 ? "success" : "destructive"}
+        className="text-[10px]"
+      >
+        {state.exitCode === 0
+          ? t("options.status.actions.success")
+          : `${t("options.status.actions.failed")} · exit ${state.exitCode}`}
+      </Badge>
+    );
+  }
+  return null;
+}
+
+function GatewayActionDetails({
+  state,
+  t,
+}: {
+  state: ActionRunState;
+  t: TranslateFn;
+}) {
+  if (state.lines.length === 0 && !state.error) return null;
+  return (
+    <details
+      className="group mt-4 border-t border-border/60 pt-3"
+      open={state.running || !!state.error}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground transition hover:text-foreground">
+        <span className="flex items-center gap-1.5">
+          <Terminal className="h-3.5 w-3.5" />
+          {t("options.status.actions.restartOutput")}
+        </span>
+        <ActionStateBadge state={state} t={t} />
+      </summary>
+      {state.error && (
+        <p className="mt-2 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+          {state.error}
+        </p>
+      )}
+      {state.lines.length > 0 && (
+        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          {state.lines.join("\n")}
+        </pre>
+      )}
+    </details>
   );
 }
 
@@ -100,167 +291,162 @@ function OnboardingGate({
   error,
   onRetry,
   loading,
+  t,
 }: {
   error: string;
   onRetry: () => void;
   loading: boolean;
+  t: TranslateFn;
 }) {
-  const allCmd = INSTALL_COMMANDS.join("\n");
+  const allCommands = INSTALL_COMMANDS.join("\n");
   const [copied, setCopied] = useState(false);
 
   async function copyAll() {
-    if (await copyToClipboard(allCmd)) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    }
+    if (!(await copyToClipboard(allCommands))) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_500);
   }
 
+  const steps = [
+    t("options.status.onboarding.step.install"),
+    t("options.status.onboarding.step.plugin"),
+    t("options.status.onboarding.step.run"),
+  ];
+
   return (
-    <section className="space-y-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-4 dark:bg-amber-950/20">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-          Backplane 没连上
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          需要本地 Hermes Agent + backplane server(`amiba-backplane`)跑起来,外加
-          browser-tools 插件。桌面版会自动配置;手动设置按下面三步:
-        </p>
-      </div>
-
-      <ol className="ml-5 list-decimal space-y-1 text-xs text-muted-foreground">
-        <li>
-          先装好 Hermes Agent —— 见{" "}
-          <a
-            href="https://github.com/NousResearch/hermes-agent"
-            target="_blank"
-            rel="noreferrer"
-            className="text-foreground underline underline-offset-2"
+    <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/[0.045] shadow-sm">
+      <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-amber-400/10 blur-3xl" />
+      <div className="relative p-6 sm:p-7">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <WifiOff className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 space-y-1.5">
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                {t("options.status.onboarding.title")}
+              </h3>
+              <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                {t("options.status.onboarding.description")}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={onRetry}
+            disabled={loading}
+            className="shrink-0"
           >
-            官方文档
-          </a>
-        </li>
-        <li>装 browser-tools 插件 + 起 backplane server</li>
-        <li>
-          启动 Hermes：<code className="font-mono">hermes chat</code>{" "}
-          或任意长命模式
-        </li>
-      </ol>
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {t("options.status.onboarding.retry")}
+          </Button>
+        </div>
 
-      <div className="relative">
-        <pre className="overflow-x-auto rounded bg-muted/60 p-3 pr-12 font-mono text-[11px] leading-relaxed">
-          {INSTALL_COMMANDS.join("\n")}
-        </pre>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="absolute right-2 top-2 h-6 gap-1 px-2 text-[10px]"
-          onClick={() => void copyAll()}
-        >
-          <Copy className="h-3 w-3" />
-          {copied ? "copied" : "copy"}
-        </Button>
+        <div className="mt-6 grid gap-2.5 sm:grid-cols-3">
+          {steps.map((step, index) => (
+            <div
+              key={step}
+              className="flex items-start gap-2.5 rounded-lg border border-amber-500/15 bg-background/55 p-3"
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                {index + 1}
+              </span>
+              <span className="text-[11px] leading-relaxed text-foreground/80">
+                {step}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <details className="mt-4 rounded-lg border border-border/60 bg-background/60 px-3.5 py-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-foreground">
+            <span className="flex items-center gap-1.5">
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+              {t("options.status.onboarding.manual")}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 gap-1 px-2 text-[10px]"
+              onClick={(event) => {
+                event.preventDefault();
+                void copyAll();
+              }}
+            >
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+              {t(
+                copied
+                  ? "options.status.onboarding.copied"
+                  : "options.status.onboarding.copy",
+              )}
+            </Button>
+          </summary>
+          <pre className="mt-3 overflow-x-auto rounded-md bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {allCommands}
+          </pre>
+        </details>
+
+        <details className="mt-3 text-[10px] text-muted-foreground">
+          <summary className="cursor-pointer">
+            {t("options.status.onboarding.error")}
+          </summary>
+          <pre className="mt-1 whitespace-pre-wrap break-all">{error}</pre>
+        </details>
       </div>
-
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={onRetry} disabled={loading}>
-          {loading ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-1 h-3 w-3" />
-          )}
-          重新检测
-        </Button>
-        <span className="text-[10px] text-muted-foreground">
-          检测到 127.0.0.1:9394 响应后，下面会自动显示运行状态
-        </span>
-      </div>
-
-      <details className="text-[10px] text-muted-foreground">
-        <summary className="cursor-pointer">报错详情</summary>
-        <pre className="mt-1 whitespace-pre-wrap break-all">{error}</pre>
-      </details>
     </section>
   );
 }
 
 function ProtocolMismatchBanner({
   mismatch,
+  t,
 }: {
   mismatch: HermesStatusResponse["protocol_mismatch"];
+  t: TranslateFn;
 }) {
   if (!mismatch) return null;
   const message =
     mismatch.advise === "update-backplane"
-      ? `Backplane plugin is out of date (protocol v${mismatch.backplane}, this app needs v${mismatch.expected}). Update the hermes backplane plugin.`
-      : `This app is older than the backplane (protocol v${mismatch.backplane} > v${mismatch.expected}). Update the desktop app / extension.`;
+      ? t("options.status.protocol.backplane", {
+          current: mismatch.backplane,
+          expected: mismatch.expected,
+        })
+      : t("options.status.protocol.client", {
+          current: mismatch.backplane,
+          expected: mismatch.expected,
+        });
+
   return (
-    <section className="space-y-1 rounded-md border border-amber-500/60 bg-amber-50/60 p-4 dark:bg-amber-950/30">
-      <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-        Protocol version mismatch
-      </h3>
-      <p className="text-xs text-amber-700 dark:text-amber-400">{message}</p>
+    <section className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.055] px-4 py-3.5">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="space-y-0.5">
+        <h3 className="text-xs font-semibold text-foreground">
+          {t("options.status.protocol.title")}
+        </h3>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {message}
+        </p>
+      </div>
     </section>
   );
 }
 
-function UpdateHint({ status }: { status: HermesStatusResponse | null }) {
-  const u = status?.update_check;
-  if (!u || u.status === "unknown") return null;
-  if (u.status === "up_to_date") {
-    return (
-      <span className="text-[11px] text-muted-foreground">
-        already on latest
-      </span>
-    );
-  }
-  if (u.status === "behind") {
-    const n = u.commits_behind;
-    return (
-      <span className="text-[11px] text-amber-600 dark:text-amber-400">
-        {typeof n === "number" && n > 0
-          ? `behind ${n} commit${n === 1 ? "" : "s"}`
-          : "update available"}
-      </span>
-    );
-  }
-  return null;
-}
-
-function ActionLog({
-  actionName,
-  state,
-}: {
-  actionName: LifecycleActionName;
-  state: ActionRunState;
-}) {
-  if (state.lines.length === 0 && !state.error) return null;
+function StatusSkeleton() {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-        <span className="font-mono">{actionName}</span>
-        {state.running && (
-          <Badge variant="outline" className="gap-1 text-[10px]">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            pid {state.pid ?? "?"}
-          </Badge>
-        )}
-        {!state.running && state.exitCode != null && (
-          <Badge
-            variant={state.exitCode === 0 ? "default" : "destructive"}
-            className="text-[10px]"
-          >
-            exit {state.exitCode}
-          </Badge>
-        )}
-        {state.error && (
-          <span className="text-destructive">{state.error}</span>
-        )}
+    <div className="space-y-5 animate-pulse">
+      <div className="h-56 rounded-2xl border border-border/60 bg-muted/25" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="h-80 rounded-xl border border-border/60 bg-muted/20" />
+        <div className="h-80 rounded-xl border border-border/60 bg-muted/20" />
       </div>
-      {state.lines.length > 0 && (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">
-          {state.lines.join("\n")}
-        </pre>
-      )}
     </div>
   );
 }
@@ -270,13 +456,12 @@ export interface SettingsStatusProps {
   onViewUpdateLogs?: () => void;
 }
 
-export function SettingsStatus({
-  onViewUpdateLogs,
-}: SettingsStatusProps = {}) {
-  const { t } = useT();
+export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
+  const { t, language } = useT();
   const [status, setStatus] = useState<HermesStatusResponse | null>(null);
   const [statusErr, setStatusErr] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
 
   const [gwState, setGwState] = useState<ActionRunState>(INITIAL_ACTION);
   const [updState, setUpdState] = useState<ActionRunState>(INITIAL_ACTION);
@@ -300,14 +485,15 @@ export function SettingsStatus({
         setStatusErr(null);
         setStatus(r);
       }
+      setLastCheckedAt(new Date());
       setStatusLoading(false);
     },
     [],
   );
 
   useEffect(() => {
-    refreshStatus();
-    const id = window.setInterval(() => refreshStatus(), STATUS_POLL_MS);
+    void refreshStatus();
+    const id = window.setInterval(() => void refreshStatus(), STATUS_POLL_MS);
     return () => window.clearInterval(id);
   }, [refreshStatus]);
 
@@ -340,16 +526,15 @@ export function SettingsStatus({
           error: null,
         });
         if (!r.running) {
-          // Force a fresh update-check after `hermes-update` finishes so
-          // the badge flips from "behind" → "up_to_date" without
-          // waiting out the 6h cache.
-          void refreshStatus({
-            forceUpdateCheck: name === "hermes-update",
-          });
+          if (r.exit_code != null) {
+            void refreshStatus({
+              forceUpdateCheck: name === "hermes-update",
+            });
+          }
           break;
         }
-        await new Promise<void>((res) =>
-          window.setTimeout(res, ACTION_POLL_MS),
+        await new Promise<void>((resolve) =>
+          window.setTimeout(resolve, ACTION_POLL_MS),
         );
       }
     },
@@ -366,11 +551,14 @@ export function SettingsStatus({
   }, [pollAction]);
 
   const triggerGateway = useCallback(async () => {
-    setTriggering((t) => ({ ...t, gw: true }));
+    setTriggering((current) => ({ ...current, gw: true }));
     const r = await restartHermesGateway();
-    setTriggering((t) => ({ ...t, gw: false }));
+    setTriggering((current) => ({ ...current, gw: false }));
     if (!r.ok) {
-      setGwState((s) => ({ ...s, error: r.error || "spawn failed" }));
+      setGwState((current) => ({
+        ...current,
+        error: r.error || "spawn failed",
+      }));
       return;
     }
     setGwState({
@@ -384,11 +572,14 @@ export function SettingsStatus({
   }, [pollAction]);
 
   const triggerUpdate = useCallback(async () => {
-    setTriggering((t) => ({ ...t, upd: true }));
+    setTriggering((current) => ({ ...current, upd: true }));
     const r = await updateHermes();
-    setTriggering((t) => ({ ...t, upd: false }));
+    setTriggering((current) => ({ ...current, upd: false }));
     if (!r.ok) {
-      setUpdState((s) => ({ ...s, error: r.error || "spawn failed" }));
+      setUpdState((current) => ({
+        ...current,
+        error: r.error || "spawn failed",
+      }));
       return;
     }
     setUpdState({
@@ -405,197 +596,437 @@ export function SettingsStatus({
     status?.config_version != null &&
     status?.latest_config_version != null &&
     status.config_version !== status.latest_config_version;
+  const updateAvailable = status?.update_check?.status === "behind";
+  const healthKind: HealthKind = status?.protocol_mismatch
+    ? "mismatch"
+    : status?.gateway_running
+      ? "healthy"
+      : "offline";
+  const platformNames = Object.keys(status?.gateway_platforms ?? {});
+  const lastCheckedLabel = lastCheckedAt
+    ? lastCheckedAt.toLocaleTimeString(language === "zh-CN" ? "zh-CN" : "en", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "—";
+
+  const healthConfig = {
+    healthy: {
+      icon: CircleCheck,
+      title: t("options.status.health.healthy.title"),
+      subtitle: t("options.status.health.healthy.subtitle"),
+      iconClass:
+        "border-[hsl(var(--success))]/25 bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]",
+    },
+    offline: {
+      icon: WifiOff,
+      title: t("options.status.health.offline.title"),
+      subtitle: t("options.status.health.offline.subtitle"),
+      iconClass: "border-destructive/20 bg-destructive/10 text-destructive",
+    },
+    mismatch: {
+      icon: TriangleAlert,
+      title: t("options.status.health.mismatch.title"),
+      subtitle: t("options.status.health.mismatch.subtitle"),
+      iconClass:
+        "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    },
+  }[healthKind];
+  const HealthIcon = healthConfig.icon;
+
+  let updateSummary = t("options.status.actions.update.unknown");
+  if (status?.update_check?.status === "up_to_date") {
+    updateSummary = t("options.status.actions.update.latest");
+  } else if (updateAvailable) {
+    const commits = status?.update_check?.commits_behind;
+    updateSummary =
+      typeof commits === "number" && commits > 0
+        ? t("options.status.actions.update.behind", { count: commits })
+        : t("options.status.actions.update.available");
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SettingsPaneHeader
-        title="Status"
-        subtitle="Runtime snapshot + lifecycle actions"
+        title={t("options.status.title")}
+        subtitle={t("options.status.subtitle")}
       >
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => refreshStatus({ forceUpdateCheck: true })}
-          disabled={statusLoading}
-        >
-          {statusLoading ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-1 h-3 w-3" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-[10px] text-muted-foreground sm:inline">
+            {t("options.status.lastChecked", { time: lastCheckedLabel })}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => void refreshStatus({ forceUpdateCheck: true })}
+            disabled={statusLoading}
+          >
+            {statusLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {t("options.status.refresh")}
+          </Button>
+        </div>
       </SettingsPaneHeader>
 
-      <div className="min-h-0 flex-1 overflow-auto p-6">
-        <div className="space-y-10">
-          {statusErr && (
+      <div className="min-h-0 flex-1 overflow-auto px-6 pb-8 pt-3">
+        <div className="mx-auto w-full max-w-6xl space-y-6">
+          {statusErr ? (
             <OnboardingGate
               error={statusErr}
-              onRetry={refreshStatus}
+              onRetry={() => void refreshStatus()}
               loading={statusLoading}
+              t={t}
             />
-          )}
-          {!statusErr && status?.protocol_mismatch && (
-            <ProtocolMismatchBanner mismatch={status.protocol_mismatch} />
-          )}
-          {!statusErr && !status && (
-            <p className="text-xs text-muted-foreground">Loading…</p>
-          )}
-
-          {status && (
+          ) : !status ? (
+            <StatusSkeleton />
+          ) : (
             <>
-              <section className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Runtime</h3>
-                <div className="space-y-1.5">
-                  <Field label="Version">
-                    {status.version || "—"}
-                    {status.release_date ? (
-                      <span className="ml-2 text-muted-foreground">
-                        ({status.release_date})
-                      </span>
-                    ) : null}
-                  </Field>
-                  <Field label="Hermes home" mono>
-                    {status.hermes_home || "—"}
-                  </Field>
-                  <Field label="Config path" mono>
-                    {status.config_path || "—"}
-                  </Field>
-                  <Field label="Env path" mono>
-                    {status.env_path || "—"}
-                  </Field>
-                  <Field label="Config version">
-                    {status.config_version ?? "—"}
-                    {status.latest_config_version != null && (
-                      <span
-                        className={`ml-2 text-[10px] ${
-                          versionMismatch
-                            ? "text-amber-600"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        (latest {status.latest_config_version}
-                        {versionMismatch ? ", upgrade needed" : ""})
-                      </span>
+              <section className="relative overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+                <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-primary/[0.08] blur-3xl" />
+                <div className="relative flex flex-col gap-5 px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <span
+                      className={cn(
+                        "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm",
+                        healthConfig.iconClass,
+                      )}
+                    >
+                      <HealthIcon className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                          {healthConfig.title}
+                        </h3>
+                        {updateAvailable && (
+                          <Badge variant="warning" className="text-[10px]">
+                            {t("options.status.metric.updateAvailable")}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                        {healthConfig.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/55 px-3 py-2">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-[10px] text-muted-foreground">
+                      Hermes
+                    </span>
+                    <span className="font-mono text-xs font-semibold text-foreground">
+                      {status.version || "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="relative grid divide-y divide-border/60 border-t border-border/65 bg-muted/[0.12] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  <StatusMetric
+                    icon={
+                      status.gateway_running ? (
+                        <Wifi className="h-4 w-4" />
+                      ) : (
+                        <WifiOff className="h-4 w-4" />
+                      )
+                    }
+                    label={t("options.status.metric.gateway")}
+                    value={t(
+                      status.gateway_running
+                        ? "options.status.metric.online"
+                        : "options.status.metric.offline",
                     )}
-                  </Field>
-                  <Field label="Active sessions">
-                    {status.active_sessions ?? 0}
-                  </Field>
+                    tone={status.gateway_running ? "success" : "destructive"}
+                  />
+                  <StatusMetric
+                    icon={<UsersRound className="h-4 w-4" />}
+                    label={t("options.status.metric.sessions")}
+                    value={status.active_sessions ?? 0}
+                  />
+                  <StatusMetric
+                    icon={<Download className="h-4 w-4" />}
+                    label={t("options.status.metric.update")}
+                    value={updateSummary}
+                    tone={updateAvailable ? "warning" : "default"}
+                  />
                 </div>
               </section>
 
-              <Separator />
+              {status.protocol_mismatch && (
+                <ProtocolMismatchBanner
+                  mismatch={status.protocol_mismatch}
+                  t={t}
+                />
+              )}
 
-              <section className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Gateway</h3>
-                <div className="space-y-1.5">
-                  <Field label="Running">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-xl border border-border/70 bg-card shadow-sm">
+                  <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Gauge className="h-4 w-4" />
+                    </span>
+                    <SectionHeading
+                      title={t("options.status.runtime.title")}
+                      subtitle={t("options.status.runtime.subtitle")}
+                    />
+                  </div>
+                  <div className="px-5 py-3">
+                    <InfoRow label={t("options.status.runtime.release")}>
+                      <span>{status.version || "—"}</span>
+                      {status.release_date && (
+                        <span className="ml-1.5 font-normal text-muted-foreground">
+                          · {status.release_date}
+                        </span>
+                      )}
+                    </InfoRow>
+                    <InfoRow label={t("options.status.runtime.configVersion")}>
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        <span className="font-mono">
+                          {status.config_version ?? "—"}
+                        </span>
+                        {status.latest_config_version != null && (
+                          <Badge
+                            variant={versionMismatch ? "warning" : "secondary"}
+                            className="text-[9px]"
+                          >
+                            {t("options.status.runtime.latest", {
+                              version: status.latest_config_version,
+                            })}
+                          </Badge>
+                        )}
+                      </span>
+                    </InfoRow>
+                    <InfoRow label={t("options.status.runtime.activeSessions")}>
+                      {status.active_sessions ?? 0}
+                    </InfoRow>
+                  </div>
+                  <div className="grid gap-2.5 border-t border-border/60 px-5 py-4">
+                    <PathRow
+                      label={t("options.status.runtime.hermesHome")}
+                      value={status.hermes_home}
+                    />
+                    <PathRow
+                      label={t("options.status.runtime.configPath")}
+                      value={status.config_path}
+                    />
+                    <PathRow
+                      label={t("options.status.runtime.envPath")}
+                      value={status.env_path}
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-border/70 bg-card shadow-sm">
+                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                          status.gateway_running
+                            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                            : "bg-destructive/10 text-destructive",
+                        )}
+                      >
+                        <Server className="h-4 w-4" />
+                      </span>
+                      <SectionHeading
+                        title={t("options.status.gateway.title")}
+                        subtitle={t("options.status.gateway.subtitle")}
+                      />
+                    </div>
                     <Badge
-                      variant={status.gateway_running ? "default" : "secondary"}
-                      className="text-[10px]"
-                    >
-                      {status.gateway_running ? "yes" : "no"}
-                    </Badge>
-                  </Field>
-                  <Field label="PID">{status.gateway_pid ?? "—"}</Field>
-                  <Field label="State">{status.gateway_state ?? "—"}</Field>
-                  <Field label="Platforms">
-                    {(() => {
-                      const names = Object.keys(status.gateway_platforms ?? {});
-                      if (!names.length) {
-                        return (
-                          <span className="text-muted-foreground">none</span>
-                        );
+                      variant={
+                        status.gateway_running ? "success" : "destructive"
                       }
-                      return (
-                        <span className="flex flex-wrap gap-1">
-                          {names.map((n) => (
+                      className="gap-1.5 text-[10px]"
+                    >
+                      <CircleDot className="h-3 w-3" />
+                      {t(
+                        status.gateway_running
+                          ? "options.status.metric.online"
+                          : "options.status.metric.offline",
+                      )}
+                    </Badge>
+                  </div>
+                  <div className="px-5 py-3">
+                    <InfoRow label={t("options.status.gateway.state")}>
+                      {status.gateway_state ?? "—"}
+                    </InfoRow>
+                    <InfoRow label={t("options.status.gateway.pid")}>
+                      <span className="font-mono">
+                        {status.gateway_pid ?? "—"}
+                      </span>
+                    </InfoRow>
+                    <InfoRow label={t("options.status.gateway.updatedAt")}>
+                      {fmtTimestamp(status.gateway_updated_at)}
+                    </InfoRow>
+                    <InfoRow label={t("options.status.gateway.platforms")}>
+                      {platformNames.length > 0 ? (
+                        <span className="flex flex-wrap justify-end gap-1">
+                          {platformNames.map((name) => (
                             <Badge
-                              key={n}
+                              key={name}
                               variant="secondary"
-                              className="text-[10px]"
+                              className="text-[9px]"
                             >
-                              {n}
+                              {name}
                             </Badge>
                           ))}
                         </span>
-                      );
-                    })()}
-                  </Field>
+                      ) : (
+                        <span className="font-normal text-muted-foreground">
+                          {t("options.status.gateway.noPlatforms")}
+                        </span>
+                      )}
+                    </InfoRow>
+                  </div>
                   {status.gateway_exit_reason && (
-                    <Field label="Last exit">
-                      {status.gateway_exit_reason}
-                    </Field>
+                    <div className="mx-5 mb-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/[0.045] px-3 py-2.5">
+                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium text-destructive">
+                          {t("options.status.gateway.lastExit")}
+                        </p>
+                        <p className="mt-0.5 break-words text-[11px] text-muted-foreground">
+                          {status.gateway_exit_reason}
+                        </p>
+                      </div>
+                    </div>
                   )}
-                  {status.gateway_updated_at != null && (
-                    <Field label="State updated">
-                      {fmtTimestamp(status.gateway_updated_at)}
-                    </Field>
-                  )}
+                </section>
+              </div>
+
+              <section className="space-y-3">
+                <SectionHeading
+                  title={t("options.status.actions.title")}
+                  subtitle={t("options.status.actions.subtitle")}
+                />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+                        <RotateCw className="h-4 w-4" />
+                      </span>
+                      <ActionStateBadge state={gwState} t={t} />
+                    </div>
+                    <div className="mt-4 space-y-1">
+                      <h4 className="text-sm font-semibold text-foreground">
+                        {t("options.status.actions.restart.title")}
+                      </h4>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {t("options.status.actions.restart.description")}
+                      </p>
+                    </div>
+                    {gwState.error && (
+                      <p className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                        {gwState.error}
+                      </p>
+                    )}
+                    <div className="mt-5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void triggerGateway()}
+                        disabled={gwState.running || triggering.gw}
+                      >
+                        {gwState.running || triggering.gw ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCw className="h-3.5 w-3.5" />
+                        )}
+                        {t("options.status.actions.restart.button")}
+                      </Button>
+                    </div>
+                    <GatewayActionDetails state={gwState} t={t} />
+                  </div>
+
+                  <div
+                    className={cn(
+                      "relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm",
+                      updateAvailable
+                        ? "border-amber-500/30"
+                        : "border-border/70",
+                    )}
+                  >
+                    {updateAvailable && (
+                      <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-amber-400/10 blur-3xl" />
+                    )}
+                    <div className="relative flex items-start justify-between gap-3">
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                          updateAvailable
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            : "bg-primary/10 text-primary",
+                        )}
+                      >
+                        <Download className="h-4 w-4" />
+                      </span>
+                      <ActionStateBadge state={updState} t={t} />
+                    </div>
+                    <div className="relative mt-4 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-semibold text-foreground">
+                          {t("options.status.actions.update.title")}
+                        </h4>
+                        {updateAvailable && (
+                          <Badge variant="warning" className="text-[9px]">
+                            {t("options.status.actions.update.available")}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {t("options.status.actions.update.description")}
+                      </p>
+                      <p
+                        className={cn(
+                          "pt-1 text-[11px] font-medium",
+                          updateAvailable
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {updateSummary}
+                      </p>
+                    </div>
+                    {updState.error && (
+                      <p className="relative mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                        {updState.error}
+                      </p>
+                    )}
+                    <div className="relative mt-5 flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={updateAvailable ? "default" : "outline"}
+                        onClick={() => void triggerUpdate()}
+                        disabled={updState.running || triggering.upd}
+                      >
+                        {updState.running || triggering.upd ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        {t("options.status.actions.update.button")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={onViewUpdateLogs}
+                        disabled={!onViewUpdateLogs}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        {t("options.status.viewUpdateLogs")}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </section>
-
-              <Separator />
             </>
           )}
-
-          <section className="space-y-3">
-            <h3 className="text-sm font-medium text-foreground">Actions</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                size="sm"
-                onClick={triggerGateway}
-                disabled={gwState.running || triggering.gw}
-              >
-                {(gwState.running || triggering.gw) && (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                )}
-                Restart gateway
-              </Button>
-              <Button
-                size="sm"
-                variant={
-                  status?.update_check?.status === "behind"
-                    ? "default"
-                    : "outline"
-                }
-                onClick={triggerUpdate}
-                disabled={updState.running || triggering.upd}
-              >
-                {(updState.running || triggering.upd) && (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                )}
-                Update Hermes
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5"
-                onClick={onViewUpdateLogs}
-                disabled={!onViewUpdateLogs}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {t("options.status.viewUpdateLogs")}
-              </Button>
-              <UpdateHint status={status} />
-              {!updState.running && updState.exitCode != null && (
-                <Badge
-                  variant={updState.exitCode === 0 ? "default" : "destructive"}
-                  className="text-[10px]"
-                >
-                  exit {updState.exitCode}
-                </Badge>
-              )}
-              {updState.error && (
-                <span className="text-[11px] text-destructive">
-                  {updState.error}
-                </span>
-              )}
-            </div>
-            <ActionLog actionName="gateway-restart" state={gwState} />
-          </section>
         </div>
       </div>
     </div>

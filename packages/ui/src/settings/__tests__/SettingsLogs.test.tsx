@@ -61,6 +61,9 @@ describe("Hermes update logs", () => {
     const shortcut = await screen.findByRole("button", {
       name: "View update logs",
     });
+    expect(screen.getByText("All systems operational")).toBeInTheDocument();
+    expect(screen.getByText("Hermes runtime")).toBeInTheDocument();
+    expect(screen.getAllByText("Local gateway").length).toBeGreaterThan(0);
     await userEvent.click(shortcut);
 
     expect(onViewUpdateLogs).toHaveBeenCalledTimes(1);
@@ -74,5 +77,20 @@ describe("Hermes update logs", () => {
     expect(
       screen.queryByText("Hermes update complete"),
     ).not.toBeInTheDocument();
+  });
+
+  it("surfaces an offline gateway as the primary health conclusion", async () => {
+    core.getHermesStatus.mockResolvedValue({
+      ok: true,
+      version: "1.0.0",
+      gateway_running: false,
+      gateway_state: "stopped",
+      update_check: { status: "up_to_date", commits_behind: 0 },
+    });
+
+    render(<SettingsStatus onViewUpdateLogs={vi.fn()} />);
+
+    expect(await screen.findByText("Gateway is offline")).toBeInTheDocument();
+    expect(screen.getAllByText("Offline").length).toBeGreaterThan(0);
   });
 });
