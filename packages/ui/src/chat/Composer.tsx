@@ -229,9 +229,9 @@ export interface ComposerProps {
   // Frame
   /**
    * Visual identity of the frame:
-   *   - "default" (the chat surface, Quick-Ask, ChatView): tight bordered
-   *     rounded-lg over solid bg-background.
-   *   - "hero" (homepage empty state): a glass card — rounded-2xl,
+   *   - "default" (the chat surface, Quick-Ask, ChatView): softly bordered
+   *     rounded-2xl over solid bg-background.
+   *   - "hero" (homepage empty state): a glass card — 24px radius,
    *     translucent bg-card, backdrop-blur, big drop shadow, larger
    *     textarea padding. Use when the composer is the focal point of
    *     the page rather than a tool bar at the bottom.
@@ -594,7 +594,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         }}
         className={cn(
           "relative flex w-full flex-col",
-          attachments?.dragOver && "rounded-lg ring-2 ring-primary/30",
+          attachments?.dragOver &&
+            (frameVariant === "hero" ? "rounded-[24px]" : "rounded-2xl"),
+          attachments?.dragOver && "ring-2 ring-primary/30",
+          flatTop && attachments?.dragOver && "rounded-t-none",
           className,
           wrapperProps?.className,
         )}
@@ -604,13 +607,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           className={cn(
             "relative flex flex-col transition-colors",
             frameVariant === "hero"
-              ? // Hero: glass card. rounded-2xl, translucent bg, backdrop
+              ? // Hero: glass card. 24px radius, translucent bg, backdrop
                 // blur, big drop shadow, soft focus tint. Used by the
                 // homepage empty state where the composer is THE focal
                 // point of the page.
-                "rounded-2xl bg-card/70 shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.18)] backdrop-blur-2xl duration-200 focus-within:bg-card/85 dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]"
+                "rounded-[24px] bg-card/70 shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.18)] backdrop-blur-2xl duration-200 focus-within:bg-card/85 dark:shadow-[0_10px_30px_-12px_rgb(0_0_0_/_0.5)]"
               : // Default: solid bordered surface for chat/quick-ask.
-                "rounded-lg border border-input bg-background shadow-sm focus-within:border-ring/25",
+                "rounded-2xl border border-input bg-background shadow-sm focus-within:border-ring/25",
             flatTop && "rounded-t-none",
             frameClassName,
           )}
@@ -619,7 +622,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             <div
               className={cn(
                 "pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-primary/5 text-sm font-medium text-primary",
-                frameVariant === "hero" ? "rounded-2xl" : "rounded-lg",
+                frameVariant === "hero" ? "rounded-[24px]" : "rounded-2xl",
+                flatTop && "rounded-t-none",
               )}
             >
               {dropOverlay}
