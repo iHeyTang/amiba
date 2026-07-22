@@ -31,15 +31,12 @@ import {
 } from "./tool-usage"
 
 const RECENT_LIMIT = 30
-const HEATMAP_RANGES = [12, 26, 52] as const
-type HeatmapRange = (typeof HEATMAP_RANGES)[number]
-const HEATMAP_DEFAULT_RANGE: HeatmapRange = 12
-const HEATMAP_RANGE_SETTING_KEY = "usage.tools.ui.heatmap.weeks"
+const HEATMAP_WEEKS = 52
 const DAY_RANGES = [1, 3, 7] as const
 type DayRange = (typeof DAY_RANGES)[number]
 const TREND_RANGE_SETTING_KEY = "usage.tools.ui.trend.days"
 const BYTOOL_RANGE_SETTING_KEY = "usage.tools.ui.bytool.days"
-const CONTENT_MAX_W_CLASS = "max-w-2xl"
+const CONTENT_MAX_W_CLASS = "max-w-3xl"
 
 const MONTH_NAMES_ZH = [
   "1月", "2月", "3月", "4月", "5月", "6月",
@@ -89,16 +86,11 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
   const [summary, setSummary] = useState<MeterSummary | null>(null)
   const [recent, setRecent] = useState<ToolInvocation[]>([])
   const [heatmap, setHeatmap] = useState<ToolHeatmapCell[]>([])
-  const [heatmapWeeks, setHeatmapWeeks] = useState<HeatmapRange>(HEATMAP_DEFAULT_RANGE)
   const [trendDays, setTrendDays] = useState<DayRange>(7)
   const [byToolDays, setByToolDays] = useState<DayRange>(7)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void readUsagePref<HeatmapRange>(HEATMAP_RANGE_SETTING_KEY, HEATMAP_DEFAULT_RANGE)
-      .then((stored) => {
-        if (HEATMAP_RANGES.includes(stored)) setHeatmapWeeks(stored)
-      })
     void readUsagePref<DayRange>(TREND_RANGE_SETTING_KEY, 7)
       .then((stored) => {
         if (DAY_RANGES.includes(stored)) setTrendDays(stored)
@@ -109,25 +101,22 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
       })
   }, [])
 
-  const refresh = useCallback(
-    async (weeks: HeatmapRange = heatmapWeeks) => {
-      if (!reader) return
-      setError(null)
-      try {
-        const [s, r, h] = await Promise.all([
-          fetchToolSummary(reader),
-          fetchToolRecent(reader, RECENT_LIMIT),
-          fetchToolHeatmap(reader, weeks),
-        ])
-        setSummary(s)
-        setRecent(r)
-        setHeatmap(h)
-      } catch (e) {
-        setError((e as Error).message ?? String(e))
-      }
-    },
-    [reader, heatmapWeeks],
-  )
+  const refresh = useCallback(async () => {
+    if (!reader) return
+    setError(null)
+    try {
+      const [s, r, h] = await Promise.all([
+        fetchToolSummary(reader),
+        fetchToolRecent(reader, RECENT_LIMIT),
+        fetchToolHeatmap(reader, HEATMAP_WEEKS),
+      ])
+      setSummary(s)
+      setRecent(r)
+      setHeatmap(h)
+    } catch (e) {
+      setError((e as Error).message ?? String(e))
+    }
+  }, [reader])
 
   useEffect(() => {
     void refresh()
@@ -140,16 +129,6 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
   }, [source, refresh])
 
   useRefetchOnFocus(() => void refresh())
-
-  const changeHeatmapRange = useCallback(
-    (weeks: HeatmapRange) => {
-      if (weeks === heatmapWeeks) return
-      setHeatmapWeeks(weeks)
-      writeUsagePref(HEATMAP_RANGE_SETTING_KEY, weeks)
-      void refresh(weeks)
-    },
-    [heatmapWeeks, refresh],
-  )
 
   const changeTrendRange = useCallback(
     (days: DayRange) => {
@@ -223,17 +202,7 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
 
           <HeroStats summary={summary} t={t} />
 
-          <Section
-            title={t("usage.tools.section.activity")}
-            trailing={
-              <ChipSwitcher
-                options={HEATMAP_RANGES}
-                value={heatmapWeeks}
-                onChange={(w) => changeHeatmapRange(w)}
-                formatLabel={(w) => t("usage.heatmap.range", { weeks: String(w) })}
-              />
-            }
-          >
+          <Section title={t("usage.tools.section.activity")}>
             {heatmap.length > 0 ? (
               <ToolHeatmap cells={heatmap} t={t} language={language} />
             ) : (

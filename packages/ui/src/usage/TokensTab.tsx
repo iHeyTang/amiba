@@ -3,7 +3,7 @@
  *
  * Layout (top → bottom):
  *   • Hero stat trio    — today: tokens / turns / sessions
- *   • Activity heatmap  — 12 / 26 / 52 weeks; hover for per-day model breakdown
+ *   • Activity heatmap  — fixed 52-week view; hover for per-day model breakdown
  *   • Last 7 days       — aligned columns
  *   • By model (today)  — horizontal bar chart of token share
  *   • Recent sessions   — newest-first list
@@ -39,10 +39,7 @@ import {
 type TFunc = ReturnType<typeof useT>["t"]
 
 const RECENT_LIMIT = 20
-const HEATMAP_RANGES = [12, 26, 52] as const
-type HeatmapRange = (typeof HEATMAP_RANGES)[number]
-const HEATMAP_DEFAULT_RANGE: HeatmapRange = 12
-const HEATMAP_RANGE_SETTING_KEY = "usage.tokens.ui.heatmap.weeks"
+const HEATMAP_WEEKS = 52
 /** Day-range options shared by the "Recent activity" and "By model"
  *  sections — 1 / 3 / 7 calendar days. Stored separately per section
  *  so the user can compare today's model split against the 7-day
@@ -52,7 +49,7 @@ type DayRange = (typeof DAY_RANGES)[number]
 const TREND_RANGE_SETTING_KEY = "usage.tokens.ui.trend.days"
 const BYMODEL_RANGE_SETTING_KEY = "usage.tokens.ui.bymodel.days"
 const AUTO_REFRESH_INTERVAL_MS = 30_000
-const CONTENT_MAX_W_CLASS = "max-w-2xl"
+const CONTENT_MAX_W_CLASS = "max-w-3xl"
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -100,18 +97,11 @@ export function TokensTab() {
   const [summary, setSummary] = useState<MeterSummary | null>(null)
   const [recent, setRecent] = useState<TurnUsage[]>([])
   const [heatmap, setHeatmap] = useState<TokenHeatmapCell[]>([])
-  const [heatmapWeeks, setHeatmapWeeks] = useState<HeatmapRange>(HEATMAP_DEFAULT_RANGE)
   const [trendDays, setTrendDays] = useState<DayRange>(7)
   const [byModelDays, setByModelDays] = useState<DayRange>(7)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void readUsagePref<HeatmapRange>(
-      HEATMAP_RANGE_SETTING_KEY,
-      HEATMAP_DEFAULT_RANGE,
-    ).then((stored) => {
-      if (HEATMAP_RANGES.includes(stored)) setHeatmapWeeks(stored)
-    })
     void readUsagePref<DayRange>(TREND_RANGE_SETTING_KEY, 7).then((stored) => {
       if (DAY_RANGES.includes(stored)) setTrendDays(stored)
     })
@@ -120,26 +110,23 @@ export function TokensTab() {
     })
   }, [])
 
-  const refresh = useCallback(
-    async (weeks: HeatmapRange = heatmapWeeks) => {
-      setError(null)
-      try {
-        const [s, r, h] = await Promise.all([
-          fetchTokenSummary(),
-          fetchTokenRecent(RECENT_LIMIT),
-          fetchTokenHeatmap(weeks),
-        ])
-        setSummary(s)
-        setRecent(r)
-        setHeatmap(h)
-      } catch (e) {
-        setError((e as Error).message ?? String(e))
-      }
-    },
-    [heatmapWeeks],
-  )
+  const refresh = useCallback(async () => {
+    setError(null)
+    try {
+      const [s, r, h] = await Promise.all([
+        fetchTokenSummary(),
+        fetchTokenRecent(RECENT_LIMIT),
+        fetchTokenHeatmap(HEATMAP_WEEKS),
+      ])
+      setSummary(s)
+      setRecent(r)
+      setHeatmap(h)
+    } catch (e) {
+      setError((e as Error).message ?? String(e))
+    }
+  }, [])
 
-  // Load on mount and whenever the heatmap range changes (via `refresh`).
+  // Load the fixed annual heatmap on mount.
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -152,16 +139,6 @@ export function TokensTab() {
   }, [refresh])
 
   useRefetchOnFocus(() => void refresh())
-
-  const changeHeatmapRange = useCallback(
-    async (weeks: HeatmapRange) => {
-      if (weeks === heatmapWeeks) return
-      setHeatmapWeeks(weeks)
-      writeUsagePref(HEATMAP_RANGE_SETTING_KEY, weeks)
-      void refresh(weeks)
-    },
-    [heatmapWeeks, refresh],
-  )
 
   const changeTrendRange = useCallback(
     async (days: DayRange) => {
@@ -232,17 +209,7 @@ export function TokensTab() {
           <HeroStats summary={summary} t={t} />
 
           {/* Activity heatmap */}
-          <Section
-            title={t("usage.tokens.section.activity")}
-            trailing={
-              <ChipSwitcher
-                options={HEATMAP_RANGES}
-                value={heatmapWeeks}
-                onChange={(w) => void changeHeatmapRange(w)}
-                formatLabel={(w) => t("usage.heatmap.range", { weeks: String(w) })}
-              />
-            }
-          >
+          <Section title={t("usage.tokens.section.activity")}>
             {heatmap.length > 0 ? (
               <TokenHeatmap cells={heatmap} t={t} language={language} />
             ) : (

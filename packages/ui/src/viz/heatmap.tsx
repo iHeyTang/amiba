@@ -32,8 +32,8 @@ import { createPortal } from "react-dom"
 
 import { cn } from "../primitives"
 
-const HEATMAP_CELL_PX = 14
-const HEATMAP_CELL_GAP_PX = 3
+const HEATMAP_CELL_PX = 10
+const HEATMAP_CELL_GAP_PX = 2
 
 const DEFAULT_MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -241,8 +241,8 @@ export function Heatmap<T extends HeatmapCellBase>({
           <div>
             {/* Month axis */}
             <div
-              className="flex select-none gap-[3px] pb-1 text-xs uppercase tracking-wide text-muted-foreground/70"
-              style={{ height: cellSize + 4 }}
+              className="flex select-none pb-1 text-xs uppercase tracking-wide text-muted-foreground/70"
+              style={{ height: cellSize + 4, gap }}
             >
               {monthLabels.map((m, ci) => (
                 <div
