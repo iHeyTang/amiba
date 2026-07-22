@@ -386,7 +386,11 @@ function ProtocolMismatchBanner({
 
 function StatusSkeleton() {
   return (
-    <div className="h-96 animate-pulse rounded-xl border border-border/60 bg-muted/20" />
+    <div className="animate-pulse space-y-7">
+      <div className="h-16 border-b border-border/60 bg-muted/10" />
+      <div className="h-44 border-y border-border/60 bg-muted/10" />
+      <div className="h-52 border-y border-border/60 bg-muted/10" />
+    </div>
   );
 }
 
@@ -590,10 +594,11 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
       <SettingsPaneHeader
         title={t("options.status.title")}
         subtitle={t("options.status.subtitle")}
+        contentClassName="mx-auto max-w-[880px]"
       />
 
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-8 pt-3">
-        <div className="w-full max-w-[880px] space-y-3">
+        <div className="mx-auto w-full max-w-[880px] space-y-3">
           {statusErr ? (
             <OnboardingGate
               error={statusErr}
@@ -612,8 +617,8 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                 />
               )}
 
-              <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="space-y-7">
+                <section className="flex flex-col gap-3 border-b border-border/70 pb-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <span
                       className={cn(
@@ -671,16 +676,16 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       {t("options.status.refresh")}
                     </Button>
                   </div>
-                </div>
+                </section>
 
-                <section className="border-t border-border/65">
-                  <div className="flex items-center gap-2 bg-muted/25 px-4 py-2.5">
+                <section>
+                  <div className="mb-2 flex items-center gap-2 px-1">
                     <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                       {t("options.status.runtime.title")}
                     </h3>
                   </div>
-                  <div>
+                  <div className="border-y border-border/60">
                     <StatusLine
                       label={t("options.status.runtime.release")}
                       actions={
@@ -782,8 +787,8 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                   </div>
                 </section>
 
-                <section className="border-t border-border/65">
-                  <div className="flex items-center justify-between gap-3 bg-muted/25 px-4 py-2.5">
+                <section>
+                  <div className="mb-2 flex items-center justify-between gap-3 px-1">
                     <span className="flex items-center gap-2">
                       <Server className="h-3.5 w-3.5 text-muted-foreground" />
                       <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -794,7 +799,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                       {fmtTimestamp(status.gateway_updated_at)}
                     </span>
                   </div>
-                  <div>
+                  <div className="border-y border-border/60">
                     <StatusLine
                       label={t("options.status.gateway.state")}
                       actions={

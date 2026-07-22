@@ -22,7 +22,10 @@ interface PaneHeaderConfig {
   chromeHeightPx: number | undefined;
 }
 
-const DEFAULT_CONFIG: PaneHeaderConfig = { className: "", chromeHeightPx: undefined };
+const DEFAULT_CONFIG: PaneHeaderConfig = {
+  className: "",
+  chromeHeightPx: undefined,
+};
 
 const PaneHeaderContext = createContext<PaneHeaderConfig>(DEFAULT_CONFIG);
 
@@ -40,7 +43,9 @@ export function SettingsPaneProvider({
     chromeHeightPx,
   };
   return (
-    <PaneHeaderContext.Provider value={value}>{children}</PaneHeaderContext.Provider>
+    <PaneHeaderContext.Provider value={value}>
+      {children}
+    </PaneHeaderContext.Provider>
   );
 }
 
@@ -58,6 +63,9 @@ interface SettingsPaneHeaderProps {
   /** Right-aligned actions (buttons, badges). Already opted out of the
    *  drag region via the global `.app-drag-region button` CSS rule. */
   children?: ReactNode;
+  /** Optional width/alignment constraints for the visible header content.
+   *  The outer header remains full-width so desktop window dragging works. */
+  contentClassName?: string;
 }
 
 /**
@@ -77,6 +85,7 @@ export function SettingsPaneHeader({
   subtitle,
   subtitleTooltip,
   children,
+  contentClassName,
 }: SettingsPaneHeaderProps) {
   const { className, chromeHeightPx } = useContext(PaneHeaderContext);
   const hasChromeFloor = chromeHeightPx !== undefined;
@@ -95,7 +104,7 @@ export function SettingsPaneHeader({
   return (
     <header
       className={cn(
-        "flex shrink-0 items-center justify-between gap-3 px-6",
+        "shrink-0 px-6",
         // Desktop hosts (chromeHeightPx set) use tighter padding so the
         // title sits near the chrome line; web/extension keeps the more
         // generous pt-5/pb-3 it shipped with.
@@ -104,22 +113,29 @@ export function SettingsPaneHeader({
       )}
       style={hasChromeFloor ? { minHeight: chromeHeightPx } : undefined}
     >
-      <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-        {title && (
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            {title}
-          </h2>
+      <div
+        className={cn(
+          "flex w-full items-center justify-between gap-3",
+          contentClassName,
         )}
-        {subtitle && (
-          <p
-            className="truncate text-[11px] text-muted-foreground"
-            title={subtitleTooltip}
-          >
-            {subtitle}
-          </p>
-        )}
+      >
+        <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
+          {title && (
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              {title}
+            </h2>
+          )}
+          {subtitle && (
+            <p
+              className="truncate text-[11px] text-muted-foreground"
+              title={subtitleTooltip}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
+        {children}
       </div>
-      {children}
     </header>
   );
 }
