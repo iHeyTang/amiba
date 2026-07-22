@@ -229,10 +229,10 @@ export interface ComposerProps {
   // Frame
   /**
    * Visual identity of the frame:
-   *   - "default" (the chat surface, Quick-Ask, ChatView): softly bordered
-   *     rounded-2xl over solid bg-background.
-   *   - "hero" (homepage empty state): a glass card — 24px radius,
-   *     translucent bg-card, backdrop-blur, soft elevation, larger
+   *   - "default" (the chat surface, Quick-Ask, ChatView): a compact,
+   *     borderless rounded-2xl surface over solid bg-background.
+   *   - "hero" (homepage empty state): a borderless glass surface — 24px
+   *     radius, translucent bg-card, soft elevation, larger
    *     textarea padding. Use when the composer is the focal point of
    *     the page rather than a tool bar at the bottom.
    */
@@ -607,16 +607,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           className={cn(
             "relative flex flex-col transition-colors",
             frameVariant === "hero"
-              ? // Hero: glass card. A very low-contrast edge carries the
-                // shape while shallow ambient shadow supplies the depth.
+              ? // Hero: a borderless glass surface. A diffuse ambient shadow
+                // describes the shape without drawing a hard outline.
                 // Used by the
                 // homepage empty state where the composer is THE focal
                 // point of the page.
-                "rounded-[24px] border border-border/30 bg-card/80 shadow-[0_8px_28px_-18px_rgb(0_0_0_/_0.28)] backdrop-blur-2xl duration-200 focus-within:border-ring/15 focus-within:bg-card/90 dark:shadow-[0_8px_28px_-18px_rgb(0_0_0_/_0.62)]"
-              : // Default: a quiet edge plus shallow elevation keeps the
-                // project/chat composer distinct without reading as a hard
-                // outlined control.
-                "rounded-2xl border border-border/45 bg-background shadow-[0_4px_14px_-8px_rgb(0_0_0_/_0.24)] focus-within:border-ring/20 dark:shadow-[0_4px_16px_-8px_rgb(0_0_0_/_0.55)]",
+                "rounded-[24px] bg-card/85 shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.2)] backdrop-blur-2xl dark:shadow-[0_12px_34px_-20px_rgb(0_0_0_/_0.6)]"
+              : // Default: the same borderless treatment at a tighter scale.
+                // Shallow ambient depth keeps it legible on the chat surface.
+                "rounded-2xl bg-background shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.22)] dark:shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.56)]",
             flatTop && "rounded-t-none",
             frameClassName,
           )}
