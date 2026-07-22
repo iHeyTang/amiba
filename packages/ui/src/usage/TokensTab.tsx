@@ -234,9 +234,9 @@ export function TokensTab() {
                 {trendBuckets.map((day) => (
                   <li
                     key={day.day}
-                    className="grid grid-cols-[40px,80px,1fr,80px] items-center gap-3 text-sm"
+                    className="grid grid-cols-[52px,80px,1fr,80px] items-center gap-3 text-sm"
                   >
-                    <span className="font-mono text-muted-foreground/80">
+                    <span className="whitespace-nowrap font-mono tabular-nums text-muted-foreground/80">
                       {formatMonthDay(day.day)}
                     </span>
                     <span className="whitespace-nowrap text-muted-foreground tabular-nums">
