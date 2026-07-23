@@ -75,7 +75,7 @@ export interface UseStreamBufferResult {
   // --- Stream-event handlers -----------------------------------------
   /** Append a `delta.content` chunk. Schedules a flush. */
   onChunk: (text: string) => void;
-  /** Append a `reasoning` chunk. Schedules a verbose flush. */
+  /** Replace the latest ephemeral progress note. Schedules a verbose flush. */
   onReasoning: (text: string) => void;
   /** Overwrite the running tool-call list. Schedules a verbose flush. */
   onToolCalls: (calls: StreamedToolCall[]) => void;
@@ -195,9 +195,10 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   const applyVerboseToAssistant = useCallback((): void => {
     const v = verboseStateRef.current;
     if (!v) return;
-    // Reasoning rides on its own field so the bubble renderer can chip it
-    // separately from the body text. ``streamVerbose`` now carries only
-    // the tool-args markdown (still hidden behind the dev verbose toggle).
+    // Reasoning rides on its own field so the bubble renderer can fold it
+    // separately from the body text. ``streamVerbose`` carries only a
+    // backward-compatible aggregate of tool arguments; the progress events
+    // below receive per-call details for the normal disclosure UI.
     const rs = v.reasoning.trimEnd();
     const parts: string[] = [];
     const named = v.tools.filter((tool) => tool.name);
@@ -212,6 +213,14 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     const progress = v.hermesOrder
       .map((id) => v.hermesById.get(id))
       .filter((ev): ev is HermesToolProgress => Boolean(ev));
+    const progressWithDetails = progress.map((event) => {
+      if (event.label && event.label.trim() !== event.tool) return event;
+      const call =
+        named.find((candidate) => candidate.id === event.toolCallId) ??
+        named.find((candidate) => candidate.name === event.tool);
+      const argumentsText = call?.arguments.trim();
+      return argumentsText ? { ...event, label: argumentsText } : event;
+    });
     // Snapshot the timeline so React sees a new identity for each text
     // item when its content grows (text items are mutated in place
     // during the run).
@@ -226,7 +235,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
               ...m,
               streamVerbose: md,
               reasoning: rs || undefined,
-              hermesToolProgress: progress,
+              hermesToolProgress: progressWithDetails,
               assistantTimeline: timelineSnapshot,
             }
           : m,
@@ -329,7 +338,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   const onReasoning = useCallback(
     (text: string): void => {
       const v = verboseStateRef.current;
-      if (v) v.reasoning += text;
+      if (v) v.reasoning = text;
       scheduleVerboseFlush();
     },
     [scheduleVerboseFlush],

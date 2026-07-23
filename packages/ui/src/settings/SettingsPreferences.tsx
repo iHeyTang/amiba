@@ -49,7 +49,6 @@ const ACCENT_LABEL_I18N: Record<AccentPreference, MessageKey> = {
   graphite: "options.preference.accent.graphite",
 };
 
-const SHOW_STREAM_DETAILS_KEY = "settings.chat.showStreamDetails";
 const NEWTAB_WALLPAPER_KEY = "settings.newtab.wallpaper.enabled";
 const SUMMON_HOTKEY_KEY = "settings.desktop.summonHotkey";
 // Mirrors the key used by FullScreenChatView so a write here propagates
@@ -91,14 +90,13 @@ function parseSummonHotkey(raw: unknown): SummonHotkey {
 /**
  * Appearance settings — a top-level tab. Merges what used to be the
  * "Appearance" + "Chat" preference sub-tabs into one page (language, theme,
- * wallpaper, message width, stream details, quick actions).
+ * wallpaper, message width, quick actions).
  */
 export function SettingsAppearance() {
   const { t } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
   const [accentPref, setAccentPref] = useStoredAccentPreference();
   const [langPref, setLangPref] = useStoredLanguagePreference();
-  const [showStreamDetails, setShowStreamDetails] = useState(false);
   // Default `true` matches the new-tab page's runtime default (see
   // `useWallpaper`).
   const [wallpaperEnabled, setWallpaperEnabled] = useState(true);
@@ -128,25 +126,15 @@ export function SettingsAppearance() {
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
-    const keys = [
-      SHOW_STREAM_DETAILS_KEY,
-      NEWTAB_WALLPAPER_KEY,
-      MESSAGES_WIDTH_KEY,
-    ];
+    const keys = [NEWTAB_WALLPAPER_KEY, MESSAGES_WIDTH_KEY];
     void storage.get(keys).then((r) => {
       if (cancelled) return;
-      const stream = r[SHOW_STREAM_DETAILS_KEY];
-      if (typeof stream === "boolean") setShowStreamDetails(stream);
       const wp = r[NEWTAB_WALLPAPER_KEY];
       if (typeof wp === "boolean") setWallpaperEnabled(wp);
       const w = r[MESSAGES_WIDTH_KEY];
       if (isMessagesMaxWidth(w)) setMessagesWidth(w);
     });
     const unsub = storage.watch(keys, (changes) => {
-      const stream = changes[SHOW_STREAM_DETAILS_KEY];
-      if (stream && typeof stream.newValue === "boolean") {
-        setShowStreamDetails(stream.newValue);
-      }
       const wp = changes[NEWTAB_WALLPAPER_KEY];
       if (wp && typeof wp.newValue === "boolean") {
         setWallpaperEnabled(wp.newValue);
@@ -195,17 +183,10 @@ export function SettingsAppearance() {
               t={t}
               messagesWidth={messagesWidth}
               widthOptions={widthOptions}
-              showStreamDetails={showStreamDetails}
               onWidthChange={(v) => {
                 setMessagesWidth(v);
                 void getPlatform().storage.set({
                   [MESSAGES_WIDTH_KEY]: v,
-                });
-              }}
-              onStreamChange={(next) => {
-                setShowStreamDetails(next);
-                void getPlatform().storage.set({
-                  [SHOW_STREAM_DETAILS_KEY]: next,
                 });
               }}
             />
@@ -332,16 +313,12 @@ function ChatSection({
   t,
   messagesWidth,
   widthOptions,
-  showStreamDetails,
   onWidthChange,
-  onStreamChange,
 }: {
   t: TranslateFn;
   messagesWidth: MessagesMaxWidth;
   widthOptions: { value: MessagesMaxWidth; label: string }[];
-  showStreamDetails: boolean;
   onWidthChange: (v: MessagesMaxWidth) => void;
-  onStreamChange: (next: boolean) => void;
 }) {
   return (
     <div className="space-y-8">
@@ -352,13 +329,6 @@ function ChatSection({
           value={messagesWidth}
           options={widthOptions}
           onChange={onWidthChange}
-        />
-        <SwitchRow
-          id="prefs-show-stream-details"
-          label={t("options.preference.stream.label")}
-          hint={t("options.preference.stream.desc")}
-          checked={showStreamDetails}
-          onChange={onStreamChange}
         />
       </div>
       {/* Quick-actions live under Chat because they're composer-side

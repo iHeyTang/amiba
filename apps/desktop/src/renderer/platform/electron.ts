@@ -59,6 +59,8 @@ export function createElectronAdapter(): PlatformAdapter {
     shell: { openExternal: (url) => bridge.shell.openExternal(url) },
 
     workspaces: {
+      chooseDirectory: (defaultPath) =>
+        bridge.workspaces.chooseDirectory(defaultPath),
       bind: (sessionId, p) => bridge.workspaces.bind(sessionId, p),
       unbind: (sessionId) => bridge.workspaces.unbind(sessionId),
       getCurrent: (sessionId) => bridge.workspaces.getCurrent(sessionId),

@@ -1,6 +1,5 @@
 import {
   Bot,
-  Brain,
   ChevronDown,
   ChevronUp,
   Disc,
@@ -16,7 +15,13 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
 import { getPlatform, type StorageChangeMap } from "@amiba/platform";
@@ -66,6 +71,7 @@ import { ApprovalBanner } from "./bubble/approval";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
 import { Composer, type ComposerHandle } from "./Composer";
+import { WorkspaceControl } from "./WorkspaceControl";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import { SessionDrawer } from "./SessionDrawer";
@@ -106,8 +112,6 @@ import { useStreamBuffer } from "./internal/useStreamBuffer";
 
 const SETTINGS_KEYS = {
   model: "settings.chat.model",
-  /** When true, assistant bubbles show streamed tool-call + reasoning deltas. */
-  showStreamDetails: "settings.chat.showStreamDetails",
   /** Where navigate opens + (when not Auto) where all browser tools run. */
   navigateOpenPolicy: "settings.sidepanel.navigateOpenPolicy",
 };
@@ -280,6 +284,17 @@ export interface ChatSurfaceProps {
   openAgentDestination: (url: string) => void | Promise<void>;
 }
 
+export type ChatSurfaceMode = "home" | "conversation";
+
+/**
+ * The home surface is a navigation state, not a property of the message log.
+ * In particular, a persisted conversation with zero messages remains a
+ * conversation view.
+ */
+export function resolveChatSurfaceMode(activeId: string): ChatSurfaceMode {
+  return activeId ? "conversation" : "home";
+}
+
 export default function ChatSurface({
   variant = "sidebar",
   messagesMaxWidth = "comfortable",
@@ -327,6 +342,10 @@ export default function ChatSurface({
   // user starts typing or sends, so it doesn't follow them around past
   // the turn it belongs to.
   const [pendingSourceApp, setPendingSourceApp] = useState<string | null>(null);
+  // A workspace selected on the id-less HomeView cannot be bound yet. The
+  // pending-prompt hand-off parks it here until runChatTurn mints the real
+  // session id, then binds it before any message reaches Hermes.
+  const pendingWorkspacePathRef = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -359,17 +378,6 @@ export default function ChatSurface({
    */
   const [navigateOpenPolicy, setNavigateOpenPolicy] =
     useState<NavigateOpenPolicy>("auto");
-  /** Show streamed tool-call + reasoning blocks above assistant markdown. */
-  const [showStreamDetails, setShowStreamDetails] = useState(false);
-  const showStreamDetailsRef = useRef(false);
-  /**
-   * Guards the `showStreamDetails` write-back so it can't clobber the stored
-   * value before the initial chrome.storage load resolves. Without this, the
-   * effect runs at mount with `false`, races the async load, and persists
-   * `false` on top of a user's `true`, making the toggle "forget" itself
-   * every time the side panel reopens.
-   */
-  const showStreamDetailsLoadedRef = useRef(false);
   // ``pageError`` outlives the pin button because non-pin flows
   // (microphone permission, etc.) still surface here. Pin's send-time
   // snapshot capture swallows failures rather than promoting them to
@@ -388,9 +396,12 @@ export default function ChatSurface({
   // hidden file input internally. The destructure below preserves the
   // local variable names so the rest of the component (queue editor,
   // session-switch GC, drain effect, …) compiles untouched.
+  // Attachment bytes need a directory before a conversation exists. Keep
+  // them under a transient composer id while the home surface is active;
+  // only `runChatTurn()` may mint the real conversation id.
+  const draftUploadSessionRef = useRef(shortId("draft"));
   const att = useComposerAttachments({
-    getSessionId: () =>
-      sessions.ready ? sessions.ensureActive() : "default",
+    getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
   });
   const {
     attachments,
@@ -426,13 +437,21 @@ export default function ChatSurface({
   // Workspace binding (desktop-only folder drop) is owned by
   // `useFolderDrop`; see internal/useFolderDrop.ts.
   const {
+    workspaceAvailable,
     workspacePath,
     workspaceError,
     setWorkspaceError,
     folderDragOver,
     dropHandlers: folderDropHandlers,
     unbindCurrent: unbindWorkspace,
+    chooseCurrent: chooseWorkspace,
   } = useFolderDrop({ sessions });
+  useEffect(() => {
+    // A successful manual picker/drop after a failed home hand-off supersedes
+    // the stale draft path. The next retry should use the session's now-bound
+    // workspace instead of attempting the rejected directory again.
+    if (workspacePath) pendingWorkspacePathRef.current = null;
+  }, [workspacePath]);
   // Hidden file-input ref + onChange handler are owned by
   // `useComposerAttachments` — see `fileInputProps` below.
   /** Composer instance — exposes focus/select via ComposerHandle.
@@ -567,13 +586,10 @@ export default function ChatSurface({
     const drain = capabilities.pendingPrompt?.drain;
     if (!drain) return;
     // Re-runs whenever the active session id flips. Critical for the
-    // home-composer hand-off: when the user submits from
-    // ``<HomeView panelMode />`` in the empty state, that surface
-    // calls ``sessions.createNew()`` and writes the typed text to
-    // ``home.pendingPrompt``. The new active id propagates here via
-    // storage sync; without this dep, the once-on-mount drain would
-    // miss the freshly-written payload and the message would never
-    // auto-send.
+    // home-composer hand-off and programmatic fresh-session requests can
+    // change the active id while a pending prompt is being written. Re-run
+    // on that transition so whichever operation finishes last still gets a
+    // chance to drain the payload.
     //
     // No `cancelled` cleanup flag: `drain()` is destructive (read +
     // remove), so a value returned from an in-flight drain that races
@@ -608,6 +624,9 @@ export default function ChatSurface({
       // dropped on next composer edit so it doesn't follow the user
       // around across unrelated turns.
       if (payload.sourceApp) setPendingSourceApp(payload.sourceApp);
+      if (payload.workspacePath) {
+        pendingWorkspacePathRef.current = payload.workspacePath;
+      }
       if (text) setInput(text);
       if (promotedAttachments.length > 0) {
         setAttachments((prev) => [...prev, ...promotedAttachments]);
@@ -803,9 +822,7 @@ export default function ChatSurface({
         return null;
       })();
       const userAlreadyPresent =
-        !!tailUser &&
-        !!cached &&
-        tailUser.content === cached.user.content;
+        !!tailUser && !!cached && tailUser.content === cached.user.content;
       if (cacheMatchesThisTurn && !userAlreadyPresent) {
         return [...arr, cached.user, synthesized];
       }
@@ -864,9 +881,7 @@ export default function ChatSurface({
             ? {
                 ...m,
                 streaming: false,
-                ...(agentFinalUrl
-                  ? { agentFinalUrl, agentFinalTitle }
-                  : {}),
+                ...(agentFinalUrl ? { agentFinalUrl, agentFinalTitle } : {}),
               }
             : m,
         );
@@ -1051,9 +1066,9 @@ export default function ChatSurface({
   // that delegate through them; sidesteps the add/remove race that swapping
   // listeners on every activeId change would create.
   const snapshotHandlerRef = useRef<(snap: SnapshotFrame) => void>(() => {});
-  const streamHandlerRef = useRef<(sessionId: string, event: StreamEvent) => void>(
-    () => {}
-  );
+  const streamHandlerRef = useRef<
+    (sessionId: string, event: StreamEvent) => void
+  >(() => {});
   useEffect(() => {
     snapshotHandlerRef.current = handleSnapshot;
     streamHandlerRef.current = handleStreamEvent;
@@ -1064,9 +1079,11 @@ export default function ChatSurface({
   // desktop's ElectronChatEngineClient wraps IPC; the surface here is the
   // same.
   useEffect(() => {
-    const unsubSnap = client.onSnapshot((frame) => snapshotHandlerRef.current(frame));
+    const unsubSnap = client.onSnapshot((frame) =>
+      snapshotHandlerRef.current(frame),
+    );
     const unsubEvt = client.onStreamEvent((sessionId, event) =>
-      streamHandlerRef.current(sessionId, event)
+      streamHandlerRef.current(sessionId, event),
     );
     return () => {
       unsubSnap();
@@ -1096,7 +1113,9 @@ export default function ChatSurface({
   // capability surfaces those mutations so the side-panel state stays in sync.
   useEffect(() => {
     if (!capabilities.navigateOpenPolicy) return;
-    return capabilities.navigateOpenPolicy.onChange((p) => setNavigateOpenPolicy(p));
+    return capabilities.navigateOpenPolicy.onChange((p) =>
+      setNavigateOpenPolicy(p),
+    );
   }, [capabilities.navigateOpenPolicy]);
 
   // Load chat-config on mount and watch for changes from the Options page so
@@ -1109,16 +1128,11 @@ export default function ChatSurface({
       const r = await storage.get([
         SETTINGS_KEYS.model,
         SETTINGS_KEYS.navigateOpenPolicy,
-        SETTINGS_KEYS.showStreamDetails,
       ]);
-      if (typeof r[SETTINGS_KEYS.showStreamDetails] === "boolean") {
-        setShowStreamDetails(r[SETTINGS_KEYS.showStreamDetails] as boolean);
-      }
-      showStreamDetailsLoadedRef.current = true;
       const storedNavPolicy = r[SETTINGS_KEYS.navigateOpenPolicy];
-      const legacyRun = (await storage.get("settings.sidepanel.runModeDefault"))[
-        "settings.sidepanel.runModeDefault"
-      ] as string | undefined;
+      const legacyRun = (
+        await storage.get("settings.sidepanel.runModeDefault")
+      )["settings.sidepanel.runModeDefault"] as string | undefined;
       let navPol: NavigateOpenPolicy =
         storedNavPolicy === "agent" ||
         storedNavPolicy === "user_new_tab" ||
@@ -1147,7 +1161,7 @@ export default function ChatSurface({
     })();
 
     const unsub = getPlatform().storage.watch(
-      [SETTINGS_KEYS.model, SETTINGS_KEYS.showStreamDetails],
+      [SETTINGS_KEYS.model],
       (changes: StorageChangeMap) => {
         setConfig((prev) => ({
           model:
@@ -1155,32 +1169,16 @@ export default function ChatSurface({
               ? (changes[SETTINGS_KEYS.model]!.newValue as string)
               : prev.model,
         }));
-        if (typeof changes[SETTINGS_KEYS.showStreamDetails]?.newValue === "boolean") {
-          setShowStreamDetails(
-            changes[SETTINGS_KEYS.showStreamDetails]!.newValue as boolean,
-          );
-        }
       },
     );
     return unsub;
   }, [capabilities.navigateOpenPolicy]);
-
-  useEffect(() => {
-    showStreamDetailsRef.current = showStreamDetails;
-  }, [showStreamDetails]);
 
   // -------------------------------------------------------------------------
   // Workspace binding (drop-a-folder-to-pin-it) lives in `useFolderDrop`
   // — see internal/useFolderDrop.ts. The hook owns the per-session
   // workspace-path subscription, the drag-target detection, and the
   // bind/unbind round-trips against `platform.workspaces`.
-
-  useEffect(() => {
-    if (!showStreamDetailsLoadedRef.current) return;
-    void getPlatform().storage.set({
-      [SETTINGS_KEYS.showStreamDetails]: showStreamDetails,
-    });
-  }, [showStreamDetails]);
 
   // Lifecycle of an assistant bubble is owned by the SW snapshot.
   // `handleSnapshot` dispatches on a tagged `kind` (absent / live /
@@ -1266,6 +1264,29 @@ export default function ChatSurface({
     setPageError(null);
 
     const sessionId = await sessions.ensureActive();
+
+    const pendingWorkspacePath = pendingWorkspacePathRef.current;
+    if (pendingWorkspacePath) {
+      const workspaces = getPlatform().workspaces;
+      if (workspaces) {
+        try {
+          await workspaces.bind(sessionId, pendingWorkspacePath);
+          pendingWorkspacePathRef.current = null;
+          setWorkspaceError(null);
+        } catch (e) {
+          const message = String((e as Error)?.message || e);
+          setWorkspaceError(message);
+          // The send path has already consumed the composer values. Restore
+          // them so the user can choose another directory and retry without
+          // losing the prompt or its attachments.
+          setInput(text);
+          setAttachments(attachmentsForTurn);
+          return;
+        }
+      } else {
+        pendingWorkspacePathRef.current = null;
+      }
+    }
 
     // Every attachment — image, text, pdf, binary — is inlined into the
     // user message content as a plain-text `<file-attachment>` block.
@@ -1412,13 +1433,14 @@ export default function ChatSurface({
         setPendingQueue((prev) => {
           if (prev.length === 0) return prev;
           const [head, ...tail] = prev;
-          queueMicrotask(() =>
-            void runChatTurn({
-              text: head.text,
-              attachments: head.attachments,
-              navigateOpenPolicyForTurn: head.navigateOpenPolicySnapshot,
-              turnMetadataForTurn: head.turnMetadataSnapshot,
-            }),
+          queueMicrotask(
+            () =>
+              void runChatTurn({
+                text: head.text,
+                attachments: head.attachments,
+                navigateOpenPolicyForTurn: head.navigateOpenPolicySnapshot,
+                turnMetadataForTurn: head.turnMetadataSnapshot,
+              }),
           );
           return tail;
         });
@@ -1483,7 +1505,7 @@ export default function ChatSurface({
         console.warn("[sidepanel] abort failed:", e);
       }
     }
-    await sessions.createNew();
+    await sessions.deselect();
   }
 
   // `addFiles`, `removeAttachment`, `openFilePicker`, `handleComposerPaste`
@@ -1493,13 +1515,12 @@ export default function ChatSurface({
   // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
-  const hasActive = !!sessions.activeId;
-  // ``composer-only`` mode is active only while we'd otherwise render the
-  // empty state. Once messages land we fall back to the normal populated
-  // layout — Quick-Ask wants its expanded card to look exactly like the
-  // desktop main window's right pane.
-  const isComposerOnlyEmpty =
-    emptyState === "composer-only" && (!hasActive || messages.length === 0);
+  const hasActive =
+    resolveChatSurfaceMode(sessions.activeId) === "conversation";
+  // The home/empty state is identified solely by the absence of a session
+  // id. A persisted session with zero messages is still a real conversation
+  // and therefore uses the normal chat layout.
+  const isComposerOnlyEmpty = emptyState === "composer-only" && !hasActive;
 
   // When the host has expanded the composer-only surface (Quick-Ask),
   // make the body fill the column and (below) pin the composer to the
@@ -1618,6 +1639,39 @@ export default function ChatSurface({
       // exactly when the popup is sitting on a blank conversation.
       quickActions={isComposerOnlyEmpty}
       flatTop={pendingQueue.length > 0 || pendingApprovals.length > 0}
+      contextRail={
+        workspaceAvailable || workspacePath || pendingSourceApp ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            {(workspaceAvailable || workspacePath) && (
+              <WorkspaceControl
+                path={workspacePath}
+                onChoose={chooseWorkspace}
+                onClear={workspacePath ? unbindWorkspace : undefined}
+                disabled={busy}
+              />
+            )}
+            {pendingSourceApp && (
+              <div
+                className="flex h-7 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground"
+                title={`Selection captured from ${pendingSourceApp}`}
+              >
+                <span className="shrink-0">{t("sidepanel.context.from")}</span>
+                <span className="max-w-32 truncate font-medium text-foreground/85">
+                  {pendingSourceApp}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPendingSourceApp(null)}
+                  className="ml-0.5 shrink-0 rounded-md p-1 text-muted-foreground/65 transition-colors hover:bg-background/70 hover:text-foreground"
+                  aria-label={t("sidepanel.context.dismissSource")}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        ) : undefined
+      }
       placeholder={
         attachmentUploading
           ? t("sidepanel.placeholder.uploading")
@@ -1663,27 +1717,10 @@ export default function ChatSurface({
       chipRow={undefined}
       actionsLeft={
         hasActive ? (
-          <>
-            {slots?.navigateOpenPolicyToggle?.({
-              policy: navigateOpenPolicy,
-              onChange: (next) => void handleNavigateOpenPolicyChange(next),
-            })}
-            <button
-              type="button"
-              onClick={() => setShowStreamDetails((v) => !v)}
-              aria-pressed={showStreamDetails}
-              title={t("sidepanel.streamDetails.tooltip")}
-              className={cn(
-                "inline-flex h-6 cursor-pointer select-none items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                showStreamDetails
-                  ? "border-foreground/20 bg-foreground/10 text-foreground hover:bg-foreground/15"
-                  : "border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              <Brain className="h-3 w-3" />
-              <span>{t("sidepanel.streamDetails")}</span>
-            </button>
-          </>
+          slots?.navigateOpenPolicyToggle?.({
+            policy: navigateOpenPolicy,
+            onChange: (next) => void handleNavigateOpenPolicyChange(next),
+          })
         ) : undefined
       }
     />
@@ -1759,13 +1796,14 @@ export default function ChatSurface({
           // sidebar variant is already a narrow column and shouldn't be
           // capped further. `full` evaluates to "" so messages span the
           // entire pane.
-          variant === "fullscreen" && MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
+          variant === "fullscreen" &&
+            MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
           folderDragOver && "ring-2 ring-primary/40",
         )}
         ref={scrollRef}
         {...folderDropHandlers}
       >
-        {!hasActive || messages.length === 0 ? (
+        {!hasActive ? (
           isComposerOnlyEmpty ? (
             // Quick-Ask compact mode: skip the hero entirely and let
             // the composer flow at its natural height. No
@@ -1799,11 +1837,9 @@ export default function ChatSurface({
           ) : slots?.emptyState ? (
             // Host-provided empty state (desktop hands in
             // ``<HomeView panelMode />`` so the home composer surface
-            // becomes the "no chat selected" view verbatim). Rendered
-            // in both the "no session" case AND the "session exists
-            // but no messages yet" case — the user gets the same
-            // home-style composer regardless of whether they clicked
-            // "new chat" first or just landed on the empty surface.
+            // becomes the "no chat selected" view verbatim). This branch is
+            // intentionally keyed only to `activeId`: existing empty
+            // sessions remain normal conversation views.
             // The slot owns its own layout; we just hand it a sized
             // parent.
             <div className="absolute inset-0">{slots.emptyState}</div>
@@ -1843,7 +1879,6 @@ export default function ChatSurface({
             <div className="min-w-0 space-y-2 p-3">
               <MessageTurns
                 messages={messages}
-                showStreamDetails={showStreamDetails}
                 onOpenAgentDestination={openAgentDestination}
               />
 
@@ -1867,175 +1902,147 @@ export default function ChatSurface({
       </div>
 
       {/*
-        Footer is skipped whenever the empty-state surface is showing
-        (no session, or session with no messages yet) — the composer
-        in that mode renders centred inside the empty-state block
-        above, and the chat-only extras (errors, workspace chips,
-        queue list, approvals) are irrelevant until the first turn
-        lands.
+        Footer is skipped only on the id-less home surface, whose composer is
+        rendered inside the empty-state block above. Existing sessions keep
+        the normal footer even when their message list is empty.
       */}
-      {hasActive && messages.length > 0 && (
-      <footer
-        className={cn(
-          "p-2",
-          // Composer always gets a fixed cap in fullscreen — a wide
-          // input line is uncomfortable to type into regardless of how
-          // wide the user set the message column above.
-          variant === "fullscreen" && "mx-auto w-full max-w-3xl",
-        )}
-      >
-        {/*
+      {hasActive && (
+        <footer
+          className={cn(
+            "p-2",
+            // Composer always gets a fixed cap in fullscreen — a wide
+            // input line is uncomfortable to type into regardless of how
+            // wide the user set the message column above.
+            variant === "fullscreen" && "mx-auto w-full max-w-3xl",
+          )}
+        >
+          {/*
           Bridge/connection pill is extension-only — provided via the
           `bridgeBar` slot. Desktop omits and the row is hidden.
         */}
-        {slots?.bridgeBar}
-        {(pageError || attachmentError || workspaceError) && (
-          <div className="mb-1 flex flex-col gap-1">
-            {pageError && (
-              <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-                <span className="min-w-0 flex-1 break-words">{pageError}</span>
-                <button
-                  type="button"
-                  onClick={() => setPageError(null)}
-                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-                  aria-label="Dismiss">
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-            {attachmentError && (
-              <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
-                <span className="min-w-0 flex-1 break-words">{attachmentError}</span>
-                <button
-                  type="button"
-                  onClick={() => setAttachmentError(null)}
-                  className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                  aria-label="Dismiss">
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-            {workspaceError && (
-              <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
-                <span className="min-w-0 flex-1 break-words">{workspaceError}</span>
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceError(null)}
-                  className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                  aria-label="Dismiss">
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        {(workspacePath || pendingSourceApp) && (
-          <div className="mb-1 flex flex-wrap items-center gap-1">
-            {workspacePath && (
-              <span
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
-                title={`Bound workspace for this session: ${workspacePath}`}>
-                <FolderOpen className="h-3 w-3 shrink-0" />
-                <span className="min-w-0 truncate" dir="rtl">
-                  {workspacePath}
-                </span>
-                <button
-                  type="button"
-                  onClick={unbindWorkspace}
-                  className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Unbind workspace">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {pendingSourceApp && (
-              <span
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
-                title={`Selection captured from ${pendingSourceApp}`}>
-                <span className="text-muted-foreground">from</span>
-                <span className="min-w-0 truncate">{pendingSourceApp}</span>
-                <button
-                  type="button"
-                  onClick={() => setPendingSourceApp(null)}
-                  className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Dismiss source hint">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-          </div>
-        )}
-        {capabilities.learn && (
-          <div className="mb-1 flex shrink-0 flex-wrap items-center gap-1">
-            {!learnRecording ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                disabled={attachmentUploading}
-                title={t("sidepanel.learn.tooltip")}
-                onClick={() => void startLearnFromPanel()}>
-                <Disc className="h-3 w-3 shrink-0" />
-                {t("sidepanel.learn.record")}
-              </Button>
-            ) : (
-              <>
-                <span className="max-w-[10rem] truncate text-[11px] text-muted-foreground">
-                  {t("sidepanel.learn.recording", { count: learnEventCount })}
-                </span>
+          {slots?.bridgeBar}
+          {(pageError || attachmentError || workspaceError) && (
+            <div className="mb-1 flex flex-col gap-1">
+              {pageError && (
+                <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                  <span className="min-w-0 flex-1 break-words">
+                    {pageError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPageError(null)}
+                    className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {attachmentError && (
+                <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+                  <span className="min-w-0 flex-1 break-words">
+                    {attachmentError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachmentError(null)}
+                    className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {workspaceError && (
+                <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+                  <span className="min-w-0 flex-1 break-words">
+                    {workspaceError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaceError(null)}
+                    className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {capabilities.learn && (
+            <div className="mb-1 flex shrink-0 flex-wrap items-center gap-1">
+              {!learnRecording ? (
                 <Button
                   type="button"
+                  variant="outline"
                   size="sm"
-                  className="h-6 px-2 text-[11px]"
-                  disabled={learnStopBusy || attachmentUploading}
-                  onClick={() => void stopLearnToComposer()}>
-                  {learnStopBusy
-                    ? t("sidepanel.learn.processing")
-                    : t("sidepanel.learn.stop")}
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  disabled={attachmentUploading}
+                  title={t("sidepanel.learn.tooltip")}
+                  onClick={() => void startLearnFromPanel()}
+                >
+                  <Disc className="h-3 w-3 shrink-0" />
+                  {t("sidepanel.learn.record")}
                 </Button>
-              </>
-            )}
-          </div>
-        )}
-        {/*
+              ) : (
+                <>
+                  <span className="max-w-[10rem] truncate text-[11px] text-muted-foreground">
+                    {t("sidepanel.learn.recording", { count: learnEventCount })}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    disabled={learnStopBusy || attachmentUploading}
+                    onClick={() => void stopLearnToComposer()}
+                  >
+                    {learnStopBusy
+                      ? t("sidepanel.learn.processing")
+                      : t("sidepanel.learn.stop")}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          {/*
           Cursor-style composer: optional queued turns render in a slim strip
           *above* the bordered box (popup stack). The textarea + action row
           stay inside the rounded frame; focus-within still targets that box.
           The hidden file input + drop handlers + drop overlay live INSIDE
           Composer (via `attachments={att}`) — no need to render them here.
         */}
-        <div
-          className={cn(
-            "relative flex w-full flex-col",
-            att.dragOver && "rounded-lg ring-2 ring-primary/30",
-          )}
-        >
-          {pendingApprovals.length > 0 && (
-            <ApprovalBanner
-              approvals={pendingApprovals}
-              inFlight={approvalInFlight}
-              error={approvalError}
-              onRespond={respondToApproval}
-              onDismissError={() => setApprovalError(null)}
+          <div
+            className={cn(
+              "relative flex w-full flex-col",
+              att.dragOver && "rounded-lg ring-2 ring-primary/30",
+            )}
+          >
+            {pendingApprovals.length > 0 && (
+              <ApprovalBanner
+                approvals={pendingApprovals}
+                inFlight={approvalInFlight}
+                error={approvalError}
+                onRespond={respondToApproval}
+                onDismissError={() => setApprovalError(null)}
+              />
+            )}
+            <PendingQueueRail
+              items={pendingQueue.map((item) => ({
+                queueId: item.queueId,
+                preview: previewPendingTurn(item),
+              }))}
+              editingQueueId={editingQueueId}
+              composerDragOver={att.dragOver}
+              onSendNow={sendQueueItemNow}
+              onEdit={editPendingQueueItem}
+              onRemove={removePendingQueueItem}
             />
-          )}
-          <PendingQueueRail
-            items={pendingQueue.map((item) => ({
-              queueId: item.queueId,
-              preview: previewPendingTurn(item),
-            }))}
-            editingQueueId={editingQueueId}
-            composerDragOver={att.dragOver}
-            onSendNow={sendQueueItemNow}
-            onEdit={editPendingQueueItem}
-            onRemove={removePendingQueueItem}
-          />
-        {readOnlyNoticeNode ?? composerNode}
-        {/* Drop overlay is rendered by Composer (via attachments
+            {readOnlyNoticeNode ?? composerNode}
+            {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
-        </div>
-      </footer>
+          </div>
+        </footer>
       )}
 
       <SessionDrawer

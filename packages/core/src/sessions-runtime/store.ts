@@ -167,29 +167,62 @@ function hermesSessionToMeta(
 /**
  * One tool-call chip restored from a Hermes ``tool_calls`` JSON payload.
  * Schema matches the panel's ``HermesToolProgress`` so it slots straight
- * onto a ``UiMessage`` and is picked up by the chip renderer in
- * ``sidepanel/index.tsx`` without further translation.
+ * onto a ``UiMessage`` and is picked up by the shared execution-row renderer
+ * without further translation.
  *
- * We only fill ``tool``, ``toolCallId`` and a constant ``status`` of
- * ``completed`` — the original ``startedAt`` / ``durationMs`` data was
- * stamped by the live engine and isn't persisted in SessionDB, so the
- * chip simply shows the tool name (no "running for Xs" line). That's a
- * known visual loss across reload; restoring it would require also
- * persisting timing data per tool call to Hermes.
+ * We restore ``tool``, ``toolCallId``, arguments (as the folded ``label``)
+ * and a constant ``status`` of ``completed``. The original ``startedAt`` /
+ * ``durationMs`` data was stamped by the live engine and isn't persisted in
+ * SessionDB, so the row has no duration after reload.
  */
 interface RestoredToolProgress {
   tool: string;
   toolCallId: string;
   status: "completed";
+  label?: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
+  error?: boolean;
+}
+
+function decodeStoredValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function asArgumentRecord(value: unknown): Record<string, unknown> | undefined {
+  const decoded = decodeStoredValue(value);
+  return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+    ? decoded as Record<string, unknown>
+    : undefined;
+}
+
+function storedResultFailed(result: unknown): boolean {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  const record = result as Record<string, unknown>;
+  return (
+    record.success === false ||
+    Boolean(record.error) ||
+    (typeof record.exit_code === "number" && record.exit_code !== 0)
+  );
 }
 
 /**
- * Pull the ``id`` and tool name from one entry of the assistant
- * row's ``tool_calls`` JSON array. The shape is whatever the gateway
+ * Pull the id, name, and arguments from one entry of the assistant row's
+ * ``tool_calls`` JSON array. The shape is whatever the gateway
  * persisted — usually OpenAI-style ``{id, type, function: {name, ...}}``
  * but we accept several spellings to tolerate older rows.
  */
-function readToolCallEntry(raw: unknown): RestoredToolProgress | null {
+function readToolCallEntry(
+  raw: unknown,
+  resultsByCallId: ReadonlyMap<string, unknown>,
+): RestoredToolProgress | null {
   if (!raw || typeof raw !== "object") return null;
   const t = raw as Record<string, unknown>;
   const id = (typeof t.id === "string" && t.id)
@@ -207,7 +240,32 @@ function readToolCallEntry(raw: unknown): RestoredToolProgress | null {
   } else if (typeof t.tool_name === "string") {
     tool = t.tool_name;
   }
-  return { tool: tool || "tool", toolCallId: id, status: "completed" };
+  const fnArgs =
+    fn && typeof fn === "object"
+      ? (fn as Record<string, unknown>).arguments
+      : undefined;
+  const args = fnArgs ?? t.arguments ?? t.input;
+  const structuredArgs = asArgumentRecord(args);
+  const result = resultsByCallId.get(id);
+  let label = "";
+  if (typeof args === "string") {
+    label = args.trim();
+  } else if (args != null) {
+    try {
+      label = JSON.stringify(args, null, 2);
+    } catch {
+      label = "";
+    }
+  }
+  return {
+    tool: tool || "tool",
+    toolCallId: id,
+    status: "completed",
+    ...(label ? { label } : {}),
+    ...(structuredArgs ? { args: structuredArgs } : {}),
+    ...(result !== undefined ? { result } : {}),
+    ...(storedResultFailed(result) ? { error: true } : {}),
+  };
 }
 
 /**
@@ -225,7 +283,10 @@ function readToolCallEntry(raw: unknown): RestoredToolProgress | null {
  * typed on ``SessionMessage`` — we attach them via the index signature
  * and let the panel renderer pick them up.
  */
-function hermesMessageToSession(m: HermesMessage): SessionMessage {
+function hermesMessageToSession(
+  m: HermesMessage,
+  resultsByCallId: ReadonlyMap<string, unknown>,
+): SessionMessage {
   let content = "";
   if (typeof m.content === "string") {
     content = m.content;
@@ -245,7 +306,7 @@ function hermesMessageToSession(m: HermesMessage): SessionMessage {
   // Reasoning trace was either streamed (``reasoning``) or block-form
   // (``reasoning_content``). On reload the panel renders this as a chip
   // via ``UiMessage.reasoning`` (not ``streamVerbose`` — that path is
-  // reserved for the dev verbose toggle's tool-args dump).
+  // reserved for backward-compatible tool-argument details).
   const reasoning = (typeof m.reasoning_content === "string" && m.reasoning_content)
     || (typeof m.reasoning === "string" && m.reasoning)
     || "";
@@ -260,7 +321,7 @@ function hermesMessageToSession(m: HermesMessage): SessionMessage {
   if (Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
     const restored: RestoredToolProgress[] = [];
     for (const tc of m.tool_calls) {
-      const entry = readToolCallEntry(tc);
+      const entry = readToolCallEntry(tc, resultsByCallId);
       if (entry) restored.push(entry);
     }
     if (restored.length > 0) {
@@ -401,6 +462,12 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
     }
     return [];
   }
+  const resultsByCallId = new Map<string, unknown>();
+  for (const message of res.messages) {
+    if (message.role !== "tool" || !message.tool_call_id) continue;
+    resultsByCallId.set(message.tool_call_id, decodeStoredValue(message.content));
+  }
+
   // Skip role=tool rows entirely. Each tool result is already represented
   // as a chip on the *preceding assistant message* via the synthesized
   // ``hermesToolProgress`` (from that assistant's ``tool_calls`` field).
@@ -408,7 +475,7 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
   // the ``[tool] {raw json}`` bubbles the panel showed before this fix.
   const messages = res.messages
     .filter((m) => m.role !== "tool")
-    .map(hermesMessageToSession);
+    .map((message) => hermesMessageToSession(message, resultsByCallId));
   _ensuredSessions.add(id);
   return messages;
 }

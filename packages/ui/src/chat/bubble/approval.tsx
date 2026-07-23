@@ -291,10 +291,8 @@ export function ApprovalRecordChip({ record }: { record: ApprovalRecord }) {
 }
 
 /**
- * Trailing audit-trail rendered at the bottom of the assistant bubble when
- * there's no timeline view (Thoughts toggle off). In timeline mode each
- * approval lands inline at the position it occurred — see Bubble — so this
- * strip is suppressed there.
+ * Compact audit trail for callers that need to render approval records as a
+ * group. Bubble normally places each record in the local execution trace.
  */
 export function ApprovalRecordList({ records }: { records: ApprovalRecord[] }) {
   return (

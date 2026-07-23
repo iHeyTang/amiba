@@ -59,6 +59,8 @@ import type { TriggerProvider } from "./composer/providers/types"
  *
  *   - `topAffordance` — inside the frame, above the textarea (e.g. an
  *                       "editing queue item" hint).
+ *   - `contextRail`   — a workspace/runtime shelf directly above and
+ *                       visually behind the frame.
  *   - `chipRow`       — inside the frame, between top affordance and
  *                       textarea (e.g. pinned-page + attachment chips).
  *   - `actionsLeft`   — inside the frame's bottom action row, left side
@@ -207,6 +209,12 @@ export interface ComposerProps {
   /** Outside the frame, above it. Used by ChatView for bridge status,
    *  page-context chips, etc. that don't visually merge with the frame. */
   extrasAbove?: ReactNode
+  /**
+   * Execution context visually joined to the top of the composer. This is
+   * intentionally distinct from `extrasAbove`: workspace/runtime belong to
+   * the input's identity, while notices and bridge state remain separate.
+   */
+  contextRail?: ReactNode
   /** Inside the frame, above the chip row + textarea. */
   topAffordance?: ReactNode
   /**
@@ -316,6 +324,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       microphone,
       quickActions = true,
       extrasAbove,
+      contextRail,
       topAffordance,
       chipRow,
       actionsLeft,
@@ -603,9 +612,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         )}
       >
         {extrasAbove}
+        {contextRail ? (
+          <div
+            className={cn(
+              "relative z-0 mx-4 -mb-2.5 flex h-10 items-start rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 px-3 pt-[3px]",
+              "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]",
+              frameVariant === "hero" &&
+                "mx-6 h-11 rounded-t-[16px] px-4 pt-[5px]",
+              flatTop && "mx-0 rounded-t-none"
+            )}>
+            {contextRail}
+          </div>
+        ) : null}
         <div
           className={cn(
-            "relative flex flex-col transition-colors",
+            "relative z-10 flex flex-col transition-colors",
             frameVariant === "hero"
               ? // Hero: the same quiet, focus-stable edge at a larger scale.
                 // Diffuse ambient shadow keeps the surface approachable.
@@ -616,7 +637,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               : // Default: a low-contrast static edge restores the input's
                 // boundary without becoming stronger when the editor focuses.
                 "rounded-2xl border border-border/30 bg-background shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.22)] dark:shadow-[0_8px_24px_-16px_rgb(0_0_0_/_0.56)]",
-            flatTop && "rounded-t-none",
+            flatTop && !contextRail && "rounded-t-none",
             frameClassName,
           )}
         >
@@ -625,7 +646,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               className={cn(
                 "pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-primary/5 text-sm font-medium text-primary",
                 frameVariant === "hero" ? "rounded-[24px]" : "rounded-2xl",
-                flatTop && "rounded-t-none",
+                flatTop && !contextRail && "rounded-t-none",
               )}
             >
               {dropOverlay}

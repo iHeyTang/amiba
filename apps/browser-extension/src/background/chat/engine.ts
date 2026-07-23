@@ -156,15 +156,27 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
   const runningByTool = new Map<string, string[]>(); // toolName → stack of synthesised ids
 
   function emitToolProgress(progress: HermesToolProgress): void {
+    const prior = (getState(sessionId)?.hermesToolProgress ?? []).find(
+      (event) => event.toolCallId === progress.toolCallId,
+    );
+    const merged: HermesToolProgress = {
+      ...(prior ?? {}),
+      ...progress,
+      label: progress.label ?? prior?.label,
+      args: progress.args ?? prior?.args,
+      result: progress.result ?? prior?.result,
+      error: progress.error ?? prior?.error,
+      inlineDiff: progress.inlineDiff ?? prior?.inlineDiff,
+    };
     mutateState(sessionId, (cur) => {
-      const seen = cur.hermesOrder.includes(progress.toolCallId);
+      const seen = cur.hermesOrder.includes(merged.toolCallId);
       const order = seen
         ? cur.hermesOrder
-        : [...cur.hermesOrder, progress.toolCallId];
+        : [...cur.hermesOrder, merged.toolCallId];
       const others = cur.hermesToolProgress.filter(
-        (e) => e.toolCallId !== progress.toolCallId,
+        (e) => e.toolCallId !== merged.toolCallId,
       );
-      others.push(progress);
+      others.push(merged);
       const byId = new Map(others.map((e) => [e.toolCallId, e]));
       const ordered = order
         .map((id) => byId.get(id))
@@ -174,10 +186,10 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
         hermesToolProgress: ordered,
         timeline: seen
           ? cur.timeline
-          : appendToolToTimeline(cur.timeline, progress.toolCallId),
+          : appendToolToTimeline(cur.timeline, merged.toolCallId),
       };
     });
-    emit(sessionId, { kind: "hermesToolProgress", event: progress });
+    emit(sessionId, { kind: "hermesToolProgress", event: merged });
   }
 
   // The gateway emits an explicit `approval.responded` event but without
@@ -299,9 +311,9 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
           mutateState(sessionId, () => ({ reasoning: text }));
           emit(sessionId, { kind: "reasoning", text });
         },
-        onToolStarted: ({ tool, preview }) => {
+        onToolStarted: ({ tool, toolCallId: stableId, preview, args }) => {
           if (!tool) return;
-          const toolCallId = shortId("rtc"); // run-tool-call
+          const toolCallId = stableId ?? shortId("rtc"); // run-tool-call
           const stack = runningByTool.get(tool) ?? [];
           stack.push(toolCallId);
           runningByTool.set(tool, stack);
@@ -311,17 +323,27 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
             toolCallId,
             status: "running",
             label: preview,
+            args,
             startedAt: now,
           });
         },
-        onToolCompleted: ({ tool, duration, error }) => {
+        onToolCompleted: ({
+          tool,
+          toolCallId: stableId,
+          duration,
+          error,
+          args,
+          result,
+          inlineDiff,
+        }) => {
           if (!tool) return;
           const stack = runningByTool.get(tool);
           // FIFO: oldest matching `running` is the one that completed.
           // (Hermes runs tools sequentially within a turn so this is
           // unambiguous in practice; the stack defends against future
           // parallelism quirks.)
-          const toolCallId = stack && stack.length > 0 ? stack.shift()! : null;
+          const toolCallId =
+            stableId ?? (stack && stack.length > 0 ? stack.shift()! : null);
           if (toolCallId == null) {
             // Completion without a matching start — drop it rather than
             // emit a ghost completed chip with no prior running state.
@@ -330,6 +352,10 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
               tool,
             );
             return;
+          }
+          if (stableId && stack) {
+            const index = stack.indexOf(stableId);
+            if (index >= 0) stack.splice(index, 1);
           }
           if (stack && stack.length === 0) runningByTool.delete(tool);
           const now = Date.now();
@@ -348,7 +374,11 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
             tool,
             toolCallId,
             status: "completed",
-            label: error ? "(error)" : prior?.label,
+            label: prior?.label,
+            args,
+            result,
+            error,
+            inlineDiff,
             startedAt,
             durationMs,
           });

@@ -29,6 +29,10 @@ export type {
   ChatSurfaceCapabilities,
 } from "./internal/capabilities"
 export { TabBar } from "./TabBar"
+export {
+  WorkspaceControl,
+  type WorkspaceControlProps,
+} from "./WorkspaceControl"
 export { ChannelChip } from "./internal/ChannelChip"
 export { SessionDrawer } from "./SessionDrawer"
 export {

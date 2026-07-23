@@ -52,6 +52,7 @@ interface PendingPromptPayload {
   text?: string
   attachments?: PendingPromptAttachment[]
   sourceApp?: string
+  workspacePath?: string
   ts: number
 }
 
@@ -74,6 +75,11 @@ export interface ChatSessionRequest {
    * above the composer until the user starts editing.
    */
   sourceApp?: string
+  /**
+   * Draft workspace selected on the id-less home surface. The receiving chat
+   * binds it only after ``ensureActive()`` creates the real conversation.
+   */
+  workspacePath?: string
   /**
    * Extra storage keys to write in the same atomic patch as the pending
    * prompt. Use for "set this companion setting only when the user
@@ -110,6 +116,7 @@ export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
     text: text || undefined,
     attachments: hasAttachments ? attachments : undefined,
     sourceApp: req.sourceApp,
+    workspacePath: req.workspacePath?.trim() || undefined,
     ts: Date.now(),
   }
   await getPlatform().storage.set({

@@ -89,12 +89,17 @@ export type WorkspaceChange =
 
 /**
  * Workspace binding — per chat session. Each session can pin a different
- * directory; the agent receives the bound path as a `<workspace>`
- * context block on every turn for that session.
+ * directory; desktop forwards that path as the structured cwd for every
+ * Hermes run in the session.
  *
  * Desktop only; the extension surface leaves this undefined.
  */
 export interface WorkspaceAdapter {
+  /**
+   * Open the host's native folder picker. Omitted on runtimes that cannot
+   * choose local directories (browser extension, headless main process).
+   */
+  chooseDirectory?(defaultPath?: string): Promise<string | null>
   bind(sessionId: string, path: string): Promise<void>
   unbind(sessionId: string): Promise<void>
   getCurrent(sessionId: string): Promise<string | null>

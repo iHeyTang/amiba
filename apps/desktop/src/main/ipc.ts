@@ -1,7 +1,13 @@
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 
-import { BrowserWindow, ipcMain, shell } from "electron"
+import {
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type OpenDialogOptions,
+} from "electron"
 import type { WorkspaceChange } from "@amiba/platform"
 
 import { mainStore, type StorageChangeMap } from "./storage"
@@ -37,6 +43,21 @@ export function registerIpcHandlers() {
   mainStore.watch(broadcastChange)
 
   ipcMain.handle("shell:open-external", (_e, url: string) => shell.openExternal(url))
+
+  ipcMain.handle(
+    "workspace:choose-directory",
+    async (event, defaultPath?: string): Promise<string | null> => {
+      const options: OpenDialogOptions = {
+        properties: ["openDirectory", "createDirectory"],
+        ...(defaultPath ? { defaultPath } : {}),
+      }
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      const result = parent
+        ? await dialog.showOpenDialog(parent, options)
+        : await dialog.showOpenDialog(options)
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    },
+  )
 
   ipcMain.handle(
     "workspace:bind",

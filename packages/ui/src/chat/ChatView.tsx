@@ -26,9 +26,6 @@ export interface ChatViewProps {
   /** True while the engine is streaming a reply for the active session. */
   busy?: boolean
 
-  /** Show streamed reasoning / tool-call timeline ("Thoughts" toggle). */
-  showStreamDetails?: boolean
-
   /** Optional top-level error banner shown above the messages. */
   error?: ChatError | null
 
@@ -71,7 +68,6 @@ export function ChatView({
   openTabIds,
   messages,
   busy,
-  showStreamDetails = false,
   error,
   onActivate,
   onClose,
@@ -148,7 +144,6 @@ export function ChatView({
             ) : (
               <MessageTurns
                 messages={messages}
-                showStreamDetails={showStreamDetails}
                 onOpenAgentDestination={onOpenAgentDestination}
               />
             )}

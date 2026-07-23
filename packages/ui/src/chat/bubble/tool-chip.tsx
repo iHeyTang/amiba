@@ -1,19 +1,22 @@
 import type { HermesToolProgress } from "@amiba/core"
+import { useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
+import { ChevronRight } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { formatToolDuration } from "../internal/helpers"
+import {
+  describeToolCall,
+  hasToolDetail,
+  ToolDetail
+} from "./tool-presentation"
 
 /**
- * One tool-progress chip. Layout: [status slot][tool name][· label preview]
- * [duration].
- *
- * The status slot is a fixed width so the chip text aligns regardless of
- * whether the leading glyph is an animated dot (running), an emoji
- * (completed with emoji), or a solid placeholder dot (completed without
- * emoji). Click toggles a details panel for the full `label` text.
+ * One quiet execution row. The conversation exposes the semantic action and
+ * its target; only calls with useful evidence can be opened.
  */
 export function ToolChip({ event }: { event: HermesToolProgress }) {
+  const { t } = useT()
   const [expanded, setExpanded] = useState(false)
   // Force a re-render every second while running so the duration ticks
   // live. Once `completed` arrives the chip re-renders with `durationMs`
@@ -27,9 +30,9 @@ export function ToolChip({ event }: { event: HermesToolProgress }) {
   }, [running])
   void tick
 
-  const labelRaw = (event.label ?? "").trim()
-  const labelMeaningful = labelRaw && labelRaw !== event.tool
-  const hasDetail = !!labelMeaningful
+  const presentation = describeToolCall(event, t)
+  const ToolIcon = presentation.icon
+  const hasDetail = hasToolDetail(event)
 
   let durationText: string | null = null
   if (!running && typeof event.durationMs === "number") {
@@ -39,70 +42,64 @@ export function ToolChip({ event }: { event: HermesToolProgress }) {
     if (elapsed >= 1000) durationText = formatToolDuration(elapsed)
   }
 
-  const tooltipParts: string[] = [event.tool]
-  if (labelMeaningful) tooltipParts.push(labelRaw)
-  if (running) {
-    tooltipParts.push("running…")
-  } else if (typeof event.durationMs === "number") {
-    tooltipParts.push(`completed in ${formatToolDuration(event.durationMs)}`)
-  }
-  if (hasDetail) tooltipParts.push("(click to expand)")
-  const tooltip = tooltipParts.join(" · ")
+  const detailAction = expanded
+    ? t("sidepanel.trace.collapseDetails")
+    : t("sidepanel.trace.expandDetails")
 
   return (
-    <div className="flex max-w-full flex-col items-start gap-1">
+    <div className="min-w-0">
       <button
         type="button"
         disabled={!hasDetail}
         onClick={() => hasDetail && setExpanded((v) => !v)}
-        title={tooltip}
+        aria-expanded={hasDetail ? expanded : undefined}
+        aria-label={[presentation.action, presentation.target].filter(Boolean).join(" ")}
+        title={hasDetail ? detailAction : presentation.action}
         className={cn(
-          "inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] leading-none transition-colors",
-          running
-            ? "border-amber-400/60 bg-amber-50/70 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-            : hasDetail
-              ? expanded
-                ? "border-border bg-muted text-foreground"
-                : "cursor-pointer border-border/60 bg-muted/30 text-foreground/75 hover:bg-muted/60"
-              : "cursor-default border-border/40 bg-muted/20 text-foreground/55"
+          "group/tool inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          hasDetail
+            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            : "cursor-default",
+          running && "text-foreground/75"
         )}>
-        {/* Fixed-width status slot — keeps tool-name column aligned across
-            running / completed-with-emoji / completed-plain chips. */}
         <span
           aria-hidden
           className="inline-flex h-3 w-3 shrink-0 items-center justify-center leading-none">
           {running ? (
             <span className="hermes-thinking-dot" />
-          ) : event.emoji ? (
-            <span className="leading-none">{event.emoji}</span>
           ) : (
-            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
+            <ToolIcon
+              className={cn(
+                "h-3 w-3",
+                event.error ? "text-destructive/80" : "opacity-55"
+              )}
+            />
           )}
         </span>
-        <span className="shrink-0">{event.tool}</span>
-        {labelMeaningful && (
-          <>
-            <span aria-hidden className="shrink-0 opacity-40">
-              ·
-            </span>
-            <span className="min-w-0 truncate font-mono text-foreground/60">{labelRaw}</span>
-          </>
+        <span className="shrink-0 text-foreground/75">{presentation.action}</span>
+        {presentation.target && (
+          <span className="min-w-0 truncate font-mono text-foreground/65">
+            {presentation.target}
+          </span>
         )}
         {durationText && (
-          <span
-            className={cn(
-              "ml-auto shrink-0 pl-1 tabular-nums opacity-70",
-              running ? "" : "text-foreground/55"
-            )}>
+          <span className="shrink-0 tabular-nums text-muted-foreground/65">
             {durationText}
           </span>
         )}
+        {hasDetail && (
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "h-3 w-3 shrink-0 opacity-45 transition-transform group-hover/tool:opacity-70",
+              expanded && "rotate-90"
+            )}
+          />
+        )}
       </button>
       {expanded && hasDetail && (
-        <div className="w-full rounded-md border border-border/50 bg-muted/25 px-2 py-1.5">
-          <pre className="whitespace-pre-wrap break-all font-mono text-[10.5px] leading-snug text-muted-foreground">
-            {event.label}
-          </pre>
+        <div className="ml-[7px] border-l border-border/60 pb-1.5 pl-4 pr-1">
+          <ToolDetail event={event} t={t} />
         </div>
       )}
     </div>
@@ -112,7 +109,7 @@ export function ToolChip({ event }: { event: HermesToolProgress }) {
 /** Legacy stack-of-chips renderer used for old messages without a timeline. */
 export function ToolProgressChips({ events }: { events: HermesToolProgress[] }) {
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className="flex min-w-0 flex-col gap-0.5">
       {events.map((ev) => (
         <ToolChip key={ev.toolCallId} event={ev} />
       ))}

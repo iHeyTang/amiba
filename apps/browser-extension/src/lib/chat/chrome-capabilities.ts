@@ -252,9 +252,10 @@ export const chromePendingPrompt: PendingPromptCapability = {
    * Read + clear the pending-prompt payload that a hand-off surface
    * (HomeView panel-mode composer, Quick-Ask Spotlight, snip, etc.)
    * stored before the chat surface mounted or before the user activated
-   * a fresh session. Returns the full `{ text, attachments, sourceApp }`
-   * shape — mirroring desktop — so attachments and source chips survive
-   * the round-trip. Returning `null` means there was nothing pending.
+   * a fresh session. Returns the full
+   * `{ text, attachments, sourceApp, workspacePath }` shape — mirroring
+   * desktop — so attachments, source chips, and draft workspace metadata
+   * survive the round-trip. Returning `null` means there was nothing pending.
    */
   async drain(): Promise<PendingPromptResult | null> {
     try {
@@ -266,6 +267,7 @@ export const chromePendingPrompt: PendingPromptCapability = {
         text?: unknown;
         attachments?: unknown;
         sourceApp?: unknown;
+        workspacePath?: unknown;
       };
       const text =
         typeof obj.text === "string" && obj.text.trim()
@@ -274,6 +276,10 @@ export const chromePendingPrompt: PendingPromptCapability = {
       const sourceApp =
         typeof obj.sourceApp === "string" && obj.sourceApp.trim()
           ? obj.sourceApp
+          : undefined;
+      const workspacePath =
+        typeof obj.workspacePath === "string" && obj.workspacePath.trim()
+          ? obj.workspacePath
           : undefined;
       let attachments: PendingPromptAttachment[] | undefined;
       if (Array.isArray(obj.attachments)) {
@@ -285,7 +291,7 @@ export const chromePendingPrompt: PendingPromptCapability = {
         if (out.length > 0) attachments = out;
       }
       if (!text && !attachments) return null;
-      return { text, attachments, sourceApp };
+      return { text, attachments, sourceApp, workspacePath };
     } catch {
       return null;
     }

@@ -199,10 +199,13 @@ async function handleSubmit(payload: SubmitPayload) {
   }
 
   // Inject the bound workspace path as a system-context block on the
-  // user's most recent message. The agent's tools then know the cwd
-  // without needing the user to spell it out every turn. We mutate a
-  // shallow copy so the renderer's persisted history stays untouched.
+  // user's most recent message. The structured cwd below is authoritative
+  // for tools; this user-visible context keeps the active directory explicit
+  // when an existing conversation switches workspaces while its persisted
+  // system prompt remains byte-stable. We mutate a shallow copy so the
+  // renderer's persisted history stays untouched.
   const augmentedHistory = injectWorkspaceContext(history, sessionId)
+  const workingDirectory = workspaceManager.getForSession(sessionId) ?? undefined
 
   const state = makeInitialState(sessionId, assistantUiId)
   const controller = new AbortController()
@@ -221,12 +224,9 @@ async function handleSubmit(payload: SubmitPayload) {
     return fresh
   }
 
-  // The /v1/runs surface reports tool progress as bare started/completed
-  // events that carry only a tool name (no toolCallId, label, or emoji —
-  // unlike the chat-completions `hermes.tool.progress` channel). Synthesize
-  // a stable id per `tool.started` and pair each `tool.completed` back FIFO
-  // by tool name (the agent reports completions in start order), so the
-  // trace UI — which keys all of its state on toolCallId — keeps working.
+  // Current gateways provide a stable tool_call_id plus structured args and
+  // results. Keep the FIFO fallback for older Hermes installations whose
+  // /v1/runs events only carried a tool name.
   let toolSeq = 0
   const runningToolIds = new Map<string, string[]>()
 
@@ -240,7 +240,17 @@ async function handleSubmit(payload: SubmitPayload) {
       event.status === "completed"
         ? event.durationMs ?? (startedAt ? Date.now() - startedAt : undefined)
         : event.durationMs
-    const stamped: HermesToolProgress = { ...event, startedAt, durationMs }
+    const stamped: HermesToolProgress = {
+      ...(prior ?? {}),
+      ...event,
+      label: event.label ?? prior?.label,
+      args: event.args ?? prior?.args,
+      result: event.result ?? prior?.result,
+      error: event.error ?? prior?.error,
+      inlineDiff: event.inlineDiff ?? prior?.inlineDiff,
+      startedAt,
+      durationMs,
+    }
 
     const existingIdx = state.hermesToolProgress.findIndex(
       (e) => e.toolCallId === event.toolCallId,
@@ -302,6 +312,7 @@ async function handleSubmit(payload: SubmitPayload) {
       {
         model,
         sessionId,
+        workingDirectory,
         signal: controller.signal,
         onRun: (runId) => {
           state.runId = runId
@@ -321,15 +332,20 @@ async function handleSubmit(payload: SubmitPayload) {
           emitEvent(sessionId, { kind: "chunk", text: delta })
         },
         onReasoning: (text) => {
-          // Runs delivers reasoning as one consolidated block rather than
-          // streamed deltas; append it whole.
-          if (!text) return
-          state.reasoning += text
+          // Hermes historically used reasoning.available for both genuine
+          // intermediate notes and a copy of the final answer. Treat it as
+          // ephemeral progress, and drop the latter before it can flash twice.
+          const trimmed = text.trim()
+          if (!trimmed) return
+          const probe = trimmed.slice(0, 100)
+          if (probe && state.assistantText.includes(probe)) return
+          state.reasoning = trimmed
           state.updatedAt = Date.now()
-          emitEvent(sessionId, { kind: "reasoning", text })
+          emitEvent(sessionId, { kind: "reasoning", text: trimmed })
         },
-        onToolStarted: ({ tool, preview }) => {
-          const toolCallId = `rt_${state.runId ?? sessionId}_${toolSeq++}`
+        onToolStarted: ({ tool, toolCallId: stableId, preview, args }) => {
+          const toolCallId =
+            stableId ?? `rt_${state.runId ?? sessionId}_${toolSeq++}`
           const queue = runningToolIds.get(tool) ?? []
           queue.push(toolCallId)
           runningToolIds.set(tool, queue)
@@ -338,18 +354,37 @@ async function handleSubmit(payload: SubmitPayload) {
             toolCallId,
             status: "running",
             label: preview || undefined,
+            args,
           })
         },
-        onToolCompleted: ({ tool, duration }) => {
+        onToolCompleted: ({
+          tool,
+          toolCallId: stableId,
+          duration,
+          error,
+          args,
+          result,
+          inlineDiff,
+        }) => {
           const queue = runningToolIds.get(tool)
           const toolCallId =
-            queue && queue.length
+            stableId ??
+            (queue && queue.length
               ? queue.shift()!
-              : `rt_${state.runId ?? sessionId}_${toolSeq++}`
+              : `rt_${state.runId ?? sessionId}_${toolSeq++}`)
+          if (stableId && queue) {
+            const index = queue.indexOf(stableId)
+            if (index >= 0) queue.splice(index, 1)
+          }
+          if (queue && queue.length === 0) runningToolIds.delete(tool)
           applyToolProgress({
             tool,
             toolCallId,
             status: "completed",
+            args,
+            result,
+            error,
+            inlineDiff,
             durationMs:
               typeof duration === "number" ? Math.round(duration * 1000) : undefined,
           })

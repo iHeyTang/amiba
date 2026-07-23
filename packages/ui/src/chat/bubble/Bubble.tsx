@@ -1,7 +1,9 @@
+import type { ApprovalRecord, HermesToolProgress } from "@amiba/core"
 import { cn } from "../../primitives"
-import { ChevronDown, ChevronUp, Globe } from "lucide-react"
+import { ChevronDown, ChevronRight, ChevronUp, Globe } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
+import { useT } from "@amiba/i18n"
 
 import {
   bubbleTextContent,
@@ -14,16 +16,18 @@ import {
   EXPANDED_MAX_HEIGHT_CLASS,
   type UiMessage
 } from "../internal/types"
-import { ApprovalRecordChip, ApprovalRecordList } from "./approval"
+import { ApprovalRecordChip } from "./approval"
 import {
   AgentDestinationChip,
   AttachmentBadgeView
 } from "./chips"
-import { ToolChip, ToolProgressChips } from "./tool-chip"
+import { ToolChip } from "./tool-chip"
+import { describeToolCall, hasToolDetail } from "./tool-presentation"
 
 export interface BubbleProps {
   m: UiMessage
-  showStreamDetails?: boolean
+  /** Turn-level renderers use this after moving execution details into one summary. */
+  suppressTrace?: boolean
   /**
    * Called when the "Open in my browser →" chip on a finished assistant
    * bubble is clicked. Extension impl opens in a chrome tab; desktop impl
@@ -43,7 +47,9 @@ export interface BubbleProps {
  *                   audit trail, and "Open in my browser →" chip.
  *  - other roles  — minimal grey monospace box for visibility.
  */
-export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }: BubbleProps) {
+export function Bubble({ m, suppressTrace = false, onOpenAgentDestination }: BubbleProps) {
+  const { t } = useT()
+
   if (m.role === "user") {
     const bodyText = bubbleTextContent(m.content)
     const pageBadges =
@@ -85,163 +91,102 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
   }
 
   if (m.role === "assistant") {
-    const rawBody = bubbleTextContent(m.content)
-    const { body: bodyText, thinking: extractedThinking } = splitThinkingFromBody(rawBody)
-    const verboseText = bubbleTextContent(m.streamVerbose)
-    const reasoningText = [bubbleTextContent(m.reasoning).trim(), extractedThinking]
-      .filter((s) => s.length > 0)
-      .join("\n\n")
-    const toolProgress = m.hermesToolProgress ?? []
-    const timeline = m.assistantTimeline ?? []
-    const hasTimeline = showStreamDetails && timeline.length > 0
-    const hasReasoningBlock = showStreamDetails && verboseText.trim().length > 0
-    const hasLegacyToolList = showStreamDetails && !hasTimeline && toolProgress.length > 0
-    const hasVerboseBlock = hasReasoningBlock || hasLegacyToolList || hasTimeline
+    const trace = resolveAssistantTrace(m)
+    const hasBody = trace.bodyText.trim().length > 0
+    const traceVisible = trace.hasTrace && !suppressTrace
+    const hasFinalDestination =
+      !m.streaming && Boolean(m.agentFinalUrl && onOpenAgentDestination)
 
-    // Bubble has no user-visible content for the current view → skip it.
-    // Reasoning text only counts when `showStreamDetails` is on; with the
-    // thinking trace hidden, a reasoning-only bubble would otherwise paint
-    // an empty `px-1 py-1` strip and many of them stack into the large
-    // blank band reported between turns.
-    const reasoningVisible = showStreamDetails && reasoningText.length > 0
+    // A completed assistant message with no answer or inspectable execution
+    // record should take up no space in the conversation.
     if (
       !m.streaming &&
-      bodyText.trim().length === 0 &&
-      !reasoningVisible &&
-      !hasVerboseBlock
+      !hasBody &&
+      !traceVisible &&
+      !hasFinalDestination
     ) {
       return null
     }
 
-    // Pre-token streaming placeholder — only when we genuinely have
-    // nothing visible yet. If reasoning is already streaming (and the
-    // user kept the trace visible) or a tool timeline / progress block
-    // has started, we'd rather paint the real content than mask it with
-    // a generic "Thinking…" line.
-    const hasVisibleContent =
-      bodyText.trim().length > 0 ||
-      (showStreamDetails && reasoningText.length > 0) ||
-      hasVerboseBlock
+    // MessageTurns renders this trace once for the whole user turn. Suppress
+    // the otherwise-duplicated streaming placeholder while that aggregate is
+    // already visible.
+    if (
+      suppressTrace &&
+      trace.hasTrace &&
+      !hasBody &&
+      !hasFinalDestination
+    ) {
+      return null
+    }
+
+    // Before the first reasoning/tool/text event, keep the placeholder to a
+    // single quiet line. As soon as real execution state arrives, render it.
+    const hasVisibleContent = hasBody || traceVisible || hasFinalDestination
     const isEmptyStreaming = !!m.streaming && !hasVisibleContent
     if (isEmptyStreaming) {
-      const runningTool = toolProgress.find((e) => e.status === "running")
-      const hasFinishedTool = toolProgress.some((e) => e.status === "completed")
-      const placeholder = runningTool
-        ? `Running ${runningTool.tool}…`
-        : hasFinishedTool
-          ? "Generating answer…"
-          : "Thinking…"
       return (
         <div className="px-1 py-1 text-sm" aria-live="polite">
           <div className="inline-flex max-w-full items-center gap-2 text-muted-foreground">
             <span className="hermes-thinking-dot shrink-0" aria-hidden="true" />
-            <span className="truncate">{placeholder}</span>
+            <span className="truncate">{t("sidepanel.trace.thinking")}</span>
           </div>
         </div>
       )
     }
 
-    const hasRunningTool = toolProgress.some((e) => e.status === "running")
     const awaitingAnswerOnly =
       !!m.streaming &&
-      bodyText.trim() === "" &&
-      hasVerboseBlock &&
-      !hasRunningTool &&
-      !hasTimeline
-    const progressMap = new Map(toolProgress.map((p) => [p.toolCallId, p] as const))
-    const approvalRecords = m.hermesApprovalRecords ?? []
-    const approvalMap = new Map(approvalRecords.map((r) => [r.approvalId, r] as const))
+      !hasBody &&
+      trace.toolProgress.length > 0 &&
+      !trace.hasRunningTool &&
+      trace.reasoningText.length === 0
 
     return (
       <div className="min-w-0 px-1 py-1 text-sm">
-        {reasoningText.length > 0 && showStreamDetails && (
-          <Streamdown
-            mode={m.streaming ? "streaming" : "static"}
-            parseIncompleteMarkdown
-            caret="circle"
-            isAnimating={!!m.streaming}
-            className="chat-md chat-md--reasoning mb-1.5 break-words">
-            {reasoningText}
-          </Streamdown>
-        )}
-        {hasReasoningBlock && (
-          <Streamdown
-            mode={m.streaming ? "streaming" : "static"}
-            parseIncompleteMarkdown
-            caret="circle"
-            isAnimating={!!m.streaming}
-            className="chat-md mb-2 break-words text-xs text-muted-foreground/80">
-            {verboseText}
-          </Streamdown>
-        )}
-        {hasLegacyToolList && (
-          <div className="mb-2">
-            <ToolProgressChips events={toolProgress} />
+        {traceVisible && (
+          <div className={cn("flex flex-col gap-0.5", hasBody ? "mb-2" : "")}>
+            {m.streaming && trace.reasoningText.length > 0 && (
+              <div className="inline-flex min-h-7 max-w-full items-center gap-2 px-1.5 text-[11px] text-muted-foreground">
+                <span className="hermes-thinking-dot shrink-0" aria-hidden />
+                <span className="truncate">
+                  {compactProgressNote(trace.reasoningText)}
+                </span>
+              </div>
+            )}
+            {trace.legacyToolDetails.length > 0 && (
+              <TraceDisclosure
+                label={t("sidepanel.trace.toolDetails")}
+                text={trace.legacyToolDetails}
+                streaming={!!m.streaming}
+              />
+            )}
+            {trace.items.map((item) => {
+              if (item.kind === "tool") {
+                return <ToolChip key={item.id} event={item.event} />
+              }
+              return <ApprovalRecordChip key={item.id} record={item.record} />
+            })}
             {awaitingAnswerOnly && (
-              <div className="mt-1.5 inline-flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="hermes-thinking-dot" aria-hidden="true" />
-                <span>Generating answer…</span>
+              <div
+                className="inline-flex min-h-7 items-center gap-2 px-1.5 text-[11px] text-muted-foreground"
+                aria-live="polite">
+                <span className="hermes-thinking-dot shrink-0" aria-hidden="true" />
+                <span>{t("sidepanel.trace.generating")}</span>
               </div>
             )}
           </div>
         )}
-        {hasTimeline ? (
-          (() => {
-            let lastTextId: string | null = null
-            for (let i = timeline.length - 1; i >= 0; i--) {
-              const it = timeline[i]
-              if (it.kind === "text") {
-                lastTextId = it.id
-                break
-              }
-            }
-            return (
-              <div className="flex flex-col gap-2">
-                {timeline.map((item) => {
-                  if (item.kind === "text") {
-                    if (!item.text.trim()) return null
-                    const isLive = !!m.streaming && item.id === lastTextId
-                    return (
-                      <Streamdown
-                        key={item.id}
-                        mode={isLive ? "streaming" : "static"}
-                        parseIncompleteMarkdown
-                        caret="circle"
-                        isAnimating={isLive}
-                        className="chat-md break-words">
-                        {item.text}
-                      </Streamdown>
-                    )
-                  }
-                  if (item.kind === "tool") {
-                    const ev = progressMap.get(item.toolCallId)
-                    if (!ev) return null
-                    return <ToolChip key={item.id} event={ev} />
-                  }
-                  const rec = approvalMap.get(item.approvalId)
-                  if (!rec) return null
-                  return <ApprovalRecordChip key={item.id} record={rec} />
-                })}
-              </div>
-            )
-          })()
-        ) : (
-          bodyText.trim().length > 0 && (
-            <Streamdown
-              mode="streaming"
-              parseIncompleteMarkdown
-              caret="circle"
-              isAnimating={!!m.streaming}
-              className="chat-md break-words">
-              {bodyText}
-            </Streamdown>
-          )
+        {hasBody && (
+          <Streamdown
+            mode={m.streaming ? "streaming" : "static"}
+            parseIncompleteMarkdown
+            caret="circle"
+            isAnimating={!!m.streaming}
+            className="chat-md break-words">
+            {trace.bodyText}
+          </Streamdown>
         )}
-        {!hasTimeline &&
-          m.hermesApprovalRecords &&
-          m.hermesApprovalRecords.length > 0 && (
-            <ApprovalRecordList records={m.hermesApprovalRecords} />
-          )}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
           <AgentDestinationChip
             url={m.agentFinalUrl}
@@ -256,6 +201,295 @@ export function Bubble({ m, showStreamDetails = false, onOpenAgentDestination }:
   return (
     <div className="mx-3 rounded-md bg-muted/50 p-2 font-mono text-xs">
       [{m.role}] {bubbleTextContent(m.content)}
+    </div>
+  )
+}
+
+type ResolvedTraceItem =
+  | { kind: "tool"; id: string; event: HermesToolProgress }
+  | { kind: "approval"; id: string; record: ApprovalRecord }
+
+function resolveAssistantTrace(m: UiMessage) {
+  const rawBody = bubbleTextContent(m.content)
+  const { body: bodyText, thinking: extractedThinking } = splitThinkingFromBody(rawBody)
+  const verboseText = bubbleTextContent(m.streamVerbose)
+  const reasoningText = [bubbleTextContent(m.reasoning).trim(), extractedThinking]
+    .filter((text) => text.length > 0)
+    .join("\n\n")
+  const toolProgress = m.hermesToolProgress ?? []
+  const approvalRecords = m.hermesApprovalRecords ?? []
+  const progressMap = new Map(toolProgress.map((event) => [event.toolCallId, event] as const))
+  const approvalMap = new Map(
+    approvalRecords.map((record) => [record.approvalId, record] as const)
+  )
+  const items: ResolvedTraceItem[] = []
+  const timelineToolIds = new Set<string>()
+  const timelineApprovalIds = new Set<string>()
+
+  for (const item of m.assistantTimeline ?? []) {
+    if (item.kind === "tool") {
+      const event = progressMap.get(item.toolCallId)
+      if (!event) continue
+      timelineToolIds.add(item.toolCallId)
+      items.push({ kind: "tool", id: item.id, event })
+      continue
+    }
+    if (item.kind === "approval") {
+      const record = approvalMap.get(item.approvalId)
+      if (!record) continue
+      timelineApprovalIds.add(item.approvalId)
+      items.push({ kind: "approval", id: item.id, record })
+    }
+  }
+
+  for (const event of toolProgress) {
+    if (timelineToolIds.has(event.toolCallId)) continue
+    items.push({ kind: "tool", id: `tool:${event.toolCallId}`, event })
+  }
+  for (const record of approvalRecords) {
+    if (timelineApprovalIds.has(record.approvalId)) continue
+    items.push({
+      kind: "approval",
+      id: `approval:${record.approvalId}`,
+      record
+    })
+  }
+
+  const hasPerToolDetails = toolProgress.some(hasToolDetail)
+  const legacyToolDetails =
+    verboseText.trim().length > 0 && !hasPerToolDetails ? verboseText.trim() : ""
+
+  return {
+    bodyText,
+    reasoningText,
+    legacyToolDetails,
+    toolProgress,
+    items,
+    hasRunningTool: toolProgress.some((event) => event.status === "running"),
+    hasTrace:
+      (!!m.streaming && reasoningText.length > 0) ||
+      legacyToolDetails.length > 0 ||
+      items.length > 0
+  }
+}
+
+function compactProgressNote(text: string): string {
+  const parts = text
+    .split(/\n+/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+  const latest = parts.at(-1) ?? ""
+  return latest.length > 160 ? `${latest.slice(0, 159)}…` : latest
+}
+
+function TraceDisclosure({
+  label,
+  text,
+  streaming
+}: {
+  label: string
+  text: string
+  streaming: boolean
+}) {
+  const { t } = useT()
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        title={
+          expanded
+            ? t("sidepanel.trace.collapseDetails")
+            : t("sidepanel.trace.expandDetails")
+        }
+        onClick={() => setExpanded((value) => !value)}
+        className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+        <span
+          aria-hidden
+          className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
+          <span className="h-1.5 w-1.5 rounded-full bg-current opacity-45" />
+        </span>
+        <span className="min-w-0 truncate">{label}</span>
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "h-3 w-3 shrink-0 opacity-45 transition-transform group-hover/trace:opacity-70",
+            expanded && "rotate-90"
+          )}
+        />
+      </button>
+      {expanded && (
+        <div className="ml-[7px] border-l border-border/60 py-1.5 pl-4 pr-1">
+          <Streamdown
+            mode={streaming ? "streaming" : "static"}
+            parseIncompleteMarkdown
+            caret="circle"
+            isAnimating={streaming}
+            className="chat-md chat-md--reasoning break-words text-xs text-muted-foreground/85">
+            {text}
+          </Streamdown>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type TurnTraceDetail =
+  | {
+      kind: "legacy"
+      id: string
+      text: string
+      streaming: boolean
+    }
+  | {
+      kind: "tool"
+      id: string
+      event: HermesToolProgress
+    }
+  | {
+      kind: "approval"
+      id: string
+      record: ApprovalRecord
+    }
+
+/**
+ * One disclosure for the entire agent run. Completed conversations spend a
+ * single line on execution metadata; opening it reveals inspectable tool and
+ * approval evidence. Intermediate model progress is intentionally ephemeral.
+ */
+function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
+  const { t } = useT()
+  const [expanded, setExpanded] = useState(false)
+  const details: TurnTraceDetail[] = []
+  const tools: HermesToolProgress[] = []
+  const seenToolIds = new Set<string>()
+  const seenApprovalIds = new Set<string>()
+  let latestProgress = ""
+
+  for (const message of messages) {
+    const trace = resolveAssistantTrace(message)
+    if (message.streaming && trace.reasoningText) {
+      latestProgress = compactProgressNote(trace.reasoningText)
+    }
+    if (trace.legacyToolDetails) {
+      details.push({
+        kind: "legacy",
+        id: `${message.uiId}:legacy`,
+        text: trace.legacyToolDetails,
+        streaming: !!message.streaming
+      })
+    }
+    for (const item of trace.items) {
+      if (item.kind === "tool") {
+        if (seenToolIds.has(item.event.toolCallId)) continue
+        seenToolIds.add(item.event.toolCallId)
+        tools.push(item.event)
+        details.push(item)
+        continue
+      }
+      if (seenApprovalIds.has(item.record.approvalId)) continue
+      seenApprovalIds.add(item.record.approvalId)
+      details.push(item)
+    }
+  }
+
+  if (details.length === 0 && !latestProgress) return null
+
+  const streaming = messages.some((message) => message.streaming)
+  const runningTool = [...tools].reverse().find((event) => event.status === "running")
+  const runningPresentation = runningTool
+    ? describeToolCall(runningTool, t)
+    : null
+  const hasDetails = details.length > 0
+  const statusLabel = runningTool
+    ? t("sidepanel.trace.executionRunning")
+    : streaming && tools.length > 0
+      ? t("sidepanel.trace.generating")
+      : streaming
+        ? t("sidepanel.trace.thinking")
+        : t("sidepanel.trace.executionComplete")
+  const metaLabel = runningTool
+    ? [runningPresentation?.action, runningPresentation?.target]
+        .filter(Boolean)
+        .join(" · ")
+    : tools.length > 0
+      ? t("sidepanel.trace.toolCount", { count: tools.length })
+      : latestProgress || t("sidepanel.trace.executionDetails")
+
+  return (
+    <div className="min-w-0 px-1 py-0.5 text-sm" data-execution-summary>
+      <button
+        type="button"
+        disabled={!hasDetails}
+        aria-expanded={hasDetails ? expanded : undefined}
+        title={
+          hasDetails
+            ? expanded
+              ? t("sidepanel.trace.collapseDetails")
+              : t("sidepanel.trace.expandDetails")
+            : latestProgress
+        }
+        onClick={() => hasDetails && setExpanded((value) => !value)}
+        className={cn(
+          "group/run inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          hasDetails
+            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            : "cursor-default"
+        )}>
+        <span
+          aria-hidden
+          className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
+          {streaming ? (
+            <span className="hermes-thinking-dot" />
+          ) : (
+            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-45" />
+          )}
+        </span>
+        <span className="shrink-0">{statusLabel}</span>
+        <span aria-hidden className="shrink-0 opacity-35">
+          ·
+        </span>
+        <span
+          className={cn(
+            "min-w-0 truncate text-muted-foreground/75",
+            runningTool && "font-mono"
+          )}>
+          {metaLabel}
+        </span>
+        {hasDetails && (
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "h-3 w-3 shrink-0 opacity-45 transition-transform group-hover/run:opacity-70",
+              expanded && "rotate-90"
+            )}
+          />
+        )}
+      </button>
+      {expanded && hasDetails && (
+        <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
+          {details.map((detail) => {
+            if (detail.kind === "legacy") {
+              return (
+                <TraceDisclosure
+                  key={detail.id}
+                  label={t("sidepanel.trace.toolDetails")}
+                  text={detail.text}
+                  streaming={detail.streaming}
+                />
+              )
+            }
+            if (detail.kind === "tool") {
+              return <ToolChip key={detail.id} event={detail.event} />
+            }
+            return (
+              <ApprovalRecordChip key={detail.id} record={detail.record} />
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -351,11 +585,9 @@ export function UserStickyBubble({
  */
 export function MessageTurns({
   messages,
-  showStreamDetails,
   onOpenAgentDestination
 }: {
   messages: UiMessage[]
-  showStreamDetails: boolean
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"]
 }) {
   type Turn = { user: UiMessage | null; replies: UiMessage[] }
@@ -379,11 +611,14 @@ export function MessageTurns({
           {turn.user && (
             <UserStickyBubble m={turn.user} onOpenAgentDestination={onOpenAgentDestination} />
           )}
+          <TurnExecutionDisclosure
+            messages={turn.replies.filter((message) => message.role === "assistant")}
+          />
           {turn.replies.map((m) => (
             <Bubble
               key={m.uiId}
               m={m}
-              showStreamDetails={showStreamDetails}
+              suppressTrace={m.role === "assistant"}
               onOpenAgentDestination={onOpenAgentDestination}
             />
           ))}

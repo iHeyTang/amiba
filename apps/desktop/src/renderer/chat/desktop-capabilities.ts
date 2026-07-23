@@ -15,7 +15,7 @@
  *   - `amiba://` URL handler — text prompt
  *   - Unix socket inbox — text + optional attachments
  * Everything funnels through the same `home.pendingPrompt` key with the
- * shape `{ text?, attachments?, sourceApp? }`.
+ * shape `{ text?, attachments?, sourceApp?, workspacePath? }`.
  */
 import type {
   PendingPromptAttachment,
@@ -74,12 +74,17 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       text?: unknown
       attachments?: unknown
       sourceApp?: unknown
+      workspacePath?: unknown
     }
     const text =
       typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined
     const sourceApp =
       typeof obj.sourceApp === "string" && obj.sourceApp.trim()
         ? obj.sourceApp
+        : undefined
+    const workspacePath =
+      typeof obj.workspacePath === "string" && obj.workspacePath.trim()
+        ? obj.workspacePath
         : undefined
     let attachments: PendingPromptAttachment[] | undefined
     if (Array.isArray(obj.attachments)) {
@@ -91,7 +96,7 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       if (out.length > 0) attachments = out
     }
     if (!text && !attachments) return null
-    return { text, attachments, sourceApp }
+    return { text, attachments, sourceApp, workspacePath }
   } catch {
     return null
   }

@@ -49,13 +49,13 @@ export interface UiMessage extends ChatMessage {
    */
   agentFinalUrl?: string
   agentFinalTitle?: string
-  /** Streamed reasoning + tool-arg dump for the verbose toggle. */
+  /** Streamed tool-argument markdown kept for backward-compatible details. */
   streamVerbose?: string
   /**
-   * Pure reasoning / "thinking" text for this turn — separate from
-   * `streamVerbose` which mixes reasoning with tool-arg dumps. Rendered
-   * as a collapsible chip with muted typography so it doesn't share the
-   * body text's font scale.
+   * Hermes `reasoning.available` text. In current gateways this is an
+   * intermediate progress note, not a reliable chain-of-thought channel.
+   * The UI may show the latest note while a run is active and discards it
+   * from the completed execution record.
    */
   reasoning?: string
   /** Live tool-progress events from the gateway, rendered as chips. */

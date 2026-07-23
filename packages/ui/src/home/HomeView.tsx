@@ -17,13 +17,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   transcribeAudio,
@@ -39,8 +33,10 @@ import {
   useVoiceRecorder,
   WallpaperBackdrop,
   WallpaperCredit,
+  WorkspaceControl,
   type ComposerHandle,
 } from "../chat";
+import { getPlatform } from "@amiba/platform";
 import { shortId } from "@amiba/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
@@ -128,7 +124,8 @@ function Home({
   const sessions = useSessions();
   // Shortcuts hook is capability-provided — stable across renders. Falls
   // back to a no-op so the rules-of-hooks order stays consistent.
-  const useShortcutsHook = capabilities?.shortcuts?.useController ?? useNoShortcuts;
+  const useShortcutsHook =
+    capabilities?.shortcuts?.useController ?? useNoShortcuts;
   const shortcuts = useShortcutsHook();
   const wallpaper = useWallpaper();
   // Composer attachments — same hook the main panel and Quick-Ask use.
@@ -156,7 +153,10 @@ function Home({
 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const inputRef = useRef<ComposerHandle | null>(null);
+  const canChooseWorkspace = Boolean(getPlatform().workspaces?.chooseDirectory);
 
   // Voice input — same pipeline as the chat composer. The recorder hook
   // owns the MediaRecorder lifecycle; once the user stops we POST the
@@ -179,6 +179,23 @@ function Home({
   // Either way, the caller supplies `onOpenChat`.
   function goToChatTab() {
     onOpenChat();
+  }
+
+  async function chooseWorkspace() {
+    const choose = getPlatform().workspaces?.chooseDirectory;
+    if (!choose) return;
+    try {
+      const selected = await choose(workspacePath ?? undefined);
+      if (!selected) return;
+      setWorkspacePath(selected);
+      setWorkspaceError(null);
+    } catch (e) {
+      setWorkspaceError(
+        t("workspace.pickerFailed", {
+          error: String((e as Error)?.message || e),
+        }),
+      );
+    }
   }
 
   async function submitToChat(text: string) {
@@ -209,17 +226,16 @@ function Home({
       // dangling in the rail as an unnamed empty row.
       //
       // Letting only the receiving surface create the session avoids
-      // that fork entirely. ``ensureActive`` short-circuits to the
-      // local active id when one exists (panelMode with a selected
-      // empty session — "scenario 2") and creates a fresh session
-      // when there isn't (newtab → chat hand-off or panelMode empty
-      // activeId — "scenario 1"). One session in either case.
+      // that fork entirely. The home surface has no active id, so the
+      // autosend path creates exactly one session when it submits the
+      // first message.
       //
       // Uses `queueChatPrompt` (the bare write — no `createNew`)
       // rather than the `useChatSessionRequester` hook with `mode:
       // "new"` precisely because of the orphan-session story above.
       await queueChatPrompt({
         text: trimmed || undefined,
+        workspacePath: workspacePath ?? undefined,
         attachments:
           readyAttachments.length > 0
             ? readyAttachments
@@ -428,10 +444,27 @@ function Home({
               { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
               { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
             ]}
+            contextRail={
+              canChooseWorkspace ? (
+                <WorkspaceControl
+                  path={workspacePath}
+                  onChoose={() => void chooseWorkspace()}
+                  onClear={
+                    workspacePath
+                      ? () => {
+                          setWorkspacePath(null);
+                          setWorkspaceError(null);
+                        }
+                      : undefined
+                  }
+                  disabled={busy}
+                />
+              ) : undefined
+            }
             extrasBelow={
-              voiceError ? (
+              voiceError || workspaceError ? (
                 <p role="alert" className="text-[11px] text-destructive">
-                  {voiceError}
+                  {voiceError || workspaceError}
                 </p>
               ) : undefined
             }
@@ -451,7 +484,6 @@ function Home({
           />
         )}
       </main>
-
     </div>
   );
 }
@@ -531,8 +563,7 @@ function ShortcutsStrip({
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   // Hide the section entirely while we're still resolving the folder on
@@ -1074,9 +1105,7 @@ function TopBar({
         )}
       >
         <AmibaLogo size={22} variant={logoVariant} />
-        <p className="text-sm font-semibold tracking-tight">
-          {t("app.title")}
-        </p>
+        <p className="text-sm font-semibold tracking-tight">{t("app.title")}</p>
       </div>
       <div className="flex items-center gap-1">
         {wallpaperController?.wallpaper ? (
@@ -1102,4 +1131,3 @@ function TopBar({
     </header>
   );
 }
-

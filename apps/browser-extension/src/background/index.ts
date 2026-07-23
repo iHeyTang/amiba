@@ -93,15 +93,9 @@ chrome.runtime.onInstalled.addListener(() => {
 async function migrateLegacyStorageKeys() {
   const OLD_STREAM_KEY = "settings.sidepanel.showStreamDetails";
   const NEW_STREAM_KEY = "settings.chat.showStreamDetails";
-
-  const r = await chrome.storage.local.get([OLD_STREAM_KEY, NEW_STREAM_KEY]);
-  const carryOver =
-    r[NEW_STREAM_KEY] === undefined && typeof r[OLD_STREAM_KEY] === "boolean";
-  if (carryOver) {
-    await chrome.storage.local.set({ [NEW_STREAM_KEY]: r[OLD_STREAM_KEY] });
-  }
   await chrome.storage.local.remove([
     OLD_STREAM_KEY,
+    NEW_STREAM_KEY,
     "settings.newtab.enabled",
     "settings.newtab.fallbackUrl",
   ]);

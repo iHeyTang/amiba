@@ -425,16 +425,28 @@ export async function postHermesApprovalDecision(opts: {
 /** Subset of `tool_progress_callback` event types the runs SSE forwards. */
 export interface RunToolStarted {
   tool: string;
+  /** Stable Hermes tool-call id. Missing on older gateways. */
+  toolCallId?: string;
   /** Human-readable preview, e.g. `"my_browser_navigate https://example.com"`. */
   preview?: string;
+  /** Redacted structured arguments. Missing on older gateways. */
+  args?: Record<string, unknown>;
 }
 
 export interface RunToolCompleted {
   tool: string;
+  /** Stable Hermes tool-call id. Missing on older gateways. */
+  toolCallId?: string;
   /** Seconds the tool spent running. */
   duration?: number;
   /** True when the underlying tool raised an error. */
   error?: boolean;
+  /** Redacted structured arguments. */
+  args?: Record<string, unknown>;
+  /** Bounded, redacted result payload. */
+  result?: unknown;
+  /** Bounded edit diff for file-mutating tools. */
+  inlineDiff?: string;
 }
 
 export interface RunHandlers {
@@ -476,6 +488,12 @@ export interface RunAgentOptions {
   sessionKey?: string;
   /** Hermes session id for short-term chat continuity. */
   sessionId?: string;
+  /**
+   * Absolute workspace directory for this turn. Sent as structured ``cwd``
+   * metadata so Hermes binds its session context and tool task before the
+   * agent starts; it is never inferred from prompt text.
+   */
+  workingDirectory?: string;
   /** Optional model override; the gateway has its own default. */
   model?: string;
   /** System prompt → goes into the `instructions` request field. */
@@ -550,6 +568,7 @@ export async function runHermesAgent(
   if (opts.instructions) startBody.instructions = opts.instructions;
   if (opts.model) startBody.model = opts.model;
   if (opts.sessionId) startBody.session_id = opts.sessionId;
+  if (opts.workingDirectory) startBody.cwd = opts.workingDirectory;
 
   // Turn metadata travels OUT OF BAND so it never enters the prompt
   // path. The backplane side-channel must hold the snapshot before
@@ -705,17 +724,38 @@ export async function runHermesAgent(
         case "tool.started": {
           handlers.onToolStarted?.({
             tool: String(obj.tool ?? ""),
+            toolCallId:
+              typeof obj.tool_call_id === "string"
+                ? obj.tool_call_id
+                : undefined,
             preview:
               typeof obj.preview === "string" ? obj.preview : undefined,
+            args:
+              obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
+                ? obj.args as Record<string, unknown>
+                : undefined,
           });
           break;
         }
         case "tool.completed": {
           handlers.onToolCompleted?.({
             tool: String(obj.tool ?? ""),
+            toolCallId:
+              typeof obj.tool_call_id === "string"
+                ? obj.tool_call_id
+                : undefined,
             duration:
               typeof obj.duration === "number" ? obj.duration : undefined,
             error: typeof obj.error === "boolean" ? obj.error : undefined,
+            args:
+              obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
+                ? obj.args as Record<string, unknown>
+                : undefined,
+            result: obj.result,
+            inlineDiff:
+              typeof obj.inline_diff === "string"
+                ? obj.inline_diff
+                : undefined,
           });
           break;
         }

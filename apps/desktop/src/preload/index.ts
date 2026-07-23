@@ -78,6 +78,8 @@ const api = {
    * (the legacy `File.path` field is gone).
    */
   workspaces: {
+    chooseDirectory: (defaultPath?: string): Promise<string | null> =>
+      ipcRenderer.invoke("workspace:choose-directory", defaultPath),
     bind: (sessionId: string, p: string): Promise<void> =>
       ipcRenderer.invoke("workspace:bind", { sessionId, path: p }),
     unbind: (sessionId: string): Promise<void> =>

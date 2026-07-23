@@ -22,6 +22,8 @@ export interface UseFolderDropArgs {
 }
 
 export interface UseFolderDropResult {
+  /** Whether this host can open a native directory picker. */
+  workspaceAvailable: boolean;
   /** Currently bound path for `sessions.activeId`, or null. */
   workspacePath: string | null;
   /** User-actionable error from the last bind/unbind attempt. The
@@ -44,6 +46,8 @@ export interface UseFolderDropResult {
   /** Detach the current session's workspace binding. The path chip's X
    * button calls this. */
   unbindCurrent: () => void;
+  /** Open the native directory picker and bind the result to the active chat. */
+  chooseCurrent: () => void;
 }
 
 /** Electron 33 removed `File.path` from the renderer; the preload
@@ -138,12 +142,10 @@ export function useFolderDrop(args: UseFolderDropArgs): UseFolderDropResult {
         return;
       }
       try {
-        // Bindings are session-scoped: ensure an active session exists
-        // so a drop on a brand-new app launch (no chat yet) still pins
-        // to a real session id rather than failing silently.
-        const sessionId = sessions.ready
-          ? await sessions.ensureActive()
-          : null;
+        // Workspace bindings belong to real conversations. The id-less home
+        // surface must stay id-less until its first message is submitted, so
+        // a folder drop there never creates a placeholder session.
+        const sessionId = sessions.ready ? sessions.activeId : "";
         if (!sessionId) {
           setWorkspaceError(
             "Open or start a chat session before binding a workspace.",
@@ -165,7 +167,7 @@ export function useFolderDrop(args: UseFolderDropArgs): UseFolderDropResult {
         // Workspace binding is a desktop-only capability — bail early on
         // the extension surface so the composer's file-drop handler
         // keeps owning the chat-area drop without competition.
-        if (!getPlatform().workspaces) return;
+        if (!getPlatform().workspaces || !sessions.activeId) return;
         const dt = e.dataTransfer;
         if (!dt) return;
         if (!Array.from(dt.types || []).includes("Files")) return;
@@ -181,7 +183,7 @@ export function useFolderDrop(args: UseFolderDropArgs): UseFolderDropResult {
         setFolderDragOver(false);
       },
       onDrop: (e: DragEvent<HTMLDivElement>) => {
-        if (!getPlatform().workspaces) return;
+        if (!getPlatform().workspaces || !sessions.activeId) return;
         const dt = e.dataTransfer;
         if (!dt || !dragHasDirectory(dt)) return;
         e.preventDefault();
@@ -190,7 +192,7 @@ export function useFolderDrop(args: UseFolderDropArgs): UseFolderDropResult {
         if (files.length > 0) void handleFolderDrop(files);
       },
     }),
-    [handleFolderDrop],
+    [handleFolderDrop, sessions.activeId],
   );
 
   const unbindCurrent = useCallback(() => {
@@ -203,12 +205,31 @@ export function useFolderDrop(args: UseFolderDropArgs): UseFolderDropResult {
     });
   }, [sessions.activeId]);
 
+  const chooseCurrent = useCallback(() => {
+    const ws = getPlatform().workspaces;
+    const chooseDirectory = ws?.chooseDirectory;
+    const sid = sessions.activeId;
+    if (!ws || !chooseDirectory || !sid) return;
+    void (async () => {
+      try {
+        const selected = await chooseDirectory(workspacePath ?? undefined);
+        if (!selected) return;
+        await ws.bind(sid, selected);
+        setWorkspaceError(null);
+      } catch (e) {
+        setWorkspaceError(String((e as Error)?.message || e));
+      }
+    })();
+  }, [sessions.activeId, workspacePath]);
+
   return {
+    workspaceAvailable: Boolean(getPlatform().workspaces?.chooseDirectory),
     workspacePath,
     workspaceError,
     setWorkspaceError,
     folderDragOver,
     dropHandlers,
     unbindCurrent,
+    chooseCurrent,
   };
 }

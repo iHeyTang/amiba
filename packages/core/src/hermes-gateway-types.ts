@@ -33,6 +33,14 @@ export interface HermesToolProgress {
   status: "running" | "completed"
   label?: string
   emoji?: string
+  /** Redacted structured arguments from Hermes's authoritative tool callback. */
+  args?: Record<string, unknown>
+  /** Bounded, redacted tool result used by tool-specific inspection views. */
+  result?: unknown
+  /** True when Hermes classified the tool result as a failure. */
+  error?: boolean
+  /** Bounded ANSI diff emitted for file-mutating tools. */
+  inlineDiff?: string
   /** Wall-clock ms when the engine first saw a `running` event. */
   startedAt?: number
   /** Elapsed wall-clock between the matching `running` and this `completed`. */

@@ -56,6 +56,7 @@ interface AmibaBridgeApi {
     onChanged(cb: () => void): () => void
   }
   workspaces: {
+    chooseDirectory(defaultPath?: string): Promise<string | null>
     bind(sessionId: string, path: string): Promise<void>
     unbind(sessionId: string): Promise<void>
     getCurrent(sessionId: string): Promise<string | null>

@@ -143,6 +143,12 @@ export interface FullScreenChatViewProps {
    * source). Forwarded verbatim to the inner `<ChatSurface mentionProviders>`.
    */
   mentionProviders?: TriggerProvider[];
+  /**
+   * Restore the last selected sidebar destination on mount. Desktop disables
+   * this so every app launch lands on the id-less chat home; other hosts keep
+   * the existing persisted-navigation behaviour by default.
+   */
+  restoreSidebarViewOnMount?: boolean;
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -167,6 +173,7 @@ function FullScreenChatViewInner({
   topBarHeightPx,
   topBarClassName,
   mentionProviders,
+  restoreSidebarViewOnMount = true,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -241,11 +248,13 @@ function FullScreenChatViewInner({
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
-    void storage.get(SIDEBAR_VIEW_KEY).then((r) => {
-      if (cancelled) return;
-      const v = r[SIDEBAR_VIEW_KEY];
-      if (isSidebarView(v)) setSidebarView(v);
-    });
+    if (restoreSidebarViewOnMount) {
+      void storage.get(SIDEBAR_VIEW_KEY).then((r) => {
+        if (cancelled) return;
+        const v = r[SIDEBAR_VIEW_KEY];
+        if (isSidebarView(v)) setSidebarView(v);
+      });
+    }
     const unsub = storage.watch([SIDEBAR_VIEW_KEY], (changes: StorageChangeMap) => {
       const ch = changes[SIDEBAR_VIEW_KEY];
       if (ch && isSidebarView(ch.newValue)) setSidebarView(ch.newValue);
@@ -254,7 +263,7 @@ function FullScreenChatViewInner({
       cancelled = true;
       unsub();
     };
-  }, []);
+  }, [restoreSidebarViewOnMount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -332,11 +341,11 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
   }, []);
 
-  // New-chat row: mint a session AND land the main pane on the chat surface
-  // (the row is reachable from any view, not just Chats).
+  // New-chat row is navigation to the id-less home surface. A real session is
+  // minted only when that surface submits its first message.
   const onNewChatAndShow = useCallback(async () => {
     if (!sessions.ready) return;
-    await sessions.createNew();
+    await sessions.deselect();
     onSidebarViewChange("chats");
   }, [sessions, onSidebarViewChange]);
 

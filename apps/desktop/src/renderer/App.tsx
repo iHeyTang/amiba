@@ -214,6 +214,7 @@ function AppInner(): ReactElement {
       topBarLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
       topBarHeightPx={TITLE_BAR_HEIGHT}
       topBarClassName="app-drag-region"
+      restoreSidebarViewOnMount={false}
       slots={{
         emptyState: (
           <HomeView

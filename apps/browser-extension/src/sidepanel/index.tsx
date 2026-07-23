@@ -70,9 +70,9 @@ function SidePanelInner(props: {
         ),
         // Mirrors desktop: the empty state IS the home composer. HomeView
         // in panelMode drops its full-screen chrome and keeps just the
-        // centred composer card. Submit calls `sessions.createNew()` and
-        // writes the text to `home.pendingPrompt`; ChatSurface's drain
-        // effect auto-sends inside the freshly-active session, so
+        // centred composer card. Submit writes the text to
+        // `home.pendingPrompt`; ChatSurface's drain effect creates the
+        // session as part of auto-send, so
         // `onOpenChat` is a no-op (we're already in the chat surface).
         // Capabilities are intentionally empty — the bookmark-shortcuts
         // strip belongs on the new-tab Home, not the narrow sidebar.

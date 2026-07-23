@@ -1,9 +1,10 @@
 /**
  * Per-session workspace binding.
  *
- * Each chat session can pin a different directory; the chat engine
- * prepends a `<workspace>` block to user prompts for whichever session
- * is sending the turn. A chokidar watcher runs per binding so a future
+ * Each chat session can pin a different directory; the chat engine forwards
+ * it as the structured cwd for each Hermes run and also adds a compact
+ * user-turn context note so workspace switches stay explicit without
+ * rebuilding the persisted system prompt. A chokidar watcher runs per binding so a future
  * `hermes-plugin-fs-scoped` consumer can react to file changes; file
  * events are NOT broadcast over the PlatformAdapter today because no
  * renderer subscriber consumes them and the IPC volume on noisy trees

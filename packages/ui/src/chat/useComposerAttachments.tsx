@@ -18,9 +18,9 @@
  * `<AttachmentButton>`) anywhere the paperclip should live.
  *
  * `getSessionId` is supplied by the caller because different surfaces
- * have different session models — main panel uses `sessions.ensureActive`,
- * the home page invents a transient id, the Quick-Ask popup uses its
- * own ephemeral session. The hook stays out of that decision.
+ * have different session models — composers without an active conversation
+ * use a transient upload id, while an existing chat uses its real id. The
+ * hook stays out of that decision.
  */
 import {
   classify,

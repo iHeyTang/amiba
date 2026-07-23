@@ -172,6 +172,11 @@ export interface PendingPromptResult {
    * composer header. Only set by Quick-Ask Spotlight on macOS today.
    */
   sourceApp?: string
+  /**
+   * Absolute directory selected before a conversation existed. ChatSurface
+   * binds it to the session created by the first submitted message.
+   */
+  workspacePath?: string
 }
 
 export interface PendingPromptCapability {
