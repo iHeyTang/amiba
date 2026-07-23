@@ -60,7 +60,8 @@ describe("ScheduledTasksPage", () => {
     render(<ScheduledTasksPage />);
 
     expect(await screen.findByText("Daily digest")).toBeInTheDocument();
-    expect(screen.getByText("0 9 * * *")).toBeInTheDocument();
+    expect(screen.getByText("Daily at 09:00")).toBeInTheDocument();
+    expect(screen.queryByText("daily-digest")).not.toBeInTheDocument();
     expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
   });
 
@@ -68,9 +69,42 @@ describe("ScheduledTasksPage", () => {
     render(<ScheduledTasksPage />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Trigger now" }),
+      await screen.findByRole("button", {
+        name: "More actions for Daily digest",
+      }),
     );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Run now" }));
 
     expect(cronCore.triggerHermesCronJob).toHaveBeenCalledWith("daily-digest");
+  });
+
+  it("moves secondary actions into an accessible more menu", async () => {
+    render(<ScheduledTasksPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "More actions for Daily digest",
+      }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "Edit task" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Copy task ID" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete task" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the row switch to pause an enabled task", async () => {
+    render(<ScheduledTasksPage />);
+
+    await userEvent.click(
+      await screen.findByRole("switch", { name: "Pause Daily digest" }),
+    );
+
+    expect(cronCore.pauseHermesCronJob).toHaveBeenCalledWith("daily-digest");
   });
 });
