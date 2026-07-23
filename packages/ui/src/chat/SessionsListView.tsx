@@ -232,7 +232,6 @@ export function SessionsListView({
                 return tr === d.labelKey ? d.fallbackLabel : tr;
               })(),
             })}
-            count={0}
             collapsed={!!topCollapsed[SOURCE_LOCAL]}
             onToggle={() => toggleTop(SOURCE_LOCAL)}
             variant="rail"
@@ -289,7 +288,6 @@ export function SessionsListView({
             <TopSection
               key={sec.source}
               label={sec.label}
-              count={sec.items.length}
               collapsed={!!topCollapsed[sec.source]}
               onToggle={() => toggleTop(sec.source)}
               variant="rail"

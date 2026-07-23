@@ -23,8 +23,6 @@ import { cn } from "../primitives";
 
 export interface TopSectionProps {
   label: string;
-  /** Optional pill next to the label (e.g. session count). */
-  count?: number;
   collapsed: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -51,7 +49,6 @@ export interface TopSectionProps {
 
 export function TopSection({
   label,
-  count,
   collapsed,
   onToggle,
   children,
@@ -111,28 +108,9 @@ export function TopSection({
           </>
         )}
       </button>
-      {typeof count === "number" && count > 0 && (
-        // Right-edge count. Rendered in natural text height (no h-6
-        // box) so the section header reads at its tighter ~26px row
-        // and doesn't visibly jump shorter when the hover action slot
-        // takes over — the action button is absolute-positioned and
-        // doesn't expand the parent, so a h-6 count would have made
-        // the row jitter on every hover.
-        <span
-          className={cn(
-            "pr-1 text-[10px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80",
-            actions && "group-hover/topsection:invisible",
-          )}
-        >
-          {count}
-        </span>
-      )}
       {actions && (
         // Absolutely positioned so its height (h-6 icon button) doesn't
-        // push the wrapper taller — the row stays at text height in
-        // both states. We use `invisible` (not `hidden`) on the count
-        // above so the layout slot is reserved; the actions then
-        // overlay that slot without any reflow.
+        // push the wrapper taller — the row stays at text height.
         <span className="absolute right-1 hidden h-6 items-center gap-0.5 group-hover/topsection:flex">
           {actions}
         </span>
@@ -269,7 +247,6 @@ export function ScheduledSection({
   return (
     <TopSection
       label={t("sidepanel.sessions.group.scheduled")}
-      count={visibleCount}
       collapsed={collapsed}
       onToggle={onToggle}
       variant={variant}
@@ -301,7 +278,6 @@ export function ScheduledSection({
               <Fragment key={jobId}>
                 <CronJobRow
                   job={job}
-                  runCount={jobSessions.length}
                   expanded={expanded}
                   onToggle={() => toggleJob(jobId)}
                 />
@@ -365,12 +341,11 @@ function jobStubFromId(jobId: string): HermesCronJob {
 
 interface CronJobRowProps {
   job: HermesCronJob;
-  runCount: number;
   expanded: boolean;
   onToggle: () => void;
 }
 
-function CronJobRow({ job, runCount, expanded, onToggle }: CronJobRowProps) {
+function CronJobRow({ job, expanded, onToggle }: CronJobRowProps) {
   const displayName = job.name || job.id;
   const stateDot =
     job.last_status === "error"
@@ -404,12 +379,6 @@ function CronJobRow({ job, runCount, expanded, onToggle }: CronJobRowProps) {
             {job.schedule_display}
           </span>
         )}
-        {/* Run-count badge — same 24×24 right-edge slot as every
-            other count/time/icon along the rail's right margin so the
-            entire right column stays visually aligned. */}
-        <span className="ml-1 inline-flex h-6 w-6 shrink-0 items-center justify-center text-[10px] text-muted-foreground/70">
-          {runCount}
-        </span>
       </button>
     </li>
   );

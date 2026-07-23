@@ -253,7 +253,6 @@ export function SessionDrawer({
                     return tr === d.labelKey ? d.fallbackLabel : tr;
                   })(),
                 })}
-                count={0}
                 collapsed={!!topCollapsed[SOURCE_LOCAL]}
                 onToggle={() => toggleTop(SOURCE_LOCAL)}
               >
@@ -268,7 +267,6 @@ export function SessionDrawer({
                   <TopSection
                     key={sec.source}
                     label={sec.label}
-                    count={sec.items.length}
                     collapsed={!!topCollapsed[sec.source]}
                     onToggle={() => toggleTop(sec.source)}
                   >
@@ -492,4 +490,3 @@ function RowAction({
     </button>
   );
 }
-
