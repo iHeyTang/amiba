@@ -27,7 +27,7 @@ import { useT, type MessageKey } from "@amiba/i18n";
 import { Input, cn } from "../primitives";
 import { TopSection } from "./SessionGroups";
 
-const COLLAPSED_SECTION_LIMIT = 8;
+const HISTORY_PAGE_SIZE = 20;
 
 export interface SessionsListViewProps {
   sessions: SessionMeta[];
@@ -199,11 +199,14 @@ export function SessionsListView({
   const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({});
   const toggleTop = (k: string) =>
     setTopCollapsed((p) => ({ ...p, [k]: !p[k] }));
-  const [expandedSources, setExpandedSources] = useState<
-    Record<string, boolean>
-  >({});
-  const toggleExpandedSource = (source: string) =>
-    setExpandedSources((p) => ({ ...p, [source]: !p[source] }));
+  const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>(
+    {},
+  );
+  const showMore = (source: string) =>
+    setVisibleLimits((previous) => ({
+      ...previous,
+      [source]: (previous[source] ?? HISTORY_PAGE_SIZE) + HISTORY_PAGE_SIZE,
+    }));
 
   if (!ready) {
     return (
@@ -245,14 +248,15 @@ export function SessionsListView({
         )
       ) : (
         channelSections.map((sec) => {
-          const activeIsOlder = sec.items.some(
-            (s, index) =>
-              s.id === activeId && index >= COLLAPSED_SECTION_LIMIT,
-          );
-          const expanded = !!expandedSources[sec.source] || activeIsOlder;
-          const visible = expanded
-            ? sec.items
-            : sec.items.slice(0, COLLAPSED_SECTION_LIMIT);
+          const configuredLimit =
+            visibleLimits[sec.source] ?? HISTORY_PAGE_SIZE;
+          const activeIndex = sec.items.findIndex((s) => s.id === activeId);
+          const visibleLimit =
+            activeIndex >= configuredLimit
+              ? Math.ceil((activeIndex + 1) / HISTORY_PAGE_SIZE) *
+                HISTORY_PAGE_SIZE
+              : configuredLimit;
+          const visible = sec.items.slice(0, visibleLimit);
           const hiddenCount = sec.items.length - visible.length;
           const rows = (
             <>
@@ -273,18 +277,10 @@ export function SessionsListView({
               {hiddenCount > 0 ? (
                 <button
                   type="button"
-                  onClick={() => toggleExpandedSource(sec.source)}
+                  onClick={() => showMore(sec.source)}
                   className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
                 >
-                  {t("sidepanel.sessions.showMore", { count: hiddenCount })}
-                </button>
-              ) : expanded && sec.items.length > COLLAPSED_SECTION_LIMIT ? (
-                <button
-                  type="button"
-                  onClick={() => toggleExpandedSource(sec.source)}
-                  className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-                >
-                  {t("sidepanel.sessions.showLess")}
+                  {t("sidepanel.sessions.showMore")}
                 </button>
               ) : null}
             </>

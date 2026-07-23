@@ -121,4 +121,30 @@ describe("Sidebar", () => {
     )
     expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped")
   })
+
+  it("reveals history in batches of twenty with stable copy", async () => {
+    setup({
+      sessions: Array.from({ length: 45 }, (_, index) => ({
+        id: `s${index + 1}`,
+        title: `Chat ${index + 1}`,
+        createdAt: 45 - index,
+        updatedAt: 45 - index,
+        messageCount: 1,
+      })),
+    })
+
+    expect(screen.getByText("Chat 20")).toBeInTheDocument()
+    expect(screen.queryByText("Chat 21")).not.toBeInTheDocument()
+    const showMore = screen.getByRole("button", { name: "Show more" })
+
+    await userEvent.click(showMore)
+    expect(screen.getByText("Chat 40")).toBeInTheDocument()
+    expect(screen.queryByText("Chat 41")).not.toBeInTheDocument()
+
+    await userEvent.click(showMore)
+    expect(screen.getByText("Chat 45")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument()
+  })
 })
