@@ -7,6 +7,7 @@ export {
   default as FullScreenChatView,
   type FullScreenChatViewProps,
 } from "./FullScreenChatView"
+export { ScheduledTasksPage } from "./ScheduledTasksPage"
 export {
   SessionTitleProvider,
   useSessionTitle,

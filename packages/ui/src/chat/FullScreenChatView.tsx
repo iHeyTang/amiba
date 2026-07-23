@@ -3,12 +3,12 @@
  * (the single-level sidebar on the left, the main pane on the right).
  *
  * The sidebar (`<Sidebar>`) is one column with three regions: a fixed top
- * (new-chat / search / built-in + extension nav rows), unified chat + scheduled
+ * (new-chat / search / built-in + extension nav rows), unified conversation
  * history, and a settings row pinned at the bottom. It replaces the old icon
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
  * The main pane renders by `sidebarView`: the chat surface ("chats"), the
- * scheduled-runs page ("scheduled"), or an extension webview for
+ * registered scheduled-tasks page ("scheduled"), or an extension webview for
  * extension-contributed main panels. (Skills / Tokens / Tools live in
  * the Settings window as settings panes.)
  *
@@ -40,7 +40,7 @@ import type { MessagesMaxWidth } from "./internal/types";
 import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
-import { ScheduledRunsPage } from "./ScheduledRunsPage";
+import { ScheduledTasksPage } from "./ScheduledTasksPage";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import {
   SessionTitleProvider,
@@ -210,13 +210,15 @@ function FullScreenChatViewInner({
   // the subtree. Highest-priority slot in the placeholder chain.
   const externalTitleOverride = useSessionTitle();
 
-  // Final top-bar title. Priority: external override > cron job · time >
-  // active chat title > product wordmark.
+  // The workspace destination owns the title while it is selected. Otherwise
+  // the active conversation (including a cron-run output) provides context.
   const topBarPlaceholder =
-    externalTitleOverride ||
-    (sessions.activeId ? scheduled.activeRunTitle(sessions.activeId) : null) ||
-    activeChatTitle ||
-    "Amiba";
+    sidebarView === "scheduled"
+      ? t("options.cron.title")
+      : externalTitleOverride ||
+        (sessions.activeId ? scheduled.activeRunTitle(sessions.activeId) : null) ||
+        activeChatTitle ||
+        "Amiba";
 
   useEffect(() => {
     let cancelled = false;
@@ -354,11 +356,8 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  // Scheduled-page run click: activate the run as the active session and
-  // STAY on the scheduled page — the run's conversation renders inline in
-  // the page's detail pane (the master/detail layout). Clicking the active
-  // run again deselects it (mirrors `onOpenSession`), dropping the detail
-  // pane back to its placeholder.
+  // Scheduled runs live in History, not in the registered-task workspace.
+  // Opening one behaves like opening any other conversation output.
   const onOpenRun = useCallback(
     async (id: string) => {
       if (!sessions.ready) return;
@@ -367,19 +366,9 @@ function FullScreenChatViewInner({
         return;
       }
       await sessions.openTab(id);
-      onSidebarViewChange("scheduled");
+      onSidebarViewChange("chats");
     },
     [sessions, onSidebarViewChange],
-  );
-
-  // Whether the active session is one of the cron runs — gates whether the
-  // scheduled page's detail pane shows the ChatSurface (a run is selected)
-  // or its "select a run" placeholder (active session is a chat, or none).
-  const activeRunSelected = useMemo(
-    () =>
-      !!sessions.activeId &&
-      scheduled.runs.some((r) => r.id === sessions.activeId),
-    [sessions.activeId, scheduled.runs],
   );
 
   // Layout: a single thin top bar spans the full window width (mac traffic
@@ -434,26 +423,7 @@ function FullScreenChatViewInner({
         </div>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {sidebarView === "scheduled" ? (
-            <ScheduledRunsPage
-              query=""
-              activeId={sessions.activeId}
-              onOpenRun={(id) => void onOpenRun(id)}
-              showList={false}
-              detail={
-                activeRunSelected ? (
-                  <ChatSurface
-                    variant="fullscreen"
-                    messagesMaxWidth={messagesWidth}
-                    client={client}
-                    capabilities={capabilities}
-                    slots={slots}
-                    openSettings={openSettings}
-                    openAgentDestination={openAgentDestination}
-                    mentionProviders={mentionProviders}
-                  />
-                ) : undefined
-              }
-            />
+            <ScheduledTasksPage />
           ) : sidebarView === "chats" ? (
             <ChatSurface
               variant="fullscreen"

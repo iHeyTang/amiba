@@ -4,7 +4,6 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
-  Clock,
   Code2,
   FilePlus2,
   FileText,
@@ -45,7 +44,6 @@ import { HermesModelConfigTab } from "./HermesModelConfigTab";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { ScriptEditor } from "./ScriptEditor";
 import { ScriptList } from "./ScriptList";
-import { SettingsCron } from "./SettingsCron";
 import {
   SettingsLogs,
   type SettingsLogSource,
@@ -68,7 +66,7 @@ import {
 /**
  * Sidebar order — four groups along the beginner→advanced axis:
  *   General:     Appearance → Shortcuts            (safe, everyday)
- *   Agent:       Skills → Tools → Memory → Cron → Tokens → Voice
+ *   Agent:       Skills → Tools → Memory → Tokens → Voice
  *                                                  (daily agent stuff, safe to touch)
  *   Advanced:    Models (incl. Connection) → Mention sources → Extensions
  *                (incl. Plugins) → Userscripts     (know-what-you're-doing config)
@@ -86,7 +84,6 @@ const ALL_TABS = [
   "tools",
   "memory",
   "voice",
-  "cron",
   "logs",
   "extensions",
   "mention-sources",
@@ -421,7 +418,6 @@ export function SettingsView({
             <NavBtn icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.skills")} active={mainTab === "skills"} onClick={() => onMainTabChange("skills")} />
             <NavBtn icon={<Wrench className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.tools")} active={mainTab === "tools"} onClick={() => onMainTabChange("tools")} />
             <NavBtn icon={<BrainCircuit className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.memory")} active={mainTab === "memory"} onClick={() => onMainTabChange("memory")} />
-            <NavBtn icon={<Clock className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.cron")} active={mainTab === "cron"} onClick={() => onMainTabChange("cron")} />
             <NavBtn icon={<Wallet className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.tokens")} active={mainTab === "tokens"} onClick={() => onMainTabChange("tokens")} />
             <NavBtn icon={<Mic className="h-4 w-4 shrink-0 opacity-70" />} label={t("options.nav.voice")} active={mainTab === "voice"} onClick={() => onMainTabChange("voice")} />
 
@@ -493,8 +489,6 @@ export function SettingsView({
               </div>
             </ScrollArea>
           </div>
-        ) : mainTab === "cron" ? (
-          <SettingsCron />
         ) : mainTab === "status" ? (
           <SettingsStatus onViewUpdateLogs={() => showLogs("hermes-update")} />
         ) : mainTab === "logs" ? (

@@ -402,8 +402,7 @@ export const en = {
 
   // Cron
   "options.cron.title": "Cron",
-  "options.cron.subtitle":
-    "Hermes Agent scheduled jobs ({count} total)",
+  "options.cron.subtitle": "Jobs registered with Hermes Agent",
   "options.cron.refresh": "Refresh",
   "options.cron.newJob": "New job",
 

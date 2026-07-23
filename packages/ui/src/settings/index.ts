@@ -1,7 +1,6 @@
 export { HermesModelConfigTab } from "./HermesModelConfigTab"
 export { ScriptEditor } from "./ScriptEditor"
 export { ScriptList } from "./ScriptList"
-export { SettingsCron } from "./SettingsCron"
 export { SettingsGateway } from "./SettingsGateway"
 export { SettingsLogs } from "./SettingsLogs"
 export { SettingsMemory } from "./SettingsMemory"

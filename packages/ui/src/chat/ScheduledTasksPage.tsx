@@ -46,8 +46,7 @@ import {
 } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
-import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
-import { SettingsPaneHeader } from "./SettingsPaneHeader";
+import { SettingsPaneHeader } from "../settings/SettingsPaneHeader";
 
 const STATE_META: Record<
   string,
@@ -662,7 +661,7 @@ function JobRow({
   );
 }
 
-export function SettingsCron() {
+export function ScheduledTasksPage() {
   const { t } = useT();
   const [jobs, setJobs] = useState<HermesCronJob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -820,7 +819,8 @@ export function SettingsCron() {
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <SettingsPaneHeader
         title={t("options.cron.title")}
-        subtitle={t("options.cron.subtitle", { count: jobs.length })}
+        subtitle={t("options.cron.subtitle")}
+        contentClassName="mx-auto max-w-5xl"
       >
         <div className="flex shrink-0 items-center gap-2">
           <Button
@@ -851,7 +851,7 @@ export function SettingsCron() {
       </SettingsPaneHeader>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-3 p-6">
+        <div className="mx-auto w-full max-w-5xl space-y-3 p-6">
           {error && <p className="text-xs text-destructive">{error}</p>}
           {actionError && (
             <p className="rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">

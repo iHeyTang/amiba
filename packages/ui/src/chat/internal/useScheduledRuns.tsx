@@ -1,10 +1,7 @@
 /**
- * Cron-run data for the Scheduled page + the top-bar cron title. Cron
- * sessions come from `useCronSessions` (the main session index hides them)
- * and are re-keyed by JOB ID so the unified list view groups runs under
- * their parent job. Extracted out of `FullScreenChatView` so both the
- * `ScheduledRunsPage` (list) and the top bar (active-run title) share one
- * source of truth.
+ * Cron-run data for History + the top-bar cron title. Cron sessions come
+ * from `useCronSessions` (the main session index hides them) and are re-keyed
+ * by JOB ID so the unified list view groups runs under their parent job.
  */
 import { Loader2, Zap } from "lucide-react";
 import {
@@ -145,7 +142,7 @@ export function useScheduledRuns(): ScheduledRuns {
 
 /**
  * Hover-revealed "Run this cron job now" affordance for each Scheduled
- * section. Click → native `confirm()` (matches `SettingsCron`), then
+ * section. Click → native `confirm()` (matches `ScheduledTasksPage`), then
  * `triggerHermesCronJob(jobId)`; the run lands on the next scheduler tick
  * and shows up under the section like any other.
  */

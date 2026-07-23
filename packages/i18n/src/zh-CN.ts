@@ -377,7 +377,7 @@ export const zhCN: Messages = {
 
   // Cron
   "options.cron.title": "定时任务",
-  "options.cron.subtitle": "Hermes Agent 的定时任务（共 {count} 个）",
+  "options.cron.subtitle": "已登记到 Hermes Agent 的计划任务",
   "options.cron.refresh": "刷新",
   "options.cron.newJob": "新建任务",
 

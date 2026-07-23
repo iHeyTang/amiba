@@ -159,7 +159,7 @@ Phase 3e — 1:1 chat-surface lift (done):
 
 Phase 3f — Options/Settings 1:1 lift (done):
 - [x] `packages/settings-ui` — new package, 12 files (~6700 LOC):
-  - `HermesModelConfigTab` (1959 LOC) + `SettingsCron` (911) + `SettingsSkills` (995) + `SettingsStatus` (549) + `SettingsLogs` (389) + `SettingsPreferences` (580) + `SettingsMemory` (196) + `SettingsGateway` (200) — all 8 settings panes.
+  - `HermesModelConfigTab` + `SettingsSkills` + `SettingsStatus` + `SettingsLogs` + `SettingsPreferences` + `SettingsMemory` + `SettingsGateway` provide settings panes; registered jobs live in the workspace `ScheduledTasksPage`.
   - `ScriptEditor` (168) + `ScriptList` (88) — userscript management UI (capability-gated).
   - `SettingsView.tsx` — main tab container (sidebar nav + content router). Scripts tab hides when `userscripts` capability absent.
   - `capabilities.ts` — `BridgeCapability` + `UserScriptCapability` + composed `OptionsCapabilities`.

@@ -135,7 +135,7 @@ export function Sidebar({
     {
       id: "scheduled",
       icon: <Clock className="h-4 w-4" />,
-      label: t("sidepanel.sessions.group.scheduled"),
+      label: t("options.cron.title"),
       order: 1,
     },
   ];
