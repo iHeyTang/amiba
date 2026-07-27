@@ -74,6 +74,7 @@ function MemoryBlock({ entry }: { entry: HermesMemoryEntries }) {
 
       {entry.path && (
         <p
+          data-selection="text"
           className="truncate font-mono text-[10px] text-muted-foreground/70"
           title={entry.path}
         >
@@ -117,7 +118,12 @@ function MemoryBlock({ entry }: { entry: HermesMemoryEntries }) {
                   </span>
                 )}
               </div>
-              <p className="whitespace-pre-wrap break-words">{rec.text}</p>
+              <p
+                data-selection="text"
+                className="whitespace-pre-wrap break-words"
+              >
+                {rec.text}
+              </p>
             </li>
           ))}
         </ol>

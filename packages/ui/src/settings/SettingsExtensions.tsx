@@ -222,7 +222,7 @@ function ExtensionsTab() {
                           ? t("options.extensions.showDetails")
                           : t("options.extensions.showError")}
                       </summary>
-                      <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-[11px]">
+                      <pre data-selection="text" className="mt-1 overflow-auto rounded bg-muted p-2 text-[11px]">
                         {ext.error}
                       </pre>
                     </details>

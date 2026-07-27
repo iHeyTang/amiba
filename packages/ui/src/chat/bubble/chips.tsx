@@ -70,7 +70,7 @@ export interface ErrorBlockProps {
 export function ErrorBlock({ error, onOpenSettings }: ErrorBlockProps) {
   const { t } = useT()
   return (
-    <div className="w-full max-w-sm rounded-md border border-destructive/50 bg-destructive/10 p-3 text-left text-xs text-destructive">
+    <div data-selection="text" className="w-full max-w-sm rounded-md border border-destructive/50 bg-destructive/10 p-3 text-left text-xs text-destructive">
       <div className="break-all font-mono">{error.message}</div>
       {error.hint && (
         <pre className="mt-2 whitespace-pre-wrap break-words text-foreground/90">

@@ -39,7 +39,7 @@ export function MessageList({ messages, pendingIndicator, emptyState }: Props) {
 
   return (
     <ScrollArea className="h-full">
-      <div ref={viewportRef} onScroll={onScroll} className="flex flex-col gap-3 p-4">
+      <div ref={viewportRef} onScroll={onScroll} data-selection="text" className="flex flex-col gap-3 p-4">
         {messages.map((m) => (
           <MessageBubble key={m.uiId ?? `${m.role}-${m.content.slice(0, 16)}`} message={m} />
         ))}

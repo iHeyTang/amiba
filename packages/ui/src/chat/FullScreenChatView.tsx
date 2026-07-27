@@ -26,10 +26,7 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  useSessions,
-  type ChatEngineClient,
-} from "@amiba/core";
+import { useSessions, type ChatEngineClient } from "@amiba/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import { useT } from "@amiba/i18n";
 import { getPlatform, type StorageChangeMap } from "@amiba/platform";
@@ -42,11 +39,13 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { ScheduledTasksPage } from "./ScheduledTasksPage";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
-import {
-  SessionTitleProvider,
-  useSessionTitle,
-} from "./useSessionTitle";
+import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
+import {
+  WorkspacePane,
+  WorkspacePaneProvider,
+  WorkspacePaneToggle,
+} from "./WorkspacePane";
 import {
   ExtensionWebView,
   useExtensionMains,
@@ -67,7 +66,10 @@ const HISTORY_LAYOUT_KEY = "settings.chat.historyLayout";
 const DEFAULT_HISTORY_LAYOUT: HistoryLayout = "timeline";
 
 function clampSidebarWidth(v: number): number {
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(v)));
+  return Math.min(
+    MAX_SIDEBAR_WIDTH,
+    Math.max(MIN_SIDEBAR_WIDTH, Math.round(v)),
+  );
 }
 
 function isSidebarWidth(v: unknown): v is number {
@@ -96,7 +98,9 @@ export interface FullScreenChatViewProps {
     bridgeBar?: ReactNode;
     navigateOpenPolicyToggle?: (ctx: {
       policy: import("./internal/capabilities").NavigateOpenPolicy;
-      onChange: (next: import("./internal/capabilities").NavigateOpenPolicy) => void;
+      onChange: (
+        next: import("./internal/capabilities").NavigateOpenPolicy,
+      ) => void;
     }) => ReactNode;
     /**
      * Rendered in the main pane when no session is active. Desktop hands
@@ -152,12 +156,18 @@ export interface FullScreenChatViewProps {
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
+  const sessions = useSessions();
   // The provider owns the top-bar title-override store. Any descendant
   // (chat surface, future plugin panels, etc.) can call
   // ``useSetSessionTitle`` to hot-update the bar without prop-drilling.
   return (
     <SessionTitleProvider>
-      <FullScreenChatViewInner {...props} />
+      <WorkspacePaneProvider
+        capability={props.capabilities?.workspaceInspector}
+        sessionId={sessions.activeId}
+      >
+        <FullScreenChatViewInner {...props} />
+      </WorkspacePaneProvider>
     </SessionTitleProvider>
   );
 }
@@ -200,9 +210,7 @@ function FullScreenChatViewInner({
   // reachable via the Scheduled page.
   const chatSessions = useMemo(
     () =>
-      sessions.sessions.filter(
-        (s) => !s.archived && !s.id.startsWith("cron_"),
-      ),
+      sessions.sessions.filter((s) => !s.archived && !s.id.startsWith("cron_")),
     [sessions.sessions],
   );
 
@@ -223,7 +231,9 @@ function FullScreenChatViewInner({
     sidebarView === "scheduled"
       ? t("options.cron.title")
       : externalTitleOverride ||
-        (sessions.activeId ? scheduled.activeRunTitle(sessions.activeId) : null) ||
+        (sessions.activeId
+          ? scheduled.activeRunTitle(sessions.activeId)
+          : null) ||
         activeChatTitle ||
         "Amiba";
 
@@ -235,10 +245,14 @@ function FullScreenChatViewInner({
       const v = r[MESSAGES_WIDTH_KEY];
       if (isMessagesMaxWidth(v)) setMessagesWidth(v);
     });
-    const unsub = storage.watch([MESSAGES_WIDTH_KEY], (changes: StorageChangeMap) => {
-      const ch = changes[MESSAGES_WIDTH_KEY];
-      if (ch && isMessagesMaxWidth(ch.newValue)) setMessagesWidth(ch.newValue);
-    });
+    const unsub = storage.watch(
+      [MESSAGES_WIDTH_KEY],
+      (changes: StorageChangeMap) => {
+        const ch = changes[MESSAGES_WIDTH_KEY];
+        if (ch && isMessagesMaxWidth(ch.newValue))
+          setMessagesWidth(ch.newValue);
+      },
+    );
     return () => {
       cancelled = true;
       unsub();
@@ -255,10 +269,13 @@ function FullScreenChatViewInner({
         if (isSidebarView(v)) setSidebarView(v);
       });
     }
-    const unsub = storage.watch([SIDEBAR_VIEW_KEY], (changes: StorageChangeMap) => {
-      const ch = changes[SIDEBAR_VIEW_KEY];
-      if (ch && isSidebarView(ch.newValue)) setSidebarView(ch.newValue);
-    });
+    const unsub = storage.watch(
+      [SIDEBAR_VIEW_KEY],
+      (changes: StorageChangeMap) => {
+        const ch = changes[SIDEBAR_VIEW_KEY];
+        if (ch && isSidebarView(ch.newValue)) setSidebarView(ch.newValue);
+      },
+    );
     return () => {
       cancelled = true;
       unsub();
@@ -273,10 +290,13 @@ function FullScreenChatViewInner({
       const v = r[HISTORY_LAYOUT_KEY];
       if (isHistoryLayout(v)) setHistoryLayout(v);
     });
-    const unsub = storage.watch([HISTORY_LAYOUT_KEY], (changes: StorageChangeMap) => {
-      const ch = changes[HISTORY_LAYOUT_KEY];
-      if (ch && isHistoryLayout(ch.newValue)) setHistoryLayout(ch.newValue);
-    });
+    const unsub = storage.watch(
+      [HISTORY_LAYOUT_KEY],
+      (changes: StorageChangeMap) => {
+        const ch = changes[HISTORY_LAYOUT_KEY];
+        if (ch && isHistoryLayout(ch.newValue)) setHistoryLayout(ch.newValue);
+      },
+    );
     return () => {
       cancelled = true;
       unsub();
@@ -291,11 +311,14 @@ function FullScreenChatViewInner({
       const v = r[SIDEBAR_WIDTH_KEY];
       if (isSidebarWidth(v)) setSidebarWidth(clampSidebarWidth(v));
     });
-    const unsub = storage.watch([SIDEBAR_WIDTH_KEY], (changes: StorageChangeMap) => {
-      const ch = changes[SIDEBAR_WIDTH_KEY];
-      if (ch && isSidebarWidth(ch.newValue))
-        setSidebarWidth(clampSidebarWidth(ch.newValue));
-    });
+    const unsub = storage.watch(
+      [SIDEBAR_WIDTH_KEY],
+      (changes: StorageChangeMap) => {
+        const ch = changes[SIDEBAR_WIDTH_KEY];
+        if (ch && isSidebarWidth(ch.newValue))
+          setSidebarWidth(clampSidebarWidth(ch.newValue));
+      },
+    );
     return () => {
       cancelled = true;
       unsub();
@@ -393,8 +416,11 @@ function FullScreenChatViewInner({
         leftInset={topBarLeftInset}
         heightPx={topBarHeightPx}
         className={topBarClassName}
+        rightSlot={
+          sidebarView === "chats" ? <WorkspacePaneToggle /> : undefined
+        }
       />
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div className="relative flex min-h-0 min-w-0 flex-1">
         <Sidebar
           activeView={sidebarView}
           onSelectView={onSidebarViewChange}
@@ -430,29 +456,41 @@ function FullScreenChatViewInner({
         >
           <div className="absolute inset-y-0 right-0 w-px bg-transparent transition-colors group-hover:bg-border group-active:bg-primary/30" />
         </div>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {sidebarView === "scheduled" ? (
-            <ScheduledTasksPage />
-          ) : sidebarView === "chats" ? (
-            <ChatSurface
-              variant="fullscreen"
-              messagesMaxWidth={messagesWidth}
-              client={client}
-              capabilities={capabilities}
-              slots={slots}
-              openSettings={openSettings}
-              openAgentDestination={openAgentDestination}
-              mentionProviders={mentionProviders}
-            />
-          ) : (() => {
-            // Extension-contributed main panel. The sidebarView id IS the extensionId.
-            const contrib = extensionMains.find((m) => m.extensionId === sidebarView);
-            if (contrib) {
-              return <ExtensionWebView src={contrib.viewUrl} className="h-full w-full" />;
-            }
-            return null;
-          })()}
-        </main>
+        <div className="flex min-h-0 min-w-0 flex-1">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {sidebarView === "scheduled" ? (
+              <ScheduledTasksPage />
+            ) : sidebarView === "chats" ? (
+              <ChatSurface
+                variant="fullscreen"
+                messagesMaxWidth={messagesWidth}
+                client={client}
+                capabilities={capabilities}
+                slots={slots}
+                openSettings={openSettings}
+                openAgentDestination={openAgentDestination}
+                mentionProviders={mentionProviders}
+              />
+            ) : (
+              (() => {
+                // Extension-contributed main panel. The sidebarView id IS the extensionId.
+                const contrib = extensionMains.find(
+                  (m) => m.extensionId === sidebarView,
+                );
+                if (contrib) {
+                  return (
+                    <ExtensionWebView
+                      src={contrib.viewUrl}
+                      className="h-full w-full"
+                    />
+                  );
+                }
+                return null;
+              })()
+            )}
+          </main>
+          <WorkspacePane visible={sidebarView === "chats"} />
+        </div>
       </div>
       <CommandPalette
         open={palette.open}
@@ -481,6 +519,8 @@ interface SlimTopBarProps {
   heightPx?: number;
   /** Extra className (desktop passes `app-drag-region`). */
   className?: string;
+  /** Optional host controls aligned to the right edge. */
+  rightSlot?: ReactNode;
 }
 
 /**
@@ -495,6 +535,7 @@ function SlimTopBar({
   leftInset = 0,
   heightPx = 24,
   className,
+  rightSlot,
 }: SlimTopBarProps) {
   const { t } = useT();
   return (
@@ -529,6 +570,11 @@ function SlimTopBar({
           {title}
         </span>
       </div>
+      {rightSlot && (
+        <div className="app-no-drag relative z-10 ml-auto flex items-center">
+          {rightSlot}
+        </div>
+      )}
     </header>
   );
 }

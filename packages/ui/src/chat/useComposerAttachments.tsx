@@ -15,7 +15,7 @@
  *
  * Callers wire the hidden file input via `fileInputProps` on their own
  * `<input>` and render `<AttachmentToolbar>` (or just the underlying
- * `<AttachmentButton>`) anywhere the paperclip should live.
+ * `<AttachmentButton>`) anywhere the add control should live.
  *
  * `getSessionId` is supplied by the caller because different surfaces
  * have different session models — composers without an active conversation
@@ -33,7 +33,7 @@ import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
 import { cn } from "../primitives"
 import { shortId } from "@amiba/utils"
-import { Paperclip } from "lucide-react"
+import { Plus } from "lucide-react"
 import {
   useCallback,
   useRef,
@@ -330,8 +330,7 @@ export function useComposerAttachments(
 }
 
 /**
- * Paperclip "attach files" button. Style + size match the
- * ChatSurface original so all three surfaces look identical.
+ * Quiet "attach files" control shared by every composer surface.
  */
 export interface AttachmentButtonProps {
   onClick: () => void | Promise<void>
@@ -360,13 +359,13 @@ export function AttachmentButton({
       variant="ghost"
       size="icon"
       className={cn(
-        "h-6 w-6 shrink-0 rounded-full border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        "h-7 w-7 shrink-0 rounded-full bg-transparent text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground",
         disabled &&
           "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground",
         className,
       )}
     >
-      <Paperclip className="h-3 w-3" />
+      <Plus className="h-4 w-4" strokeWidth={1.8} />
     </Button>
   )
 }

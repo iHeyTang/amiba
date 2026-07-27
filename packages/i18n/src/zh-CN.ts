@@ -26,6 +26,58 @@ export const zhCN: Messages = {
   "common.retry": "重试",
   "common.untitled": "未命名",
 
+  // 会话轮次导航
+  "conversationRail.label": "会话导航",
+  "conversationRail.jumpTo": "跳转到第 {index} 条消息：{message}",
+  "conversationRail.messageFallback": "用户消息",
+
+  // 工作台
+  "workspacePane.title": "工作台",
+  "workspacePane.open": "打开工作台",
+  "workspacePane.collapse": "收起工作台",
+  "workspacePane.resize": "调整工作台宽度",
+  "workspacePane.pin": "固定此标签",
+  "workspacePane.emptyTitle": "这里还没有打开的内容",
+  "workspacePane.emptyBody":
+    "在对话中打开文件、查看修改或代码运行结果时，它们会显示在这里。",
+  "workspacePane.emptyFiles": "文件",
+  "workspacePane.emptyChanges": "修改",
+  "workspacePane.emptyRuns": "代码运行",
+  "workspacePane.loadingFile": "正在打开文件…",
+  "workspacePane.refreshing": "正在从磁盘刷新…",
+  "workspacePane.fileUnavailable": "无法打开这个文件。",
+  "workspacePane.fileDeleted": "这个文件已从工作区中删除。",
+  "workspacePane.binaryFile": "暂不支持预览二进制文件",
+  "workspacePane.truncated": "文件大小为 {size}，当前预览前 2 MB",
+  "workspacePane.filesChanged": "修改了 {count} 个文件",
+  "workspacePane.openToolResource": "在工作台中打开",
+  "workspacePane.review": "审阅",
+  "workspacePane.currentTurn": "本轮",
+  "workspacePane.toolChange": "本次修改",
+  "workspacePane.noDiff": "这次修改没有可审阅的差异。",
+  "workspacePane.unmodifiedLines": "{count} 行未修改",
+  "workspacePane.moreUnmodifiedLines": "还有 {count} 行未修改",
+  "workspacePane.contextUnavailable": "无法读取完整文件上下文",
+  "workspacePane.openFile": "打开文件",
+  "workspacePane.copyPath": "复制路径",
+  "workspacePane.revealFile": "在访达中显示",
+  "workspacePane.openExternal": "使用默认应用打开",
+  "workspacePane.expandFile": "展开文件",
+  "workspacePane.collapseFile": "折叠文件",
+  "workspacePane.expandAll": "全部展开",
+  "workspacePane.collapseAll": "全部折叠",
+  "workspacePane.moreActions": "更多操作",
+  "workspacePane.codeRun": "执行代码",
+  "workspacePane.code": "代码",
+  "workspacePane.output": "输出",
+  "workspacePane.running": "运行中",
+  "workspacePane.failed": "执行失败",
+  "workspacePane.noOutput": "没有输出",
+  "workspacePane.copyCode": "复制代码",
+  "workspacePane.copyOutput": "复制输出",
+  "workspacePane.copyWorkingDirectory": "复制工作目录",
+  "workspacePane.copyDiff": "复制差异",
+
   // App shell
   "app.title": "Amiba",
   "app.subtitle": "扩展控制台",
@@ -68,8 +120,10 @@ export const zhCN: Messages = {
   "options.extensions.reload": "重载",
   "options.extensions.uninstall": "卸载",
   "options.extensions.uninstall.confirm.title": "卸载扩展？",
-  "options.extensions.uninstall.confirm.body": "{name} 将从应用中移除。<userData>/extensions/{id}/ 目录会被删除。",
-  "options.extensions.uninstall.confirm.body.local": "仅从注册表移除 {name}。源目录 {path} 不会被删除。",
+  "options.extensions.uninstall.confirm.body":
+    "{name} 将从应用中移除。<userData>/extensions/{id}/ 目录会被删除。",
+  "options.extensions.uninstall.confirm.body.local":
+    "仅从注册表移除 {name}。源目录 {path} 不会被删除。",
   "options.extensions.sideload.error": "添加本地扩展失败：{error}",
   "options.extensions.empty": "暂无已安装扩展。点击「添加本地扩展…」开始。",
   "options.extensions.tab.installed": "已安装",
@@ -83,7 +137,8 @@ export const zhCN: Messages = {
   "options.extensions.browse.installFailed": "安装失败：{error}",
   "options.extensions.browse.indexUrl": "索引：{url}",
   "options.plugins.heading": "插件",
-  "options.plugins.subtitle": "Hermes agent 插件（Python）。开关启用或停用、卸载可在此直接操作；改动在下次启动 Hermes 时生效。安装请用 `hermes plugins` 命令。",
+  "options.plugins.subtitle":
+    "Hermes agent 插件（Python）。开关启用或停用、卸载可在此直接操作；改动在下次启动 Hermes 时生效。安装请用 `hermes plugins` 命令。",
   "options.plugins.loading": "加载插件中…",
   "options.plugins.error": "加载插件失败：{error}",
   "options.plugins.empty": "未安装插件。",
@@ -93,13 +148,16 @@ export const zhCN: Messages = {
   "options.plugins.toggleError": "切换插件失败：{error}",
 
   // Mention sources —— composer 的可插拔 @ 提及来源
-  "options.mentionSources.title": "可以在对话里 @ 提及的外部来源（如飞书文档）。每个是一个 git 仓，填 URL 安装、更新即 git pull。它不是 hermes 插件 —— agent 动作/触发归 hermes 的 plugins/mcp/platforms。",
-  "options.mentionSources.installPlaceholder": "git URL，如 https://github.com/you/amiba-source-notion",
+  "options.mentionSources.title":
+    "可以在对话里 @ 提及的外部来源（如飞书文档）。每个是一个 git 仓，填 URL 安装、更新即 git pull。它不是 hermes 插件 —— agent 动作/触发归 hermes 的 plugins/mcp/platforms。",
+  "options.mentionSources.installPlaceholder":
+    "git URL，如 https://github.com/you/amiba-source-notion",
   "options.mentionSources.install": "安装",
   "options.mentionSources.installing": "安装中…",
   "options.mentionSources.loading": "加载来源中…",
   "options.mentionSources.error": "无法连接 backplane。",
-  "options.mentionSources.empty": "还没有装任何提及来源。在上面粘贴一个 git URL 来添加。",
+  "options.mentionSources.empty":
+    "还没有装任何提及来源。在上面粘贴一个 git URL 来添加。",
   "options.mentionSources.update": "更新",
   "options.mentionSources.reload": "重载",
   "options.mentionSources.remove": "移除",
@@ -108,14 +166,18 @@ export const zhCN: Messages = {
   "options.mentionSources.legacy": "旧版",
   "options.mentionSources.unavailable": "不可用",
   "options.mentionSources.noSearch": "无 search",
-  "options.mentionSources.noSearchHint": "导入了但没暴露 `search` —— 它的 @ 提及搜不出东西。检查 __init__.py 是否 re-export 了 `search`。",
-  "options.mentionSources.removeConfirm": "移除「{name}」提及来源？会删除它的目录。",
+  "options.mentionSources.noSearchHint":
+    "导入了但没暴露 `search` —— 它的 @ 提及搜不出东西。检查 __init__.py 是否 re-export 了 `search`。",
+  "options.mentionSources.removeConfirm":
+    "移除「{name}」提及来源？会删除它的目录。",
   "options.mentionSources.installError": "安装失败：{error}",
   "options.mentionSources.updateError": "更新失败：{error}",
   "options.mentionSources.removeError": "移除失败：{error}",
-  "options.mentionSources.loadWarning": "{name} 已安装，但它没有 search 能力（{warning}）。",
+  "options.mentionSources.loadWarning":
+    "{name} 已安装，但它没有 search 能力（{warning}）。",
   "options.plugins.uninstallAction": "卸载",
-  "options.plugins.uninstallConfirm": "确定卸载「{name}」？删除后需重启 Hermes 才完全生效，此操作不可撤销。",
+  "options.plugins.uninstallConfirm":
+    "确定卸载「{name}」？删除后需重启 Hermes 才完全生效，此操作不可撤销。",
   "options.plugins.uninstallError": "卸载失败：{error}",
 
   // Featured features —— 被提升为一级设置入口的插件
@@ -124,19 +186,23 @@ export const zhCN: Messages = {
   "options.feature.stateOff": "已停用。",
   "options.feature.notInstalled": "支撑此功能的插件尚未安装。",
   "options.feature.installAction": "安装",
-  "options.feature.installPrompt": "请帮我安装支撑「{name}」功能的 Hermes 插件，运行 `hermes plugins install {ref}`。完成后告诉我是否需要重启 Hermes 才能使用。",
+  "options.feature.installPrompt":
+    "请帮我安装支撑「{name}」功能的 Hermes 插件，运行 `hermes plugins install {ref}`。完成后告诉我是否需要重启 Hermes 才能使用。",
   "options.feature.agentSourceApp": "设置",
   "options.feature.backplaneError": "无法连接 backplane 读取此功能的状态。",
   "options.feature.browser.title": "浏览器",
-  "options.feature.browser.subtitle": "通过配套的 Chrome 扩展，让 Amiba 查看并操作你的浏览器。",
+  "options.feature.browser.subtitle":
+    "通过配套的 Chrome 扩展，让 Amiba 查看并操作你的浏览器。",
   "options.feature.browser.how.title": "工作方式",
-  "options.feature.browser.how.body": "启用后，Amiba 会注册浏览器操作工具并运行一个本地 WebSocket 中枢。安装配套的 Chrome 扩展后会自动连接 —— 之后 Amiba 即可读取标签页、导航、点击、输入并在浏览器中运行脚本。",
+  "options.feature.browser.how.body":
+    "启用后，Amiba 会注册浏览器操作工具并运行一个本地 WebSocket 中枢。安装配套的 Chrome 扩展后会自动连接 —— 之后 Amiba 即可读取标签页、导航、点击、输入并在浏览器中运行脚本。",
 
   // Composer voice input
   "composer.voice.startRecording": "录制语音消息",
   "composer.voice.stopRecording": "停止录音",
   "composer.voice.transcribing": "转写中…",
-  "composer.voice.permissionDenied": "麦克风权限被拒绝。请在系统设置中允许后再使用语音输入。",
+  "composer.voice.permissionDenied":
+    "麦克风权限被拒绝。请在系统设置中允许后再使用语音输入。",
   "composer.voice.unsupported": "当前环境不支持语音输入。",
   "composer.voice.transcribeFailed": "语音转写失败：{error}",
   "composer.mention.typeToSearch": "输入关键词搜索",
@@ -148,7 +214,8 @@ export const zhCN: Messages = {
   "options.voice.enable.label": "启用语音输入",
   "options.voice.enable.help": "在对话输入框中显示麦克风按钮。",
   "options.voice.autoSend.label": "转写完自动发送",
-  "options.voice.autoSend.help": "关闭时转写结果会先填到输入框，等你确认再发送。",
+  "options.voice.autoSend.help":
+    "关闭时转写结果会先填到输入框，等你确认再发送。",
   "options.voice.device.label": "麦克风设备",
   "options.voice.device.system": "系统默认",
   "options.voice.device.refresh": "刷新设备列表",
@@ -158,7 +225,8 @@ export const zhCN: Messages = {
   "options.voice.test.transcribing": "正在转写测试片段…",
   "options.voice.test.loadingModel":
     "首次使用本地模型，正在下载 ~150 MB，请耐心等待…",
-  "options.voice.test.timeout": "请求超时，模型可能仍在下载或加载，请稍后重试。",
+  "options.voice.test.timeout":
+    "请求超时，模型可能仍在下载或加载，请稍后重试。",
   "options.voice.test.success": "识别结果：{text}",
   "options.voice.test.empty": "录音成功，但没有识别到语音内容。",
   "options.voice.test.failed": "测试失败：{error}",
@@ -209,7 +277,8 @@ export const zhCN: Messages = {
   "options.preference.hotkey.modifier.Alt": "Alt / Option",
   "options.preference.hotkey.modifier.Shift": "Shift",
   "options.preference.hotkey.accelerator.label": "组合键",
-  "options.preference.hotkey.accelerator.placeholder": "例如 CommandOrControl+Shift+H",
+  "options.preference.hotkey.accelerator.placeholder":
+    "例如 CommandOrControl+Shift+H",
   "options.preference.hotkey.accelerator.hint":
     "支持 Electron accelerator 语法。修饰键写 Cmd / Ctrl / Alt / Shift / CommandOrControl 等。",
   "options.preference.hotkey.macHint":
@@ -237,7 +306,8 @@ export const zhCN: Messages = {
   "onboarding.error.plugin": "插件加载失败",
   "onboarding.error.backplane": "本地服务启动超时",
   "onboarding.configure.errorTitle": "配置未完成",
-  "onboarding.configure.errorHint": "Hermes 已安装就绪，只是本地服务没能启动。可以重试，或查看下方日志。",
+  "onboarding.configure.errorHint":
+    "Hermes 已安装就绪，只是本地服务没能启动。可以重试，或查看下方日志。",
   "onboarding.configure.retry": "重试",
   "onboarding.action.copy": "复制命令",
   "onboarding.action.copied": "已复制",
@@ -263,32 +333,6 @@ export const zhCN: Messages = {
   "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "每日壁纸",
 
-  // 输入框快捷动作 — 设置项
-  "options.preference.quickActions.label": "快捷动作",
-  "options.preference.quickActions.desc":
-    "聊天输入框旁的按钮，用预设提示词包裹你输入的内容。",
-  "options.preference.quickActions.builtins": "内置动作",
-  "options.preference.quickActions.custom": "自定义动作",
-  "options.preference.quickActions.add": "新增动作",
-  "options.preference.quickActions.reset": "恢复默认",
-  "options.preference.quickActions.empty":
-    "还没有自定义动作。新增后即可在输入框直接调用你自己的提示词模板。",
-  "options.preference.quickActions.field.label": "标签",
-  "options.preference.quickActions.field.label.placeholder": "润色（正式语气）",
-  "options.preference.quickActions.field.tooltip": "悬浮提示（可选）",
-  "options.preference.quickActions.field.tooltip.placeholder":
-    "鼠标悬浮时显示；不填则使用标签内容。",
-  "options.preference.quickActions.field.template": "提示词模板",
-  "options.preference.quickActions.field.template.placeholder":
-    "请将以下内容改写为正式语气：\n\n{input}",
-  "options.preference.quickActions.field.template.help":
-    "使用 {input} 作为用户输入文本的占位符。如果未包含 {input}，将自动把用户输入追加到末尾。",
-  "options.preference.quickActions.action.save": "保存",
-  "options.preference.quickActions.action.cancel": "取消",
-  "options.preference.quickActions.action.edit": "编辑",
-  "options.preference.quickActions.action.delete": "删除",
-  "options.preference.quickActions.delete.confirm": "删除这个快捷动作？",
-
   // Userscripts
   "options.scripts.title": "用户脚本",
   "options.scripts.subtitle": "创建、安装与管理用户脚本",
@@ -297,8 +341,7 @@ export const zhCN: Messages = {
   "options.scripts.installDialog.title": "从 URL 安装用户脚本",
   "options.scripts.installDialog.label": "脚本 URL",
   "options.scripts.installDialog.install": "安装",
-  "options.scripts.empty":
-    "尚未安装任何用户脚本。使用上方按钮创建或导入一个。",
+  "options.scripts.empty": "尚未安装任何用户脚本。使用上方按钮创建或导入一个。",
   "options.scripts.removeConfirm": "确定要删除此用户脚本吗？此操作无法撤销。",
   "options.scripts.editor.newTitle": "新建用户脚本",
   "options.scripts.editor.editTitle": "编辑：{name}",
@@ -336,7 +379,8 @@ export const zhCN: Messages = {
   "options.gateway.saved": "已保存。",
   "options.gateway.backplaneKey.title": "Backplane 访问",
   "options.gateway.backplaneKey.label": "访问密钥（可选）",
-  "options.gateway.backplaneKey.placeholder": "未设置 AMIBA_BACKPLANE_KEY 时留空",
+  "options.gateway.backplaneKey.placeholder":
+    "未设置 AMIBA_BACKPLANE_KEY 时留空",
   "options.gateway.backplaneKey.help":
     "通常留空即可。如想加鉴权，把 AMIBA_BACKPLANE_KEY 写到 ~/.hermes/.env，重启 Hermes 后把同一个值贴到这里。",
   "options.gateway.bridge.title": "桥接服务",
@@ -375,12 +419,20 @@ export const zhCN: Messages = {
 
   // Cron
   "options.cron.title": "定时任务",
-  "options.cron.subtitle": "已登记到 Hermes Agent 的计划任务",
+  "options.cron.pageTitle": "已安排的任务",
+  "options.cron.subtitle": "让 Hermes 按计划执行任务、提醒或处理重复工作",
   "options.cron.refresh": "刷新",
   "options.cron.newJob": "新建任务",
+  "options.cron.search": "搜索已安排的任务",
+  "options.cron.search.empty": "没有找到匹配的任务",
+  "options.cron.filter.label": "筛选定时任务",
+  "options.cron.filter.all": "全部",
+  "options.cron.filter.enabled": "已开启",
+  "options.cron.filter.paused": "已暂停",
   "options.cron.loading": "正在加载定时任务…",
   "options.cron.empty.title": "还没有定时任务",
-  "options.cron.empty.description": "新建任务，让 Hermes 按时间自动处理重复工作。",
+  "options.cron.empty.description":
+    "新建任务，让 Hermes 按时间自动处理重复工作。",
   "options.cron.state.scheduled": "已启用",
   "options.cron.state.running": "执行中",
   "options.cron.state.paused": "已暂停",
@@ -388,8 +440,6 @@ export const zhCN: Messages = {
   "options.cron.state.error": "需要处理",
   "options.cron.state.unknown": "未知状态",
   "options.cron.mode.directScript": "直连脚本",
-  "options.cron.row.script": "脚本：{script}",
-  "options.cron.row.noDescription": "暂无任务说明",
   "options.cron.meta.nextRun": "下次 {time}",
   "options.cron.meta.noNextRun": "暂无下次执行",
   "options.cron.meta.neverRun": "尚未执行",
@@ -408,7 +458,8 @@ export const zhCN: Messages = {
   "options.cron.action.resumeNamed": "恢复 {name}",
   "options.cron.action.copied": "已复制任务 ID",
   "options.cron.action.copyFailed": "无法复制任务 ID",
-  "options.cron.action.deleteConfirm": "确定删除“{name}”吗？已保存的运行输出也会被移除。",
+  "options.cron.action.deleteConfirm":
+    "确定删除“{name}”吗？已保存的运行输出也会被移除。",
 
   // 运行状态与日志
   "options.status.title": "运行状态",
@@ -416,7 +467,8 @@ export const zhCN: Messages = {
   "options.status.refresh": "刷新",
   "options.status.lastChecked": "检查于 {time}",
   "options.status.health.healthy.title": "所有服务运行正常",
-  "options.status.health.healthy.subtitle": "Hermes 与本地网关均已连接，可以正常工作。",
+  "options.status.health.healthy.subtitle":
+    "Hermes 与本地网关均已连接，可以正常工作。",
   "options.status.health.offline.title": "网关当前离线",
   "options.status.health.offline.subtitle":
     "已检测到 Hermes，但本地网关进程当前没有运行。",
@@ -448,7 +500,8 @@ export const zhCN: Messages = {
   "options.status.gateway.noPlatforms": "暂无连接",
   "options.status.gateway.lastExit": "最近退出原因",
   "options.status.actions.title": "维护操作",
-  "options.status.actions.subtitle": "无需离开应用即可重启本地服务或更新 Hermes。",
+  "options.status.actions.subtitle":
+    "无需离开应用即可重启本地服务或更新 Hermes。",
   "options.status.actions.restart.title": "重启网关",
   "options.status.actions.restart.description":
     "重新启动本地网关进程，已有对话数据不会丢失。",
@@ -587,6 +640,11 @@ export const zhCN: Messages = {
   "sidepanel.trace.fields.exitCode": "退出码",
   "sidepanel.trace.fields.diff": "修改",
   "sidepanel.trace.fields.matches": "匹配结果",
+  "sidepanel.trace.searchResults.count": "{count} 个结果",
+  "sidepanel.trace.searchResults.matches": "{count} 处匹配",
+  "sidepanel.trace.searchResults.truncated": "结果已截断",
+  "sidepanel.trace.searchResults.empty": "没有匹配的文件",
+  "sidepanel.trace.searchResults.openFile": "在工作台中打开文件",
   "sidepanel.trace.fields.goal": "目标",
   "sidepanel.trace.fields.role": "角色",
   "sidepanel.trace.fields.action": "操作",
@@ -600,8 +658,7 @@ export const zhCN: Messages = {
   "sidepanel.pin": "钉住",
   "sidepanel.pin.pinAria": "将当前页面附加到下一条消息",
   "sidepanel.pin.unpinAria": "取消钉住当前页面",
-  "sidepanel.pin.pinTooltip":
-    "将当前页面附加到下一条消息（一次性快照）",
+  "sidepanel.pin.pinTooltip": "将当前页面附加到下一条消息（一次性快照）",
   "sidepanel.pin.unpinTooltip": "从下一条消息中移除该页面",
   "sidepanel.learn.record": "录制操作",
   "sidepanel.learn.recording": "录制中 · 已记录 {count} 步",
@@ -611,7 +668,8 @@ export const zhCN: Messages = {
     "记录当前标签页的点击与输入；停止后会把轨迹 JSON 附加到对话中。提示词请自行撰写。",
   "sidepanel.queue.sendNow": "立即发送：把此消息提到队列最前",
   "sidepanel.queue.sendNow.aria": "立即发送",
-  "sidepanel.queue.edit": "编辑：把此消息加载到输入框（保留队列位置，暂停队列）",
+  "sidepanel.queue.edit":
+    "编辑：把此消息加载到输入框（保留队列位置，暂停队列）",
   "sidepanel.queue.edit.aria": "编辑",
   "sidepanel.queue.delete": "删除",
   "sidepanel.queue.editing": "此消息正在输入框中编辑",
@@ -631,8 +689,7 @@ export const zhCN: Messages = {
   "sidepanel.permission.allowOnce": "仅本次允许",
   "sidepanel.permission.allowOnce.desc": "仅此次允许；下次仍会询问",
   "sidepanel.permission.allowSession": "本会话允许",
-  "sidepanel.permission.allowSession.desc":
-    "本次对话期间不再询问",
+  "sidepanel.permission.allowSession.desc": "本次对话期间不再询问",
   "sidepanel.permission.allowAlways": "始终允许",
   "sidepanel.permission.allowAlways.desc": "记住此命令，不再询问",
   "sidepanel.permission.deny": "拒绝",
@@ -690,8 +747,7 @@ export const zhCN: Messages = {
   "sidepanel.status.online": "在线",
   "sidepanel.status.offline": "离线",
   "sidepanel.status.bridgeUrl": "桥接：{url}",
-  "sidepanel.status.tooltip.online":
-    "Hermes 桥接服务可达。点击打开网关设置。",
+  "sidepanel.status.tooltip.online": "Hermes 桥接服务可达。点击打开网关设置。",
   "sidepanel.status.tooltip.offline":
     "无法连接到 Hermes 网关。请启动 `hermes chat` 并检查网关地址。",
   "sidepanel.status.tooltip.connecting": "正在连接 Hermes 桥接服务…",
@@ -703,8 +759,7 @@ export const zhCN: Messages = {
   "sidepanel.status.tooltip.clickDisconnect": "点击断开",
   "sidepanel.status.aria.bar": "Amiba 浏览器扩展 {label}。{action}。",
   "sidepanel.status.showAgentWindow": "显示代理窗口",
-  "sidepanel.status.showAgentWindow.disabled":
-    "代理窗口未运行 — 请先连接",
+  "sidepanel.status.showAgentWindow.disabled": "代理窗口未运行 — 请先连接",
   "sidepanel.status.dismiss": "关闭",
 
   // Navigate open policy toggle
@@ -746,12 +801,13 @@ export const zhCN: Messages = {
   "sidepanel.sessions.group.thisMonth": "本月",
   "sidepanel.sessions.group.older": "更早",
   "sidepanel.sessions.group.chats": "对话历史",
+  "sidepanel.sessions.group.unbound": "其他对话",
   "sidepanel.sessions.group.channelChats": "{name}对话",
   "sidepanel.sessions.group.scheduled": "定时任务",
   "sidepanel.sessions.history.empty": "暂无对话或定时任务运行记录。",
   "sidepanel.sessions.layout.aria": "历史记录布局",
   "sidepanel.sessions.layout.timeline": "全部按时间排列",
-  "sidepanel.sessions.layout.grouped": "对话与定时任务分组展示",
+  "sidepanel.sessions.layout.grouped": "按工作目录分组",
   "sidepanel.nav.section.workspace": "工作区",
   "sidepanel.sessions.showMore": "显示更多",
   "sidepanel.sessions.activityBar.aria": "侧边栏视图",
@@ -836,7 +892,8 @@ export const zhCN: Messages = {
   "newtab.shortcuts.add.dialog.useCurrentTab": "使用当前活动标签页",
   "newtab.shortcuts.add.dialog.confirm": "添加",
   "newtab.shortcuts.add.dialog.cancel": "取消",
-  "newtab.shortcuts.add.invalidUrl": "请输入有效的 URL(包括 http:// 或 https://)。",
+  "newtab.shortcuts.add.invalidUrl":
+    "请输入有效的 URL(包括 http:// 或 https://)。",
   "newtab.shortcuts.empty":
     "还没有快捷收藏 — 点击右侧 ⚙ 管理 添加你最常打开的站点。",
 
@@ -875,26 +932,6 @@ export const zhCN: Messages = {
   "commandPalette.group.conversations": "对话",
   "commandPalette.cmd.newChat": "新对话",
 
-  // 输入框快捷动作 — 按钮条
-  "composer.quick.empty.tooltip":
-    "请先在输入框输入内容，然后点击快捷动作把它包裹成预设提示词。",
-  "composer.quick.translate.label": "翻译",
-  "composer.quick.translate.tooltip": "中英互译（自动检测）",
-  "composer.quick.translate.template":
-    "请翻译以下内容：如果原文是英文，请翻译成简体中文；否则翻译成英文。保留原有语气和代码块，不要解释或加任何前缀，仅输出译文。\n\n{input}",
-  "composer.quick.summarize.label": "总结",
-  "composer.quick.summarize.tooltip": "用简洁的语言总结要点",
-  "composer.quick.summarize.template":
-    "请简洁地总结以下内容。先用一句话给出最核心的结论，必要时再补充 3–5 条短要点。使用与原文相同的语言回复。\n\n{input}",
-  "composer.quick.polish.label": "润色",
-  "composer.quick.polish.tooltip": "在保持原意和语言的前提下润色表达",
-  "composer.quick.polish.template":
-    "请润色以下文字，使其更清晰、自然、合乎语法。保持原文语言和原意，不要添加新信息。仅输出润色后的文本，不要解释。\n\n{input}",
-  "composer.quick.explain.label": "解释",
-  "composer.quick.explain.tooltip": "解释这段内容/这段代码的含义",
-  "composer.quick.explain.template":
-    "请清晰地解释以下内容。如果是代码，请逐步说明它在做什么，并指出任何不直观的行为；如果是文字或概念，先解释关键术语，再讲清楚整体含义。使用与原文相同的语言回复。\n\n{input}",
-
   // ── 渠道（多平台会话） ──
   "channels.cli": "CLI",
   "channels.tui": "TUI",
@@ -922,7 +959,8 @@ export const zhCN: Messages = {
   "channels.unknown": "其他",
   "channels.remoteTitle": "来自 {name}",
   "sidepanel.sessions.readOnlyBadge": "只读",
-  "sidepanel.sessions.readOnlyNotice": "此会话来自 {name}，请在 {name} 继续对话。",
+  "sidepanel.sessions.readOnlyNotice":
+    "此会话来自 {name}，请在 {name} 继续对话。",
 
   // Tokens + Tools pages (internal modules; ex token-meter + tool-meter)
   "options.nav.tokens": "用量",
@@ -977,7 +1015,8 @@ export const zhCN: Messages = {
   "tools.search.empty": "没有匹配的工具组。",
   "tools.group.builtin": "内置工具",
   "tools.group.installedMcps": "已安装 (MCP)",
-  "tools.installedMcps.empty": "尚未安装任何 MCP — 在聊天里让助手帮你找一个并安装。",
+  "tools.installedMcps.empty":
+    "尚未安装任何 MCP — 在聊天里让助手帮你找一个并安装。",
   "tools.installedMcp.curated": "精选",
   "tools.installedMcp.manual": "手动添加",
   "tools.installedMcp.source": "来源",

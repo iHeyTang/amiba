@@ -9,6 +9,10 @@ import type {
   ClientToEngineMessage,
   EngineToClientMessage
 } from "@amiba/core"
+import type {
+  WorkspaceFileChange,
+  WorkspaceFileDocument,
+} from "@amiba/platform"
 
 type StorageChange = { oldValue?: unknown; newValue?: unknown }
 type StorageChangeMap = Record<string, StorageChange>
@@ -60,11 +64,20 @@ interface AmibaBridgeApi {
     bind(sessionId: string, path: string): Promise<void>
     unbind(sessionId: string): Promise<void>
     getCurrent(sessionId: string): Promise<string | null>
+    listBindings(): Promise<Record<string, string>>
     onChanged(cb: (change: WorkspaceChange) => void): () => void
     getPathForFile(file: File): string
   }
   files: {
     list(sessionId: string, query: string): Promise<{ path: string; isDir: boolean }[]>
+    read(sessionId: string, path: string): Promise<WorkspaceFileDocument>
+    reveal(sessionId: string, path: string): Promise<void>
+    openExternal(sessionId: string, path: string): Promise<void>
+    watch(
+      sessionId: string,
+      paths: string[],
+      cb: (change: WorkspaceFileChange) => void,
+    ): () => void
   }
   notifier: {
     onMessage(cb: (msg: unknown) => void): () => void

@@ -71,6 +71,7 @@ export function createMainPlatformAdapter(): PlatformAdapter {
       unbind: (sessionId) => workspaceManager.unbind(sessionId),
       getCurrent: (sessionId) =>
         Promise.resolve(workspaceManager.getForSession(sessionId)),
+      listBindings: () => Promise.resolve(workspaceManager.listBindings()),
       onChange: (cb) => workspaceManager.onChange(cb)
     }
   }

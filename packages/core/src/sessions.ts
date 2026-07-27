@@ -18,6 +18,12 @@ export interface SessionMeta {
   archived?: boolean
   /** Cached count so the sidebar doesn't have to load history just to count. */
   messageCount?: number
+  /**
+   * Short first-user-message preview returned by Hermes. Kept out of normal
+   * row rendering, but lets compatibility layers identify legacy structured
+   * context without loading every conversation.
+   */
+  preview?: string
   /** Set once the user manually renames; suppresses auto-title regeneration. */
   titleManual?: boolean
   /**

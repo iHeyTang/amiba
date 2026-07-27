@@ -103,7 +103,44 @@ export interface WorkspaceAdapter {
   bind(sessionId: string, path: string): Promise<void>
   unbind(sessionId: string): Promise<void>
   getCurrent(sessionId: string): Promise<string | null>
+  /** Snapshot every persisted session binding for workspace-grouped history. */
+  listBindings(): Promise<Record<string, string>>
   onChange(cb: (change: WorkspaceChange) => void): () => void
+}
+
+export interface WorkspaceFileDocument {
+  /** Canonical absolute path after main-process workspace validation. */
+  path: string
+  /** Slash-normalised path relative to the bound workspace root. */
+  relativePath: string
+  name: string
+  content: string
+  size: number
+  modifiedAt: number
+  revision: string
+  truncated: boolean
+  binary: boolean
+}
+
+export interface WorkspaceFileChange {
+  subscriptionId: string
+  sessionId: string
+  path: string
+  event: "add" | "change" | "unlink"
+}
+
+/**
+ * Read-only workspace resource bridge used by the desktop workbench.
+ *
+ * File access remains in Electron main. Renderers submit a session id and a
+ * path hint; main resolves it against that session's bound workspace and
+ * rejects traversal / symlink escapes before touching the file.
+ */
+export interface WorkspaceFilesAdapter {
+  read(sessionId: string, path: string): Promise<WorkspaceFileDocument>
+  reveal(sessionId: string, path: string): Promise<void>
+  openExternal(sessionId: string, path: string): Promise<void>
+  watch(sessionId: string, paths: string[], listener: (change: WorkspaceFileChange) => void): () => void
 }
 
 export interface PlatformAdapter {
@@ -119,6 +156,8 @@ export interface PlatformAdapter {
   shell: ShellAdapter
   /** Desktop-only. The extension leaves this undefined. */
   workspaces?: WorkspaceAdapter
+  /** Desktop-only, read-only file surface for the workspace workbench. */
+  workspaceFiles?: WorkspaceFilesAdapter
 }
 
 let current: PlatformAdapter | null = null

@@ -80,12 +80,14 @@ The adapter surface lives at `apps/desktop/src/renderer/platform/adapter.ts` (wi
 ## Migration roadmap
 
 Phase 1 — scaffolding (done):
+
 - [x] Monorepo root (`pnpm-workspace.yaml`, root `package.json`)
 - [x] `apps/browser-extension` = verbatim copy of original extension (renamed to `@amiba/browser-extension`)
 - [x] `apps/desktop` = Electron + Vite + React shell with placeholder Chat/Settings routes
 - [x] `PlatformAdapter` interface + Electron implementation skeleton
 
 Phase 2a — foundation extraction (done, strangler-fig: extension still has its originals):
+
 - [x] `packages/platform` — `PlatformAdapter` interface, including `storage.watch()` for live updates.
 - [x] `packages/utils` — `cn`, `formatBytes`, `shortId`, `safeJsonStringify`.
 - [x] `packages/ui` — 14 shadcn primitives (Button, Card, Select, …). `cn` resolved via `@amiba/utils`.
@@ -94,12 +96,14 @@ Phase 2a — foundation extraction (done, strangler-fig: extension still has its
 - [x] `apps/desktop` consumes all four packages; Settings page edits language live, Chat page reacts via `storage.watch()`.
 
 Phase 2b-1 — UI shell parity (done):
+
 - [x] `packages/theme` — extracted from `lib/theme.ts`, chrome → adapter.
 - [x] `packages/tailwind-preset` — extracted from extension's `tailwind.config.js`.
 - [x] `packages/ui/styles/tokens.css` — extracted HSL palette + `@layer base` + Radix ScrollArea fixes from extension's `style.css`. Chat-specific styling (`.chat-md`, `.tabbar-scroller`, `#__plasmo`) stays per-app.
 - [x] `apps/desktop` consumes preset + tokens, calls `useResolvedTheme()` at the app root, pages use semantic tokens (`bg-background`, `text-foreground`, `text-muted-foreground`, `bg-sidebar`, `border-border`). Settings page exposes Language + Theme selectors.
 
 Phase 2b-2 — migrate extension to consume packages (done):
+
 - [x] `apps/browser-extension/package.json` adds `@amiba/{platform,utils,ui,i18n,theme,tailwind-preset}` workspace deps.
 - [x] `apps/browser-extension/src/lib/platform/chrome-adapter.ts` maps `PlatformAdapter` → `chrome.*`; `init.ts` calls `setPlatform()` once.
 - [x] Every entry (`sidepanel/index.tsx`, `options/index.tsx`, `newtab/index.tsx`, `tabs/chat.tsx`) imports `~lib/platform/init` as its first line.
@@ -108,27 +112,31 @@ Phase 2b-2 — migrate extension to consume packages (done):
 - [x] Duplicated sources deleted: `components/ui/*`, `lib/utils.ts`, `lib/i18n/`, `lib/theme.ts`.
 
 Phase 2c-1 — refactor storage-portable lib modules in place (done):
+
 - [x] `lib/attachments/read.ts`, `lib/sessions/{store,migrate,use-sessions}.ts`, `lib/wallpaper/use-wallpaper.ts`, `lib/backplane-client.ts` — `chrome.storage.local.*` + `chrome.runtime.sendMessage` swapped to `getPlatform().storage` / `.runtime.sendMessage`.
 - [x] `chrome.storage.onChanged.addListener` watcher pattern → `getPlatform().storage.watch(keys, cb)` returning `unsub`. (`use-sessions.ts` lines 250–296, `use-wallpaper.ts` lines 290–305.)
 - [x] These modules now compile in either runtime — moving them to `packages/core` is a cp away.
 
-Phase 2c-2 — extension-only modules stay on chrome.*:
+Phase 2c-2 — extension-only modules stay on chrome.\*:
+
 - `lib/home-shortcuts/use-home-shortcuts.ts` (bookmarks CRUD + events).
-- `lib/page-context/{capture,use-active-tab}.ts` (chrome.scripting / chrome.tabs.* events).
-- `lib/quick-actions/index.ts` (browser tabs + bookmarks).
+- `lib/page-context/{capture,use-active-tab}.ts` (chrome.scripting / chrome.tabs.\* events).
 - Rationale: these features have no desktop counterpart. Bloating `PlatformAdapter` with bookmark/tabs-events methods would just produce `notImpl` stubs in `ElectronAdapter`. Better surfaced via `getPlatform().kind === "extension"` branching at call sites if a feature ever needs to coexist.
 
 Phase 3a — chat domain layer (done):
+
 - [x] `packages/core` with chat domain types: `ChatMessage`, `SessionMeta`, gateway wire protocol (`HermesToolProgress`, `HermesApprovalRequest`, …), engine ↔ UI protocol (`SubmitPayload`, `StreamEvent`, `SnapshotFrame`, `ChatRuntimeState`, …).
 - [x] `ChatEngineClient` interface — transport-agnostic surface the UI uses to talk to its engine.
 - [x] Extension's `lib/types.ts` / `lib/chat/hermes-client.ts` / `background/chat/types.ts` re-export from `@amiba/core` for back-compat.
 
 Phase 3b — chat-ui (done, lightweight desktop-ready shell):
+
 - [x] `packages/chat-ui` with `TabBar`, `SessionDrawer`, `MessageList`, `Composer`, `EmptyState`, and a composing `ChatView`.
 - [x] `<ChatView>` takes a `client: ChatEngineClient` plus session state, with `composerExtrasAbove` and `headerExtras` slots for extension-only widgets (BridgeStatusBar / NavigateOpenPolicyToggle / Learn / page-context chip).
 - [x] `apps/desktop` mounts `<ChatView>` with a stub `ElectronChatEngineClient`. Each "send" appends a placeholder assistant reply; sessions persist in renderer memory across tabs. Real Electron-main chat engine is the next-phase product work.
 
 Phase 3c — visual identity lift (done):
+
 - [x] `packages/core/config.ts` + `backplane-client.ts` — shared endpoint constants + the local-backplane HTTP entry point. Extension's `lib/backplane-client.ts` and `background/config.ts` re-export.
 - [x] `packages/core/attachments/` — `types.ts`, `format.ts`, `read.ts` (770 LOC). Extension's `lib/attachments/*` re-export.
 - [x] `packages/ui/HermesLogo.tsx` — brand mark, both PNG variants inlined as base64 (~48 KB) so the asset works in any bundler with no special loader. Extension's `components/hermes-logo.tsx` re-exports.
@@ -140,38 +148,42 @@ Phase 3c — visual identity lift (done):
 - [x] Desktop's `<Chat />` page renders `<ChatView>` with `MessageTurns` + `Bubble` + `Streamdown`. Visual identity matches extension chat surface. `electron-vite build` exit=0 (2010 modules, renderer 1.74 MB + 44 KB CSS).
 
 Phase 3c — extension migration to `<ChatView>` (deferred):
+
 - [ ] Extension's `sidepanel/index.tsx` (4199 LOC monolith) still uses its own JSX. Migrating it onto `<ChatView>` means decomposing every state variable that today lives in the `SidePanel` function, plus building a `ChromeChatEngineClient` that wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })`. This is a substantial PR on its own; deferring until the desktop chat engine is real so both surfaces can co-evolve.
 - [ ] When tackled: TabBar / SessionDrawer / MessageList already shared; the lift focuses on Composer wiring (Learn/page-context slots), BridgeStatusBar header slot, and the assistant-bubble renderer (currently uses Streamdown + intricate tool/approval timeline).
 - [ ] Options panes (Gateway / Skills / Memory / Cron / Logs / Preferences / Status / Models) → `packages/settings-ui` is a separate sweep.
 
 Phase 3e — 1:1 chat-surface lift (done):
+
 - [x] `useSessions` hook + `store` + `migrate` (~1430 LOC) lifted to `packages/core/sessions-runtime/`.
 - [x] 7 `hermes-*` backplane clients (sessions, memory, cron, logs, skills, lifecycle, agent-model) lifted to `packages/core/`.
 - [x] Capability interfaces in `packages/chat-ui/src/internal/capabilities.ts`: PageContextCapability / LearnCapability / NavigateOpenPolicyCapability / PendingPromptCapability — all optional.
-- [x] **Entire SidePanel function (4199 → 2752 → 2762 LOC) lifted** to `packages/chat-ui/src/SidePanelView.tsx`. All ~30 chrome.* sites replaced with capability/client/prop calls. Extension-only UI (Learn buttons, BridgeStatusBar, NavigateOpenPolicyToggle, page-context chips) gated by capability presence + slot props.
+- [x] **Entire SidePanel function (4199 → 2752 → 2762 LOC) lifted** to `packages/chat-ui/src/SidePanelView.tsx`. All ~30 chrome.\* sites replaced with capability/client/prop calls. Extension-only UI (Learn buttons, BridgeStatusBar, NavigateOpenPolicyToggle, page-context chips) gated by capability presence + slot props.
 - [x] `apps/browser-extension/src/lib/chat/chrome-engine-client.ts` — wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })` as ChatEngineClient.
 - [x] `apps/browser-extension/src/lib/chat/chrome-capabilities.ts` — chrome impls of all 4 capabilities + `openAgentDestinationInUserWindow` helper.
 - [x] **`apps/browser-extension/src/sidepanel/index.tsx` reduced from 2752 to 56 LOC** — pure wrapper that builds ChromeChatEngineClient + chromeCapabilities + BridgeStatusBar/NavigateOpenPolicyToggle slots, renders `<SidePanelView>`.
 - [x] **`apps/desktop/src/renderer/App.tsx` is 36 LOC** — `<SidePanelView client={ElectronChatEngineClient} capabilities={{}} ...>`. No left rail, no nav, no custom Composer. Visual identity 1:1 with extension's sidepanel.
 - [x] Multi-window desktop: chat in main BrowserWindow, settings opens via `window.hermes.settings.open()` IPC → new BrowserWindow loading `options.html` (placeholder until Options panes lift).
 - [x] electron-vite multi-entry rollup config (chat + options entries).
-- [x] Self-verify: 8 packages tsc exit=0, extension tsc + plasmo build exit=0, desktop tsc + electron-vite build exit=0 (2020 modules, two HTML entries, chat 1.21 MB + options 1.7 KB + shared globals 574 KB + CSS 47 KB). Zero chrome.* code references in `packages/` (all hits are doc comments).
+- [x] Self-verify: 8 packages tsc exit=0, extension tsc + plasmo build exit=0, desktop tsc + electron-vite build exit=0 (2020 modules, two HTML entries, chat 1.21 MB + options 1.7 KB + shared globals 574 KB + CSS 47 KB). Zero chrome.\* code references in `packages/` (all hits are doc comments).
 
 Phase 3f — Options/Settings 1:1 lift (done):
+
 - [x] `packages/settings-ui` — new package, 12 files (~6700 LOC):
   - `HermesModelConfigTab` + `SettingsSkills` + `SettingsStatus` + `SettingsLogs` + `SettingsPreferences` + `SettingsMemory` + `SettingsGateway` provide settings panes; registered jobs live in the workspace `ScheduledTasksPage`.
   - `ScriptEditor` (168) + `ScriptList` (88) — userscript management UI (capability-gated).
   - `SettingsView.tsx` — main tab container (sidebar nav + content router). Scripts tab hides when `userscripts` capability absent.
   - `capabilities.ts` — `BridgeCapability` + `UserScriptCapability` + composed `OptionsCapabilities`.
-- [x] Additional lifts to `@amiba/core` to support settings-ui: `fetch-models` + `quick-actions` (chrome.storage → getPlatform().storage including `.watch()`).
+- [x] Additional lift to `@amiba/core` to support settings-ui: `fetch-models`.
 - [x] `apps/browser-extension/src/options/index.tsx` reduced from 507 → 20 LOC (`<SettingsView capabilities={chromeOptionsCapabilities} />`).
 - [x] `apps/browser-extension/src/lib/options/chrome-capabilities.ts` — `chrome.runtime.sendMessage` impls for userscript CRUD + `bridge.refresh`.
 - [x] `apps/desktop/src/renderer/options.tsx` (29 LOC) — `<SettingsView capabilities={{}} />`. Scripts tab + bridge refresh hidden automatically.
 - [x] Tailwind content paths updated in both apps to scan settings-ui.
 - [x] Self-verify: 9 packages tsc exit=0, extension tsc + plasmo build exit=0, desktop tsc (renderer + main) + electron-vite build exit=0 (2051 modules, chat 1.11 MB + options 988 KB + shared globals 678 KB + CSS 56 KB).
-- [x] packages/ has zero non-comment chrome.* code references.
+- [x] packages/ has zero non-comment chrome.\* code references.
 
 Phase 3d — desktop chat engine (done):
+
 - [x] `packages/core/hermes-client.ts` — HermesClient + streamChat + runHermesAgent + postHermesApprovalDecision lifted from extension. Single source of truth for the HTTP/SSE gateway protocol; extension's `lib/chat/hermes-client.ts` is now a one-line re-export.
 - [x] `apps/desktop/src/main/storage.ts` — single in-process file-backed store shared by the main-side PlatformAdapter and the renderer-IPC storage handlers.
 - [x] `apps/desktop/src/main/platform.ts` — `createMainPlatformAdapter()` so `backplaneFetch` / HermesClient can read `settings.backplane.key` from main without IPC.
@@ -180,18 +192,22 @@ Phase 3d — desktop chat engine (done):
 - [x] `apps/desktop/src/renderer/pages/Chat.tsx` — drives `UiMessage[]` from `client.onStreamEvent(...)`. Maps `chunk → content`, `reasoning → reasoning`, `hermesToolProgress → chips + timeline`, `approvalRequest → audit trail`, `done/aborted/error → finalize`. Mirrors the extension's `handleStreamEvent` minus queue / page-context / Learn (those are extension-only).
 
 Phase 3e — extension-only modules stay put:
-- `lib/page-context/*`, `lib/home-shortcuts/*`, `lib/quick-actions/*`, `lib/userscript/*`, `background/*` — browser-only by nature; not migrated, not extracted. Surfaced into chat-ui via the slot props on `<ChatView>`.
+
+- `lib/page-context/*`, `lib/home-shortcuts/*`, `lib/userscript/*`, `background/*` — browser-only by nature; not migrated, not extracted. Surfaced into chat-ui via the slot props on `<ChatView>`.
 
 Phase 3f — desktop-only future surfaces (not started):
+
 - [ ] System tray + global hotkeys.
 - [ ] Native file picker for attachments (instead of the extension's page-context-capture).
 - [ ] Auto-update via `electron-updater`.
 
 Phase 3 — UI parity:
+
 - [ ] `apps/desktop` renders the chat panel from `packages/ui/chat` at `/chat`.
 - [ ] `apps/desktop` renders the settings panes from `packages/ui/settings` at `/settings/*`.
 
 Phase 4 — desktop polish:
+
 - [ ] App icon + electron-builder targets (mac dmg, win nsis, linux AppImage).
 - [ ] Auto-update via `electron-updater`.
 - [ ] Native menu, tray, global shortcuts.

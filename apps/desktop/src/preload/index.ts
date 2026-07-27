@@ -1,56 +1,64 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron"
-import { createExtensionsBridge, createWebviewPreloadBridge } from "@amiba/extension-host/preload"
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { randomUUID } from "node:crypto";
+import {
+  createExtensionsBridge,
+  createWebviewPreloadBridge,
+} from "@amiba/extension-host/preload";
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Amiba window
 // stacks more than that on a few high-fan-out IPC channels (storage,
 // workspace, chat, notifier, quick-ask) because every React hook that
-// observes state — `useQuickActions`, `useCronRuns`, `useWallpaper`,
+// observes state — `useCronRuns`, `useWallpaper`,
 // `useResume`, the platform adapter's `storage.watch`, … — adds its
 // own listener on top of the shared `ipcRenderer`. Without bumping
 // the cap Electron logs "MaxListenersExceededWarning" on every fresh
 // mount of the main window, and the warnings drown out real bugs.
 // `0` = unlimited; we'd rather chase real leaks via the cleanup
 // effects than treat the 10-listener line as load-bearing.
-ipcRenderer.setMaxListeners(0)
+ipcRenderer.setMaxListeners(0);
 
-type StorageChange = { oldValue?: unknown; newValue?: unknown }
-type StorageChangeMap = Record<string, StorageChange>
+type StorageChange = { oldValue?: unknown; newValue?: unknown };
+type StorageChangeMap = Record<string, StorageChange>;
 
 type WorkspaceChange =
   | { kind: "bound"; sessionId: string; path: string }
-  | { kind: "unbound"; sessionId: string }
+  | { kind: "unbound"; sessionId: string };
 
 // Mirrors @amiba/core protocol types — kept loose here so preload
 // stays runtime-only without pulling the core package into the browser
 // context's preload classpath.
-type ChatClientMessage = unknown
-type ChatEngineMessage = unknown
+type ChatClientMessage = unknown;
+type ChatEngineMessage = unknown;
 
 const api = {
   storage: {
     get: (keys?: string | string[]) => ipcRenderer.invoke("storage:get", keys),
-    set: (patch: Record<string, unknown>) => ipcRenderer.invoke("storage:set", patch),
-    remove: (keys: string | string[]) => ipcRenderer.invoke("storage:remove", keys),
+    set: (patch: Record<string, unknown>) =>
+      ipcRenderer.invoke("storage:set", patch),
+    remove: (keys: string | string[]) =>
+      ipcRenderer.invoke("storage:remove", keys),
     onChanged: (cb: (changes: StorageChangeMap) => void) => {
-      const handler = (_e: unknown, changes: StorageChangeMap) => cb(changes)
-      ipcRenderer.on("storage:changed", handler)
-      return () => ipcRenderer.off("storage:changed", handler)
-    }
+      const handler = (_e: unknown, changes: StorageChangeMap) => cb(changes);
+      ipcRenderer.on("storage:changed", handler);
+      return () => ipcRenderer.off("storage:changed", handler);
+    },
   },
 
   chat: {
     /** Send any ClientToEngineMessage to the main-process chat engine. */
-    send: (msg: ChatClientMessage) => ipcRenderer.invoke("chat:client-to-engine", msg),
+    send: (msg: ChatClientMessage) =>
+      ipcRenderer.invoke("chat:client-to-engine", msg),
     /** Subscribe to engine → client frames (events + snapshots). */
     onMessage: (cb: (msg: ChatEngineMessage) => void) => {
-      const handler = (_e: unknown, msg: ChatEngineMessage) => cb(msg)
-      ipcRenderer.on("chat:engine-to-client", handler)
-      return () => ipcRenderer.off("chat:engine-to-client", handler)
-    }
+      const handler = (_e: unknown, msg: ChatEngineMessage) => cb(msg);
+      ipcRenderer.on("chat:engine-to-client", handler);
+      return () => ipcRenderer.off("chat:engine-to-client", handler);
+    },
   },
 
   shell: {
-    openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url)
+    openExternal: (url: string) =>
+      ipcRenderer.invoke("shell:open-external", url),
   },
 
   /**
@@ -63,10 +71,10 @@ const api = {
   toolActivity: {
     read: (days: number) => ipcRenderer.invoke("tool-activity:read", { days }),
     onChanged: (cb: () => void) => {
-      const handler = () => cb()
-      ipcRenderer.on("tool-activity:changed", handler)
-      return () => ipcRenderer.off("tool-activity:changed", handler)
-    }
+      const handler = () => cb();
+      ipcRenderer.on("tool-activity:changed", handler);
+      return () => ipcRenderer.off("tool-activity:changed", handler);
+    },
   },
 
   /**
@@ -86,12 +94,14 @@ const api = {
       ipcRenderer.invoke("workspace:unbind", sessionId),
     getCurrent: (sessionId: string): Promise<string | null> =>
       ipcRenderer.invoke("workspace:get-current", sessionId),
+    listBindings: (): Promise<Record<string, string>> =>
+      ipcRenderer.invoke("workspace:list-bindings"),
     onChanged: (cb: (change: WorkspaceChange) => void) => {
-      const handler = (_e: unknown, change: WorkspaceChange) => cb(change)
-      ipcRenderer.on("workspace:changed", handler)
-      return () => ipcRenderer.off("workspace:changed", handler)
+      const handler = (_e: unknown, change: WorkspaceChange) => cb(change);
+      ipcRenderer.on("workspace:changed", handler);
+      return () => ipcRenderer.off("workspace:changed", handler);
     },
-    getPathForFile: (file: File): string => webUtils.getPathForFile(file)
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   },
 
   /**
@@ -100,8 +110,52 @@ const api = {
    * renderer's Files TriggerProvider maps the rows into composer menu items.
    */
   files: {
-    list: (sessionId: string, query: string): Promise<{ path: string; isDir: boolean }[]> =>
+    list: (
+      sessionId: string,
+      query: string,
+    ): Promise<{ path: string; isDir: boolean }[]> =>
       ipcRenderer.invoke("files:list", { sessionId, query }),
+    read: (sessionId: string, path: string) =>
+      ipcRenderer.invoke("files:read", { sessionId, path }),
+    reveal: (sessionId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke("files:reveal", { sessionId, path }),
+    openExternal: (sessionId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke("files:open-external", { sessionId, path }),
+    watch: (
+      sessionId: string,
+      paths: string[],
+      cb: (change: {
+        subscriptionId: string;
+        sessionId: string;
+        path: string;
+        event: "add" | "change" | "unlink";
+      }) => void,
+    ) => {
+      const subscriptionId = randomUUID();
+      const handler = (
+        _e: unknown,
+        change: {
+          subscriptionId: string;
+          sessionId: string;
+          path: string;
+          event: "add" | "change" | "unlink";
+        },
+      ) => {
+        if (change.subscriptionId === subscriptionId) cb(change);
+      };
+      ipcRenderer.on("files:changed", handler);
+      const registration = ipcRenderer.invoke("files:watch", {
+        subscriptionId,
+        sessionId,
+        paths,
+      });
+      return () => {
+        ipcRenderer.off("files:changed", handler);
+        void registration.finally(() =>
+          ipcRenderer.invoke("files:unwatch", subscriptionId),
+        );
+      };
+    },
   },
 
   /**
@@ -117,15 +171,13 @@ const api = {
    * the main window, just with its own session id.
    */
   quickAsk: {
-    onPrefill: (
-      cb: (payload: { text: string; sourceApp: string }) => void,
-    ) => {
+    onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {
       const handler = (
         _e: unknown,
         payload: { text: string; sourceApp: string },
-      ) => cb(payload)
-      ipcRenderer.on("quick-ask:prefill", handler)
-      return () => ipcRenderer.off("quick-ask:prefill", handler)
+      ) => cb(payload);
+      ipcRenderer.on("quick-ask:prefill", handler);
+      return () => ipcRenderer.off("quick-ask:prefill", handler);
     },
     dismiss: () => ipcRenderer.invoke("quick-ask:dismiss"),
     resize: (contentHeightPx: number) =>
@@ -146,14 +198,15 @@ const api = {
 
   notifier: {
     onMessage: (cb: (msg: unknown) => void) => {
-      const handler = (_e: unknown, msg: unknown) => cb(msg)
-      ipcRenderer.on("notifier:message", handler)
-      return () => ipcRenderer.off("notifier:message", handler)
+      const handler = (_e: unknown, msg: unknown) => cb(msg);
+      ipcRenderer.on("notifier:message", handler);
+      return () => ipcRenderer.off("notifier:message", handler);
     },
     activateMain: () => ipcRenderer.invoke("notifier:activate-main"),
     approve: (approvalId: string) =>
       ipcRenderer.invoke("notifier:approve", approvalId),
-    deny: (approvalId: string) => ipcRenderer.invoke("notifier:deny", approvalId),
+    deny: (approvalId: string) =>
+      ipcRenderer.invoke("notifier:deny", approvalId),
     /**
      * Fire a demo notifier card so the user can confirm the floating
      * window appears and clicks register. Call from the main window's
@@ -192,9 +245,9 @@ const api = {
    * prompt + flip the sidebar) — this bridge just delivers the text.
    */
   onChatStartSession: (cb: (payload: { text: string }) => void) => {
-    const handler = (_e: unknown, payload: { text: string }) => cb(payload)
-    ipcRenderer.on("ui:chat-start-session", handler)
-    return () => ipcRenderer.off("ui:chat-start-session", handler)
+    const handler = (_e: unknown, payload: { text: string }) => cb(payload);
+    ipcRenderer.on("ui:chat-start-session", handler);
+    return () => ipcRenderer.off("ui:chat-start-session", handler);
   },
 
   /**
@@ -203,8 +256,11 @@ const api = {
    * spawns stream back via `onJobLog`; completion lands in `onJobEnd`.
    */
   hermesRuntime: {
-    detect: (): Promise<{ installed: boolean; binary?: string; version?: string }> =>
-      ipcRenderer.invoke("hermes:detect"),
+    detect: (): Promise<{
+      installed: boolean;
+      binary?: string;
+      version?: string;
+    }> => ipcRenderer.invoke("hermes:detect"),
     install: (): Promise<{ id: string; pid: number | undefined }> =>
       ipcRenderer.invoke("hermes:install"),
     /**
@@ -215,29 +271,37 @@ const api = {
      */
     installPty: (): Promise<{ id: string; pid: number }> =>
       ipcRenderer.invoke("hermes:install-pty"),
-    installPlugin: (
-      args: { binary: string; pluginId: string },
-    ): Promise<{ id: string; pid: number | undefined }> =>
+    installPlugin: (args: {
+      binary: string;
+      pluginId: string;
+    }): Promise<{ id: string; pid: number | undefined }> =>
       ipcRenderer.invoke("hermes:install-plugin", args),
-    installBackplane: (
-      args: { binary: string },
-    ): Promise<{ id: string; pid: number | undefined }> =>
+    installBackplane: (args: {
+      binary: string;
+    }): Promise<{ id: string; pid: number | undefined }> =>
       ipcRenderer.invoke("hermes:install-backplane", args),
-    startBackplane: (
-      args: { binary: string },
-    ): Promise<{ id: string; pid: number | undefined; alreadyRunning: boolean }> =>
-      ipcRenderer.invoke("hermes:start-backplane", args),
-    ensureBackend: (
-      args: { binary: string },
-    ): Promise<{ ok: boolean; error?: string }> =>
+    startBackplane: (args: {
+      binary: string;
+    }): Promise<{
+      id: string;
+      pid: number | undefined;
+      alreadyRunning: boolean;
+    }> => ipcRenderer.invoke("hermes:start-backplane", args),
+    ensureBackend: (args: {
+      binary: string;
+    }): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke("hermes:ensure-backend", args),
-    stopBackplane: (): Promise<boolean> => ipcRenderer.invoke("hermes:stop-backplane"),
+    stopBackplane: (): Promise<boolean> =>
+      ipcRenderer.invoke("hermes:stop-backplane"),
     cancelJob: (jobId: string): Promise<boolean> =>
       ipcRenderer.invoke("hermes:cancel-job", jobId),
     ptyInput: (args: { jobId: string; data: string }): Promise<boolean> =>
       ipcRenderer.invoke("hermes:pty-input", args),
-    ptyResize: (args: { jobId: string; cols: number; rows: number }): Promise<boolean> =>
-      ipcRenderer.invoke("hermes:pty-resize", args),
+    ptyResize: (args: {
+      jobId: string;
+      cols: number;
+      rows: number;
+    }): Promise<boolean> => ipcRenderer.invoke("hermes:pty-resize", args),
     requiredPlugins: (): Promise<readonly string[]> =>
       ipcRenderer.invoke("hermes:required-plugins"),
     installedPlugins: (): Promise<readonly string[]> =>
@@ -245,27 +309,42 @@ const api = {
     installDisplayCommand: (): Promise<string> =>
       ipcRenderer.invoke("hermes:install-display-command"),
     onJobLog: (
-      cb: (msg: { jobId: string; stream: "stdout" | "stderr"; line: string }) => void,
+      cb: (msg: {
+        jobId: string;
+        stream: "stdout" | "stderr";
+        line: string;
+      }) => void,
     ) => {
-      const handler = (_e: unknown, msg: { jobId: string; stream: "stdout" | "stderr"; line: string }) => cb(msg)
-      ipcRenderer.on("hermes:job-log", handler)
-      return () => ipcRenderer.off("hermes:job-log", handler)
+      const handler = (
+        _e: unknown,
+        msg: { jobId: string; stream: "stdout" | "stderr"; line: string },
+      ) => cb(msg);
+      ipcRenderer.on("hermes:job-log", handler);
+      return () => ipcRenderer.off("hermes:job-log", handler);
     },
     onJobEnd: (
-      cb: (msg: { jobId: string; exitCode: number | null; error?: string }) => void,
+      cb: (msg: {
+        jobId: string;
+        exitCode: number | null;
+        error?: string;
+      }) => void,
     ) => {
-      const handler = (_e: unknown, msg: { jobId: string; exitCode: number | null; error?: string }) => cb(msg)
-      ipcRenderer.on("hermes:job-end", handler)
-      return () => ipcRenderer.off("hermes:job-end", handler)
+      const handler = (
+        _e: unknown,
+        msg: { jobId: string; exitCode: number | null; error?: string },
+      ) => cb(msg);
+      ipcRenderer.on("hermes:job-end", handler);
+      return () => ipcRenderer.off("hermes:job-end", handler);
     },
     onPtyData: (cb: (msg: { jobId: string; data: string }) => void) => {
-      const handler = (_e: unknown, msg: { jobId: string; data: string }) => cb(msg)
-      ipcRenderer.on("hermes:pty-data", handler)
-      return () => ipcRenderer.off("hermes:pty-data", handler)
+      const handler = (_e: unknown, msg: { jobId: string; data: string }) =>
+        cb(msg);
+      ipcRenderer.on("hermes:pty-data", handler);
+      return () => ipcRenderer.off("hermes:pty-data", handler);
     },
   },
-}
+};
 
-contextBridge.exposeInMainWorld("amiba", api)
+contextBridge.exposeInMainWorld("amiba", api);
 
-export type AmibaBridge = typeof api
+export type AmibaBridge = typeof api;

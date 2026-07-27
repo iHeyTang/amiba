@@ -52,6 +52,11 @@ describe("Hermes update logs", () => {
     expect(core.getHermesLogs).not.toHaveBeenCalled();
     expect(screen.queryByText("Level")).not.toBeInTheDocument();
     expect(screen.getByText("exit 0")).toBeInTheDocument();
+    expect(
+      screen
+        .getByText("Hermes update complete")
+        .closest('[data-selection="text"]'),
+    ).toHaveAttribute("data-selection", "text");
   });
 
   it("keeps update output off Status and opens Logs through the shortcut", async () => {

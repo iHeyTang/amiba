@@ -1,27 +1,21 @@
-import { Pencil, Send, Trash2 } from "lucide-react";
+import { MessageSquareText, Send, X } from "lucide-react";
 import { useT } from "@amiba/i18n";
 
 import { cn } from "../../primitives";
 
 /**
- * The horizontal strip of "queued for after current turn" chips that
- * sits above the composer when one or more messages were entered while
- * the engine was streaming. Each chip exposes three actions:
+ * "Queued for after the current turn" tabs inside Composer's context rail.
+ * They share the same attached shelf as the conversation workspace instead of
+ * introducing a second card above the input. Each tab exposes three actions:
  *
  *   - **Send now** — pre-empt the current stream and fire this item.
- *   - **Edit** — hoist the item's text + attachments into the composer
- *     for in-place editing; Send commits the edit and fires.
- *   - **Delete** — drop the item (and its attachments).
+ *   - **Click the preview** — hoist it into the composer for editing.
+ *   - **Close** — drop the item (and its attachments).
  *
  * Pure presentational: the parent owns the queue state and the three
  * action callbacks. We don't re-export the `PendingChatTurn` shape on
  * purpose — keeping it parent-internal means we can change its fields
  * without touching the chip-row component.
- *
- * Layout note: this row renders with `rounded-t-lg border-b-0` so it
- * visually merges with the composer's flat top (the composer is told
- * to drop its top corner radius via `flatTop`). Treat the two as a
- * single bordered card.
  */
 export interface QueueRailItem {
   queueId: string;
@@ -33,10 +27,6 @@ export interface QueueRailItem {
 export interface PendingQueueRailProps {
   items: QueueRailItem[];
   editingQueueId: string | null;
-  /** True iff the composer is in folder/file drag-over state — used to
-   * tint the rail's outer border so the queue row reads as part of the
-   * drop target. */
-  composerDragOver?: boolean;
   onSendNow: (queueId: string) => void;
   onEdit: (queueId: string) => void;
   onRemove: (queueId: string) => void;
@@ -45,7 +35,6 @@ export interface PendingQueueRailProps {
 export function PendingQueueRail({
   items,
   editingQueueId,
-  composerDragOver = false,
   onSendNow,
   onEdit,
   onRemove,
@@ -53,72 +42,60 @@ export function PendingQueueRail({
   const { t } = useT();
   if (items.length === 0) return null;
   return (
-    <div
-      className={cn(
-        "relative z-[1] overflow-hidden rounded-t-lg border border-input border-b-0 bg-muted/50 shadow-[0_-2px_10px_-2px_rgba(0,0,0,0.12)] dark:bg-muted/35 dark:shadow-[0_-2px_14px_-2px_rgba(0,0,0,0.45)]",
-        composerDragOver && "border-primary/50",
-      )}
+    <ul
+      aria-label={t("sidepanel.queue.tooltip")}
+      className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      <ul className="max-h-[7rem] divide-y divide-border/60 overflow-y-auto">
-        {items.map((item) => {
-          const isEditing = item.queueId === editingQueueId;
-          return (
-            <li
-              key={item.queueId}
-              className="group flex items-center gap-1.5 py-1.5 pl-2.5 pr-1 transition-colors hover:bg-muted/70"
+      {items.map((item) => {
+        const isEditing = item.queueId === editingQueueId;
+        return (
+          <li
+            key={item.queueId}
+            className={cn(
+              "group flex h-6 w-fit max-w-64 shrink-0 items-center rounded-md bg-background/55 pl-1.5 pr-0.5 text-[11px]",
+              "transition-colors hover:bg-background/85",
+              isEditing && "text-muted-foreground",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => onEdit(item.queueId)}
+              disabled={isEditing}
+              title={
+                isEditing ? t("sidepanel.queue.editing") : item.preview
+              }
+              aria-label={t("sidepanel.queue.edit.aria")}
+              className={cn(
+                "flex min-w-0 items-center gap-1.5 rounded px-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                isEditing ? "cursor-default" : "text-foreground/85",
+              )}
             >
-              <p
-                className={cn(
-                  "min-w-0 flex-1 truncate text-[12px] leading-snug",
-                  isEditing
-                    ? "text-muted-foreground"
-                    : "text-foreground/90",
-                )}
-                title={
-                  isEditing ? t("sidepanel.queue.editing") : item.preview
-                }
-              >
+              <MessageSquareText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+              <span className="max-w-40 truncate">
                 {item.preview}
-              </p>
-              <div className="flex shrink-0 items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => onSendNow(item.queueId)}
-                  title={t("sidepanel.queue.sendNow")}
-                  aria-label={t("sidepanel.queue.sendNow.aria")}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onEdit(item.queueId)}
-                  title={t("sidepanel.queue.edit")}
-                  aria-label={t("sidepanel.queue.edit.aria")}
-                  disabled={isEditing}
-                  className={cn(
-                    "rounded p-1 transition-colors",
-                    isEditing
-                      ? "cursor-default text-foreground/40"
-                      : "text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
-                  )}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRemove(item.queueId)}
-                  title={t("sidepanel.queue.delete")}
-                  aria-label={t("sidepanel.queue.delete")}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSendNow(item.queueId)}
+              title={t("sidepanel.queue.sendNow")}
+              aria-label={t("sidepanel.queue.sendNow.aria")}
+              className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <Send className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemove(item.queueId)}
+              title={t("sidepanel.queue.delete")}
+              aria-label={t("sidepanel.queue.delete")}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

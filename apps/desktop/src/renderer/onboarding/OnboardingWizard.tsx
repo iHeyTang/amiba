@@ -817,7 +817,7 @@ function ManualCommandBlock({
               {c.label}
             </p>
             <div className="relative">
-              <pre className="overflow-x-auto rounded bg-muted/60 p-3 pr-20 font-mono text-[11px] leading-relaxed">
+              <pre data-selection="text" className="overflow-x-auto rounded bg-muted/60 p-3 pr-20 font-mono text-[11px] leading-relaxed">
                 {c.command || "…"}
               </pre>
               <button
@@ -866,6 +866,7 @@ function LogPanel({ logs, t }: { logs: LogLine[]; t: TranslateFn }) {
       </div>
       <div
         ref={ref}
+        data-selection="text"
         className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border/40 bg-black/85 px-3 py-2 font-mono text-[11px] leading-snug text-zinc-200"
       >
         {logs.length === 0 ? (
@@ -1020,6 +1021,7 @@ function TerminalPanel({ jobId }: { jobId: string }) {
 
   return (
     <div
+      data-selection="text"
       className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/40 p-2 shadow-sm"
       style={{ backgroundColor: palette.background }}
     >

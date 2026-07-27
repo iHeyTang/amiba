@@ -224,7 +224,10 @@ function GatewayActionDetails({
         </p>
       )}
       {state.lines.length > 0 && (
-        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+        <pre
+          data-selection="text"
+          className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground"
+        >
           {state.lines.join("\n")}
         </pre>
       )}
@@ -334,7 +337,10 @@ function OnboardingGate({
               )}
             </Button>
           </summary>
-          <pre className="mt-3 overflow-x-auto rounded-md bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          <pre
+            data-selection="text"
+            className="mt-3 overflow-x-auto rounded-md bg-muted/45 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground"
+          >
             {allCommands}
           </pre>
         </details>
@@ -343,7 +349,12 @@ function OnboardingGate({
           <summary className="cursor-pointer">
             {t("options.status.onboarding.error")}
           </summary>
-          <pre className="mt-1 whitespace-pre-wrap break-all">{error}</pre>
+          <pre
+            data-selection="text"
+            className="mt-1 whitespace-pre-wrap break-all"
+          >
+            {error}
+          </pre>
         </details>
       </div>
     </section>

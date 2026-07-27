@@ -650,7 +650,7 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
                   .
                 </p>
               ) : fileBody?.content != null ? (
-                <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-relaxed">
+                <pre data-selection="text" className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-relaxed">
                   {fileBody.content}
                 </pre>
               ) : (

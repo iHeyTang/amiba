@@ -1,7 +1,27 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Sidebar } from "../Sidebar"
+
+const workspaceBindings = vi.hoisted(() => ({
+  current: {
+    supported: false,
+    ready: true,
+    bySessionId: {} as Record<string, string>,
+  },
+}))
+
+vi.mock("../internal/useWorkspaceBindings", () => ({
+  useWorkspaceBindings: () => workspaceBindings.current,
+}))
+
+beforeEach(() => {
+  workspaceBindings.current = {
+    supported: false,
+    ready: true,
+    bySessionId: {},
+  }
+})
 
 function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props = {
@@ -110,14 +130,71 @@ describe("Sidebar", () => {
       scheduledLabelFor: () => "Daily report",
     })
 
-    expect(screen.getByText("Chats")).toBeInTheDocument()
+    expect(screen.getByText("Other chats")).toBeInTheDocument()
     expect(screen.getAllByText("Scheduled tasks").length).toBeGreaterThan(0)
+  })
+
+  it("groups related conversations beneath their workspace directory", async () => {
+    workspaceBindings.current = {
+      supported: true,
+      ready: true,
+      bySessionId: {
+        s1: "/Users/amira/Code/hermes-x",
+        s2: "/Users/amira/Code/hermes-x",
+        s3: "/Users/amira/Code/superun",
+      },
+    }
+    setup({
+      historyLayout: "grouped",
+      sessions: [
+        {
+          id: "s1",
+          title: "Refine workbench",
+          createdAt: 4,
+          updatedAt: 4,
+          messageCount: 1,
+        },
+        {
+          id: "s2",
+          title: "Fix tool cards",
+          createdAt: 3,
+          updatedAt: 3,
+          messageCount: 1,
+        },
+        {
+          id: "s3",
+          title: "Review analytics",
+          createdAt: 2,
+          updatedAt: 2,
+          messageCount: 1,
+        },
+        {
+          id: "s4",
+          title: "General question",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 1,
+        },
+      ],
+    })
+
+    const hermesGroup = screen.getByRole("button", { name: "hermes-x" })
+    expect(hermesGroup).toHaveAttribute("title", "/Users/amira/Code/hermes-x")
+    expect(screen.getByText("superun")).toBeInTheDocument()
+    expect(screen.getByText("Other chats")).toBeInTheDocument()
+    expect(screen.getByText("Refine workbench")).toBeInTheDocument()
+    expect(screen.getByText("Fix tool cards")).toBeInTheDocument()
+
+    await userEvent.click(hermesGroup)
+    expect(screen.queryByText("Refine workbench")).not.toBeInTheDocument()
+    expect(screen.queryByText("Fix tool cards")).not.toBeInTheDocument()
+    expect(screen.getByText("Review analytics")).toBeInTheDocument()
   })
 
   it("switches history layout from the header controls", async () => {
     const props = setup()
     await userEvent.click(
-      screen.getByRole("button", { name: "Group chats and scheduled tasks" }),
+      screen.getByRole("button", { name: "Group chats by workspace" }),
     )
     expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped")
   })

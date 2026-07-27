@@ -23,6 +23,12 @@ import { cn } from "../primitives";
 
 export interface TopSectionProps {
   label: string;
+  /** Optional semantic icon for project/workspace-style tree groups. */
+  icon?: ReactNode;
+  /** Full label shown on hover when the visible label is shortened. */
+  title?: string;
+  /** Fine-grained label typography override for product-specific groups. */
+  labelClassName?: string;
   collapsed: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -49,6 +55,9 @@ export interface TopSectionProps {
 
 export function TopSection({
   label,
+  icon,
+  title,
+  labelClassName,
   collapsed,
   onToggle,
   children,
@@ -81,12 +90,20 @@ export function TopSection({
       <button
         type="button"
         onClick={onToggle}
+        title={title}
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
         aria-expanded={!collapsed}
       >
         {isRail ? (
           <>
-            <span className="flex-1 truncate">{label}</span>
+            {icon ? (
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75 [&_svg]:h-3.5 [&_svg]:w-3.5">
+                {icon}
+              </span>
+            ) : null}
+            <span className={cn("flex-1 truncate", labelClassName)}>
+              {label}
+            </span>
             <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
               {collapsed ? (
                 <ChevronRight className="h-3 w-3" />
@@ -104,7 +121,14 @@ export function TopSection({
                 <ChevronDown className="h-4 w-4" />
               )}
             </span>
-            <span className="flex-1 truncate">{label}</span>
+            {icon ? (
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75 [&_svg]:h-3.5 [&_svg]:w-3.5">
+                {icon}
+              </span>
+            ) : null}
+            <span className={cn("flex-1 truncate", labelClassName)}>
+              {label}
+            </span>
           </>
         )}
       </button>

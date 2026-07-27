@@ -64,7 +64,16 @@ export function createElectronAdapter(): PlatformAdapter {
       bind: (sessionId, p) => bridge.workspaces.bind(sessionId, p),
       unbind: (sessionId) => bridge.workspaces.unbind(sessionId),
       getCurrent: (sessionId) => bridge.workspaces.getCurrent(sessionId),
+      listBindings: () => bridge.workspaces.listBindings(),
       onChange: (cb) => bridge.workspaces.onChanged(cb)
+    },
+
+    workspaceFiles: {
+      read: (sessionId, path) => bridge.files.read(sessionId, path),
+      reveal: (sessionId, path) => bridge.files.reveal(sessionId, path),
+      openExternal: (sessionId, path) => bridge.files.openExternal(sessionId, path),
+      watch: (sessionId, paths, listener) =>
+        bridge.files.watch(sessionId, paths, listener)
     }
   }
 }

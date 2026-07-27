@@ -1,22 +1,22 @@
-import { SessionsProvider } from "@amiba/core"
-import { setPlatform } from "@amiba/platform"
-import React from "react"
-import { createRoot } from "react-dom/client"
+import { SessionsProvider } from "@amiba/core";
+import { setPlatform } from "@amiba/platform";
+import React from "react";
+import { createRoot } from "react-dom/client";
 
-import { createElectronAdapter } from "../platform/electron"
-import "../styles/globals.css"
-import { QuickAskView } from "./QuickAskView"
+import { createElectronAdapter } from "../platform/electron";
+import "../styles/globals.css";
+import { QuickAskView } from "./QuickAskView";
 
 // Each BrowserWindow has its OWN renderer process — the main window's
 // `setPlatform()` call in `renderer/index.tsx` does not carry over. The
 // Quick-Ask popup must initialise its own PlatformAdapter before any
-// hook (`useQuickActions`, `useComposerAttachments`, etc.) runs, or
+// hook (`useComposerAttachments`, `useWallpaper`, etc.) runs, or
 // `getPlatform()` throws "PlatformAdapter not initialized" the moment
 // React mounts and the renderer crashes to a blank window.
-setPlatform(createElectronAdapter())
+setPlatform(createElectronAdapter());
 
-const root = document.getElementById("root")
-if (!root) throw new Error("root element missing")
+const root = document.getElementById("root");
+if (!root) throw new Error("root element missing");
 
 // SessionsProvider drives ``useSessions()`` inside ChatSurface — Quick-
 // Ask reuses the same multi-session runtime as the main window. The two
@@ -30,4 +30,4 @@ createRoot(root).render(
       <QuickAskView />
     </SessionsProvider>
   </React.StrictMode>,
-)
+);

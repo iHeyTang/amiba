@@ -146,7 +146,7 @@ export function ApprovalBanner({
               )}
             </div>
             {command && (
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-foreground/[0.06] px-2 py-1 font-mono text-[11px] leading-snug text-foreground/90">
+              <pre data-selection="text" className="max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-foreground/[0.06] px-2 py-1 font-mono text-[11px] leading-snug text-foreground/90">
                 {command}
               </pre>
             )}

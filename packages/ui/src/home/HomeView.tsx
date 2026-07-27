@@ -422,7 +422,7 @@ function Home({
             ref={inputRef}
             value={input}
             onChange={setInput}
-            onSubmit={(override) => void submitToChat(override ?? input)}
+            onSubmit={(text) => void submitToChat(text)}
             busy={busy}
             canSubmit={canSend}
             frameVariant="hero"

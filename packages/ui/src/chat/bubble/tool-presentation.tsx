@@ -1,11 +1,13 @@
-import type { HermesToolProgress } from "@amiba/core"
-import type { TranslateFn } from "@amiba/i18n"
+import type { HermesToolProgress } from "@amiba/core";
+import type { TranslateFn } from "@amiba/i18n";
 import {
   BookOpen,
   Braces,
+  ChevronRight,
   Code2,
   ExternalLink,
   Eye,
+  FileCode2,
   FilePenLine,
   FileText,
   FolderSearch,
@@ -19,11 +21,12 @@ import {
   Search,
   Terminal,
   Users,
-  Wrench
-} from "lucide-react"
-import type { ReactNode } from "react"
+  Wrench,
+} from "lucide-react";
+import type { ReactNode } from "react";
 
-import { cn } from "../../primitives"
+import { cn } from "../../primitives";
+import { useWorkspacePane } from "../WorkspacePane";
 
 type ToolKind =
   | "web-search"
@@ -41,256 +44,256 @@ type ToolKind =
   | "memory"
   | "generate-media"
   | "inspect-media"
-  | "generic"
+  | "generic";
 
 interface ToolSpec {
-  kind: ToolKind
-  actionKey: Parameters<TranslateFn>[0]
-  icon: LucideIcon
+  kind: ToolKind;
+  actionKey: Parameters<TranslateFn>[0];
+  icon: LucideIcon;
 }
 
 const TOOL_SPECS: Record<string, ToolSpec> = {
   web_search: {
     kind: "web-search",
     actionKey: "sidepanel.trace.actions.searchWeb",
-    icon: Search
+    icon: Search,
   },
   x_search: {
     kind: "web-search",
     actionKey: "sidepanel.trace.actions.searchWeb",
-    icon: Search
+    icon: Search,
   },
   web_extract: {
     kind: "web",
     actionKey: "sidepanel.trace.actions.readWeb",
-    icon: Globe
+    icon: Globe,
   },
   browser_navigate: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.browse",
-    icon: Globe
+    icon: Globe,
   },
   browser_back: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.browse",
-    icon: Globe
+    icon: Globe,
   },
   browser_snapshot: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.inspectPage",
-    icon: Eye
+    icon: Eye,
   },
   browser_vision: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.inspectPage",
-    icon: Eye
+    icon: Eye,
   },
   browser_console: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.inspectPage",
-    icon: Braces
+    icon: Braces,
   },
   browser_get_images: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.inspectPage",
-    icon: Image
+    icon: Image,
   },
   browser_click: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.click",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   browser_type: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.type",
-    icon: Keyboard
+    icon: Keyboard,
   },
   browser_press: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.type",
-    icon: Keyboard
+    icon: Keyboard,
   },
   browser_scroll: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.browse",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   browser_dialog: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.click",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   read_file: {
     kind: "read-file",
     actionKey: "sidepanel.trace.actions.readFile",
-    icon: FileText
+    icon: FileText,
   },
   write_file: {
     kind: "write-file",
     actionKey: "sidepanel.trace.actions.writeFile",
-    icon: FilePenLine
+    icon: FilePenLine,
   },
   patch: {
     kind: "write-file",
     actionKey: "sidepanel.trace.actions.editFile",
-    icon: FilePenLine
+    icon: FilePenLine,
   },
   search_files: {
     kind: "search-files",
     actionKey: "sidepanel.trace.actions.searchFiles",
-    icon: FolderSearch
+    icon: FolderSearch,
   },
   terminal: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
-    icon: Terminal
+    icon: Terminal,
   },
   process: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
-    icon: Terminal
+    icon: Terminal,
   },
   read_terminal: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
-    icon: Terminal
+    icon: Terminal,
   },
   close_terminal: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
-    icon: Terminal
+    icon: Terminal,
   },
   execute_code: {
     kind: "code",
     actionKey: "sidepanel.trace.actions.runCode",
-    icon: Code2
+    icon: Code2,
   },
   delegate_task: {
     kind: "delegation",
     actionKey: "sidepanel.trace.actions.delegate",
-    icon: Users
+    icon: Users,
   },
   todo: {
     kind: "tasks",
     actionKey: "sidepanel.trace.actions.updateTasks",
-    icon: ListTodo
+    icon: ListTodo,
   },
   skill_view: {
     kind: "skill",
     actionKey: "sidepanel.trace.actions.useSkill",
-    icon: BookOpen
+    icon: BookOpen,
   },
   skills_list: {
     kind: "skill",
     actionKey: "sidepanel.trace.actions.useSkill",
-    icon: BookOpen
+    icon: BookOpen,
   },
   skill_manage: {
     kind: "skill",
     actionKey: "sidepanel.trace.actions.useSkill",
-    icon: BookOpen
+    icon: BookOpen,
   },
   memory: {
     kind: "memory",
     actionKey: "sidepanel.trace.actions.updateMemory",
-    icon: MemoryStick
+    icon: MemoryStick,
   },
   image_generate: {
     kind: "generate-media",
     actionKey: "sidepanel.trace.actions.generateMedia",
-    icon: Image
+    icon: Image,
   },
   video_generate: {
     kind: "generate-media",
     actionKey: "sidepanel.trace.actions.generateMedia",
-    icon: Image
+    icon: Image,
   },
   text_to_speech: {
     kind: "generate-media",
     actionKey: "sidepanel.trace.actions.generateMedia",
-    icon: Image
+    icon: Image,
   },
   vision_analyze: {
     kind: "inspect-media",
     actionKey: "sidepanel.trace.actions.inspectMedia",
-    icon: Eye
+    icon: Eye,
   },
   video_analyze: {
     kind: "inspect-media",
     actionKey: "sidepanel.trace.actions.inspectMedia",
-    icon: Eye
+    icon: Eye,
   },
   browser_cdp: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.inspectPage",
-    icon: Braces
+    icon: Braces,
   },
   open_preview: {
     kind: "browser",
     actionKey: "sidepanel.trace.actions.browse",
-    icon: Globe
+    icon: Globe,
   },
   focus_pane: {
     kind: "browser-input",
     actionKey: "sidepanel.trace.actions.click",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   session_search: {
     kind: "web-search",
     actionKey: "sidepanel.trace.actions.searchSessions",
-    icon: Search
+    icon: Search,
   },
   clarify: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.askUser",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   cronjob: {
     kind: "tasks",
     actionKey: "sidepanel.trace.actions.schedule",
-    icon: ListTodo
+    icon: ListTodo,
   },
   project_create: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.manageProject",
-    icon: FolderSearch
+    icon: FolderSearch,
   },
   project_list: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.manageProject",
-    icon: FolderSearch
+    icon: FolderSearch,
   },
   project_switch: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.manageProject",
-    icon: FolderSearch
+    icon: FolderSearch,
   },
   send_message: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.sendMessage",
-    icon: MousePointer2
+    icon: MousePointer2,
   },
   ha_call_service: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.controlDevice",
-    icon: Wrench
+    icon: Wrench,
   },
   ha_get_state: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.controlDevice",
-    icon: Wrench
+    icon: Wrench,
   },
   ha_list_entities: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.controlDevice",
-    icon: Wrench
+    icon: Wrench,
   },
   ha_list_services: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.controlDevice",
-    icon: Wrench
-  }
-}
+    icon: Wrench,
+  },
+};
 
 for (const tool of [
   "kanban_attach",
@@ -304,13 +307,13 @@ for (const tool of [
   "kanban_link",
   "kanban_list",
   "kanban_show",
-  "kanban_unblock"
+  "kanban_unblock",
 ]) {
   TOOL_SPECS[tool] = {
     kind: "tasks",
     actionKey: "sidepanel.trace.actions.manageBoard",
-    icon: ListTodo
-  }
+    icon: ListTodo,
+  };
 }
 
 for (const tool of [
@@ -320,20 +323,20 @@ for (const tool of [
   "spotify_playback",
   "spotify_playlists",
   "spotify_queue",
-  "spotify_search"
+  "spotify_search",
 ]) {
   TOOL_SPECS[tool] = {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.controlMedia",
-    icon: Image
-  }
+    icon: Image,
+  };
 }
 
 const GENERIC_SPEC: ToolSpec = {
   kind: "generic",
   actionKey: "sidepanel.trace.actions.useTool",
-  icon: Wrench
-}
+  icon: Wrench,
+};
 
 const QUIET_SUCCESS_TOOLS = new Set([
   "clarify",
@@ -341,29 +344,29 @@ const QUIET_SUCCESS_TOOLS = new Set([
   "project_create",
   "project_switch",
   "send_message",
-  "ha_call_service"
-])
+  "ha_call_service",
+]);
 
 const TASK_INSPECTION_TOOLS = new Set([
   "kanban_attachments",
   "kanban_list",
-  "kanban_show"
-])
+  "kanban_show",
+]);
 
 function recordOf(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function parsedArgs(event: HermesToolProgress): Record<string, unknown> {
-  if (event.args) return event.args
-  const label = (event.label ?? "").trim()
-  if (!label.startsWith("{")) return {}
+  if (event.args) return event.args;
+  const label = (event.label ?? "").trim();
+  if (!label.startsWith("{")) return {};
   try {
-    return recordOf(JSON.parse(label)) ?? {}
+    return recordOf(JSON.parse(label)) ?? {};
   } catch {
-    return {}
+    return {};
   }
 }
 
@@ -372,120 +375,122 @@ function stringValue(
   ...keys: string[]
 ): string {
   for (const key of keys) {
-    const value = record[key]
-    if (typeof value === "string" && value.trim()) return value.trim()
-    if (typeof value === "number") return String(value)
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
   }
-  return ""
+  return "";
 }
 
 function firstListString(value: unknown): string {
-  if (!Array.isArray(value)) return ""
-  const first = value.find((item) => typeof item === "string")
-  return typeof first === "string" ? first : ""
+  if (!Array.isArray(value)) return "";
+  const first = value.find((item) => typeof item === "string");
+  return typeof first === "string" ? first : "";
 }
 
 function oneline(value: string, max = 120): string {
-  const compact = value.replace(/\s+/g, " ").trim()
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
-function compactPath(path: string): string {
-  const parts = path.replaceAll("\\", "/").split("/").filter(Boolean)
-  return parts.slice(-2).join("/") || path
+function compactPath(path: string, maxLength = 34): string {
+  const normalized = path.replaceAll("\\", "/").replace(/^\/+/, "");
+  if (normalized.length <= maxLength) return normalized;
+  const tail = normalized.slice(-(maxLength - 2)).replace(/^\/+/, "");
+  return `…/${tail}`;
 }
 
 function hostname(url: string): string {
   try {
-    return new URL(url).hostname || url
+    return new URL(url).hostname || url;
   } catch {
-    return url
+    return url;
   }
 }
 
 function lineRange(args: Record<string, unknown>): string {
-  const offset = typeof args.offset === "number" ? args.offset : null
-  const limit = typeof args.limit === "number" ? args.limit : null
-  if (offset == null) return ""
-  return limit && limit > 1 ? `L${offset}–${offset + limit - 1}` : `L${offset}`
+  const offset = typeof args.offset === "number" ? args.offset : null;
+  const limit = typeof args.limit === "number" ? args.limit : null;
+  if (offset == null) return "";
+  return limit && limit > 1 ? `L${offset}–${offset + limit - 1}` : `L${offset}`;
 }
 
 function fallbackTarget(event: HermesToolProgress): string {
-  const label = (event.label ?? "").trim()
-  if (!label || label === event.tool || label.startsWith("{")) return ""
-  return oneline(label)
+  const label = (event.label ?? "").trim();
+  if (!label || label === event.tool || label.startsWith("{")) return "";
+  return oneline(label);
 }
 
 function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
-  const args = parsedArgs(event)
+  const args = parsedArgs(event);
   switch (spec.kind) {
     case "web-search":
-      return oneline(stringValue(args, "query", "q") || fallbackTarget(event))
+      return oneline(stringValue(args, "query", "q") || fallbackTarget(event));
     case "web": {
       const url =
         stringValue(args, "url", "href") ||
         firstListString(args.urls) ||
-        fallbackTarget(event)
-      return hostname(url)
+        fallbackTarget(event);
+      return hostname(url);
     }
     case "browser": {
-      const url = stringValue(args, "url", "href") || fallbackTarget(event)
-      return url ? hostname(url) : ""
+      const url = stringValue(args, "url", "href") || fallbackTarget(event);
+      return url ? hostname(url) : "";
     }
     case "browser-input":
       return oneline(
         stringValue(args, "ref", "selector", "key", "text") ||
           fallbackTarget(event),
-        80
-      )
+        80,
+      );
     case "read-file":
     case "write-file": {
-      const path = stringValue(args, "path", "file", "filepath")
-      const lines = lineRange(args)
+      const path = stringValue(args, "path", "file", "filepath");
+      const lines = lineRange(args);
       return [path ? compactPath(path) : fallbackTarget(event), lines]
         .filter(Boolean)
-        .join(" · ")
+        .join(" · ");
     }
     case "search-files":
       return oneline(
-        stringValue(args, "pattern", "query", "path") || fallbackTarget(event)
-      )
+        stringValue(args, "pattern", "query", "path") || fallbackTarget(event),
+      );
     case "terminal":
       return oneline(
-        stringValue(args, "command", "data", "action") || fallbackTarget(event)
-      )
+        stringValue(args, "command", "data", "action") || fallbackTarget(event),
+      );
     case "code":
       return (
         stringValue(args, "language", "lang", "runtime") ||
         fallbackTarget(event)
-      )
+      );
     case "delegation":
-      return oneline(stringValue(args, "goal") || fallbackTarget(event))
+      return oneline(stringValue(args, "goal") || fallbackTarget(event));
     case "tasks": {
-      const todos = Array.isArray(args.todos) ? args.todos : []
+      const todos = Array.isArray(args.todos) ? args.todos : [];
       return todos.length
         ? String(todos.length)
         : oneline(
             stringValue(args, "action", "title", "task_id") ||
-              fallbackTarget(event)
-          )
+              fallbackTarget(event),
+          );
     }
     case "skill":
       return oneline(
-        stringValue(args, "name", "category") || fallbackTarget(event)
-      )
+        stringValue(args, "name", "category") || fallbackTarget(event),
+      );
     case "memory":
       return oneline(
         [stringValue(args, "action"), stringValue(args, "target")]
           .filter(Boolean)
-          .join(" · ") || fallbackTarget(event)
-      )
+          .join(" · ") || fallbackTarget(event),
+      );
     case "generate-media":
     case "inspect-media":
       return oneline(
         stringValue(args, "prompt", "question", "text") ||
-          fallbackTarget(event)
-      )
+          fallbackTarget(event),
+      );
     default: {
       const semanticTarget = stringValue(
         args,
@@ -497,166 +502,151 @@ function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
         "job_id",
         "project",
         "device_id",
-        "action"
-      )
-      return oneline(
-        semanticTarget || fallbackTarget(event) || event.tool
-      )
+        "action",
+      );
+      return oneline(semanticTarget || fallbackTarget(event) || event.tool);
     }
   }
 }
 
 export interface ToolCallPresentation {
-  kind: ToolKind
-  action: string
-  target: string
-  icon: LucideIcon
+  kind: ToolKind;
+  action: string;
+  target: string;
+  icon: LucideIcon;
 }
 
 export function describeToolCall(
   event: HermesToolProgress,
-  t: TranslateFn
+  t: TranslateFn,
 ): ToolCallPresentation {
-  const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC
+  const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC;
   return {
     kind: spec.kind,
     action: t(spec.actionKey),
     target: targetFor(event, spec),
-    icon: spec.icon
-  }
+    icon: spec.icon,
+  };
 }
 
 export function hasToolDetail(event: HermesToolProgress): boolean {
-  const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC
-  const args = parsedArgs(event)
-  const output = resultText(event.result)
-  const failed = Boolean(event.error)
+  const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC;
+  const args = parsedArgs(event);
+  const output = resultText(event.result);
+  const failed = Boolean(event.error);
 
   switch (spec.kind) {
     // Loading a skill and manipulating the browser are implementation steps,
     // not evidence. Successful calls stay as one quiet row.
     case "skill":
     case "browser-input":
-      return failed
+      return failed;
     case "read-file":
+      return failed || Boolean(output);
     case "search-files":
-      return failed || Boolean(output)
+      return failed || event.result !== undefined;
     case "write-file":
       return (
         failed ||
         Boolean(event.inlineDiff?.trim()) ||
         Boolean(stringValue(args, "patch", "content"))
-      )
+      );
     case "terminal":
-      return failed || Boolean(output)
+      return failed || Boolean(output);
     case "code":
-      return (
-        failed ||
-        Boolean(output) ||
-        Boolean(stringValue(args, "code"))
-      )
+      return failed || Boolean(output) || Boolean(stringValue(args, "code"));
     case "web-search":
     case "web":
     case "browser":
-      return (
-        failed ||
-        Boolean(output) ||
-        collectLinks(event.result).length > 0
-      )
+      return failed || Boolean(output) || collectLinks(event.result).length > 0;
     case "delegation":
       return (
         failed ||
         (Array.isArray(args.tasks) && args.tasks.length > 0) ||
         event.result !== undefined
-      )
+      );
     case "tasks":
       if (event.tool === "todo") {
         return (
           failed ||
           (Array.isArray(args.todos) && args.todos.length > 0) ||
           Boolean(firstCollection(event.result)?.length)
-        )
+        );
       }
       if (event.tool === "cronjob") {
         return (
           failed ||
-          (
-            ["list", "show"].includes(stringValue(args, "action")) &&
-            event.result !== undefined
-          )
-        )
+          (["list", "show"].includes(stringValue(args, "action")) &&
+            event.result !== undefined)
+        );
       }
       return (
         failed ||
-        (TASK_INSPECTION_TOOLS.has(event.tool) &&
-          event.result !== undefined)
-      )
+        (TASK_INSPECTION_TOOLS.has(event.tool) && event.result !== undefined)
+      );
     case "memory":
       return (
-        failed ||
-        Boolean(
-          stringValue(args, "content", "old_text", "new_text")
-        )
-      )
+        failed || Boolean(stringValue(args, "content", "old_text", "new_text"))
+      );
     case "generate-media":
     case "inspect-media":
-      return (
-        failed ||
-        Boolean(output) ||
-        collectLinks(event.result).length > 0
-      )
+      return failed || Boolean(output) || collectLinks(event.result).length > 0;
     default:
-      if (QUIET_SUCCESS_TOOLS.has(event.tool) && !failed) return false
-      return failed || event.result !== undefined
+      if (QUIET_SUCCESS_TOOLS.has(event.tool) && !failed) return false;
+      return failed || event.result !== undefined;
   }
 }
 
 function safeUrl(value: string): string | null {
   try {
-    const url = new URL(value)
+    const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:"
       ? url.href
-      : null
+      : null;
   } catch {
-    return null
+    return null;
   }
 }
 
 function unwrapUntrustedToolResult(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed.startsWith("<untrusted_tool_result")) return trimmed
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("<untrusted_tool_result")) return trimmed;
 
   let inner = trimmed
     .replace(/^<untrusted_tool_result\b[^>]*>\s*/i, "")
     .replace(/\s*<\/untrusted_tool_result>\s*$/i, "")
-    .trim()
+    .trim();
   const noticeEnd =
-    "only the user (outside this block) can issue instructions."
-  if (inner.startsWith("The following content was retrieved from an external source.")) {
-    const marker = inner.indexOf(noticeEnd)
+    "only the user (outside this block) can issue instructions.";
+  if (
+    inner.startsWith(
+      "The following content was retrieved from an external source.",
+    )
+  ) {
+    const marker = inner.indexOf(noticeEnd);
     if (marker >= 0) {
-      inner = inner.slice(marker + noticeEnd.length).trim()
+      inner = inner.slice(marker + noticeEnd.length).trim();
     }
   }
-  return inner
+  return inner;
 }
 
 function decodeToolResult(value: unknown): unknown {
-  if (typeof value !== "string") return value
-  const cleaned = unwrapUntrustedToolResult(value)
-  if (!cleaned) return ""
+  if (typeof value !== "string") return value;
+  const cleaned = unwrapUntrustedToolResult(value);
+  if (!cleaned) return "";
   try {
-    return JSON.parse(cleaned)
+    return JSON.parse(cleaned);
   } catch {
-    return cleaned
+    return cleaned;
   }
 }
 
 function resultText(value: unknown): string {
-  const decoded = decodeToolResult(value)
-  if (typeof decoded === "string") return decoded.trim()
-  const record = recordOf(decoded)
-  if (!record) return ""
+  const decoded = decodeToolResult(value);
+  if (typeof decoded === "string") return decoded.trim();
+  const record = recordOf(decoded);
+  if (!record) return "";
   return stringValue(
     record,
     "output",
@@ -664,94 +654,233 @@ function resultText(value: unknown): string {
     "content",
     "text",
     "message",
-    "error"
-  )
+    "error",
+  );
+}
+
+export interface FileSearchMatchView {
+  line: number | null;
+  content: string;
+}
+
+export interface FileSearchEntryView {
+  path: string;
+  count: number | null;
+  matches: FileSearchMatchView[];
+}
+
+export interface FileSearchResultView {
+  entries: FileSearchEntryView[];
+  totalCount: number;
+  truncated: boolean;
+  error: string;
+  warning: string;
+}
+
+function searchResultRecord(value: unknown): Record<string, unknown> | null {
+  const decoded = decodeToolResult(value);
+  const direct = recordOf(decoded);
+  if (direct) {
+    const nested = stringValue(direct, "output", "content");
+    if (!nested) return direct;
+    const nestedRecord = searchResultRecord(nested);
+    return nestedRecord ?? direct;
+  }
+  if (typeof decoded !== "string") return null;
+  const cleaned = decoded.trim();
+  if (!cleaned.startsWith("{")) return null;
+  const end = cleaned.lastIndexOf("}");
+  if (end < 0) return null;
+  try {
+    return recordOf(JSON.parse(cleaned.slice(0, end + 1)));
+  } catch {
+    return null;
+  }
+}
+
+function numericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+export function parseFileSearchResult(
+  value: unknown,
+): FileSearchResultView | null {
+  const record = searchResultRecord(value);
+  if (!record) return null;
+  const entries = new Map<string, FileSearchEntryView>();
+  const ensureEntry = (path: string) => {
+    const normalized = path.trim();
+    if (!normalized) return null;
+    const current = entries.get(normalized);
+    if (current) return current;
+    const entry: FileSearchEntryView = {
+      path: normalized,
+      count: null,
+      matches: [],
+    };
+    entries.set(normalized, entry);
+    return entry;
+  };
+
+  if (Array.isArray(record.files)) {
+    for (const path of record.files) {
+      if (typeof path === "string") ensureEntry(path);
+    }
+  }
+
+  if (Array.isArray(record.matches)) {
+    for (const item of record.matches) {
+      const match = recordOf(item);
+      if (!match) continue;
+      const entry = ensureEntry(stringValue(match, "path", "file", "filepath"));
+      if (!entry) continue;
+      entry.matches.push({
+        line: numericValue(match.line ?? match.line_number),
+        content: stringValue(match, "content", "text", "match"),
+      });
+    }
+  }
+
+  const denseMatches = stringValue(record, "matches_text");
+  if (denseMatches) {
+    let current: FileSearchEntryView | null = null;
+    for (const row of denseMatches.split(/\r?\n/)) {
+      const match = row.match(/^\s{2,}(\d+):\s?(.*)$/);
+      if (match && current) {
+        current.matches.push({
+          line: Number(match[1]),
+          content: match[2] ?? "",
+        });
+      } else if (row.trim()) {
+        current = ensureEntry(row.trim());
+      }
+    }
+  }
+
+  const counts = recordOf(record.counts);
+  if (counts) {
+    for (const [path, value] of Object.entries(counts)) {
+      const entry = ensureEntry(path);
+      if (entry) entry.count = numericValue(value);
+    }
+  }
+
+  const totalCount =
+    numericValue(record.total_count) ??
+    Array.from(entries.values()).reduce(
+      (total, entry) =>
+        total + (entry.count ?? Math.max(1, entry.matches.length)),
+      0,
+    );
+
+  if (
+    entries.size === 0 &&
+    totalCount === 0 &&
+    !stringValue(record, "error", "warning", "_warning")
+  ) {
+    return {
+      entries: [],
+      totalCount: 0,
+      truncated: Boolean(record.truncated),
+      error: "",
+      warning: "",
+    };
+  }
+
+  return {
+    entries: Array.from(entries.values()),
+    totalCount,
+    truncated: Boolean(record.truncated),
+    error: stringValue(record, "error"),
+    warning: stringValue(record, "warning", "_warning", "limit_reason"),
+  };
 }
 
 function exitCode(value: unknown): string {
-  const record = recordOf(value)
-  if (!record) return ""
-  return stringValue(record, "exit_code", "exitCode", "code")
+  const record = recordOf(value);
+  if (!record) return "";
+  return stringValue(record, "exit_code", "exitCode", "code");
 }
 
 function DetailShell({
   kind,
-  children
+  children,
 }: {
-  kind: ToolKind
-  children: ReactNode
+  kind: ToolKind;
+  children: ReactNode;
 }) {
   return (
-    <div
-      data-tool-detail={kind}
-      className="mt-1 w-full max-w-2xl min-w-0">
+    <div data-tool-detail={kind} className="mt-1 w-full max-w-2xl min-w-0">
       {children}
     </div>
-  )
+  );
 }
 
 function CodeEvidence({
   text,
-  tone = "default"
+  tone = "default",
 }: {
-  text: string
-  tone?: "default" | "error"
+  text: string;
+  tone?: "default" | "error";
 }) {
-  if (!text.trim()) return null
+  if (!text.trim()) return null;
   return (
     <section className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/20">
       <pre
         className={cn(
           "max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[10.5px] leading-[1.6]",
-          tone === "error"
-            ? "text-destructive/85"
-            : "text-foreground/75"
-        )}>
+          tone === "error" ? "text-destructive/85" : "text-foreground/75",
+        )}
+      >
         {text}
       </pre>
     </section>
-  )
+  );
 }
 
 function stripAnsi(value: string): string {
-  return value.replace(
-    new RegExp("\\x1B\\[[0-?]*[ -/]*[@-~]", "g"),
-    ""
-  )
+  return value.replace(new RegExp("\\x1B\\[[0-?]*[ -/]*[@-~]", "g"), "");
 }
 
 function DiffEvidence({ diff }: { diff: string }) {
-  const lines = stripAnsi(diff).split("\n")
+  const lines = stripAnsi(diff).split("\n");
   return (
     <section className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
       <pre className="max-h-80 overflow-auto py-1.5 font-mono text-[10.5px] leading-[1.55]">
         {lines.map((line, index) => {
-          const added = line.startsWith("+") && !line.startsWith("+++")
-          const removed = line.startsWith("-") && !line.startsWith("---")
-          const hunk = line.startsWith("@@")
+          const added = line.startsWith("+") && !line.startsWith("+++");
+          const removed = line.startsWith("-") && !line.startsWith("---");
+          const hunk = line.startsWith("@@");
           return (
             <div
               key={`${index}:${line}`}
               className={cn(
                 "min-h-[1.55em] whitespace-pre-wrap break-all px-3",
-                added && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                added &&
+                  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                 removed && "bg-red-500/10 text-red-700 dark:text-red-300",
                 hunk && "text-muted-foreground/65",
-                !added && !removed && !hunk && "text-foreground/70"
-              )}>
+                !added && !removed && !hunk && "text-foreground/70",
+              )}
+            >
               {line || " "}
             </div>
-          )
+          );
         })}
       </pre>
     </section>
-  )
+  );
 }
 
 interface LinkEvidence {
-  url: string
-  title: string
-  snippet?: string
+  url: string;
+  title: string;
+  snippet?: string;
 }
 
 function readableWebText(value: string): string {
@@ -763,71 +892,70 @@ function readableWebText(value: string): string {
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/\s+/g, " ")
-    .trim()
+    .trim();
 }
 
 function headingFromWebText(value: string): string {
-  const unwrapped = unwrapUntrustedToolResult(value)
-  const heading = unwrapped.match(/^\s{0,3}#{1,3}\s+(.+)$/m)?.[1]
-  return heading ? oneline(heading.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"), 90) : ""
+  const unwrapped = unwrapUntrustedToolResult(value);
+  const heading = unwrapped.match(/^\s{0,3}#{1,3}\s+(.+)$/m)?.[1];
+  return heading
+    ? oneline(heading.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"), 90)
+    : "";
 }
 
 function displayWebLocation(url: string): string {
   try {
-    const parsed = new URL(url)
-    const path = decodeURIComponent(`${parsed.pathname}${parsed.search}`)
-    return `${parsed.hostname}${path === "/" ? "" : path}`
+    const parsed = new URL(url);
+    const path = decodeURIComponent(`${parsed.pathname}${parsed.search}`);
+    return `${parsed.hostname}${path === "/" ? "" : path}`;
   } catch {
-    return url
+    return url;
   }
 }
 
 function collectLinks(
   value: unknown,
   out: LinkEvidence[] = [],
-  depth = 0
+  depth = 0,
 ): LinkEvidence[] {
-  if (depth > 4 || out.length >= 6) return out
-  const decoded = decodeToolResult(value)
+  if (depth > 4 || out.length >= 6) return out;
+  const decoded = decodeToolResult(value);
   if (Array.isArray(decoded)) {
-    for (const item of decoded) collectLinks(item, out, depth + 1)
-    return out
+    for (const item of decoded) collectLinks(item, out, depth + 1);
+    return out;
   }
-  const record = recordOf(decoded)
-  if (!record) return out
-  const rawUrl = stringValue(record, "url", "href", "link")
-  const url = rawUrl ? safeUrl(rawUrl) : null
+  const record = recordOf(decoded);
+  if (!record) return out;
+  const rawUrl = stringValue(record, "url", "href", "link");
+  const url = rawUrl ? safeUrl(rawUrl) : null;
   if (url && !out.some((item) => item.url === url)) {
     const rawContent = stringValue(
       record,
       "snippet",
       "description",
       "summary",
-      "content"
-    )
-    const explicitTitle = stringValue(record, "title", "name")
-    const derivedTitle = headingFromWebText(rawContent)
-    let snippet = readableWebText(rawContent)
+      "content",
+    );
+    const explicitTitle = stringValue(record, "title", "name");
+    const derivedTitle = headingFromWebText(rawContent);
+    let snippet = readableWebText(rawContent);
     if (!explicitTitle && derivedTitle && snippet.startsWith(derivedTitle)) {
-      snippet = snippet.slice(derivedTitle.length).trim()
+      snippet = snippet.slice(derivedTitle.length).trim();
     }
     out.push({
       url,
-      title:
-        explicitTitle ||
-        derivedTitle ||
-        hostname(url),
-      snippet: oneline(snippet, 260) || undefined
-    })
+      title: explicitTitle || derivedTitle || hostname(url),
+      snippet: oneline(snippet, 260) || undefined,
+    });
   }
   for (const child of Object.values(record)) {
-    collectLinks(child, out, depth + 1)
+    collectLinks(child, out, depth + 1);
   }
-  return out
+  return out;
 }
 
 function LinkList({ links }: { links: LinkEvidence[] }) {
-  if (links.length === 0) return null
+  if (links.length === 0) return null;
   return (
     <section className="space-y-1.5">
       {links.map((link) => (
@@ -836,10 +964,12 @@ function LinkList({ links }: { links: LinkEvidence[] }) {
           href={link.url}
           target="_blank"
           rel="noreferrer"
-          className="group/link grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_0.875rem] items-start gap-2.5 rounded-lg border border-border/45 bg-muted/10 px-3 py-2.5 transition-colors hover:border-border/70 hover:bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+          className="group/link grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_0.875rem] items-start gap-2.5 rounded-lg border border-border/45 bg-muted/10 px-3 py-2.5 transition-colors hover:border-border/70 hover:bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
           <span
             aria-hidden
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border/40 bg-background/60 text-muted-foreground/55">
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-border/40 bg-background/60 text-muted-foreground/55"
+          >
             <Globe className="h-3.5 w-3.5" />
           </span>
           <span className="min-w-0">
@@ -859,11 +989,130 @@ function LinkList({ links }: { links: LinkEvidence[] }) {
         </a>
       ))}
     </section>
-  )
+  );
 }
 
-function StructuredValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
-  if (value == null) return <span className="text-muted-foreground/60">—</span>
+function fileSearchPathParts(path: string): {
+  name: string;
+  parent: string;
+} {
+  const parts = path.replaceAll("\\", "/").split("/").filter(Boolean);
+  return {
+    name: parts.at(-1) ?? path,
+    parent: parts.slice(Math.max(0, parts.length - 4), -1).join("/"),
+  };
+}
+
+function FileSearchEvidence({
+  value,
+  fallbackText,
+  failed,
+  onOpenFile,
+  t,
+}: {
+  value: unknown;
+  fallbackText: string;
+  failed: boolean;
+  onOpenFile?: (path: string, line?: number) => void;
+  t: TranslateFn;
+}) {
+  const result = parseFileSearchResult(value);
+  if (!result) {
+    return (
+      <CodeEvidence text={fallbackText} tone={failed ? "error" : "default"} />
+    );
+  }
+  if (result.error) {
+    return <CodeEvidence text={result.error} tone="error" />;
+  }
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-border/40 bg-muted/[0.06] p-1.5">
+      <div className="flex h-6 items-center gap-1.5 px-1.5 text-[10px] text-muted-foreground">
+        <FolderSearch className="h-3 w-3" />
+        <span>
+          {t("sidepanel.trace.searchResults.count", {
+            count: result.totalCount,
+          })}
+        </span>
+        {result.truncated && (
+          <span className="ml-auto">
+            {t("sidepanel.trace.searchResults.truncated")}
+          </span>
+        )}
+      </div>
+      {result.entries.length > 0 ? (
+        <div className="max-h-80 overflow-y-auto overscroll-contain">
+          {result.entries.slice(0, 30).map((entry) => {
+            const path = fileSearchPathParts(entry.path);
+            const firstLine = entry.matches.find(
+              (match) => match.line !== null,
+            )?.line;
+            const matchCount = entry.count ?? entry.matches.length;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                disabled={!onOpenFile}
+                onClick={() => onOpenFile?.(entry.path, firstLine ?? undefined)}
+                title={
+                  onOpenFile
+                    ? t("sidepanel.trace.searchResults.openFile")
+                    : entry.path
+                }
+                className={cn(
+                  "group/search-result flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left",
+                  onOpenFile &&
+                    "transition-colors hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40",
+                )}
+              >
+                <FileCode2 className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden whitespace-nowrap font-mono">
+                  <span className="max-w-[55%] shrink-0 truncate text-[10.5px] font-medium text-foreground/78">
+                    {path.name}
+                  </span>
+                  {path.parent && (
+                    <span className="min-w-0 truncate text-[9.5px] text-muted-foreground/48">
+                      {path.parent}
+                    </span>
+                  )}
+                </span>
+                {matchCount > 0 && (
+                  <span className="shrink-0 font-mono text-[9.5px] tabular-nums text-muted-foreground/50">
+                    {t("sidepanel.trace.searchResults.matches", {
+                      count: matchCount,
+                    })}
+                  </span>
+                )}
+                {onOpenFile && (
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/30 transition-transform group-hover/search-result:translate-x-0.5" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="px-2 py-3 text-center text-[10px] text-muted-foreground">
+          {t("sidepanel.trace.searchResults.empty")}
+        </div>
+      )}
+      {result.warning && (
+        <div className="border-t border-border/35 px-3 py-1.5 text-[9.5px] text-muted-foreground/65">
+          {result.warning}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StructuredValue({
+  value,
+  depth = 0,
+}: {
+  value: unknown;
+  depth?: number;
+}) {
+  if (value == null) return <span className="text-muted-foreground/60">—</span>;
   if (typeof value === "string") {
     return value.includes("\n") || value.length > 120 ? (
       <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words font-mono text-[10.5px] leading-[1.55] text-foreground/70">
@@ -871,10 +1120,12 @@ function StructuredValue({ value, depth = 0 }: { value: unknown; depth?: number 
       </pre>
     ) : (
       <span className="break-all font-mono text-foreground/75">{value}</span>
-    )
+    );
   }
   if (typeof value === "number" || typeof value === "boolean") {
-    return <span className="font-mono text-foreground/75">{String(value)}</span>
+    return (
+      <span className="font-mono text-foreground/75">{String(value)}</span>
+    );
   }
   if (Array.isArray(value)) {
     return (
@@ -890,36 +1141,39 @@ function StructuredValue({ value, depth = 0 }: { value: unknown; depth?: number 
           </div>
         ))}
       </div>
-    )
+    );
   }
-  const record = recordOf(value)
+  const record = recordOf(value);
   if (!record || depth >= 3) {
-    return <span className="text-muted-foreground/60">[…]</span>
+    return <span className="text-muted-foreground/60">[…]</span>;
   }
   return (
     <dl className="space-y-1.5">
-      {Object.entries(record).slice(0, 30).map(([key, item]) => (
-        <div key={key} className="grid min-w-0 gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
-          <dt className="truncate font-mono text-muted-foreground/55">{key}</dt>
-          <dd className="min-w-0">
-            <StructuredValue value={item} depth={depth + 1} />
-          </dd>
-        </div>
-      ))}
+      {Object.entries(record)
+        .slice(0, 30)
+        .map(([key, item]) => (
+          <div
+            key={key}
+            className="grid min-w-0 gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]"
+          >
+            <dt className="truncate font-mono text-muted-foreground/55">
+              {key}
+            </dt>
+            <dd className="min-w-0">
+              <StructuredValue value={item} depth={depth + 1} />
+            </dd>
+          </div>
+        ))}
     </dl>
-  )
+  );
 }
 
-function StructuredEvidence({
-  value
-}: {
-  value: unknown
-}) {
+function StructuredEvidence({ value }: { value: unknown }) {
   if (
     value == null ||
     (recordOf(value) && Object.keys(recordOf(value)!).length === 0)
   ) {
-    return null
+    return null;
   }
   return (
     <section className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
@@ -927,7 +1181,7 @@ function StructuredEvidence({
         <StructuredValue value={value} />
       </div>
     </section>
-  )
+  );
 }
 
 function TerminalEvidence({
@@ -935,21 +1189,22 @@ function TerminalEvidence({
   output,
   workdir,
   exit,
-  failed
+  failed,
 }: {
-  command: string
-  output: string
-  workdir: string
-  exit: string
-  failed: boolean
+  command: string;
+  output: string;
+  workdir: string;
+  exit: string;
+  failed: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-md border border-border/45 bg-muted/20">
       <pre
         className={cn(
           "max-h-80 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[10.5px] leading-[1.65]",
-          failed ? "text-destructive/85" : "text-foreground/75"
-        )}>
+          failed ? "text-destructive/85" : "text-foreground/75",
+        )}
+      >
         {command ? `$ ${command}` : ""}
         {command && output ? "\n\n" : ""}
         {output}
@@ -963,19 +1218,19 @@ function TerminalEvidence({
         </div>
       )}
     </section>
-  )
+  );
 }
 
 function CodeRunEvidence({
   code,
   output,
   workdir,
-  failed
+  failed,
 }: {
-  code: string
-  output: string
-  workdir: string
-  failed: boolean
+  code: string;
+  output: string;
+  workdir: string;
+  failed: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-md border border-border/45 bg-muted/20">
@@ -988,8 +1243,9 @@ function CodeRunEvidence({
         <pre
           className={cn(
             "max-h-72 overflow-auto whitespace-pre-wrap break-words border-t border-border/35 px-3 py-2 font-mono text-[10.5px] leading-[1.6]",
-            failed ? "text-destructive/85" : "text-muted-foreground/80"
-          )}>
+            failed ? "text-destructive/85" : "text-muted-foreground/80",
+          )}
+        >
           {output}
         </pre>
       )}
@@ -999,56 +1255,58 @@ function CodeRunEvidence({
         </div>
       )}
     </section>
-  )
+  );
 }
 
 function TodoEvidence({ value }: { value: unknown }) {
-  if (!Array.isArray(value) || value.length === 0) return null
+  if (!Array.isArray(value) || value.length === 0) return null;
   return (
     <ul className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
       {value.slice(0, 30).map((item, index) => {
-        const record = recordOf(item)
+        const record = recordOf(item);
         const text =
           typeof item === "string"
             ? item
             : record
               ? stringValue(record, "content", "title", "task", "goal", "name")
-              : String(item)
-        const status = record
-          ? stringValue(record, "status", "state")
-          : ""
+              : String(item);
+        const status = record ? stringValue(record, "status", "state") : "";
         const done =
           record?.completed === true ||
-          ["done", "completed", "complete"].includes(status.toLowerCase())
+          ["done", "completed", "complete"].includes(status.toLowerCase());
         return (
           <li
             key={`${index}:${text}`}
-            className="flex min-w-0 items-start gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0">
+            className="flex min-w-0 items-start gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0"
+          >
             <span
               aria-hidden
               className={cn(
                 "mt-[0.35em] h-1.5 w-1.5 shrink-0 rounded-full",
-                done ? "bg-emerald-500/70" : "border border-muted-foreground/45"
+                done
+                  ? "bg-emerald-500/70"
+                  : "border border-muted-foreground/45",
               )}
             />
             <span
               className={cn(
                 "min-w-0 break-words text-foreground/75",
-                done && "text-muted-foreground line-through"
-              )}>
+                done && "text-muted-foreground line-through",
+              )}
+            >
               {text || "—"}
             </span>
           </li>
-        )
+        );
       })}
     </ul>
-  )
+  );
 }
 
 function firstCollection(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value
-  const record = recordOf(value)
-  if (!record) return null
+  if (Array.isArray(value)) return value;
+  const record = recordOf(value);
+  if (!record) return null;
   for (const key of [
     "items",
     "results",
@@ -1057,20 +1315,20 @@ function firstCollection(value: unknown): unknown[] | null {
     "jobs",
     "cards",
     "records",
-    "attachments"
+    "attachments",
   ]) {
-    if (Array.isArray(record[key])) return record[key] as unknown[]
+    if (Array.isArray(record[key])) return record[key] as unknown[];
   }
-  return null
+  return null;
 }
 
 function CollectionEvidence({ value }: { value: unknown }) {
-  const items = firstCollection(value)
-  if (!items || items.length === 0) return null
+  const items = firstCollection(value);
+  if (!items || items.length === 0) return null;
   return (
     <div className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
       {items.slice(0, 30).map((item, index) => {
-        const record = recordOf(item)
+        const record = recordOf(item);
         const primary =
           typeof item === "string"
             ? item
@@ -1083,9 +1341,9 @@ function CollectionEvidence({ value }: { value: unknown }) {
                   "goal",
                   "id",
                   "task_id",
-                  "url"
+                  "url",
                 )
-              : String(item)
+              : String(item);
         const secondary = record
           ? stringValue(
               record,
@@ -1093,13 +1351,14 @@ function CollectionEvidence({ value }: { value: unknown }) {
               "schedule",
               "cron",
               "next_run",
-              "role"
+              "role",
             )
-          : ""
+          : "";
         return (
           <div
             key={`${index}:${primary}`}
-            className="flex min-w-0 items-start gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0">
+            className="flex min-w-0 items-start gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0"
+          >
             <span className="mt-[0.15em] shrink-0 font-mono text-[10px] text-muted-foreground/40">
               {index + 1}
             </span>
@@ -1112,36 +1371,37 @@ function CollectionEvidence({ value }: { value: unknown }) {
               </span>
             )}
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 function DelegationEvidence({
   tasks,
   result,
-  failed
+  failed,
 }: {
-  tasks: unknown
-  result: unknown
-  failed: boolean
+  tasks: unknown;
+  result: unknown;
+  failed: boolean;
 }) {
-  const output = resultText(result)
+  const output = resultText(result);
   return (
     <div className="space-y-1.5">
       {Array.isArray(tasks) && (
         <div className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
           {tasks.slice(0, 20).map((task, index) => {
-            const record = recordOf(task)
+            const record = recordOf(task);
             const goal = record
               ? stringValue(record, "goal", "task", "title")
-              : String(task)
-            const role = record ? stringValue(record, "role", "name") : ""
+              : String(task);
+            const role = record ? stringValue(record, "role", "name") : "";
             return (
               <div
                 key={`${index}:${goal}`}
-                className="flex min-w-0 gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0">
+                className="flex min-w-0 gap-2 border-b border-border/30 px-3 py-2 text-[11px] last:border-b-0"
+              >
                 <span className="shrink-0 font-mono text-muted-foreground/45">
                   {index + 1}
                 </span>
@@ -1149,10 +1409,12 @@ function DelegationEvidence({
                   {goal || "—"}
                 </span>
                 {role && (
-                  <span className="shrink-0 text-muted-foreground/55">{role}</span>
+                  <span className="shrink-0 text-muted-foreground/55">
+                    {role}
+                  </span>
                 )}
               </div>
-            )
+            );
           })}
         </div>
       )}
@@ -1163,26 +1425,25 @@ function DelegationEvidence({
         !Array.isArray(tasks) && <StructuredEvidence value={result} />
       )}
     </div>
-  )
+  );
 }
 
 export function ToolDetail({
   event,
-  t
+  t,
 }: {
-  event: HermesToolProgress
-  t: TranslateFn
+  event: HermesToolProgress;
+  t: TranslateFn;
 }) {
-  const presentation = describeToolCall(event, t)
-  const args = parsedArgs(event)
-  const result = decodeToolResult(event.result)
-  const output = resultText(result)
-  const workdir = stringValue(args, "workdir", "cwd")
-  const url =
-    stringValue(args, "url", "href") ||
-    firstListString(args.urls)
-  const command = stringValue(args, "command")
-  const code = stringValue(args, "code")
+  const workspacePane = useWorkspacePane();
+  const presentation = describeToolCall(event, t);
+  const args = parsedArgs(event);
+  const result = decodeToolResult(event.result);
+  const output = resultText(result);
+  const workdir = stringValue(args, "workdir", "cwd");
+  const url = stringValue(args, "url", "href") || firstListString(args.urls);
+  const command = stringValue(args, "command");
+  const code = stringValue(args, "code");
 
   if (presentation.kind === "terminal") {
     return (
@@ -1195,7 +1456,7 @@ export function ToolDetail({
           failed={Boolean(event.error)}
         />
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "code") {
@@ -1208,18 +1469,15 @@ export function ToolDetail({
           failed={Boolean(event.error)}
         />
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "read-file") {
     return (
       <DetailShell kind={presentation.kind}>
-        <CodeEvidence
-          text={output}
-          tone={event.error ? "error" : "default"}
-        />
+        <CodeEvidence text={output} tone={event.error ? "error" : "default"} />
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "write-file") {
@@ -1234,7 +1492,7 @@ export function ToolDetail({
           {event.error && <CodeEvidence text={output} tone="error" />}
         </div>
       </DetailShell>
-    )
+    );
   }
 
   if (
@@ -1243,19 +1501,19 @@ export function ToolDetail({
     presentation.kind === "browser" ||
     presentation.kind === "browser-input"
   ) {
-    const links = collectLinks(result)
-    const resultRecord = recordOf(result)
-    const directUrl = url ? safeUrl(url) : null
+    const links = collectLinks(result);
+    const resultRecord = recordOf(result);
+    const directUrl = url ? safeUrl(url) : null;
     if (directUrl && !links.some((link) => link.url === directUrl)) {
       links.unshift({
         url: directUrl,
         title:
           (resultRecord && stringValue(resultRecord, "title", "name")) ||
           hostname(directUrl),
-        snippet: output ? oneline(output, 260) : undefined
-      })
+        snippet: output ? oneline(output, 260) : undefined,
+      });
     } else if (links.length > 0 && output && !links[0]?.snippet) {
-      links[0] = { ...links[0], snippet: oneline(output, 260) }
+      links[0] = { ...links[0], snippet: oneline(output, 260) };
     }
     return (
       <DetailShell kind={presentation.kind}>
@@ -1266,23 +1524,27 @@ export function ToolDetail({
             tone={event.error ? "error" : "default"}
           />
         )}
-        {links.length === 0 && !output && (
-          <StructuredEvidence value={result} />
-        )}
+        {links.length === 0 && !output && <StructuredEvidence value={result} />}
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "search-files") {
     return (
       <DetailShell kind={presentation.kind}>
-        <CodeEvidence
-          text={output}
-          tone={event.error ? "error" : "default"}
+        <FileSearchEvidence
+          value={event.result}
+          fallbackText={output}
+          failed={Boolean(event.error)}
+          onOpenFile={
+            workspacePane.enabled
+              ? (path, line) => workspacePane.openFile(path, line)
+              : undefined
+          }
+          t={t}
         />
-        {!output && <StructuredEvidence value={result} />}
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "delegation") {
@@ -1294,13 +1556,13 @@ export function ToolDetail({
           failed={Boolean(event.error)}
         />
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "tasks") {
-    const resultRecord = recordOf(result)
-    const todos = resultRecord?.todos ?? args.todos
-    const resultCollection = firstCollection(result)
+    const resultRecord = recordOf(result);
+    const todos = resultRecord?.todos ?? args.todos;
+    const resultCollection = firstCollection(result);
     return (
       <DetailShell kind={presentation.kind}>
         <div className="space-y-1.5">
@@ -1309,13 +1571,12 @@ export function ToolDetail({
           ) : (
             <CollectionEvidence value={result} />
           )}
-          {(event.error ||
-            (event.tool !== "todo" && !resultCollection)) && (
+          {(event.error || (event.tool !== "todo" && !resultCollection)) && (
             <StructuredEvidence value={result} />
           )}
         </div>
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "skill") {
@@ -1327,19 +1588,18 @@ export function ToolDetail({
           event.error && <StructuredEvidence value={result} />
         )}
       </DetailShell>
-    )
+    );
   }
 
   if (presentation.kind === "memory") {
-    const action = stringValue(args, "action")
-    const oldText = stringValue(args, "old_text")
+    const action = stringValue(args, "action");
+    const oldText = stringValue(args, "old_text");
     const newText =
       stringValue(args, "new_text") ||
-      (action === "add" ? stringValue(args, "content") : "")
-    const diff = [
-      oldText ? `-${oldText}` : "",
-      newText ? `+${newText}` : ""
-    ].filter(Boolean).join("\n")
+      (action === "add" ? stringValue(args, "content") : "");
+    const diff = [oldText ? `-${oldText}` : "", newText ? `+${newText}` : ""]
+      .filter(Boolean)
+      .join("\n");
     return (
       <DetailShell kind={presentation.kind}>
         {diff ? (
@@ -1353,14 +1613,14 @@ export function ToolDetail({
           <StructuredEvidence value={result} />
         )}
       </DetailShell>
-    )
+    );
   }
 
   if (
     presentation.kind === "generate-media" ||
     presentation.kind === "inspect-media"
   ) {
-    const links = collectLinks(result)
+    const links = collectLinks(result);
     return (
       <DetailShell kind={presentation.kind}>
         <LinkList links={links} />
@@ -1370,24 +1630,19 @@ export function ToolDetail({
             tone={event.error ? "error" : "default"}
           />
         ) : (
-          links.length === 0 && (
-            <StructuredEvidence value={result} />
-          )
+          links.length === 0 && <StructuredEvidence value={result} />
         )}
       </DetailShell>
-    )
+    );
   }
 
   return (
     <DetailShell kind={presentation.kind}>
       {output ? (
-        <CodeEvidence
-          text={output}
-          tone={event.error ? "error" : "default"}
-        />
+        <CodeEvidence text={output} tone={event.error ? "error" : "default"} />
       ) : (
         <StructuredEvidence value={result ?? args} />
       )}
     </DetailShell>
-  )
+  );
 }

@@ -415,6 +415,7 @@ export function SettingsLogs({
 
             <div
               ref={scrollRef}
+              data-selection="text"
               className="min-h-[400px] max-h-[calc(100vh-280px)] overflow-auto p-3 font-mono text-[11px] leading-5"
             >
               {lines.length === 0 && !loading && !error && (

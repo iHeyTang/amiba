@@ -161,6 +161,7 @@ export function ScriptEditor({
       </div>
       <div
         ref={ref}
+        data-selection="text"
         className="min-h-[480px] flex-1 overflow-hidden rounded-lg border border-border bg-muted/20"
       />
     </div>

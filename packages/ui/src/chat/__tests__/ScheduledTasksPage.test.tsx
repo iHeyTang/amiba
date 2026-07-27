@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,16 @@ const registeredJob = {
   workdir: null,
 };
 
+const pausedJob = {
+  ...registeredJob,
+  id: "weekly-review",
+  name: "Weekly review",
+  prompt: "Review the week",
+  schedule_display: "0 16 * * 5",
+  enabled: false,
+  state: "paused",
+};
+
 describe("ScheduledTasksPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,15 +71,26 @@ describe("ScheduledTasksPage", () => {
 
     expect(await screen.findByText("Daily digest")).toBeInTheDocument();
     expect(screen.getByText("Daily at 09:00")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Summarise the latest activity"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("daily-digest")).not.toBeInTheDocument();
     expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Never run")).not.toBeInTheDocument();
   });
 
   it("keeps task lifecycle actions available in the workspace", async () => {
     render(<ScheduledTasksPage />);
 
+    expect(
+      await screen.findByText("Daily digest"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Run now" }),
+    ).not.toBeInTheDocument();
+
     await userEvent.click(
-      await screen.findByRole("button", {
+      screen.getByRole("button", {
         name: "More actions for Daily digest",
       }),
     );
@@ -106,5 +127,36 @@ describe("ScheduledTasksPage", () => {
     );
 
     expect(cronCore.pauseHermesCronJob).toHaveBeenCalledWith("daily-digest");
+  });
+
+  it("searches tasks and filters them by lifecycle state", async () => {
+    cronCore.getHermesCronJobs.mockResolvedValue({
+      ok: true,
+      jobs: [registeredJob, pausedJob],
+    });
+    render(<ScheduledTasksPage />);
+
+    const search = await screen.findByRole("searchbox", {
+      name: "Search scheduled tasks",
+    });
+    await userEvent.type(search, "weekly");
+
+    expect(screen.queryByText("Daily digest")).not.toBeInTheDocument();
+    expect(screen.getByText("Weekly review")).toBeInTheDocument();
+
+    await userEvent.clear(search);
+
+    const enabledRow = screen.getByText("Daily digest").closest("li");
+    const pausedRow = screen.getByText("Weekly review").closest("li");
+    expect(enabledRow).not.toBeNull();
+    expect(pausedRow).not.toBeNull();
+    expect(within(enabledRow!).getByText(/^Next /)).toBeInTheDocument();
+    expect(within(pausedRow!).getByText("Paused")).toBeInTheDocument();
+    expect(within(pausedRow!).queryByText(/^Next /)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Paused" }));
+
+    expect(screen.queryByText("Daily digest")).not.toBeInTheDocument();
+    expect(screen.getByText("Weekly review")).toBeInTheDocument();
   });
 });

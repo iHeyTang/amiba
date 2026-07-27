@@ -17,11 +17,7 @@
  * Everything funnels through the same `home.pendingPrompt` key with the
  * shape `{ text?, attachments?, sourceApp?, workspacePath? }`.
  */
-import type {
-  PendingPromptAttachment,
-  PendingPromptResult,
-  ChatSurfaceCapabilities,
-} from "@amiba/ui"
+import type { PendingPromptAttachment, PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui"
 import { getPlatform } from "@amiba/platform"
 
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"
@@ -36,25 +32,16 @@ function normalizeAttachment(raw: unknown): PendingPromptAttachment | null {
   const r = raw as Record<string, unknown>
   const path = typeof r.path === "string" ? r.path : ""
   if (!path) return null
-  const name =
-    typeof r.name === "string" && r.name
-      ? r.name
-      : path.split(/[\\/]/).pop() || "file"
+  const name = typeof r.name === "string" && r.name ? r.name : path.split(/[\\/]/).pop() || "file"
   return {
-    uiId:
-      typeof r.uiId === "string" && r.uiId
-        ? r.uiId
-        : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    uiId: typeof r.uiId === "string" && r.uiId ? r.uiId : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
     mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
-    size:
-      typeof r.size === "number" && Number.isFinite(r.size) ? r.size : 0,
+    size: typeof r.size === "number" && Number.isFinite(r.size) ? r.size : 0,
     kind: coerceKind(r.kind),
     path,
-    thumbDataUrl:
-      typeof r.thumbDataUrl === "string" ? r.thumbDataUrl : undefined,
-    textPreview:
-      typeof r.textPreview === "string" ? r.textPreview : undefined,
+    thumbDataUrl: typeof r.thumbDataUrl === "string" ? r.thumbDataUrl : undefined,
+    textPreview: typeof r.textPreview === "string" ? r.textPreview : undefined
   }
 }
 
@@ -76,16 +63,10 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       sourceApp?: unknown
       workspacePath?: unknown
     }
-    const text =
-      typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined
-    const sourceApp =
-      typeof obj.sourceApp === "string" && obj.sourceApp.trim()
-        ? obj.sourceApp
-        : undefined
+    const text = typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined
+    const sourceApp = typeof obj.sourceApp === "string" && obj.sourceApp.trim() ? obj.sourceApp : undefined
     const workspacePath =
-      typeof obj.workspacePath === "string" && obj.workspacePath.trim()
-        ? obj.workspacePath
-        : undefined
+      typeof obj.workspacePath === "string" && obj.workspacePath.trim() ? obj.workspacePath : undefined
     let attachments: PendingPromptAttachment[] | undefined
     if (Array.isArray(obj.attachments)) {
       const out: PendingPromptAttachment[] = []
@@ -128,6 +109,29 @@ function subscribePendingPrompt(onChanged: () => void): () => void {
 export const desktopCapabilities: ChatSurfaceCapabilities = {
   pendingPrompt: {
     drain: drainPendingPrompt,
-    subscribe: subscribePendingPrompt,
+    subscribe: subscribePendingPrompt
   },
+  workspaceInspector: {
+    files: {
+      read: (sessionId, path) => {
+        const files = getPlatform().workspaceFiles
+        if (!files) throw new Error("Workspace file access is unavailable.")
+        return files.read(sessionId, path)
+      },
+      reveal: (sessionId, path) => {
+        const files = getPlatform().workspaceFiles
+        if (!files) throw new Error("Workspace file access is unavailable.")
+        return files.reveal(sessionId, path)
+      },
+      openExternal: (sessionId, path) => {
+        const files = getPlatform().workspaceFiles
+        if (!files) throw new Error("Workspace file access is unavailable.")
+        return files.openExternal(sessionId, path)
+      },
+      watch: (sessionId, paths, listener) => {
+        const files = getPlatform().workspaceFiles
+        return files ? files.watch(sessionId, paths, listener) : () => {}
+      }
+    }
+  }
 }

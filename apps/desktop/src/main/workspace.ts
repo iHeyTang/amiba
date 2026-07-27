@@ -160,6 +160,14 @@ class WorkspaceManager extends EventEmitter {
     return this.bindings.get(sessionId)?.path ?? null
   }
 
+  listBindings(): Record<string, string> {
+    const out: Record<string, string> = {}
+    for (const [sessionId, binding] of this.bindings) {
+      out[sessionId] = binding.path
+    }
+    return out
+  }
+
   /**
    * Legacy/global accessor. Returns the binding from the most-recently
    * bound session as a "current" approximation for surfaces that
@@ -169,6 +177,48 @@ class WorkspaceManager extends EventEmitter {
     let last: string | null = null
     for (const b of this.bindings.values()) last = b.path
     return last
+  }
+
+  /**
+   * Resolve an existing path inside a session's bound workspace.
+   *
+   * Both the root and target go through `realpath`, so a lexical path that
+   * looks contained but escapes through a symlink is rejected. Relative tool
+   * paths are anchored to the workspace root; authoritative absolute paths
+   * reported by Hermes are accepted when they remain inside the same root.
+   */
+  async resolveFileForSession(
+    sessionId: string,
+    candidate: string,
+  ): Promise<{ root: string; path: string; relativePath: string }> {
+    const boundRoot = this.getForSession(sessionId)
+    if (!boundRoot) {
+      throw new Error("No workspace is bound to this conversation.")
+    }
+    if (!candidate || !candidate.trim()) {
+      throw new Error("A file path is required.")
+    }
+
+    const root = await fs.realpath(boundRoot)
+    const requested = path.isAbsolute(candidate)
+      ? path.resolve(candidate)
+      : path.resolve(root, candidate)
+    const resolved = await fs.realpath(requested)
+    const relativePath = path.relative(root, resolved)
+    if (
+      relativePath === ".." ||
+      relativePath.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativePath)
+    ) {
+      throw new Error(
+        "The requested file is outside this conversation's workspace.",
+      )
+    }
+    return {
+      root,
+      path: resolved,
+      relativePath: relativePath.split(path.sep).join("/"),
+    }
   }
 
   async bind(sessionId: string, target: string): Promise<void> {

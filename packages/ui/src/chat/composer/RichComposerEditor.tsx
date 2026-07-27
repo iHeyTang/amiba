@@ -82,7 +82,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             placeholder={
               placeholder ? (
                 // Mirror the ContentEditable's padding (`className` carries it,
-                // e.g. hero's `px-5 pt-3.5`) onto the overlay so the placeholder
+                // e.g. hero's `px-5 pt-4`) onto the overlay so the placeholder
                 // text starts exactly where typed text would. `inset-0` makes the
                 // overlay's content box match the editor's — without the shared
                 // padding the placeholder pins to the raw top-left corner.

@@ -18,11 +18,7 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  resolveChannel,
-  SOURCE_LOCAL,
-  type SessionMeta,
-} from "@amiba/core";
+import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 import { Input, cn } from "../primitives";
 import { TopSection } from "./SessionGroups";
@@ -61,6 +57,12 @@ export interface SessionsListViewProps {
    * per cron-job group.
    */
   sectionActionsFor?: (source: string) => ReactNode;
+  /** Optional semantic icon for each top-level history section. */
+  sectionIconFor?: (source: string) => ReactNode;
+  /** Full section title used when a shortened label is displayed. */
+  sectionTitleFor?: (source: string) => string | undefined;
+  /** Typography override for section labels. */
+  sectionLabelClassName?: string;
   /** Override the grouping key. Defaults to the session's channel source. */
   groupKeyFor?: (session: SessionMeta) => string;
   /** Stable section order when `groupKeyFor` is supplied. */
@@ -69,6 +71,8 @@ export interface SessionsListViewProps {
   showSectionHeaders?: boolean;
   /** Optional leading icon used to distinguish mixed history row types. */
   rowIconFor?: (session: SessionMeta) => ReactNode;
+  /** Align rows beneath a tree-group label rather than with the group icon. */
+  indentRows?: boolean;
   /** Disable rename/delete affordances for read-only rows such as cron runs. */
   allowActionsFor?: (session: SessionMeta) => boolean;
 }
@@ -86,10 +90,14 @@ export function SessionsListView({
   noMatchesLabel,
   sectionLabelFor,
   sectionActionsFor,
+  sectionIconFor,
+  sectionTitleFor,
+  sectionLabelClassName,
   groupKeyFor,
   sectionOrder,
   showSectionHeaders = true,
   rowIconFor,
+  indentRows = false,
   allowActionsFor,
 }: SessionsListViewProps) {
   const { t } = useT();
@@ -269,6 +277,7 @@ export function SessionsListView({
                     onRename={(title) => onRename(s.id, title)}
                     onDelete={() => onDelete(s.id)}
                     icon={rowIconFor?.(s)}
+                    nested={indentRows}
                     allowActions={allowActionsFor?.(s) ?? true}
                   />
                 ))}
@@ -292,6 +301,9 @@ export function SessionsListView({
               onToggle={() => toggleTop(sec.source)}
               variant="rail"
               actions={sectionActionsFor?.(sec.source)}
+              icon={sectionIconFor?.(sec.source)}
+              title={sectionTitleFor?.(sec.source)}
+              labelClassName={sectionLabelClassName}
             >
               {rows}
             </TopSection>
@@ -313,6 +325,7 @@ interface SessionRowProps {
   onRename: (title: string) => void;
   onDelete: () => void;
   icon?: ReactNode;
+  nested?: boolean;
   allowActions: boolean;
 }
 
@@ -323,6 +336,7 @@ function SessionRow({
   onRename,
   onDelete,
   icon,
+  nested,
   allowActions,
 }: SessionRowProps) {
   const { t } = useT();
@@ -354,7 +368,8 @@ function SessionRow({
     return (
       <div
         className={cn(
-          "mx-0.5 flex h-8 items-center rounded-md px-2",
+          "mx-0.5 flex h-8 items-center rounded-md pr-2",
+          nested ? "pl-8" : "pl-2",
           active && "bg-secondary",
         )}
       >
@@ -382,7 +397,10 @@ function SessionRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left focus-visible:outline-none"
+        className={cn(
+          "flex h-full min-w-0 flex-1 items-center gap-2 pr-2 text-left focus-visible:outline-none",
+          nested ? "pl-8" : "pl-2",
+        )}
       >
         {icon ? (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">

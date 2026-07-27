@@ -218,7 +218,7 @@ export function useVoiceRecorder(
  * the textarea, conceptually next to "submit", not next to attachments.
  *
  * Two visual states:
- *   - idle      → Mic glyph, neutral border (matches the send button).
+ *   - idle      → bare Mic glyph; a quiet surface appears only on hover.
  *   - recording → Mic glyph kept (semantic continuity) over a green
  *                 "breathing" pulse — soft 2.5s ease-in-out opacity
  *                 cycle, no flashing. Click still toggles stop; the icon
@@ -278,19 +278,19 @@ export function MicrophoneButton({
       variant="ghost"
       size="icon"
       className={cn(
-        "h-6 w-6 shrink-0 rounded-full border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        "h-7 w-7 shrink-0 rounded-full bg-transparent text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground",
         recording
           ? // Breathing green: slower than Tailwind's stock `animate-pulse`
             // (2.5s vs 2s) and combined with a tinted bg so the active
             // state reads as a steady "live" light, not a frantic blink.
-            "animate-pulse border-emerald-500/70 bg-emerald-500/10 text-emerald-600 [animation-duration:2500ms] hover:bg-emerald-500/15 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400"
+            "animate-pulse bg-emerald-500/10 text-emerald-600 [animation-duration:2500ms] hover:bg-emerald-500/15 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400"
           : transcribing
             ? // Same emerald palette as recording so the recording →
               // transcribing → done transition reads as one continuous
-              // flow, just dialled down (border 40 vs 70, bg 5 vs 10)
-              // because waiting isn't an action. Cursor-wait reinforces.
-              "cursor-wait border-emerald-500/40 bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/5 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400"
-            : "border-border",
+              // flow, just dialled down because waiting isn't an action.
+              // Cursor-wait reinforces.
+              "cursor-wait bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/5 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400"
+            : "",
         // ``transcribing`` already applies its own (non-muted) styling
         // above; only the bare ``disabled`` case needs the muted look.
         disabled &&
@@ -300,9 +300,9 @@ export function MicrophoneButton({
       )}
     >
       {transcribing ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
-        <Mic className="h-3 w-3" />
+        <Mic className="h-3.5 w-3.5" />
       )}
     </Button>
   )

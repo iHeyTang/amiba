@@ -21,6 +21,7 @@
  */
 
 import type { ChatMessage } from "@amiba/core"
+import type { WorkspaceFilesAdapter } from "@amiba/platform"
 
 // ---------------------------------------------------------------------------
 // page-context
@@ -204,6 +205,14 @@ export interface PendingPromptCapability {
 }
 
 // ---------------------------------------------------------------------------
+// desktop workspace inspector
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceInspectorCapability {
+  files: WorkspaceFilesAdapter
+}
+
+// ---------------------------------------------------------------------------
 // composed bundle
 // ---------------------------------------------------------------------------
 
@@ -212,6 +221,7 @@ export interface ChatSurfaceCapabilities {
   learn?: LearnCapability
   navigateOpenPolicy?: NavigateOpenPolicyCapability
   pendingPrompt?: PendingPromptCapability
+  workspaceInspector?: WorkspaceInspectorCapability
 }
 
 /**

@@ -4,13 +4,14 @@
  *   • top (fixed):   new-chat, search (opens the command palette), then the
  *                    built-in + extension nav rows.
  *   • middle (flex): unified chat + scheduled-run history, switchable between
- *                    a time-ordered stream and two explicit groups.
+ *                    a time-ordered stream and workspace-directory groups.
  *   • bottom (fixed): the settings row.
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
 import {
   BookOpen,
   Clock,
+  Folder,
   List,
   ListTree,
   MessageSquare,
@@ -29,19 +30,36 @@ import { cn } from "../primitives";
 import { NavigationGroupLabel } from "../navigation/NavigationRow";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
+import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
 /** Extension ids are arbitrary strings; no compile-time union needed. */
 export type ActivityViewId = string;
 export type HistoryLayout = "timeline" | "grouped";
 
 const HISTORY_ALL_GROUP = "__history_all__";
-const HISTORY_CHAT_GROUP = "__history_chats__";
+const HISTORY_UNBOUND_GROUP = "__history_unbound__";
 const HISTORY_SCHEDULED_GROUP = "__history_scheduled__";
+const HISTORY_WORKSPACE_PREFIX = "__history_workspace__:";
+
+function workspaceGroupKey(path: string): string {
+  return `${HISTORY_WORKSPACE_PREFIX}${path}`;
+}
+
+function workspacePathFromGroup(group: string): string | null {
+  return group.startsWith(HISTORY_WORKSPACE_PREFIX)
+    ? group.slice(HISTORY_WORKSPACE_PREFIX.length)
+    : null;
+}
+
+function workspaceName(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, "");
+  return normalized.split(/[\\/]/).filter(Boolean).at(-1) || path;
+}
 
 const ICON_MAP: Record<string, ReactNode> = {
   "book-open": <BookOpen className="h-4 w-4" />,
-  "wallet": <Wallet className="h-4 w-4" />,
-  "wrench": <Wrench className="h-4 w-4" />,
+  wallet: <Wallet className="h-4 w-4" />,
+  wrench: <Wrench className="h-4 w-4" />,
 };
 
 export function resolveExtensionIcon(name: string): ReactNode | null {
@@ -109,6 +127,7 @@ export function Sidebar({
   className,
 }: SidebarProps) {
   const { t } = useT();
+  const workspaceBindings = useWorkspaceBindings(sessions);
 
   const scheduledIds = useMemo(
     () => new Set(scheduledSessions.map((session) => session.id)),
@@ -125,6 +144,38 @@ export function Sidebar({
       ].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [sessions, scheduledSessions, scheduledLabelFor],
   );
+  const groupedSectionOrder = useMemo(() => {
+    if (historyLayout !== "grouped") return [];
+
+    const workspaceRecency = new Map<string, number>();
+    let hasUnbound = false;
+    for (const session of sessions) {
+      const path = workspaceBindings.bySessionId[session.id];
+      if (!path) {
+        hasUnbound = true;
+        continue;
+      }
+      workspaceRecency.set(
+        path,
+        Math.max(
+          workspaceRecency.get(path) ?? 0,
+          session.updatedAt ?? session.createdAt ?? 0,
+        ),
+      );
+    }
+
+    const ordered = Array.from(workspaceRecency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([path]) => workspaceGroupKey(path));
+    if (hasUnbound) ordered.push(HISTORY_UNBOUND_GROUP);
+    if (scheduledSessions.length > 0) ordered.push(HISTORY_SCHEDULED_GROUP);
+    return ordered;
+  }, [
+    historyLayout,
+    sessions,
+    scheduledSessions.length,
+    workspaceBindings.bySessionId,
+  ]);
 
   // Built-in non-chat destinations get low implicit orders so extension items
   // (manifest default order 100) sort after them, while an extension that sets
@@ -141,7 +192,9 @@ export function Sidebar({
   ];
   const extNav: NavRow[] = (extensionItems ?? []).map((e) => ({
     id: e.extensionId,
-    icon: resolveExtensionIcon(e.icon) ?? <BookOpen className="h-[18px] w-[18px]" />,
+    icon: resolveExtensionIcon(e.icon) ?? (
+      <BookOpen className="h-[18px] w-[18px]" />
+    ),
     label: e.label,
     order: e.order,
   }));
@@ -215,7 +268,10 @@ export function Sidebar({
         <SessionsListView
           sessions={historySessions}
           activeId={activeSessionId}
-          ready={sessionsReady}
+          ready={
+            sessionsReady &&
+            (historyLayout !== "grouped" || workspaceBindings.ready)
+          }
           query=""
           onOpen={(id) =>
             scheduledIds.has(id)
@@ -238,18 +294,42 @@ export function Sidebar({
               ? HISTORY_ALL_GROUP
               : scheduledIds.has(session.id)
                 ? HISTORY_SCHEDULED_GROUP
-                : HISTORY_CHAT_GROUP
+                : workspaceBindings.bySessionId[session.id]
+                  ? workspaceGroupKey(workspaceBindings.bySessionId[session.id])
+                  : HISTORY_UNBOUND_GROUP
           }
-          sectionOrder={[HISTORY_CHAT_GROUP, HISTORY_SCHEDULED_GROUP]}
+          sectionOrder={groupedSectionOrder}
           sectionLabelFor={(source) =>
             source === HISTORY_SCHEDULED_GROUP
               ? t("sidepanel.sessions.group.scheduled")
-              : t("sidepanel.sessions.group.chats")
+              : source === HISTORY_UNBOUND_GROUP
+                ? t("sidepanel.sessions.group.unbound")
+                : workspaceName(workspacePathFromGroup(source) ?? source)
           }
+          sectionIconFor={(source) =>
+            source === HISTORY_SCHEDULED_GROUP ? (
+              <Clock />
+            ) : source === HISTORY_UNBOUND_GROUP ? (
+              <MessageSquare />
+            ) : (
+              <Folder />
+            )
+          }
+          sectionTitleFor={(source) =>
+            workspacePathFromGroup(source) ?? undefined
+          }
+          sectionLabelClassName="normal-case tracking-normal text-[12px] text-foreground/75"
           showSectionHeaders={historyLayout === "grouped"}
           rowIconFor={(session) =>
-            scheduledIds.has(session.id) ? <Clock /> : <MessageSquare />
+            historyLayout === "timeline" ? (
+              scheduledIds.has(session.id) ? (
+                <Clock />
+              ) : (
+                <MessageSquare />
+              )
+            ) : undefined
           }
+          indentRows={historyLayout === "grouped"}
           allowActionsFor={(session) => !scheduledIds.has(session.id)}
         />
       </div>

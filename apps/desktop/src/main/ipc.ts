@@ -1,5 +1,5 @@
-import { readdir } from "node:fs/promises"
-import { join } from "node:path"
+import { open, readdir, stat } from "node:fs/promises"
+import { basename, join, resolve as resolvePath } from "node:path"
 
 import {
   BrowserWindow,
@@ -12,6 +12,59 @@ import type { WorkspaceChange } from "@amiba/platform"
 
 import { mainStore, type StorageChangeMap } from "./storage"
 import { workspaceManager } from "./workspace"
+
+const MAX_FILE_VIEW_BYTES = 2 * 1024 * 1024
+
+interface FileWatchSubscription {
+  webContentsId: number
+  sessionId: string
+  paths: Set<string>
+}
+
+const fileWatchSubscriptions = new Map<string, FileWatchSubscription>()
+const observedFileWatchSenders = new Set<number>()
+
+async function readWorkspaceFile(sessionId: string, candidate: string) {
+  const resolved = await workspaceManager.resolveFileForSession(
+    sessionId,
+    candidate,
+  )
+  const fileStat = await stat(resolved.path)
+  if (!fileStat.isFile()) {
+    throw new Error("The selected workspace resource is not a file.")
+  }
+
+  const bytesToRead = Math.min(fileStat.size, MAX_FILE_VIEW_BYTES)
+  const buffer = Buffer.alloc(bytesToRead)
+  const handle = await open(resolved.path, "r")
+  let bytesRead = 0
+  try {
+    if (bytesToRead > 0) {
+      const result = await handle.read(buffer, 0, bytesToRead, 0)
+      bytesRead = result.bytesRead
+    }
+  } finally {
+    await handle.close()
+  }
+
+  const contentBuffer = buffer.subarray(0, bytesRead)
+  const binaryProbe = contentBuffer.subarray(
+    0,
+    Math.min(contentBuffer.length, 8_192),
+  )
+  const binary = binaryProbe.includes(0)
+  return {
+    path: resolved.path,
+    relativePath: resolved.relativePath,
+    name: basename(resolved.path),
+    content: binary ? "" : contentBuffer.toString("utf8"),
+    size: fileStat.size,
+    modifiedAt: fileStat.mtimeMs,
+    revision: `${fileStat.mtimeMs}:${fileStat.size}`,
+    truncated: fileStat.size > MAX_FILE_VIEW_BYTES,
+    binary,
+  }
+}
 
 function broadcastChange(changes: StorageChangeMap) {
   if (Object.keys(changes).length === 0) return
@@ -70,6 +123,7 @@ export function registerIpcHandlers() {
   ipcMain.handle("workspace:get-current", (_e, sessionId: string) =>
     workspaceManager.getForSession(sessionId),
   )
+  ipcMain.handle("workspace:list-bindings", () => workspaceManager.listBindings())
 
   // @file mention source for the desktop chat. Lists the active session's
   // bound workspace dir (top level only — recursion is a later enhancement),
@@ -94,5 +148,101 @@ export function registerIpcHandlers() {
     },
   )
 
+  ipcMain.handle(
+    "files:read",
+    (_e, args: { sessionId: string; path: string }) =>
+      readWorkspaceFile(args.sessionId, args.path),
+  )
+
+  ipcMain.handle(
+    "files:reveal",
+    async (_e, args: { sessionId: string; path: string }): Promise<void> => {
+      const resolved = await workspaceManager.resolveFileForSession(
+        args.sessionId,
+        args.path,
+      )
+      shell.showItemInFolder(resolved.path)
+    },
+  )
+
+  ipcMain.handle(
+    "files:open-external",
+    async (_e, args: { sessionId: string; path: string }): Promise<void> => {
+      const resolved = await workspaceManager.resolveFileForSession(
+        args.sessionId,
+        args.path,
+      )
+      const error = await shell.openPath(resolved.path)
+      if (error) throw new Error(error)
+    },
+  )
+
+  ipcMain.handle(
+    "files:watch",
+    async (
+      event,
+      args: { subscriptionId: string; sessionId: string; paths: string[] },
+    ): Promise<void> => {
+      if (!args.subscriptionId || !args.sessionId) {
+        throw new Error("Invalid file watch subscription.")
+      }
+      const paths = new Set<string>()
+      for (const candidate of args.paths.slice(0, 32)) {
+        try {
+          const resolved = await workspaceManager.resolveFileForSession(
+            args.sessionId,
+            candidate,
+          )
+          paths.add(resolved.path)
+        } catch {
+          // A file can disappear between read and watch registration. The
+          // viewer already owns the corresponding missing-file state.
+        }
+      }
+      fileWatchSubscriptions.set(args.subscriptionId, {
+        webContentsId: event.sender.id,
+        sessionId: args.sessionId,
+        paths,
+      })
+      if (observedFileWatchSenders.has(event.sender.id)) return
+      observedFileWatchSenders.add(event.sender.id)
+      event.sender.once("destroyed", () => {
+        observedFileWatchSenders.delete(event.sender.id)
+        for (const [id, subscription] of fileWatchSubscriptions) {
+          if (subscription.webContentsId === event.sender.id) {
+            fileWatchSubscriptions.delete(id)
+          }
+        }
+      })
+    },
+  )
+
+  ipcMain.handle("files:unwatch", (event, subscriptionId: string): void => {
+    const subscription = fileWatchSubscriptions.get(subscriptionId)
+    if (subscription?.webContentsId === event.sender.id) {
+      fileWatchSubscriptions.delete(subscriptionId)
+    }
+  })
+
   workspaceManager.onChange(broadcastWorkspaceChange)
+  workspaceManager.onFile((change) => {
+    const changedPath = resolvePath(change.path)
+    for (const [subscriptionId, subscription] of fileWatchSubscriptions) {
+      if (subscription.sessionId !== change.sessionId) continue
+      if (
+        !subscription.paths.has(change.path) &&
+        !subscription.paths.has(changedPath)
+      ) {
+        continue
+      }
+      const target = BrowserWindow.getAllWindows()
+        .map((win) => win.webContents)
+        .find((contents) => contents.id === subscription.webContentsId)
+      if (!target || target.isDestroyed()) {
+        fileWatchSubscriptions.delete(subscriptionId)
+        continue
+      }
+      target.send("files:changed", { ...change, subscriptionId })
+    }
+  })
 }

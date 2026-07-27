@@ -31,11 +31,64 @@ export const en = {
   "common.retry": "Retry",
   "common.untitled": "Untitled",
 
+  // Conversation turn navigation
+  "conversationRail.label": "Conversation navigation",
+  "conversationRail.jumpTo": "Jump to message {index}: {message}",
+  "conversationRail.messageFallback": "User message",
+
+  // Workspace inspector
+  "workspacePane.title": "Workbench",
+  "workspacePane.open": "Open workbench",
+  "workspacePane.collapse": "Collapse workbench",
+  "workspacePane.resize": "Resize workbench",
+  "workspacePane.pin": "Keep this tab open",
+  "workspacePane.emptyTitle": "Nothing open yet",
+  "workspacePane.emptyBody":
+    "Files, changes, and code run results opened from the conversation will appear here.",
+  "workspacePane.emptyFiles": "Files",
+  "workspacePane.emptyChanges": "Changes",
+  "workspacePane.emptyRuns": "Code runs",
+  "workspacePane.loadingFile": "Opening file…",
+  "workspacePane.refreshing": "Refreshing from disk…",
+  "workspacePane.fileUnavailable": "This file could not be opened.",
+  "workspacePane.fileDeleted": "This file was removed from the workspace.",
+  "workspacePane.binaryFile": "Binary preview is not available yet",
+  "workspacePane.truncated": "Previewing the first 2 MB of a {size} file",
+  "workspacePane.filesChanged": "{count} files changed",
+  "workspacePane.openToolResource": "Open in workbench",
+  "workspacePane.review": "Review",
+  "workspacePane.currentTurn": "Current turn",
+  "workspacePane.toolChange": "Tool change",
+  "workspacePane.noDiff": "No reviewable diff was returned.",
+  "workspacePane.unmodifiedLines": "{count} unmodified lines",
+  "workspacePane.moreUnmodifiedLines": "{count} more unmodified lines",
+  "workspacePane.contextUnavailable": "Full file context is unavailable",
+  "workspacePane.openFile": "Open file",
+  "workspacePane.copyPath": "Copy path",
+  "workspacePane.revealFile": "Reveal in Finder",
+  "workspacePane.openExternal": "Open with default app",
+  "workspacePane.expandFile": "Expand file",
+  "workspacePane.collapseFile": "Collapse file",
+  "workspacePane.expandAll": "Expand all",
+  "workspacePane.collapseAll": "Collapse all",
+  "workspacePane.moreActions": "More actions",
+  "workspacePane.codeRun": "Run code",
+  "workspacePane.code": "Code",
+  "workspacePane.output": "Output",
+  "workspacePane.running": "Running",
+  "workspacePane.failed": "Failed",
+  "workspacePane.noOutput": "No output",
+  "workspacePane.copyCode": "Copy code",
+  "workspacePane.copyOutput": "Copy output",
+  "workspacePane.copyWorkingDirectory": "Copy working directory",
+  "workspacePane.copyDiff": "Copy diff",
+
   // App shell
   "app.title": "Amiba",
   "app.subtitle": "Extension console",
   "app.initializing": "Starting the local service…",
-  "app.initError": "Couldn't start the local service. Make sure Hermes is installed and try again.",
+  "app.initError":
+    "Couldn't start the local service. Make sure Hermes is installed and try again.",
   "app.initRetry": "Retry",
 
   // Options nav
@@ -60,7 +113,8 @@ export const en = {
 
   // Extensions settings page
   "options.extensions.title": "Extensions",
-  "options.extensions.subtitle": "View installed extensions and troubleshoot load failures.",
+  "options.extensions.subtitle":
+    "View installed extensions and troubleshoot load failures.",
   "options.extensions.status.loaded": "Loaded",
   "options.extensions.status.failed": "Failed",
   "options.extensions.status.incompatible": "Incompatible",
@@ -73,10 +127,13 @@ export const en = {
   "options.extensions.reload": "Reload",
   "options.extensions.uninstall": "Uninstall",
   "options.extensions.uninstall.confirm.title": "Uninstall extension?",
-  "options.extensions.uninstall.confirm.body": "{name} will be removed from this app. The folder at <userData>/extensions/{id}/ will be deleted.",
-  "options.extensions.uninstall.confirm.body.local": "Only removes {name} from the registry. The source folder at {path} is not touched.",
+  "options.extensions.uninstall.confirm.body":
+    "{name} will be removed from this app. The folder at <userData>/extensions/{id}/ will be deleted.",
+  "options.extensions.uninstall.confirm.body.local":
+    "Only removes {name} from the registry. The source folder at {path} is not touched.",
   "options.extensions.sideload.error": "Could not add local extension: {error}",
-  "options.extensions.empty": "No extensions installed yet. Add a local extension to get started.",
+  "options.extensions.empty":
+    "No extensions installed yet. Add a local extension to get started.",
   "options.extensions.tab.installed": "Installed",
   "options.extensions.tab.browse": "Browse",
   "options.extensions.browse.loading": "Loading marketplace…",
@@ -88,7 +145,8 @@ export const en = {
   "options.extensions.browse.installFailed": "Install failed: {error}",
   "options.extensions.browse.indexUrl": "Index: {url}",
   "options.plugins.heading": "Plugins",
-  "options.plugins.subtitle": "Hermes agent plugins (Python). Toggle to enable or disable, or uninstall right here; changes apply on the next Hermes start. Install via the `hermes plugins` CLI.",
+  "options.plugins.subtitle":
+    "Hermes agent plugins (Python). Toggle to enable or disable, or uninstall right here; changes apply on the next Hermes start. Install via the `hermes plugins` CLI.",
   "options.plugins.loading": "Loading plugins…",
   "options.plugins.error": "Couldn't load plugins: {error}",
   "options.plugins.empty": "No plugins installed.",
@@ -98,44 +156,57 @@ export const en = {
   "options.plugins.toggleError": "Couldn't change plugin: {error}",
 
   // Mention sources — pluggable @-mention sources for the composer
-  "options.mentionSources.title": "Sources you can @-mention in chat (e.g. Feishu docs). Each is a git repo; install by URL, update pulls latest. Not a hermes plugin — agent actions/triggers belong to hermes plugins/mcp/platforms.",
-  "options.mentionSources.installPlaceholder": "git URL, e.g. https://github.com/you/amiba-source-notion",
+  "options.mentionSources.title":
+    "Sources you can @-mention in chat (e.g. Feishu docs). Each is a git repo; install by URL, update pulls latest. Not a hermes plugin — agent actions/triggers belong to hermes plugins/mcp/platforms.",
+  "options.mentionSources.installPlaceholder":
+    "git URL, e.g. https://github.com/you/amiba-source-notion",
   "options.mentionSources.install": "Install",
   "options.mentionSources.installing": "Installing…",
   "options.mentionSources.loading": "Loading sources…",
   "options.mentionSources.error": "Couldn't reach the backplane.",
-  "options.mentionSources.empty": "No mention sources installed yet. Paste a git URL above to add one.",
+  "options.mentionSources.empty":
+    "No mention sources installed yet. Paste a git URL above to add one.",
   "options.mentionSources.update": "Update",
   "options.mentionSources.reload": "Reload",
   "options.mentionSources.remove": "Remove",
   "options.mentionSources.local": "local",
-  "options.mentionSources.localHint": "Editable symlink → {path} (edit the repo; Reload picks it up)",
+  "options.mentionSources.localHint":
+    "Editable symlink → {path} (edit the repo; Reload picks it up)",
   "options.mentionSources.legacy": "legacy",
   "options.mentionSources.unavailable": "unavailable",
   "options.mentionSources.noSearch": "no search",
-  "options.mentionSources.noSearchHint": "Imported but exposes no `search` — its @-mentions return nothing. Check its __init__.py re-exports `search`.",
-  "options.mentionSources.removeConfirm": "Remove the \"{name}\" mention source? This deletes its folder.",
+  "options.mentionSources.noSearchHint":
+    "Imported but exposes no `search` — its @-mentions return nothing. Check its __init__.py re-exports `search`.",
+  "options.mentionSources.removeConfirm":
+    'Remove the "{name}" mention source? This deletes its folder.',
   "options.mentionSources.installError": "Install failed: {error}",
   "options.mentionSources.updateError": "Update failed: {error}",
   "options.mentionSources.removeError": "Remove failed: {error}",
-  "options.mentionSources.loadWarning": "{name} installed, but it has no search capability ({warning}).",
+  "options.mentionSources.loadWarning":
+    "{name} installed, but it has no search capability ({warning}).",
   "options.plugins.uninstallAction": "Uninstall",
-  "options.plugins.uninstallConfirm": "Uninstall \"{name}\"? It fully unloads after a Hermes restart. This can't be undone.",
+  "options.plugins.uninstallConfirm":
+    'Uninstall "{name}"? It fully unloads after a Hermes restart. This can\'t be undone.',
   "options.plugins.uninstallError": "Couldn't uninstall: {error}",
 
   // Featured features — plugins promoted to a first-class Settings surface
   "options.feature.enableLabel": "Enable",
   "options.feature.stateOn": "Enabled — applies on the next Hermes start.",
   "options.feature.stateOff": "Disabled.",
-  "options.feature.notInstalled": "The plugin that powers this feature isn't installed yet.",
+  "options.feature.notInstalled":
+    "The plugin that powers this feature isn't installed yet.",
   "options.feature.installAction": "Install",
-  "options.feature.installPrompt": "Please install the Hermes plugin that powers the \"{name}\" feature for me by running `hermes plugins install {ref}`. When it's done, tell me whether Hermes needs a restart to start using it.",
+  "options.feature.installPrompt":
+    'Please install the Hermes plugin that powers the "{name}" feature for me by running `hermes plugins install {ref}`. When it\'s done, tell me whether Hermes needs a restart to start using it.',
   "options.feature.agentSourceApp": "Settings",
-  "options.feature.backplaneError": "Couldn't reach the backplane to read this feature's status.",
+  "options.feature.backplaneError":
+    "Couldn't reach the backplane to read this feature's status.",
   "options.feature.browser.title": "Browser",
-  "options.feature.browser.subtitle": "Let Amiba see and control your browser through the companion Chrome extension.",
+  "options.feature.browser.subtitle":
+    "Let Amiba see and control your browser through the companion Chrome extension.",
   "options.feature.browser.how.title": "How it works",
-  "options.feature.browser.how.body": "When enabled, Amiba registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Amiba can then read tabs, navigate, click, type, and run scripts in your browser.",
+  "options.feature.browser.how.body":
+    "When enabled, Amiba registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Amiba can then read tabs, navigate, click, type, and run scripts in your browser.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
@@ -171,7 +242,8 @@ export const en = {
   "options.voice.test.timeout":
     "Request timed out. The model may still be downloading or loading — try again in a moment.",
   "options.voice.test.success": "Recognised: {text}",
-  "options.voice.test.empty": "Recording captured, but no speech was recognised.",
+  "options.voice.test.empty":
+    "Recording captured, but no speech was recognised.",
   "options.voice.test.failed": "Test failed: {error}",
 
   // Provider picker
@@ -196,7 +268,8 @@ export const en = {
   // API-key editor
   "options.voice.apiKey.label": "API key",
   "options.voice.apiKey.placeholder": "Paste your provider API key",
-  "options.voice.apiKey.placeholderReplace": "Enter a new key to replace the saved one",
+  "options.voice.apiKey.placeholderReplace":
+    "Enter a new key to replace the saved one",
   "options.voice.apiKey.set": "Key is set",
   "options.voice.apiKey.unset": "Not set",
   "options.voice.apiKey.clear": "Clear",
@@ -253,7 +326,8 @@ export const en = {
   "onboarding.error.plugin": "Failed to load a plugin",
   "onboarding.error.backplane": "Local service didn't come up in time",
   "onboarding.configure.errorTitle": "Setup didn't finish",
-  "onboarding.configure.errorHint": "Hermes is installed and ready — only its local service couldn't start. Try again, or check the log.",
+  "onboarding.configure.errorHint":
+    "Hermes is installed and ready — only its local service couldn't start. Try again, or check the log.",
   "onboarding.configure.retry": "Retry",
   "onboarding.action.copy": "Copy command",
   "onboarding.action.copied": "Copied",
@@ -278,33 +352,6 @@ export const en = {
   "options.preference.language.en": "English",
   "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
-
-  // Composer quick actions — Settings UI
-  "options.preference.quickActions.label": "Quick actions",
-  "options.preference.quickActions.desc":
-    "Chips next to the chat input that wrap your text in a preset prompt.",
-  "options.preference.quickActions.builtins": "Built-in actions",
-  "options.preference.quickActions.custom": "Your actions",
-  "options.preference.quickActions.add": "Add action",
-  "options.preference.quickActions.reset": "Reset to defaults",
-  "options.preference.quickActions.empty":
-    "No custom actions yet. Add one to fire your own prompt template from the composer.",
-  "options.preference.quickActions.field.label": "Label",
-  "options.preference.quickActions.field.label.placeholder": "Polish (formal)",
-  "options.preference.quickActions.field.tooltip": "Tooltip (optional)",
-  "options.preference.quickActions.field.tooltip.placeholder":
-    "Shown on hover; defaults to the label.",
-  "options.preference.quickActions.field.template": "Prompt template",
-  "options.preference.quickActions.field.template.placeholder":
-    "Rewrite the following in a formal tone:\n\n{input}",
-  "options.preference.quickActions.field.template.help":
-    "Use {input} as the placeholder for the user's typed text. If omitted, the user's text is appended on a new line.",
-  "options.preference.quickActions.action.save": "Save",
-  "options.preference.quickActions.action.cancel": "Cancel",
-  "options.preference.quickActions.action.edit": "Edit",
-  "options.preference.quickActions.action.delete": "Delete",
-  "options.preference.quickActions.delete.confirm":
-    "Delete this quick action?",
 
   // Userscripts
   "options.scripts.title": "Userscripts",
@@ -368,8 +415,7 @@ export const en = {
   "options.memory.title": "Memory",
   "options.memory.subtitle":
     "Hermes Agent's persistent memory (read-only view)",
-  "options.memory.subtitle.tooltip":
-    "$HERMES_HOME/memories/{MEMORY,USER}.md",
+  "options.memory.subtitle.tooltip": "$HERMES_HOME/memories/{MEMORY,USER}.md",
   "options.memory.empty": "(No memory entries yet)",
   "options.memory.refresh": "Refresh",
   "options.memory.failedToLoad": "Failed to load",
@@ -396,12 +442,19 @@ export const en = {
   "options.models.refreshCatalog": "Refresh catalog",
   "options.models.loadingSettings": "Loading settings…",
 
-
   // Cron
   "options.cron.title": "Cron",
-  "options.cron.subtitle": "Jobs registered with Hermes Agent",
+  "options.cron.pageTitle": "Scheduled tasks",
+  "options.cron.subtitle":
+    "Let Hermes run tasks, reminders, and recurring work on schedule",
   "options.cron.refresh": "Refresh",
   "options.cron.newJob": "New job",
+  "options.cron.search": "Search scheduled tasks",
+  "options.cron.search.empty": "No matching tasks",
+  "options.cron.filter.label": "Filter scheduled tasks",
+  "options.cron.filter.all": "All",
+  "options.cron.filter.enabled": "Enabled",
+  "options.cron.filter.paused": "Paused",
   "options.cron.loading": "Loading scheduled tasks…",
   "options.cron.empty.title": "No scheduled tasks yet",
   "options.cron.empty.description":
@@ -413,8 +466,6 @@ export const en = {
   "options.cron.state.error": "Needs attention",
   "options.cron.state.unknown": "Unknown",
   "options.cron.mode.directScript": "Direct script",
-  "options.cron.row.script": "Script: {script}",
-  "options.cron.row.noDescription": "No task description",
   "options.cron.meta.nextRun": "Next {time}",
   "options.cron.meta.noNextRun": "No next run",
   "options.cron.meta.neverRun": "Never run",
@@ -457,7 +508,8 @@ export const en = {
   "options.status.metric.update": "Hermes update",
   "options.status.metric.updateAvailable": "Update available",
   "options.status.runtime.title": "Hermes runtime",
-  "options.status.runtime.subtitle": "Installed version and local configuration",
+  "options.status.runtime.subtitle":
+    "Installed version and local configuration",
   "options.status.runtime.release": "Release",
   "options.status.runtime.configVersion": "Config version",
   "options.status.runtime.latest": "latest {version}",
@@ -502,7 +554,8 @@ export const en = {
   "options.status.onboarding.description":
     "Amiba cannot reach the local backplane. The desktop app normally starts it automatically; use the checks below if it stays offline.",
   "options.status.onboarding.retry": "Check again",
-  "options.status.onboarding.step.install": "Confirm Hermes Agent is installed.",
+  "options.status.onboarding.step.install":
+    "Confirm Hermes Agent is installed.",
   "options.status.onboarding.step.plugin":
     "Install the Amiba browser-tools plugin.",
   "options.status.onboarding.step.run":
@@ -513,8 +566,7 @@ export const en = {
   "options.status.onboarding.error": "Technical details",
   "options.status.viewUpdateLogs": "View update logs",
   "options.logs.title": "Logs",
-  "options.logs.subtitle":
-    "Tail Hermes Agent and Hermes update logs",
+  "options.logs.subtitle": "Tail Hermes Agent and Hermes update logs",
   "options.logs.refresh": "Refresh",
   "options.logs.autoRefresh": "Auto",
   "options.logs.live": "live",
@@ -554,8 +606,7 @@ export const en = {
   "sidepanel.tabbar.menu.closeRight": "Close to the right",
   "sidepanel.tabbar.menu.closeAll": "Close all",
   "sidepanel.placeholder": "Message Amiba…",
-  "sidepanel.placeholder.uploading":
-    "Waiting for attachment upload to finish…",
+  "sidepanel.placeholder.uploading": "Waiting for attachment upload to finish…",
   "sidepanel.placeholder.withAttachments": "Add a question about your file(s)…",
   "sidepanel.placeholder.withPinned": "Ask about the attached page(s)…",
   "sidepanel.send": "Send",
@@ -619,6 +670,11 @@ export const en = {
   "sidepanel.trace.fields.exitCode": "Exit code",
   "sidepanel.trace.fields.diff": "Changes",
   "sidepanel.trace.fields.matches": "Matches",
+  "sidepanel.trace.searchResults.count": "{count} results",
+  "sidepanel.trace.searchResults.matches": "{count} matches",
+  "sidepanel.trace.searchResults.truncated": "Results truncated",
+  "sidepanel.trace.searchResults.empty": "No matching files",
+  "sidepanel.trace.searchResults.openFile": "Open file in workbench",
   "sidepanel.trace.fields.goal": "Goal",
   "sidepanel.trace.fields.role": "Role",
   "sidepanel.trace.fields.action": "Action",
@@ -641,7 +697,8 @@ export const en = {
   "sidepanel.learn.processing": "Processing…",
   "sidepanel.learn.tooltip":
     "Record clicks and input on the active tab; the trace JSON will be attached to the conversation when you stop. Write your prompt yourself.",
-  "sidepanel.queue.sendNow": "Send now: jump this message to the front of the queue",
+  "sidepanel.queue.sendNow":
+    "Send now: jump this message to the front of the queue",
   "sidepanel.queue.sendNow.aria": "Send now",
   "sidepanel.queue.edit":
     "Edit: load this message into the composer (keeps queue position, pauses the queue)",
@@ -702,8 +759,7 @@ export const en = {
   "sidepanel.attachment.uploading": "Uploading",
   "sidepanel.attachment.removeAria": "Remove {name}",
   "sidepanel.attachment.removePage": "Remove attached page",
-  "sidepanel.attachment.autoFrom":
-    "Auto-attached from {source}",
+  "sidepanel.attachment.autoFrom": "Auto-attached from {source}",
   "sidepanel.attachment.autoFrom.fallback": "current tab",
   "sidepanel.attachment.openInBrowser": "Open {name} in your browser",
   "sidepanel.attachment.remove": "Remove",
@@ -733,16 +789,14 @@ export const en = {
     "Hermes bridge is reachable. Click to open Gateway settings.",
   "sidepanel.status.tooltip.offline":
     "Hermes gateway is not reachable. Start `hermes chat` and check the Gateway URL.",
-  "sidepanel.status.tooltip.connecting":
-    "Connecting to the Hermes bridge…",
+  "sidepanel.status.tooltip.connecting": "Connecting to the Hermes bridge…",
   "sidepanel.status.tooltipBase": "Amiba Browser Extension · {state}",
   "sidepanel.status.tooltip.agentRunning":
     "Agent window: #{windowId} · tab {tabId}",
   "sidepanel.status.tooltip.agentDown": "Agent window: not running",
   "sidepanel.status.tooltip.clickConnect": "Click to connect",
   "sidepanel.status.tooltip.clickDisconnect": "Click to disconnect",
-  "sidepanel.status.aria.bar":
-    "Amiba Browser Extension {label}. {action}.",
+  "sidepanel.status.aria.bar": "Amiba Browser Extension {label}. {action}.",
   "sidepanel.status.showAgentWindow": "Show agent window",
   "sidepanel.status.showAgentWindow.disabled":
     "Agent window not running — connect first",
@@ -753,8 +807,7 @@ export const en = {
   "sidepanel.navPolicy.background": "In background tab",
   "sidepanel.navPolicy.foreground": "In foreground tab",
   "sidepanel.navPolicy.sameTab": "Replace current tab",
-  "sidepanel.navPolicy.tooltip":
-    "Where to open links the agent navigates to.",
+  "sidepanel.navPolicy.tooltip": "Where to open links the agent navigates to.",
   "sidepanel.navPolicy.listAria": "Navigate opens",
   "sidepanel.navPolicy.auto.label": "Auto",
   "sidepanel.navPolicy.auto.desc":
@@ -781,7 +834,7 @@ export const en = {
   "sidepanel.sessions.cancel": "Cancel",
   "sidepanel.sessions.newChatTitle": "New chat",
   "sidepanel.sessions.deleteConfirm":
-    "Permanently delete \"{title}\"? This drops the session and its messages from History — closing the tab from the top bar would have just hidden it.",
+    'Permanently delete "{title}"? This drops the session and its messages from History — closing the tab from the top bar would have just hidden it.',
   "sidepanel.sessions.group.pinned": "Pinned",
   "sidepanel.sessions.group.today": "Today",
   "sidepanel.sessions.group.yesterday": "Yesterday",
@@ -789,6 +842,7 @@ export const en = {
   "sidepanel.sessions.group.thisMonth": "This month",
   "sidepanel.sessions.group.older": "Older",
   "sidepanel.sessions.group.chats": "Chats",
+  "sidepanel.sessions.group.unbound": "Other chats",
   // Channel-scoped section label: ``{name} chats`` — used for both the
   // local "Local chats" section and remote channel sections ("Feishu
   // chats", "Telegram chats", …). Single template keeps section
@@ -798,20 +852,21 @@ export const en = {
   "sidepanel.sessions.history.empty": "No chats or scheduled runs yet.",
   "sidepanel.sessions.layout.aria": "History layout",
   "sidepanel.sessions.layout.timeline": "All by time",
-  "sidepanel.sessions.layout.grouped": "Group chats and scheduled tasks",
+  "sidepanel.sessions.layout.grouped": "Group chats by workspace",
   "sidepanel.nav.section.workspace": "Workspace",
   "sidepanel.sessions.showMore": "Show more",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
-  "sidepanel.sessions.scheduled.empty": "No scheduled tasks yet. Create one from a chat to get started.",
-  "sidepanel.sessions.scheduled.error": "Couldn't load scheduled tasks. Check that the backplane is running.",
+  "sidepanel.sessions.scheduled.empty":
+    "No scheduled tasks yet. Create one from a chat to get started.",
+  "sidepanel.sessions.scheduled.error":
+    "Couldn't load scheduled tasks. Check that the backplane is running.",
   "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
   "sidepanel.sessions.scheduled.selectRun": "Select a run to view its output.",
   "sidepanel.sessions.scheduled.trigger": "Trigger now",
   "sidepanel.sessions.scheduled.triggerConfirm":
-    "Run \"{name}\" now? It will fire on the next scheduler tick.",
-  "sidepanel.sessions.scheduled.triggerFailed":
-    "Trigger failed: {error}",
+    'Run "{name}" now? It will fire on the next scheduler tick.',
+  "sidepanel.sessions.scheduled.triggerFailed": "Trigger failed: {error}",
 
   // New tab
   "newtab.greeting": "What can I help with?",
@@ -849,7 +904,7 @@ export const en = {
     "Output file exceeded the bridge's in-memory cap — only the head of the run is shown above.",
   "newtab.continueInChat": "Continue in chat",
   "newtab.continueInChat.prompt":
-    "Below is the output from cron job \"{name}\" at {time}. Help me read it: what's worth handling right away, what can wait, and is there anything I need to follow up on?\n\n---\n\n{content}",
+    'Below is the output from cron job "{name}" at {time}. Help me read it: what\'s worth handling right away, what can wait, and is there anything I need to follow up on?\n\n---\n\n{content}',
   "newtab.empty.installed": "Routine enabled",
   "newtab.empty.headline": "Get Amiba working for you",
   "newtab.empty.installedDesc":
@@ -902,7 +957,8 @@ export const en = {
   "chat.openOptions": "Open Amiba options",
   "chat.search": "Search",
   "chat.settings": "Settings",
-  "commandPalette.description": "Search conversations or run common app commands.",
+  "commandPalette.description":
+    "Search conversations or run common app commands.",
   "chat.resizeSidebar": "Resize sidebar",
   "chat.untitled": "Untitled chat",
   "chat.rename": "Rename",
@@ -925,29 +981,6 @@ export const en = {
   "commandPalette.group.recommended": "Recommended",
   "commandPalette.group.conversations": "Conversations",
   "commandPalette.cmd.newChat": "New Chat",
-
-  // Composer quick actions — chip strip
-  "composer.quick.empty.tooltip":
-    "Type something first, then tap a quick action to wrap it in a preset prompt.",
-  "composer.quick.translate.label": "Translate",
-  "composer.quick.translate.tooltip":
-    "Translate between Chinese and English (auto-detect)",
-  "composer.quick.translate.template":
-    "Translate the following text. If it is in English, translate to Simplified Chinese; otherwise translate to English. Preserve the original tone and any code blocks unchanged. Reply with only the translation, no preamble.\n\n{input}",
-  "composer.quick.summarize.label": "Summarize",
-  "composer.quick.summarize.tooltip": "Summarize the text concisely",
-  "composer.quick.summarize.template":
-    "Summarize the following concisely. Lead with the single most important point, then 3–5 short bullet points if appropriate. Reply in the same language as the input.\n\n{input}",
-  "composer.quick.polish.label": "Polish",
-  "composer.quick.polish.tooltip":
-    "Polish the text for clarity and tone (same language)",
-  "composer.quick.polish.template":
-    "Polish the following text to be clearer, more natural, and grammatically correct. Keep the original language and meaning; do not add new information. Reply with only the polished text.\n\n{input}",
-  "composer.quick.explain.label": "Explain",
-  "composer.quick.explain.tooltip":
-    "Explain what this means / what this code does",
-  "composer.quick.explain.template":
-    "Explain the following clearly. If it is code, describe what it does step by step and call out any non-obvious behavior. If it is prose or a concept, define the key terms first, then walk through the idea. Reply in the same language as the input.\n\n{input}",
 
   // ── Channels (multi-platform sessions) ──
   // ``channels.local`` is the label for every "this machine" session
@@ -1011,7 +1044,8 @@ export const en = {
   "usage.tokens.label.placeholder": "Unknown",
   "usage.tokens.label.placeholderHint":
     "No specific model was recorded for this session. The gateway used its default routing — the real model that ran isn't stored per-session.",
-  "usage.tokens.footer.source": "Data from hermes-agent · auto-refreshes every 30 s",
+  "usage.tokens.footer.source":
+    "Data from hermes-agent · auto-refreshes every 30 s",
   "usage.tools.hero.calls": "Calls",
   "usage.tools.hero.tools": "Tools",
   "usage.tools.hero.unfinished": "Unfinished",

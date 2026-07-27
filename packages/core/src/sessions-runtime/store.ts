@@ -157,6 +157,7 @@ function hermesSessionToMeta(
     createdAt,
     updatedAt,
     messageCount: s.message_count ?? 0,
+    preview: s.preview ?? undefined,
     pinned: local?.pinned,
     archived: local?.archived,
     titleManual: local?.titleManual,

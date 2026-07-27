@@ -25,6 +25,12 @@ export interface UiMessage extends ChatMessage {
   uiId: string
   streaming?: boolean
   /**
+   * Workspace bound to this user turn. Fresh messages store it explicitly so
+   * the conversation can show a compact context badge immediately; restored
+   * legacy messages derive the same value from their `<workspace>` block.
+   */
+  workspacePath?: string
+  /**
    * Pages attached as system context for this turn (live current tab and/or
    * pinned snapshots). Persisted alongside the message so the provenance
    * chip survives panel reloads.

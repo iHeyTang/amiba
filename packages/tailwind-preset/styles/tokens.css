@@ -140,6 +140,20 @@
   body {
     @apply bg-background text-foreground;
     overscroll-behavior: none;
+    /*
+     * Desktop-app selection contract
+     * --------------------------------
+     * Application chrome is intentionally non-selectable. Accidental drags
+     * across sidebars, tab labels, toolbars, cards and status copy otherwise
+     * leave a large browser-style selection behind, which feels especially
+     * broken in a mouse-driven desktop shell.
+     *
+     * Content surfaces opt back in with `data-selection="text"`. Native text
+     * editors remain selectable without an opt-in. Keeping this policy here
+     * makes it apply consistently to desktop and browser-extension surfaces.
+     */
+    -webkit-user-select: none;
+    user-select: none;
     /* Deliberate native UI font: SF on macOS, Segoe on Windows, with CJK
        fallbacks — leaning into the OS font so the app reads as a native
        desktop app, not a web page. (No web font is shipped on purpose.) */
@@ -153,6 +167,46 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  :where(
+    [data-selection="text"],
+    [data-selection="text"] *
+  ) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /*
+   * Controls embedded inside selectable content (for example code-block copy
+   * actions in a chat response) still behave like chrome, not document text.
+   */
+  :where(
+    button,
+    select,
+    option,
+    summary,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    [data-selection="none"]
+  ) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  :where(
+    input,
+    textarea,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"]
+  ) {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 

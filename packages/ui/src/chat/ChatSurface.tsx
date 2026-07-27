@@ -4,8 +4,6 @@ import {
   ChevronUp,
   Disc,
   Eye,
-  Folder,
-  FolderOpen,
   Globe,
   History,
   Loader2,
@@ -70,8 +68,9 @@ import {
 import { ApprovalBanner } from "./bubble/approval";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
+import { useWorkspacePane } from "./WorkspacePane";
 import { Composer, type ComposerHandle } from "./Composer";
-import { WorkspaceControl } from "./WorkspaceControl";
+import { ConversationTurnRail } from "./ConversationTurnRail";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import { SessionDrawer } from "./SessionDrawer";
@@ -99,7 +98,7 @@ import type {
 import type { TriggerProvider } from "./composer/providers/types";
 import { PendingQueueRail } from "./internal/PendingQueueRail";
 import { useApprovals } from "./internal/useApprovals";
-import { useFolderDrop } from "./internal/useFolderDrop";
+import { useConversationWorkspace } from "./internal/useConversationWorkspace";
 import { useLearnMode } from "./internal/useLearnMode";
 import {
   pendingQueueStorageKey,
@@ -317,6 +316,7 @@ export default function ChatSurface({
   const { t } = useT();
 
   const sessions = useSessions();
+  const workspacePane = useWorkspacePane();
 
   const [input, setInput] = useState("");
 
@@ -432,24 +432,14 @@ export default function ChatSurface({
     start: startLearnFromPanel,
     stopAndAttach: stopLearnToComposer,
   } = learnMode;
-  // `dragOver` + `dropHandlers` are owned by `useComposerAttachments`
-  // — see destructure above. The local state used to live here.
-  // Workspace binding (desktop-only folder drop) is owned by
-  // `useFolderDrop`; see internal/useFolderDrop.ts.
-  const {
-    workspaceAvailable,
-    workspacePath,
-    workspaceError,
-    setWorkspaceError,
-    folderDragOver,
-    dropHandlers: folderDropHandlers,
-    unbindCurrent: unbindWorkspace,
-    chooseCurrent: chooseWorkspace,
-  } = useFolderDrop({ sessions });
+  // Conversation workspaces are read-only here. The id-less Home surface
+  // chooses the directory and the first send binds it to the newly-created
+  // session; switching conversations only restores that immutable binding.
+  const { workspacePath, workspaceError, setWorkspaceError } =
+    useConversationWorkspace({ sessions });
   useEffect(() => {
-    // A successful manual picker/drop after a failed home hand-off supersedes
-    // the stale draft path. The next retry should use the session's now-bound
-    // workspace instead of attempting the rejected directory again.
+    // Once the Home hand-off binds its draft directory, the conversation's
+    // restored workspace becomes authoritative and the transient draft can go.
     if (workspacePath) pendingWorkspacePathRef.current = null;
   }, [workspacePath]);
   // Hidden file-input ref + onChange handler are owned by
@@ -530,7 +520,9 @@ export default function ChatSurface({
     onApprovalResolvedEvent,
     reset: resetApprovals,
   } = approvals;
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const conversationFrameRef = useRef<HTMLDivElement | null>(null);
+  const conversationViewportRef = useRef<HTMLDivElement | null>(null);
+  const conversationContentRef = useRef<HTMLDivElement | null>(null);
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
 
@@ -1017,6 +1009,7 @@ export default function ChatSurface({
     switch (event.kind) {
       case "begin":
         setBusy(true);
+        workspacePane.beginTurn();
         stream.onBegin(event.assistantUiId);
         break;
       case "chunk":
@@ -1030,6 +1023,7 @@ export default function ChatSurface({
         break;
       case "hermesToolProgress":
         stream.onHermesToolProgress(event.event);
+        workspacePane.observeToolEvent(event.event);
         break;
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
@@ -1174,12 +1168,6 @@ export default function ChatSurface({
     return unsub;
   }, [capabilities.navigateOpenPolicy]);
 
-  // -------------------------------------------------------------------------
-  // Workspace binding (drop-a-folder-to-pin-it) lives in `useFolderDrop`
-  // — see internal/useFolderDrop.ts. The hook owns the per-session
-  // workspace-path subscription, the drag-target detection, and the
-  // bind/unbind round-trips against `platform.workspaces`.
-
   // Lifecycle of an assistant bubble is owned by the SW snapshot.
   // `handleSnapshot` dispatches on a tagged `kind` (absent / live /
   // interrupted / completed) — see `SnapshotFrame` in
@@ -1191,10 +1179,8 @@ export default function ChatSurface({
 
   // Auto-scroll on new content.
   useEffect(() => {
-    const el = scrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    );
-    if (el) (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+    const viewport = conversationViewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [sessions.activeMessages]);
 
   // Session switch: drop panel-local stream accumulators and compose-time
@@ -1266,11 +1252,13 @@ export default function ChatSurface({
     const sessionId = await sessions.ensureActive();
 
     const pendingWorkspacePath = pendingWorkspacePathRef.current;
+    let workspaceForTurn = workspacePath ?? undefined;
     if (pendingWorkspacePath) {
       const workspaces = getPlatform().workspaces;
       if (workspaces) {
         try {
           await workspaces.bind(sessionId, pendingWorkspacePath);
+          workspaceForTurn = pendingWorkspacePath;
           pendingWorkspacePathRef.current = null;
           setWorkspaceError(null);
         } catch (e) {
@@ -1312,6 +1300,7 @@ export default function ChatSurface({
       uiId: shortId("u"),
       role: "user",
       content: text,
+      ...(workspaceForTurn ? { workspacePath: workspaceForTurn } : {}),
     };
     const assistantMsg: UiMessage = {
       uiId: shortId("a"),
@@ -1517,6 +1506,9 @@ export default function ChatSurface({
   const messages = sessions.activeMessages as UiMessage[];
   const hasActive =
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
+  const showTurnRail =
+    variant === "fullscreen" &&
+    messages.some((message) => message.role === "user");
   // The home/empty state is identified solely by the absence of a session
   // id. A persisted session with zero messages is still a real conversation
   // and therefore uses the normal chat layout.
@@ -1632,24 +1624,10 @@ export default function ChatSurface({
         !attachmentUploading &&
         !attachmentBusy
       }
-      // Quick-action chips are kept hidden in the normal sidebar/
-      // fullscreen layouts (the composer footer is meant to be a
-      // narrow input row). Quick-Ask's ``composer-only`` empty state
-      // is the one surface that wants them back — they re-appear
-      // exactly when the popup is sitting on a blank conversation.
-      quickActions={isComposerOnlyEmpty}
-      flatTop={pendingQueue.length > 0 || pendingApprovals.length > 0}
+      flatTop={pendingApprovals.length > 0}
       contextRail={
-        workspaceAvailable || workspacePath || pendingSourceApp ? (
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-            {(workspaceAvailable || workspacePath) && (
-              <WorkspaceControl
-                path={workspacePath}
-                onChoose={chooseWorkspace}
-                onClear={workspacePath ? unbindWorkspace : undefined}
-                disabled={busy}
-              />
-            )}
+        pendingSourceApp || pendingQueue.length > 0 ? (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
             {pendingSourceApp && (
               <div
                 className="flex h-7 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground"
@@ -1669,6 +1647,16 @@ export default function ChatSurface({
                 </button>
               </div>
             )}
+            <PendingQueueRail
+              items={pendingQueue.map((item) => ({
+                queueId: item.queueId,
+                preview: previewPendingTurn(item),
+              }))}
+              editingQueueId={editingQueueId}
+              onSendNow={sendQueueItemNow}
+              onEdit={editPendingQueueItem}
+              onRemove={removePendingQueueItem}
+            />
           </div>
         ) : undefined
       }
@@ -1716,12 +1704,12 @@ export default function ChatSurface({
       mentionProviders={mentionProviders}
       chipRow={undefined}
       actionsLeft={
-        hasActive ? (
-          slots?.navigateOpenPolicyToggle?.({
-            policy: navigateOpenPolicy,
-            onChange: (next) => void handleNavigateOpenPolicyChange(next),
-          })
-        ) : undefined
+        hasActive
+          ? slots?.navigateOpenPolicyToggle?.({
+              policy: navigateOpenPolicy,
+              onChange: (next) => void handleNavigateOpenPolicyChange(next),
+            })
+          : undefined
       }
     />
   );
@@ -1784,120 +1772,133 @@ export default function ChatSurface({
         the tabs instead of butting up against them.
       */}
       <div
+        ref={conversationFrameRef}
         className={cn(
-          "relative min-w-0 overflow-hidden pt-2",
+          "relative flex min-h-0 min-w-0 flex-col overflow-hidden",
           // ``flex-1`` makes this body region fill the rest of the column
           // in the normal "hero" / populated paths. Quick-Ask's
           // composer-only empty mode opts out so the wrapper sizes to the
           // composer's natural height (a flex-1 child inside a content-
           // sized parent would collapse to 0 and hide the composer).
           expandComposerArea && "flex-1",
-          // Only fullscreen variant honors the messages-width preset; the
-          // sidebar variant is already a narrow column and shouldn't be
-          // capped further. `full` evaluates to "" so messages span the
-          // entire pane.
-          variant === "fullscreen" &&
-            MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
-          folderDragOver && "ring-2 ring-primary/40",
         )}
-        ref={scrollRef}
-        {...folderDropHandlers}
       >
-        {!hasActive ? (
-          isComposerOnlyEmpty ? (
-            // Quick-Ask compact mode: skip the hero entirely and let
-            // the composer flow at its natural height. No
-            // ``absolute inset-0`` here — the wrapper must size to the
-            // composer so the host popup can shrink-wrap. The full
-            // composer (attachments, voice, send) is preserved; only
-            // the surrounding chrome (logo, greeting, queue list,
-            // workspace chips) is dropped. The ``selection from <App>``
-            // hint still renders here so a Spotlight-style selection
-            // hand-off remains visible before the first turn.
-            <div
-              className={cn(
-                "flex flex-col px-2 pb-2",
-                // Expanded → fill the (now flex-1) body and push the
-                // composer to the BOTTOM, so a tall popup reads like a chat
-                // (composer at the bottom, room above for an upward menu)
-                // rather than a top-anchored input with dead space below.
-                composerOnlyExpanded && "h-full justify-end",
-              )}
-            >
-              {pendingSourceApp && (
-                <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
-                  <span>{t("quickAsk.selectionFrom")}</span>
-                  <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                    {pendingSourceApp}
-                  </span>
-                </div>
-              )}
-              {readOnlyNoticeNode ?? composerNode}
-            </div>
-          ) : slots?.emptyState ? (
-            // Host-provided empty state (desktop hands in
-            // ``<HomeView panelMode />`` so the home composer surface
-            // becomes the "no chat selected" view verbatim). This branch is
-            // intentionally keyed only to `activeId`: existing empty
-            // sessions remain normal conversation views.
-            // The slot owns its own layout; we just hand it a sized
-            // parent.
-            <div className="absolute inset-0">{slots.emptyState}</div>
-          ) : (
-            // Built-in fallback: home-style centred composer with a
-            // greeting above, reusing the chat ``composerNode`` so
-            // submission creates a session via ``ensureActive`` and
-            // the conversation continues seamlessly.
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
-              <div className="space-y-1 text-center">
-                <AmibaLogo size={56} />
-                <p className="pt-2 text-sm font-semibold">
-                  {t("newtab.greeting")}
-                </p>
-                <p className="max-w-[40ch] text-xs text-muted-foreground">
-                  {t("newtab.subtitle")}
-                </p>
-              </div>
+        <div
+          className={cn(
+            "relative flex min-h-0 min-w-0 flex-col overflow-hidden pt-2",
+            expandComposerArea && "flex-1",
+            // The message column is constrained independently from the
+            // panel-level turn rail. This keeps the rail pinned to the
+            // panel's left edge while the conversation stays centered.
+            variant === "fullscreen" &&
+              MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
+          )}
+        >
+          {!hasActive ? (
+            isComposerOnlyEmpty ? (
+              // Quick-Ask compact mode: skip the hero entirely and let
+              // the composer flow at its natural height. No
+              // ``absolute inset-0`` here — the wrapper must size to the
+              // composer so the host popup can shrink-wrap. The full
+              // composer (attachments, voice, send) is preserved; only
+              // the surrounding chrome (logo, greeting, queue list,
+              // workspace chips) is dropped. The ``selection from <App>``
+              // hint still renders here so a Spotlight-style selection
+              // hand-off remains visible before the first turn.
               <div
                 className={cn(
-                  "w-full",
-                  variant === "fullscreen" ? "max-w-2xl" : "max-w-md",
+                  "flex flex-col px-2 pb-2",
+                  // Expanded → fill the (now flex-1) body and push the
+                  // composer to the BOTTOM, so a tall popup reads like a chat
+                  // (composer at the bottom, room above for an upward menu)
+                  // rather than a top-anchored input with dead space below.
+                  composerOnlyExpanded && "h-full justify-end",
                 )}
               >
+                {pendingSourceApp && (
+                  <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                    <span>{t("quickAsk.selectionFrom")}</span>
+                    <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                      {pendingSourceApp}
+                    </span>
+                  </div>
+                )}
                 {readOnlyNoticeNode ?? composerNode}
               </div>
-              {error && (
-                <ErrorBlock
-                  error={error}
-                  onOpenSettings={() => openSettings()}
+            ) : slots?.emptyState ? (
+              // Host-provided empty state (desktop hands in
+              // ``<HomeView panelMode />`` so the home composer surface
+              // becomes the "no chat selected" view verbatim). This branch is
+              // intentionally keyed only to `activeId`: existing empty
+              // sessions remain normal conversation views.
+              // The slot owns its own layout; we just hand it a sized
+              // parent.
+              <div className="absolute inset-0">{slots.emptyState}</div>
+            ) : (
+              // Built-in fallback: home-style centred composer with a
+              // greeting above, reusing the chat ``composerNode`` so
+              // submission creates a session via ``ensureActive`` and
+              // the conversation continues seamlessly.
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
+                <div className="space-y-1 text-center">
+                  <AmibaLogo size={56} />
+                  <p className="pt-2 text-sm font-semibold">
+                    {t("newtab.greeting")}
+                  </p>
+                  <p className="max-w-[40ch] text-xs text-muted-foreground">
+                    {t("newtab.subtitle")}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "w-full",
+                    variant === "fullscreen" ? "max-w-2xl" : "max-w-md",
+                  )}
+                >
+                  {readOnlyNoticeNode ?? composerNode}
+                </div>
+                {error && (
+                  <ErrorBlock
+                    error={error}
+                    onOpenSettings={() => openSettings()}
+                  />
+                )}
+              </div>
+            )
+          ) : (
+            <ScrollArea
+              data-conversation-scroll-region
+              className="min-h-0 min-w-0 flex-1"
+              viewportRef={conversationViewportRef}
+              hideScrollbar={showTurnRail}
+            >
+              <div
+                ref={conversationContentRef}
+                data-selection="text"
+                className="min-w-0 space-y-2 p-3"
+              >
+                <MessageTurns
+                  messages={messages}
+                  onOpenAgentDestination={openAgentDestination}
                 />
-              )}
-            </div>
-          )
-        ) : (
-          <ScrollArea className="h-full min-w-0">
-            <div className="min-w-0 space-y-2 p-3">
-              <MessageTurns
-                messages={messages}
-                onOpenAgentDestination={openAgentDestination}
-              />
 
-              {error && (
-                <ErrorBlock
-                  error={error}
-                  onOpenSettings={() => openSettings()}
-                />
-              )}
-            </div>
-          </ScrollArea>
-        )}
-        {folderDragOver && (
-          <div className="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-primary/10 text-[12px] font-medium text-primary">
-            <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-background/95 px-3 py-2 shadow-sm">
-              <FolderOpen className="h-4 w-4" />
-              <span>Drop folder to bind workspace</span>
-            </div>
-          </div>
+                {error && (
+                  <ErrorBlock
+                    error={error}
+                    onOpenSettings={() => openSettings()}
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+        {hasActive && showTurnRail && (
+          <ConversationTurnRail
+            messages={messages}
+            viewportRef={conversationViewportRef}
+            contentRef={conversationContentRef}
+            containerRef={conversationFrameRef}
+          />
         )}
       </div>
 
@@ -2005,13 +2006,8 @@ export default function ChatSurface({
               )}
             </div>
           )}
-          {/*
-          Cursor-style composer: optional queued turns render in a slim strip
-          *above* the bordered box (popup stack). The textarea + action row
-          stay inside the rounded frame; focus-within still targets that box.
-          The hidden file input + drop handlers + drop overlay live INSIDE
-          Composer (via `attachments={att}`) — no need to render them here.
-        */}
+          {/* Approval state remains a blocking banner. Queue entries now share the
+          composer's context rail with its immutable workspace tab. */}
           <div
             className={cn(
               "relative flex w-full flex-col",
@@ -2027,17 +2023,6 @@ export default function ChatSurface({
                 onDismissError={() => setApprovalError(null)}
               />
             )}
-            <PendingQueueRail
-              items={pendingQueue.map((item) => ({
-                queueId: item.queueId,
-                preview: previewPendingTurn(item),
-              }))}
-              editingQueueId={editingQueueId}
-              composerDragOver={att.dragOver}
-              onSendNow={sendQueueItemNow}
-              onEdit={editPendingQueueItem}
-              onRemove={removePendingQueueItem}
-            />
             {readOnlyNoticeNode ?? composerNode}
             {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
