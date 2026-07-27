@@ -180,6 +180,8 @@ describe("Sidebar", () => {
 
     const hermesGroup = screen.getByRole("button", { name: "hermes-x" })
     expect(hermesGroup).toHaveAttribute("title", "/Users/amira/Code/hermes-x")
+    expect(hermesGroup).toHaveClass("h-full", "w-full", "px-2.5")
+    expect(hermesGroup.parentElement).not.toHaveClass("px-2.5")
     expect(screen.getByText("superun")).toBeInTheDocument()
     expect(screen.getByText("Other chats")).toBeInTheDocument()
     expect(screen.getByText("Refine workbench")).toBeInTheDocument()

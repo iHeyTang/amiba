@@ -76,10 +76,10 @@ export function TopSection({
   // below). Drawer headers keep their original uppercase micro-label
   // look — that surface is unchanged.
   const headerWrapCls = isRail
-    ? "group/topsection relative mt-2 flex h-7 w-full shrink-0 items-center rounded-md px-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
+    ? "group/topsection relative mt-2 flex h-7 w-full shrink-0 items-center rounded-md text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
     : cn(
         "group/topsection relative flex w-full shrink-0 items-center font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40",
-        "px-2 py-1.5 text-xs",
+        "text-xs",
       );
   // Header is a `<div>` (not a button) because `actions` may contain
   // nested buttons, and `<button>` inside `<button>` is invalid HTML.
@@ -91,7 +91,11 @@ export function TopSection({
         type="button"
         onClick={onToggle}
         title={title}
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5 rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
+          isRail ? "h-full w-full px-2.5" : "w-full px-2 py-1.5",
+          actions && "pr-9",
+        )}
         aria-expanded={!collapsed}
       >
         {isRail ? (
@@ -135,7 +139,7 @@ export function TopSection({
       {actions && (
         // Absolutely positioned so its height (h-6 icon button) doesn't
         // push the wrapper taller — the row stays at text height.
-        <span className="absolute right-1 hidden h-6 items-center gap-0.5 group-hover/topsection:flex">
+        <span className="absolute right-1 z-10 hidden h-6 items-center gap-0.5 group-hover/topsection:flex">
           {actions}
         </span>
       )}
