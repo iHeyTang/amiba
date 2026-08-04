@@ -9,6 +9,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { SessionMessage, SessionMeta } from "../sessions";
+import type { AgentExecutionContext } from "../agent-context";
 
 /**
  * Immutable snapshot of the session-runtime's reactive state. Returned
@@ -99,7 +100,14 @@ export interface SessionsController {
   deselect: () => Promise<void>;
 
   /** Create a fresh session, open it as a tab, and activate it. */
-  createNew: () => Promise<string>;
+  createNew: (agent?: AgentExecutionContext) => Promise<string>;
+
+  /**
+   * Bind the profile/response mode used by this task. Callers should only
+   * switch profiles before the first user message; the store accepts the
+   * update generically so migrations and explicit reset flows stay possible.
+   */
+  setAgentContext: (id: string, agent: AgentExecutionContext) => Promise<void>;
 
   /**
    * Bring an externally-shaped session into the panel: insert ``meta``
@@ -108,7 +116,10 @@ export interface SessionsController {
    * the same id is already known locally, falls back to ``openTab``
    * without re-appending the seed messages.
    */
-  importSession: (meta: SessionMeta, messages: SessionMessage[]) => Promise<void>;
+  importSession: (
+    meta: SessionMeta,
+    messages: SessionMessage[],
+  ) => Promise<void>;
 
   rename: (id: string, title: string) => Promise<void>;
 

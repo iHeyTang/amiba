@@ -9,6 +9,7 @@ vi.mock("@amiba/i18n", () => ({
 import {
   WorkspacePane,
   WorkspacePaneProvider,
+  WorkspacePaneToggle,
   useWorkspacePane,
 } from "../WorkspacePane";
 import type { WorkspaceInspectorCapability } from "../internal/capabilities";
@@ -29,6 +30,7 @@ function Probe() {
       <button type="button" onClick={pane.toggle} aria-pressed={pane.open}>
         toggle workspace
       </button>
+      <WorkspacePaneToggle />
       <output aria-label="workspace width">{pane.width}</output>
     </>
   );
@@ -66,16 +68,32 @@ describe("WorkspacePane responsive behavior", () => {
       name: "toggle workspace",
     });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const edgeToggle = screen.getByRole("button", {
+      name: "workspacePane.open",
+    });
 
     await userEvent.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const openEdgeToggle = screen.getByRole("button", {
+      name: "workspacePane.collapse",
+    });
+    expect(openEdgeToggle).toBe(edgeToggle);
+    expect(openEdgeToggle).toHaveAttribute("aria-pressed", "true");
     const pane = screen.getByLabelText("workspacePane.title");
-    expect(pane.parentElement).toHaveClass("max-[1100px]:!w-1/2");
+    expect(pane.parentElement).toHaveClass(
+      "relative",
+      "shrink-0",
+      "self-stretch",
+      "max-[1100px]:!w-1/2",
+    );
     expect(pane).toHaveClass(
       "max-[1100px]:!w-full",
       "max-[1100px]:!max-w-none",
     );
+
+    await userEvent.click(openEdgeToggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   it("previews resize directly and commits the width once dragging ends", async () => {

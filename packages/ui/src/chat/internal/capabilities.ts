@@ -20,7 +20,7 @@
  *                                 it on mount.
  */
 
-import type { ChatMessage } from "@amiba/core"
+import type { AgentExecutionContext, ChatMessage } from "@amiba/core"
 import type { WorkspaceFilesAdapter } from "@amiba/platform"
 
 // ---------------------------------------------------------------------------
@@ -178,6 +178,8 @@ export interface PendingPromptResult {
    * binds it to the session created by the first submitted message.
    */
   workspacePath?: string
+  /** Profile-scoped runtime selected by the originating surface. */
+  agent?: AgentExecutionContext
 }
 
 export interface PendingPromptCapability {

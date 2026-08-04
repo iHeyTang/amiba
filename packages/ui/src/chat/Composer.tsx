@@ -19,6 +19,8 @@ import {
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments";
 import { MicrophoneButton } from "./useVoiceRecorder";
+import { ComposerModelPicker } from "./ComposerModelPicker";
+import { ComposerAgentPicker } from "./ComposerAgentPicker";
 import {
   forwardRef,
   useCallback,
@@ -39,6 +41,7 @@ import { expandMentions } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
+import type { AgentExecutionContext } from "@amiba/core";
 
 /**
  * The chat surface's input box. **One implementation** used by every
@@ -180,6 +183,21 @@ export interface ComposerProps {
     /** Force-disable independent of transcribing (rare). */
     disabled?: boolean;
   };
+  /**
+   * Show a compact Hermes inference-model selector beside the send controls.
+   * It lists models from configured or currently authenticated providers.
+   */
+  modelPicker?: boolean;
+  /**
+   * Task-scoped Hermes Profile and optional response mode. Once a task has
+   * messages, callers lock this control so execution and history keep using
+   * the same isolated Profile.
+   */
+  agentPicker?: {
+    value: AgentExecutionContext;
+    onChange: (next: AgentExecutionContext) => void;
+    locked?: boolean;
+  };
   // ---------------------------------------------------------------------
   // Surface-specific slots — fall back to these only when something
   // genuinely surface-specific needs to fit in the composer. Anything
@@ -302,6 +320,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onPaste,
       attachments,
       microphone,
+      modelPicker,
+      agentPicker,
       extrasAbove,
       contextRail,
       topAffordance,
@@ -692,6 +712,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             {/* Mic sits next to the send button — speech-to-text is the
                 output-side affordance, not an attachment. Grouping it on
                 the right keeps the left rail consistent across surfaces. */}
+            {agentPicker ? (
+              <ComposerAgentPicker
+                disabled={disabled}
+                locked={agentPicker.locked}
+                onChange={agentPicker.onChange}
+                value={agentPicker.value}
+              />
+            ) : null}
+            {modelPicker ? (
+              <ComposerModelPicker
+                disabled={disabled}
+                profileId={agentPicker?.value.profileId}
+              />
+            ) : null}
             {microphone ? (
               <MicrophoneButton
                 recording={microphone.recording}

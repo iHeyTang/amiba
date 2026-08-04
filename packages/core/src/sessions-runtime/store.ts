@@ -49,6 +49,11 @@ import { getPlatform } from "@amiba/platform";
 import { shortId } from "@amiba/utils";
 
 import {
+  normalizeAgentContext,
+  normalizeAgentProfileId,
+  type AgentExecutionContext,
+} from "../agent-context";
+import {
   createHermesSession,
   deleteHermesSession,
   ensureHermesSession,
@@ -60,6 +65,7 @@ import {
   secToMs,
   updateHermesSession,
 } from "../hermes-sessions";
+import { getHermesProfiles } from "../hermes-profiles";
 import { getLocalSource, SOURCE_LOCAL } from "../channels";
 import {
   LOCAL_META_KEY,
@@ -105,7 +111,6 @@ let _lastSavedLocalMeta: Record<string, SessionLocalMeta> = {};
 // Local sidecar (pinned / archived / titleManual)
 // ---------------------------------------------------------------------------
 
-
 async function readLocalMeta(): Promise<Record<string, SessionLocalMeta>> {
   const r = await getPlatform().storage.get([LOCAL_META_KEY]);
   const v = r[LOCAL_META_KEY];
@@ -126,6 +131,7 @@ function pickLocalFields(s: SessionMeta): SessionLocalMeta {
   if (s.pinned) out.pinned = true;
   if (s.archived) out.archived = true;
   if (s.titleManual) out.titleManual = true;
+  if (s.agent) out.agent = normalizeAgentContext(s.agent);
   return out;
 }
 
@@ -133,7 +139,8 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
   return (
     Boolean(a.pinned) === Boolean(b.pinned) &&
     Boolean(a.archived) === Boolean(b.archived) &&
-    Boolean(a.titleManual) === Boolean(b.titleManual)
+    Boolean(a.titleManual) === Boolean(b.titleManual) &&
+    JSON.stringify(a.agent ?? null) === JSON.stringify(b.agent ?? null)
   );
 }
 
@@ -141,10 +148,10 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
 // Mapping helpers between SessionMeta / SessionMessage and Hermes shapes
 // ---------------------------------------------------------------------------
 
-
 function hermesSessionToMeta(
   s: HermesSession,
   local: SessionLocalMeta | undefined,
+  profileId: string,
 ): SessionMeta {
   // Hermes stores timestamps as float seconds; the existing UI works in
   // ms. ``last_active`` falls back to ``started_at`` for a fresh session
@@ -162,6 +169,12 @@ function hermesSessionToMeta(
     archived: local?.archived,
     titleManual: local?.titleManual,
     source: s.source,
+    agent: {
+      profileId: normalizeAgentProfileId(profileId),
+      ...(local?.agent?.personality
+        ? { personality: local.agent.personality }
+        : {}),
+    },
   };
 }
 
@@ -200,12 +213,13 @@ function decodeStoredValue(value: unknown): unknown {
 function asArgumentRecord(value: unknown): Record<string, unknown> | undefined {
   const decoded = decodeStoredValue(value);
   return decoded && typeof decoded === "object" && !Array.isArray(decoded)
-    ? decoded as Record<string, unknown>
+    ? (decoded as Record<string, unknown>)
     : undefined;
 }
 
 function storedResultFailed(result: unknown): boolean {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    return false;
   const record = result as Record<string, unknown>;
   return (
     record.success === false ||
@@ -226,13 +240,18 @@ function readToolCallEntry(
 ): RestoredToolProgress | null {
   if (!raw || typeof raw !== "object") return null;
   const t = raw as Record<string, unknown>;
-  const id = (typeof t.id === "string" && t.id)
-    || (typeof t.tool_call_id === "string" && t.tool_call_id)
-    || null;
+  const id =
+    (typeof t.id === "string" && t.id) ||
+    (typeof t.tool_call_id === "string" && t.tool_call_id) ||
+    null;
   if (!id) return null;
   let tool = "";
   const fn = t.function;
-  if (fn && typeof fn === "object" && typeof (fn as Record<string, unknown>).name === "string") {
+  if (
+    fn &&
+    typeof fn === "object" &&
+    typeof (fn as Record<string, unknown>).name === "string"
+  ) {
     tool = (fn as { name: string }).name;
   } else if (typeof t.name === "string") {
     tool = t.name;
@@ -308,9 +327,10 @@ function hermesMessageToSession(
   // (``reasoning_content``). On reload the panel renders this as a chip
   // via ``UiMessage.reasoning`` (not ``streamVerbose`` — that path is
   // reserved for backward-compatible tool-argument details).
-  const reasoning = (typeof m.reasoning_content === "string" && m.reasoning_content)
-    || (typeof m.reasoning === "string" && m.reasoning)
-    || "";
+  const reasoning =
+    (typeof m.reasoning_content === "string" && m.reasoning_content) ||
+    (typeof m.reasoning === "string" && m.reasoning) ||
+    "";
   if (reasoning) {
     msg.reasoning = reasoning;
   }
@@ -337,15 +357,28 @@ function hermesMessageToSession(
 // loadIndex
 // ---------------------------------------------------------------------------
 
-
 export async function loadIndex(): Promise<SessionMeta[]> {
-  const res = await listHermesSessions({
-    limit: LIST_FETCH_PAGE,
-    offset: 0,
-    excludeSources: HIDDEN_SESSION_SOURCES,
-  });
-  if (!res.ok) {
-    console.warn("[hermes-sessions] listHermesSessions failed:", res);
+  const profileResult = await getHermesProfiles();
+  const profileIds = profileResult.ok
+    ? profileResult.profiles.map((profile) => profile.name)
+    : ["default"];
+  const results = await Promise.all(
+    profileIds.map(async (profileId) => ({
+      profileId,
+      response: await listHermesSessions({
+        limit: LIST_FETCH_PAGE,
+        offset: 0,
+        excludeSources: HIDDEN_SESSION_SOURCES,
+        profileId,
+      }),
+    })),
+  );
+  const successful = results.filter((item) => item.response.ok);
+  if (successful.length === 0) {
+    console.warn(
+      "[hermes-sessions] listHermesSessions failed:",
+      results.map((item) => item.response),
+    );
     // Reset the saved snapshot so the next saveIndex doesn't decide some
     // session "disappeared" and skip an actual creation: we now know
     // nothing about Hermes state.
@@ -354,8 +387,12 @@ export async function loadIndex(): Promise<SessionMeta[]> {
   }
   const local = await readLocalMeta();
   _lastSavedLocalMeta = local;
-  const out = res.sessions.map((s) =>
-    hermesSessionToMeta(s, local[s.id]),
+  const out = successful.flatMap(({ profileId, response }) =>
+    response.ok
+      ? response.sessions.map((session) =>
+          hermesSessionToMeta(session, local[session.id], profileId),
+        )
+      : [],
   );
   // Sort newest-first so the History drawer and tab list see a stable
   // order. SessionDB returns by started_at; we re-sort by updatedAt
@@ -370,7 +407,6 @@ export async function loadIndex(): Promise<SessionMeta[]> {
 // saveIndex — diff against last snapshot, emit targeted API calls
 // ---------------------------------------------------------------------------
 
-
 export async function saveIndex(index: SessionMeta[]): Promise<void> {
   const prevMap = _lastSavedIndex ?? new Map<string, SessionMeta>();
   const localMeta = { ..._lastSavedLocalMeta };
@@ -383,13 +419,18 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       // strings go through, empty stays unset to avoid the auto-derived
       // "New chat" clashing across multiple fresh sessions (Hermes
       // titles are unique).
-      const create = await createHermesSession({
-        id: cur.id,
-        source: getLocalSource(),
-        title: cur.title?.trim() ? cur.title : undefined,
-      });
+      const create = await createHermesSession(
+        {
+          id: cur.id,
+          source: getLocalSource(),
+          title: cur.title?.trim() ? cur.title : undefined,
+        },
+        cur.agent?.profileId,
+      );
       if (create.ok) {
-        _ensuredSessions.add(cur.id);
+        _ensuredSessions.add(
+          `${normalizeAgentProfileId(cur.agent?.profileId)}:${cur.id}`,
+        );
         if (create.title_error) {
           console.warn(
             "[hermes-sessions] title conflict on create:",
@@ -403,9 +444,13 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       // Title changed — PATCH. 409 means another session owns that
       // title; surface as a warning but keep the local title (the user
       // will see it un-synced; they can rename to resolve).
-      const upd = await updateHermesSession(cur.id, {
-        title: cur.title || "",
-      });
+      const upd = await updateHermesSession(
+        cur.id,
+        {
+          title: cur.title || "",
+        },
+        cur.agent?.profileId,
+      );
       if (upd.ok === false && upd.status !== 404) {
         console.warn(
           "[hermes-sessions] updateHermesSession title failed:",
@@ -421,7 +466,8 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       if (
         !desired.pinned &&
         !desired.archived &&
-        !desired.titleManual
+        !desired.titleManual &&
+        !desired.agent
       ) {
         delete localMeta[cur.id];
       } else {
@@ -453,10 +499,12 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
 // loadMessages
 // ---------------------------------------------------------------------------
 
-
-export async function loadMessages(id: string): Promise<SessionMessage[]> {
+export async function loadMessages(
+  id: string,
+  profileId?: string,
+): Promise<SessionMessage[]> {
   if (!id) return [];
-  const res = await getHermesMessages(id);
+  const res = await getHermesMessages(id, profileId);
   if (res.ok === false) {
     if (res.status !== 404) {
       console.warn("[hermes-sessions] getHermesMessages failed:", res);
@@ -466,7 +514,10 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
   const resultsByCallId = new Map<string, unknown>();
   for (const message of res.messages) {
     if (message.role !== "tool" || !message.tool_call_id) continue;
-    resultsByCallId.set(message.tool_call_id, decodeStoredValue(message.content));
+    resultsByCallId.set(
+      message.tool_call_id,
+      decodeStoredValue(message.content),
+    );
   }
 
   // Skip role=tool rows entirely. Each tool result is already represented
@@ -485,21 +536,25 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
 // saveMessages — diff vs in-memory set, append the new ones
 // ---------------------------------------------------------------------------
 
-
-async function ensureSessionRowExists(id: string): Promise<void> {
+async function ensureSessionRowExists(
+  id: string,
+  profileId?: string,
+): Promise<void> {
   // Idempotent: SessionDB's INSERT OR IGNORE makes re-creates safe.
   // We still keep the local ``_ensuredSessions`` Set as a fastpath (it
   // gates other store internals like ``loadMessages``); the shared
   // ``ensureHermesSession`` has its own process-local cache too, but
   // they cover different scopes so we maintain both.
-  if (_ensuredSessions.has(id)) return;
-  await ensureHermesSession(id, getLocalSource());
-  _ensuredSessions.add(id);
+  const key = `${normalizeAgentProfileId(profileId)}:${id}`;
+  if (_ensuredSessions.has(key)) return;
+  await ensureHermesSession(id, getLocalSource(), undefined, profileId);
+  _ensuredSessions.add(key);
 }
 
 export async function saveMessages(
   id: string,
   _messages: SessionMessage[],
+  profileId?: string,
 ): Promise<void> {
   // ---------------------------------------------------------------
   // No append from the extension side — api_server already persists
@@ -516,22 +571,24 @@ export async function saveMessages(
   // INSERT-OR-IGNORE so the call is idempotent.
   // ---------------------------------------------------------------
   if (!id) return;
-  await ensureSessionRowExists(id);
+  await ensureSessionRowExists(id, profileId);
 }
 
 // ---------------------------------------------------------------------------
 // dropMessages → delete session entirely (Hermes deletes session + msgs)
 // ---------------------------------------------------------------------------
 
-
-export async function dropMessages(id: string): Promise<void> {
+export async function dropMessages(
+  id: string,
+  profileId?: string,
+): Promise<void> {
   if (!id) return;
-  const res = await deleteHermesSession(id);
+  const res = await deleteHermesSession(id, profileId);
   if (res.ok === false && res.status !== 404) {
     console.warn("[hermes-sessions] deleteHermesSession failed:", res);
   }
-  _ensuredSessions.delete(id);
-  forgetEnsuredHermesSession(id);
+  _ensuredSessions.delete(`${normalizeAgentProfileId(profileId)}:${id}`);
+  forgetEnsuredHermesSession(id, profileId);
 
   // Clean up the sidecar entry too.
   const local = await readLocalMeta();
@@ -546,10 +603,13 @@ export async function dropMessages(id: string): Promise<void> {
 // Factory helpers (signatures retained verbatim from the old store)
 // ---------------------------------------------------------------------------
 
-
 /** Build a fresh metadata record. Caller is responsible for inserting it. */
 export function newSessionMeta(
-  opts: { id?: string; title?: string } = {},
+  opts: {
+    id?: string;
+    title?: string;
+    agent?: AgentExecutionContext;
+  } = {},
 ): SessionMeta {
   const now = Date.now();
   return {
@@ -559,6 +619,7 @@ export function newSessionMeta(
     updatedAt: now,
     messageCount: 0,
     source: getLocalSource(),
+    ...(opts.agent ? { agent: normalizeAgentContext(opts.agent) } : {}),
   };
 }
 

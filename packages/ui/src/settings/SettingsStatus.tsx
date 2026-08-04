@@ -395,6 +395,37 @@ function ProtocolMismatchBanner({
   );
 }
 
+function HermesVersionMismatchBanner({
+  mismatch,
+  t,
+}: {
+  mismatch: HermesStatusResponse["hermes_version_mismatch"];
+  t: TranslateFn;
+}) {
+  if (!mismatch) return null;
+  return (
+    <section className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.055] px-4 py-3.5">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="space-y-0.5">
+        <h3 className="text-xs font-semibold text-foreground">
+          {t("options.status.hermesVersion.title")}
+        </h3>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {t(
+            mismatch.reason === "unverifiable"
+              ? "options.status.hermesVersion.unverifiable"
+              : "options.status.hermesVersion.unsupported",
+            {
+              current: mismatch.installed || "unknown",
+              required: mismatch.required,
+            },
+          )}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function StatusSkeleton() {
   return (
     <div className="animate-pulse space-y-7">
@@ -546,12 +577,13 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
     void pollAction("hermes-update", setUpdState, updAbort);
   }, [pollAction]);
 
-  const versionMismatch =
+  const configVersionMismatch =
     status?.config_version != null &&
     status?.latest_config_version != null &&
     status.config_version !== status.latest_config_version;
   const updateAvailable = status?.update_check?.status === "behind";
-  const healthKind: HealthKind = status?.protocol_mismatch
+  const healthKind: HealthKind =
+    status?.protocol_mismatch || status?.hermes_version_mismatch
     ? "mismatch"
     : status?.gateway_running
       ? "healthy"
@@ -582,7 +614,9 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
     mismatch: {
       icon: TriangleAlert,
       title: t("options.status.health.mismatch.title"),
-      subtitle: t("options.status.health.mismatch.subtitle"),
+      subtitle: status?.hermes_version_mismatch
+        ? t("options.status.health.mismatch.hermesVersion")
+        : t("options.status.health.mismatch.subtitle"),
       iconClass:
         "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
     },
@@ -621,6 +655,12 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
             <StatusSkeleton />
           ) : (
             <>
+              {status.hermes_version_mismatch && (
+                <HermesVersionMismatchBanner
+                  mismatch={status.hermes_version_mismatch}
+                  t={t}
+                />
+              )}
               {status.protocol_mismatch && (
                 <ProtocolMismatchBanner
                   mismatch={status.protocol_mismatch}
@@ -755,7 +795,9 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                         </span>
                         {status.latest_config_version != null && (
                           <Badge
-                            variant={versionMismatch ? "warning" : "secondary"}
+                            variant={
+                              configVersionMismatch ? "warning" : "secondary"
+                            }
                             className="text-[9px]"
                           >
                             {t("options.status.runtime.latest", {

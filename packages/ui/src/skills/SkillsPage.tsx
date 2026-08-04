@@ -21,6 +21,7 @@ import {
   DialogTitle,
   Input,
   ScrollArea,
+  Switch,
 } from "../primitives";
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
@@ -30,6 +31,7 @@ import {
   getHermesSkillFile,
   postHermesSkillToggle,
 } from "@amiba/core";
+import { useT, type MessageKey } from "@amiba/i18n";
 import type {
   HermesSkillEntry,
   HermesSkillFileEntry,
@@ -40,52 +42,58 @@ import type {
 
 const ALL_KEY = "__all__";
 const UNCATEGORIZED_KEY = "__uncategorized__";
-const UNCATEGORIZED_LABEL = "Uncategorized";
 
 interface OriginInfo {
-  label: string;
-  tooltip: string;
+  labelKey: MessageKey;
+  tooltipKey: MessageKey;
   className: string;
 }
 
 const ORIGIN_INFO: Record<string, OriginInfo> = {
   bundled: {
-    label: "Bundled",
-    tooltip: "Shipped with Hermes Agent (.bundled_manifest)",
+    labelKey: "options.skills.origin.bundled",
+    tooltipKey: "options.skills.origin.bundledHint",
     className: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
   },
   hub: {
-    label: "Hub",
-    tooltip: "Installed from Skills Hub via `hermes skill install` (.hub/lock.json)",
+    labelKey: "options.skills.origin.hub",
+    tooltipKey: "options.skills.origin.hubHint",
     className: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
   },
   agent: {
-    label: "Agent-authored",
-    tooltip:
-      "Written by the curator agent during background-review (.usage.json: created_by=\"agent\")",
+    labelKey: "options.skills.origin.agent",
+    tooltipKey: "options.skills.origin.agentHint",
     className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
   },
   manual: {
-    label: "Manual",
-    tooltip:
-      "Present on disk but absent from all three manifests (user clone, symlink, or third-party CLI install)",
+    labelKey: "options.skills.origin.manual",
+    tooltipKey: "options.skills.origin.manualHint",
     className: "bg-muted text-muted-foreground",
   },
   external: {
-    label: "External",
-    tooltip: "From `skills.external_dirs` in config.yaml",
+    labelKey: "options.skills.origin.external",
+    tooltipKey: "options.skills.origin.externalHint",
     className: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
   },
 };
 
-function originMeta(origin: HermesSkillOrigin): OriginInfo {
-  return (
-    ORIGIN_INFO[origin] ?? {
+function originMeta(
+  origin: HermesSkillOrigin,
+  t: ReturnType<typeof useT>["t"],
+): { label: string; tooltip: string; className: string } {
+  const meta = ORIGIN_INFO[origin];
+  if (!meta) {
+    return {
       label: origin,
       tooltip: origin,
       className: "bg-muted text-muted-foreground",
-    }
-  );
+    };
+  }
+  return {
+    label: t(meta.labelKey),
+    tooltip: t(meta.tooltipKey),
+    className: meta.className,
+  };
 }
 
 const ORIGIN_FILTER_ORDER: HermesSkillOrigin[] = [
@@ -100,16 +108,16 @@ type EnabledBucket = "enabled" | "disabled";
 
 const ENABLED_INFO: Record<
   EnabledBucket,
-  { label: string; tooltip: string; className: string }
+  { labelKey: MessageKey; tooltipKey: MessageKey; className: string }
 > = {
   enabled: {
-    label: "Enabled",
-    tooltip: "Loaded into the current agent",
+    labelKey: "options.skills.enabled",
+    tooltipKey: "options.skills.enabledHint",
     className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   },
   disabled: {
-    label: "Disabled",
-    tooltip: "Listed in config.yaml/skills.disabled",
+    labelKey: "options.skills.disabled",
+    tooltipKey: "options.skills.disabledHint",
     className: "bg-muted text-muted-foreground",
   },
 };
@@ -123,30 +131,26 @@ interface CategoryBucket {
   enabledCount: number;
 }
 
-function formatRelative(iso: string | null): string {
+function formatRelative(iso: string | null, language: string): string {
   if (!iso) return "";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "";
-  const diffSec = Math.round((Date.now() - t) / 1000);
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) {
-    const n = Math.floor(diffSec / 60);
-    return `${n} minute${n === 1 ? "" : "s"} ago`;
-  }
-  if (diffSec < 86400) {
-    const n = Math.floor(diffSec / 3600);
-    return `${n} hour${n === 1 ? "" : "s"} ago`;
-  }
-  if (diffSec < 86400 * 30) {
-    const n = Math.floor(diffSec / 86400);
-    return `${n} day${n === 1 ? "" : "s"} ago`;
-  }
-  if (diffSec < 86400 * 365) {
-    const n = Math.floor(diffSec / (86400 * 30));
-    return `${n} month${n === 1 ? "" : "s"} ago`;
-  }
-  const n = Math.floor(diffSec / (86400 * 365));
-  return `${n} year${n === 1 ? "" : "s"} ago`;
+  const timestamp = Date.parse(iso);
+  if (Number.isNaN(timestamp)) return "";
+  const elapsed = timestamp - Date.now();
+  const absoluteSeconds = Math.abs(elapsed / 1000);
+  const formatter = new Intl.RelativeTimeFormat(language, {
+    numeric: "auto",
+  });
+  if (absoluteSeconds < 60)
+    return formatter.format(Math.round(elapsed / 1000), "second");
+  if (absoluteSeconds < 3600)
+    return formatter.format(Math.round(elapsed / 60000), "minute");
+  if (absoluteSeconds < 86400)
+    return formatter.format(Math.round(elapsed / 3600000), "hour");
+  if (absoluteSeconds < 86400 * 30)
+    return formatter.format(Math.round(elapsed / 86400000), "day");
+  if (absoluteSeconds < 86400 * 365)
+    return formatter.format(Math.round(elapsed / (86400000 * 30)), "month");
+  return formatter.format(Math.round(elapsed / (86400000 * 365)), "year");
 }
 
 function formatAbsolute(iso: string | null): string {
@@ -173,14 +177,16 @@ function SkillRow({
   onToggle: (skill: HermesSkillEntry, next: boolean) => void;
   toggling: boolean;
 }) {
-  const origin = originMeta(skill.origin);
+  const { t, language } = useT();
+  const origin = originMeta(skill.origin, t);
   const muted = !skill.enabled;
 
-  const updatedRel = formatRelative(skill.updated_at);
+  const updatedRel = formatRelative(skill.updated_at, language);
 
   const hoverParts: string[] = [];
   if (skill.description) hoverParts.push(skill.description);
-  if (skill.platforms?.length) hoverParts.push(`platforms: ${skill.platforms.join(", ")}`);
+  if (skill.platforms?.length)
+    hoverParts.push(`platforms: ${skill.platforms.join(", ")}`);
   if (skill.tags.length) hoverParts.push(`tags: ${skill.tags.join(", ")}`);
   hoverParts.push(`Added: ${formatAbsolute(skill.created_at)}`);
   hoverParts.push(`Updated: ${formatAbsolute(skill.updated_at)}`);
@@ -190,10 +196,12 @@ function SkillRow({
   hoverParts.push("Click the row to browse files");
   const hoverTitle = hoverParts.join("\n");
 
-  const toggleLabel = skill.enabled ? "Enabled" : "Disabled";
+  const toggleLabel = skill.enabled
+    ? t("options.skills.enabled")
+    : t("options.skills.disabled");
   const toggleTooltip = skill.enabled
-    ? "Click to disable: remove from config.yaml/skills.disabled"
-    : "Click to enable: write to config.yaml/skills.disabled";
+    ? t("options.skills.toggleOn")
+    : t("options.skills.toggleOff");
 
   return (
     <li
@@ -243,34 +251,29 @@ function SkillRow({
       </div>
       <span
         className={cn(
-          "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium",
+          "mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
           origin.className,
         )}
         title={origin.tooltip}
       >
         {origin.label}
       </span>
-      <button
-        type="button"
+      <div
+        className="mt-0.5 flex shrink-0 items-center gap-2"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
         title={toggleTooltip}
-        aria-pressed={skill.enabled}
-        disabled={toggling}
-        onClick={(e) => {
-          // Stop click from bubbling into the row's "open viewer" handler.
-          e.stopPropagation();
-          onToggle(skill, !skill.enabled);
-        }}
-        onKeyDown={(e) => e.stopPropagation()}
-        className={cn(
-          "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium transition-colors",
-          skill.enabled
-            ? "bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300"
-            : "bg-muted text-muted-foreground hover:bg-muted/80",
-          toggling && "cursor-wait opacity-50",
-        )}
       >
-        {toggleLabel}
-      </button>
+        <span className="text-[11px] text-muted-foreground">
+          {toggleLabel}
+        </span>
+        <Switch
+          aria-label={toggleTooltip}
+          checked={skill.enabled}
+          disabled={toggling}
+          onCheckedChange={(next) => onToggle(skill, next)}
+        />
+      </div>
     </li>
   );
 }
@@ -390,10 +393,16 @@ function flattenSkillTree(
 
 interface SkillViewerDialogProps {
   skill: HermesSkillEntry | null;
+  profileId?: string;
   onClose: () => void;
 }
 
-function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
+function SkillViewerDialog({
+  skill,
+  profileId,
+  onClose,
+}: SkillViewerDialogProps) {
+  const { t } = useT();
   const [files, setFiles] = useState<HermesSkillFileEntry[]>([]);
   const [root, setRoot] = useState<string>("");
   const [truncated, setTruncated] = useState(false);
@@ -433,11 +442,11 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
     setLoadingList(true);
     let cancelled = false;
     void (async () => {
-      const r = await getHermesSkillFiles(skill.name);
+      const r = await getHermesSkillFiles(skill.name, profileId);
       if (cancelled) return;
       setLoadingList(false);
       if (!r.ok) {
-        setListError(r.error || "Failed to load");
+        setListError(r.error || t("options.skills.loadFailed"));
         return;
       }
       setFiles(r.files);
@@ -455,7 +464,7 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [skill]);
+  }, [profileId, skill, t]);
 
   const tree = useMemo(() => buildSkillTree(files), [files]);
   const flatRows = useMemo(
@@ -484,11 +493,11 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
     setFileError(null);
     let cancelled = false;
     void (async () => {
-      const r = await getHermesSkillFile(skill.name, selectedPath);
+      const r = await getHermesSkillFile(skill.name, selectedPath, profileId);
       if (cancelled) return;
       setLoadingFile(false);
       if (!r.ok) {
-        setFileError(r.error || "Read failed");
+        setFileError(r.error || t("options.skills.loadFailed"));
         setFileBody(null);
         return;
       }
@@ -497,7 +506,7 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [skill, selectedPath]);
+  }, [profileId, skill, selectedPath, t]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -529,10 +538,13 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
           {/* ── File list ── */}
           <aside className="flex min-h-0 w-64 shrink-0 flex-col border-r border-border bg-muted/15">
             <div className="border-b border-border/50 px-3 py-1.5 text-xs uppercase tracking-wider text-muted-foreground/70">
-              Files ({files.length})
+              {t("options.skills.files", { count: files.length })}
               {truncated && (
                 <span className="ml-1 text-amber-600 dark:text-amber-400">
-                  · showing first {files.length}
+                  ·{" "}
+                  {t("options.skills.filesTruncated", {
+                    count: files.length,
+                  })}
                 </span>
               )}
             </div>
@@ -540,13 +552,15 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
               {loadingList ? (
                 <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  Loading…
+                  {t("options.skills.loading")}
                 </div>
               ) : listError ? (
-                <p className="px-3 py-3 text-xs text-destructive">{listError}</p>
+                <p className="px-3 py-3 text-xs text-destructive">
+                  {listError}
+                </p>
               ) : files.length === 0 ? (
                 <p className="px-3 py-3 text-xs text-muted-foreground">
-                  (no files)
+                  {t("options.skills.noFiles")}
                 </p>
               ) : (
                 <ul className="flex flex-col py-1">
@@ -635,27 +649,34 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
               {loadingFile ? (
                 <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  Reading…
+                  {t("options.skills.reading")}
                 </div>
               ) : fileError ? (
-                <p className="px-4 py-3 text-xs text-destructive">{fileError}</p>
+                <p className="px-4 py-3 text-xs text-destructive">
+                  {fileError}
+                </p>
               ) : fileBody?.encoding === "binary" ? (
                 <p className="px-4 py-3 text-xs text-muted-foreground">
-                  Binary file · {formatFileSize(fileBody.size ?? 0)}
+                  {t("options.skills.binaryFile", {
+                    size: formatFileSize(fileBody.size ?? 0),
+                  })}
                 </p>
               ) : fileBody?.encoding === "too-large" ? (
                 <p className="px-4 py-3 text-xs text-muted-foreground">
-                  File too large ({formatFileSize(fileBody.size ?? 0)}) — exceeds preview limit
-                  {fileBody.limit ? ` (${formatFileSize(fileBody.limit)})` : ""}
-                  .
+                  {t("options.skills.fileTooLarge", {
+                    size: formatFileSize(fileBody.size ?? 0),
+                  })}
                 </p>
               ) : fileBody?.content != null ? (
-                <pre data-selection="text" className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-relaxed">
+                <pre
+                  data-selection="text"
+                  className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-relaxed"
+                >
                   {fileBody.content}
                 </pre>
               ) : (
                 <p className="px-4 py-3 text-xs text-muted-foreground">
-                  (Select a file on the left to view its contents)
+                  {t("options.skills.selectFile")}
                 </p>
               )}
             </ScrollArea>
@@ -666,7 +687,10 @@ function SkillViewerDialog({ skill, onClose }: SkillViewerDialogProps) {
   );
 }
 
-function buildCategoryBuckets(skills: HermesSkillEntry[]): CategoryBucket[] {
+function buildCategoryBuckets(
+  skills: HermesSkillEntry[],
+  uncategorizedLabel: string,
+): CategoryBucket[] {
   const map = new Map<string, { count: number; enabledCount: number }>();
   for (const s of skills) {
     const key = s.category ?? UNCATEGORIZED_KEY;
@@ -682,7 +706,7 @@ function buildCategoryBuckets(skills: HermesSkillEntry[]): CategoryBucket[] {
   });
   return keys.map((k) => ({
     key: k,
-    label: k === UNCATEGORIZED_KEY ? UNCATEGORIZED_LABEL : k,
+    label: k === UNCATEGORIZED_KEY ? uncategorizedLabel : k,
     count: map.get(k)!.count,
     enabledCount: map.get(k)!.enabledCount,
   }));
@@ -698,8 +722,15 @@ const EMPTY_RESPONSE: HermesSkillsResponse = {
   origin_counts: {},
 };
 
-/** Read-only view of Hermes skills available to the current agent. */
-export function SkillsPage() {
+/** Skills available to the selected Hermes profile. */
+export function SkillsPage({
+  profileId,
+  embedded = false,
+}: {
+  profileId?: string;
+  embedded?: boolean;
+} = {}) {
+  const { t } = useT();
   const [data, setData] = useState<HermesSkillsResponse>(EMPTY_RESPONSE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -745,15 +776,15 @@ export function SkillsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const r = await getHermesSkills();
+    const r = await getHermesSkills(profileId);
     setLoading(false);
     if (!r.ok) {
-      setError(r.error || "Failed to load");
+      setError(r.error || t("options.skills.loadFailed"));
       setData(EMPTY_RESPONSE);
       return;
     }
     setData(r);
-  }, []);
+  }, [profileId, t]);
 
   /**
    * Optimistic toggle: flip the `enabled` flag locally first, fire the
@@ -777,13 +808,11 @@ export function SkillsPage() {
         ),
         totals: {
           ...prev.totals,
-          enabled:
-            prev.totals.enabled + (next ? 1 : -1),
-          disabled:
-            prev.totals.disabled + (next ? -1 : 1),
+          enabled: prev.totals.enabled + (next ? 1 : -1),
+          disabled: prev.totals.disabled + (next ? -1 : 1),
         },
       }));
-      const r = await postHermesSkillToggle(name, next);
+      const r = await postHermesSkillToggle(name, next, profileId);
       setTogglingNames((prev) => {
         const out = new Set(prev);
         out.delete(name);
@@ -798,16 +827,16 @@ export function SkillsPage() {
           ),
           totals: {
             ...prev.totals,
-            enabled:
-              prev.totals.enabled + (next ? -1 : 1),
-            disabled:
-              prev.totals.disabled + (next ? 1 : -1),
+            enabled: prev.totals.enabled + (next ? -1 : 1),
+            disabled: prev.totals.disabled + (next ? 1 : -1),
           },
         }));
-        setToggleError(`${name}: ${r.error || "Toggle failed"}`);
+        setToggleError(
+          `${name}: ${r.error || t("options.skills.toggleFailed")}`,
+        );
       }
     },
-    [],
+    [profileId, t],
   );
 
   useEffect(() => {
@@ -818,7 +847,10 @@ export function SkillsPage() {
   // session), so refetch whenever the user comes back to the window.
   useRefetchOnFocus(() => void refresh());
 
-  const buckets = useMemo(() => buildCategoryBuckets(data.skills), [data.skills]);
+  const buckets = useMemo(
+    () => buildCategoryBuckets(data.skills, t("options.skills.uncategorized")),
+    [data.skills, t],
+  );
 
   // Facet base: category-filtered only. Origin/active chip counts come from
   // here so chips don't disappear or jitter as the user toggles facets on
@@ -889,53 +921,57 @@ export function SkillsPage() {
           focus), so there is neither a title bar nor a refresh button. */}
       <div className="flex min-h-0 flex-1">
         {/* ── Category sidebar ── */}
-        <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-muted/15">
-          {/* "All" entry stays outside the ScrollArea so its w-full reliably
+        {!embedded ? (
+          <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-muted/15">
+            {/* "All" entry stays outside the ScrollArea so its w-full reliably
               expands the aside to its declared width even before data lands —
               Radix ScrollArea's viewport wraps children in display:table,
               which breaks width inheritance during the loading state. */}
-          <div className="border-b border-border/50">
-            <CategoryButton
-              active={category === ALL_KEY}
-              label="All"
-              count={data.totals.total}
-              enabledCount={data.totals.enabled}
-              onClick={() => setCategory(ALL_KEY)}
-            />
-          </div>
-          <ScrollArea className="min-h-0 flex-1">
-            <nav className="flex flex-col">
-              {buckets.length > 0 && (
-                <p className="px-3 pt-2 pb-1 text-sm font-normal text-muted-foreground">
-                  Categories
-                </p>
-              )}
-              {buckets.map((b) => (
-                <CategoryButton
-                  key={b.key}
-                  active={category === b.key}
-                  label={b.label}
-                  count={b.count}
-                  enabledCount={b.enabledCount}
-                  onClick={() => setCategory(b.key)}
-                />
-              ))}
-            </nav>
-          </ScrollArea>
-        </aside>
+            <div className="border-b border-border/50">
+              <CategoryButton
+                active={category === ALL_KEY}
+                label={t("options.skills.all")}
+                count={data.totals.total}
+                enabledCount={data.totals.enabled}
+                onClick={() => setCategory(ALL_KEY)}
+              />
+            </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <nav className="flex flex-col">
+                {buckets.length > 0 && (
+                  <p className="px-3 pb-1 pt-2 text-sm font-normal text-muted-foreground">
+                    {t("options.skills.categories")}
+                  </p>
+                )}
+                {buckets.map((b) => (
+                  <CategoryButton
+                    key={b.key}
+                    active={category === b.key}
+                    label={b.label}
+                    count={b.count}
+                    enabledCount={b.enabledCount}
+                    onClick={() => setCategory(b.key)}
+                  />
+                ))}
+              </nav>
+            </ScrollArea>
+          </aside>
+        ) : null}
 
         {/* ── Right panel ── */}
         <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <div className="space-y-4 p-6">
+          <div className={cn("space-y-4 p-6", embedded && "pt-3")}>
             {error && <p className="text-xs text-destructive">{error}</p>}
             {toggleError && (
               <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">
-                <span className="min-w-0 flex-1 break-words">{toggleError}</span>
+                <span className="min-w-0 flex-1 break-words">
+                  {toggleError}
+                </span>
                 <button
                   type="button"
                   onClick={() => setToggleError(null)}
                   className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                  aria-label="Dismiss error"
+                  aria-label={t("options.skills.dismissError")}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -946,25 +982,63 @@ export function SkillsPage() {
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold tracking-tight">
                   {category === ALL_KEY
-                    ? "All"
-                    : currentBucket?.label ?? category}
+                    ? t("options.skills.all")
+                    : (currentBucket?.label ?? category)}
                 </h3>
                 <p
                   className="text-xs text-muted-foreground"
                   title={data.skills_dirs.join("\n") || "$HERMES_HOME/skills"}
                 >
-                  {currentBucket?.count ?? data.totals.total} total ·{" "}
-                  {currentBucket?.enabledCount ?? data.totals.enabled} enabled
+                  {t("options.skills.totalEnabled", {
+                    total: currentBucket?.count ?? data.totals.total,
+                    enabled: currentBucket?.enabledCount ?? data.totals.enabled,
+                  })}
                 </p>
               </div>
             </div>
+
+            {embedded && buckets.length > 0 ? (
+              <div
+                aria-label={t("options.skills.categories")}
+                className="flex gap-1.5 overflow-x-auto pb-0.5"
+              >
+                {[
+                  {
+                    key: ALL_KEY,
+                    label: t("options.skills.all"),
+                    count: data.totals.total,
+                  },
+                  ...buckets,
+                ].map((bucket) => {
+                  const active = category === bucket.key;
+                  return (
+                    <button
+                      className={cn(
+                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] transition-colors",
+                        active
+                          ? "border-foreground/15 bg-foreground text-background"
+                          : "border-border/65 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                      key={bucket.key}
+                      onClick={() => setCategory(bucket.key)}
+                      type="button"
+                    >
+                      <span>{bucket.label}</span>
+                      <span className="tabular-nums opacity-65">
+                        {bucket.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
 
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name, description, tag, or category…"
+                placeholder={t("options.skills.search")}
                 className="h-8 pl-7 pr-7 text-sm"
               />
               {query && (
@@ -972,7 +1046,7 @@ export function SkillsPage() {
                   type="button"
                   onClick={() => setQuery("")}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Clear search"
+                  aria-label={t("options.skills.clearSearch")}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -990,7 +1064,7 @@ export function SkillsPage() {
                       key={b}
                       type="button"
                       onClick={() => toggleEnabled(b)}
-                      title={meta.tooltip}
+                      title={t(meta.tooltipKey)}
                       className={cn(
                         "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
                         on
@@ -998,7 +1072,7 @@ export function SkillsPage() {
                           : "border-border text-muted-foreground hover:bg-muted",
                       )}
                     >
-                      <span>{meta.label}</span>
+                      <span>{t(meta.labelKey)}</span>
                       <span className="tabular-nums opacity-70">{count}</span>
                     </button>
                   );
@@ -1007,7 +1081,7 @@ export function SkillsPage() {
                   <span className="mx-0.5 text-muted-foreground/50">·</span>
                 )}
                 {visibleOrigins.map((o) => {
-                  const meta = originMeta(o);
+                  const meta = originMeta(o, t);
                   const on = originFilter.has(o);
                   const count = originCounts[o] ?? 0;
                   return (
@@ -1037,16 +1111,18 @@ export function SkillsPage() {
                     }}
                     className="rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
                   >
-                    Clear
+                    {t("options.skills.clearFilters")}
                   </button>
                 )}
               </div>
             )}
 
             {filtered.length === 0 && !loading && !error ? (
-              <p className="text-xs text-muted-foreground">No skills match the filter.</p>
+              <p className="text-xs text-muted-foreground">
+                {t("options.skills.noMatches")}
+              </p>
             ) : (
-              <ul className="overflow-hidden rounded-md border border-border/60">
+              <ul className="overflow-hidden rounded-xl border border-border/60">
                 {filtered.map((s) => (
                   <SkillRow
                     key={`${s.category ?? ""}/${s.name}`}
@@ -1062,6 +1138,7 @@ export function SkillsPage() {
         </ScrollArea>
       </div>
       <SkillViewerDialog
+        profileId={profileId}
         skill={viewingSkill}
         onClose={() => setViewingSkill(null)}
       />

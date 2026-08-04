@@ -61,6 +61,7 @@ export function createElectronAdapter(): PlatformAdapter {
     workspaces: {
       chooseDirectory: (defaultPath) =>
         bridge.workspaces.chooseDirectory(defaultPath),
+      getDefaultRoot: () => bridge.workspaces.getDefaultRoot(),
       bind: (sessionId, p) => bridge.workspaces.bind(sessionId, p),
       unbind: (sessionId) => bridge.workspaces.unbind(sessionId),
       getCurrent: (sessionId) => bridge.workspaces.getCurrent(sessionId),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import wraps
+
 from aiohttp import web
 
 from .skills_service import (
@@ -9,6 +11,7 @@ from .skills_service import (
     toggle_skill,
 )
 from ....common import json_error, read_json_object
+from ....adapters.hermes_core import hermes_profile_scope
 
 
 _UPSTREAM_SKILL_FIELDS = ("name", "description", "category", "enabled")
@@ -147,19 +150,33 @@ async def handle_skill_toggle(request: web.Request) -> web.Response:
 
 
 def register_skills_routes(app: web.Application) -> None:
+    def profiled(handler):
+        @wraps(handler)
+        async def wrapped(request: web.Request) -> web.Response:
+            with hermes_profile_scope(request.query.get("profile")):
+                return await handler(request)
+
+        return wrapped
+
     # `name` is URL-encoded by the client; aiohttp's `{name}` matcher already
     # decodes percent-escapes for us. Skill names with slashes don't exist
     # in practice (the discovery walk treats path segments as the category
     # boundary), so the single-segment matcher is safe.
     app.add_routes(
         [
-            web.get("/hermes/skills", handle_skills_list),
+            web.get("/hermes/skills", profiled(handle_skills_list)),
             # Mine-only companion that exposes the bundle-level scan
             # diagnostics that don't fit a raw list response.
-            web.get("/hermes/skills/meta", handle_skills_meta),
-            web.get("/hermes/skills/{name}/files", handle_skill_files),
-            web.get("/hermes/skills/{name}/file", handle_skill_file),
+            web.get("/hermes/skills/meta", profiled(handle_skills_meta)),
+            web.get(
+                "/hermes/skills/{name}/files",
+                profiled(handle_skill_files),
+            ),
+            web.get(
+                "/hermes/skills/{name}/file",
+                profiled(handle_skill_file),
+            ),
             # PUT mirrors upstream PUT /api/skills/toggle.
-            web.put("/hermes/skills/toggle", handle_skill_toggle),
+            web.put("/hermes/skills/toggle", profiled(handle_skill_toggle)),
         ]
     )

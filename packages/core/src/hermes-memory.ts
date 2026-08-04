@@ -11,6 +11,13 @@ import { backplaneFetch } from "./backplane-client";
 
 export type HermesMemoryTarget = "memory" | "user";
 
+function profileUrl(path: string, profileId?: string): string {
+  const profile = profileId?.trim();
+  if (!profile) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}profile=${encodeURIComponent(profile)}`;
+}
+
 /**
  * One memory entry plus the upstream safety scanner's verdict.
  * `flagged` is `null` for clean entries and a short classification
@@ -64,9 +71,11 @@ function emptyEntries(target: HermesMemoryTarget, error: string): HermesMemoryEn
   };
 }
 
-export async function getHermesMemoryList(): Promise<HermesMemoryListResponse> {
+export async function getHermesMemoryList(
+  profileId?: string,
+): Promise<HermesMemoryListResponse> {
   try {
-    const url = `/hermes/memories`;
+    const url = profileUrl("/hermes/memories", profileId);
     const res = await backplaneFetch(url, { method: "GET" });
     const data = (await res.json()) as HermesMemoryListResponse;
     if (!res.ok || data.ok === false) {
@@ -80,9 +89,10 @@ export async function getHermesMemoryList(): Promise<HermesMemoryListResponse> {
 
 export async function getHermesMemoryTarget(
   target: HermesMemoryTarget,
+  profileId?: string,
 ): Promise<HermesMemoryEntries> {
   try {
-    const url = `/hermes/memories/${target}`;
+    const url = profileUrl(`/hermes/memories/${target}`, profileId);
     const res = await backplaneFetch(url, { method: "GET" });
     const data = (await res.json()) as HermesMemoryEntries;
     if (!res.ok || data.ok === false) {

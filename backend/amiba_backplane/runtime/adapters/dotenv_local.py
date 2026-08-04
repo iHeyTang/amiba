@@ -30,8 +30,17 @@ _ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def _hermes_home() -> Path:
-    """Same resolution Hermes uses: env override → ``~/.hermes``."""
-    return Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+    """Resolve the context-local Hermes home selected by the request.
+
+    The backplane serves several Profiles concurrently and scopes Hermes with
+    ``set_hermes_home_override`` rather than mutating process-global
+    ``HERMES_HOME``. Reading the environment variable here therefore always
+    returned the default Profile and made named-Profile credential edits land
+    in the wrong ``.env``.
+    """
+    from .hermes_core import hermes_home
+
+    return hermes_home()
 
 
 def plugin_dotenv_path(base: Path | None = None) -> Path:
@@ -97,8 +106,14 @@ def merge_dotenv_file_and_apply(
     updates: Dict[str, str],
     *,
     base: Path | None = None,
+    apply_process: bool = True,
 ) -> Dict[str, str]:
-    """Merge *updates* into ``.env`` and set ``os.environ`` (empty value deletes)."""
+    """Merge *updates* into ``.env``.
+
+    ``apply_process`` is only safe for the default single-profile environment.
+    Named Profiles are isolated and must never publish their secrets into the
+    shared backplane process.
+    """
     path = plugin_dotenv_path(base)
     cur = read_dotenv_as_dict(path)
     for k, v in updates.items():
@@ -106,10 +121,12 @@ def merge_dotenv_file_and_apply(
             continue
         if v == "":
             cur.pop(k, None)
-            os.environ.pop(k, None)
+            if apply_process:
+                os.environ.pop(k, None)
         else:
             cur[k] = v
-            os.environ[k] = v
+            if apply_process:
+                os.environ[k] = v
     path.parent.mkdir(parents=True, exist_ok=True)
     body = "\n".join(f"{k}={_fmt_dotenv_value(v)}" for k, v in sorted(cur.items()))
     path.write_text(body + ("\n" if body else ""), encoding="utf-8")
@@ -216,4 +233,3 @@ def apply_plugin_dotenv(base: Path | None = None) -> None:
             n += 1
     if n:
         logger.info("Applied %d key(s) from %s (only where unset)", n, path)
-

@@ -1,8 +1,7 @@
 /**
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
- *   • top (fixed):   new-chat, search (opens the command palette), then the
- *                    built-in + extension nav rows.
+ *   • top (fixed):   new-chat, then the built-in + extension nav rows.
  *   • middle (flex): unified chat + scheduled-run history, switchable between
  *                    a time-ordered stream and workspace-directory groups.
  *   • bottom (fixed): the settings row.
@@ -13,12 +12,13 @@ import {
   Clock,
   Folder,
   List,
+  ListTodo,
   ListTree,
   MessageSquare,
   Plus,
-  Search,
   Settings,
   Wallet,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
@@ -27,7 +27,6 @@ import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import type { MainContribution } from "@amiba/extension-host/renderer";
 import { cn } from "../primitives";
-import { NavigationGroupLabel } from "../navigation/NavigationRow";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
@@ -78,7 +77,6 @@ export interface SidebarProps {
   onSelectView: (id: string) => void;
   onNewChat: () => void;
   extensionItems?: MainContribution[];
-  onOpenCommandPalette: () => void;
   sessions: SessionMeta[];
   activeSessionId: string;
   sessionsReady: boolean;
@@ -93,12 +91,8 @@ export interface SidebarProps {
   scheduledLabelFor: (source: string) => string;
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
+  onOpenTaskCenter: () => void;
   onOpenSettings: () => void;
-  /**
-   * Explicit column width in px (user-resizable via the drag handle in
-   * `FullScreenChatView`). Overrides the `w-60` fallback when provided.
-   */
-  widthPx?: number;
   className?: string;
 }
 
@@ -107,7 +101,6 @@ export function Sidebar({
   onSelectView,
   onNewChat,
   extensionItems,
-  onOpenCommandPalette,
   sessions,
   activeSessionId,
   sessionsReady,
@@ -122,8 +115,8 @@ export function Sidebar({
   scheduledLabelFor,
   historyLayout,
   onHistoryLayoutChange,
+  onOpenTaskCenter,
   onOpenSettings,
-  widthPx,
   className,
 }: SidebarProps) {
   const { t } = useT();
@@ -185,7 +178,7 @@ export function Sidebar({
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
-      icon: <Clock className="h-4 w-4" />,
+      icon: <Workflow className="h-4 w-4" />,
       label: t("options.cron.title"),
       order: 1,
     },
@@ -203,28 +196,15 @@ export function Sidebar({
   return (
     <nav
       aria-label={t("sidepanel.sessions.activityBar.aria")}
-      className={cn(
-        "flex min-h-0 w-60 shrink-0 flex-col bg-muted/30",
-        className,
-      )}
-      style={widthPx !== undefined ? { width: widthPx } : undefined}
+      className={cn("flex min-h-0 w-full flex-col bg-transparent", className)}
     >
-      {/* Top (fixed): new-chat + search + nav rows */}
+      {/* Top (fixed): new-chat + nav rows. Search lives in the pane header. */}
       <div className="flex shrink-0 flex-col gap-0.5 p-2 pb-1">
-        <NavigationGroupLabel className="pt-0">
-          {t("sidepanel.nav.section.workspace")}
-        </NavigationGroupLabel>
         <SidebarItem
           id="new-chat"
           icon={<Plus className="h-4 w-4" />}
           label={t("chat.newChat")}
           onClick={onNewChat}
-        />
-        <SidebarItem
-          id="search"
-          icon={<Search className="h-4 w-4" />}
-          label={t("chat.search")}
-          onClick={onOpenCommandPalette}
         />
         {navRows.map((row) => (
           <SidebarItem
@@ -244,6 +224,15 @@ export function Sidebar({
           <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
             {t("sidepanel.sessions.title")}
           </span>
+          <button
+            type="button"
+            onClick={onOpenTaskCenter}
+            aria-label={t("sidepanel.sessions.viewAll")}
+            title={t("sidepanel.sessions.viewAll")}
+            className="mr-1 rounded-full px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+          >
+            {t("common.all")}
+          </button>
           <div
             role="group"
             aria-label={t("sidepanel.sessions.layout.aria")}
@@ -310,7 +299,7 @@ export function Sidebar({
             source === HISTORY_SCHEDULED_GROUP ? (
               <Clock />
             ) : source === HISTORY_UNBOUND_GROUP ? (
-              <MessageSquare />
+              <ListTodo />
             ) : (
               <Folder />
             )

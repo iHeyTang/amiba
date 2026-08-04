@@ -10,12 +10,13 @@
  * persisted message history.
  */
 
-import type { ChatMessage } from "./chat-messages"
+import type { ChatMessage } from "./chat-messages";
+import type { AgentExecutionContext } from "./agent-context";
 import type {
   HermesApprovalRequest,
   HermesToolProgress,
-  StreamedToolCall
-} from "./hermes-gateway-types"
+  StreamedToolCall,
+} from "./hermes-gateway-types";
 
 /**
  * Per-turn read-only context shipped alongside the messages — purely for
@@ -31,7 +32,7 @@ import type {
  * file in an IDE surface). Anything optional; older clients omit.
  */
 export interface TurnMetadata {
-  browser_tab_snapshot?: BrowserTabSnapshot
+  browser_tab_snapshot?: BrowserTabSnapshot;
 }
 
 /**
@@ -40,24 +41,30 @@ export interface TurnMetadata {
  * can substitute it verbatim. ``captured_at`` is an ms-epoch timestamp.
  */
 export interface BrowserTabSnapshot {
-  tab_id?: number
-  window_id?: number
-  url?: string
-  title?: string
-  favicon?: string
-  text?: string
-  truncated?: boolean
-  full_length?: number
-  captured_at: number
+  tab_id?: number;
+  window_id?: number;
+  url?: string;
+  title?: string;
+  favicon?: string;
+  text?: string;
+  truncated?: boolean;
+  full_length?: number;
+  captured_at: number;
 }
 
 /** Payload the UI sends on `submit` to start one assistant turn. */
 export interface SubmitPayload {
-  sessionId: string
+  sessionId: string;
   /** Stable uiId of the assistant placeholder bubble the UI just appended. */
-  assistantUiId: string
-  model: string
-  history: ChatMessage[]
+  assistantUiId: string;
+  model: string;
+  history: ChatMessage[];
+  /**
+   * Profile-scoped Hermes runtime for this task. The profile is bound when the
+   * task is created and remains stable for its lifetime; the optional
+   * personality is a task-scoped prompt overlay.
+   */
+  agent?: AgentExecutionContext;
   /**
    * SessionDB ``source`` tag for first-time creation of this session.
    * The engine ensures the row exists with this tag before issuing the
@@ -73,7 +80,7 @@ export interface SubmitPayload {
    * re-using the same id see the row already in place and the value
    * is a no-op.
    */
-  source?: string
+  source?: string;
   /**
    * Turn-scoped read-only context for tool handlers (e.g. frozen browser
    * tab snapshot). Never inlined into the prompt; reaches the agent
@@ -82,7 +89,7 @@ export interface SubmitPayload {
    * handlers fetch it over loopback keyed by ``approval_session_key``.
    * Optional — desktop surfaces and history-replay paths leave it unset.
    */
-  turnMetadata?: TurnMetadata
+  turnMetadata?: TurnMetadata;
 }
 
 /**
@@ -94,39 +101,39 @@ export interface SubmitPayload {
 export type AssistantTimelineItem =
   | { kind: "text"; id: string; text: string }
   | { kind: "tool"; id: string; toolCallId: string }
-  | { kind: "approval"; id: string; approvalId: string }
+  | { kind: "approval"; id: string; approvalId: string };
 
 export interface ChatRuntimeError {
-  message: string
-  status?: number
-  hint?: string
+  message: string;
+  status?: number;
+  hint?: string;
 }
 
 /** Everything the UI needs to reconstruct an in-flight or just-ended turn. */
 export interface ChatRuntimeState {
-  sessionId: string
-  assistantUiId: string | null
-  streaming: boolean
-  assistantText: string
-  reasoning: string
-  toolCalls: StreamedToolCall[]
-  hermesOrder: string[]
-  hermesToolProgress: HermesToolProgress[]
-  timeline: AssistantTimelineItem[]
-  error: ChatRuntimeError | null
+  sessionId: string;
+  assistantUiId: string | null;
+  streaming: boolean;
+  assistantText: string;
+  reasoning: string;
+  toolCalls: StreamedToolCall[];
+  hermesOrder: string[];
+  hermesToolProgress: HermesToolProgress[];
+  timeline: AssistantTimelineItem[];
+  error: ChatRuntimeError | null;
   /** URL/title the agent tab ended on (agent-window surface only). */
-  agentFinalUrl: string | null
-  agentFinalTitle: string | null
+  agentFinalUrl: string | null;
+  agentFinalTitle: string | null;
   /** Approval requests the gateway emitted that haven't been answered yet. */
-  pendingApprovals: HermesApprovalRequest[]
+  pendingApprovals: HermesApprovalRequest[];
   /**
    * `X-Hermes-Run-Id` from the in-flight or last-completed chat
    * completion request. Required to POST approval decisions back.
    * May be `null` on older gateways that don't emit the header.
    */
-  runId: string | null
-  startedAt: number
-  updatedAt: number
+  runId: string | null;
+  startedAt: number;
+  updatedAt: number;
 }
 
 /**
@@ -135,7 +142,7 @@ export interface ChatRuntimeState {
  * so the wire-protocol declaration sits next to the message types it
  * carries — both apps reference it by import.
  */
-export const CHAT_PORT_NAME = "hermes-chat"
+export const CHAT_PORT_NAME = "hermes-chat";
 
 /** UI → engine frames. */
 export type ClientToEngineMessage =
@@ -144,7 +151,7 @@ export type ClientToEngineMessage =
   | { type: "submit"; payload: SubmitPayload }
   | { type: "abort"; sessionId: string }
   | { type: "clear"; sessionId: string }
-  | { type: "clearApproval"; sessionId: string; approvalId: string }
+  | { type: "clearApproval"; sessionId: string; approvalId: string };
 
 /**
  * Snapshot kind tags what the engine knows about this session right now:
@@ -157,14 +164,29 @@ export type ClientToEngineMessage =
  */
 export type SnapshotFrame =
   | { type: "snapshot"; sessionId: string; kind: "absent" }
-  | { type: "snapshot"; sessionId: string; kind: "live"; state: ChatRuntimeState }
-  | { type: "snapshot"; sessionId: string; kind: "interrupted"; state: ChatRuntimeState }
-  | { type: "snapshot"; sessionId: string; kind: "completed"; state: ChatRuntimeState }
+  | {
+      type: "snapshot";
+      sessionId: string;
+      kind: "live";
+      state: ChatRuntimeState;
+    }
+  | {
+      type: "snapshot";
+      sessionId: string;
+      kind: "interrupted";
+      state: ChatRuntimeState;
+    }
+  | {
+      type: "snapshot";
+      sessionId: string;
+      kind: "completed";
+      state: ChatRuntimeState;
+    };
 
 /** engine → UI frames. */
 export type EngineToClientMessage =
   | SnapshotFrame
-  | { type: "event"; sessionId: string; event: StreamEvent }
+  | { type: "event"; sessionId: string; event: StreamEvent };
 
 /** Live deltas. */
 export type StreamEvent =
@@ -178,14 +200,14 @@ export type StreamEvent =
   | { kind: "approvalRequest"; request: HermesApprovalRequest }
   | { kind: "approvalResolved"; approvalId: string }
   | {
-      kind: "done"
+      kind: "done";
       /**
        * URL the agent tab ended on, when the just-finished turn ran on the
        * agent surface. Drives the "Open in my browser →" chip on the
        * assistant bubble. Omitted for user-mode turns.
        */
-      agentFinalUrl?: string
-      agentFinalTitle?: string
+      agentFinalUrl?: string;
+      agentFinalTitle?: string;
     }
   | { kind: "aborted" }
-  | { kind: "error"; message: string; status?: number; hint?: string }
+  | { kind: "error"; message: string; status?: number; hint?: string };

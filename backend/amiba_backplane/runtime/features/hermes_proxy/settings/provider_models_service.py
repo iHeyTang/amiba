@@ -176,6 +176,8 @@ def _merge_live_pricing_into_entry(
         op = _price_per_million_from_openrouter_token_price(row.get("completion"))
         if op is not None:
             meta["output_price_per_mtok"] = op
+    if "input_price_per_mtok" in meta or "output_price_per_mtok" in meta:
+        meta.setdefault("pricing_source", "provider-live")
     if meta:
         entry["metadata"] = meta
 

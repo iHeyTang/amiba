@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react"
 import { useExtensionRegistry, desktopBridge } from "@amiba/extension-host/renderer"
 import type { ExtensionsBridge } from "@amiba/extension-host/preload"
 import { useT } from "@amiba/i18n"
+import { CliToolsTab } from "./CliToolsTab"
 import { PluginsTab } from "./PluginsTab"
 import {
   Button,
@@ -32,7 +33,10 @@ function getExtensions(): ExtensionsBridge {
 function ExtensionsTab() {
   const { t } = useT()
   const [refreshKey, setRefreshKey] = useState(0)
-  const items = useExtensionRegistry(refreshKey)
+  const registryItems = useExtensionRegistry(refreshKey)
+  // Bundled extensions implement Amiba itself. They are not user assets and
+  // therefore do not belong in the external-tools inventory.
+  const items = registryItems.filter((item) => item.source !== "bundled")
 
   const [addLocalError, setAddLocalError] = useState<string | null>(null)
   const [pendingUninstall, setPendingUninstall] = useState<{
@@ -256,10 +260,8 @@ function ExtensionsTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Panel shell — extensions and plugins share ONE first-level settings pane
-// with an in-page tab switcher. To the user both are "installable capability
-// packages"; the runtime split (renderer add-ons vs agent-side Python) is an
-// implementation detail the tab labels carry.
+// Application extensions, Agent plugins and explicitly managed CLI programs
+// live here. MCP is a source of Agent tools, so it is configured in Tools.
 // ---------------------------------------------------------------------------
 
 function SettingsPane({ title, children }: { title: string; children: ReactNode }) {
@@ -277,23 +279,44 @@ function SettingsPane({ title, children }: { title: string; children: ReactNode 
 
 export function SettingsExtensions() {
   const { t } = useT()
-  const [tab, setTab] = useState<"extensions" | "plugins">("extensions")
+  const [tab, setTab] = useState<
+    "extensions" | "plugins" | "cli"
+  >("extensions")
   return (
     <SettingsPane title={t("options.extensions.title")}>
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v === "plugins" ? "plugins" : "extensions")}
+        onValueChange={(value) => {
+          if (
+            value === "plugins" ||
+            value === "cli"
+          ) {
+            setTab(value)
+          } else {
+            setTab("extensions")
+          }
+        }}
         className="flex min-h-0 flex-col"
       >
         <TabsList className="mb-4 shrink-0 self-start">
-          <TabsTrigger value="extensions">{t("options.nav.extensions")}</TabsTrigger>
-          <TabsTrigger value="plugins">{t("options.nav.plugins")}</TabsTrigger>
+          <TabsTrigger value="extensions">
+            {t("externalTools.tab.extensions")}
+          </TabsTrigger>
+          <TabsTrigger value="plugins">
+            {t("externalTools.tab.plugins")}
+          </TabsTrigger>
+          <TabsTrigger value="cli">
+            {t("externalTools.tab.cli")}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="extensions">
           <ExtensionsTab />
         </TabsContent>
         <TabsContent value="plugins">
           <PluginsTab />
+        </TabsContent>
+        <TabsContent value="cli">
+          <CliToolsTab />
         </TabsContent>
       </Tabs>
     </SettingsPane>

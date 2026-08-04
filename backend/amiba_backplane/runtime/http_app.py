@@ -14,6 +14,10 @@ from .common import json_error
 from .features import register_native
 from .features.gateway_proxy import register as register_gateway_proxy
 from .features.hermes_proxy.attachments.routes import max_client_size_bytes
+from .hermes_compatibility import (
+    hermes_compatibility_middleware,
+    hermes_compatibility_status,
+)
 from .protocol import PROTOCOL_VERSION
 
 
@@ -47,11 +51,13 @@ def _version() -> str:
 
 
 async def _health_handler(_req: web.Request) -> web.Response:
+    compatibility = hermes_compatibility_status()
     return web.json_response(
         {
             "ok": True,
             "plugin_version": _version(),
             "protocol_version": PROTOCOL_VERSION,
+            **compatibility,
         }
     )
 
@@ -62,7 +68,11 @@ def build_http_app() -> web.Application:
     # responses too, otherwise the browser swallows them and the
     # extension can't tell auth failure apart from network failure.
     app = web.Application(
-        middlewares=[cors_middleware, auth_middleware],
+        middlewares=[
+            cors_middleware,
+            auth_middleware,
+            hermes_compatibility_middleware,
+        ],
         client_max_size=max_client_size_bytes(),
     )
     # /health is exempt from auth (see runtime.auth._AUTH_EXEMPT_PATHS)

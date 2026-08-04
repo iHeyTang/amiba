@@ -268,6 +268,7 @@ export const chromePendingPrompt: PendingPromptCapability = {
         attachments?: unknown;
         sourceApp?: unknown;
         workspacePath?: unknown;
+        agent?: unknown;
       };
       const text =
         typeof obj.text === "string" && obj.text.trim()
@@ -281,6 +282,29 @@ export const chromePendingPrompt: PendingPromptCapability = {
         typeof obj.workspacePath === "string" && obj.workspacePath.trim()
           ? obj.workspacePath
           : undefined;
+      const rawAgent =
+        obj.agent && typeof obj.agent === "object"
+          ? (obj.agent as Record<string, unknown>)
+          : null;
+      const agent =
+        rawAgent && typeof rawAgent.profileId === "string"
+          ? {
+              profileId: rawAgent.profileId,
+              ...(rawAgent.personality &&
+              typeof rawAgent.personality === "object" &&
+              typeof (rawAgent.personality as Record<string, unknown>).key ===
+                "string" &&
+              typeof (rawAgent.personality as Record<string, unknown>).prompt ===
+                "string"
+                ? {
+                    personality: rawAgent.personality as {
+                      key: string;
+                      prompt: string;
+                    },
+                  }
+                : {}),
+            }
+          : undefined;
       let attachments: PendingPromptAttachment[] | undefined;
       if (Array.isArray(obj.attachments)) {
         const out: PendingPromptAttachment[] = [];
@@ -291,7 +315,7 @@ export const chromePendingPrompt: PendingPromptCapability = {
         if (out.length > 0) attachments = out;
       }
       if (!text && !attachments) return null;
-      return { text, attachments, sourceApp, workspacePath };
+      return { text, attachments, sourceApp, workspacePath, agent };
     } catch {
       return null;
     }

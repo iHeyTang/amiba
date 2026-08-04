@@ -1,11 +1,16 @@
-export { HermesModelConfigTab } from "./HermesModelConfigTab"
-export { ScriptEditor } from "./ScriptEditor"
-export { ScriptList } from "./ScriptList"
-export { SettingsGateway } from "./SettingsGateway"
-export { SettingsLogs } from "./SettingsLogs"
-export { SettingsMemory } from "./SettingsMemory"
-export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences"
-export { SettingsStatus } from "./SettingsStatus"
-export { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome"
-export { SettingsView, type SettingsViewProps } from "./SettingsView"
-export * from "./capabilities"
+export { HermesModelConfigTab } from "./HermesModelConfigTab";
+export {
+  AgentBehaviorEditor,
+  SettingsAssistantBehavior,
+} from "./AgentBehaviorEditor";
+export { ScriptEditor } from "./ScriptEditor";
+export { ScriptList } from "./ScriptList";
+export { SettingsGateway } from "./SettingsGateway";
+export { SettingsLogs } from "./SettingsLogs";
+export { SettingsMemory } from "./SettingsMemory";
+export { SettingsAgents } from "./SettingsAgents";
+export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
+export { SettingsStatus } from "./SettingsStatus";
+export { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
+export { SettingsView, type SettingsViewProps } from "./SettingsView";
+export * from "./capabilities";

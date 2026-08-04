@@ -3,6 +3,7 @@ import {
   CircleAlert,
   CirclePlay,
   Copy,
+  FolderOpen,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -27,7 +28,6 @@ import { Button } from "../primitives";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -51,13 +51,16 @@ import {
   resumeHermesCronJob,
   triggerHermesCronJob,
   updateHermesCronJob,
+  getHermesSkills,
+  type HermesSkillEntry,
   type HermesCronCreateInput,
   type HermesCronJob,
   type HermesCronUpdateInput,
 } from "@amiba/core";
 import { useT } from "@amiba/i18n";
+import { getPlatform } from "@amiba/platform";
 import { cn } from "../primitives";
-import { SettingsPaneHeader } from "../settings/SettingsPaneHeader";
+import { ModelSelectionField } from "../models";
 
 type Language = "en" | "zh-CN";
 type JobFilter = "all" | "enabled" | "paused";
@@ -153,19 +156,14 @@ interface JobFormState {
   name: string;
   prompt: string;
   schedule: string;
-  // `deliver` is intentionally NOT on the form. New jobs created from
-  // this page have no chat origin, so Hermes core defaults `deliver` to
-  // `"local"` (= no channel push, file-only — the new-tab page reads
-  // those files via the bridge). Updates from this form never send
-  // `deliver`, so a value the user set via conversation (e.g. `"feishu"`)
-  // is preserved. To configure delivery, ask Hermes — the upstream
-  // `cronjob` tool's `action=update` accepts any deliver token.
   noAgent: boolean;
   script: string;
   repeat: string;
-  skills: string;
+  skills: string[];
   model: string;
+  provider: string;
   workdir: string;
+  deliver: string;
 }
 
 function emptyForm(): JobFormState {
@@ -176,9 +174,11 @@ function emptyForm(): JobFormState {
     noAgent: false,
     script: "",
     repeat: "",
-    skills: "",
+    skills: [],
     model: "",
+    provider: "",
     workdir: "",
+    deliver: "local",
   };
 }
 
@@ -190,9 +190,11 @@ function jobToForm(job: HermesCronJob): JobFormState {
     noAgent: !!job.no_agent,
     script: job.script ?? "",
     repeat: job.repeat?.times != null ? String(job.repeat.times) : "",
-    skills: (job.skills ?? []).join(", "),
+    skills: job.skills ?? [],
     model: job.model ?? "",
+    provider: job.provider ?? "",
     workdir: job.workdir ?? "",
+    deliver: job.deliver ?? "local",
   };
 }
 
@@ -211,10 +213,7 @@ function buildCreateInput(form: JobFormState): HermesCronCreateInput | string {
     return "Prompt is required (unless no_agent mode is enabled)";
   }
 
-  const skillsList = form.skills
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const skillsList = form.skills;
 
   const repeatRaw = form.repeat.trim();
   let repeat: number | undefined;
@@ -226,20 +225,17 @@ function buildCreateInput(form: JobFormState): HermesCronCreateInput | string {
     repeat = n;
   }
 
-  // Note: `deliver` is intentionally omitted. Hermes core will default it
-  // — for a job created without an `origin` (which is always the case
-  // from this options page), the default is `"local"` (no channel push,
-  // file-only — the new-tab page reads those files). Users who want
-  // channel push set it via chat.
   const input: HermesCronCreateInput = {
     schedule,
     no_agent: noAgent,
+    deliver: form.deliver.trim() || "local",
   };
   if (prompt) input.prompt = prompt;
   if (form.name.trim()) input.name = form.name.trim();
   if (script) input.script = script;
   if (skillsList.length) input.skills = skillsList;
   if (form.model.trim()) input.model = form.model.trim();
+  if (form.provider.trim()) input.provider = form.provider.trim();
   if (form.workdir.trim()) input.workdir = form.workdir.trim();
   if (repeat != null) input.repeat = repeat;
 
@@ -249,10 +245,6 @@ function buildCreateInput(form: JobFormState): HermesCronCreateInput | string {
 function buildUpdateInput(form: JobFormState): HermesCronUpdateInput | string {
   const created = buildCreateInput(form);
   if (typeof created === "string") return created;
-  // `deliver` is deliberately not sent — the bridge's `update_job_response`
-  // only patches fields present in the payload, so a value the user has
-  // configured via chat (e.g. `"feishu"`, `"all"`, …) is preserved
-  // through an options-page edit.
   const update: HermesCronUpdateInput = {
     schedule: created.schedule,
     no_agent: created.no_agent,
@@ -260,6 +252,8 @@ function buildUpdateInput(form: JobFormState): HermesCronUpdateInput | string {
     prompt: created.prompt ?? "",
     skills: created.skills ?? [],
     model: created.model ?? null,
+    provider: created.provider ?? null,
+    deliver: created.deliver ?? "local",
     script: created.script ?? null,
     workdir: created.workdir ?? null,
   };
@@ -279,6 +273,132 @@ interface JobDialogProps {
   onSubmit: (form: JobFormState) => Promise<void>;
 }
 
+function SkillSelectionField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string[];
+  onChange: (value: string[]) => void;
+  disabled: boolean;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [skills, setSkills] = useState<HermesSkillEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const openPicker = async () => {
+    setOpen(true);
+    if (skills.length > 0 || loading) return;
+    setLoading(true);
+    const result = await getHermesSkills();
+    setLoading(false);
+    if (result.ok) setSkills(result.skills);
+  };
+
+  const filtered = skills.filter((skill) => {
+    const needle = query.trim().toLowerCase();
+    return (
+      !needle ||
+      `${skill.name} ${skill.description}`.toLowerCase().includes(needle)
+    );
+  });
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={disabled}
+        className="h-9 w-full justify-start rounded-xl px-3 font-normal shadow-none"
+        onClick={() => void openPicker()}
+      >
+        <span className="min-w-0 flex-1 truncate text-left text-xs">
+          {value.length > 0
+            ? value.join(" · ")
+            : t("options.cron.form.skills.inherit")}
+        </span>
+        {value.length > 0 && (
+          <span className="text-[10px] tabular-nums text-muted-foreground">
+            {value.length}
+          </span>
+        )}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex max-h-[70vh] max-w-lg flex-col gap-0 overflow-hidden rounded-2xl p-0">
+          <DialogTitle className="sr-only">
+            {t("options.cron.form.skills")}
+          </DialogTitle>
+          <div className="border-b border-border px-4">
+            <Input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="h-12 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              placeholder={t("options.cron.form.skills.search")}
+            />
+          </div>
+          <ScrollArea className="min-h-0 flex-1 p-2">
+            {loading ? (
+              <div className="flex h-32 items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {filtered.map((skill) => {
+                  const selected = value.includes(skill.name);
+                  return (
+                    <button
+                      key={skill.name}
+                      type="button"
+                      onClick={() =>
+                        onChange(
+                          selected
+                            ? value.filter((name) => name !== skill.name)
+                            : [...value, skill.name],
+                        )
+                      }
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/60",
+                        selected && "bg-secondary",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-1 h-3.5 w-3.5 shrink-0 rounded border",
+                          selected
+                            ? "border-primary bg-primary"
+                            : "border-border",
+                        )}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium">
+                          {skill.name}
+                        </span>
+                        {skill.description && (
+                          <span className="mt-0.5 line-clamp-2 block text-[10px] leading-4 text-muted-foreground">
+                            {skill.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+          <DialogFooter className="border-t border-border/60 px-4 py-3">
+            <Button size="sm" onClick={() => setOpen(false)}>
+              {t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function JobDialog({
   open,
   mode,
@@ -290,6 +410,8 @@ function JobDialog({
 }: JobDialogProps) {
   const [form, setForm] = useState<JobFormState>(initial);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const { t } = useT();
+  const chooseDirectory = getPlatform().workspaces?.chooseDirectory;
 
   useEffect(() => {
     if (open) {
@@ -297,15 +419,16 @@ function JobDialog({
       // Open the advanced panel automatically if any advanced field is set,
       // so editing an existing job doesn't hide non-default values.
       setAdvancedOpen(
-        !!(
-          initial.skills ||
-          initial.model ||
-          initial.workdir ||
-          initial.repeat ||
-          initial.noAgent ||
-          initial.script
-        ),
+        !!(initial.repeat || initial.noAgent || initial.script),
       );
+      const workspaces = getPlatform().workspaces;
+      if (!initial.workdir && workspaces) {
+        void workspaces.getDefaultRoot().then((root) => {
+          setForm((previous) =>
+            previous.workdir ? previous : { ...previous, workdir: root },
+          );
+        });
+      }
     }
   }, [open, initial]);
 
@@ -316,52 +439,51 @@ function JobDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !busy && onClose()}>
       <DialogContent className="flex max-h-[85vh] w-[90vw] max-w-2xl flex-col gap-0 p-0">
-        <DialogHeader className="border-b border-border bg-muted/30 px-4 py-3">
+        <DialogHeader className="border-b border-border/60 px-5 py-4">
           <DialogTitle className="text-sm font-semibold">
-            {mode === "create" ? "Create cron job" : "Edit cron job"}
+            {mode === "create"
+              ? t("options.cron.form.create")
+              : t("options.cron.form.edit")}
           </DialogTitle>
-          <DialogDescription className="text-[11px] text-muted-foreground">
-            Stored in ~/.hermes/cron/jobs.json and executed by Hermes Agent
-          </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-4 px-4 py-4">
+          <div className="space-y-5 px-5 py-5">
             <div className="space-y-1.5">
               <Label htmlFor="cron-name" className="text-xs">
-                Name
+                {t("options.cron.form.name")}
               </Label>
               <Input
                 id="cron-name"
                 value={form.name}
                 onChange={(e) => patch("name", e.target.value)}
-                placeholder="(optional; defaults to the first 50 chars of the prompt)"
-                className="h-8 text-xs"
+                placeholder={t("options.cron.form.name.placeholder")}
+                className="text-xs"
                 disabled={busy}
               />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="cron-schedule" className="text-xs">
-                Schedule <span className="text-destructive">*</span>
+                {t("options.cron.form.schedule")}{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="cron-schedule"
                 value={form.schedule}
                 onChange={(e) => patch("schedule", e.target.value)}
                 placeholder="0 9 * * *  /  every 30m  /  30m  /  2026-02-03T14:00"
-                className="h-8 font-mono text-xs"
+                className="font-mono text-xs"
                 disabled={busy}
               />
               <p className="text-[10px] text-muted-foreground">
-                Accepts: 5-field cron expression · "every 30m / 2h / 1d" ·
-                duration "30m / 2h / 1d" (one-shot) · ISO timestamp
+                {t("options.cron.form.schedule.hint")}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="cron-prompt" className="text-xs">
-                Prompt{" "}
+                {t("options.cron.form.prompt")}{" "}
                 {form.noAgent ? (
                   ""
                 ) : (
@@ -374,13 +496,107 @@ function JobDialog({
                 onChange={(e) => patch("prompt", e.target.value)}
                 placeholder={
                   form.noAgent
-                    ? "(optional in no_agent mode; used only as a name hint)"
-                    : "Instructions Hermes Agent will run. Must be self-contained (no session context)."
+                    ? t("options.cron.form.prompt.scriptPlaceholder")
+                    : t("options.cron.form.prompt.placeholder")
                 }
-                className="min-h-[120px] font-mono text-xs"
+                className="min-h-[120px] text-xs"
                 disabled={busy}
               />
             </div>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold">
+                {t("options.cron.form.execution")}
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {t("options.cron.form.model")}
+                  </Label>
+                  <ModelSelectionField
+                    value={
+                      form.model
+                        ? { model: form.model, provider: form.provider }
+                        : null
+                    }
+                    onChange={(value) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        model: value?.model ?? "",
+                        provider: value?.provider ?? "",
+                      }))
+                    }
+                    disabled={busy}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {t("options.cron.form.skills")}
+                  </Label>
+                  <SkillSelectionField
+                    value={form.skills}
+                    onChange={(value) => patch("skills", value)}
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cron-workdir" className="text-xs">
+                  {t("options.cron.form.workdir")}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="cron-workdir"
+                    value={form.workdir}
+                    onChange={(e) => patch("workdir", e.target.value)}
+                    placeholder={t("options.cron.form.workdir.placeholder")}
+                    className="min-w-0 flex-1 font-mono text-xs"
+                    disabled={busy}
+                  />
+                  {chooseDirectory && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 rounded-full"
+                      aria-label={t("options.cron.form.workdir.choose")}
+                      disabled={busy}
+                      onClick={() => {
+                        void chooseDirectory(form.workdir || undefined).then(
+                          (path) => path && patch("workdir", path),
+                        );
+                      }}
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cron-deliver" className="text-xs">
+                  {t("options.cron.form.delivery")}
+                </Label>
+                <Input
+                  id="cron-deliver"
+                  list="cron-delivery-targets"
+                  value={form.deliver}
+                  onChange={(event) => patch("deliver", event.target.value)}
+                  placeholder="local / all / feishu:oc_xxx"
+                  className="font-mono text-xs"
+                  disabled={busy}
+                />
+                <datalist id="cron-delivery-targets">
+                  <option value="local" />
+                  <option value="origin" />
+                  <option value="all" />
+                </datalist>
+                <p className="text-[10px] text-muted-foreground">
+                  {t("options.cron.form.delivery.hint")}
+                </p>
+              </div>
+            </section>
 
             <div className="flex justify-end">
               <button
@@ -388,18 +604,21 @@ function JobDialog({
                 onClick={() => setAdvancedOpen((v) => !v)}
                 className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
               >
-                {advancedOpen ? "Hide advanced" : "Show advanced"}
+                {advancedOpen
+                  ? t("options.cron.form.advanced.hide")
+                  : t("options.cron.form.advanced.show")}
               </button>
             </div>
 
             {advancedOpen && (
-              <div className="space-y-3 rounded border border-border/60 bg-muted/10 px-3 py-3">
+              <div className="space-y-3 rounded-xl border border-border/60 px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-medium">no_agent mode</p>
+                    <p className="text-xs font-medium">
+                      {t("options.cron.form.directScript")}
+                    </p>
                     <p className="text-[10px] text-muted-foreground">
-                      Run the script directly without the LLM; empty stdout is
-                      silent.
+                      {t("options.cron.form.directScript.hint")}
                     </p>
                   </div>
                   <Switch
@@ -411,73 +630,30 @@ function JobDialog({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="cron-script" className="text-xs">
-                    Script
+                    {t("options.cron.form.script")}
                   </Label>
                   <Input
                     id="cron-script"
                     value={form.script}
                     onChange={(e) => patch("script", e.target.value)}
-                    placeholder="Resolved under ~/.hermes/scripts/; absolute paths also accepted"
-                    className="h-8 font-mono text-xs"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cron-repeat" className="text-xs">
-                      Repeat count
-                    </Label>
-                    <Input
-                      id="cron-repeat"
-                      type="number"
-                      min={0}
-                      value={form.repeat}
-                      onChange={(e) => patch("repeat", e.target.value)}
-                      placeholder="Leave blank = unlimited"
-                      className="h-8 text-xs"
-                      disabled={busy}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cron-model" className="text-xs">
-                      Model override
-                    </Label>
-                    <Input
-                      id="cron-model"
-                      value={form.model}
-                      onChange={(e) => patch("model", e.target.value)}
-                      placeholder="e.g. claude-opus-4-7"
-                      className="h-8 font-mono text-xs"
-                      disabled={busy}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="cron-skills" className="text-xs">
-                    Skills (comma-separated)
-                  </Label>
-                  <Input
-                    id="cron-skills"
-                    value={form.skills}
-                    onChange={(e) => patch("skills", e.target.value)}
-                    placeholder="lark-mail, lark-calendar"
-                    className="h-8 font-mono text-xs"
+                    placeholder={t("options.cron.form.script.placeholder")}
+                    className="font-mono text-xs"
                     disabled={busy}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="cron-workdir" className="text-xs">
-                    Working directory
+                  <Label htmlFor="cron-repeat" className="text-xs">
+                    {t("options.cron.form.repeat")}
                   </Label>
                   <Input
-                    id="cron-workdir"
-                    value={form.workdir}
-                    onChange={(e) => patch("workdir", e.target.value)}
-                    placeholder="Absolute path; blank = scheduler cwd"
-                    className="h-8 font-mono text-xs"
+                    id="cron-repeat"
+                    type="number"
+                    min={0}
+                    value={form.repeat}
+                    onChange={(e) => patch("repeat", e.target.value)}
+                    placeholder={t("options.cron.form.repeat.placeholder")}
+                    className="text-xs"
                     disabled={busy}
                   />
                 </div>
@@ -488,15 +664,17 @@ function JobDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="border-t border-border bg-muted/20 px-4 py-3">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
-            Cancel
+        <DialogFooter className="border-t border-border/60 px-5 py-3">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            {t("common.cancel")}
           </Button>
           <Button size="sm" disabled={busy} onClick={() => void onSubmit(form)}>
             {busy ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : null}
-            {mode === "create" ? "Create" : "Save"}
+            {mode === "create"
+              ? t("options.cron.form.createAction")
+              : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -570,12 +748,12 @@ function JobRow({
                 completed
                   ? t("options.cron.state.completed")
                   : paused
-                  ? t("options.cron.action.resumeNamed", {
-                      name: job.name || job.id,
-                    })
-                  : t("options.cron.action.pauseNamed", {
-                      name: job.name || job.id,
-                    })
+                    ? t("options.cron.action.resumeNamed", {
+                        name: job.name || job.id,
+                      })
+                    : t("options.cron.action.pauseNamed", {
+                        name: job.name || job.id,
+                      })
               }
               disabled={busy || completed}
               onClick={() => (paused ? onResume(job) : onPause(job))}
@@ -1108,9 +1286,7 @@ export function ScheduledTasksPage() {
         job.prompt,
         job.script,
         job.schedule_display,
-      ].some((value) =>
-        value?.toLocaleLowerCase().includes(normalizedQuery),
-      );
+      ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
     });
   }, [filter, jobs, query]);
   const hasActiveSearch = query.trim().length > 0 || filter !== "all";
@@ -1123,64 +1299,52 @@ export function ScheduledTasksPage() {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="flex min-h-0 flex-1 flex-col bg-background">
-        <SettingsPaneHeader contentClassName="max-w-none">
-          <div className="flex shrink-0 items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground/80"
-                  disabled={loading}
-                  aria-label={t("options.cron.refresh")}
-                  onClick={() => void refresh()}
-                >
-                  <RefreshCw
-                    className={cn("h-3.5 w-3.5", loading && "animate-spin")}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t("options.cron.refresh")}
-              </TooltipContent>
-            </Tooltip>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg px-3 text-xs shadow-none"
-              onClick={() => setCreating(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t("options.cron.newJob")}
-            </Button>
-          </div>
-        </SettingsPaneHeader>
-
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto w-full max-w-[760px] px-6 pb-14 pt-5">
-            <header>
-              <h1 className="text-[21px] font-medium tracking-[-0.025em] text-foreground">
-                {t("options.cron.pageTitle")}
-              </h1>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground/80">
-                {t("options.cron.subtitle")}
-              </p>
-            </header>
-
-            <div className="relative mt-6">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70"
-              />
-              <Input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label={t("options.cron.search")}
-                placeholder={t("options.cron.search")}
-                className="h-9 rounded-full border-border/65 bg-transparent pl-9 pr-4 text-xs shadow-none placeholder:text-muted-foreground/65 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-ring/30"
-              />
+          <div className="mx-auto w-full max-w-[808px] px-6 pb-14 pt-4">
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  aria-hidden
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70"
+                />
+                <Input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  aria-label={t("options.cron.search")}
+                  placeholder={t("options.cron.search")}
+                  className="h-9 rounded-full border-border/65 bg-transparent pl-9 pr-4 text-xs shadow-none placeholder:text-muted-foreground/65 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-ring/30"
+                />
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full text-muted-foreground/80"
+                    disabled={loading}
+                    aria-label={t("options.cron.refresh")}
+                    onClick={() => void refresh()}
+                  >
+                    <RefreshCw
+                      className={cn("h-3.5 w-3.5", loading && "animate-spin")}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t("options.cron.refresh")}
+                </TooltipContent>
+              </Tooltip>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-3 text-xs shadow-none"
+                onClick={() => setCreating(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t("options.cron.newJob")}
+              </Button>
             </div>
 
             <div className="mt-4 flex min-h-8 items-center justify-between gap-3">

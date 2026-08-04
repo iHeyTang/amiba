@@ -1,6 +1,7 @@
 /**
- * Full-screen chat surface — a thin top bar above a two-pane body
- * (the single-level sidebar on the left, the main pane on the right).
+ * Full-screen chat surface — two direct side-by-side panes. Each pane owns
+ * its own header so the window chrome reinforces the sidebar/content split
+ * instead of placing an unrelated status strip across the whole app.
  *
  * The sidebar (`<Sidebar>`) is one column with three regions: a fixed top
  * (new-chat / search / built-in + extension nav rows), unified conversation
@@ -16,7 +17,16 @@
  * it as the chat view inside the main BrowserWindow.
  */
 
-import { Home } from "lucide-react";
+import {
+  BookOpen,
+  Clock,
+  Folder,
+  Home,
+  ListTodo,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -38,6 +48,7 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { ScheduledTasksPage } from "./ScheduledTasksPage";
+import { TaskCenterPage } from "./TaskCenterPage";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
@@ -58,7 +69,8 @@ const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 
 const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
-const DEFAULT_SIDEBAR_WIDTH = 240; // matches the `w-60` fallback
+const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
+const DEFAULT_SIDEBAR_WIDTH = 240;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 420;
 
@@ -74,6 +86,10 @@ function clampSidebarWidth(v: number): number {
 
 function isSidebarWidth(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
+}
+
+function isSidebarCollapsed(v: unknown): v is boolean {
+  return typeof v === "boolean";
 }
 
 function isSidebarView(v: unknown): v is ActivityViewId {
@@ -124,22 +140,21 @@ export interface FullScreenChatViewProps {
    */
   onGoHome?: () => void;
   /**
-   * Pixel reserve on the left edge of the top header so OS chrome
+   * Pixel reserve on the left edge of the sidebar header so OS chrome
    * (macOS traffic lights when running inside Electron with a hidden
    * native title bar) doesn't visually collide with the content. Default
    * 0; desktop passes ~96 on mac.
    */
   topBarLeftInset?: number;
   /**
-   * Top bar row height in pixels. Defaults to 24 (compact, matches
-   * extension/web layouts). Desktop overrides to 32 so the centred title
-   * lands on the macOS traffic-light baseline.
+   * Pane header row height in pixels. Defaults to 40 for web layouts.
+   * Desktop overrides to 48 so the traffic lights and header actions have
+   * comfortable, consistent hit areas.
    */
   topBarHeightPx?: number;
   /**
-   * Extra className applied to the top header. Desktop passes
-   * `app-drag-region` so the user can drag the window from the header
-   * (buttons inside opt out automatically via the global CSS rule).
+   * Extra className applied to both pane headers. Desktop passes
+   * `app-drag-region` so the user can drag the window from either header.
    */
   topBarClassName?: string;
   /**
@@ -196,6 +211,7 @@ function FullScreenChatViewInner({
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
     DEFAULT_HISTORY_LAYOUT,
   );
@@ -230,12 +246,13 @@ function FullScreenChatViewInner({
   const topBarPlaceholder =
     sidebarView === "scheduled"
       ? t("options.cron.title")
-      : externalTitleOverride ||
-        (sessions.activeId
-          ? scheduled.activeRunTitle(sessions.activeId)
-          : null) ||
-        activeChatTitle ||
-        "Amiba";
+      : sidebarView === "tasks"
+        ? t("tasks.title")
+        : externalTitleOverride ||
+          (sessions.activeId
+            ? scheduled.activeRunTitle(sessions.activeId)
+            : null) ||
+          activeChatTitle;
 
   useEffect(() => {
     let cancelled = false;
@@ -251,6 +268,28 @@ function FullScreenChatViewInner({
         const ch = changes[MESSAGES_WIDTH_KEY];
         if (ch && isMessagesMaxWidth(ch.newValue))
           setMessagesWidth(ch.newValue);
+      },
+    );
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const storage = getPlatform().storage;
+    void storage.get(SIDEBAR_COLLAPSED_KEY).then((r) => {
+      if (cancelled) return;
+      const v = r[SIDEBAR_COLLAPSED_KEY];
+      if (isSidebarCollapsed(v)) setSidebarCollapsed(v);
+    });
+    const unsub = storage.watch(
+      [SIDEBAR_COLLAPSED_KEY],
+      (changes: StorageChangeMap) => {
+        const ch = changes[SIDEBAR_COLLAPSED_KEY];
+        if (ch && isSidebarCollapsed(ch.newValue))
+          setSidebarCollapsed(ch.newValue);
       },
     );
     return () => {
@@ -364,6 +403,11 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
   }, []);
 
+  const onSidebarCollapsedChange = useCallback((next: boolean) => {
+    setSidebarCollapsed(next);
+    void getPlatform().storage.set({ [SIDEBAR_COLLAPSED_KEY]: next });
+  }, []);
+
   // New-chat row is navigation to the id-less home surface. A real session is
   // minted only when that surface submits its first message.
   const onNewChatAndShow = useCallback(async () => {
@@ -403,63 +447,97 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  // Layout: a single thin top bar spans the full window width (mac traffic
-  // lights + drag region + centered active title), with the body row
-  // (sidebar | main) below it. The top bar + sidebar share ``bg-muted/40`` so
-  // they read as one continuous chrome surface; the main pane stays on
-  // ``bg-background`` (lighter content area).
+  const activeMain = extensionMains.find((m) => m.extensionId === sidebarView);
+  const contentHeaderIcon =
+    sidebarView === "scheduled" ? (
+      <Clock className="h-4 w-4" />
+    ) : sidebarView === "tasks" ? (
+      <ListTodo className="h-4 w-4" />
+    ) : sidebarView === "chats" ? (
+      <Folder className="h-4 w-4" />
+    ) : (
+      <BookOpen className="h-4 w-4" />
+    );
+
+  // Layout: the sidebar and content region are direct siblings. Inside the
+  // content region, chat and workspace preview are independent full-height
+  // columns; the preview must not inherit or sit below the chat header.
   return (
-    <div className="flex h-screen min-h-0 w-full flex-col bg-background text-foreground">
-      <SlimTopBar
-        onGoHome={onGoHome}
-        title={topBarPlaceholder}
-        leftInset={topBarLeftInset}
-        heightPx={topBarHeightPx}
-        className={topBarClassName}
-        rightSlot={
-          sidebarView === "chats" ? <WorkspacePaneToggle /> : undefined
-        }
-      />
-      <div className="relative flex min-h-0 min-w-0 flex-1">
-        <Sidebar
-          activeView={sidebarView}
-          onSelectView={onSidebarViewChange}
-          onNewChat={() => void onNewChatAndShow()}
-          extensionItems={extensionMains}
-          onOpenCommandPalette={() => palette.setOpen(true)}
-          sessions={chatSessions}
-          activeSessionId={sessions.activeId}
-          sessionsReady={sessions.ready}
-          onOpenSession={(id) => void onOpenSession(id)}
-          onRenameSession={(id, title) => void sessions.rename(id, title)}
-          onDeleteSession={(id) => void sessions.remove(id)}
-          onRefreshSessions={() => void sessions.refresh()}
-          scheduledSessions={scheduled.runs}
-          scheduledReady={scheduled.ready}
-          onOpenScheduledSession={(id) => void onOpenRun(id)}
-          onRefreshScheduledSessions={scheduled.refresh}
-          scheduledLabelFor={scheduled.labelFor}
-          historyLayout={historyLayout}
-          onHistoryLayoutChange={onHistoryLayoutChange}
-          onOpenSettings={() => openSettings()}
-          widthPx={sidebarWidth}
-        />
-        {/* Resize divider: invisible 4px hit area straddling the sidebar
-            edge; shows an accent line on hover / while dragging. */}
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("chat.resizeSidebar")}
-          data-testid="sidebar-resize-handle"
-          onPointerDown={onSidebarResizeStart}
-          className="group relative -ml-1 w-1 shrink-0 cursor-col-resize touch-none"
-        >
-          <div className="absolute inset-y-0 right-0 w-px bg-transparent transition-colors group-hover:bg-border group-active:bg-primary/30" />
-        </div>
-        <div className="flex min-h-0 min-w-0 flex-1">
+    <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
+      {!sidebarCollapsed && (
+        <>
+          <aside
+            className="flex min-h-0 shrink-0 flex-col bg-muted/30"
+            style={{ width: sidebarWidth }}
+          >
+            <SidebarHeader
+              onGoHome={onGoHome}
+              onSearch={() => palette.setOpen(true)}
+              onCollapse={() => onSidebarCollapsedChange(true)}
+              leftInset={topBarLeftInset}
+              heightPx={topBarHeightPx}
+              className={topBarClassName}
+            />
+            <Sidebar
+              activeView={sidebarView}
+              onSelectView={onSidebarViewChange}
+              onNewChat={() => void onNewChatAndShow()}
+              extensionItems={extensionMains}
+              sessions={chatSessions}
+              activeSessionId={sessions.activeId}
+              sessionsReady={sessions.ready}
+              onOpenSession={(id) => void onOpenSession(id)}
+              onRenameSession={(id, title) => void sessions.rename(id, title)}
+              onDeleteSession={(id) => void sessions.remove(id)}
+              onRefreshSessions={() => void sessions.refresh()}
+              scheduledSessions={scheduled.runs}
+              scheduledReady={scheduled.ready}
+              onOpenScheduledSession={(id) => void onOpenRun(id)}
+              onRefreshScheduledSessions={scheduled.refresh}
+              scheduledLabelFor={scheduled.labelFor}
+              historyLayout={historyLayout}
+              onHistoryLayoutChange={onHistoryLayoutChange}
+              onOpenTaskCenter={() => onSidebarViewChange("tasks")}
+              onOpenSettings={() => openSettings()}
+              className="min-w-0 flex-1"
+            />
+          </aside>
+          {/* Resize divider: invisible 4px hit area straddling the sidebar
+              edge; shows an accent line on hover / while dragging. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("chat.resizeSidebar")}
+            data-testid="sidebar-resize-handle"
+            onPointerDown={onSidebarResizeStart}
+            className="group relative -ml-1 w-1 shrink-0 cursor-col-resize touch-none"
+          >
+            <div className="absolute inset-y-0 right-0 w-px bg-border/55 transition-colors group-hover:bg-border group-active:bg-primary/30" />
+          </div>
+        </>
+      )}
+      <section className="relative flex min-h-0 min-w-0 flex-1">
+        <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <ContentHeader
+            title={activeMain?.label || topBarPlaceholder}
+            icon={contentHeaderIcon}
+            sidebarCollapsed={sidebarCollapsed}
+            onExpandSidebar={() => onSidebarCollapsedChange(false)}
+            leftInset={topBarLeftInset}
+            heightPx={topBarHeightPx}
+            className={cn(
+              topBarClassName,
+              sidebarView === "chats" &&
+                messagesWidth !== "full" &&
+                "amiba-chat-header--wide-overlay",
+            )}
+            seamless={sidebarView === "chats"}
+          />
           <main className="flex min-h-0 min-w-0 flex-1 flex-col">
             {sidebarView === "scheduled" ? (
               <ScheduledTasksPage />
+            ) : sidebarView === "tasks" ? (
+              <TaskCenterPage />
             ) : sidebarView === "chats" ? (
               <ChatSurface
                 variant="fullscreen"
@@ -471,27 +549,25 @@ function FullScreenChatViewInner({
                 openAgentDestination={openAgentDestination}
                 mentionProviders={mentionProviders}
               />
-            ) : (
-              (() => {
-                // Extension-contributed main panel. The sidebarView id IS the extensionId.
-                const contrib = extensionMains.find(
-                  (m) => m.extensionId === sidebarView,
-                );
-                if (contrib) {
-                  return (
-                    <ExtensionWebView
-                      src={contrib.viewUrl}
-                      className="h-full w-full"
-                    />
-                  );
-                }
-                return null;
-              })()
-            )}
+            ) : activeMain ? (
+              <ExtensionWebView
+                src={activeMain.viewUrl}
+                className="h-full w-full"
+              />
+            ) : null}
           </main>
-          <WorkspacePane visible={sidebarView === "chats"} />
         </div>
-      </div>
+        <WorkspacePane visible={sidebarView === "chats"} />
+        {sidebarView === "chats" && (
+          <div
+            data-workspace-edge-toggle
+            className="app-no-drag absolute right-3 top-0 z-50 flex items-center"
+            style={{ height: topBarHeightPx ?? 40 }}
+          >
+            <WorkspacePaneToggle />
+          </div>
+        )}
+      </section>
       <CommandPalette
         open={palette.open}
         onOpenChange={palette.setOpen}
@@ -505,76 +581,135 @@ function FullScreenChatViewInner({
 }
 
 // ---------------------------------------------------------------------------
-// Slim top bar — a thin chrome strip across the full window width
+// Independent pane headers
 // ---------------------------------------------------------------------------
 
-interface SlimTopBarProps {
-  /** Optional — when present, renders a Home button on the left. */
+interface SidebarHeaderProps {
   onGoHome?: () => void;
-  /** Centered active conversation / page title. */
-  title: string;
-  /** Reserve on the left edge so OS chrome (mac traffic lights) clears. */
+  onSearch: () => void;
+  onCollapse: () => void;
   leftInset?: number;
-  /** Row height in px. Default 24 (compact). Desktop passes 32. */
   heightPx?: number;
-  /** Extra className (desktop passes `app-drag-region`). */
   className?: string;
-  /** Optional host controls aligned to the right edge. */
-  rightSlot?: ReactNode;
 }
 
-/**
- * Thin chrome strip across the window: mac traffic-light reserve + window-drag
- * region + a centered active-title readout. Search / new-chat / settings now
- * live in the sidebar, so this bar carries no actions except an optional Home
- * button (browser-extension passes `onGoHome`; desktop omits it).
- */
-function SlimTopBar({
+function HeaderAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="app-no-drag inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+    >
+      {children}
+    </button>
+  );
+}
+
+function SidebarHeader({
   onGoHome,
-  title,
+  onSearch,
+  onCollapse,
   leftInset = 0,
-  heightPx = 24,
+  heightPx = 40,
   className,
-  rightSlot,
-}: SlimTopBarProps) {
+}: SidebarHeaderProps) {
+  const { t } = useT();
+  return (
+    <header
+      className={cn("flex shrink-0 items-center pr-2", className)}
+      style={{
+        height: heightPx,
+        paddingLeft: Math.max(leftInset, 8),
+      }}
+    >
+      {onGoHome && (
+        <HeaderAction label={t("chat.goHome")} onClick={onGoHome}>
+          <Home className="h-4 w-4" />
+        </HeaderAction>
+      )}
+      <div className="ml-auto flex items-center gap-0.5">
+        <HeaderAction label={t("chat.search")} onClick={onSearch}>
+          <Search className="h-4 w-4" />
+        </HeaderAction>
+        <HeaderAction label={t("chat.collapseSidebar")} onClick={onCollapse}>
+          <PanelLeftClose className="h-4 w-4" />
+        </HeaderAction>
+      </div>
+    </header>
+  );
+}
+
+interface ContentHeaderProps {
+  title: string;
+  icon: ReactNode;
+  sidebarCollapsed: boolean;
+  onExpandSidebar: () => void;
+  leftInset?: number;
+  heightPx?: number;
+  className?: string;
+  seamless?: boolean;
+}
+
+function ContentHeader({
+  title,
+  icon,
+  sidebarCollapsed,
+  onExpandSidebar,
+  leftInset = 0,
+  heightPx = 40,
+  className,
+  seamless = false,
+}: ContentHeaderProps) {
   const { t } = useT();
   return (
     <header
       className={cn(
-        // Background matches the sidebar so the two read as one continuous
-        // chrome surface; no border — the contrast against ``bg-background``
-        // in the body carries the boundary.
-        "relative flex shrink-0 items-center bg-muted/40 pr-2",
+        "flex shrink-0 items-center bg-background px-3",
+        !seamless && "border-b border-border/45",
         className,
       )}
       style={{
         height: heightPx,
-        paddingLeft: Math.max(leftInset, 12),
       }}
     >
-      {onGoHome && (
-        <button
-          type="button"
-          onClick={onGoHome}
-          title={t("chat.goHome")}
-          aria-label={t("chat.goHome")}
-          className="app-no-drag inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-        >
-          <Home className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {/* Centre: active title. ``pointer-events-none`` so window-drag still
-          works across the whole bar. */}
-      <div className="pointer-events-none absolute inset-x-0 flex h-full items-center justify-center">
-        <span className="truncate px-2 text-xs font-medium tracking-tight text-foreground/65">
-          {title}
-        </span>
+      <div
+        data-content-header-leading
+        className="flex min-w-0 items-center gap-2"
+        style={{
+          height: heightPx,
+          left: sidebarCollapsed ? Math.max(leftInset, 12) : 12,
+        }}
+      >
+        {sidebarCollapsed && (
+          <HeaderAction
+            label={t("chat.expandSidebar")}
+            onClick={onExpandSidebar}
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </HeaderAction>
+        )}
+        {title && (
+          <div
+            data-content-header-title
+            className="pointer-events-none flex min-w-0 items-center gap-2 text-foreground/75"
+          >
+            <span className="shrink-0 text-muted-foreground">{icon}</span>
+            <span className="truncate text-[13px] font-medium tracking-tight">
+              {title}
+            </span>
+          </div>
+        )}
       </div>
-      {rightSlot && (
-        <div className="app-no-drag relative z-10 ml-auto flex items-center">
-          {rightSlot}
-        </div>
-      )}
     </header>
   );
 }

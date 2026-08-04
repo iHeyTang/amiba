@@ -5,6 +5,7 @@
  *   - ``primitives/`` — shadcn-style atoms (Button, Input, Select, …) +
  *                       the Amiba-branded logo
  *   - ``theme/``      — theme preference + resolution hooks (light/dark/auto)
+ *   - ``models/``     — model identity helpers and provider-aware icon rendering
  *   - ``chat/``       — chat surface (Composer, MessageList, ChatSurface, …)
  *   - ``home/``       — Home page (composer hand-off, recents, shortcuts)
  *   - ``settings/``   — settings panes (gateway, voice, skills, memory, …)
@@ -16,6 +17,7 @@
  */
 export * from "./primitives"
 export * from "./theme"
+export * from "./models"
 export * from "./chat"
 export * from "./home"
 export * from "./settings"

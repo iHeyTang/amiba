@@ -3,6 +3,10 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "./cn";
+import {
+  FORM_CONTROL_STATE_CLASS,
+  FORM_CONTROL_SURFACE_CLASS,
+} from "./form-control";
 const Select = SelectPrimitive.Root;
 
 const SelectGroup = SelectPrimitive.Group;
@@ -16,10 +20,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-      "whitespace-nowrap shadow-sm placeholder:text-muted-foreground",
-      "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-      "disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex h-9 items-center justify-between gap-2 px-3 py-1.5",
+      FORM_CONTROL_SURFACE_CLASS,
+      FORM_CONTROL_STATE_CLASS,
+      "whitespace-nowrap [&>span]:line-clamp-1",
       className,
     )}
     {...props}
@@ -87,7 +91,8 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Viewport
         className={cn(
           "max-h-80 overflow-y-auto overflow-x-hidden p-1",
-          position === "popper" && "w-full min-w-[var(--radix-select-trigger-width)]",
+          position === "popper" &&
+            "w-full min-w-[var(--radix-select-trigger-width)]",
         )}
       >
         {children}

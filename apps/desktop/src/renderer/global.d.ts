@@ -61,6 +61,7 @@ interface AmibaBridgeApi {
   }
   workspaces: {
     chooseDirectory(defaultPath?: string): Promise<string | null>
+    getDefaultRoot(): Promise<string>
     bind(sessionId: string, path: string): Promise<void>
     unbind(sessionId: string): Promise<void>
     getCurrent(sessionId: string): Promise<string | null>

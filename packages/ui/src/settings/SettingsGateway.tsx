@@ -5,6 +5,7 @@ import { Button } from "../primitives";
 import { Input } from "../primitives";
 import { Label } from "../primitives";
 import { Separator } from "../primitives";
+import { ModelIcon } from "../models";
 import {
   BACKPLANE_KEY_STORAGE_KEY,
   BRIDGE_URL,
@@ -122,15 +123,22 @@ export function SettingsGateway({ bridge }: { bridge?: BridgeCapability } = {}) 
               {t("options.gateway.model.fromGateway")}
             </Button>
           </div>
-          <Input
-            id="model"
-            list="settings-model-datalist"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder={DEFAULT_HERMES_MODEL}
-            className="font-mono text-xs"
-            autoComplete="off"
-          />
+          <div className="relative">
+            <ModelIcon
+              className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              model={model}
+              provider=""
+            />
+            <Input
+              id="model"
+              list="settings-model-datalist"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder={DEFAULT_HERMES_MODEL}
+              className="pl-9 font-mono text-xs"
+              autoComplete="off"
+            />
+          </div>
           <datalist id="settings-model-datalist">
             {modelIds.map((id) => (
               <option key={id} value={id} />

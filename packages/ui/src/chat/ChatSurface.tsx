@@ -35,8 +35,10 @@ import {
   deleteAttachmentFile,
   formatBytesShort,
   formatFileAttachmentsForPrompt,
+  getHermesProfiles,
   isAttachmentReadOk,
   isLocalChannel,
+  normalizeAgentContext,
   postHermesApprovalDecision,
   readBlobAsAttachment,
   resolveChannel,
@@ -46,6 +48,7 @@ import {
   useVoicePrefs,
   DEFAULT_HERMES_MODEL,
   HERMES_APPROVAL_GATEWAY_TIMEOUT_MS,
+  type AgentExecutionContext,
   type ApprovalOutcome,
   type ApprovalRecord,
   type Attachment,
@@ -319,6 +322,48 @@ export default function ChatSurface({
   const workspacePane = useWorkspacePane();
 
   const [input, setInput] = useState("");
+  const defaultProfileIdRef = useRef("default");
+  const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
+    profileId: "default",
+  });
+  const currentSessionMeta = sessions.sessions.find(
+    (session) => session.id === sessions.activeId,
+  );
+  const effectiveAgent = normalizeAgentContext(
+    currentSessionMeta?.agent ?? draftAgent,
+  );
+  const agentLocked =
+    Boolean(currentSessionMeta?.messageCount) ||
+    sessions.activeMessages.some((message) => message.role === "user");
+
+  useEffect(() => {
+    let alive = true;
+    void getHermesProfiles().then((result) => {
+      if (!alive || !result.ok) return;
+      defaultProfileIdRef.current = result.active || "default";
+      if (!sessions.activeId) {
+        setDraftAgent((current) =>
+          current.profileId === "default" && !current.personality
+            ? { profileId: defaultProfileIdRef.current }
+            : current,
+        );
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentSessionMeta?.agent) {
+      const next = normalizeAgentContext(currentSessionMeta.agent);
+      setDraftAgent((current) =>
+        JSON.stringify(current) === JSON.stringify(next) ? current : next,
+      );
+    } else if (!sessions.activeId) {
+      setDraftAgent({ profileId: defaultProfileIdRef.current });
+    }
+  }, [currentSessionMeta?.agent, sessions.activeId]);
 
   // Report composer empty/non-empty to hosts that care (Quick-Ask uses it
   // to stay expanded while there's a draft). No-op when the callback is
@@ -481,6 +526,9 @@ export default function ChatSurface({
   const inFlightTurnByIdRef = useRef<
     Map<string, { user: UiMessage; assistantUiId: string }>
   >(new Map());
+  const agentBySessionRef = useRef<Map<string, AgentExecutionContext>>(
+    new Map(),
+  );
   // Pending-turn queue, per-session persistence, send/stop/sendNow/
   // edit/cancel/remove + the two pre-emption refs all live in
   // `usePendingQueue` — see destructure below `runChatTurn`. The hook
@@ -618,6 +666,9 @@ export default function ChatSurface({
       if (payload.sourceApp) setPendingSourceApp(payload.sourceApp);
       if (payload.workspacePath) {
         pendingWorkspacePathRef.current = payload.workspacePath;
+      }
+      if (payload.agent) {
+        setDraftAgent(normalizeAgentContext(payload.agent));
       }
       if (text) setInput(text);
       if (promotedAttachments.length > 0) {
@@ -889,7 +940,11 @@ export default function ChatSurface({
     // Fire-and-forget LLM-generated title via the backplane. The endpoint
     // short-circuits when the session is already titled or beyond the
     // first-exchange window, so it's safe to call after every stream end.
-    void triggerHermesAutoTitle(sessionId)
+    const profileId =
+      agentBySessionRef.current.get(sessionId)?.profileId ??
+      sessions.sessions.find((session) => session.id === sessionId)?.agent
+        ?.profileId;
+    void triggerHermesAutoTitle(sessionId, profileId)
       .then((res) => {
         if (res && "ok" in res && res.ok && res.title) {
           void sessions.applyAutoTitle(sessionId, res.title);
@@ -1113,9 +1168,8 @@ export default function ChatSurface({
   }, [capabilities.navigateOpenPolicy]);
 
   // Load chat-config on mount and watch for changes from the Options page so
-  // the side panel always reflects the latest model selection. Storage goes
-  // through the PlatformAdapter so the same code path works in extension
-  // (chrome.storage.local) and desktop (Electron file store).
+  // the side panel always reflects the latest gateway alias. The actual
+  // inference model is selected independently from the composer picker.
   useEffect(() => {
     void (async () => {
       const storage = getPlatform().storage;
@@ -1249,12 +1303,22 @@ export default function ChatSurface({
     setError(null);
     setPageError(null);
 
-    const sessionId = await sessions.ensureActive();
+    const sessionAgent = sessions.sessions.find(
+      (session) => session.id === sessions.activeId,
+    )?.agent;
+    const agentForTurn = normalizeAgentContext(sessionAgent ?? draftAgent);
+    const sessionId = sessions.activeId
+      ? sessions.activeId
+      : await sessions.createNew(agentForTurn);
+    if (!sessionAgent) {
+      await sessions.setAgentContext(sessionId, agentForTurn);
+    }
+    agentBySessionRef.current.set(sessionId, agentForTurn);
 
     const pendingWorkspacePath = pendingWorkspacePathRef.current;
     let workspaceForTurn = workspacePath ?? undefined;
+    const workspaces = getPlatform().workspaces;
     if (pendingWorkspacePath) {
-      const workspaces = getPlatform().workspaces;
       if (workspaces) {
         try {
           await workspaces.bind(sessionId, pendingWorkspacePath);
@@ -1273,6 +1337,28 @@ export default function ChatSurface({
         }
       } else {
         pendingWorkspacePathRef.current = null;
+      }
+    }
+
+    // A desktop task never has an undefined cwd. During the first send the
+    // active-session workspace hook can still be crossing the IPC boundary,
+    // so resolve it synchronously here before constructing the persisted user
+    // message or starting Hermes. Unbound sessions resolve to Amiba's $HOME
+    // default in the desktop workspace adapter.
+    if (!workspaceForTurn && workspaces) {
+      try {
+        workspaceForTurn =
+          (await workspaces.getCurrent(sessionId)) ?? undefined;
+        if (!workspaceForTurn) {
+          throw new Error("The default workspace root is unavailable.");
+        }
+        setWorkspaceError(null);
+      } catch (e) {
+        const message = String((e as Error)?.message || e);
+        setWorkspaceError(message);
+        setInput(text);
+        setAttachments(attachmentsForTurn);
+        return;
       }
     }
 
@@ -1390,6 +1476,7 @@ export default function ChatSurface({
             assistantUiId: assistantMsg.uiId,
             model: config.model,
             history,
+            agent: agentForTurn,
             turnMetadata: turnMetadataForTurn,
           });
         } catch (e) {
@@ -1674,6 +1761,7 @@ export default function ChatSurface({
         { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
         { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
       ]}
+      modelPicker
       topAffordance={
         editingQueueId != null ? (
           <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
@@ -1702,6 +1790,17 @@ export default function ChatSurface({
           : undefined
       }
       mentionProviders={mentionProviders}
+      agentPicker={{
+        value: effectiveAgent,
+        locked: agentLocked,
+        onChange: (next) => {
+          const normalized = normalizeAgentContext(next);
+          setDraftAgent(normalized);
+          if (sessions.activeId && !agentLocked) {
+            void sessions.setAgentContext(sessions.activeId, normalized);
+          }
+        },
+      }}
       chipRow={undefined}
       actionsLeft={
         hasActive

@@ -56,6 +56,8 @@ export interface HermesToolProgress {
 export interface HermesApprovalRequest {
   approvalId: string
   runId: string
+  /** Named Hermes profile that owns the run; needed for approval routing. */
+  profileId?: string
   tool?: string
   command?: string
   description?: string

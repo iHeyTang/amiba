@@ -58,7 +58,9 @@ export function SessionsProvider({
   children,
   store: injected,
 }: SessionsProviderProps): ReactElement {
-  const [store] = useState<SessionsStore>(() => injected ?? new SessionsStore());
+  const [store] = useState<SessionsStore>(
+    () => injected ?? new SessionsStore(),
+  );
 
   useEffect(() => {
     void store.initialize();
@@ -128,7 +130,8 @@ export function useSessions(): SessionsController {
     openTabIds: state.openTabIds as SessionsController["openTabIds"],
     openTabs,
     activeId: state.activeId,
-    activeMessages: state.activeMessages as SessionsController["activeMessages"],
+    activeMessages:
+      state.activeMessages as SessionsController["activeMessages"],
     setActiveMessages: store.setActiveMessages,
     ensureActive: store.ensureActive,
     openTab: store.openTab,
@@ -137,6 +140,7 @@ export function useSessions(): SessionsController {
     switchToTab: store.switchToTab,
     deselect: store.deselect,
     createNew: store.createNew,
+    setAgentContext: store.setAgentContext,
     importSession: store.importSession,
     rename: store.rename,
     remove: store.remove,

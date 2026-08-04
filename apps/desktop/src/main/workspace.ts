@@ -1,14 +1,13 @@
 /**
- * Per-session workspace binding.
+ * Per-session workspace binding with a product-level $HOME fallback.
  *
  * Each chat session can pin a different directory; the chat engine forwards
  * it as the structured cwd for each Hermes run and also adds a compact
  * user-turn context note so workspace switches stay explicit without
- * rebuilding the persisted system prompt. A chokidar watcher runs per binding so a future
- * `hermes-plugin-fs-scoped` consumer can react to file changes; file
- * events are NOT broadcast over the PlatformAdapter today because no
- * renderer subscriber consumes them and the IPC volume on noisy trees
- * (`node_modules`, `dist`, …) was wasted bandwidth.
+ * rebuilding the persisted system prompt. Sessions without a binding resolve
+ * to the user's home directory. The default root is never watched recursively;
+ * a chokidar watcher runs only for explicit project-directory bindings so the
+ * app does not crawl the user's entire home directory.
  *
  * Persistence: `workspace.bindings` stores `Record<sessionId, path>`.
  * Restored at startup; orphaned bindings (target deleted / unreadable)
@@ -23,6 +22,7 @@ import chokidar from "chokidar"
 import type { WorkspaceChange } from "@amiba/platform"
 
 import { mainStore } from "./storage"
+import { getDefaultWorkspaceRoot } from "./workspace-root"
 
 const STORE_KEY = "workspace.bindings"
 
@@ -157,7 +157,11 @@ class WorkspaceManager extends EventEmitter {
   }
 
   getForSession(sessionId: string): string | null {
-    return this.bindings.get(sessionId)?.path ?? null
+    return this.bindings.get(sessionId)?.path ?? getDefaultWorkspaceRoot()
+  }
+
+  getDefaultRoot(): string {
+    return getDefaultWorkspaceRoot()
   }
 
   listBindings(): Record<string, string> {
@@ -176,7 +180,7 @@ class WorkspaceManager extends EventEmitter {
   getCurrent(): string | null {
     let last: string | null = null
     for (const b of this.bindings.values()) last = b.path
-    return last
+    return last ?? getDefaultWorkspaceRoot()
   }
 
   /**
@@ -223,6 +227,19 @@ class WorkspaceManager extends EventEmitter {
 
   async bind(sessionId: string, target: string): Promise<void> {
     if (!sessionId) throw new Error("workspace.bind: sessionId required")
+    // $HOME is the implicit default, not a persisted exceptional binding.
+    // Treat selecting it as "use the default" and, importantly, do not attach
+    // a recursive chokidar watcher to the whole home directory.
+    if (path.resolve(target) === getDefaultWorkspaceRoot()) {
+      if (!this.bindings.has(sessionId)) return
+      await this.stopBinding(sessionId)
+      await this.persist()
+      this.emit("change", {
+        kind: "unbound",
+        sessionId,
+      } satisfies WorkspaceChange)
+      return
+    }
     const abs = await validateBindTarget(target)
     const existing = this.bindings.get(sessionId)
     if (existing && existing.path === abs) return

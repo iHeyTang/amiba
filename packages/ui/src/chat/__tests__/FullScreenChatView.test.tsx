@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   storageGet: vi.fn(),
   storageSet: vi.fn(),
   storageWatch: vi.fn(() => () => {}),
+  paletteSetOpen: vi.fn(),
 }))
 
 vi.mock("@amiba/core", () => ({
@@ -44,7 +45,7 @@ vi.mock("../CommandPalette", () => ({
 }))
 
 vi.mock("../useCommandPalette", () => ({
-  useCommandPalette: () => ({ open: false, setOpen: vi.fn() }),
+  useCommandPalette: () => ({ open: false, setOpen: mocks.paletteSetOpen }),
 }))
 
 vi.mock("../ScheduledTasksPage", () => ({
@@ -131,6 +132,28 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sessions.createNew).not.toHaveBeenCalled()
   })
 
+  it("keeps the empty task header visually silent", () => {
+    const sessions = makeSessions()
+    sessions.activeId = ""
+    sessions.openTabIds = []
+    sessions.openTabs = []
+    mocks.useSessions.mockReturnValue(sessions)
+
+    const { container } = render(
+      <FullScreenChatView
+        client={{} as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    )
+
+    expect(
+      container.querySelector("[data-content-header-title]"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Amiba")).not.toBeInTheDocument()
+  })
+
   it("can ignore the persisted sidebar destination on app startup", async () => {
     mocks.useSessions.mockReturnValue(makeSessions())
 
@@ -147,5 +170,83 @@ describe("FullScreenChatView new-chat home", () => {
       expect(screen.getByText("chat-surface")).toBeInTheDocument()
     })
     expect(screen.queryByText("scheduled-page")).not.toBeInTheDocument()
+  })
+
+  it("moves search to the sidebar header", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions())
+
+    render(
+      <FullScreenChatView
+        client={{} as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+      />,
+    )
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "chat.search" }),
+    )
+    expect(mocks.paletteSetOpen).toHaveBeenCalledWith(true)
+  })
+
+  it("mounts the workbench as a sibling column of the chat column", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions())
+
+    render(
+      <FullScreenChatView
+        client={{} as never}
+        capabilities={{ workspaceInspector: { files: {} } } as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    )
+
+    const chat = screen.getByText("chat-surface")
+    const pane = await screen.findByLabelText("workspacePane.title")
+    const paneColumn = pane.parentElement
+    const rightContent = paneColumn?.parentElement
+    const edgeToggle = screen.getByRole("button", {
+      name: "workspacePane.open",
+    })
+    const edgeToggleLayer = edgeToggle.parentElement
+
+    expect(rightContent).toHaveClass("relative", "flex")
+    expect(rightContent?.children).toHaveLength(3)
+    expect(rightContent?.children[0]).toContainElement(chat)
+    expect(rightContent?.children[1]).toBe(paneColumn)
+    expect(rightContent?.children[2]).toBe(edgeToggleLayer)
+    expect(edgeToggleLayer).toHaveClass("absolute", "right-3", "top-0")
+  })
+
+  it("collapses and restores the sidebar from the pane headers", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions())
+
+    render(
+      <FullScreenChatView
+        client={{} as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: "new-chat" })).toBeInTheDocument()
+    await userEvent.click(
+      screen.getByRole("button", { name: "chat.collapseSidebar" }),
+    )
+    expect(
+      screen.queryByRole("button", { name: "new-chat" }),
+    ).not.toBeInTheDocument()
+    expect(mocks.storageSet).toHaveBeenCalledWith({
+      "settings.chat.sidebarCollapsed": true,
+    })
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "chat.expandSidebar" }),
+    )
+    expect(screen.getByRole("button", { name: "new-chat" })).toBeInTheDocument()
+    expect(mocks.storageSet).toHaveBeenCalledWith({
+      "settings.chat.sidebarCollapsed": false,
+    })
   })
 })

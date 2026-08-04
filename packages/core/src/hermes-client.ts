@@ -9,6 +9,7 @@
 
 import { backplaneFetch } from "./backplane-client";
 import type { ChatMessage } from "./chat-messages";
+import { hermesAgentPath, type AgentExecutionContext } from "./agent-context";
 // Wire-protocol types live alongside this file in core. Local imports only —
 // re-exports happen from packages/core/src/index.ts.
 import type {
@@ -22,6 +23,7 @@ import type {
 export interface HermesClientOptions {
   model: string;
   sessionId?: string;
+  agent?: AgentExecutionContext;
   /** Forwarded to fetch as AbortSignal; lets the side panel cancel mid-stream. */
   signal?: AbortSignal;
 }
@@ -84,7 +86,7 @@ export async function streamChat(
   opts: HermesClientOptions,
   handlers: StreamHandlers = {},
 ): Promise<string> {
-  const path = "/v1/chat/completions";
+  const path = hermesAgentPath(opts.agent?.profileId, "/v1/chat/completions");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -123,8 +125,7 @@ export async function streamChat(
   // gateway versions — we'll also try to lift it from the approval
   // request payload itself as a fallback.
   const runHeader =
-    res.headers.get("X-Hermes-Run-Id") ||
-    res.headers.get("x-hermes-run-id");
+    res.headers.get("X-Hermes-Run-Id") || res.headers.get("x-hermes-run-id");
   if (runHeader && handlers.onRun) handlers.onRun(runHeader);
 
   if (!res.body) throw new Error("Hermes returned no response body");
@@ -138,9 +139,7 @@ export async function streamChat(
     { index: number; id?: string; name: string; arguments: string }
   >();
 
-  function mergeToolCallDeltas(
-    toolDeltas: unknown,
-  ): StreamedToolCall[] | null {
+  function mergeToolCallDeltas(toolDeltas: unknown): StreamedToolCall[] | null {
     if (!Array.isArray(toolDeltas) || toolDeltas.length === 0) return null;
     for (const raw of toolDeltas) {
       if (!raw || typeof raw !== "object") continue;
@@ -230,8 +229,8 @@ export async function streamChat(
             handlers.onApprovalRequest?.({
               approvalId,
               runId,
-              tool:
-                typeof obj.tool === "string" ? obj.tool : undefined,
+              profileId: opts.agent?.profileId,
+              tool: typeof obj.tool === "string" ? obj.tool : undefined,
               command:
                 typeof obj.command === "string"
                   ? obj.command
@@ -244,8 +243,7 @@ export async function streamChat(
                   : typeof obj.detail === "string"
                     ? obj.detail
                     : undefined,
-              reason:
-                typeof obj.reason === "string" ? obj.reason : undefined,
+              reason: typeof obj.reason === "string" ? obj.reason : undefined,
               raw: obj,
             });
           } catch (e) {
@@ -336,9 +334,7 @@ export async function streamChat(
   return assembled;
 }
 
-function parseEvent(
-  block: string,
-): { event: string; data: string } | null {
+function parseEvent(block: string): { event: string; data: string } | null {
   // SSE frame: one or more `data: ...` lines (concatenated with '\n'), plus
   // an optional `event: <name>` line. `id:` is ignored. Default event name
   // for streams without an explicit `event:` is `"message"` per the SSE spec.
@@ -363,7 +359,6 @@ async function safeText(res: Response): Promise<string> {
   }
 }
 
-
 /**
  * POST a decision to `/v1/runs/{runId}/approval`. Both the panel (after
  * a user click) and the background engine could in theory call this; we
@@ -374,10 +369,14 @@ export async function postHermesApprovalDecision(opts: {
   runId: string;
   approvalId: string;
   decision: HermesApprovalDecision;
+  profileId?: string;
 }): Promise<{ ok: boolean; status?: number; error?: string }> {
   if (!opts.runId) return { ok: false, error: "missing run id" };
   if (!opts.approvalId) return { ok: false, error: "missing approval id" };
-  const path = `/v1/runs/${encodeURIComponent(opts.runId)}/approval`;
+  const path = hermesAgentPath(
+    opts.profileId,
+    `/v1/runs/${encodeURIComponent(opts.runId)}/approval`,
+  );
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -449,6 +448,33 @@ export interface RunToolCompleted {
   inlineDiff?: string;
 }
 
+export type RunMoaEvent =
+  | {
+      kind: "progress";
+      label?: string;
+      refsDone: number;
+      refsTotal: number;
+    }
+  | {
+      kind: "phase";
+      phase: string;
+      aggregator?: string;
+      refsDone?: number;
+      refsTotal?: number;
+    }
+  | {
+      kind: "reference";
+      label?: string;
+      text: string;
+      index?: number;
+      count?: number;
+    }
+  | {
+      kind: "aggregating";
+      aggregator?: string;
+      refCount?: number;
+    };
+
 export interface RunHandlers {
   /** `event: "message.delta"` — assistant text chunk. */
   onMessageDelta?: (delta: string) => void;
@@ -461,6 +487,8 @@ export interface RunHandlers {
   onToolStarted?: (event: RunToolStarted) => void;
   /** `event: "tool.completed"` */
   onToolCompleted?: (event: RunToolCompleted) => void;
+  /** Structured lifecycle emitted while a Mixture-of-Agents preset runs. */
+  onMoaEvent?: (event: RunMoaEvent) => void;
   /** `event: "approval.request"` — agent paused waiting for user consent. */
   onApprovalRequest?: (request: HermesApprovalRequest) => void;
   /**
@@ -475,7 +503,11 @@ export interface RunHandlers {
   /** `event: "run.completed"` — final answer in `output`, plus token usage. */
   onRunCompleted?: (info: {
     output: string;
-    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
+    };
   }) => void;
   /** `event: "run.failed"` */
   onRunFailed?: (info: { error: string }) => void;
@@ -488,6 +520,8 @@ export interface RunAgentOptions {
   sessionKey?: string;
   /** Hermes session id for short-term chat continuity. */
   sessionId?: string;
+  /** Profile + task-scoped response mode selected by Amiba. */
+  agent?: AgentExecutionContext;
   /**
    * Absolute workspace directory for this turn. Sent as structured ``cwd``
    * metadata so Hermes binds its session context and tool task before the
@@ -545,6 +579,7 @@ export async function runHermesAgent(
   opts: RunAgentOptions,
   handlers: RunHandlers = {},
 ): Promise<void> {
+  const route = (path: string) => hermesAgentPath(opts.agent?.profileId, path);
   // Phase 1: kick off the run.
   const startHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -565,7 +600,9 @@ export async function runHermesAgent(
       ...(m.name ? { name: m.name } : {}),
     })),
   };
-  if (opts.instructions) startBody.instructions = opts.instructions;
+  const instructions =
+    opts.instructions?.trim() || opts.agent?.personality?.prompt?.trim() || "";
+  if (instructions) startBody.instructions = instructions;
   if (opts.model) startBody.model = opts.model;
   if (opts.sessionId) startBody.session_id = opts.sessionId;
   if (opts.workingDirectory) startBody.cwd = opts.workingDirectory;
@@ -606,7 +643,8 @@ export async function runHermesAgent(
     }
   }
 
-  const startRes = await backplaneFetch("/v1/runs", {
+  const startPath = route("/v1/runs");
+  const startRes = await backplaneFetch(startPath, {
     method: "POST",
     headers: startHeaders,
     body: JSON.stringify(startBody),
@@ -620,7 +658,7 @@ export async function runHermesAgent(
     throw new HermesHttpError(
       startRes.status,
       text || startRes.statusText,
-      "/v1/runs",
+      startPath,
     );
   }
   const startJson = (await startRes.json()) as { run_id?: string };
@@ -634,7 +672,7 @@ export async function runHermesAgent(
   const ctrl = opts.signal ? null : new AbortController();
   const sig = opts.signal ?? ctrl!.signal;
   const stopOnAbort = () => {
-    void backplaneFetch(`/v1/runs/${encodeURIComponent(runId)}/stop`, {
+    void backplaneFetch(route(`/v1/runs/${encodeURIComponent(runId)}/stop`), {
       method: "POST",
       // Don't await; this is best-effort cleanup.
       keepalive: true,
@@ -649,20 +687,18 @@ export async function runHermesAgent(
     Accept: "text/event-stream",
   };
 
-  const eventsRes = await backplaneFetch(
-    `/v1/runs/${encodeURIComponent(runId)}/events`,
-    {
-      method: "GET",
-      headers: eventsHeaders,
-      signal: sig,
-    },
-  );
+  const eventsPath = route(`/v1/runs/${encodeURIComponent(runId)}/events`);
+  const eventsRes = await backplaneFetch(eventsPath, {
+    method: "GET",
+    headers: eventsHeaders,
+    signal: sig,
+  });
   if (!eventsRes.ok) {
     const text = await safeText(eventsRes);
     throw new HermesHttpError(
       eventsRes.status,
       text || eventsRes.statusText,
-      `/v1/runs/${runId}/events`,
+      eventsPath,
     );
   }
   if (!eventsRes.body) {
@@ -721,6 +757,48 @@ export async function runHermesAgent(
           }
           break;
         }
+        case "moa.progress": {
+          handlers.onMoaEvent?.({
+            kind: "progress",
+            label: typeof obj.label === "string" ? obj.label : undefined,
+            refsDone: typeof obj.refs_done === "number" ? obj.refs_done : 0,
+            refsTotal: typeof obj.refs_total === "number" ? obj.refs_total : 0,
+          });
+          break;
+        }
+        case "moa.phase": {
+          handlers.onMoaEvent?.({
+            kind: "phase",
+            phase: typeof obj.phase === "string" ? obj.phase : "",
+            aggregator:
+              typeof obj.aggregator === "string" ? obj.aggregator : undefined,
+            refsDone:
+              typeof obj.refs_done === "number" ? obj.refs_done : undefined,
+            refsTotal:
+              typeof obj.refs_total === "number" ? obj.refs_total : undefined,
+          });
+          break;
+        }
+        case "moa.reference": {
+          handlers.onMoaEvent?.({
+            kind: "reference",
+            label: typeof obj.label === "string" ? obj.label : undefined,
+            text: typeof obj.text === "string" ? obj.text : "",
+            index: typeof obj.index === "number" ? obj.index : undefined,
+            count: typeof obj.count === "number" ? obj.count : undefined,
+          });
+          break;
+        }
+        case "moa.aggregating": {
+          handlers.onMoaEvent?.({
+            kind: "aggregating",
+            aggregator:
+              typeof obj.aggregator === "string" ? obj.aggregator : undefined,
+            refCount:
+              typeof obj.ref_count === "number" ? obj.ref_count : undefined,
+          });
+          break;
+        }
         case "tool.started": {
           handlers.onToolStarted?.({
             tool: String(obj.tool ?? ""),
@@ -728,11 +806,12 @@ export async function runHermesAgent(
               typeof obj.tool_call_id === "string"
                 ? obj.tool_call_id
                 : undefined,
-            preview:
-              typeof obj.preview === "string" ? obj.preview : undefined,
+            preview: typeof obj.preview === "string" ? obj.preview : undefined,
             args:
-              obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
-                ? obj.args as Record<string, unknown>
+              obj.args &&
+              typeof obj.args === "object" &&
+              !Array.isArray(obj.args)
+                ? (obj.args as Record<string, unknown>)
                 : undefined,
           });
           break;
@@ -748,14 +827,14 @@ export async function runHermesAgent(
               typeof obj.duration === "number" ? obj.duration : undefined,
             error: typeof obj.error === "boolean" ? obj.error : undefined,
             args:
-              obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
-                ? obj.args as Record<string, unknown>
+              obj.args &&
+              typeof obj.args === "object" &&
+              !Array.isArray(obj.args)
+                ? (obj.args as Record<string, unknown>)
                 : undefined,
             result: obj.result,
             inlineDiff:
-              typeof obj.inline_diff === "string"
-                ? obj.inline_diff
-                : undefined,
+              typeof obj.inline_diff === "string" ? obj.inline_diff : undefined,
           });
           break;
         }
@@ -771,16 +850,12 @@ export async function runHermesAgent(
           handlers.onApprovalRequest?.({
             approvalId,
             runId,
-            tool:
-              typeof obj.tool === "string" ? obj.tool : undefined,
-            command:
-              typeof obj.command === "string" ? obj.command : undefined,
+            profileId: opts.agent?.profileId,
+            tool: typeof obj.tool === "string" ? obj.tool : undefined,
+            command: typeof obj.command === "string" ? obj.command : undefined,
             description:
-              typeof obj.description === "string"
-                ? obj.description
-                : undefined,
-            reason:
-              typeof obj.reason === "string" ? obj.reason : undefined,
+              typeof obj.description === "string" ? obj.description : undefined,
+            reason: typeof obj.reason === "string" ? obj.reason : undefined,
             raw: obj,
           });
           break;
@@ -796,8 +871,7 @@ export async function runHermesAgent(
           if ((allowed as string[]).includes(choice)) {
             handlers.onApprovalResponded?.({
               choice: choice as HermesApprovalDecision,
-              resolved:
-                typeof obj.resolved === "number" ? obj.resolved : 1,
+              resolved: typeof obj.resolved === "number" ? obj.resolved : 1,
             });
           }
           break;

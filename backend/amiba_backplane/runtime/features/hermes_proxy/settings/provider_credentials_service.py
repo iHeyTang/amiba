@@ -5,23 +5,34 @@ Each provider profile self-declares which env vars matter via
 placeholder when there's a meaningful default (URL fields get the
 provider's stock ``base_url``).
 
-OAuth-only providers (``env_vars=()``) return an empty ``fields`` list
-and an ``auth_hint`` describing how the user authenticates.
+Providers with a non-env authentication path return an ``auth_hint`` even
+when editable env credentials also exist. This lets clients present external
+login and token-based methods without flattening them into one form.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List
 
 from ....adapters.dotenv_local import (
-    get_dotenv_values_for_keys,
     is_valid_env_key,
     merge_dotenv_file_and_apply,
+    plugin_dotenv_path,
+    read_dotenv_as_dict,
 )
-from ....adapters.hermes_core import get_provider_profile
+from ....adapters.hermes_core import (
+    current_profile_id,
+    get_provider_profile,
+    is_default_profile,
+)
 from ....adapters.hermes_provider_env import (
     base_url_env_var_for_slug,
     env_var_names_for_slug,
+)
+from .provider_connection_service import (
+    allows_ambient_credentials,
+    build_provider_connection,
 )
 
 # Matches the extension's custom-provider UX: any of these env vars is
@@ -105,35 +116,84 @@ def _auth_hint_for(slug: str) -> str:
     return tmpl.format(slug=slug) if tmpl else ""
 
 
-def read_provider_credentials_response(provider: str) -> Dict[str, Any]:
+def read_provider_credentials_response(
+    provider: str,
+    *,
+    verify_service: bool = False,
+) -> Dict[str, Any]:
     raw = str(provider or "").strip()
     if not raw:
         raise ValueError("missing provider query parameter")
     keys = allowed_credential_keys_for_provider(raw)
+    prof = get_provider_profile(raw)
+    auth_type = str(getattr(prof, "auth_type", "") or "").strip()
+    allow_ambient_env = allows_ambient_credentials(
+        auth_type,
+        current_profile_id(),
+    )
     if not keys:
         return {
             "ok": True,
             "provider": raw,
             "fields": [],
             "auth_hint": _auth_hint_for(raw),
+            "auth_type": auth_type,
+            "connection": build_provider_connection(
+                raw,
+                auth_type=auth_type,
+                secret_keys=[],
+                saved_values={},
+                verify_service=verify_service,
+                allow_ambient_env=allow_ambient_env,
+            ),
+            "profile": current_profile_id(),
         }
     default_base_url = _provider_default_base_url(raw)
-    values = get_dotenv_values_for_keys(keys)
-    fields: List[Dict[str, str]] = []
+    saved_values = read_dotenv_as_dict(plugin_dotenv_path())
+    fields: List[Dict[str, Any]] = []
     for k in keys:
+        saved_value = saved_values.get(k, "")
+        ambient_value = (
+            str(os.environ.get(k, "") or "") if allow_ambient_env else ""
+        )
+        kind = _field_kind(k)
+        origin = (
+            "saved"
+            if saved_value.strip()
+            else ("environment" if ambient_value.strip() else "none")
+        )
         fields.append(
             {
                 "key": k,
-                "value": values.get(k, ""),
+                # This endpoint is the local desktop settings boundary. Return
+                # values the process can already read so the renderer can show
+                # them in a masked password field instead of substituting a
+                # misleading "stored" placeholder. External credential-pool
+                # entries remain metadata-only because Hermes does not expose
+                # their underlying tokens here.
+                "value": saved_value or ambient_value,
                 "placeholder": _field_placeholder(k, default_base_url),
-                "kind": _field_kind(k),
+                "kind": kind,
+                "origin": origin,
+                "configured": bool(saved_value.strip() or ambient_value.strip()),
             }
         )
+    secret_keys = [field["key"] for field in fields if field["kind"] == "secret"]
     return {
         "ok": True,
         "provider": raw,
         "fields": fields,
-        "auth_hint": "",
+        "auth_hint": _auth_hint_for(raw),
+        "auth_type": auth_type,
+        "connection": build_provider_connection(
+            raw,
+            auth_type=auth_type,
+            secret_keys=secret_keys,
+            saved_values=saved_values,
+            verify_service=verify_service,
+            allow_ambient_env=allow_ambient_env,
+        ),
+        "profile": current_profile_id(),
     }
 
 
@@ -161,5 +221,8 @@ def merge_credentials_for_provider(provider: str, values: Dict[str, Any]) -> Lis
             raise ValueError(f"value for {key!r} must be string")
         updates[key] = str(value) if value is not None else ""
 
-    merge_dotenv_file_and_apply(updates)
+    merge_dotenv_file_and_apply(
+        updates,
+        apply_process=is_default_profile(),
+    )
     return sorted(updates.keys())

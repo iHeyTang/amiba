@@ -11,6 +11,10 @@
 
 import { backplaneFetch } from "./backplane-client";
 import { EXPECTED_BACKPLANE_PROTOCOL } from "./config";
+import {
+  MINIMUM_HERMES_VERSION,
+  getHermesVersionCompatibility,
+} from "./hermes-version";
 
 function responseError(
   res: Response,
@@ -60,6 +64,16 @@ export interface HermesStatusResponse {
     expected: number;         // EXPECTED_BACKPLANE_PROTOCOL
     advise: "update-backplane" | "update-client";  // backplane<expected → update-backplane; backplane>expected → update-client
   };
+  /** Minimum version required by the running backplane, when reported. */
+  minimum_supported_version?: string;
+  /** Compatibility result reported by the backplane. */
+  version_compatible?: boolean;
+  /** Client-side compatibility failure against this Amiba build's minimum. */
+  hermes_version_mismatch?: {
+    installed: string;
+    required: string;
+    reason: "unsupported" | "unverifiable";
+  };
 }
 
 export interface GetHermesStatusOptions {
@@ -101,6 +115,19 @@ export async function getHermesStatus(
         backplane: reportedVersion,
         expected: EXPECTED_BACKPLANE_PROTOCOL,
         advise: reportedVersion < EXPECTED_BACKPLANE_PROTOCOL ? "update-backplane" : "update-client",
+      };
+    }
+    const compatibility = getHermesVersionCompatibility(
+      status.version,
+      MINIMUM_HERMES_VERSION,
+    );
+    status.minimum_supported_version = MINIMUM_HERMES_VERSION;
+    status.version_compatible = compatibility.compatible;
+    if (!compatibility.compatible && compatibility.reason) {
+      status.hermes_version_mismatch = {
+        installed: compatibility.installed,
+        required: compatibility.required,
+        reason: compatibility.reason,
       };
     }
     return status;

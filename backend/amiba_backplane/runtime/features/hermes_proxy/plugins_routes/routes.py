@@ -19,11 +19,13 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiohttp import web
 
+from ....adapters.hermes_core import hermes_profile_scope
 from ....common import json_error
 
 
@@ -302,11 +304,19 @@ async def handle_uninstall(request: web.Request) -> web.Response:
 
 
 def register(app: web.Application) -> None:
+    def profiled(handler):
+        @wraps(handler)
+        async def wrapped(request: web.Request) -> web.Response:
+            with hermes_profile_scope(request.query.get("profile")):
+                return await handler(request)
+
+        return wrapped
+
     app.add_routes(
         [
-            web.get("/hermes/plugins", handle_list),
-            web.post("/hermes/plugins/enable", handle_enable),
-            web.post("/hermes/plugins/disable", handle_disable),
-            web.post("/hermes/plugins/uninstall", handle_uninstall),
+            web.get("/hermes/plugins", profiled(handle_list)),
+            web.post("/hermes/plugins/enable", profiled(handle_enable)),
+            web.post("/hermes/plugins/disable", profiled(handle_disable)),
+            web.post("/hermes/plugins/uninstall", profiled(handle_uninstall)),
         ]
     )

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getHermesMessages, type SessionMeta } from "@amiba/core";
 import { getPlatform, type WorkspaceChange } from "@amiba/platform";
@@ -26,18 +26,20 @@ export function useWorkspaceBindings(
   sessions: SessionMeta[] = [],
 ): WorkspaceBindingsState {
   const workspaces = getPlatform().workspaces;
-  const [state, setState] = useState<WorkspaceBindingsState>(() => ({
-    supported: !!workspaces,
-    ready: !workspaces,
-    bySessionId: {},
-  }));
-  const bindingsRef = useRef(state.bySessionId);
+  const [explicitBindings, setExplicitBindings] = useState<
+    Record<string, string>
+  >({});
+  const [defaultRoot, setDefaultRoot] = useState<string | null>(null);
+  const [ready, setReady] = useState(!workspaces);
+  const bindingsRef = useRef(explicitBindings);
   const attemptedLegacyRestoreRef = useRef(new Set<string>());
-  bindingsRef.current = state.bySessionId;
+  bindingsRef.current = explicitBindings;
 
   useEffect(() => {
     if (!workspaces) {
-      setState({ supported: false, ready: true, bySessionId: {} });
+      setExplicitBindings({});
+      setDefaultRoot(null);
+      setReady(true);
       return;
     }
 
@@ -52,41 +54,36 @@ export function useWorkspaceBindings(
           change.kind === "bound" ? change.path : null,
         );
       }
-      setState((previous) => {
-        const bySessionId = { ...previous.bySessionId };
+      setExplicitBindings((previous) => {
+        const next = { ...previous };
         if (change.kind === "bound") {
-          bySessionId[change.sessionId] = change.path;
+          next[change.sessionId] = change.path;
         } else {
-          delete bySessionId[change.sessionId];
+          delete next[change.sessionId];
         }
-        return { ...previous, bySessionId };
+        return next;
       });
     };
 
-    setState((previous) => ({
-      supported: true,
-      ready: false,
-      bySessionId: previous.bySessionId,
-    }));
+    setReady(false);
     const unsubscribe = workspaces.onChange(applyChange);
 
-    void workspaces
-      .listBindings()
-      .then((snapshot) => {
+    void Promise.all([
+      workspaces.listBindings().catch(() => ({})),
+      workspaces.getDefaultRoot().catch(() => null),
+    ])
+      .then(([snapshot, root]) => {
         if (!active) return;
         loading = false;
-        const bySessionId = { ...snapshot };
+        const next = { ...snapshot };
         for (const [sessionId, path] of changesDuringLoad) {
-          if (path) bySessionId[sessionId] = path;
-          else delete bySessionId[sessionId];
+          if (path) next[sessionId] = path;
+          else delete next[sessionId];
         }
-        setState({ supported: true, ready: true, bySessionId });
+        setExplicitBindings(next);
+        setDefaultRoot(root);
+        setReady(true);
       })
-      .catch(() => {
-        if (!active) return;
-        loading = false;
-        setState((previous) => ({ ...previous, ready: true }));
-      });
 
     return () => {
       active = false;
@@ -95,7 +92,7 @@ export function useWorkspaceBindings(
   }, [workspaces]);
 
   useEffect(() => {
-    if (!workspaces || !state.ready) return;
+    if (!workspaces || !ready) return;
 
     // Earlier desktop builds persisted the injected `<workspace>` message but
     // not the session→directory index used by the sidebar and structured cwd.
@@ -112,7 +109,10 @@ export function useWorkspaceBindings(
 
     for (const session of candidates) {
       attemptedLegacyRestoreRef.current.add(session.id);
-      void getHermesMessages(session.id)
+      const messagesRequest = session.agent?.profileId
+        ? getHermesMessages(session.id, session.agent.profileId)
+        : getHermesMessages(session.id);
+      void messagesRequest
         .then(async (result) => {
           if (!result.ok || bindingsRef.current[session.id]) return;
           let restoredPath = "";
@@ -136,7 +136,21 @@ export function useWorkspaceBindings(
           // in the normal unbound group rather than blocking the sidebar.
         });
     }
-  }, [sessions, state.ready, workspaces]);
+  }, [sessions, ready, workspaces]);
 
-  return state;
+  const bySessionId = useMemo(() => {
+    const resolved = { ...explicitBindings };
+    if (defaultRoot) {
+      for (const session of sessions) {
+        if (!resolved[session.id]) resolved[session.id] = defaultRoot;
+      }
+    }
+    return resolved;
+  }, [defaultRoot, explicitBindings, sessions]);
+
+  return {
+    supported: !!workspaces,
+    ready,
+    bySessionId,
+  };
 }

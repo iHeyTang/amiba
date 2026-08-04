@@ -32,16 +32,17 @@
  *     surfaces outside a session-provider subtree fall back to
  *     `queueChatPrompt` directly and accept the "current" semantics.
  */
-import { useCallback } from "react"
+import { useCallback } from "react";
 
 import {
   HOME_PENDING_PROMPT_KEY,
   useSessions,
+  type AgentExecutionContext,
   type SessionsController,
-} from "@amiba/core"
-import { getPlatform } from "@amiba/platform"
+} from "@amiba/core";
+import { getPlatform } from "@amiba/platform";
 
-import type { PendingPromptAttachment } from "./internal/capabilities"
+import type { PendingPromptAttachment } from "./internal/capabilities";
 
 /**
  * Wire shape stored under `HOME_PENDING_PROMPT_KEY`. Matches what every
@@ -49,11 +50,12 @@ import type { PendingPromptAttachment } from "./internal/capabilities"
  * URL inbox) so a single drainer in ChatSurface handles them all.
  */
 interface PendingPromptPayload {
-  text?: string
-  attachments?: PendingPromptAttachment[]
-  sourceApp?: string
-  workspacePath?: string
-  ts: number
+  text?: string;
+  attachments?: PendingPromptAttachment[];
+  sourceApp?: string;
+  workspacePath?: string;
+  agent?: AgentExecutionContext;
+  ts: number;
 }
 
 export interface ChatSessionRequest {
@@ -64,22 +66,24 @@ export interface ChatSessionRequest {
    * (ChatSurface's autosend gates on `input.trim()` being non-empty),
    * so the user gets the prefilled attachments and types a prompt.
    */
-  text?: string
+  text?: string;
   /**
    * Optional attachments. Paths must point at already-settled files; the
    * autosend path doesn't wait for in-progress uploads to finish.
    */
-  attachments?: PendingPromptAttachment[]
+  attachments?: PendingPromptAttachment[];
   /**
    * Human-readable origin badge ("Safari", "Brain installer", …) shown
    * above the composer until the user starts editing.
    */
-  sourceApp?: string
+  sourceApp?: string;
   /**
    * Draft workspace selected on the id-less home surface. The receiving chat
    * binds it only after ``ensureActive()`` creates the real conversation.
    */
-  workspacePath?: string
+  workspacePath?: string;
+  /** Hermes Profile and optional task-scoped response mode. */
+  agent?: AgentExecutionContext;
   /**
    * Extra storage keys to write in the same atomic patch as the pending
    * prompt. Use for "set this companion setting only when the user
@@ -87,7 +91,7 @@ export interface ChatSessionRequest {
    * conditional logic at the caller before passing in — this layer
    * doesn't reason about defaults, it just merges.
    */
-  storagePatch?: Record<string, unknown>
+  storagePatch?: Record<string, unknown>;
 }
 
 /**
@@ -102,13 +106,13 @@ export interface ChatSessionRequest {
  * with `mode: "new"`.
  */
 export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
-  const text = req.text?.trim() ?? ""
-  const attachments = req.attachments?.filter((a) => a.path) ?? undefined
-  const hasAttachments = !!attachments && attachments.length > 0
+  const text = req.text?.trim() ?? "";
+  const attachments = req.attachments?.filter((a) => a.path) ?? undefined;
+  const hasAttachments = !!attachments && attachments.length > 0;
   if (!text && !hasAttachments) {
     throw new Error(
       "queueChatPrompt: at least one of `text` or `attachments` is required.",
-    )
+    );
   }
   const payload: PendingPromptPayload = {
     // Omit empty fields so the drain side's "anything to do?" check stays
@@ -117,15 +121,16 @@ export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
     attachments: hasAttachments ? attachments : undefined,
     sourceApp: req.sourceApp,
     workspacePath: req.workspacePath?.trim() || undefined,
+    agent: req.agent,
     ts: Date.now(),
-  }
+  };
   await getPlatform().storage.set({
     ...req.storagePatch,
     [HOME_PENDING_PROMPT_KEY]: payload,
-  })
+  });
 }
 
-export type ChatSessionMode = "current" | "new"
+export type ChatSessionMode = "current" | "new";
 
 /**
  * Hook variant. Returns a function that mints a fresh session (when
@@ -141,7 +146,7 @@ export type ChatSessionMode = "current" | "new"
 export function useChatSessionRequester(): (
   req: ChatSessionRequest & { mode?: ChatSessionMode },
 ) => Promise<void> {
-  const sessions: SessionsController = useSessions()
+  const sessions: SessionsController = useSessions();
   return useCallback(
     async (req) => {
       if (req.mode === "new") {
@@ -149,10 +154,10 @@ export function useChatSessionRequester(): (
         // on activeId change; if that drain races ahead of the prompt
         // write, the subscribe handler will tick it again as soon as
         // the write lands.
-        await sessions.createNew()
+        await sessions.createNew(req.agent);
       }
-      await queueChatPrompt(req)
+      await queueChatPrompt(req);
     },
     [sessions],
-  )
+  );
 }

@@ -35,7 +35,13 @@ type PageState =
   | { kind: "error" }
   | { kind: "loaded"; plugin: HermesPlugin | null }
 
-export function SettingsBrowser() {
+export function SettingsBrowser({
+  embedded = false,
+  profileId,
+}: {
+  embedded?: boolean
+  profileId?: string
+} = {}) {
   const { t } = useT()
   const startAgentTask = useStartAgentTask()
   const [state, setState] = useState<PageState>({ kind: "loading" })
@@ -45,14 +51,14 @@ export function SettingsBrowser() {
 
   const reload = useCallback(() => {
     setState({ kind: "loading" })
-    void getHermesPlugins().then((res) => {
+    void getHermesPlugins(profileId).then((res) => {
       if (!res.ok) {
         setState({ kind: "error" })
         return
       }
       setState({ kind: "loaded", plugin: res.plugins.find(matchBrowserPlugin) ?? null })
     })
-  }, [])
+  }, [profileId])
 
   useEffect(() => {
     reload()
@@ -64,7 +70,7 @@ export function SettingsBrowser() {
     const next = !p.enabled
     setBusy(true)
     setToggleError(null)
-    const res = await setPluginEnabled(p.name, next)
+    const res = await setPluginEnabled(p.name, next, profileId)
     setBusy(false)
     if (!res.ok) {
       setToggleError(t("options.plugins.toggleError", { error: res.error ?? "unknown" }))
@@ -86,6 +92,75 @@ export function SettingsBrowser() {
     )
   }
 
+  const content = (
+    <div className="flex flex-col gap-4">
+      {state.kind === "loading" && (
+        <p className="text-sm text-muted-foreground">{t("options.plugins.loading")}</p>
+      )}
+
+      {state.kind === "error" && (
+        <p className="text-sm text-muted-foreground">{t("options.feature.backplaneError")}</p>
+      )}
+
+      {state.kind === "loaded" && !state.plugin && (
+        <div className="flex flex-col items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-sm text-amber-700">{t("options.feature.notInstalled")}</p>
+          {startAgentTask && (
+            <Button size="sm" onClick={onInstall}>
+              {t("options.feature.installAction")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {state.kind === "loaded" && state.plugin && (
+        <div className="flex items-center justify-between gap-4 rounded-md border bg-card p-4">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="font-medium">{t("options.feature.enableLabel")}</span>
+            <span className="text-xs text-muted-foreground">
+              {state.plugin.enabled
+                ? t("options.feature.stateOn")
+                : t("options.feature.stateOff")}
+            </span>
+          </div>
+          <Switch
+            checked={state.plugin.enabled}
+            disabled={busy}
+            onCheckedChange={() => void onToggle()}
+          />
+        </div>
+      )}
+
+      {restartHint && (
+        <p className="text-xs text-amber-600">{t("options.feature.restartHint")}</p>
+      )}
+      {toggleError && <p className="text-sm text-destructive">{toggleError}</p>}
+
+      {!embedded && (
+        <section className="flex flex-col gap-2 rounded-md border bg-card p-4">
+          <h3 className="text-sm font-semibold">{t("options.feature.browser.how.title")}</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {t("options.feature.browser.how.body")}
+          </p>
+        </section>
+      )}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <section className="border-t border-border/60 pt-5">
+        <h3 className="text-sm font-medium">
+          {t("tools.detail.browser.currentTabTitle")}
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {t("tools.detail.browser.currentTabDescription")}
+        </p>
+        <div className="mt-3">{content}</div>
+      </section>
+    )
+  }
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SettingsPaneHeader
@@ -93,55 +168,8 @@ export function SettingsBrowser() {
         subtitle={t("options.feature.browser.subtitle")}
       />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
-          {state.kind === "loading" && (
-            <p className="text-sm text-muted-foreground">{t("options.plugins.loading")}</p>
-          )}
-
-          {state.kind === "error" && (
-            <p className="text-sm text-muted-foreground">{t("options.feature.backplaneError")}</p>
-          )}
-
-          {state.kind === "loaded" && !state.plugin && (
-            <div className="flex flex-col items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
-              <p className="text-sm text-amber-700">{t("options.feature.notInstalled")}</p>
-              {startAgentTask && (
-                <Button size="sm" onClick={onInstall}>
-                  {t("options.feature.installAction")}
-                </Button>
-              )}
-            </div>
-          )}
-
-          {state.kind === "loaded" && state.plugin && (
-            <div className="flex items-center justify-between gap-4 rounded-md border bg-card p-4">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="font-medium">{t("options.feature.enableLabel")}</span>
-                <span className="text-xs text-muted-foreground">
-                  {state.plugin.enabled
-                    ? t("options.feature.stateOn")
-                    : t("options.feature.stateOff")}
-                </span>
-              </div>
-              <Switch
-                checked={state.plugin.enabled}
-                disabled={busy}
-                onCheckedChange={() => void onToggle()}
-              />
-            </div>
-          )}
-
-          {restartHint && (
-            <p className="text-xs text-amber-600">{t("options.plugins.restartHint")}</p>
-          )}
-          {toggleError && <p className="text-sm text-destructive">{toggleError}</p>}
-
-          <section className="flex flex-col gap-2 rounded-md border bg-card p-4">
-            <h3 className="text-sm font-semibold">{t("options.feature.browser.how.title")}</h3>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {t("options.feature.browser.how.body")}
-            </p>
-          </section>
+        <div className="mx-auto max-w-2xl p-6">
+          {content}
         </div>
       </ScrollArea>
     </div>

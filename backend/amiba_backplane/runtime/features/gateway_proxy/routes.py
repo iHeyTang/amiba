@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import quote
 
 from aiohttp import ClientSession, ClientTimeout, web
 
@@ -36,14 +37,35 @@ _HOP_HEADERS = frozenset(
 _CLIENT_KEY = "gateway_proxy_client"
 
 
-def _api_server_key() -> str:
-    return (os.environ.get("API_SERVER_KEY") or "").strip()
+def _api_server_key(profile: str = "") -> str:
+    """Resolve the gateway credential for the URL-selected profile.
+
+    The multiplexing gateway intentionally rejects the default profile's key
+    on a named `/p/<profile>/...` route. Read the named profile's isolated
+    secret scope without mutating process-global environment variables.
+    """
+    normalized = str(profile or "").strip().lower()
+    if not normalized or normalized == "default":
+        return (os.environ.get("API_SERVER_KEY") or "").strip()
+    try:
+        from agent.secret_scope import build_profile_secret_scope  # type: ignore
+        from hermes_cli.profiles import get_profile_dir  # type: ignore
+
+        return str(
+            build_profile_secret_scope(get_profile_dir(normalized)).get(
+                "API_SERVER_KEY", ""
+            )
+            or ""
+        ).strip()
+    except Exception:
+        # Upstream will fail closed for an unknown profile or missing key.
+        return ""
 
 
 _SESSION_HEADERS = frozenset(("x-hermes-session-id", "x-hermes-session-key"))
 
 
-def _filter_request_headers(src) -> dict:
+def _filter_request_headers(src, *, profile: str = "") -> dict:
     """Copy inbound headers, strip hop-by-hop + inbound Authorization,
     inject the gateway's API_SERVER_KEY if set.
 
@@ -54,7 +76,7 @@ def _filter_request_headers(src) -> dict:
     they reach upstream.
     """
     out: dict[str, str] = {}
-    key = _api_server_key()
+    key = _api_server_key(profile)
     for k, v in src.items():
         lk = k.lower()
         if lk in _HOP_HEADERS:
@@ -79,8 +101,12 @@ def _filter_response_headers(src) -> dict:
 async def _proxy_handler(request: web.Request) -> web.StreamResponse:
     session: ClientSession = request.app[_CLIENT_KEY]
     tail = request.match_info["tail"]
-    upstream_url = f"{GATEWAY_BASE}/v1/{tail}"
-    headers = _filter_request_headers(request.headers)
+    profile = str(request.match_info.get("profile") or "").strip().lower()
+    profile_prefix = (
+        f"/p/{quote(profile, safe='')}" if profile and profile != "default" else ""
+    )
+    upstream_url = f"{GATEWAY_BASE}{profile_prefix}/v1/{tail}"
+    headers = _filter_request_headers(request.headers, profile=profile)
 
     body = await request.read() if request.can_read_body else None
 
@@ -136,6 +162,7 @@ async def _on_cleanup(app: web.Application) -> None:
 
 
 def register(app: web.Application) -> None:
+    app.router.add_route("*", "/p/{profile}/v1/{tail:.*}", _proxy_handler)
     app.router.add_route("*", "/v1/{tail:.*}", _proxy_handler)
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)

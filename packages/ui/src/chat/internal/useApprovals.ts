@@ -185,6 +185,7 @@ export function useApprovals(args: UseApprovalsArgs): UseApprovalsResult {
         runId,
         approvalId: request.approvalId,
         decision,
+        profileId: request.profileId,
       });
       if (!res.ok) {
         // 409 `approval_not_active` means the gateway has already timed

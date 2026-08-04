@@ -52,11 +52,7 @@ async function resolveAgentFinalLocation(): Promise<{
   try {
     const tab = await chrome.tabs.get(tabId);
     const url = tab.url || tab.pendingUrl || null;
-    if (
-      !url ||
-      url === "about:blank" ||
-      !/^(https?|file|ftp):/i.test(url)
-    ) {
+    if (!url || url === "about:blank" || !/^(https?|file|ftp):/i.test(url)) {
       return {};
     }
     return { url, title: tab.title || undefined };
@@ -103,14 +99,12 @@ function appendApprovalToTimeline(
     (it) => it.kind === "approval" && it.approvalId === approvalId,
   );
   if (seen) return timeline;
-  return [
-    ...timeline,
-    { kind: "approval", id: shortId("tl"), approvalId },
-  ];
+  return [...timeline, { kind: "approval", id: shortId("tl"), approvalId }];
 }
 
 export async function startStream(payload: SubmitPayload): Promise<void> {
-  const { sessionId, assistantUiId, model, history, turnMetadata } = payload;
+  const { sessionId, assistantUiId, model, history, turnMetadata, agent } =
+    payload;
 
   if (controllers.has(sessionId)) {
     emit(sessionId, {
@@ -226,6 +220,7 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
       {
         model,
         sessionId,
+        agent,
         signal: ctrl.signal,
         turnMetadata,
         onRun: (runId) => {
@@ -462,8 +457,7 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
       mutateState(sessionId, () => ({ streaming: false }));
       emit(sessionId, { kind: "aborted" });
     } else {
-      const status =
-        err instanceof HermesHttpError ? err.status : undefined;
+      const status = err instanceof HermesHttpError ? err.status : undefined;
       const hint =
         err instanceof HermesHttpError ? err.hint() || undefined : undefined;
       const message = String(err?.message || err);

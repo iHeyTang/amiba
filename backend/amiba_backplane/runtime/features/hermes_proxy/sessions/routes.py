@@ -26,6 +26,7 @@ from __future__ import annotations
 from aiohttp import web
 
 from ....common import read_json_object, strip_ok
+from ....adapters.hermes_core import hermes_profile_scope
 from .service import (
     MAX_MESSAGE_BODY_BYTES,
     append_message_response,
@@ -59,6 +60,10 @@ _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 200  # mirrors common pagination ceiling; SessionDB has no hard cap
 
 
+def _profile(request: web.Request) -> str:
+    return str(request.query.get("profile") or "default").strip().lower()
+
+
 async def handle_list_sessions(request: web.Request) -> web.Response:
     limit = min(_parse_int(request.query.get("limit"), _DEFAULT_LIMIT), _MAX_LIMIT)
     offset = _parse_int(request.query.get("offset"), 0)
@@ -74,12 +79,16 @@ async def handle_list_sessions(request: web.Request) -> web.Response:
             piece = piece.strip()
             if piece:
                 exclude_sources.append(piece)
-    payload = list_sessions_response(
-        limit=limit,
-        offset=offset,
-        source=source,
-        exclude_sources=exclude_sources or None,
-    )
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = list_sessions_response(
+                limit=limit,
+                offset=offset,
+                source=source,
+                exclude_sources=exclude_sources or None,
+            )
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         # Service couldn't even reach SessionDB — surface as 503 so a
         # client can distinguish "Hermes isn't ready yet" from "session
@@ -91,7 +100,11 @@ async def handle_list_sessions(request: web.Request) -> web.Response:
 
 async def handle_get_session(request: web.Request) -> web.Response:
     session_id = request.match_info.get("session_id", "")
-    payload = get_session_response(session_id)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = get_session_response(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         status = 404 if payload.get("error") == "session not found" else 503
         return web.json_response(payload, status=status)
@@ -102,7 +115,11 @@ async def handle_get_session(request: web.Request) -> web.Response:
 
 async def handle_get_messages(request: web.Request) -> web.Response:
     session_id = request.match_info.get("session_id", "")
-    payload = get_messages_response(session_id)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = get_messages_response(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         status = 404 if payload.get("error") == "session not found" else 503
         return web.json_response(payload, status=status)
@@ -135,7 +152,11 @@ async def handle_create_session(request: web.Request) -> web.Response:
         body = await read_json_object(request)
     except web.HTTPBadRequest as exc:
         return exc
-    payload = create_session_response(body)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = create_session_response(body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         status = 400 if _is_validation_error(payload.get("error", "")) else 503
         return web.json_response(payload, status=status)
@@ -148,7 +169,11 @@ async def handle_append_message(request: web.Request) -> web.Response:
         body = await read_json_object(request, max_bytes=MAX_MESSAGE_BODY_BYTES)
     except web.HTTPBadRequest as exc:
         return exc
-    payload = append_message_response(session_id, body)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = append_message_response(session_id, body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         err = payload.get("error", "")
         if err == "session not found":
@@ -167,7 +192,11 @@ async def handle_update_session(request: web.Request) -> web.Response:
         body = await read_json_object(request)
     except web.HTTPBadRequest as exc:
         return exc
-    payload = update_session_response(session_id, body)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = update_session_response(session_id, body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         kind = payload.get("kind")
         err = payload.get("error", "")
@@ -185,7 +214,11 @@ async def handle_update_session(request: web.Request) -> web.Response:
 
 async def handle_trigger_auto_title(request: web.Request) -> web.Response:
     session_id = request.match_info.get("session_id", "")
-    payload = trigger_auto_title_response(session_id)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = trigger_auto_title_response(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         err = payload.get("error", "")
         if err == "session not found":
@@ -200,7 +233,11 @@ async def handle_trigger_auto_title(request: web.Request) -> web.Response:
 
 async def handle_delete_session(request: web.Request) -> web.Response:
     session_id = request.match_info.get("session_id", "")
-    payload = delete_session_response(session_id)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = delete_session_response(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
     if not payload.get("ok"):
         status = 404 if payload.get("error") == "session not found" else 503
         return web.json_response(payload, status=status)

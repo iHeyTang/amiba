@@ -63,6 +63,45 @@ describe("runHermesAgent workspace cwd", () => {
     expect(JSON.parse(String(init.body))).not.toHaveProperty("cwd");
   });
 
+  it("uses the named Profile route and task-scoped response mode", async () => {
+    backplaneFetch.mockImplementation(async (path: string) => {
+      if (path === "/p/researcher/v1/runs") {
+        return Response.json(
+          { run_id: "run_profile", status: "started" },
+          { status: 202 },
+        );
+      }
+      return new Response(
+        'data: {"event":"run.completed","output":"done"}\n\n',
+        { status: 200 },
+      );
+    });
+
+    await runHermesAgent([{ role: "user", content: "Compare sources" }], {
+      sessionId: "session-profile",
+      agent: {
+        profileId: "researcher",
+        personality: {
+          key: "concise",
+          prompt: "Answer briefly.",
+        },
+      },
+    });
+
+    expect(backplaneFetch.mock.calls[0]?.[0]).toBe(
+      "/p/researcher/v1/runs",
+    );
+    expect(backplaneFetch.mock.calls[1]?.[0]).toBe(
+      "/p/researcher/v1/runs/run_profile/events",
+    );
+    expect(
+      JSON.parse(String(backplaneFetch.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      session_id: "session-profile",
+      instructions: "Answer briefly.",
+    });
+  });
+
   it("forwards structured tool lifecycle details", async () => {
     backplaneFetch.mockImplementation(async (path: string) => {
       if (path === "/v1/runs") {
@@ -109,6 +148,52 @@ describe("runHermesAgent workspace cwd", () => {
       args: { command: "pnpm test", workdir: "/repo" },
       result: { output: "passed", exit_code: 0 },
       inlineDiff: undefined,
+    });
+  });
+
+  it("forwards structured MoA lifecycle events", async () => {
+    backplaneFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/runs") {
+        return new Response(
+          JSON.stringify({ run_id: "run_moa", status: "started" }),
+          { status: 202 },
+        );
+      }
+      return new Response(
+        [
+          'data: {"event":"moa.progress","label":"openai/gpt-5","refs_done":1,"refs_total":2}',
+          "",
+          'data: {"event":"moa.phase","phase":"aggregator","aggregator":"anthropic/claude-opus-5","refs_done":2,"refs_total":2}',
+          "",
+          'data: {"event":"run.completed","output":"done"}',
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        },
+      );
+    });
+    const onMoaEvent = vi.fn();
+
+    await runHermesAgent(
+      [{ role: "user", content: "Compare the proposals" }],
+      { sessionId: "session-moa" },
+      { onMoaEvent },
+    );
+
+    expect(onMoaEvent).toHaveBeenNthCalledWith(1, {
+      kind: "progress",
+      label: "openai/gpt-5",
+      refsDone: 1,
+      refsTotal: 2,
+    });
+    expect(onMoaEvent).toHaveBeenNthCalledWith(2, {
+      kind: "phase",
+      phase: "aggregator",
+      aggregator: "anthropic/claude-opus-5",
+      refsDone: 2,
+      refsTotal: 2,
     });
   });
 });

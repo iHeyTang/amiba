@@ -66,6 +66,8 @@ export type StartAgentTask = (
   opts?: {
     /** Origin badge shown above the composer until the user edits. */
     sourceApp?: string
+    /** Run the new task inside this isolated Hermes Profile. */
+    profileId?: string
   },
 ) => void | Promise<void>
 

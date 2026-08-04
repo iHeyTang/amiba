@@ -10,6 +10,35 @@
  */
 
 /*
+ * Desktop conversation chrome
+ * ---------------------------
+ * The chat column is a native size container because its usable width differs
+ * from the viewport when the navigation sidebar is resized. Once there is
+ * enough lateral whitespace around the constrained message column, the header
+ * stops generating a full-width box: only its leading and trailing controls
+ * float in that whitespace while the conversation extends to the top. At
+ * narrower sizes it remains an ordinary row, still without a dividing line.
+ */
+.amiba-chat-column {
+  container-name: amiba-chat-column;
+  container-type: inline-size;
+}
+
+@container amiba-chat-column (min-width: 80rem) {
+  .amiba-chat-header--wide-overlay {
+    display: contents;
+  }
+
+  .amiba-chat-header--wide-overlay [data-content-header-leading] {
+    position: absolute;
+    top: 0;
+    z-index: 30;
+    max-width: 11rem;
+    pointer-events: auto;
+  }
+}
+
+/*
  * Markdown styling for assistant bubbles. Streamdown's defaults (mt-6/mb-2 on
  * headings, my-4 on blockquotes/code/lists, text-3xl on h1, etc.) are tuned
  * for full-page content and feel both sparse and crude in a narrow chat
@@ -153,7 +182,9 @@
 }
 /* Nested lists shouldn't double their top/bottom margin. */
 .chat-md.chat-md [data-streamdown="list-item"] [data-streamdown="ordered-list"],
-.chat-md.chat-md [data-streamdown="list-item"] [data-streamdown="unordered-list"] {
+.chat-md.chat-md
+  [data-streamdown="list-item"]
+  [data-streamdown="unordered-list"] {
   margin-top: 0.15rem;
   margin-bottom: 0.15rem;
 }
@@ -446,26 +477,4 @@
   [data-streamdown="table-row"]:not(:last-child)
   [data-streamdown="table-cell"] {
   border-bottom-color: hsl(var(--border) / 0.4);
-}
-
-/*
- * Command palette open/close zoom origin.
- *
- * DialogContent centers itself with `translate(-50%, -50%)`, but
- * tailwindcss-animate's enter/exit keyframes rebuild `transform` from the
- * `--tw-(enter|exit)-translate-*` vars (default 0), dropping the centering
- * translate for the duration of the animation. The card then starts with its
- * top-left at screen center (offset down-right) and slides up-left into place —
- * reads as "rising from the bottom-right corner".
- *
- * Pin those translate vars to -50% so the keyframes keep the card centered and
- * only the scale (zoom-in/out-95) + opacity animate: a clean zoom from the true
- * center. `!important` beats `.animate-in`'s reset of these vars to `initial`.
- * Scoped to the palette via its data attribute.
- */
-[data-amiba-command-palette] {
-  --tw-enter-translate-x: -50% !important;
-  --tw-enter-translate-y: -50% !important;
-  --tw-exit-translate-x: -50% !important;
-  --tw-exit-translate-y: -50% !important;
 }

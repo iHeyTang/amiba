@@ -26,9 +26,9 @@ describe("CommandPalette", () => {
     expect(screen.getByTestId("command-palette-input")).toBeInTheDocument()
   })
 
-  it("runs New Chat and closes", async () => {
+  it("runs New Task and closes", async () => {
     const props = setup()
-    await userEvent.click(screen.getByText("New Chat"))
+    await userEvent.click(screen.getByText("New Task"))
     expect(props.onNewChat).toHaveBeenCalledTimes(1)
     expect(props.onOpenChange).toHaveBeenCalledWith(false)
   })

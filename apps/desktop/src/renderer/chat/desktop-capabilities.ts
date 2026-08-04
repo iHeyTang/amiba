@@ -17,6 +17,7 @@
  * Everything funnels through the same `home.pendingPrompt` key with the
  * shape `{ text?, attachments?, sourceApp?, workspacePath? }`.
  */
+import type { AgentExecutionContext } from "@amiba/core"
 import type { PendingPromptAttachment, PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui"
 import { getPlatform } from "@amiba/platform"
 
@@ -62,11 +63,30 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       attachments?: unknown
       sourceApp?: unknown
       workspacePath?: unknown
+      agent?: unknown
     }
     const text = typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined
     const sourceApp = typeof obj.sourceApp === "string" && obj.sourceApp.trim() ? obj.sourceApp : undefined
     const workspacePath =
       typeof obj.workspacePath === "string" && obj.workspacePath.trim() ? obj.workspacePath : undefined
+    const rawAgent =
+      obj.agent && typeof obj.agent === "object"
+        ? (obj.agent as Record<string, unknown>)
+        : null
+    const agent: AgentExecutionContext | undefined =
+      rawAgent && typeof rawAgent.profileId === "string"
+        ? {
+            profileId: rawAgent.profileId,
+            ...(rawAgent.personality &&
+            typeof rawAgent.personality === "object" &&
+            typeof (rawAgent.personality as Record<string, unknown>).key === "string" &&
+            typeof (rawAgent.personality as Record<string, unknown>).prompt === "string"
+              ? {
+                  personality: rawAgent.personality as AgentExecutionContext["personality"],
+                }
+              : {}),
+          }
+        : undefined
     let attachments: PendingPromptAttachment[] | undefined
     if (Array.isArray(obj.attachments)) {
       const out: PendingPromptAttachment[] = []
@@ -77,7 +97,7 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       if (out.length > 0) attachments = out
     }
     if (!text && !attachments) return null
-    return { text, attachments, sourceApp, workspacePath }
+    return { text, attachments, sourceApp, workspacePath, agent }
   } catch {
     return null
   }

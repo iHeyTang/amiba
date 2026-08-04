@@ -1,6 +1,10 @@
 import * as React from "react";
 
 import { cn } from "./cn";
+import {
+  FORM_CONTROL_STATE_CLASS,
+  FORM_CONTROL_SURFACE_CLASS,
+} from "./form-control";
 const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
@@ -8,7 +12,9 @@ const Textarea = React.forwardRef<
   return (
     <textarea
       className={cn(
-        "flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        "flex min-h-[60px] px-3 py-2",
+        FORM_CONTROL_SURFACE_CLASS,
+        FORM_CONTROL_STATE_CLASS,
         className,
       )}
       ref={ref}

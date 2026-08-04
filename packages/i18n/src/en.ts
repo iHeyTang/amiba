@@ -29,6 +29,7 @@ export const en = {
   "common.copy": "Copy",
   "common.copied": "Copied",
   "common.retry": "Retry",
+  "common.all": "All",
   "common.untitled": "Untitled",
 
   // Conversation turn navigation
@@ -78,6 +79,8 @@ export const en = {
   "workspacePane.running": "Running",
   "workspacePane.failed": "Failed",
   "workspacePane.noOutput": "No output",
+  "workspacePane.collaboration": "Collaboration",
+  "workspacePane.taskCount": "{count} tasks",
   "workspacePane.copyCode": "Copy code",
   "workspacePane.copyOutput": "Copy output",
   "workspacePane.copyWorkingDirectory": "Copy working directory",
@@ -86,7 +89,7 @@ export const en = {
   // App shell
   "app.title": "Amiba",
   "app.subtitle": "Extension console",
-  "app.initializing": "Starting the local service…",
+  "app.initializing": "Waking your local agent",
   "app.initError":
     "Couldn't start the local service. Make sure Hermes is installed and try again.",
   "app.initRetry": "Retry",
@@ -96,25 +99,160 @@ export const en = {
   "options.nav.shortcuts": "Shortcuts",
   "options.nav.scripts": "Userscripts",
   "options.nav.models": "Models",
+  "options.nav.agents": "Agent presets",
   "options.nav.skills": "Skills",
   "options.nav.memory": "Memory",
-  "options.nav.cron": "Cron",
+  "options.nav.cron": "Automation",
   "options.nav.status": "Status",
   "options.nav.logs": "Logs",
   "options.nav.voice": "Voice",
-  "options.nav.extensions": "Extensions",
+  "options.nav.extensions": "Extension management",
   "options.nav.plugins": "Plugins",
   "options.nav.mentionSources": "Mention Sources",
   "options.nav.section.general": "General",
-  "options.nav.section.agent": "Agent",
+  "options.nav.section.agent": "Assistant",
   "options.nav.section.advanced": "Advanced",
+  "options.nav.section.models": "Models",
   "options.nav.section.diagnostics": "Diagnostics",
-  "options.nav.section.extensions": "Extensions & Plugins",
+  "options.nav.section.extensions": "Extensions",
+
+  // Agent profiles
+  "options.agents.title": "Agent presets",
+  "options.agents.profiles": "Agent presets",
+  "options.agents.active": "Default task preset",
+  "options.agents.defaultShort": "Default",
+  "options.agents.setActive": "Make default task preset",
+  "options.agents.create": "New agent preset",
+  "options.agents.rename": "Rename agent preset",
+  "options.agents.name": "Preset name",
+  "options.agents.startFrom": "Start from",
+  "options.agents.fresh": "Blank preset",
+  "options.agents.noDescription": "No description",
+  "options.agents.customEmptyTitle": "No independent agent presets",
+  "options.agents.customEmptyDescription":
+    "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, models, or skills.",
+  "options.agents.cloneDefault": "Assistant default configuration",
+  "options.agents.empty": "No agent presets",
+  "options.agents.section.behavior": "Behavior & identity",
+  "options.agents.section.models": "Models & services",
+  "options.agents.role.title": "Description",
+  "options.agents.role.description":
+    "A short description shown when choosing who should run a task.",
+  "options.agents.role.placeholder":
+    "For example: investigates sources and verifies claims.",
+  "options.agents.soul.title": "Behavior and principles",
+  "options.agents.soul.description":
+    "Durable identity and working principles; the default response mode shapes everyday expression and tasks can still override it.",
+  "options.agents.soul.placeholder":
+    "Describe how this agent should think, work, and communicate…",
+  "options.agents.personality.title": "Response modes",
+  "options.agents.personality.description":
+    "Manage this agent's default work and expression mode; individual tasks can still switch temporarily.",
+  "options.agents.personality.defaultLabel": "Default response mode",
+  "options.agents.personality.defaultDescription":
+    "Used by new tasks; a composer selection overrides only the current task.",
+  "options.agents.personality.defaultNone": "No response mode",
+  "options.agents.personality.defaultBadge": "Default",
+  "options.agents.personality.create": "New response mode",
+  "options.agents.personality.edit": "Edit response mode",
+  "options.agents.personality.name": "Mode name",
+  "options.agents.personality.namePlaceholder": "For example: Fact checker",
+  "options.agents.personality.nameExists": "That name already exists.",
+  "options.agents.personality.summary": "Purpose",
+  "options.agents.personality.summaryPlaceholder":
+    "For example: verify key claims and cite sources.",
+  "options.agents.personality.instruction": "Behavior instruction",
+  "options.agents.personality.instructionPlaceholder":
+    "Describe how this mode should think, work, and respond…",
+  "options.agents.personality.tone": "Tone",
+  "options.agents.personality.tonePlaceholder": "For example: calm, direct",
+  "options.agents.personality.style": "Response style",
+  "options.agents.personality.stylePlaceholder":
+    "For example: conclusion before evidence",
+  "options.agents.personality.builtin": "Built in",
+  "options.agents.personality.overridden": "Adjusted",
+  "options.agents.personality.reset": "Restore built-in",
+  "options.agents.personality.duplicate": "Duplicate",
+  "options.agents.personality.deleteConfirm":
+    "Are you sure you want to {action} “{name}”?",
+  "options.agents.personality.loadFailed": "Couldn't load response modes",
+  "options.agents.personality.saveFailed": "Couldn't save the response mode",
+  "options.agents.personality.selectFailed":
+    "Couldn't set the default response mode",
+  "options.agents.personality.deleteFailed":
+    "Couldn't remove the response mode",
+  "options.agents.deleteConfirm": "Delete “{name}” and its preset data?",
+  "options.agents.loadFailed": "Couldn't load agent presets",
+  "options.agents.soulLoadFailed": "Couldn't load SOUL.md",
+  "options.agents.saveFailed": "Couldn't save the preset",
+  "options.agents.activateFailed": "Couldn't change the default preset",
+  "options.agents.createFailed": "Couldn't create the preset",
+  "options.agents.renameFailed": "Couldn't rename the preset",
+  "options.agents.deleteFailed": "Couldn't delete the preset",
+  "options.agents.modelSaveFailed": "Couldn't save the preset model",
+
+  // Skills
+  "options.skills.all": "All",
+  "options.skills.categories": "Categories",
+  "options.skills.totalEnabled": "{total} skills · {enabled} enabled",
+  "options.skills.search": "Search name, description, tag, or category…",
+  "options.skills.clearSearch": "Clear search",
+  "options.skills.clearFilters": "Clear",
+  "options.skills.noMatches": "No skills match the current filters.",
+  "options.skills.dismissError": "Dismiss error",
+  "options.skills.uncategorized": "Uncategorized",
+  "options.skills.enabled": "Enabled",
+  "options.skills.disabled": "Disabled",
+  "options.skills.enabledHint": "Loaded into this agent preset",
+  "options.skills.disabledHint": "Listed in config.yaml/skills.disabled",
+  "options.skills.toggleOn": "Click to disable this skill",
+  "options.skills.toggleOff": "Click to enable this skill",
+  "options.skills.loadFailed": "Couldn't load skills",
+  "options.skills.toggleFailed": "Couldn't change skill state",
+  "options.skills.origin.bundled": "Bundled",
+  "options.skills.origin.hub": "Skill Hub",
+  "options.skills.origin.agent": "Agent-authored",
+  "options.skills.origin.manual": "Manual",
+  "options.skills.origin.external": "External",
+  "options.skills.origin.bundledHint": "Shipped with Hermes Agent",
+  "options.skills.origin.hubHint": "Installed from the Hermes Skill Hub",
+  "options.skills.origin.agentHint": "Created by an agent",
+  "options.skills.origin.manualHint":
+    "Added manually to the Hermes skills directory",
+  "options.skills.origin.externalHint":
+    "Loaded from an external skills directory in config.yaml",
+  "options.skills.files": "Files ({count})",
+  "options.skills.filesTruncated": "showing the first {count}",
+  "options.skills.loading": "Loading…",
+  "options.skills.reading": "Reading…",
+  "options.skills.noFiles": "No files",
+  "options.skills.selectFile": "Select a file on the left to view its contents",
+  "options.skills.binaryFile": "Binary file · {size}",
+  "options.skills.fileTooLarge": "File is too large to preview ({size})",
+
+  // Task agent picker
+  "sidepanel.agentPicker.label": "Choose agent",
+  "sidepanel.agentPicker.description":
+    "Choose the Hermes Profile responsible for this task.",
+  "sidepanel.agentPicker.search": "Search agents…",
+  "sidepanel.agentPicker.empty": "No matching agents",
+  "sidepanel.agentPicker.loadFailed": "Couldn't load agents",
+  "sidepanel.agentPicker.locked":
+    "This agent is bound to the task; start a new task to switch",
+  "sidepanel.agentPicker.executionIdentity": "Execution identity",
+  "sidepanel.agentPicker.executionIdentityDescription":
+    "Choose an agent and response mode for this task.",
+  "sidepanel.agentPicker.agent": "Agent",
+  "sidepanel.agentPicker.personality": "Response mode",
+  "sidepanel.agentPicker.personalityDescription":
+    "Changes the expression style for this task only.",
+  "sidepanel.agentPicker.personalityDefault": "Follow agent",
+  "sidepanel.agentPicker.personalityDefaultDescription":
+    "Use this agent's configured default response mode and working principles.",
 
   // Extensions settings page
-  "options.extensions.title": "Extensions",
-  "options.extensions.subtitle":
-    "View installed extensions and troubleshoot load failures.",
+  "options.extensions.title": "Extension management",
+  "options.extensions.subtitle": "App extensions you added to Amiba.",
   "options.extensions.status.loaded": "Loaded",
   "options.extensions.status.failed": "Failed",
   "options.extensions.status.incompatible": "Incompatible",
@@ -146,10 +284,10 @@ export const en = {
   "options.extensions.browse.indexUrl": "Index: {url}",
   "options.plugins.heading": "Plugins",
   "options.plugins.subtitle":
-    "Hermes agent plugins (Python). Toggle to enable or disable, or uninstall right here; changes apply on the next Hermes start. Install via the `hermes plugins` CLI.",
+    "Agent plugins you added. Enable, disable or remove them independently.",
   "options.plugins.loading": "Loading plugins…",
   "options.plugins.error": "Couldn't load plugins: {error}",
-  "options.plugins.empty": "No plugins installed.",
+  "options.plugins.empty": "No user-added plugins.",
   "options.plugins.group.yours": "Your plugins",
   "options.plugins.group.bundled": "Bundled ({count})",
   "options.plugins.restartHint": "Restart Hermes to apply plugin changes.",
@@ -191,22 +329,22 @@ export const en = {
 
   // Featured features — plugins promoted to a first-class Settings surface
   "options.feature.enableLabel": "Enable",
-  "options.feature.stateOn": "Enabled — applies on the next Hermes start.",
+  "options.feature.stateOn": "Enabled — applies after restarting Amiba.",
   "options.feature.stateOff": "Disabled.",
   "options.feature.notInstalled":
-    "The plugin that powers this feature isn't installed yet.",
-  "options.feature.installAction": "Install",
+    "The browser component for connecting the current tab isn't installed yet.",
+  "options.feature.installAction": "Install connection",
+  "options.feature.restartHint": "Restart Amiba to apply this change.",
   "options.feature.installPrompt":
     'Please install the Hermes plugin that powers the "{name}" feature for me by running `hermes plugins install {ref}`. When it\'s done, tell me whether Hermes needs a restart to start using it.',
   "options.feature.agentSourceApp": "Settings",
-  "options.feature.backplaneError":
-    "Couldn't reach the backplane to read this feature's status.",
+  "options.feature.backplaneError": "Couldn't read this feature's status.",
   "options.feature.browser.title": "Browser",
   "options.feature.browser.subtitle":
     "Let Amiba see and control your browser through the companion Chrome extension.",
   "options.feature.browser.how.title": "How it works",
   "options.feature.browser.how.body":
-    "When enabled, Amiba registers browser-control tools and runs a local WebSocket hub. Install the companion Chrome extension and it connects automatically — Amiba can then read tabs, navigate, click, type, and run scripts in your browser.",
+    "Once connected, the agent can read and operate tabs you already have open, and only uses this access when a task needs it.",
 
   // Composer voice input
   "composer.voice.startRecording": "Record voice message",
@@ -441,12 +579,327 @@ export const en = {
   "options.models.catalog.updatedAt": "Catalog {time}",
   "options.models.refreshCatalog": "Refresh catalog",
   "options.models.loadingSettings": "Loading settings…",
+  "options.models.config.navTitle": "Models & services",
+  "options.models.connection.navTitle": "Connection",
+  "options.models.display.navTitle": "Shown in chat",
+  "options.models.display.navDescription": "Choose models for the input bar",
+  "options.models.display.title": "Service providers",
+  "options.models.providers.sectionTitle": "Service providers",
+  "options.models.display.search": "Search providers or models…",
+  "options.models.display.empty": "No matching providers or models.",
+  "options.models.display.source.config": "Hermes config",
+  "options.models.display.source.saved": "Saved here",
+  "options.models.display.source.detected": "Credential detected",
+  "options.models.display.source.available": "Not connected",
+  "options.models.display.current": "Current",
+  "options.models.display.currentDescription":
+    "This is the active main provider. Switch models before hiding it.",
+  "options.models.display.currentModel": "Current main model",
+  "options.models.display.availableModels": "{count} models",
+  "options.models.display.providerToggle": "Show {name} in model menus",
+  "options.models.display.configureProvider": "Configure {name}",
+  "options.models.display.modelToggle": "Show {name} in model menus",
+  "options.models.display.noModels":
+    "No models are currently available from this provider.",
+  "options.models.display.saveFailed":
+    "Could not save the model visibility preference.",
+  "options.models.card.context": "Context",
+  "options.models.card.maxInput": "Max input",
+  "options.models.card.maxOutput": "Max output",
+  "options.models.card.inputPrice": "Input",
+  "options.models.card.outputPrice": "Output",
+  "options.models.card.cacheRead": "Cache read",
+  "options.models.card.cacheWrite": "Cache write",
+  "options.models.card.free": "Free",
+  "options.models.card.group.capabilities": "Capabilities",
+  "options.models.card.group.limits": "Limits",
+  "options.models.card.group.pricing": "Pricing reference",
+  "options.models.card.group.reference": "Reference",
+  "options.models.card.capability.reasoning": "Reasoning",
+  "options.models.card.capability.tools": "Tool calling",
+  "options.models.card.capability.vision": "Vision",
+  "options.models.card.capability.structuredOutput": "Structured output",
+  "options.models.card.capability.temperature": "Temperature control",
+  "options.models.card.capability.openWeights": "Open weights",
+  "options.models.card.capability.fastMode": "Fast mode",
+  "options.models.card.capability.interleavedReasoning":
+    "Interleaved reasoning",
+  "options.models.card.capability.pdf": "PDF input",
+  "options.models.card.capability.audioInput": "Audio input",
+  "options.models.card.capability.videoInput": "Video input",
+  "options.models.card.capability.imageOutput": "Image output",
+  "options.models.card.capability.audioOutput": "Audio output",
+  "options.models.card.capability.videoOutput": "Video output",
+  "options.models.card.capability.pdfOutput": "PDF output",
+  "options.models.card.inputModalities": "Input modalities",
+  "options.models.card.outputModalities": "Output modalities",
+  "options.models.card.family": "Model family",
+  "options.models.card.knowledgeCutoff": "Knowledge cutoff",
+  "options.models.card.releaseDate": "Released",
+  "options.models.card.status": "Lifecycle",
+  "options.models.details.openFor": "View details for {name}",
+  "options.models.details.dialogDescription":
+    "Extended model information and its available data sources.",
+  "options.models.details.referenceNote":
+    "Model information references {source}.",
+  "options.models.details.noSupplemental":
+    "Hermes or the provider did not supply an extended profile, and no community catalog entry matched this model.",
+  "options.models.config.defaultsTitle": "Model assignments",
+  "options.models.config.mainModel": "Main model",
+  "options.models.config.main": "Default model",
+  "options.models.config.mainDescription":
+    "Used whenever a task has no dedicated override.",
+  "options.models.config.mainUnset": "Not set — choose a model",
+  "options.models.config.auxiliaryModels": "Auxiliary models",
+  "options.models.config.useMainModel": "Use the main model",
+  "options.models.config.useMainModelDescription":
+    "Do not assign a separate model; always follow the current main model.",
+  "options.models.config.configuredCount": "{count} of {total} configured",
+  "options.models.config.auxiliaryUnavailable":
+    "Auxiliary model configuration is unavailable because the bridge is not connected.",
+  "options.models.config.saved": "Saved",
+  "options.models.config.clear": "Clear",
+  "options.models.config.select": "Choose",
+  "options.models.config.search": "Search model id, provider, or description…",
+  "options.models.config.searchForTask": "Search models for {task}…",
+  "options.models.config.pickerTitle": "Choose a model for {task}",
+  "options.models.config.pickerDescription":
+    "Search configured providers and assign a model to this task.",
+  "options.models.config.noMatchingModels": "No matching models.",
+  "options.models.config.readMainFailed": "Could not read the main model.",
+  "options.models.config.setMainFailed": "Could not set the main model.",
+  "options.models.config.setCustomFailed":
+    "Could not set the custom main model.",
+  "options.models.config.saveFailed": "Could not save the model assignment.",
+  "options.models.config.clearFailed": "Could not clear the model assignment.",
+  "options.models.config.context": "Context",
+  "options.models.config.contextOverride": "Context (override)",
+  "options.models.config.contextOverrideHint":
+    "config.yaml override: {configured}\nAuto-detected: {detected}",
+  "options.models.config.contextDetectedHint":
+    "Auto-detected from agent model metadata",
+  "options.models.config.unknown": "unknown",
+  "options.models.config.modelFamilyHint": "Model family from models.dev",
+  "options.models.config.capability.vision": "Vision",
+  "options.models.config.capability.visionHint":
+    "Supports image input according to models.dev",
+  "options.models.config.capability.reasoning": "Reasoning",
+  "options.models.config.capability.reasoningHint":
+    "Supports reasoning tokens or extended thinking",
+  "options.models.config.capability.tools": "Tools",
+  "options.models.config.capability.toolsHint":
+    "Supports OpenAI-style function calling",
+  "options.models.config.capability.output": "Output {count}",
+  "options.models.config.capability.outputHint":
+    "Maximum output of {count} tokens per call",
+  "options.models.config.slot.vision": "Vision",
+  "options.models.config.slot.webExtract": "Web extraction",
+  "options.models.config.slot.compression": "Context compression",
+  "options.models.config.slot.sessionSearch": "Session search",
+  "options.models.config.slot.skillsHub": "Skills hub",
+  "options.models.config.slot.approval": "Approval",
+  "options.models.config.slot.mcp": "MCP",
+  "options.models.config.slot.titleGeneration": "Title generation",
+  "options.models.provider.addCustom": "Add custom endpoint",
+  "options.models.provider.customName": "Custom OpenAI-compatible endpoint",
+  "options.models.provider.credentials": "Credentials",
+  "options.models.provider.endpoint": "Endpoint: {url}",
+  "options.models.provider.metadataPartial":
+    "Provider metadata is only partially available. Make sure Hermes is installed and connected.",
+  "options.models.provider.customDescription":
+    "Use any OpenAI-compatible endpoint as the main model. Enter its model id and endpoint here.",
+  "options.models.provider.customModel": "Model id",
+  "options.models.provider.customModelPlaceholder":
+    "e.g. gpt-4o, llama-3.3-70b",
+  "options.models.provider.customEndpoint": "Endpoint URL",
+  "options.models.provider.setDefault": "Set as main model",
+  "options.models.provider.loadingCredentials": "Loading credentials…",
+  "options.models.provider.credentialValue": "Credential",
+  "options.models.provider.credentialPlaceholder": "Enter access credential",
+  "options.models.provider.showCredential": "Show credential",
+  "options.models.provider.hideCredential": "Hide credential",
+  "options.models.provider.credentialActive": "In use",
+  "options.models.provider.credentialConfigured": "Configured",
+  "options.models.provider.credentialResolution":
+    "Saving the current connection clears other mutually exclusive saved credentials and preserves shared endpoint settings.",
+  "options.models.provider.connection.title": "Connection status",
+  "options.models.provider.connection.details": "Connection details",
+  "options.models.provider.connection.credentialSource": "Credential source",
+  "options.models.provider.connection.reason": "Reason",
+  "options.models.provider.connection.external": "External connection",
+  "options.models.provider.connection.otherMethods": "Other detected methods",
+  "options.models.provider.connection.detectedNotUsed":
+    "Detected, not currently used",
+  "options.models.provider.connection.githubIdentity": "GitHub identity",
+  "options.models.provider.connection.copilotService": "Copilot service",
+  "options.models.provider.connection.notDetected": "Not detected",
+  "options.models.provider.connection.detected": "Identity credential detected",
+  "options.models.provider.connection.required": "GitHub login required",
+  "options.models.provider.connection.status.none": "Not connected",
+  "options.models.provider.connection.status.detected": "Detected",
+  "options.models.provider.connection.status.configured": "Configured",
+  "options.models.provider.connection.status.verification_required":
+    "Verification required",
+  "options.models.provider.connection.status.verified": "Verified",
+  "options.models.provider.connection.status.unavailable": "Unavailable",
+  "options.models.provider.connection.scope.title": "Scope",
+  "options.models.provider.connection.scope.profile": "This agent",
+  "options.models.provider.connection.scope.shared": "Shared credential",
+  "options.models.provider.connection.scope.system": "System login",
+  "options.models.provider.connection.scope.none": "Setup required",
+  "options.models.provider.service.status.not_applicable":
+    "No separate verification",
+  "options.models.provider.service.status.not_checked": "Not verified",
+  "options.models.provider.service.status.verified": "Verified and available",
+  "options.models.provider.service.status.unavailable": "Service unavailable",
+  "options.models.provider.service.copilotHint":
+    "The GitHub identity must be exchanged for Copilot service access",
+  "options.models.provider.service.copilotDenied":
+    "GitHub is signed in, but no usable Copilot service credential was issued",
+  "options.models.provider.service.copilotUnsupportedToken":
+    "The current GitHub credential type is not supported by the Copilot API",
+  "options.models.provider.service.copilotVerificationFailed":
+    "Service verification could not be completed. Try again later",
+  "options.models.provider.method.anthropicApiKey": "Anthropic API Key",
+  "options.models.provider.method.anthropicOauth": "Anthropic OAuth",
+  "options.models.provider.method.claudeSetupToken": "Claude Setup Token",
+  "options.models.provider.method.copilotToken": "Copilot GitHub Token",
+  "options.models.provider.method.githubCliToken": "GitHub CLI Token",
+  "options.models.provider.method.githubToken": "GitHub Token",
+  "options.models.provider.method.claudeCode": "Claude Code login",
+  "options.models.provider.method.githubCli": "GitHub CLI login",
+  "options.models.provider.method.hermesOauth": "Hermes OAuth login",
+  "options.models.provider.authHint.oauthDevice":
+    "You can also sign in through Hermes' device authorization flow.",
+  "options.models.provider.authHint.oauthExternal":
+    "You can also use an external CLI login detected by Hermes.",
+  "options.models.provider.authHint.externalProcess":
+    "This service can also be supplied by an authenticated external process.",
+  "options.models.provider.authHint.awsSdk":
+    "Hermes also reads local AWS SDK configuration or IAM environment credentials.",
+  "options.models.provider.authHint.copilot":
+    "GitHub identity and Copilot service access are separate states. Copilot is usable only after service verification succeeds.",
+  "options.models.provider.authHint.vertex":
+    "Hermes also reads Google Cloud ADC or service-account configuration.",
+  "options.models.provider.saveCredentials": "Save credentials",
+  "options.models.provider.saved": "Saved",
+  "options.models.provider.readCredentialsFailed":
+    "Could not read provider credentials.",
+  "options.models.provider.saveFailed": "Could not save provider credentials.",
+  "options.models.provider.models": "Available models",
+  "options.models.provider.refreshModels": "Refresh model list",
+  "options.models.provider.loadingModels": "Loading models…",
+  "options.models.provider.referenceList":
+    "A reference list is shown. Save credentials and refresh to fetch the full list.",
+  "options.models.provider.pricingHint":
+    "Prices are USD per million tokens and may differ by route. Treat your provider bill as the source of truth.",
+  "options.models.provider.noModels":
+    "No models are available yet. Save the required credentials, then refresh this list.",
+  "options.models.meta.context": "Context",
+  "options.models.meta.contextCap": "Context cap",
+  "options.models.meta.outputCap": "Output cap",
+  "options.models.meta.tokens": "Tokens",
+  "options.models.meta.input": "Input",
+  "options.models.meta.output": "Output",
+  "options.models.meta.inputPrice": "Input price",
+  "options.models.meta.outputPrice": "Output price",
+  "options.models.meta.pricing": "Pricing",
+  "options.models.meta.pricingTier": "Pricing tier",
+  "options.models.meta.modality": "Modality",
+  "options.models.meta.parameters": "Parameters",
+  "options.models.meta.capabilities": "Capabilities",
+  "options.models.virtual.navTitle": "Multi-model collaboration",
+  "options.models.virtual.moaTitle": "Multi-model collaboration",
+  "options.models.virtual.virtualBadge": "Multi-model collaboration",
+  "options.models.virtual.description":
+    "Multi-model collaboration runs reference models in parallel, then asks an aggregator model to produce the answer.",
+  "options.models.virtual.loading": "Loading multi-model collaboration…",
+  "options.models.virtual.unavailable":
+    "Multi-model collaboration configuration is unavailable.",
+  "options.models.virtual.save": "Save preset",
+  "options.models.virtual.saved": "Saved",
+  "options.models.virtual.unsaved": "Unsaved",
+  "options.models.virtual.saveFailed":
+    "Could not save the multi-model collaboration configuration.",
+  "options.models.virtual.status.ready": "Ready",
+  "options.models.virtual.status.degraded": "Partially ready",
+  "options.models.virtual.status.unavailable": "Unavailable",
+  "options.models.virtual.status.disabled": "Disabled",
+  "options.models.virtual.unavailableHint":
+    "The aggregator model is not currently usable. Connect its service provider or choose another model before running this preset.",
+  "options.models.virtual.degradedHint":
+    "One or more reference models are unavailable. The aggregator is ready, but this preset cannot use its full reference set.",
+  "options.models.virtual.preset": "Collaboration presets",
+  "options.models.virtual.defaultPreset": "Default",
+  "options.models.virtual.setDefault": "Set as default",
+  "options.models.virtual.newPreset": "Preset name",
+  "options.models.virtual.addPreset": "New preset",
+  "options.models.virtual.renamePreset": "Rename preset",
+  "options.models.virtual.renamePresetNamed": "Rename preset “{name}”",
+  "options.models.virtual.copyPreset": "Duplicate preset",
+  "options.models.virtual.copyName": "{name} copy",
+  "options.models.virtual.copyNameIndexed": "{name} copy {number}",
+  "options.models.virtual.presetActions": "Preset actions",
+  "options.models.virtual.presetActionsNamed": "Manage preset “{name}”",
+  "options.models.virtual.presetNameRequired": "Preset name cannot be empty.",
+  "options.models.virtual.presetNameExists":
+    "A preset with this name already exists.",
+  "options.models.virtual.deletePreset": "Delete preset",
+  "options.models.virtual.enabled": "Enabled",
+  "options.models.virtual.enabledHint":
+    "Enabled presets appear in the input-bar picker under Multi-model collaboration once the aggregator is usable.",
+  "options.models.virtual.pipelineTitle": "Model pipeline",
+  "options.models.virtual.pipelineDescription":
+    "References analyze the request in parallel. The aggregator receives their output and acts as the final model.",
+  "options.models.virtual.reference": "Reference {number}",
+  "options.models.virtual.aggregator": "Aggregator",
+  "options.models.virtual.parallel": "Parallel analysis, then aggregate",
+  "options.models.virtual.addReference": "Add reference model",
+  "options.models.virtual.removeReference": "Remove reference model",
+  "options.models.virtual.referenceEnabledNamed": "Enable {name}",
+  "options.models.virtual.slotSettingsNamed": "Execution settings for {name}",
+  "options.models.virtual.reasoningEffort": "Reasoning effort",
+  "options.models.virtual.reasoning.provider_default": "Use model default",
+  "options.models.virtual.reasoning.none": "No reasoning",
+  "options.models.virtual.reasoning.minimal": "Minimal",
+  "options.models.virtual.reasoning.low": "Low",
+  "options.models.virtual.reasoning.medium": "Medium",
+  "options.models.virtual.reasoning.high": "High",
+  "options.models.virtual.reasoning.xhigh": "Extra high",
+  "options.models.virtual.reasoning.max": "Maximum",
+  "options.models.virtual.reasoning.ultra": "Ultra",
+  "options.models.virtual.referenceOutputLimit": "Per-model output cap",
+  "options.models.virtual.inheritPresetOutputLimit": "Use preset cap",
+  "options.models.virtual.advancedTitle": "Advanced",
+  "options.models.virtual.fanout.label": "Advisor refresh",
+  "options.models.virtual.fanout.userTurn": "Once per task",
+  "options.models.virtual.fanout.perIteration": "Every execution step",
+  "options.models.virtual.fanout.everyN": "Every {count} execution steps",
+  "options.models.virtual.fanout.interval": "Refresh interval",
+  "options.models.virtual.referenceMaxTokens": "Advisor output cap",
+  "options.models.virtual.referenceMaxTokensValue": "Advisor output {count}",
+  "options.models.virtual.referenceTimeout": "Advisor timeout (seconds)",
+  "options.models.virtual.unlimited": "Unlimited",
+  "options.models.virtual.inheritHermes": "Use Hermes default",
+  "options.models.virtual.degradedPolicy": "When an advisor fails",
+  "options.models.virtual.degraded.loud": "Show degraded state",
+  "options.models.virtual.degraded.silent": "Continue silently",
+  "options.models.virtual.privacyFilter": "Advisor redaction",
+  "options.models.virtual.privacy.off": "Off",
+  "options.models.virtual.privacy.display": "UI and diagnostic records",
+  "options.models.virtual.privacy.full": "UI, records, and aggregator input",
+  "options.models.virtual.providerDefault": "Provider default",
+  "options.models.virtual.referenceTemperature": "Reference temperature",
+  "options.models.virtual.referenceTemperatureHint":
+    "Leave empty to use each model provider's default.",
+  "options.models.virtual.aggregatorTemperature": "Aggregator temperature",
+  "options.models.virtual.aggregatorTemperatureHint":
+    "Leave empty to use the aggregator provider's default.",
 
-  // Cron
-  "options.cron.title": "Cron",
-  "options.cron.pageTitle": "Scheduled tasks",
-  "options.cron.subtitle":
-    "Let Hermes run tasks, reminders, and recurring work on schedule",
+  // Automation
+  "options.cron.title": "Automation",
+  "options.cron.pageTitle": "Automation",
+  "options.cron.subtitle": "Tasks Hermes runs for you on a schedule",
   "options.cron.refresh": "Refresh",
   "options.cron.newJob": "New job",
   "options.cron.search": "Search scheduled tasks",
@@ -459,6 +912,41 @@ export const en = {
   "options.cron.empty.title": "No scheduled tasks yet",
   "options.cron.empty.description":
     "Create one to let Hermes handle recurring or time-based work.",
+  "options.cron.form.create": "New automation",
+  "options.cron.form.edit": "Edit automation",
+  "options.cron.form.createAction": "Create",
+  "options.cron.form.name": "Name",
+  "options.cron.form.name.placeholder":
+    "Optional — Hermes can derive it from the instructions",
+  "options.cron.form.schedule": "Schedule",
+  "options.cron.form.schedule.hint":
+    "Cron expression, recurring duration, one-shot duration, or ISO time",
+  "options.cron.form.prompt": "Instructions",
+  "options.cron.form.prompt.placeholder":
+    "Self-contained instructions Hermes should execute.",
+  "options.cron.form.prompt.scriptPlaceholder":
+    "Optional when running a script directly",
+  "options.cron.form.execution": "Execution",
+  "options.cron.form.model": "Model",
+  "options.cron.form.skills": "Skills",
+  "options.cron.form.skills.inherit": "No forced skills",
+  "options.cron.form.skills.search": "Search skills…",
+  "options.cron.form.workdir": "Working directory",
+  "options.cron.form.workdir.placeholder": "Defaults to $HOME",
+  "options.cron.form.workdir.choose": "Choose working directory",
+  "options.cron.form.delivery": "Delivery",
+  "options.cron.form.delivery.hint":
+    "local keeps the result in Amiba; all or a platform target also sends it out.",
+  "options.cron.form.advanced.show": "Advanced",
+  "options.cron.form.advanced.hide": "Hide advanced",
+  "options.cron.form.directScript": "Run script directly",
+  "options.cron.form.directScript.hint":
+    "Skip the model and run the script as the automation.",
+  "options.cron.form.script": "Script",
+  "options.cron.form.script.placeholder":
+    "A script under ~/.hermes/scripts or an absolute path",
+  "options.cron.form.repeat": "Run limit",
+  "options.cron.form.repeat.placeholder": "Blank means unlimited",
   "options.cron.state.scheduled": "Enabled",
   "options.cron.state.running": "Running",
   "options.cron.state.paused": "Paused",
@@ -501,6 +989,8 @@ export const en = {
   "options.status.health.mismatch.title": "Components need attention",
   "options.status.health.mismatch.subtitle":
     "The desktop app and backplane protocol versions do not match.",
+  "options.status.health.mismatch.hermesVersion":
+    "The installed Hermes version is below Amiba's supported minimum.",
   "options.status.metric.gateway": "Gateway",
   "options.status.metric.online": "Online",
   "options.status.metric.offline": "Offline",
@@ -550,6 +1040,11 @@ export const en = {
     "Backplane protocol v{current} is older than the required v{expected}. Update the backplane plugin.",
   "options.status.protocol.client":
     "Backplane protocol v{current} is newer than the supported v{expected}. Update the desktop app.",
+  "options.status.hermesVersion.title": "Hermes update required",
+  "options.status.hermesVersion.unsupported":
+    "Hermes {current} is installed. This version of Amiba requires Hermes {required} or newer; other Hermes operations are disabled until you update.",
+  "options.status.hermesVersion.unverifiable":
+    "Amiba could not verify the installed Hermes version. Install Hermes {required} or newer before continuing.",
   "options.status.onboarding.title": "Local service is unavailable",
   "options.status.onboarding.description":
     "Amiba cannot reach the local backplane. The desktop app normally starts it automatically; use the checks below if it stays offline.",
@@ -593,10 +1088,10 @@ export const en = {
   "options.logs.search.placeholder": "Substring filter (case-insensitive)",
 
   // Sidepanel
-  "sidepanel.newChat": "Start a new chat",
+  "sidepanel.newChat": "Start a new task",
   "sidepanel.tabbar.empty.before": "No open sessions — tap",
   "sidepanel.tabbar.empty.after": "or pick one from History",
-  "sidepanel.tabbar.button.new": "New chat",
+  "sidepanel.tabbar.button.new": "New task",
   "sidepanel.tabbar.button.history": "History",
   "sidepanel.tabbar.button.settings": "Settings",
   "sidepanel.tabbar.tab.close": "Close tab (session is kept in History)",
@@ -611,6 +1106,15 @@ export const en = {
   "sidepanel.placeholder.withPinned": "Ask about the attached page(s)…",
   "sidepanel.send": "Send",
   "sidepanel.send.tooltip": "Send (⌘/Ctrl+Enter)",
+  "sidepanel.modelPicker.label": "Choose model",
+  "sidepanel.modelPicker.description":
+    "Search and choose the model used for new task runs.",
+  "sidepanel.modelPicker.search": "Search models or providers…",
+  "sidepanel.modelPicker.noMatches": "No matching models.",
+  "sidepanel.modelPicker.loading": "Loading available models…",
+  "sidepanel.modelPicker.loadFailed": "Couldn’t load models. Reopen to retry.",
+  "sidepanel.modelPicker.switchFailed": "Couldn’t switch models. Try again.",
+  "sidepanel.modelPicker.virtualCapabilities": "Multi-model collaboration",
   "sidepanel.queue.tooltip": "Queue: send after the current turn finishes",
   "sidepanel.stop": "Stop generation",
   "sidepanel.regenerate": "Regenerate",
@@ -765,11 +1269,11 @@ export const en = {
   "sidepanel.attachment.remove": "Remove",
   "sidepanel.attachment.previewTooltip": "Click to preview",
   "sidepanel.attachment.previewAria": "Open larger preview of {name}",
-  "sidepanel.empty.title": "No conversation open",
+  "sidepanel.empty.title": "No task open",
   "sidepanel.empty.withHistory":
-    "Start a new chat or pick one up from History.",
-  "sidepanel.empty.firstChat": "Start your first chat with Amiba.",
-  "sidepanel.empty.newChat": "New chat",
+    "Start a new task or pick one up from History.",
+  "sidepanel.empty.firstChat": "Create your first task with Amiba.",
+  "sidepanel.empty.newChat": "New task",
   "sidepanel.empty.openHistory": "Open from History",
   "sidepanel.empty.settings": "Settings",
   // Empty-state connect prompt — shown in place of the composer when
@@ -823,7 +1327,8 @@ export const en = {
     "Your Chrome window — navigations and tools use the current tab.",
 
   // Session drawer
-  "sidepanel.sessions.title": "History",
+  "sidepanel.sessions.title": "Recent tasks",
+  "sidepanel.sessions.viewAll": "View all tasks",
   "sidepanel.sessions.empty": "No sessions yet. Send a message to start one.",
   "sidepanel.sessions.dialogAria": "Session history",
   "sidepanel.sessions.close": "Close",
@@ -832,7 +1337,7 @@ export const en = {
   "sidepanel.sessions.deletePermanently": "Delete permanently",
   "sidepanel.sessions.save": "Save",
   "sidepanel.sessions.cancel": "Cancel",
-  "sidepanel.sessions.newChatTitle": "New chat",
+  "sidepanel.sessions.newChatTitle": "New task",
   "sidepanel.sessions.deleteConfirm":
     'Permanently delete "{title}"? This drops the session and its messages from History — closing the tab from the top bar would have just hidden it.',
   "sidepanel.sessions.group.pinned": "Pinned",
@@ -842,13 +1347,45 @@ export const en = {
   "sidepanel.sessions.group.thisMonth": "This month",
   "sidepanel.sessions.group.older": "Older",
   "sidepanel.sessions.group.chats": "Chats",
-  "sidepanel.sessions.group.unbound": "Other chats",
+  "sidepanel.sessions.group.unbound": "Independent tasks",
   // Channel-scoped section label: ``{name} chats`` — used for both the
   // local "Local chats" section and remote channel sections ("Feishu
   // chats", "Telegram chats", …). Single template keeps section
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
-  "sidepanel.sessions.group.scheduled": "Scheduled tasks",
+  "sidepanel.sessions.group.scheduled": "Automation runs",
+
+  // Task center / Kanban
+  "tasks.title": "Tasks",
+  "tasks.search": "Search tasks…",
+  "tasks.create": "New task",
+  "tasks.loadFailed": "Couldn't load tasks",
+  "tasks.createFailed": "Couldn't create the task",
+  "tasks.column.planning": "Planned",
+  "tasks.column.ready": "Ready",
+  "tasks.column.running": "In progress",
+  "tasks.column.attention": "Needs attention",
+  "tasks.column.done": "Done",
+  "tasks.column.empty": "No tasks",
+  "tasks.status.triage": "Triage",
+  "tasks.status.todo": "To do",
+  "tasks.status.scheduled": "Scheduled",
+  "tasks.status.ready": "Ready",
+  "tasks.status.running": "Running",
+  "tasks.status.blocked": "Blocked",
+  "tasks.status.review": "Review",
+  "tasks.status.done": "Done",
+  "tasks.status.archived": "Archived",
+  "tasks.field.title": "Title",
+  "tasks.field.body": "Instructions",
+  "tasks.field.assignee": "Agent",
+  "tasks.field.workdir": "Working directory",
+  "tasks.field.chooseWorkdir": "Choose working directory",
+  "tasks.assignee.unassigned": "Unassigned — won't run automatically",
+  "tasks.latestSummary": "Latest handoff",
+  "modelSelection.inherit": "Use the default model",
+  "modelSelection.inherit.description":
+    "Follow the active agent profile's default model.",
   "sidepanel.sessions.history.empty": "No chats or scheduled runs yet.",
   "sidepanel.sessions.layout.aria": "History layout",
   "sidepanel.sessions.layout.timeline": "All by time",
@@ -952,10 +1489,12 @@ export const en = {
   // Chat tab
   "chat.title": "Amiba chat",
   "chat.goHome": "Back to home",
-  "chat.newChat": "New chat",
+  "chat.newChat": "New task",
   "chat.placeholder": "Send a message…",
   "chat.openOptions": "Open Amiba options",
   "chat.search": "Search",
+  "chat.collapseSidebar": "Hide sidebar",
+  "chat.expandSidebar": "Show sidebar",
   "chat.settings": "Settings",
   "commandPalette.description":
     "Search conversations or run common app commands.",
@@ -976,11 +1515,11 @@ export const en = {
   "chat.loadingSessions": "Loading sessions…",
   "chat.noMatches": "No matches.",
   "chat.noSessions": "No saved sessions yet.",
-  "commandPalette.placeholder": "Search chats or run commands",
+  "commandPalette.placeholder": "Search tasks or run commands",
   "commandPalette.empty": "No results",
   "commandPalette.group.recommended": "Recommended",
-  "commandPalette.group.conversations": "Conversations",
-  "commandPalette.cmd.newChat": "New Chat",
+  "commandPalette.group.conversations": "Tasks",
+  "commandPalette.cmd.newChat": "New Task",
 
   // ── Channels (multi-platform sessions) ──
   // ``channels.local`` is the label for every "this machine" session
@@ -1017,7 +1556,7 @@ export const en = {
   "sidepanel.sessions.readOnlyNotice":
     "This conversation lives on {name}. Continue there to send a new message.",
 
-  // Tokens + Tools pages (internal modules; ex token-meter + tool-meter)
+  // Tokens + Tools pages
   "options.nav.tokens": "Tokens",
   "options.nav.tools": "Tools",
   "usage.range.today": "Today",
@@ -1059,45 +1598,351 @@ export const en = {
   "usage.tools.label.completed": "{ms}ms",
   "usage.tools.footer.source": "Local capture · auto-refreshes every 30 s",
 
-  // Tools workspace (ex tool-meter Manage; Home = activity dashboard)
-  "tools.home": "Home",
-  "tools.empty": "No configurable toolsets were found.",
-  "tools.loadFailed": "Failed to load toolsets.",
+  // Profile-scoped tools, with internal implementation details curated away.
+  "agentCapabilities.title": "Tools",
+  "agentCapabilities.subtitle":
+    "Manage the built-in and external tools available to this assistant.",
+  "agentCapabilities.loadFailed": "Could not load built-in tools.",
+  "agentCapabilities.empty": "No configurable built-in tools are available.",
+  "agentCapabilities.back": "Back to tools",
+  "agentCapabilities.builtin.title": "Built-in tools",
+  "agentCapabilities.builtin.description":
+    "Provided by Hermes and organized by purpose for easier setup.",
+  "agentCapabilities.enabledForAssistant":
+    "Allow this assistant to use this tool",
+  "agentCapabilities.activity.title": "Tool usage",
+  "agentCapabilities.activity.description":
+    "A diagnostic record of recent tool calls.",
+  "agentCapabilities.activity.action": "Usage",
+  "agentCapabilities.scope.device": "Shared on this device",
+  "agentCapabilities.status.ready": "Ready",
+  "agentCapabilities.status.attention": "Needs setup",
+  "agentCapabilities.status.off": "Off",
+  "agentCapabilities.group.understand.title": "Understand content",
+  "agentCapabilities.group.understand.description":
+    "Help Amiba interpret visual information you share.",
+  "agentCapabilities.group.web.title": "Find and use information",
+  "agentCapabilities.group.web.description":
+    "Search, read and interact with information on the web.",
+  "agentCapabilities.group.create.title": "Create content",
+  "agentCapabilities.group.create.description":
+    "Turn instructions into images, video and spoken audio.",
+  "agentCapabilities.group.device.title": "Work on this device",
+  "agentCapabilities.group.device.description":
+    "Control how Amiba works with files, code and desktop applications.",
+  "agentCapabilities.group.connect.title": "Connected services",
+  "agentCapabilities.group.connect.description":
+    "Let Amiba act in services and devices you already use.",
+  "agentCapabilities.item.vision.title": "Understand images",
+  "agentCapabilities.item.vision.description":
+    "Read screenshots, photos, diagrams and other visual material.",
+  "agentCapabilities.item.video.title": "Understand video",
+  "agentCapabilities.item.video.description":
+    "Review video content with a video-capable model.",
+  "agentCapabilities.item.web.title": "Search and read the web",
+  "agentCapabilities.item.web.description":
+    "Choose services for search results and page extraction.",
+  "agentCapabilities.item.browser.title": "Operate web pages",
+  "agentCapabilities.item.browser.description":
+    "Choose how Amiba navigates, clicks and types in a browser.",
+  "agentCapabilities.item.xSearch.title": "Search X",
+  "agentCapabilities.item.xSearch.description":
+    "Find public posts and conversations on X.",
+  "agentCapabilities.item.imageGen.title": "Generate images",
+  "agentCapabilities.item.imageGen.description":
+    "Choose an image service and its default model.",
+  "agentCapabilities.item.videoGen.title": "Generate video",
+  "agentCapabilities.item.videoGen.description":
+    "Create or edit video from text and reference material.",
+  "agentCapabilities.item.tts.title": "Read text aloud",
+  "agentCapabilities.item.tts.description":
+    "Choose the voice service used to create spoken audio.",
+  "agentCapabilities.item.terminal.title": "Run code and commands",
+  "agentCapabilities.item.terminal.description":
+    "Choose one environment for both code and command execution.",
+  "agentCapabilities.item.codeExecution.title": "Execute code",
+  "agentCapabilities.item.codeExecution.description":
+    "Allow Amiba to run code needed to complete a task.",
+  "agentCapabilities.item.file.title": "Work with files",
+  "agentCapabilities.item.file.description":
+    "Read, create and update files you place in scope.",
+  "agentCapabilities.item.computerUse.title": "Control desktop apps",
+  "agentCapabilities.item.computerUse.description":
+    "Set up the driver and operating-system permissions for desktop control.",
+  "agentCapabilities.item.homeAssistant.title": "Control your smart home",
+  "agentCapabilities.item.homeAssistant.description":
+    "Connect Home Assistant devices and services.",
+  "agentCapabilities.item.spotify.title": "Use Spotify",
+  "agentCapabilities.item.spotify.description":
+    "Search music and control playback, playlists and your library.",
+  "agentCapabilities.item.discord.title": "Participate in Discord",
+  "agentCapabilities.item.discord.description":
+    "Read messages, find members and take part in conversations.",
+  "agentCapabilities.item.discordAdmin.title": "Manage a Discord server",
+  "agentCapabilities.item.discordAdmin.description":
+    "Work with channels, roles, pins and server administration.",
+  "agentCapabilities.item.yuanbao.title": "Use Yuanbao groups",
+  "agentCapabilities.item.yuanbao.description":
+    "Query groups and members, send messages and use stickers.",
+
+  // User-added extensions and tools.
+  "externalTools.tab.extensions": "App extensions",
+  "externalTools.tab.plugins": "Agent plugins",
+  "externalTools.tab.mcp": "MCP",
+  "externalTools.tab.cli": "CLI tools",
+  "externalTools.status.enabled": "Enabled",
+  "externalTools.status.disabled": "Disabled",
+  "externalTools.configure": "Configure",
+  "externalTools.plugin.add": "Add plugin",
+  "externalTools.plugin.addPrompt":
+    "Help me find and add an Agent plugin. Ask what I need it for, explain the source and permissions, and ask for confirmation before installing anything.",
+  "externalTools.mcp.title": "External tools",
+  "externalTools.mcp.subtitle":
+    "Connect tools provided by external services through MCP.",
+  "externalTools.mcp.loadFailed": "Could not load MCP services.",
+  "externalTools.mcp.add": "Add MCP",
+  "externalTools.mcp.source": "MCP",
+  "externalTools.mcp.addPrompt":
+    "Help me find and add an MCP service for Hermes assistant profile “{profile}”. First ask what I want Amiba to do, explain the options, and ask for confirmation before installing anything.",
+  "externalTools.mcp.configurePrompt":
+    "Help me inspect and configure MCP “{name}” (configuration name: {slug}) in Hermes assistant profile “{profile}”. Explain its current state first, and ask for confirmation before disabling, reconfiguring or removing it.",
+  "externalTools.mcp.emptyTitle": "No MCP services added",
+  "externalTools.mcp.emptyDescription":
+    "Add one when you want Amiba to connect to an external tool or data source.",
+  "externalTools.cli.subtitle":
+    "Command-line programs you explicitly choose for Amiba to use.",
+  "externalTools.cli.privacy":
+    "Amiba does not scan every command installed on your computer.",
+  "externalTools.cli.title": "Add a CLI tool through the Agent",
+  "externalTools.cli.description":
+    "Tell Amiba which command-line tool you need. It will inspect the environment, explain the installation or sign-in steps, and ask before making changes.",
+  "externalTools.cli.add": "Add CLI tool",
+  "externalTools.cli.addPrompt":
+    "Help me add or configure a CLI tool for use in Amiba. Ask what I need it for, inspect whether it is already installed, explain the plan, and ask for confirmation before installing or changing anything.",
+
+  // Agent capability configuration
   "tools.toggleFailed": "Toggle failed, please try again.",
-  "tools.badge.notConfigured": "Not configured",
-  "tools.toggle.enable": "Enable {name}",
-  "tools.toggle.disable": "Disable {name}",
-  "tools.search.placeholder": "Search toolsets…",
-  "tools.search.empty": "No matching toolsets.",
-  "tools.group.builtin": "Built-in",
-  "tools.group.installedMcps": "Installed (MCP)",
-  "tools.installedMcps.empty":
-    "No MCP servers installed yet. Ask the assistant to find and install one for you.",
-  "tools.installedMcp.curated": "Curated",
-  "tools.installedMcp.manual": "Manual",
-  "tools.installedMcp.source": "Source",
-  "tools.installedMcp.transport": "Transport",
-  "tools.installedMcp.cliHeading": "CLI",
-  "tools.installedMcp.cliHint":
-    "Manage this server via the CLI — probe, reconfigure, or remove.",
   "tools.detail.loadFailed": "Failed to load detail.",
-  "tools.detail.tab.overview": "Overview",
-  "tools.detail.tab.tools": "Tools",
-  "tools.detail.tab.providers": "Providers",
-  "tools.detail.overview.status": "Status",
-  "tools.detail.overview.configured": "Configuration",
-  "tools.detail.overview.toolCount": "Tools registered",
-  "tools.detail.overview.providerCount": "Providers",
-  "tools.detail.overview.noProviders": "No providers",
-  "tools.detail.overview.persistsHint":
-    "Changes write to ~/.hermes/config.yaml (platform_toolsets.cli) and take effect on the next agent session.",
-  "tools.detail.tools.empty": "No tools resolved for this toolset.",
-  "tools.detail.providers.empty": "No providers configured for this toolset.",
-  "tools.detail.provider.noKeysNeeded": "No keys needed",
-  "tools.detail.provider.configured": "Configured",
-  "tools.detail.provider.missingKeys": "Keys missing",
-  "tools.detail.envVar.set": "Set",
-  "tools.detail.envVar.missing": "Missing",
+  "tools.detail.journey.done": "Done",
+  "tools.detail.journey.todo": "Next",
+  "tools.detail.noSetup.title": "No additional setup needed",
+  "tools.detail.noSetup.description":
+    "Enable this capability and Amiba can use it in a new conversation.",
+  "tools.detail.noSetup.unavailableTitle": "This capability is not ready yet",
+  "tools.detail.noSetup.unavailableDescription":
+    "The current Hermes environment did not provide an actionable setup method. Update the runtime and check again.",
+  "tools.detail.understanding.loadFailed": "Could not load available models.",
+  "tools.detail.understanding.saveFailed":
+    "Could not save the understanding model.",
+  "tools.detail.understanding.routeTitle": "Current model source",
+  "tools.detail.understanding.imageDescription":
+    "Image understanding follows the main model by default. Choose a dedicated vision model when the main model cannot accept images.",
+  "tools.detail.understanding.videoDescription":
+    "Image and video understanding share one vision model. This is the model source both capabilities currently use.",
+  "tools.detail.understanding.routeDedicated":
+    "Using a dedicated understanding model",
+  "tools.detail.understanding.routeVision":
+    "Using the shared image-and-video model",
+  "tools.detail.understanding.routeMain": "Following the main model",
+  "tools.detail.understanding.noRoute": "No usable model selected",
+  "tools.detail.understanding.mainSupportsImage":
+    "The main model supports image input.",
+  "tools.detail.understanding.mainLacksImage":
+    "The main model does not support image input. Choose a dedicated model below.",
+  "tools.detail.understanding.mainImageUnknown":
+    "Amiba cannot confirm image support for the main model. You can select a known vision model below.",
+  "tools.detail.understanding.chooseTitle": "Change the understanding model",
+  "tools.detail.understanding.imageHint":
+    "Only models available through Amiba model services are shown. Choose one that explicitly supports image input.",
+  "tools.detail.understanding.videoHint":
+    "Choose a model that explicitly supports video input. Image understanding will use the same model after you save.",
+  "tools.detail.understanding.manageModels": "Manage model services",
+  "tools.detail.understanding.noModels":
+    "No models are available yet. Connect a model service from Models first.",
+  "tools.detail.understanding.provider": "Model service",
+  "tools.detail.understanding.model": "Model",
+  "tools.detail.understanding.useDedicated": "Use dedicated model",
+  "tools.detail.understanding.useShared": "Use for images and video",
+  "tools.detail.understanding.followMain": "Follow main model",
+  "tools.detail.understanding.saved": "Model source updated",
+  "tools.detail.browser.backgroundTitle": "Background browser",
+  "tools.detail.browser.backgroundDescription":
+    "Opens pages and runs automation separately without taking over the tab you are using.",
+  "tools.detail.browser.currentTabTitle": "Current browser tab",
+  "tools.detail.browser.currentTabDescription":
+    "Connect the Amiba browser extension to let the Agent work in a tab you already have open.",
+  "tools.detail.provider.title": "Choose how it works",
+  "tools.detail.provider.subtitle":
+    "Pick the service that best matches your budget and privacy preference.",
+  "tools.detail.provider.active": "In use",
+  "tools.detail.provider.choose": "Choose",
+  "tools.detail.provider.selecting": "Saving…",
+  "tools.detail.provider.search": "Search provider",
+  "tools.detail.provider.extract": "Page extraction provider",
+  "tools.detail.provider.status.ready": "Ready",
+  "tools.detail.provider.status.needsKey": "Key required",
+  "tools.detail.provider.status.needsAuth": "Sign-in required",
+  "tools.detail.provider.status.needsSetup": "Setup required",
+  "tools.detail.provider.status.inactive": "Not selected",
+  "tools.detail.provider.badge.recommended": "Recommended",
+  "tools.detail.provider.badge.subscription": "Subscription",
+  "tools.detail.credentials.title": "Connect your account",
+  "tools.detail.credentials.description":
+    "Secrets are stored securely on this device and are never shown again.",
+  "tools.detail.credentials.savedPlaceholder":
+    "Already saved — leave blank to keep it",
+  "tools.detail.credentials.openProvider": "Get this value",
+  "tools.detail.credentials.save": "Save connection",
+  "tools.detail.credentials.saving": "Saving…",
+  "tools.detail.credentials.saved": "Connection saved",
+  "tools.detail.credentials.show": "Show entered value",
+  "tools.detail.credentials.hide": "Hide entered value",
+  "tools.detail.setup.title": "Install required component",
+  "tools.detail.setup.description":
+    "Amiba can automatically install and configure the components this service needs.",
+  "tools.detail.setup.run": "Install and configure",
+  "tools.detail.setup.running": "Installing…",
+  "tools.detail.setup.connect": "Continue to connect",
+  "tools.detail.setup.connecting": "Connecting…",
+  "tools.detail.setup.configure": "Finish setup",
+  "tools.detail.setup.configuring": "Configuring…",
+  "tools.detail.setup.done": "Completed",
+  "tools.detail.setup.info.open": "View setup details for {name}",
+  "tools.detail.setup.info.changes": "What this will do",
+  "tools.detail.setup.info.agentBrowser.title": "Local browser components",
+  "tools.detail.setup.info.agentBrowser.description":
+    "Prepares an isolated headless browser environment for Hermes on this device.",
+  "tools.detail.setup.info.agentBrowser.detail.cli":
+    "Installs the Node.js dependencies in the Hermes runtime, including the agent-browser controller.",
+  "tools.detail.setup.info.agentBrowser.detail.chromium":
+    "Downloads a matching Playwright Chromium/headless-shell build, usually about 170 MB; an existing compatible Chrome can be reused.",
+  "tools.detail.setup.info.agentBrowser.detail.session":
+    "Tasks run in isolated headless sessions and do not read your everyday Chrome accounts, cookies, or extensions by default.",
+  "tools.detail.setup.info.agentBrowser.note":
+    "Browser files normally live in Playwright's cache. Removing Hermes may not remove that cache automatically.",
+  "tools.detail.setup.info.cloudBrowser.title": "Cloud browser controller",
+  "tools.detail.setup.info.cloudBrowser.description":
+    "The provider runs the browser in the cloud; Hermes installs a local controller to send it actions.",
+  "tools.detail.setup.info.cloudBrowser.detail.cli":
+    "Installs the agent-browser CLI and the Node.js dependencies required by the Hermes runtime.",
+  "tools.detail.setup.info.cloudBrowser.detail.hosted":
+    "Does not download local Chromium. Pages run in the cloud browser hosted by Browserbase, Browser Use, or Firecrawl.",
+  "tools.detail.setup.info.camofox.title": "Camofox browser service",
+  "tools.detail.setup.info.camofox.description":
+    "Installs a local anti-detection Firefox/Camoufox browser service.",
+  "tools.detail.setup.info.camofox.detail.package":
+    "Installs the @askjo/camofox-browser Node.js package in the Hermes runtime.",
+  "tools.detail.setup.info.camofox.detail.engine":
+    "The first service start downloads the Camoufox browser engine, approximately 300 MB.",
+  "tools.detail.setup.info.camofox.detail.service":
+    "After installation, the local Camofox service still needs to be started, or you can use its Docker service.",
+  "tools.detail.setup.info.cuaDriver.title": "Computer control driver",
+  "tools.detail.setup.info.cuaDriver.description":
+    "Installs cua-driver so Hermes can read the screen and perform mouse and keyboard actions in the background.",
+  "tools.detail.setup.info.cuaDriver.detail.installer":
+    "Downloads the official installer from the trycua/cua repository and installs the driver for this operating system.",
+  "tools.detail.setup.info.cuaDriver.detail.process":
+    "The driver runs as a local background process and does not use a Nous cloud computer.",
+  "tools.detail.setup.info.cuaDriver.detail.permissions":
+    "On macOS, Accessibility and Screen Recording permissions are still required after installation; the installer cannot grant them automatically.",
+  "tools.detail.setup.info.fasterWhisper.title": "Local speech recognition",
+  "tools.detail.setup.info.fasterWhisper.description":
+    "Installs faster-whisper to transcribe speech on this device.",
+  "tools.detail.setup.info.fasterWhisper.detail.package":
+    "Installs the faster-whisper Python package into the environment used by Hermes.",
+  "tools.detail.setup.info.fasterWhisper.detail.model":
+    "The recognition model downloads on first use; the default is usually about 150 MB and other sizes are available.",
+  "tools.detail.setup.info.fasterWhisper.detail.local":
+    "Audio and transcription stay on this device and require no additional speech API key.",
+  "tools.detail.setup.info.kittenTts.title": "KittenTTS local voice",
+  "tools.detail.setup.info.kittenTts.description":
+    "Installs a lightweight CPU-oriented local text-to-speech engine.",
+  "tools.detail.setup.info.kittenTts.detail.package":
+    "Installs KittenTTS and soundfile into the Hermes Python environment.",
+  "tools.detail.setup.info.kittenTts.detail.model":
+    "Downloads a voice model of approximately 25–80 MB, depending on the selected model.",
+  "tools.detail.setup.info.kittenTts.detail.local":
+    "Speech is generated locally and needs no account or remote API key.",
+  "tools.detail.setup.info.piper.title": "Piper local voice",
+  "tools.detail.setup.info.piper.description":
+    "Installs Piper to generate speech locally on this device.",
+  "tools.detail.setup.info.piper.detail.package":
+    "Installs the roughly 14 MB piper-tts runtime into the Hermes Python environment.",
+  "tools.detail.setup.info.piper.detail.voice":
+    "The selected voice downloads separately on the first speech request.",
+  "tools.detail.setup.info.piper.detail.local":
+    "Speech is generated locally and needs no account or remote API key.",
+  "tools.detail.setup.info.ddgs.title": "DuckDuckGo search component",
+  "tools.detail.setup.info.ddgs.description":
+    "Installs a DuckDuckGo search client that requires no API key.",
+  "tools.detail.setup.info.ddgs.detail.package":
+    "Installs the ddgs package into the Hermes Python environment.",
+  "tools.detail.setup.info.ddgs.detail.scope":
+    "It provides web search only, not page extraction; choose a separate extraction provider if you also need to read pages.",
+  "tools.detail.setup.info.ddgs.detail.limits":
+    "No account is required, but requests are still subject to DuckDuckGo's server-side rate limits.",
+  "tools.detail.setup.info.spotify.title": "Connect Spotify",
+  "tools.detail.setup.info.spotify.description":
+    "Uses Spotify OAuth to let Hermes access playback and library features.",
+  "tools.detail.setup.info.spotify.detail.browser":
+    "Opens your system browser to complete Spotify sign-in and authorization.",
+  "tools.detail.setup.info.spotify.detail.client":
+    "If no Spotify app is configured yet, it first asks for a Client ID.",
+  "tools.detail.setup.info.spotify.detail.storage":
+    "Authorization data is stored in the local Hermes configuration; no extra browser or media player is installed.",
+  "tools.detail.setup.info.langfuse.title": "Langfuse observability component",
+  "tools.detail.setup.info.langfuse.description":
+    "Installs and enables the Langfuse integration for recording Agent traces.",
+  "tools.detail.setup.info.langfuse.detail.sdk":
+    "Installs the Langfuse SDK into the Hermes Python environment.",
+  "tools.detail.setup.info.langfuse.detail.plugin":
+    "Enables the bundled observability/langfuse plugin in Hermes configuration.",
+  "tools.detail.setup.info.langfuse.detail.restart":
+    "Hermes must be restarted after setup before the tracing configuration takes effect.",
+  "tools.detail.setup.info.xaiGrok.title": "Connect xAI",
+  "tools.detail.setup.info.xaiGrok.description":
+    "Chooses an available authentication method for tools that use xAI.",
+  "tools.detail.setup.info.xaiGrok.detail.oauth":
+    "You can open a browser and sign in with xAI Grok OAuth, using a compatible subscription allowance.",
+  "tools.detail.setup.info.xaiGrok.detail.key":
+    "Alternatively, save an XAI_API_KEY and use the billing of that xAI API account.",
+  "tools.detail.setup.info.xaiGrok.detail.install":
+    "This step installs no local executable or browser engine.",
+  "tools.detail.setup.info.unknown.title": "Additional setup",
+  "tools.detail.setup.info.unknown.description":
+    "Hermes declares that this service needs an additional setup step.",
+  "tools.detail.setup.info.unknown.detail":
+    "This Hermes version did not provide structured details for the setup; its result will be shown when it runs.",
+  "tools.detail.auth.title": "Sign in required",
+  "tools.detail.auth.description":
+    "This option uses your Nous account. Sign in from the Models page, then come back and refresh.",
+  "tools.detail.model.title": "Choose a model",
+  "tools.detail.model.description":
+    "Models differ in speed, quality and price. The recommended default is preselected.",
+  "tools.detail.model.save": "Use this model",
+  "tools.detail.terminal.title": "Choose where commands run",
+  "tools.detail.terminal.description":
+    "This computer is best for beginners. Use an isolated container for unfamiliar code.",
+  "tools.detail.terminal.ready": "Ready",
+  "tools.detail.terminal.needsSetup": "Needs setup",
+  "tools.detail.terminal.unavailable": "Unavailable",
+  "tools.detail.terminal.connectionTitle": "Backend settings",
+  "tools.detail.terminal.connectionDescription":
+    "Only values required by the selected backend are shown. Existing secrets stay hidden.",
+  "tools.detail.computer.title": "System control permissions",
+  "tools.detail.computer.description":
+    "Computer control needs a driver and operating-system approval. Amiba only uses it when a task requires it.",
+  "tools.detail.computer.driver": "Computer control driver",
+  "tools.detail.computer.accessibility": "Accessibility permission",
+  "tools.detail.computer.screen": "Screen Recording permission",
+  "tools.detail.computer.ready": "The driver and system permissions are ready",
+  "tools.detail.computer.grant": "Request system permissions",
+  "tools.detail.computer.requested":
+    "Approve CuaDriver in the macOS system prompt, then choose Check again.",
+  "tools.detail.computer.installFirst":
+    "Install the computer control driver above, then grant system permissions.",
+  "tools.detail.refresh": "Check again",
+  "tools.detail.mutationFailed": "Could not save: {error}",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 import { uninstallPlugin } from "../hermes-plugins"
+import { invalidateHermesCompatibilityCache } from "../backplane-client"
 
 describe("uninstallPlugin", () => {
   beforeEach(() => {
+    invalidateHermesCompatibilityCache()
     global.fetch = vi.fn()
   })
   afterEach(() => {
@@ -12,6 +14,7 @@ describe("uninstallPlugin", () => {
   it("returns ok=true with appliesOnRestart on success", async () => {
     global.fetch = vi
       .fn()
+      .mockResolvedValueOnce(Response.json({ version: "0.19.0" }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, applies_on_restart: true })))
     const res = await uninstallPlugin("hermes-my-browser-extension")
     expect(res.ok).toBe(true)
@@ -21,6 +24,7 @@ describe("uninstallPlugin", () => {
   it("surfaces backend error on non-2xx", async () => {
     global.fetch = vi
       .fn()
+      .mockResolvedValueOnce(Response.json({ version: "0.19.0" }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ ok: false, error: "bundled plugin..." }), { status: 409 }),
       )

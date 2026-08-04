@@ -7,6 +7,13 @@
 
 import { backplaneFetch } from "./backplane-client";
 
+function profileUrl(path: string, profileId?: string): string {
+  const profile = profileId?.trim();
+  if (!profile) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}profile=${encodeURIComponent(profile)}`;
+}
+
 /** One row from `get_plugin_manager().list_plugins()`. */
 export interface HermesPlugin {
   name: string;
@@ -33,9 +40,14 @@ export interface HermesPluginsResponse {
   plugins: HermesPlugin[];
 }
 
-export async function getHermesPlugins(): Promise<HermesPluginsResponse> {
+export async function getHermesPlugins(
+  profileId?: string,
+): Promise<HermesPluginsResponse> {
   try {
-    const res = await backplaneFetch("/hermes/plugins", { method: "GET" });
+    const res = await backplaneFetch(
+      profileUrl("/hermes/plugins", profileId),
+      { method: "GET" },
+    );
     if (!res.ok) return { ok: false, plugins: [] };
     const data = (await res.json().catch(() => null)) as
       | { plugins?: HermesPlugin[] }
@@ -65,8 +77,12 @@ export interface PluginToggleResult {
 export async function setPluginEnabled(
   name: string,
   enabled: boolean,
+  profileId?: string,
 ): Promise<PluginToggleResult> {
-  const path = `/hermes/plugins/${enabled ? "enable" : "disable"}?name=${encodeURIComponent(name)}`;
+  const path = profileUrl(
+    `/hermes/plugins/${enabled ? "enable" : "disable"}?name=${encodeURIComponent(name)}`,
+    profileId,
+  );
   try {
     const res = await backplaneFetch(path, { method: "POST" });
     const data = (await res.json().catch(() => null)) as

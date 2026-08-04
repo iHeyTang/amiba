@@ -20,11 +20,14 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  getHermesProfiles,
+  normalizeAgentContext,
   transcribeAudio,
   useSessions,
   useVoicePrefs,
   useWallpaper,
   type WallpaperController,
+  type AgentExecutionContext,
 } from "@amiba/core";
 import {
   Composer,
@@ -40,7 +43,7 @@ import { getPlatform } from "@amiba/platform";
 import { shortId } from "@amiba/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
-import { AmibaLogo } from "../primitives";
+import { AmibaLogo, Input } from "../primitives";
 import { cn } from "../primitives";
 import type {
   FaviconCapability,
@@ -152,8 +155,14 @@ function Home({
   );
 
   const [input, setInput] = useState("");
+  const [agent, setAgent] = useState<AgentExecutionContext>({
+    profileId: "default",
+  });
   const [busy, setBusy] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState<
+    string | null
+  >(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const inputRef = useRef<ComposerHandle | null>(null);
   const canChooseWorkspace = Boolean(getPlatform().workspaces?.chooseDirectory);
@@ -172,6 +181,41 @@ function Home({
   // On mount: focus the composer textarea.
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void getHermesProfiles().then((result) => {
+      if (alive && result.ok) {
+        setAgent({ profileId: result.active || "default" });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Desktop tasks always have a workspace. Until the user picks a project
+  // directory, make the product-level $HOME fallback visible in the composer
+  // instead of representing it as an ambiguous "no directory" state.
+  useEffect(() => {
+    const workspaces = getPlatform().workspaces;
+    if (!workspaces) return;
+    let cancelled = false;
+    void workspaces
+      .getDefaultRoot()
+      .then((root) => {
+        if (cancelled) return;
+        setDefaultWorkspaceRoot(root);
+        setWorkspacePath((current) => current ?? root);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWorkspaceError(String((error as Error)?.message || error));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Navigate to the chat view. Extension does an in-page redirect to
@@ -235,7 +279,13 @@ function Home({
       // "new"` precisely because of the orphan-session story above.
       await queueChatPrompt({
         text: trimmed || undefined,
-        workspacePath: workspacePath ?? undefined,
+        agent,
+        // The default root is resolved again by the receiving chat surface.
+        // Only carry an explicit override through the pending-prompt handoff.
+        workspacePath:
+          workspacePath && workspacePath !== defaultWorkspaceRoot
+            ? workspacePath
+            : undefined,
         attachments:
           readyAttachments.length > 0
             ? readyAttachments
@@ -440,6 +490,11 @@ function Home({
             }
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
+            modelPicker
+            agentPicker={{
+              value: agent,
+              onChange: (next) => setAgent(normalizeAgentContext(next)),
+            }}
             kbdHints={[
               { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
               { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
@@ -450,9 +505,11 @@ function Home({
                   path={workspacePath}
                   onChoose={() => void chooseWorkspace()}
                   onClear={
-                    workspacePath
+                    workspacePath &&
+                    defaultWorkspaceRoot &&
+                    workspacePath !== defaultWorkspaceRoot
                       ? () => {
-                          setWorkspacePath(null);
+                          setWorkspacePath(defaultWorkspaceRoot);
                           setWorkspaceError(null);
                         }
                       : undefined
@@ -862,7 +919,7 @@ function ManagerAddRow({
           left, URL (secondary) on the right. Mixing the two orders would
           make users re-read each row top-to-bottom. */}
       <div className="flex items-stretch gap-1.5">
-        <input
+        <Input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -873,9 +930,9 @@ function ManagerAddRow({
             }
           }}
           placeholder={t("newtab.shortcuts.add.dialog.titlePlaceholder")}
-          className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:border-foreground/40 focus:outline-none"
+          className="h-8 flex-1 px-2.5 text-xs"
         />
-        <input
+        <Input
           type="url"
           value={url}
           onChange={(e) => {
@@ -889,7 +946,7 @@ function ManagerAddRow({
             }
           }}
           placeholder={t("newtab.shortcuts.add.dialog.urlPlaceholder")}
-          className="flex-[2] rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:border-foreground/40 focus:outline-none"
+          className="h-8 flex-[2] px-2.5 text-xs"
         />
         <button
           type="button"
@@ -975,7 +1032,7 @@ function ManagerRow({
           />
         )}
       </span>
-      <input
+      <Input
         type="text"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -991,7 +1048,7 @@ function ManagerRow({
           }
         }}
         aria-label={t("newtab.shortcuts.rename")}
-        className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs text-foreground hover:border-border focus:border-foreground/40 focus:bg-background focus:outline-none"
+        className="h-auto min-w-0 flex-1 rounded-md border-transparent bg-transparent px-1.5 py-1 text-xs text-foreground hover:border-border focus-visible:border-foreground/30 focus-visible:bg-background focus-visible:ring-0"
       />
       <span
         className="hidden truncate text-[10px] text-muted-foreground/70 sm:inline-block sm:max-w-[140px]"

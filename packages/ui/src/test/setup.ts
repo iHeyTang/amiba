@@ -1,5 +1,9 @@
-import "@testing-library/jest-dom/vitest"
-import { hasPlatform, setPlatform, type PlatformAdapter } from "@amiba/platform"
+import "@testing-library/jest-dom/vitest";
+import {
+  hasPlatform,
+  setPlatform,
+  type PlatformAdapter,
+} from "@amiba/platform";
 
 // cmdk (and some Radix primitives) use ResizeObserver and scrollIntoView
 // internally; jsdom does not implement them, so provide minimal no-op stubs
@@ -9,11 +13,24 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     observe() {}
     unobserve() {}
     disconnect() {}
-  }
+  };
 }
 
 if (!HTMLElement.prototype.scrollIntoView) {
-  HTMLElement.prototype.scrollIntoView = function () {}
+  HTMLElement.prototype.scrollIntoView = function () {};
+}
+
+// Radix Select uses pointer-capture APIs that jsdom does not implement.
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = function () {
+    return false;
+  };
+}
+if (!HTMLElement.prototype.setPointerCapture) {
+  HTMLElement.prototype.setPointerCapture = function () {};
+}
+if (!HTMLElement.prototype.releasePointerCapture) {
+  HTMLElement.prototype.releasePointerCapture = function () {};
 }
 
 // Components under test reach for the platform via `useT()` (i18n) and other
@@ -26,6 +43,6 @@ if (!hasPlatform()) {
     set: async () => {},
     remove: async () => {},
     watch: () => () => {},
-  }
-  setPlatform({ storage } as unknown as PlatformAdapter)
+  };
+  setPlatform({ storage } as unknown as PlatformAdapter);
 }

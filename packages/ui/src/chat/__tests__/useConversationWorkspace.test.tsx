@@ -10,7 +10,6 @@ describe("useConversationWorkspace", () => {
   const paths: Record<string, string | null> = {
     "session-a": "/workspaces/alpha",
     "session-b": "/workspaces/beta",
-    "session-c": null,
   };
 
   beforeEach(() => {
@@ -18,10 +17,11 @@ describe("useConversationWorkspace", () => {
     setPlatform({
       kind: "desktop",
       workspaces: {
+        getDefaultRoot: vi.fn(async () => "/Users/test"),
         bind: vi.fn(),
         unbind: vi.fn(),
         getCurrent: vi.fn(
-          async (sessionId: string) => paths[sessionId] ?? null,
+          async (sessionId: string) => paths[sessionId] ?? "/Users/test",
         ),
         listBindings: vi.fn(async () => ({})),
         onChange: (listener: (change: WorkspaceChange) => void) => {
@@ -52,7 +52,7 @@ describe("useConversationWorkspace", () => {
 
     rerender({ activeId: "session-c" });
     await waitFor(() => {
-      expect(result.current.workspacePath).toBeNull();
+      expect(result.current.workspacePath).toBe("/Users/test");
     });
   });
 });

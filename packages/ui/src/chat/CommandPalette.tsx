@@ -1,27 +1,27 @@
-import { Command } from "cmdk"
-import { MessageSquare, Plus, Settings } from "lucide-react"
-import type { ReactNode } from "react"
+import { Command } from "cmdk";
+import { MessageSquare, Plus, Settings } from "lucide-react";
+import type { ReactNode } from "react";
 
-import type { SessionMeta } from "@amiba/core"
-import { useT } from "@amiba/i18n"
+import type { SessionMeta } from "@amiba/core";
+import { useT } from "@amiba/i18n";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
   cn,
-} from "../primitives"
+} from "../primitives";
 
 /** Cap how many recent chats become searchable rows (cmdk filters within). */
-const MAX_SESSION_ITEMS = 50
+const MAX_SESSION_ITEMS = 50;
 
 export interface CommandPaletteProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  sessions: SessionMeta[]
-  onOpenSession: (id: string) => void
-  onNewChat: () => void
-  onOpenSettings: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sessions: SessionMeta[];
+  onOpenSession: (id: string) => void;
+  onNewChat: () => void;
+  onOpenSettings: () => void;
 }
 
 export function CommandPalette({
@@ -32,24 +32,20 @@ export function CommandPalette({
   onNewChat,
   onOpenSettings,
 }: CommandPaletteProps) {
-  const { t } = useT()
+  const { t } = useT();
 
   // Close first, then perform — so the palette never lingers over the result.
   const run = (fn: () => void) => {
-    onOpenChange(false)
-    fn()
-  }
+    onOpenChange(false);
+    fn();
+  };
 
-  const recent = sessions.slice(0, MAX_SESSION_ITEMS)
+  const recent = sessions.slice(0, MAX_SESSION_ITEMS);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideDefaultClose
-        // `data-amiba-command-palette` scopes the open/close zoom-origin fix in
-        // chat.css (pins the tw-animate enter/exit translate to -50% so the
-        // card scales from center instead of sliding up from the corner).
-        data-amiba-command-palette="true"
         // Spacing for cmdk's internal nodes is declared here (shadcn
         // CommandDialog pattern) so groups/headings/items get consistent
         // horizontal insets regardless of cmdk's own DOM structure.
@@ -108,7 +104,7 @@ export function CommandPalette({
             {recent.length > 0 && (
               <Command.Group heading={t("commandPalette.group.conversations")}>
                 {recent.map((s) => {
-                  const title = s.title?.trim() || t("chat.untitled")
+                  const title = s.title?.trim() || t("chat.untitled");
                   return (
                     <PaletteRow
                       key={s.id}
@@ -119,7 +115,7 @@ export function CommandPalette({
                       label={title}
                       onSelect={() => run(() => onOpenSession(s.id))}
                     />
-                  )
+                  );
                 })}
               </Command.Group>
             )}
@@ -127,7 +123,7 @@ export function CommandPalette({
         </Command>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 /**
@@ -142,11 +138,11 @@ function PaletteRow({
   value,
   onSelect,
 }: {
-  icon: ReactNode
-  label: string
-  shortcut?: string
-  value?: string
-  onSelect: () => void
+  icon: ReactNode;
+  label: string;
+  shortcut?: string;
+  value?: string;
+  onSelect: () => void;
 }) {
   return (
     <Command.Item value={value ?? label} onSelect={onSelect}>
@@ -158,5 +154,5 @@ function PaletteRow({
         </span>
       )}
     </Command.Item>
-  )
+  );
 }

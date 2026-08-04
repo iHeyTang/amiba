@@ -8,6 +8,7 @@ import {
   app,
   ipcMain,
   nativeImage,
+  nativeTheme,
   session,
   shell,
   systemPreferences,
@@ -261,6 +262,9 @@ function registerVoicePermissionHandler(): void {
 // the red traffic light — breaking dock-icon reopen, hotkey summon,
 // and protocol-URL handling.
 let mainWindow: BrowserWindow | null = null
+let startupWindowTheme: "light" | "dark" = nativeTheme.shouldUseDarkColors
+  ? "dark"
+  : "light"
 
 // Extension HTTP server — started inside app.whenReady() once the
 // registryPath is known. Stopped in before-quit alongside the extension host.
@@ -353,6 +357,16 @@ function registerQuickAskIpcHandlers(): void {
 }
 
 function createWindow() {
+  const startupPalette =
+    startupWindowTheme === "dark"
+      ? {
+          background: "#09090b",
+          titleBarSymbol: "#e7e7e7",
+        }
+      : {
+          background: "#ffffff",
+          titleBarSymbol: "#18191b",
+        }
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -366,24 +380,31 @@ function createWindow() {
     // doesn't need to inflate to fit the worst case.
     minHeight: 800,
     title: "Amiba",
-    backgroundColor: "#0b0b0b",
+    // Match the critical HTML shell exactly. Electron paints this native
+    // color before Chromium parses index.html, eliminating the old black
+    // frame that preceded the renderer's loading state.
+    backgroundColor: startupPalette.background,
     icon: IS_MAC ? undefined : iconPath(),
     // Immersive title bar. macOS uses `hidden` (not `hiddenInset`) so we
     // can drive the traffic-light position ourselves via
     // `trafficLightPosition` — `hiddenInset` silently ignores it.
     //
-    // 32px title-bar row with traffic lights pinned at (20, 10): the
-    // ~12px dot cluster's vertical centre sits at y=16, and an h-6
-    // button centred in the 32px row also lands at y=16, so every
+    // 48px title-bar row with traffic lights pinned at (20, 18): the
+    // ~12px dot cluster's vertical centre sits at y=24, and a header
+    // action centred in the 48px row also lands at y=24, so every
     // custom affordance shares the lights' baseline pixel-for-pixel.
     // Keep ``TITLE_BAR_HEIGHT`` in App.tsx in sync with the height
     // value here and with the ``y`` here (``y = TITLE_BAR_HEIGHT/2 -
     // dotHeight/2``).
     titleBarStyle: "hidden",
-    trafficLightPosition: IS_MAC ? { x: 20, y: 10 } : undefined,
+    trafficLightPosition: IS_MAC ? { x: 20, y: 18 } : undefined,
     titleBarOverlay: IS_MAC
       ? false
-      : { color: "#0b0b0b", symbolColor: "#e7e7e7", height: 32 },
+      : {
+          color: startupPalette.background,
+          symbolColor: startupPalette.titleBarSymbol,
+          height: 48,
+        },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -407,7 +428,9 @@ function createWindow() {
   })
 
   if (isDev && RENDERER_DEV_URL) {
-    win.loadURL(RENDERER_DEV_URL)
+    const rendererUrl = new URL(RENDERER_DEV_URL)
+    rendererUrl.searchParams.set("startupTheme", startupWindowTheme)
+    win.loadURL(rendererUrl.toString())
     // DevTools auto-open is opt-in via env so it stays out of the
     // user's face by default. Set `AMIBA_DEVTOOLS=1` in the env to
     // reopen them automatically; otherwise pop them with
@@ -416,7 +439,9 @@ function createWindow() {
       win.webContents.openDevTools({ mode: "detach" })
     }
   } else {
-    win.loadFile(path.join(__dirname, "../renderer/index.html"))
+    win.loadFile(path.join(__dirname, "../renderer/index.html"), {
+      query: { startupTheme: startupWindowTheme },
+    })
   }
 }
 
@@ -442,6 +467,22 @@ if (!gotSingleInstanceLock) {
     // that imports backplaneFetch / HermesClient — those call getPlatform() at
     // request time and need the adapter wired up first.
     setPlatform(createMainPlatformAdapter())
+    // Resolve the user's stored preference before the first BrowserWindow is
+    // created so Electron's native canvas and the HTML critical shell paint
+    // the same palette. "auto" follows the OS at launch.
+    try {
+      const storedTheme = (await mainStore.get("settings.ui.theme"))[
+        "settings.ui.theme"
+      ]
+      startupWindowTheme =
+        storedTheme === "light" || storedTheme === "dark"
+          ? storedTheme
+          : nativeTheme.shouldUseDarkColors
+            ? "dark"
+            : "light"
+    } catch {
+      startupWindowTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light"
+    }
     // Workspace restore reads `mainStore` which can fail (corrupted
     // amiba-store.json, permission denied, etc). DO NOT let that take
     // the whole app down: a failed restore should still leave the user
@@ -499,7 +540,7 @@ if (!gotSingleInstanceLock) {
     // on change. Storing the preference here would be wrong because the
     // stored preference can be "auto" (the default).
     let currentLanguage: "en" | "zh-CN" = "en"
-    let currentTheme: "light" | "dark" = "light"
+    let currentTheme: "light" | "dark" = startupWindowTheme
 
     function broadcastToWebviews(channel: string, payload: unknown) {
       for (const wc of require("electron").webContents.getAllWebContents()) {
@@ -518,6 +559,7 @@ if (!gotSingleInstanceLock) {
       if (theme !== "light" && theme !== "dark") return
       if (theme === currentTheme) return
       currentTheme = theme
+      startupWindowTheme = theme
       broadcastToWebviews("webview:theme-changed", currentTheme)
     })
 

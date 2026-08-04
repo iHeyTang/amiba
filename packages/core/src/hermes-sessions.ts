@@ -13,6 +13,7 @@
  */
 
 import { backplaneFetch } from "./backplane-client";
+import { normalizeAgentProfileId } from "./agent-context";
 
 /**
  * Hermes session row as returned by the backplane. Timestamps are seconds
@@ -203,6 +204,8 @@ export interface ListSessionsParams {
    * from the chat-history sidebar.
    */
   excludeSources?: string[];
+  /** Hermes profile whose isolated SessionDB should be queried. */
+  profileId?: string;
 }
 
 export async function listHermesSessions(
@@ -218,6 +221,7 @@ export async function listHermesSessions(
     // long.
     q.set("exclude_sources", params.excludeSources.join(","));
   }
+  q.set("profile", normalizeAgentProfileId(params.profileId));
   const qs = q.toString();
   // Wire body matches upstream GET /api/sessions: {sessions, total, limit, offset}.
   const r = await request<{
@@ -225,18 +229,21 @@ export async function listHermesSessions(
     total: number;
     limit: number;
     offset: number;
-  }>((`/hermes/sessions${qs ? `?${qs}` : ""}`));
+  }>(`/hermes/sessions${qs ? `?${qs}` : ""}`);
   if (isReqErr(r)) return r;
   return { ok: true, ...r.value };
 }
 
 export async function getHermesSession(
   id: string,
+  profileId?: string,
 ): Promise<GetSessionResponse | HermesError> {
   // Wire body matches upstream GET /api/sessions/{id}: the session dict
   // directly (no ``{ok, session}`` envelope).
   const r = await request<HermesSession>(
-    (`/hermes/sessions/${encodeURIComponent(id)}`),
+    `/hermes/sessions/${encodeURIComponent(id)}?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
   );
   if (isReqErr(r)) return r;
   return { ok: true, session: r.value };
@@ -244,11 +251,14 @@ export async function getHermesSession(
 
 export async function getHermesMessages(
   id: string,
+  profileId?: string,
 ): Promise<GetMessagesResponse | HermesError> {
   // Wire body matches upstream GET /api/sessions/{id}/messages:
   // {session_id, messages}.
   const r = await request<{ session_id: string; messages: HermesMessage[] }>(
-    (`/hermes/sessions/${encodeURIComponent(id)}/messages`),
+    `/hermes/sessions/${encodeURIComponent(id)}/messages?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
   );
   if (isReqErr(r)) return r;
   return { ok: true, ...r.value };
@@ -271,6 +281,7 @@ export interface CreateSessionInput {
 
 export async function createHermesSession(
   input: CreateSessionInput = {},
+  profileId?: string,
 ): Promise<CreateSessionResponse | HermesError> {
   // POST /hermes/sessions is mine-only (no upstream equivalent); wire
   // still carries ``{ok, session, title_error?}`` since I haven't
@@ -279,9 +290,18 @@ export async function createHermesSession(
     ok?: true;
     session: HermesSession;
     title_error?: string;
-  }>((`/hermes/sessions`), jsonInit("POST", input));
+  }>(
+    `/hermes/sessions?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", input),
+  );
   if (isReqErr(r)) return r;
-  return { ok: true, session: r.value.session, title_error: r.value.title_error };
+  return {
+    ok: true,
+    session: r.value.session,
+    title_error: r.value.title_error,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,24 +322,33 @@ export async function createHermesSession(
 
 const _ensuredSessions = new Set<string>();
 
+function ensuredSessionKey(id: string, profileId?: string): string {
+  return `${normalizeAgentProfileId(profileId)}:${id}`;
+}
+
 export async function ensureHermesSession(
   id: string,
   source: string,
   title?: string,
+  profileId?: string,
 ): Promise<void> {
   if (!id) return;
-  if (_ensuredSessions.has(id)) return;
-  const res = await createHermesSession({ id, source, title });
+  const key = ensuredSessionKey(id, profileId);
+  if (_ensuredSessions.has(key)) return;
+  const res = await createHermesSession({ id, source, title }, profileId);
   if (res.ok) {
-    _ensuredSessions.add(id);
+    _ensuredSessions.add(key);
   } else {
     console.warn("[hermes-sessions] ensureHermesSession failed:", res);
   }
 }
 
 /** Evict an id from the ensure cache — call from session-delete paths. */
-export function forgetEnsuredHermesSession(id: string): void {
-  _ensuredSessions.delete(id);
+export function forgetEnsuredHermesSession(
+  id: string,
+  profileId?: string,
+): void {
+  _ensuredSessions.delete(ensuredSessionKey(id, profileId));
 }
 
 /**
@@ -345,6 +374,7 @@ export interface AppendMessageInput {
 export async function appendHermesMessage(
   sessionId: string,
   input: AppendMessageInput,
+  profileId?: string,
 ): Promise<AppendMessageResponse | HermesError> {
   // Mine-only write path; wire keeps the {ok, session_id, message_id, message} envelope.
   const r = await request<{
@@ -353,7 +383,11 @@ export async function appendHermesMessage(
     message_id: number;
     message: HermesMessage | null;
   }>(
-    (`/hermes/sessions/${encodeURIComponent(sessionId)}/messages`),
+    `/hermes/sessions/${encodeURIComponent(
+      sessionId,
+    )}/messages?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
     jsonInit("POST", input),
   );
   if (isReqErr(r)) return r;
@@ -380,13 +414,24 @@ export interface TriggerAutoTitleResponse {
 
 export async function triggerHermesAutoTitle(
   sessionId: string,
+  profileId?: string,
 ): Promise<TriggerAutoTitleResponse | HermesError> {
   const r = await request<TriggerAutoTitleResponse>(
-    `/hermes/sessions/${encodeURIComponent(sessionId)}/auto-title`,
+    `/hermes/sessions/${encodeURIComponent(
+      sessionId,
+    )}/auto-title?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
     jsonInit("POST", {}),
   );
   if (isReqErr(r)) return r;
-  return { ok: true, title: r.value.title, skipped: r.value.skipped, reason: r.value.reason, detail: r.value.detail };
+  return {
+    ok: true,
+    title: r.value.title,
+    skipped: r.value.skipped,
+    reason: r.value.reason,
+    detail: r.value.detail,
+  };
 }
 
 export interface UpdateSessionInput {
@@ -397,10 +442,13 @@ export interface UpdateSessionInput {
 export async function updateHermesSession(
   sessionId: string,
   input: UpdateSessionInput,
+  profileId?: string,
 ): Promise<UpdateSessionResponse | HermesError> {
   // Mine-only write path; wire keeps {ok, session}.
   const r = await request<{ ok?: true; session: HermesSession }>(
-    (`/hermes/sessions/${encodeURIComponent(sessionId)}`),
+    `/hermes/sessions/${encodeURIComponent(
+      sessionId,
+    )}?profile=${encodeURIComponent(normalizeAgentProfileId(profileId))}`,
     jsonInit("PATCH", input),
   );
   if (isReqErr(r)) return r;
@@ -409,10 +457,13 @@ export async function updateHermesSession(
 
 export async function deleteHermesSession(
   sessionId: string,
+  profileId?: string,
 ): Promise<DeleteSessionResponse | HermesError> {
   // Wire matches upstream DELETE /api/sessions/{id}: just ``{ok: true}``.
   const r = await request<{ ok?: true }>(
-    (`/hermes/sessions/${encodeURIComponent(sessionId)}`),
+    `/hermes/sessions/${encodeURIComponent(
+      sessionId,
+    )}?profile=${encodeURIComponent(normalizeAgentProfileId(profileId))}`,
     jsonInit("DELETE"),
   );
   if (isReqErr(r)) return r;

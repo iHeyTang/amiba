@@ -2,6 +2,8 @@
 
 Sub-modules:
 - ``cron``: ``/hermes/cron/*`` — wraps Hermes's cron module
+- ``kanban``: ``/hermes/kanban/*`` — reads Hermes boards and session-linked
+  tasks and creates tasks in the canonical Kanban database
 - ``settings``: ``/hermes/model/info``, ``/hermes/model/auxiliary``,
   ``/hermes/model/options``, ``/hermes/model/set``,
   ``/hermes/provider-models``, ``/hermes/provider-credentials``,
@@ -37,6 +39,7 @@ from aiohttp import web
 from . import (
     attachments,
     cron,
+    kanban,
     mention_sources_gateway,
     lifecycle,
     logs,
@@ -51,6 +54,7 @@ from . import (
 def register(app: web.Application) -> None:
     """Register all hermes_proxy routes onto *app*."""
     cron.register(app)
+    kanban.register(app)
     settings.register(app)
     sessions.register(app)
     attachments.register(app)

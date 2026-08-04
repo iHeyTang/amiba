@@ -12,6 +12,7 @@
     "start": "electron .",
     "package": "vite build --config vite.runner.config.ts && electron-vite build && electron-builder",
     "postinstall": "electron-builder install-app-deps",
+    "test": "node --experimental-strip-types --test src/main/__tests__/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "build": {

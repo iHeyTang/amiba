@@ -132,8 +132,14 @@ function MemoryBlock({ entry }: { entry: HermesMemoryEntries }) {
   );
 }
 
-/** Read-only view of Hermes curated memory (MEMORY.md + USER.md). */
-export function SettingsMemory() {
+/** Read-only view of one Hermes Profile's curated memory. */
+export function SettingsMemory({
+  embedded = false,
+  profileId,
+}: {
+  embedded?: boolean;
+  profileId?: string;
+} = {}) {
   const { t } = useT();
   const [items, setItems] = useState<HermesMemoryEntries[]>([]);
   const [loading, setLoading] = useState(false);
@@ -142,7 +148,7 @@ export function SettingsMemory() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const r = await getHermesMemoryList();
+    const r = await getHermesMemoryList(profileId);
     setLoading(false);
     if (!r.ok) {
       setError(r.error || t("options.memory.failedToLoad"));
@@ -150,7 +156,7 @@ export function SettingsMemory() {
       return;
     }
     setItems(r.targets);
-  }, [t]);
+  }, [profileId, t]);
 
   useEffect(() => {
     void refresh();
@@ -158,30 +164,59 @@ export function SettingsMemory() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPaneHeader
-        title={t("options.memory.title")}
-        subtitle={t("options.memory.subtitle")}
-        subtitleTooltip={t("options.memory.subtitle.tooltip")}
-      >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-xs shrink-0"
-          disabled={loading}
-          onClick={() => void refresh()}
+      {!embedded ? (
+        <SettingsPaneHeader
+          title={t("options.memory.title")}
+          subtitle={t("options.memory.subtitle")}
+          subtitleTooltip={t("options.memory.subtitle.tooltip")}
         >
-          {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          {t("options.memory.refresh")}
-        </Button>
-      </SettingsPaneHeader>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 text-xs"
+            disabled={loading}
+            onClick={() => void refresh()}
+          >
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {t("options.memory.refresh")}
+          </Button>
+        </SettingsPaneHeader>
+      ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-6">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-3xl space-y-4 p-6",
+            embedded && "pt-4",
+          )}
+        >
+          {embedded ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                {t("options.memory.subtitle")}
+              </p>
+              <Button
+                aria-label={t("options.memory.refresh")}
+                className="h-7 w-7 rounded-full"
+                disabled={loading}
+                onClick={() => void refresh()}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+          ) : null}
           {error && <p className="text-xs text-destructive">{error}</p>}
           {items.map((entry) => (
             <MemoryBlock key={entry.target} entry={entry} />

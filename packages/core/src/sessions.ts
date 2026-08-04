@@ -7,6 +7,8 @@
  * UI-facing metadata shape is the same.
  */
 
+import type { AgentExecutionContext } from "./agent-context";
+
 export interface SessionMeta {
   id: string
   /** User-visible title; empty means "auto-generate from first user msg". */
@@ -34,6 +36,12 @@ export interface SessionMeta {
    * none; ``resolveChannel`` treats nullish as local.
    */
   source?: string
+  /**
+   * The Hermes runtime bound to this task. Kept in Amiba's local sidecar
+   * because Hermes stores each profile in a different SessionDB rather than
+   * repeating the profile id on every row.
+   */
+  agent?: AgentExecutionContext
 }
 
 import type { ChatMessage } from "./chat-messages"
@@ -46,6 +54,7 @@ export interface SessionLocalMeta {
   pinned?: boolean
   archived?: boolean
   titleManual?: boolean
+  agent?: AgentExecutionContext
 }
 
 /**

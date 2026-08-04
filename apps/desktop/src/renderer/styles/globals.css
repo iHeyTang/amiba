@@ -12,6 +12,272 @@ body,
 }
 
 /*
+ * Startup continuity
+ * ------------------
+ * These class names mirror the tiny critical shell in index.html. The shell
+ * paints before the renderer bundle is evaluated; React then takes over the
+ * same visual language and keeps it alive while Hermes/backplane start.
+ */
+:root {
+  --amiba-boot-canvas: #ffffff;
+  --amiba-boot-ink: #18191b;
+  --amiba-boot-muted: rgb(24 25 27 / 0.46);
+  --amiba-boot-signal: rgb(24 25 27 / 0.11);
+  --amiba-boot-nucleus: #8de6d0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --amiba-boot-canvas: #09090b;
+    --amiba-boot-ink: #f4f4f3;
+    --amiba-boot-muted: rgb(244 244 243 / 0.48);
+    --amiba-boot-signal: rgb(244 244 243 / 0.12);
+    --amiba-boot-nucleus: #7edbc5;
+  }
+}
+
+:root.dark {
+  --amiba-boot-canvas: #09090b;
+  --amiba-boot-ink: #f4f4f3;
+  --amiba-boot-muted: rgb(244 244 243 / 0.48);
+  --amiba-boot-signal: rgb(244 244 243 / 0.12);
+  --amiba-boot-nucleus: #7edbc5;
+}
+
+:root.light {
+  --amiba-boot-canvas: #ffffff;
+  --amiba-boot-ink: #18191b;
+  --amiba-boot-muted: rgb(24 25 27 / 0.46);
+  --amiba-boot-signal: rgb(24 25 27 / 0.11);
+  --amiba-boot-nucleus: #8de6d0;
+}
+
+.amiba-startup-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--amiba-boot-canvas);
+  color: var(--amiba-boot-ink);
+  opacity: 1;
+  transition:
+    opacity 220ms cubic-bezier(0.25, 1, 0.5, 1),
+    visibility 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.amiba-startup-screen[data-leaving="true"] {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.amiba-startup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  transition: transform 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.amiba-startup-screen[data-leaving="true"] .amiba-startup-content {
+  transform: scale(1.018);
+}
+
+.amiba-startup-mark {
+  position: relative;
+  width: 88px;
+  height: 88px;
+}
+
+.amiba-startup-membrane,
+.amiba-startup-nucleus,
+.amiba-startup-signal {
+  position: absolute;
+  display: block;
+}
+
+.amiba-startup-membrane {
+  inset: 12px;
+  border-radius: 43% 57% 59% 41% / 48% 43% 57% 52%;
+  background: var(--amiba-boot-ink);
+  animation: amiba-membrane-flow 3.8s cubic-bezier(0.45, 0, 0.55, 1)
+    infinite;
+}
+
+.amiba-startup-nucleus {
+  top: 50%;
+  left: 50%;
+  width: 25px;
+  height: 25px;
+  border-radius: 52% 48% 45% 55% / 48% 54% 46% 52%;
+  background: var(--amiba-boot-nucleus);
+  transform: translate(-50%, -50%);
+  animation: amiba-nucleus-breathe 1.8s cubic-bezier(0.45, 0, 0.55, 1)
+    infinite;
+}
+
+.amiba-startup-signal {
+  inset: 7px;
+  border: 1px solid var(--amiba-boot-signal);
+  border-radius: 44% 56% 54% 46% / 52% 44% 56% 48%;
+  opacity: 0;
+  animation: amiba-signal-travel 2.8s cubic-bezier(0.25, 1, 0.5, 1)
+    infinite;
+}
+
+.amiba-startup-signal-two {
+  animation-delay: 1.4s;
+}
+
+.amiba-startup-copy {
+  display: flex;
+  min-height: 42px;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.amiba-startup-wordmark {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: -0.02em;
+}
+
+.amiba-startup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--amiba-boot-muted);
+  font-size: 12px;
+  line-height: 17px;
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.amiba-startup-status[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.amiba-startup-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.amiba-startup-dots i {
+  width: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: amiba-status-dot 1.2s ease-in-out infinite;
+}
+
+.amiba-startup-dots i:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.amiba-startup-dots i:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+.amiba-ready-stage {
+  animation: amiba-app-arrive 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+@keyframes amiba-membrane-flow {
+  0%,
+  100% {
+    border-radius: 43% 57% 59% 41% / 48% 43% 57% 52%;
+    transform: rotate(-7deg) scale(1);
+  }
+  34% {
+    border-radius: 55% 45% 44% 56% / 42% 56% 44% 58%;
+    transform: rotate(1deg) scale(1.035, 0.98);
+  }
+  68% {
+    border-radius: 47% 53% 57% 43% / 57% 45% 55% 43%;
+    transform: rotate(7deg) scale(0.985, 1.025);
+  }
+}
+
+@keyframes amiba-nucleus-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(141 230 208 / 0);
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgb(141 230 208 / 0.11);
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+}
+
+@keyframes amiba-signal-travel {
+  0% {
+    opacity: 0;
+    transform: scale(0.78) rotate(-6deg);
+  }
+  24% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.22) rotate(8deg);
+  }
+}
+
+@keyframes amiba-status-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes amiba-app-arrive {
+  from {
+    opacity: 0.88;
+    transform: scale(0.998);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amiba-startup-membrane,
+  .amiba-startup-nucleus,
+  .amiba-startup-signal,
+  .amiba-startup-dots i,
+  .amiba-ready-stage {
+    animation: none;
+  }
+
+  .amiba-startup-signal {
+    opacity: 0.35;
+    transform: scale(1.08);
+  }
+
+  .amiba-startup-screen,
+  .amiba-startup-content,
+  .amiba-startup-status {
+    transition-duration: 100ms;
+  }
+}
+
+/*
  * Immersive title bar — main BrowserWindow runs with `titleBarStyle:
  * "hiddenInset"` (macOS) / `"hidden"` + titleBarOverlay (Win/Linux), so
  * the OS strip is gone. We expose two helpers to the renderer:

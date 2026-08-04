@@ -5,6 +5,8 @@ export {
   type FullScreenChatViewProps,
 } from "./FullScreenChatView";
 export { ScheduledTasksPage } from "./ScheduledTasksPage";
+export { TaskCenterPage } from "./TaskCenterPage";
+export { KanbanStatusBadge } from "./KanbanStatusBadge";
 export {
   SessionTitleProvider,
   useSessionTitle,
@@ -47,6 +49,10 @@ export {
 } from "./Wallpaper";
 export { MessageList } from "./MessageList";
 export { Composer, type ComposerHandle, type ComposerProps } from "./Composer";
+export {
+  ComposerModelPicker,
+  type ComposerModelPickerProps,
+} from "./ComposerModelPicker";
 export { ComposerKbdHints, Kbd, type ComposerKbdHint } from "./Kbd";
 export {
   AttachmentButton,

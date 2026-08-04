@@ -9,6 +9,13 @@
 
 import { backplaneFetch } from "./backplane-client";
 
+function profileUrl(path: string, profileId?: string): string {
+  const profile = profileId?.trim();
+  if (!profile) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}profile=${encodeURIComponent(profile)}`;
+}
+
 export interface HermesToolset {
   /** Stable key — e.g. ``"browser"``, ``"image_gen"``. */
   name: string;
@@ -24,6 +31,10 @@ export interface HermesToolset {
   configured: boolean;
   /** Concrete tool names this toolset resolves to (sorted). */
   tools: string[];
+  /** Hermes platform whose toolset list owns this capability. */
+  platform?: string;
+  /** Human-readable platform label. */
+  platform_label?: string;
 }
 
 export interface HermesToolToggleResponse {
@@ -55,6 +66,8 @@ export interface HermesToolEnvVar {
   default?: string | null;
   /** True when the value is currently set somewhere on the env. */
   is_set: boolean;
+  /** False for ordinary connection fields such as a URL, host or user name. */
+  secret?: boolean;
 }
 
 export interface HermesToolProvider {
@@ -68,6 +81,25 @@ export interface HermesToolProvider {
   post_setup?: string | null;
   /** Provider gates on Nous account auth. */
   requires_nous_auth: boolean;
+  /** True when Hermes currently resolves this provider for the capability. */
+  is_active: boolean;
+  /** Server-computed readiness; never inferred from key count in the UI. */
+  status:
+    | "ready"
+    | "needs_key"
+    | "needs_keys"
+    | "needs_auth"
+    | "needs_setup"
+    | "inactive"
+    | string;
+  /** Web-only backend identifier and supported capability lanes. */
+  web_backend?: string | null;
+  capabilities?: Array<"search" | "extract" | string>;
+  /** Provider keys written into the corresponding Hermes config sections. */
+  tts_provider?: string | null;
+  browser_provider?: string | null;
+  image_gen_plugin_name?: string | null;
+  video_gen_plugin_name?: string | null;
 }
 
 /** Extended toolset payload returned by GET /hermes/tools/toolsets/{name}. */
@@ -78,6 +110,14 @@ export interface HermesToolsetDetail extends HermesToolset {
   providers: HermesToolProvider[];
   /** True iff the toolset has a ``TOOL_CATEGORIES`` entry. */
   has_category: boolean;
+  /** Provider selected by the same resolver the runtime uses. */
+  active_provider?: string | null;
+  /** Optional guidance authored by Hermes for this capability. */
+  setup_title?: string;
+  setup_note?: string;
+  /** Web uses independent provider choices for search and extraction. */
+  active_search_backend?: string | null;
+  active_extract_backend?: string | null;
 }
 
 export interface HermesToolsetDetailResponse {
@@ -86,9 +126,81 @@ export interface HermesToolsetDetailResponse {
   error?: string;
 }
 
+export interface HermesToolModel {
+  id: string;
+  display: string;
+  speed: string;
+  strengths: string;
+  price: string;
+}
+
+export interface HermesToolModelsResponse {
+  ok: boolean;
+  name: string;
+  has_models: boolean;
+  provider?: string | null;
+  plugin?: string | null;
+  models: HermesToolModel[];
+  current?: string | null;
+  default?: string | null;
+  error?: string;
+}
+
+export interface HermesToolMutationResponse {
+  ok: boolean;
+  name?: string;
+  provider?: string;
+  model?: string;
+  capability?: string;
+  saved?: string[];
+  skipped?: string[];
+  is_set?: Record<string, boolean>;
+  key?: string;
+  output?: string;
+  error?: string;
+}
+
+export interface HermesTerminalBackend {
+  name: string;
+  label: string;
+  description: string;
+  active: boolean;
+  status: "ready" | "needs_setup" | "unavailable" | string;
+  detail: string;
+  fields: HermesToolEnvVar[];
+}
+
+export interface HermesTerminalBackendsResponse {
+  ok: boolean;
+  active: string;
+  backends: HermesTerminalBackend[];
+  error?: string;
+}
+
+export interface HermesComputerUseCheck {
+  label: string;
+  status: string;
+  message: string;
+}
+
+export interface HermesComputerUseStatus {
+  ok: boolean;
+  platform: string;
+  platform_supported: boolean;
+  installed: boolean;
+  version?: string | null;
+  ready?: boolean | null;
+  can_grant: boolean;
+  accessibility?: boolean | null;
+  screen_recording?: boolean | null;
+  screen_recording_capturable?: boolean | null;
+  checks: HermesComputerUseCheck[];
+  error?: string | null;
+}
+
 function responseError(
   res: Response,
-  data: { error?: string } | null | undefined,
+  data: { error?: string | null } | null | undefined,
 ): string {
   return (
     (data && typeof data.error === "string" && data.error) ||
@@ -96,20 +208,166 @@ function responseError(
   );
 }
 
+/** Read terminal execution choices and their server-computed readiness. */
+export async function getHermesTerminalBackends(
+  profileId?: string,
+): Promise<HermesTerminalBackendsResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/terminal/backends", profileId),
+      { method: "GET" },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | HermesTerminalBackendsResponse
+      | { error?: string }
+      | null;
+    if (
+      !res.ok ||
+      !data ||
+      (data as HermesTerminalBackendsResponse).ok === false
+    ) {
+      return {
+        ok: false,
+        active: "local",
+        backends: [],
+        error: responseError(res, data),
+      };
+    }
+    return data as HermesTerminalBackendsResponse;
+  } catch (e) {
+    return {
+      ok: false,
+      active: "local",
+      backends: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+/** Select where Hermes executes shell commands and generated code. */
+export async function putHermesTerminalBackend(
+  backend: string,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/terminal/backend", profileId),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backend }),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/** Save allow-listed credentials/settings for terminal backends. */
+export async function putHermesTerminalEnv(
+  env: Record<string, string>,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/terminal/env", profileId),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ env }),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/** Read cua-driver health and operating-system permission readiness. */
+export async function getHermesComputerUseStatus(): Promise<HermesComputerUseStatus> {
+  try {
+    const res = await backplaneFetch("/hermes/tools/computer-use/status", {
+      method: "GET",
+    });
+    const data = (await res.json().catch(() => null)) as
+      | HermesComputerUseStatus
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesComputerUseStatus).ok === false) {
+      return {
+        ok: false,
+        platform: "unknown",
+        platform_supported: false,
+        installed: false,
+        can_grant: false,
+        checks: [],
+        error: responseError(res, data),
+      };
+    }
+    return data as HermesComputerUseStatus;
+  } catch (e) {
+    return {
+      ok: false,
+      platform: "unknown",
+      platform_supported: false,
+      installed: false,
+      can_grant: false,
+      checks: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+/** Ask Hermes to launch the OS-owned computer-control permission flow. */
+export async function postHermesComputerUseGrant(): Promise<HermesToolMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      "/hermes/tools/computer-use/permissions/grant",
+      { method: "POST" },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
 /** GET /hermes/tools/toolsets — full list with state per item. */
-export async function getHermesToolsets(): Promise<{
+export async function getHermesToolsets(profileId?: string): Promise<{
   ok: boolean;
   toolsets: HermesToolset[];
   error?: string;
 }> {
   try {
-    const res = await backplaneFetch("/hermes/tools/toolsets", {
-      method: "GET",
-    });
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/toolsets", profileId),
+      { method: "GET" },
+    );
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       return { ok: false, toolsets: [], error: responseError(res, body) };
     }
     const data = (await res.json()) as HermesToolset[];
@@ -126,9 +384,13 @@ export async function getHermesToolsets(): Promise<{
 /** GET /hermes/tools/toolsets/{name} — extended detail for one toolset. */
 export async function getHermesToolsetDetail(
   name: string,
+  profileId?: string,
 ): Promise<HermesToolsetDetailResponse> {
   try {
-    const url = `/hermes/tools/toolsets/${encodeURIComponent(name)}`;
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}`,
+      profileId,
+    );
     const res = await backplaneFetch(url, { method: "GET" });
     const data = (await res.json().catch(() => null)) as
       | HermesToolsetDetailResponse
@@ -138,6 +400,168 @@ export async function getHermesToolsetDetail(
       return { ok: false, error: responseError(res, data) };
     }
     return data as HermesToolsetDetailResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/** Select the provider Hermes should use for a capability. */
+export async function putHermesToolsetProvider(
+  name: string,
+  provider: string,
+  capability?: "search" | "extract",
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}/provider`,
+      profileId,
+    );
+    const res = await backplaneFetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        ...(capability ? { capability } : {}),
+      }),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/**
+ * Save only provider fields declared by Hermes for this capability.
+ * Existing secrets are never returned by the API; blank values are ignored.
+ */
+export async function putHermesToolsetEnv(
+  name: string,
+  env: Record<string, string>,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}/env`,
+      profileId,
+    );
+    const res = await backplaneFetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ env }),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/** Read a provider-specific image/video generation model catalog. */
+export async function getHermesToolsetModels(
+  name: string,
+  provider?: string,
+  profileId?: string,
+): Promise<HermesToolModelsResponse> {
+  try {
+    const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}/models${query}`,
+      profileId,
+    );
+    const res = await backplaneFetch(url, { method: "GET" });
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolModelsResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolModelsResponse).ok === false) {
+      return {
+        ok: false,
+        name,
+        has_models: false,
+        models: [],
+        error: responseError(res, data),
+      };
+    }
+    return data as HermesToolModelsResponse;
+  } catch (e) {
+    return {
+      ok: false,
+      name,
+      has_models: false,
+      models: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+/** Persist a validated provider model choice. */
+export async function putHermesToolsetModel(
+  name: string,
+  model: string,
+  provider?: string,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}/model`,
+      profileId,
+    );
+    const res = await backplaneFetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, ...(provider ? { provider } : {}) }),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+/** Run a provider-declared installer or OAuth/setup helper. */
+export async function postHermesToolsetSetup(
+  name: string,
+  key: string,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}/post-setup`,
+      profileId,
+    );
+    const res = await backplaneFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | HermesToolMutationResponse
+      | { error?: string }
+      | null;
+    if (!res.ok || !data || (data as HermesToolMutationResponse).ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data as HermesToolMutationResponse;
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message || e) };
   }
@@ -171,15 +595,18 @@ export interface HermesInstalledMcpsResponse {
 }
 
 /** GET /hermes/tools/installed-mcps — user-installed MCP servers. */
-export async function getHermesInstalledMcps(): Promise<HermesInstalledMcpsResponse> {
+export async function getHermesInstalledMcps(
+  profileId?: string,
+): Promise<HermesInstalledMcpsResponse> {
   try {
-    const res = await backplaneFetch("/hermes/tools/installed-mcps", {
-      method: "GET",
-    });
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/installed-mcps", profileId),
+      { method: "GET" },
+    );
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       return { ok: false, items: [], error: responseError(res, body) };
     }
     const data = (await res.json()) as HermesInstalledMcpsResponse;
@@ -199,9 +626,13 @@ export async function getHermesInstalledMcps(): Promise<HermesInstalledMcpsRespo
 export async function putHermesToolsetToggle(
   name: string,
   enabled: boolean,
+  profileId?: string,
 ): Promise<HermesToolToggleResponse> {
   try {
-    const url = `/hermes/tools/toolsets/${encodeURIComponent(name)}`;
+    const url = profileUrl(
+      `/hermes/tools/toolsets/${encodeURIComponent(name)}`,
+      profileId,
+    );
     const res = await backplaneFetch(url, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

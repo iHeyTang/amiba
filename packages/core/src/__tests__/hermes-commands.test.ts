@@ -1,8 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 import { getHermesCommands } from "../hermes-commands"
+import { invalidateHermesCompatibilityCache } from "../backplane-client"
 
 describe("getHermesCommands", () => {
-  beforeEach(() => { global.fetch = vi.fn() })
+  beforeEach(() => {
+    invalidateHermesCompatibilityCache()
+    global.fetch = vi.fn()
+  })
   afterEach(() => { vi.restoreAllMocks() })
 
   it("returns commands on success", async () => {
@@ -10,7 +14,9 @@ describe("getHermesCommands", () => {
       { name: "new", description: "Start a new session", category: "Session",
         aliases: ["reset"], args_hint: "[name]", subcommands: [] },
     ]
-    global.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(body)))
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({ version: "0.19.0" }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(body)))
     const res = await getHermesCommands()
     expect(res.ok).toBe(true)
     expect(res.commands[0].name).toBe("new")
@@ -18,7 +24,9 @@ describe("getHermesCommands", () => {
   })
 
   it("returns ok=false on non-2xx", async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 500 }))
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({ version: "0.19.0" }))
+      .mockResolvedValueOnce(new Response("{}", { status: 500 }))
     const res = await getHermesCommands()
     expect(res.ok).toBe(false)
     expect(res.commands).toEqual([])

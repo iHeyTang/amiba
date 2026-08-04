@@ -120,6 +120,9 @@ export function registerIpcHandlers() {
   ipcMain.handle("workspace:unbind", (_e, sessionId: string) =>
     workspaceManager.unbind(sessionId),
   )
+  ipcMain.handle("workspace:get-default-root", () =>
+    workspaceManager.getDefaultRoot(),
+  )
   ipcMain.handle("workspace:get-current", (_e, sessionId: string) =>
     workspaceManager.getForSession(sessionId),
   )

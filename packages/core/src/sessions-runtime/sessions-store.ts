@@ -45,9 +45,23 @@
 
 import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 
-import { appendHermesMessage, createHermesSession } from "../hermes-sessions";
+import {
+  normalizeAgentContext,
+  normalizeAgentProfileId,
+  type AgentExecutionContext,
+} from "../agent-context";
+import {
+  appendHermesMessage,
+  createHermesSession,
+  deleteHermesSession,
+  forgetEnsuredHermesSession,
+} from "../hermes-sessions";
 import { getLocalSource } from "../channels";
-import { SESSION_KEYS, type SessionMessage, type SessionMeta } from "../sessions";
+import {
+  SESSION_KEYS,
+  type SessionMessage,
+  type SessionMeta,
+} from "../sessions";
 import { migrateLegacyChatHistory } from "./migrate";
 import {
   deriveTitleFromMessages,
@@ -239,6 +253,13 @@ export class SessionsStore {
     await saveIndex(next as SessionMeta[]);
   }
 
+  private profileIdForSession(id: string): string {
+    return normalizeAgentProfileId(
+      this.state.sessions.find((session) => session.id === id)?.agent
+        ?.profileId,
+    );
+  }
+
   private schedulePersistMessages(): void {
     if (this.persistTimer != null) {
       clearTimeout(this.persistTimer);
@@ -254,7 +275,11 @@ export class SessionsStore {
       // pair no longer represents a coherent view. The pre-switch flush
       // already saved this session's outgoing state.
       if (token !== this.switchToken) return;
-      void saveMessages(id, messages as SessionMessage[]);
+      void saveMessages(
+        id,
+        messages as SessionMessage[],
+        this.profileIdForSession(id),
+      );
     }, PERSIST_DEBOUNCE_MS);
   }
 
@@ -270,7 +295,11 @@ export class SessionsStore {
     }
     const id = this.state.activeId;
     if (!id) return;
-    await saveMessages(id, this.state.activeMessages as SessionMessage[]);
+    await saveMessages(
+      id,
+      this.state.activeMessages as SessionMessage[],
+      this.profileIdForSession(id),
+    );
   };
 
   /**
@@ -327,7 +356,8 @@ export class SessionsStore {
     const prevTabs = this.state.openTabIds;
     const prunedTabs = prevTabs.filter((id) => known.has(id));
     const tabsChanged = prunedTabs.length !== prevTabs.length;
-    const activeDeleted = !!this.state.activeId && !known.has(this.state.activeId);
+    const activeDeleted =
+      !!this.state.activeId && !known.has(this.state.activeId);
     if (activeDeleted) {
       // Another window deleted our active session — drop the selection
       // and land back on the home/empty surface.
@@ -378,7 +408,7 @@ export class SessionsStore {
     if (id === this.state.activeId) return;
     await this.flushActiveBeforeSwitch();
     const token = ++this.switchToken;
-    const next = await loadMessages(id);
+    const next = await loadMessages(id, this.profileIdForSession(id));
     if (token !== this.switchToken) return;
     this.commit({ activeId: id, activeMessages: next });
   }
@@ -395,7 +425,11 @@ export class SessionsStore {
     }
     const id = this.state.activeId;
     if (!id) return;
-    await saveMessages(id, this.state.activeMessages as SessionMessage[]);
+    await saveMessages(
+      id,
+      this.state.activeMessages as SessionMessage[],
+      this.profileIdForSession(id),
+    );
   }
 
   switchToTab = async (id: string): Promise<void> => {
@@ -470,9 +504,9 @@ export class SessionsStore {
   // Action: createNew + ensureActive
   // -------------------------------------------------------------------------
 
-  createNew = async (): Promise<string> => {
+  createNew = async (agent?: AgentExecutionContext): Promise<string> => {
     await this.flushActiveBeforeSwitch();
-    const meta = newSessionMeta();
+    const meta = newSessionMeta({ agent });
     ++this.switchToken;
     const nextSessions = [meta, ...this.state.sessions];
     const nextTabs = [...this.state.openTabIds, meta.id];
@@ -496,6 +530,56 @@ export class SessionsStore {
     return this.createNew();
   };
 
+  setAgentContext = async (
+    id: string,
+    agent: AgentExecutionContext,
+  ): Promise<void> => {
+    const idx = this.state.sessions.findIndex((session) => session.id === id);
+    if (idx < 0) return;
+    const normalized = normalizeAgentContext(agent);
+    const current = this.state.sessions[idx];
+    if (JSON.stringify(current.agent ?? null) === JSON.stringify(normalized)) {
+      return;
+    }
+    const previousProfileId = normalizeAgentProfileId(current.agent?.profileId);
+    if (
+      previousProfileId !== normalized.profileId &&
+      (current.messageCount ?? 0) > 0
+    ) {
+      return;
+    }
+    if (previousProfileId !== normalized.profileId) {
+      // Empty tasks can change agent before their first turn. Move the
+      // placeholder row rather than leaving the same id in two isolated
+      // SessionDB files.
+      await deleteHermesSession(id, previousProfileId);
+      forgetEnsuredHermesSession(id, previousProfileId);
+      const created = await createHermesSession(
+        {
+          id,
+          source: current.source || getLocalSource(),
+          title: current.title || undefined,
+        },
+        normalized.profileId,
+      );
+      if (!created.ok) {
+        console.warn(
+          "[hermes-sessions] failed to move empty task to profile:",
+          created,
+        );
+        return;
+      }
+    }
+    const next = this.state.sessions.slice();
+    next[idx] = {
+      ...current,
+      agent: normalized,
+      updatedAt: Date.now(),
+    };
+    this.commit({ sessions: next });
+    await this.persistIndex(next);
+  };
+
   // -------------------------------------------------------------------------
   // Action: importSession
   // -------------------------------------------------------------------------
@@ -510,22 +594,35 @@ export class SessionsStore {
       await this.openTab(meta.id);
       return;
     }
-    const created = await createHermesSession({
-      id: meta.id,
-      source: getLocalSource(),
-      title: meta.title || undefined,
-    });
+    const created = await createHermesSession(
+      {
+        id: meta.id,
+        source: getLocalSource(),
+        title: meta.title || undefined,
+      },
+      meta.agent?.profileId,
+    );
     if (!("ok" in created) || !created.ok) {
-      console.warn("[hermes-sessions] importSession createHermesSession failed:", created);
+      console.warn(
+        "[hermes-sessions] importSession createHermesSession failed:",
+        created,
+      );
       return;
     }
     for (const m of messages) {
-      const r = await appendHermesMessage(meta.id, {
-        role: m.role,
-        content: m.content,
-      });
+      const r = await appendHermesMessage(
+        meta.id,
+        {
+          role: m.role,
+          content: m.content,
+        },
+        meta.agent?.profileId,
+      );
       if (!("ok" in r) || !r.ok) {
-        console.warn("[hermes-sessions] importSession appendHermesMessage failed:", r);
+        console.warn(
+          "[hermes-sessions] importSession appendHermesMessage failed:",
+          r,
+        );
       }
     }
     const nextSessions = [meta, ...this.state.sessions];
@@ -556,10 +653,14 @@ export class SessionsStore {
   };
 
   remove = async (id: string): Promise<void> => {
+    const profileId = normalizeAgentProfileId(
+      this.state.sessions.find((session) => session.id === id)?.agent
+        ?.profileId,
+    );
     const filteredIndex = this.state.sessions.filter((s) => s.id !== id);
     this.commit({ sessions: filteredIndex });
     await this.persistIndex(filteredIndex);
-    await dropMessages(id);
+    await dropMessages(id, profileId);
 
     // Reap any side-panel attachment files that lived under this session
     // on disk. Best-effort: silently no-ops when the bridge is
@@ -595,11 +696,14 @@ export class SessionsStore {
     this.commit({ activeMessages: [], sessions: nextSessions });
     await Promise.all([
       this.persistIndex(nextSessions),
-      saveMessages(id, []),
+      saveMessages(id, [], this.profileIdForSession(id)),
     ]);
   };
 
-  touchSession = async (id: string, messages: SessionMessage[]): Promise<void> => {
+  touchSession = async (
+    id: string,
+    messages: SessionMessage[],
+  ): Promise<void> => {
     const idx = this.state.sessions.findIndex((s) => s.id === id);
     if (idx < 0) return;
     const cur = this.state.sessions[idx];

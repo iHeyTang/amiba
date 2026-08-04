@@ -5,6 +5,8 @@ Path layout matches ``hermes_cli/web_server.py``:
 - ``GET  /hermes/model/info``        — resolved metadata for the main model
 - ``GET  /hermes/model/auxiliary``   — auxiliary slot assignments
 - ``GET  /hermes/model/options``     — provider catalog + curated model lists
+- ``GET  /hermes/model/moa``         — Mixture-of-Agents named presets
+- ``PUT  /hermes/model/moa``         — persist Mixture-of-Agents presets
 - ``POST /hermes/model/set``         — assign main or auxiliary slot
                                        (additive ``base_url`` field on ``scope=main``)
 
@@ -22,12 +24,24 @@ main model is the sole responsibility of ``POST /hermes/model/set``.
 
 from __future__ import annotations
 
+import asyncio
+from functools import wraps
 from urllib.parse import unquote
 
 from aiohttp import web
 
 from ....common import json_error, read_json_object, strip_ok
-from .model_catalog_service import build_provider_models_http_response
+from ....adapters.dotenv_local import plugin_dotenv_path, read_dotenv_as_dict
+from ....adapters.hermes_core import (
+    current_profile_id,
+    get_provider_profile,
+    hermes_profile_scope,
+)
+from ....adapters.hermes_provider_env import env_var_names_for_slug
+from .model_catalog_service import (
+    build_provider_models_http_response,
+    enrich_models_payload,
+)
 from .model_config_service import (
     read_auxiliary_models_response,
     read_main_model_response,
@@ -37,6 +51,14 @@ from .model_config_service import (
 from .provider_credentials_service import (
     merge_credentials_for_provider,
     read_provider_credentials_response,
+)
+from .provider_connection_service import (
+    allows_ambient_credentials,
+    build_provider_connection,
+)
+from .virtual_capabilities_service import (
+    read_moa_config_response,
+    write_moa_config_response,
 )
 
 
@@ -77,6 +99,31 @@ async def handle_model_auxiliary(_request: web.Request) -> web.Response:
     except RuntimeError as exc:
         return json_error(501, str(exc))
     return web.json_response(strip_ok(payload))
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /hermes/model/moa — virtual Mixture-of-Agents capability
+# ---------------------------------------------------------------------------
+
+
+async def handle_model_moa_get(_request: web.Request) -> web.Response:
+    try:
+        return web.json_response(read_moa_config_response())
+    except RuntimeError as exc:
+        return json_error(501, str(exc))
+
+
+async def handle_model_moa_put(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        return web.json_response(write_moa_config_response(body))
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except RuntimeError as exc:
+        return json_error(501, str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -207,11 +254,11 @@ async def handle_model_set(request: web.Request) -> web.Response:
 # ---------------------------------------------------------------------------
 
 
-async def handle_model_options(_request: web.Request) -> web.Response:
+async def handle_model_options(request: web.Request) -> web.Response:
     """Provider catalog + curated model lists.
 
-    Delegates to ``hermes_cli.inventory.build_models_payload`` with two
-    extra flags so the extension's adapter has the data it needs:
+    Delegates to ``hermes_cli.inventory.build_models_payload`` with the same
+    complete inventory options as Hermes's dashboard picker:
 
     - ``include_unconfigured=True`` — append canonical providers the
       user hasn't authenticated yet (otherwise the picker can only
@@ -220,6 +267,15 @@ async def handle_model_options(_request: web.Request) -> web.Response:
     - ``picker_hints=True`` — add ``authenticated``/``auth_type``/
       ``key_env``/``warning`` per row so the adapter can tell
       "user-config", "env-detected" and "unconfigured" apart.
+    - ``canonical_order=True`` — keep Hermes's provider order.
+    - ``pricing=True`` — include provider-backed live pricing where Hermes
+      supports it.
+    - ``capabilities=True`` — include the fast/reasoning fields Hermes
+      explicitly publishes for each model.
+    - ``refresh=...`` — honor the caller's explicit cache-busting request.
+
+    No ``max_models`` limit is applied: this is the settings catalog, not the
+    compact terminal picker, so every model returned by Hermes stays visible.
 
     Adds one mine-only field on top: ``configured_provider_slugs`` —
     the alias-resolved canonical slugs the user explicitly listed in
@@ -251,12 +307,21 @@ async def handle_model_options(_request: web.Request) -> web.Response:
         )
 
     try:
-        ctx = load_picker_context()
-        payload = build_models_payload(
+        refresh_value = request.query.get("refresh", "0")
+        force_refresh = str(refresh_value).lower() in ("1", "true", "yes")
+        ctx = await asyncio.to_thread(load_picker_context)
+        payload = await asyncio.to_thread(
+            build_models_payload,
             ctx,
-            max_models=50,
             include_unconfigured=True,
             picker_hints=True,
+            canonical_order=True,
+            pricing=True,
+            capabilities=True,
+            refresh=force_refresh,
+            probe_custom_providers=force_refresh,
+            probe_current_custom_provider=not force_refresh,
+            for_picker=True,
         )
         payload["configured_provider_slugs"] = _user_configured_canonical_slugs(ctx)
         # Strict "user configured this via the extension" set — reads
@@ -277,6 +342,12 @@ async def handle_model_options(_request: web.Request) -> web.Response:
             )
         except Exception:
             payload["dotenv_configured_provider_slugs"] = []
+        # Hermes's inventory runs inside the long-lived backplane process.
+        # For a named Profile, process-global API keys belong to the default
+        # Profile and must not make that provider look executable. Reconcile
+        # every row with the same Profile-local .env / shared-login rules used
+        # by the credential editor and task runtime.
+        await asyncio.to_thread(_apply_profile_runtime_connections, payload)
         # Replace ai-gateway's curated 16-model subset with Vercel's
         # actual live catalog. ``hermes_cli.models.fetch_ai_gateway_models``
         # intersects Vercel's ``/v1/models`` response with a hard-coded
@@ -285,19 +356,79 @@ async def handle_model_options(_request: web.Request) -> web.Response:
         # default in a terminal picker; in the extension's "All available
         # models" view it just looks broken ("I configured Vercel — why
         # is half of it missing?").
-        await _expand_ai_gateway_models(payload)
+        await _expand_ai_gateway_models(payload, force_refresh=force_refresh)
+        # Keep Hermes's complete picker inventory, including its runtime fast
+        # gate and provider-backed live pricing. The settings surface also
+        # exposes optional models.dev profiles, but they remain isolated under
+        # ``supplemental`` so community data is never presented as provider or
+        # Hermes-owned metadata.
+        await asyncio.to_thread(enrich_models_payload, payload)
         return web.json_response(payload)
     except Exception as exc:
         return json_error(500, f"failed to list model options: {exc}")
 
 
-async def _expand_ai_gateway_models(payload: object) -> None:
+def _apply_profile_runtime_connections(payload: object) -> None:
+    rows = payload.get("providers") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return
+    profile_id = current_profile_id()
+    saved_values = read_dotenv_as_dict(plugin_dotenv_path())
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        slug = str(row.get("slug") or "").strip()
+        if not slug:
+            continue
+        prof = get_provider_profile(slug)
+        auth_type = str(
+            row.get("auth_type")
+            or getattr(prof, "auth_type", "")
+            or ""
+        ).strip()
+        secret_keys = env_var_names_for_slug(slug)
+        key_env = str(row.get("key_env") or "").strip()
+        if key_env and key_env not in secret_keys:
+            secret_keys.append(key_env)
+        allow_ambient = allows_ambient_credentials(auth_type, profile_id)
+        connection = build_provider_connection(
+            slug,
+            auth_type=auth_type,
+            secret_keys=secret_keys,
+            saved_values=saved_values,
+            verify_service=False,
+            allow_ambient_env=allow_ambient,
+        )
+        row["connection"] = connection
+        row["credential_scope"] = connection.get("active_scope", "none")
+        status = str(connection.get("status") or "none")
+        connection_usable = status in {"configured", "detected", "verified"}
+        original_authenticated = row.get("authenticated") is True
+        source = str(row.get("source") or "").strip()
+        config_only_runtime = (
+            source == "user-config"
+            and original_authenticated
+            and not secret_keys
+        )
+        no_secret_runtime = auth_type in {
+            "local",
+            "none",
+            "virtual",
+        }
+        row["authenticated"] = bool(
+            connection_usable
+            or config_only_runtime
+            or (no_secret_runtime and original_authenticated)
+        )
+
+
+async def _expand_ai_gateway_models(
+    payload: object, *, force_refresh: bool = False
+) -> None:
     """Overwrite the ai-gateway row's ``models`` with Vercel's full live
     catalog when authenticated. Silently no-ops on any failure — the
     curated fallback Hermes provided stays in place.
     """
-    import asyncio as _asyncio
-
     rows = payload.get("providers") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         return
@@ -308,7 +439,9 @@ async def _expand_ai_gateway_models(payload: object) -> None:
             break
     if target is None or not target.get("authenticated"):
         return
-    full = await _asyncio.to_thread(_fetch_ai_gateway_full_catalog_sync)
+    full = await asyncio.to_thread(
+        _fetch_ai_gateway_full_catalog_sync, force_refresh=force_refresh
+    )
     if not full:
         return
     target["models"] = full
@@ -319,7 +452,9 @@ _AI_GATEWAY_CATALOG_CACHE: tuple[float, list[dict]] | None = None
 _AI_GATEWAY_CATALOG_TTL_S = 300.0
 
 
-def _fetch_ai_gateway_full_catalog_sync() -> list[dict]:
+def _fetch_ai_gateway_full_catalog_sync(
+    *, force_refresh: bool = False
+) -> list[dict]:
     """Blocking helper: hit ``https://ai-gateway.vercel.sh/v1/models``
     (public, no auth needed for listing) and return rich entries
     ``{id, description?, metadata?}`` for every model. The extension's
@@ -338,7 +473,7 @@ def _fetch_ai_gateway_full_catalog_sync() -> list[dict]:
 
     global _AI_GATEWAY_CATALOG_CACHE
     now = _time.monotonic()
-    if _AI_GATEWAY_CATALOG_CACHE is not None:
+    if not force_refresh and _AI_GATEWAY_CATALOG_CACHE is not None:
         stamp, cached = _AI_GATEWAY_CATALOG_CACHE
         if now - stamp < _AI_GATEWAY_CATALOG_TTL_S:
             return [dict(e) for e in cached]
@@ -472,8 +607,10 @@ async def handle_provider_models(request: web.Request) -> web.Response:
     provider_pm = unquote(str(request.query.get("provider", ""))).strip()
     if not provider_pm:
         return json_error(400, "missing provider query parameter")
-    body_pm = build_provider_models_http_response(
-        provider=provider_pm, force_refresh=force_pm
+    body_pm = await asyncio.to_thread(
+        build_provider_models_http_response,
+        provider=provider_pm,
+        force_refresh=force_pm,
     )
     return web.json_response(body_pm)
 
@@ -495,8 +632,20 @@ async def handle_provider_credentials_get(request: web.Request) -> web.Response:
     provider = unquote(str(request.query.get("provider", ""))).strip()
     if not provider:
         return json_error(400, "missing provider query parameter")
+    verify_service = str(request.query.get("verify", "0")).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     try:
-        return web.json_response(read_provider_credentials_response(provider))
+        import asyncio as _asyncio
+
+        payload = await _asyncio.to_thread(
+            read_provider_credentials_response,
+            provider,
+            verify_service=verify_service,
+        )
+        return web.json_response(payload)
     except ValueError as exc:
         return json_error(400, str(exc))
 
@@ -527,30 +676,50 @@ async def handle_provider_credentials_post(request: web.Request) -> web.Response
     if not isinstance(values, dict):
         return json_error(400, "values must be an object")
     try:
-        written = merge_credentials_for_provider(provider, values)
+        import asyncio as _asyncio
+
+        written = await _asyncio.to_thread(
+            merge_credentials_for_provider,
+            provider,
+            values,
+        )
+        payload = await _asyncio.to_thread(
+            read_provider_credentials_response,
+            provider,
+            verify_service=True,
+        )
     except ValueError as exc:
         return json_error(400, str(exc))
-    return web.json_response(
-        {"ok": True, "provider": provider, "written": written}
-    )
+    payload["written"] = written
+    return web.json_response(payload)
 
 
 def register_model_routes(app: web.Application) -> None:
+    def profiled(handler):
+        @wraps(handler)
+        async def wrapped(request: web.Request) -> web.Response:
+            with hermes_profile_scope(request.query.get("profile")):
+                return await handler(request)
+
+        return wrapped
+
     app.add_routes(
         [
-            web.get("/hermes/model/info", handle_model_info),
-            web.get("/hermes/model/auxiliary", handle_model_auxiliary),
-            web.get("/hermes/model/options", handle_model_options),
-            web.post("/hermes/model/set", handle_model_set),
+            web.get("/hermes/model/info", profiled(handle_model_info)),
+            web.get("/hermes/model/auxiliary", profiled(handle_model_auxiliary)),
+            web.get("/hermes/model/options", profiled(handle_model_options)),
+            web.get("/hermes/model/moa", profiled(handle_model_moa_get)),
+            web.put("/hermes/model/moa", profiled(handle_model_moa_put)),
+            web.post("/hermes/model/set", profiled(handle_model_set)),
             # Mine-only beyond this line.
-            web.get("/hermes/provider-models", handle_provider_models),
+            web.get("/hermes/provider-models", profiled(handle_provider_models)),
             web.get(
                 "/hermes/provider-credentials",
-                handle_provider_credentials_get,
+                profiled(handle_provider_credentials_get),
             ),
             web.post(
                 "/hermes/provider-credentials",
-                handle_provider_credentials_post,
+                profiled(handle_provider_credentials_post),
             ),
         ]
     )

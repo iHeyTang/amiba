@@ -5,14 +5,15 @@ Hermes stores curated memory as two markdown files under
 (notes about the user). Entries within a file are separated by
 ``\\n§\\n``.
 
-Defers the path + delimiter + content-scanner to upstream
-``tools/memory_tool.py`` so this module never drifts from the agent's own
-view of memory. The only thing we add here is structuring the data for
-the HTTP surface and surfacing the upstream security scan's verdict on
-each entry — Hermes uses the same regex set internally before injecting
-memory into prompts (see ``_MEMORY_THREAT_PATTERNS`` in
-``tools/memory_tool.py``), so anything it would flag is content the UI
-should warn the user about before they trust it.
+Defers the delimiter + content-scanner to upstream ``tools/memory_tool.py``
+so this module never drifts from the agent's own view of memory. The path is
+resolved through Amiba's request-scoped Hermes adapter; importing a Hermes
+memory helper must never pin one profile's directory for later requests.
+The only thing we add here is structuring the data for the HTTP surface and
+surfacing the upstream security scan's verdict on each entry — Hermes uses
+the same regex set internally before injecting memory into prompts (see
+``_MEMORY_THREAT_PATTERNS`` in ``tools/memory_tool.py``), so anything it
+would flag is content the UI should warn the user about before they trust it.
 """
 
 from __future__ import annotations
@@ -62,14 +63,8 @@ def _char_limit(target: str) -> int:
 
 
 def _memory_dir() -> Path:
-    """Resolve the memories directory through upstream when available."""
-    try:
-        from tools.memory_tool import get_memory_dir  # type: ignore
-
-        return Path(get_memory_dir())
-    except Exception as exc:
-        logger.debug("memory_tool.get_memory_dir unavailable: %s", exc)
-        return hermes_home() / "memories"
+    """Resolve the active request's profile directory without module caching."""
+    return hermes_home() / "memories"
 
 
 def _path_for(target: str) -> Path:

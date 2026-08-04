@@ -128,4 +128,30 @@ describe("Hermes update logs", () => {
     expect(await screen.findByText("Gateway is offline")).toBeInTheDocument();
     expect(screen.getAllByText("Offline").length).toBeGreaterThan(0);
   });
+
+  it("surfaces the Hermes minimum-version requirement with an update path", async () => {
+    core.getHermesStatus.mockResolvedValue({
+      ok: true,
+      version: "0.16.9",
+      gateway_running: true,
+      hermes_version_mismatch: {
+        installed: "0.16.9",
+        required: "0.19.0",
+        reason: "unsupported",
+      },
+      update_check: { status: "behind", commits_behind: null },
+    });
+
+    render(<SettingsStatus onViewUpdateLogs={vi.fn()} />);
+
+    expect(
+      await screen.findByText("Hermes update required"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/requires Hermes 0\.19\.0 or newer/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Update Hermes" }),
+    ).toBeInTheDocument();
+  });
 });

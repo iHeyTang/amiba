@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ....adapters.hermes_core import hermes_home
+from ....hermes_compatibility import hermes_compatibility_status
 from ....protocol import PROTOCOL_VERSION
 
 logger = logging.getLogger(__name__)
@@ -321,6 +322,7 @@ async def status_response(force_update_check: bool = False) -> Dict[str, Any]:
 
 def _build_status_sync(force_update_check: bool = False) -> Dict[str, Any]:
     version, release_date = _version_info()
+    compatibility = hermes_compatibility_status()
     cfg_v, latest_cfg_v = _config_version_info()
     config_path, env_path = _config_and_env_paths()
 
@@ -352,6 +354,9 @@ def _build_status_sync(force_update_check: bool = False) -> Dict[str, Any]:
 
     return {
         "version": version,
+        "minimum_supported_version": compatibility["minimum_hermes_version"],
+        "version_compatible": compatibility["hermes_version_compatible"],
+        "version_error": compatibility["hermes_version_error"],
         "release_date": release_date,
         "protocol_version": PROTOCOL_VERSION,
         "hermes_home": str(hermes_home()),

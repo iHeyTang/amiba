@@ -1,9 +1,10 @@
 import { getHermesPlugins, setPluginEnabled, uninstallPlugin, type HermesPlugin } from "@amiba/core"
-import { Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { useT } from "@amiba/i18n"
 import { Button, Switch, cn } from "../primitives"
+import { useStartAgentTask } from "./agent-task"
 
 type State =
   | { kind: "loading" }
@@ -17,14 +18,15 @@ type State =
  * — so we flip optimistically and show a "restart to apply" hint. Uninstall is
  * source-aware on the backplane (user → remove dir; entrypoint → pip uninstall;
  * bundled/project → refused), so only user/entrypoint rows get a delete button;
- * on success we drop the row and show the restart hint. Install still lives in
- * the `hermes plugins` operator CLI — there is no install affordance here.
+ * on success we drop the row and show the restart hint. Installation is handed
+ * to the Agent so the user does not have to work through the operator CLI.
  *
- * Plugins split naturally into "yours" (user / project / pip) and "bundled"
- * (20+ shipped with hermes-agent), so we group rather than dump a flat list.
+ * Bundled plugins implement Agent abilities and are intentionally hidden here.
+ * This inventory contains only plugins the user added.
  */
 export function PluginsTab() {
   const { t } = useT()
+  const startAgentTask = useStartAgentTask()
   const [state, setState] = useState<State>({ kind: "loading" })
   const [busy, setBusy] = useState<string | null>(null)
   const [restartHint, setRestartHint] = useState(false)
@@ -79,9 +81,24 @@ export function PluginsTab() {
     setRestartHint(true)
   }
 
+  function onInstall() {
+    if (!startAgentTask) return
+    void startAgentTask(t("externalTools.plugin.addPrompt"), {
+      sourceApp: t("options.extensions.title"),
+    })
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">{t("options.plugins.subtitle")}</p>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm text-muted-foreground">{t("options.plugins.subtitle")}</p>
+        {startAgentTask && (
+          <Button type="button" size="sm" onClick={onInstall}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("externalTools.plugin.add")}
+          </Button>
+        )}
+      </div>
 
       {restartHint && (
         <p className="text-xs text-amber-600">{t("options.plugins.restartHint")}</p>
@@ -127,32 +144,20 @@ function PluginGroups({
 }) {
   const { t } = useT()
   const yours = sortPlugins(plugins.filter((p) => p.source !== "bundled"))
-  const bundled = sortPlugins(plugins.filter((p) => p.source === "bundled"))
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Yours — always shown; this is what the user installed */}
-      <section className="flex flex-col gap-1.5">
-        <h3 className="text-sm font-semibold">{t("options.plugins.group.yours")}</h3>
-        {yours.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("options.plugins.empty")}</p>
-        ) : (
-          <PluginList plugins={yours} busy={busy} onToggle={onToggle} onUninstall={onUninstall} />
-        )}
-      </section>
-
-      {/* Bundled — collapsed by default (20+ ship with hermes-agent) */}
-      {bundled.length > 0 && (
-        <details className="flex flex-col gap-1.5">
-          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
-            {t("options.plugins.group.bundled", { count: bundled.length })}
-          </summary>
-          <div className="mt-1.5">
-            <PluginList plugins={bundled} busy={busy} onToggle={onToggle} onUninstall={onUninstall} />
-          </div>
-        </details>
+    <section className="flex flex-col gap-1.5">
+      {yours.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("options.plugins.empty")}</p>
+      ) : (
+        <PluginList
+          plugins={yours}
+          busy={busy}
+          onToggle={onToggle}
+          onUninstall={onUninstall}
+        />
       )}
-    </div>
+    </section>
   )
 }
 

@@ -33,6 +33,7 @@ describe("useWorkspaceBindings", () => {
     setPlatform({
       kind: "desktop",
       workspaces: {
+        getDefaultRoot: vi.fn(async () => "/Users/test"),
         bind,
         unbind: vi.fn(),
         getCurrent: vi.fn(),
@@ -46,6 +47,32 @@ describe("useWorkspaceBindings", () => {
         },
       },
     } as unknown as PlatformAdapter);
+  });
+
+  it("maps sessions without an explicit binding to the $HOME default", async () => {
+    const { result } = renderHook(() =>
+      useWorkspaceBindings([
+        {
+          id: "session-a",
+          title: "Explicit project",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "session-c",
+          title: "Default workspace",
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ]),
+    );
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.bySessionId).toEqual({
+      "session-a": "/workspaces/alpha",
+      "session-b": "/workspaces/beta",
+      "session-c": "/Users/test",
+    });
   });
 
   it("loads one binding snapshot and applies later changes incrementally", async () => {
@@ -76,6 +103,7 @@ describe("useWorkspaceBindings", () => {
     setPlatform({
       kind: "desktop",
       workspaces: {
+        getDefaultRoot: vi.fn(async () => "/Users/test"),
         bind,
         unbind: vi.fn(),
         getCurrent: vi.fn(),

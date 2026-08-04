@@ -46,8 +46,19 @@ export async function saveThemePreference(pref: ThemePreference): Promise<void> 
   await getPlatform().storage.set({ [THEME_PREF_STORAGE_KEY]: pref })
 }
 
+function startupThemePreference(): ThemePreference {
+  if (typeof document === "undefined") return DEFAULT_THEME_PREFERENCE
+  const startupTheme = document.documentElement.dataset.startupTheme
+  return startupTheme === "light" || startupTheme === "dark"
+    ? startupTheme
+    : DEFAULT_THEME_PREFERENCE
+}
+
 export function useStoredThemePreference() {
-  const [pref, setPref] = useState<ThemePreference>(DEFAULT_THEME_PREFERENCE)
+  // Desktop injects its already-resolved launch palette into index.html.
+  // Starting from it prevents the first React effect from briefly reverting
+  // a pinned theme to the OS preference before storage finishes loading.
+  const [pref, setPref] = useState<ThemePreference>(startupThemePreference)
 
   useEffect(() => {
     let mounted = true

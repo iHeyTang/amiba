@@ -40,20 +40,31 @@ export function useConversationWorkspace({
     if (!workspaces || !activeId) return;
 
     let cancelled = false;
-    void workspaces
-      .getCurrent(activeId)
-      .then((path) => {
-        if (!cancelled) setWorkspacePath(path);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setWorkspacePath(null);
-        setWorkspaceError(String((error as Error)?.message || error));
-      });
+    const restoreCurrent = () =>
+      workspaces
+        .getCurrent(activeId)
+        .then((path) => {
+          if (cancelled) return;
+          setWorkspacePath(path);
+          setWorkspaceError(null);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setWorkspacePath(null);
+          setWorkspaceError(String((error as Error)?.message || error));
+        });
+    void restoreCurrent();
 
     const unsubscribe = workspaces.onChange((change) => {
       if (change.sessionId !== activeId) return;
-      setWorkspacePath(change.kind === "bound" ? change.path : null);
+      if (change.kind === "bound") {
+        setWorkspacePath(change.path);
+        setWorkspaceError(null);
+      } else {
+        // Removing an explicit project binding returns the task to the
+        // product-level $HOME workspace; it is not a "no workspace" state.
+        void restoreCurrent();
+      }
     });
 
     return () => {

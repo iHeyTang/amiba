@@ -1,64 +1,92 @@
 import {
+  Check,
   ChevronDown,
   ChevronRight,
-  Crown,
+  Fingerprint,
   Loader2,
-  MoreHorizontal,
   RefreshCw,
-  X,
-  Zap,
 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Badge } from "../primitives";
 import { Button } from "../primitives";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../primitives";
 import { Input } from "../primitives";
 import { Label } from "../primitives";
 import { ScrollArea } from "../primitives";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../primitives";
+import {
+  ModelCatalogEntryCard,
+  ModelIcon,
+  ModelIdentityName,
+  ModelPickerDialog,
+  resolveCatalogModelDisplayName,
+  type ModelPickerGroup,
+  type ModelPickerStatus,
+} from "../models";
 import { useT } from "@amiba/i18n";
 
-import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
-import { SettingsPaneHeader } from "./SettingsPaneHeader";
 import { SettingsGateway } from "./SettingsGateway";
 import type { BridgeCapability } from "./capabilities";
 import {
-  AUXILIARY_SLOT_LABELS,
   AUXILIARY_SLOT_NAMES,
-  getHermesAuxiliaryModels,
-  getHermesMainModelInfo,
-  getHermesModelCatalog,
-  getHermesProviderCredentials,
-  getHermesProviderModels,
-  saveHermesProviderCredentials,
-  setHermesAgentMainModel,
-  setHermesAuxiliarySlot,
+  DEFAULT_HERMES_MODEL_DISPLAY_PREFERENCES,
+  buildHermesModelPickerGroups,
+  buildHermesModelProviderViews,
+  buildHermesVirtualCapabilityPickerGroups,
+  buildHermesVirtualCapabilityViews,
+  hermesSelectedModelSummaryKey,
+  hermesModelGateway,
+  getHermesProfiles,
   type AuxiliaryModelsResponse,
   type AuxiliarySlotName,
   type AuxiliaryTask,
+  type HermesAgentMainModelResponse,
   type HermesCatalogModelEntry,
+  type HermesModelDisplayPreferences,
   type HermesModelCatalogResponse,
+  type HermesMoaConfigResponse,
+  type HermesProviderConnection,
   type HermesProviderCredentialField,
+  type HermesProfile,
+  type HermesSelectedModelSummary,
 } from "@amiba/core";
 import { cn } from "../primitives";
-/** Sidebar selection: special "model-config" panel or a provider slug. */
-type SidebarSection = "model-config" | string;
+import { ModelDisplayPanel } from "./ModelDisplayPanel";
+import {
+  MODEL_SETTINGS_SECTION_CLASS,
+  MODEL_SETTINGS_SURFACE_CLASS,
+  ModelSettingsSectionHeader,
+} from "./ModelSettingsSectionChrome";
+import { ProviderConnectionStatusBadge } from "./ProviderConnectionStatusBadge";
+import { ProviderCredentialEditor } from "./ProviderCredentialEditor";
+import { VirtualCapabilitiesPanel } from "./VirtualCapabilitiesPanel";
 
-/**
- * Format a context-length token count for display: ``200K``, ``1M``,
- * ``128K``. Returns empty string when the count is missing or zero —
- * callers use that as the "hide the chip" signal.
- */
-function formatContextLength(n: number): string {
-  if (!n || n <= 0) return "";
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000;
-    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
-  }
-  if (n >= 1000) {
-    return `${Math.round(n / 1000)}K`;
-  }
-  return String(n);
-}
+export type HermesModelSettingsView =
+  | "models"
+  | "multi-model-collaboration"
+  | "connection";
+
+const AUXILIARY_SLOT_MESSAGE_KEYS = {
+  vision: "options.models.config.slot.vision",
+  web_extract: "options.models.config.slot.webExtract",
+  compression: "options.models.config.slot.compression",
+  session_search: "options.models.config.slot.sessionSearch",
+  skills_hub: "options.models.config.slot.skillsHub",
+  approval: "options.models.config.slot.approval",
+  mcp: "options.models.config.slot.mcp",
+  title_generation: "options.models.config.slot.titleGeneration",
+} as const;
 
 /** Build a name-indexed view of the upstream `tasks` array for render code. */
 function tasksToMap(
@@ -71,200 +99,221 @@ function tasksToMap(
   return map as Record<AuxiliarySlotName, AuxiliaryTask>;
 }
 
-function formatScalarForMeta(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "boolean") return v ? "yes" : "no";
-  if (typeof v === "number") {
-    if (!Number.isFinite(v)) return "";
-    if (Number.isInteger(v)) return String(v);
-    const t = v.toFixed(8).replace(/\.?0+$/, "");
-    return t === "-0" ? "0" : t;
-  }
-  if (typeof v === "string") return v.trim();
-  if (Array.isArray(v))
-    return v.map(formatScalarForMeta).filter(Boolean).join(", ");
-  return "";
+function useDelayedLoading(active: boolean, delay = 180): boolean {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setVisible(true), delay);
+    return () => window.clearTimeout(timer);
+  }, [active, delay]);
+  return visible;
 }
 
-function labelMetaKey(k: string): string {
-  const m: Record<string, string> = {
-    context_window: "Context",
-    max_context_tokens: "Context cap",
-    max_output_tokens: "Output cap",
-    max_tokens: "tokens",
-    input_price_per_mtok: "Input",
-    output_price_per_mtok: "Output",
-    input_price: "Input price",
-    output_price: "Output price",
-    pricing: "Pricing",
-    pricing_tier: "Pricing tier",
-    modality: "Modality",
-    modalities: "Modality",
-    parameters: "Parameters",
-    tags: "Capabilities",
-  };
-  return m[k] ?? k.replace(/_/g, " ");
-}
-
-/** Stable order for ``metadata`` chips (context first, then pricing, then tags). */
-const META_DISPLAY_KEY_ORDER: string[] = [
-  "context_window",
-  "max_context_tokens",
-  "max_output_tokens",
-  "max_tokens",
-  "input_price_per_mtok",
-  "output_price_per_mtok",
-  "input_price",
-  "output_price",
-  "pricing",
-  "pricing_tier",
-  "modality",
-  "modalities",
-  "parameters",
-  "tags",
-];
-
-function metaDisplayKeyRank(k: string): number {
-  const i = META_DISPLAY_KEY_ORDER.indexOf(k);
-  return i === -1 ? 1000 : i;
-}
-
-function hasDisplayableMeta(meta: Record<string, unknown> | undefined): boolean {
-  if (!meta || typeof meta !== "object") return false;
-  return Object.keys(meta).some((k) => {
-    const v = meta[k];
-    if (v === null || v === undefined) return false;
-    if (typeof v === "string") return v.trim() !== "";
-    if (typeof v === "boolean" || typeof v === "number") return true;
-    if (Array.isArray(v)) return v.length > 0;
-    return false;
-  });
-}
-
-/** Renders ``entry.metadata`` plus catalog top-level fields the bridge may fold in. */
-function ModelEntryMetadataLine({
-  meta,
-}: {
-  meta: Record<string, unknown> | undefined;
-}) {
-  if (!hasDisplayableMeta(meta)) return null;
-  const m = meta as Record<string, unknown>;
-  const pairs = Object.entries(m).filter(
-    ([, v]) => formatScalarForMeta(v) !== "",
-  );
-  if (!pairs.length) return null;
-  pairs.sort(([a], [b]) => metaDisplayKeyRank(a) - metaDisplayKeyRank(b) || a.localeCompare(b));
-  const TOKEN_COUNT_KEYS = new Set([
-    "context_window",
-    "max_context_tokens",
-    "max_output_tokens",
-    "max_tokens",
-  ]);
+function LoadingBar({ className }: { className: string }) {
   return (
-    <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] leading-snug text-muted-foreground">
-      {pairs.map(([k, v]) => {
-        if (k === "input_price_per_mtok" || k === "output_price_per_mtok") {
-          const label = k === "input_price_per_mtok" ? "Input" : "Output";
-          return (
-            <span key={k} title={k}>
-              <span className="font-medium text-foreground/65">{label}</span>
-              <span className="text-muted-foreground/90">
-                {" "}
-                {formatScalarForMeta(v)} $/M
-              </span>
-            </span>
-          );
-        }
-        const valueText = TOKEN_COUNT_KEYS.has(k)
-          ? formatTokenCount(v)
-          : formatScalarForMeta(v);
-        return (
-          <span key={k} title={k}>
-            <span className="font-medium text-foreground/65">{labelMetaKey(k)}</span>
-            <span className="text-muted-foreground/90"> {valueText}</span>
-          </span>
-        );
-      })}
-    </div>
+    <span
+      aria-hidden
+      className={cn("block rounded-full bg-muted/70", className)}
+    />
   );
 }
 
-/** Format token-count integers with K/M suffix (200000 → "200K"). Falls
- * back to the generic formatter for non-numeric or non-positive values
- * so we never silently swallow odd input.
- */
-function formatTokenCount(v: unknown): string {
-  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) {
-    return formatScalarForMeta(v);
+function ProfileScopeControl({
+  profiles,
+  value,
+  onChange,
+}: {
+  profiles: HermesProfile[];
+  value: string;
+  onChange: (profile: string) => void;
+}) {
+  const { t } = useT();
+  if (!value) return null;
+  return (
+    <Select onValueChange={onChange} value={value}>
+      <SelectTrigger
+        aria-label={t("options.agents.profiles")}
+        className="h-7 w-auto max-w-48 gap-1.5 rounded-full border-border/60 bg-muted/20 px-2.5 text-[10px] shadow-none"
+      >
+        <Fingerprint
+          aria-hidden
+          className="h-3 w-3 shrink-0 text-muted-foreground"
+        />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end" className="min-w-44">
+        {profiles.map((profile) => (
+          <SelectItem key={profile.name} value={profile.name}>
+            {profile.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ModelSettingsLoadingSkeleton({
+  visible,
+  view,
+}: {
+  visible: boolean;
+  view: Exclude<HermesModelSettingsView, "connection">;
+}) {
+  if (!visible) return <div className="min-h-0 flex-1 bg-background" />;
+  if (view === "multi-model-collaboration") {
+    return (
+      <div
+        className="flex min-h-0 flex-1 bg-background motion-safe:animate-pulse"
+        data-model-settings-loading="multi-model-collaboration"
+      >
+        <aside className="w-52 shrink-0 border-r border-border/60 bg-muted/10 p-3">
+          <div className="mb-6 flex items-center justify-between">
+            <LoadingBar className="h-3 w-20" />
+            <LoadingBar className="h-5 w-5" />
+          </div>
+          <div className="space-y-2">
+            <LoadingBar className="h-8 w-full rounded-md" />
+            <LoadingBar className="h-8 w-4/5 rounded-md" />
+          </div>
+        </aside>
+        <div className="min-w-0 flex-1">
+          <div className="mx-auto max-w-3xl space-y-5 p-6">
+            <div className="h-12 rounded-xl border border-border/60 bg-muted/[0.08]" />
+            <div className="space-y-2">
+              <LoadingBar className="h-3 w-24" />
+              <LoadingBar className="h-2.5 w-72 max-w-full" />
+            </div>
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              {[0, 1, 2].map((row) => (
+                <div
+                  className="grid h-[4.5rem] grid-cols-[8rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/45 px-4 last:border-b-0"
+                  key={row}
+                >
+                  <LoadingBar className="h-2.5 w-20" />
+                  <LoadingBar className="h-8 w-48 max-w-full rounded-lg" />
+                  <LoadingBar className="h-5 w-12" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
-  if (v >= 1_000_000) {
-    const m = v / 1_000_000;
-    return Number.isInteger(m) ? `${m}M` : `${m.toFixed(1)}M`;
-  }
-  if (v >= 1_000) {
-    const k = v / 1_000;
-    return Number.isInteger(k) ? `${k}K` : `${k.toFixed(0)}K`;
-  }
-  return String(v);
+  return (
+    <ScrollArea
+      className="min-h-0 min-w-0 flex-1"
+      data-model-settings-loading="models"
+    >
+      <div className="mx-auto max-w-3xl space-y-8 p-6 motion-safe:animate-pulse">
+        {[2, 4].map((rows, section) => (
+          <section className="space-y-4" key={rows}>
+            <LoadingBar className={section === 0 ? "h-3 w-28" : "h-3 w-24"} />
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              {Array.from({ length: rows }, (_, row) => (
+                <div
+                  className="flex h-14 items-center gap-3 border-b border-border/45 px-4 last:border-b-0"
+                  key={row}
+                >
+                  <LoadingBar className="h-4 w-4" />
+                  <LoadingBar className="h-3 w-28" />
+                  <LoadingBar className="ml-auto h-5 w-12" />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </ScrollArea>
+  );
 }
 
 export function HermesModelConfigTab({
   bridge,
+  view = "models",
+  selectedProfileId,
+  onSelectedProfileIdChange,
+  showProfileScope = false,
+  initialProviderId,
 }: {
   /** Forwarded to the Connection section (SettingsGateway body). */
   bridge?: BridgeCapability;
+  /** Settings owns top-level navigation; this component renders one pane. */
+  view?: HermesModelSettingsView;
+  /** Fix model reads and writes to this Profile. */
+  selectedProfileId?: string;
+  /** Optional legacy scope picker. Advanced agent settings should own scope. */
+  onSelectedProfileIdChange?: (profileId: string) => void;
+  /** Show the internal Profile picker. Hidden by default to avoid duplicate scope UI. */
+  showProfileScope?: boolean;
+  /** Open this provider's configuration dialog when the pane mounts. */
+  initialProviderId?: string;
 } = {}) {
   const { t } = useT();
+  const [profiles, setProfiles] = useState<HermesProfile[]>([]);
+  const [localProfileId, setLocalProfileId] = useState("");
+  const profileId = selectedProfileId ?? localProfileId;
+  const profileSelectionIsControlled = selectedProfileId !== undefined;
+  const setProfileId = useCallback(
+    (nextProfileId: string) => {
+      if (!profileSelectionIsControlled) {
+        setLocalProfileId(nextProfileId);
+      }
+      onSelectedProfileIdChange?.(nextProfileId);
+    },
+    [onSelectedProfileIdChange, profileSelectionIsControlled],
+  );
   // ── Shared / catalog state ─────────────────────────────────────────────
-  const [catalog, setCatalog] = useState<HermesModelCatalogResponse | null>(null);
+  const [catalog, setCatalog] = useState<HermesModelCatalogResponse | null>(
+    null,
+  );
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
-
-  // ── Sidebar selection ──────────────────────────────────────────────────
-  const [section, setSection] = useState<SidebarSection>("model-config");
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   // ── Main-model state (disk only — no draft) ───────────────────────────
-  const [mainLoading, setMainLoading] = useState(true);
+  const [configurationLoading, setConfigurationLoading] = useState(true);
   const [mainError, setMainError] = useState<string | null>(null);
   const [diskProvider, setDiskProvider] = useState("auto");
   const [diskModel, setDiskModel] = useState("");
-  const [diskBaseUrl, setDiskBaseUrl] = useState("");
-  /**
-   * Resolved context-length triple + capabilities from
-   * ``/hermes/model/info``. Owned independently of the catalog and
-   * credentials fetches — those three surfaces are orthogonal now.
-   */
-  const [mainContext, setMainContext] = useState<{
-    auto: number;
-    config: number;
-    effective: number;
-  }>({ auto: 0, config: 0, effective: 0 });
-  const [mainCapabilities, setMainCapabilities] = useState<{
-    supports_tools?: boolean;
-    supports_vision?: boolean;
-    supports_reasoning?: boolean;
-    context_window?: number | null;
-    max_output_tokens?: number | null;
-    model_family?: string | null;
-  }>({});
-
+  const [mainInfo, setMainInfo] = useState<HermesAgentMainModelResponse>({
+    ok: true,
+  });
   // ── Auxiliary-model state (8 named slots) ────────────────────────────
   // Bridge returns ``tasks: AuxiliaryTask[]`` matching upstream
   // `/api/model/auxiliary`. We index it by `task` name locally for fast
   // lookup in the per-slot render code — this is a *local view* of the
   // upstream-aligned response, not a wire-shape compat shim.
-  const [auxSlots, setAuxSlots] = useState<Record<AuxiliarySlotName, AuxiliaryTask> | null>(null);
+  const [auxSlots, setAuxSlots] = useState<Record<
+    AuxiliarySlotName,
+    AuxiliaryTask
+  > | null>(null);
   const [auxError, setAuxError] = useState<string | null>(null);
-  const [auxSavingSlot, setAuxSavingSlot] = useState<AuxiliarySlotName | null>(null);
-  const [auxSavedSlot, setAuxSavedSlot] = useState<AuxiliarySlotName | null>(null);
+  const [auxSavingSlot, setAuxSavingSlot] = useState<AuxiliarySlotName | null>(
+    null,
+  );
+  const [auxSavedSlot, setAuxSavedSlot] = useState<AuxiliarySlotName | null>(
+    null,
+  );
 
   // ── Provider panel state ──────────────────────────────────────────────
-  // Sidebar selection drives this; empty means "no provider picked yet".
-  const [hProvider, setHProvider] = useState("");
+  // The selected provider drives the configuration dialog.
+  const [hProvider, setHProvider] = useState(
+    () => initialProviderId?.trim() ?? "",
+  );
+  useEffect(() => {
+    if (initialProviderId !== undefined) {
+      setHProvider(initialProviderId.trim());
+    }
+  }, [initialProviderId, profileId]);
   const [hSaving, setHSaving] = useState(false);
   const [hSaved, setHSaved] = useState(false);
   const [hError, setHError] = useState<string | null>(null);
-  const [providerCliModels, setProviderCliModels] = useState<HermesCatalogModelEntry[]>([]);
+  const [providerCliModels, setProviderCliModels] = useState<
+    HermesCatalogModelEntry[]
+  >([]);
   const [providerCliLoading, setProviderCliLoading] = useState(false);
   const [providerCliMeta, setProviderCliMeta] = useState<{
     source?: string;
@@ -274,15 +323,19 @@ export function HermesModelConfigTab({
   /**
    * Per-provider credential cache. Keyed by slug. Once a provider's
    * fields/hint have been fetched they live here for the rest of the
-   * session — switching sidebar selection just re-reads from cache and
-   * the panel renders instantly (no spinner). ``saveProviderCredentials``
-   * and ``refreshCatalogFromRemote`` overwrite the relevant slug's entry
-   * so writes don't leave stale data behind.
+   * session — reopening a dialog re-reads from cache and renders instantly.
+   * Saving credentials overwrites the relevant slug so writes do not leave
+   * stale data behind.
    */
   const [credentialsCache, setCredentialsCache] = useState<
     Record<
       string,
-      { fields: HermesProviderCredentialField[]; authHint: string }
+      {
+        fields: HermesProviderCredentialField[];
+        authHint: string;
+        authType?: string;
+        connection?: HermesProviderConnection;
+      }
     >
   >({});
   /** Edit drafts for the *current* hProvider only — reset on switch. */
@@ -291,9 +344,15 @@ export function HermesModelConfigTab({
   const [keysLoading, setKeysLoading] = useState(false);
   const [keysError, setKeysError] = useState<string | null>(null);
 
-  const currentCredentials = hProvider ? credentialsCache[hProvider] : undefined;
+  const currentCredentials = hProvider
+    ? credentialsCache[hProvider]
+    : undefined;
   const credentialFields = currentCredentials?.fields ?? [];
   const credentialAuthHint = currentCredentials?.authHint ?? "";
+  const credentialAuthType = currentCredentials?.authType;
+  const providerConnection =
+    currentCredentials?.connection ??
+    catalog?.providers?.[hProvider]?.connection;
 
   // ── Model-Config panel state ──────────────────────────────────────────
   const [mcSaving, setMcSaving] = useState(false);
@@ -302,6 +361,71 @@ export function HermesModelConfigTab({
   // Editable fields used only when configuring a `custom` main model.
   const [customDraftModel, setCustomDraftModel] = useState("");
   const [customDraftBaseUrl, setCustomDraftBaseUrl] = useState("");
+  const [displayPreferences, setDisplayPreferences] =
+    useState<HermesModelDisplayPreferences>(
+      DEFAULT_HERMES_MODEL_DISPLAY_PREFERENCES,
+    );
+  const [displayPending, setDisplayPending] = useState<string | null>(null);
+  const [displayError, setDisplayError] = useState<string | null>(null);
+  const [moaConfig, setMoaConfig] = useState<HermesMoaConfigResponse | null>(
+    null,
+  );
+  const [selectedModelSummaries, setSelectedModelSummaries] = useState<
+    HermesSelectedModelSummary[]
+  >([]);
+  const showInitialLoading = useDelayedLoading(configurationLoading);
+  const catalogStatus: ModelPickerStatus = catalog
+    ? "ready"
+    : catalogLoading
+      ? "loading"
+      : "error";
+
+  useEffect(() => {
+    if (view === "connection") {
+      setProfileId("default");
+      return;
+    }
+    if (profileSelectionIsControlled && profileId) {
+      if (!showProfileScope) setProfiles([]);
+      return;
+    }
+    let cancelled = false;
+    void getHermesProfiles().then((result) => {
+      if (cancelled) return;
+      if (!result.ok || result.profiles.length === 0) {
+        setProfiles([]);
+        setProfileId("default");
+        return;
+      }
+      setProfiles(result.profiles);
+      const selectedExists = result.profiles.some(
+        (profile) => profile.name === profileId,
+      );
+      if (!selectedExists) {
+        setProfileId(result.active || result.profiles[0]?.name || "default");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    profileId,
+    profileSelectionIsControlled,
+    setProfileId,
+    showProfileScope,
+    view,
+  ]);
+
+  useEffect(() => {
+    setHProvider("");
+    setCredentialsCache({});
+    setProviderCliModels([]);
+    setProviderCliMeta(null);
+    setCatalog(null);
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setDisplayPreferences(DEFAULT_HERMES_MODEL_DISPLAY_PREFERENCES);
+  }, [profileId]);
 
   // ── Derived ───────────────────────────────────────────────────────────
   const canonicalLabelBySlug = useMemo(() => {
@@ -312,78 +436,35 @@ export function HermesModelConfigTab({
     return m;
   }, [catalog?.canonical_providers]);
 
-  const configSlugSet = useMemo(
-    () => new Set(catalog?.config_provider_ids ?? []),
-    [catalog?.config_provider_ids],
+  const displayProviders = useMemo(
+    () =>
+      buildHermesModelProviderViews(
+        catalog,
+        { ...mainInfo, provider: diskProvider, model: diskModel },
+        displayPreferences,
+      ),
+    [catalog, diskModel, diskProvider, displayPreferences, mainInfo],
   );
-
-  const envReadySlugSet = useMemo(
-    () => new Set(catalog?.env_ready_provider_ids ?? []),
-    [catalog?.env_ready_provider_ids],
+  const displayProviderById = useMemo(
+    () => new Map(displayProviders.map((provider) => [provider.id, provider])),
+    [displayProviders],
   );
-
-  const configuredSlugSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const x of catalog?.config_provider_ids ?? []) s.add(x);
-    for (const x of catalog?.env_ready_provider_ids ?? []) s.add(x);
-    return s;
-  }, [catalog?.config_provider_ids, catalog?.env_ready_provider_ids]);
-
-  /**
-   * Sidebar split into two ordered groups:
-   *   - configured: providers the user has actually set up
-   *     (config.yaml entries ∪ env-ready keys)
-   *   - available: every other canonical slug
-   *
-   * No "auto" entry — auto is a main-model resolution policy, not a
-   * provider you configure. It lives in Model Config only.
-   *
-   * ``custom`` (the BYO OpenAI-compatible escape hatch) is **not**
-   * unconditionally included — it's noise for the 99% of users who
-   * don't run their own gateway. We only put it in the list when:
-   *   - it's the user's current main provider (``diskProvider === "custom"``)
-   *   - or the user explicitly opened its editor (``hProvider === "custom"``)
-   * The "+ Custom endpoint" affordance under the list is the entry
-   * point for first-time activation. ``customVisible`` is also
-   * exported so the JSX can decide whether to render that affordance.
-   */
-  const sidebarGroups = useMemo(() => {
-    const hp = hProvider.trim();
-    const all: string[] = [];
-    const seen = new Set<string>();
-    const push = (slug: string) => {
-      const s = slug.trim();
-      if (!s || seen.has(s) || s === "auto") return;
-      seen.add(s);
-      all.push(s);
-    };
-    for (const id of catalog?.config_provider_ids ?? []) push(id);
-    for (const id of catalog?.env_ready_provider_ids ?? []) push(id);
-    for (const id of catalog?.provider_ids ?? []) {
-      if (id !== "custom") push(id);
-    }
-    if (hp && hp !== "custom") push(hp);
-    const customVisible = diskProvider === "custom" || hp === "custom";
-    if (customVisible) push("custom");
-
-    const configured = all.filter((s) => configuredSlugSet.has(s));
-    const available = all.filter((s) => !configuredSlugSet.has(s));
-    return { configured, available, customVisible };
-  }, [
-    catalog?.config_provider_ids,
-    catalog?.env_ready_provider_ids,
-    catalog?.provider_ids,
-    configuredSlugSet,
-    diskProvider,
-    hProvider,
-  ]);
+  const serviceProviders = useMemo(
+    () => displayProviders.filter((provider) => provider.kind !== "virtual"),
+    [displayProviders],
+  );
+  const virtualCapabilities = useMemo(
+    () =>
+      moaConfig
+        ? buildHermesVirtualCapabilityViews(displayProviders, moaConfig)
+        : [],
+    [displayProviders, moaConfig],
+  );
 
   function providerOptionLabel(id: string): string {
-    if (id === "custom") return "Custom OpenAI-compatible endpoint";
-    const tui = canonicalLabelBySlug.get(id);
+    if (id === "custom") return t("options.models.provider.customName");
+    const tui = displayProviderById.get(id)?.label;
     if (tui) return tui;
-    if (configSlugSet.has(id)) return `${id} (already in your Hermes config)`;
-    if (envReadySlugSet.has(id)) return `${id} (key saved in ~/.hermes/.env)`;
     return id;
   }
 
@@ -397,10 +478,23 @@ export function HermesModelConfigTab({
    * them surprises users who never touched the panel.
    */
   const allCatalogModels = useMemo(() => {
-    const candidates = new Set<string>([
-      ...(catalog?.config_provider_ids ?? []),
-      ...(catalog?.env_ready_provider_ids ?? []),
-    ]);
+    const result = new Map<
+      string,
+      { provider: string; entry: HermesCatalogModelEntry }
+    >();
+    for (const summary of selectedModelSummaries) {
+      result.set(
+        hermesSelectedModelSummaryKey(summary.provider, summary.model),
+        {
+          provider: summary.provider,
+          entry: summary.entry,
+        },
+      );
+    }
+    const candidates = new Set<string>();
+    for (const provider of serviceProviders) {
+      if (provider.explicitlyConfigured) candidates.add(provider.id);
+    }
     if (diskProvider && diskProvider !== "auto" && diskProvider !== "custom") {
       candidates.add(diskProvider);
     }
@@ -410,18 +504,67 @@ export function HermesModelConfigTab({
         if (p && p !== "auto" && p !== "custom") candidates.add(p);
       }
     }
-    const result: { provider: string; entry: HermesCatalogModelEntry }[] = [];
     for (const pid of candidates) {
       const block = catalog?.providers?.[pid];
       if (!block?.models?.length) continue;
       for (const m of block.models) {
         if (typeof m.id === "string" && m.id.trim()) {
-          result.push({ provider: pid, entry: m });
+          result.set(hermesSelectedModelSummaryKey(pid, m.id), {
+            provider: pid,
+            entry: m,
+          });
         }
       }
     }
-    return result;
-  }, [catalog, diskProvider, auxSlots]);
+    return [...result.values()];
+  }, [
+    auxSlots,
+    catalog,
+    diskProvider,
+    selectedModelSummaries,
+    serviceProviders,
+  ]);
+
+  // Model assignment dialogs consume the same visibility projection as the
+  // composer picker. Credentials make a provider selectable; only its display
+  // switch makes it visible here.
+  const assignmentProviderGroups = useMemo<ModelPickerGroup[]>(
+    () =>
+      buildHermesModelPickerGroups(displayProviders).map((group) => ({
+        id: `provider:${group.provider}`,
+        kind: "provider",
+        label: group.label,
+        models: group.models.map((entry) => ({
+          description: entry.description ?? entry.supplemental?.description,
+          metadata: entry.metadata,
+          model: entry.id,
+          supplemental: entry.supplemental,
+        })),
+        provider: group.provider,
+      })),
+    [displayProviders],
+  );
+  const mainAssignmentPickerGroups = useMemo<ModelPickerGroup[]>(
+    () => [
+      ...assignmentProviderGroups,
+      ...buildHermesVirtualCapabilityPickerGroups(virtualCapabilities).map(
+        (group) => ({
+          id: `virtual:${group.capability}`,
+          kind: "virtual" as const,
+          label:
+            group.capability === "moa"
+              ? t("options.models.virtual.moaTitle")
+              : group.label,
+          models: group.models.map((entry) => ({
+            label: entry.id,
+            model: entry.id,
+          })),
+          provider: group.provider,
+        }),
+      ),
+    ],
+    [assignmentProviderGroups, t, virtualCapabilities],
+  );
 
   const modelEntriesForProvider = useMemo((): HermesCatalogModelEntry[] => {
     const p = hProvider.trim();
@@ -432,47 +575,58 @@ export function HermesModelConfigTab({
   }, [providerCliModels, catalog?.providers, hProvider]);
 
   const showHermesModelLoading =
-    !mainLoading &&
-    hProvider.trim() !== "" &&
-    providerCliLoading;
+    !configurationLoading && hProvider.trim() !== "" && providerCliLoading;
 
   // ── Load provider models when provider panel changes ──────────────────
-  const loadProviderModels = useCallback(async (refresh: boolean) => {
-    const p = hProvider.trim();
-    if (!p) {
-      setProviderCliModels([]);
-      setProviderCliMeta(null);
-      setProviderCliLoading(false);
-      return;
-    }
-    setProviderCliLoading(true);
-    try {
-      const r = await getHermesProviderModels(p, refresh);
-      if (r.ok && r.models && r.models.length > 0) {
-        setProviderCliModels(r.models.filter((m) => typeof m.id === "string" && m.id.trim()));
-        setProviderCliMeta({
-          source: r.source,
-          cli_loaded: r.cli_loaded,
-          pricing_loaded: r.pricing_loaded,
-        });
-      } else {
+  const loadProviderModels = useCallback(
+    async (refresh: boolean) => {
+      const p = hProvider.trim();
+      if (!p) {
+        setProviderCliModels([]);
+        setProviderCliMeta(null);
+        setProviderCliLoading(false);
+        return;
+      }
+      setProviderCliLoading(true);
+      try {
+        const r = await hermesModelGateway.provider.readModels(
+          p,
+          refresh,
+          profileId,
+        );
+        if (r.ok && r.models && r.models.length > 0) {
+          setProviderCliModels(
+            r.models.filter((m) => typeof m.id === "string" && m.id.trim()),
+          );
+          setProviderCliMeta({
+            source: r.source,
+            cli_loaded: r.cli_loaded,
+            pricing_loaded: r.pricing_loaded,
+          });
+        } else {
+          setProviderCliModels([]);
+          setProviderCliMeta({
+            source: r.source,
+            cli_loaded: r.cli_loaded,
+            pricing_loaded: r.pricing_loaded,
+          });
+        }
+      } catch {
         setProviderCliModels([]);
         setProviderCliMeta({
-          source: r.source,
-          cli_loaded: r.cli_loaded,
-          pricing_loaded: r.pricing_loaded,
+          source: "error",
+          cli_loaded: false,
+          pricing_loaded: false,
         });
+      } finally {
+        setProviderCliLoading(false);
       }
-    } catch {
-      setProviderCliModels([]);
-      setProviderCliMeta({ source: "error", cli_loaded: false, pricing_loaded: false });
-    } finally {
-      setProviderCliLoading(false);
-    }
-  }, [hProvider]);
+    },
+    [hProvider, profileId],
+  );
 
   useEffect(() => {
-    if (mainLoading) return;
+    if (configurationLoading) return;
     const p = hProvider.trim();
     if (!p) {
       setProviderCliModels([]);
@@ -483,7 +637,7 @@ export function HermesModelConfigTab({
     setProviderCliModels([]);
     setProviderCliMeta(null);
     void loadProviderModels(false);
-  }, [mainLoading, hProvider, loadProviderModels]);
+  }, [configurationLoading, hProvider, loadProviderModels]);
 
   // ── Resolve credentials for the active provider ───────────────────────
   // Cache-first: if we've fetched this slug before in the current session,
@@ -508,21 +662,30 @@ export function HermesModelConfigTab({
     let cancelled = false;
     setKeyDrafts({});
     setKeysLoading(true);
-    void getHermesProviderCredentials(p).then((r) => {
-      if (cancelled) return;
-      setKeysLoading(false);
-      if (!r.ok) {
-        setKeysError(r.error || "Failed to read credentials");
-        return;
-      }
-      setCredentialsCache((prev) => ({
-        ...prev,
-        [p]: { fields: r.fields, authHint: r.auth_hint },
-      }));
-      const drafts: Record<string, string> = {};
-      for (const f of r.fields) drafts[f.key] = f.value;
-      setKeyDrafts(drafts);
-    });
+    void hermesModelGateway.provider
+      .readCredentials(p, true, profileId)
+      .then((r) => {
+        if (cancelled) return;
+        setKeysLoading(false);
+        if (!r.ok) {
+          setKeysError(
+            r.error || t("options.models.provider.readCredentialsFailed"),
+          );
+          return;
+        }
+        setCredentialsCache((prev) => ({
+          ...prev,
+          [p]: {
+            fields: r.fields,
+            authHint: r.auth_hint,
+            authType: r.auth_type,
+            connection: r.connection,
+          },
+        }));
+        const drafts: Record<string, string> = {};
+        for (const f of r.fields) drafts[f.key] = f.value;
+        setKeyDrafts(drafts);
+      });
     return () => {
       cancelled = true;
     };
@@ -530,77 +693,110 @@ export function HermesModelConfigTab({
     // entry would otherwise re-trigger this effect and clobber the
     // user's drafts. Cache reads happen the next time hProvider flips.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hProvider]);
+  }, [hProvider, profileId]);
 
-  // ── Initial load — three independent fetches, no bundling ─────────────
+  // ── Fast local configuration load ─────────────────────────────────────
   useEffect(() => {
+    if (!profileId) return;
     let cancelled = false;
-    setMainLoading(true);
+    setConfigurationLoading(true);
     setMainError(null);
-    void getHermesMainModelInfo().then((main) => {
-      if (cancelled) return;
-      setMainLoading(false);
-      if (!main.ok) {
-        setMainError(main.error || "Failed to read main model");
-        return;
-      }
-      const dp = (main.provider || "auto").trim() || "auto";
-      const dm = (main.model || "").trim();
-      const bu = (main.base_url || "").trim();
-      setDiskProvider(dp);
-      setDiskModel(dm);
-      setDiskBaseUrl(bu);
-      setCustomDraftModel(dp === "custom" ? dm : "");
-      setCustomDraftBaseUrl(dp === "custom" ? bu : "");
-      setMainContext({
-        auto: main.auto_context_length ?? 0,
-        config: main.config_context_length ?? 0,
-        effective: main.effective_context_length ?? 0,
+    void hermesModelGateway.workspace
+      .readConfiguration(profileId)
+      .then(
+        ({
+          main,
+          auxiliary,
+          moa,
+          displayPreferences,
+          selectedModelSummaries: rememberedModels,
+        }) => {
+          if (cancelled) return;
+          setConfigurationLoading(false);
+          setDisplayPreferences(displayPreferences);
+          setSelectedModelSummaries(rememberedModels);
+          setMainInfo(main);
+          setMoaConfig(moa);
+          if (!main.ok) {
+            setMainError(
+              main.error || t("options.models.config.readMainFailed"),
+            );
+          } else {
+            const dp = (main.provider || "auto").trim() || "auto";
+            const dm = (main.model || "").trim();
+            const bu = (main.base_url || "").trim();
+            setDiskProvider(dp);
+            setDiskModel(dm);
+            setCustomDraftModel(dp === "custom" ? dm : "");
+            setCustomDraftBaseUrl(dp === "custom" ? bu : "");
+          }
+
+          if (auxiliary.ok) setAuxSlots(tasksToMap(auxiliary));
+          else setAuxError(auxiliary.error || null);
+        },
+      )
+      .catch((loadError: unknown) => {
+        if (cancelled) return;
+        setConfigurationLoading(false);
+        setMainError(String((loadError as Error)?.message || loadError));
       });
-      setMainCapabilities(main.capabilities ?? {});
-    });
-    void getHermesModelCatalog(false).then((cat) => {
-      if (cancelled) return;
-      setCatalogLoading(false);
-      if (cat.ok) setCatalog(cat);
-    });
-    void getHermesAuxiliaryModels().then((auxResp) => {
-      if (cancelled) return;
-      if (auxResp.ok) {
-        setAuxSlots(tasksToMap(auxResp));
-      } else {
-        setAuxError(auxResp.error || null);
-      }
-    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [profileId, t]);
 
-  // ── Refresh catalog + provider models ─────────────────────────────────
-  async function refreshCatalogFromRemote() {
-    setCatalogRefreshing(true);
-    try {
-      const c = await getHermesModelCatalog(true);
-      if (c.ok) setCatalog(c);
-      await loadProviderModels(true);
-      const p = hProvider.trim();
-      if (p) {
-        const dv = await getHermesProviderCredentials(p);
-        if (dv.ok) {
-          setCredentialsCache((prev) => ({
-            ...prev,
-            [p]: { fields: dv.fields, authHint: dv.auth_hint },
-          }));
-          const drafts: Record<string, string> = {};
-          for (const f of dv.fields) drafts[f.key] = f.value;
-          setKeyDrafts(drafts);
-        }
-      }
-    } finally {
-      setCatalogRefreshing(false);
+  // ── Shared stale-while-revalidate catalog load ─────────────────────────
+  useEffect(() => {
+    if (!profileId) return;
+    let cancelled = false;
+    const cached = hermesModelGateway.catalog.peek(profileId);
+    if (cached) {
+      setCatalog(cached);
+      setCatalogLoading(false);
+    } else {
+      setCatalogLoading(true);
     }
-  }
+    const unwatch = hermesModelGateway.catalog.watch((nextCatalog) => {
+      if (cancelled) return;
+      setCatalog(nextCatalog);
+      setCatalogLoading(false);
+      setCatalogError(null);
+    }, profileId);
+    void hermesModelGateway.catalog
+      .read(false, profileId)
+      .then((nextCatalog) => {
+        if (cancelled) return;
+        setCatalogLoading(false);
+        if (nextCatalog.ok) {
+          setCatalog(nextCatalog);
+          setCatalogError(null);
+        } else if (!cached) {
+          setCatalogError(
+            nextCatalog.error || t("sidepanel.modelPicker.loadFailed"),
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+      unwatch();
+    };
+  }, [profileId, t]);
+
+  useEffect(
+    () =>
+      hermesModelGateway.display.watch((preferences) => {
+        setDisplayPreferences(preferences);
+      }, profileId),
+    [profileId],
+  );
+
+  useEffect(
+    () =>
+      hermesModelGateway.summaries.watch((summaries) => {
+        setSelectedModelSummaries(summaries);
+      }),
+    [],
+  );
 
   /**
    * Save credentials for the current provider. This writes ONLY to the
@@ -608,7 +804,7 @@ export function HermesModelConfigTab({
    * the main model is exclusively the Model Config panel's job (the ⭐
    * action, or the custom-main editor).
    */
-  async function saveProviderCredentials() {
+  async function saveProviderCredentials(activeCredentialKey?: string) {
     const p = hProvider.trim();
     if (!p || credentialFields.length === 0) return;
     setHSaving(true);
@@ -616,14 +812,47 @@ export function HermesModelConfigTab({
     setKeysError(null);
     try {
       const values: Record<string, string> = {};
-      for (const f of credentialFields) values[f.key] = keyDrafts[f.key] ?? "";
-      const r = await saveHermesProviderCredentials(p, values);
+      const alternativeCredentialKeys = credentialFields
+        .filter((field) => field.kind === "secret")
+        .map((field) => field.key);
+      for (const field of credentialFields) {
+        const draft = keyDrafts[field.key] ?? "";
+        if (field.kind !== "secret") {
+          values[field.key] = draft;
+          continue;
+        }
+        if (
+          activeCredentialKey &&
+          alternativeCredentialKeys.length > 1 &&
+          field.key !== activeCredentialKey
+        ) {
+          // Selecting a method is explicit: remove saved alternatives.
+          values[field.key] = "";
+          continue;
+        }
+        values[field.key] = draft;
+      }
+      const r = await hermesModelGateway.provider.writeCredentials(
+        p,
+        values,
+        profileId,
+      );
       if (!r.ok) {
-        setHError(r.error || "Save failed");
+        setHError(r.error || t("options.models.provider.saveFailed"));
         return;
       }
-      // Overwrite the cached snapshot so a subsequent provider switch
-      // re-reads the saved values instead of pre-save state.
+      const nextFields = r.fields?.length
+        ? r.fields
+        : credentialFields.map((field) => ({
+            ...field,
+            value: values[field.key] ?? "",
+          }));
+      const nextDrafts: Record<string, string> = {};
+      for (const field of nextFields) nextDrafts[field.key] = field.value;
+      setKeyDrafts(nextDrafts);
+      // The backend returns the normalized effective connection after the
+      // write, including Copilot verification. Cache that domain result
+      // instead of reconstructing provider-specific priority in React.
       setCredentialsCache((prev) => {
         const cached = prev[p];
         if (!cached) return prev;
@@ -631,10 +860,18 @@ export function HermesModelConfigTab({
           ...prev,
           [p]: {
             ...cached,
-            fields: cached.fields.map((f) => ({ ...f, value: values[f.key] ?? "" })),
+            fields: nextFields,
+            authHint: r.auth_hint || cached.authHint,
+            authType: r.auth_type || cached.authType,
+            connection: r.connection,
           },
         };
       });
+      const refreshedCatalog = await hermesModelGateway.catalog.read(
+        true,
+        profileId,
+      );
+      if (refreshedCatalog.ok) setCatalog(refreshedCatalog);
       void loadProviderModels(true);
       setHSaved(true);
       setTimeout(() => setHSaved(false), 1500);
@@ -643,9 +880,49 @@ export function HermesModelConfigTab({
     }
   }
 
-  function selectProviderSection(slug: string) {
-    setSection(slug);
+  function openProviderConfiguration(slug: string) {
     setHProvider(slug);
+  }
+
+  async function setDisplayedProvider(provider: string, visible: boolean) {
+    const pendingKey = `provider:${provider}`;
+    setDisplayPending(pendingKey);
+    setDisplayError(null);
+    try {
+      const next = await hermesModelGateway.display.setProviderVisibility(
+        provider,
+        visible,
+        profileId,
+      );
+      setDisplayPreferences(next);
+    } catch {
+      setDisplayError(t("options.models.display.saveFailed"));
+    } finally {
+      setDisplayPending((current) => (current === pendingKey ? null : current));
+    }
+  }
+
+  async function setDisplayedModel(
+    provider: string,
+    model: string,
+    visible: boolean,
+  ) {
+    const pendingKey = `model:${provider}:${model}`;
+    setDisplayPending(pendingKey);
+    setDisplayError(null);
+    try {
+      const next = await hermesModelGateway.display.setModelVisibility(
+        provider,
+        model,
+        visible,
+        profileId,
+      );
+      setDisplayPreferences(next);
+    } catch {
+      setDisplayError(t("options.models.display.saveFailed"));
+    } finally {
+      setDisplayPending((current) => (current === pendingKey ? null : current));
+    }
   }
 
   // ── Model Config: assign a catalog model to the Main slot ──────────────
@@ -660,27 +937,23 @@ export function HermesModelConfigTab({
       // stale ``model.base_url`` from leaking into the new provider.
       // The custom-main editor below has its own write path that
       // explicitly sets base_url; that's the only place it gets set.
-      const r = await setHermesAgentMainModel({
-        provider: p || "auto",
-        model: id,
-        base_url: null,
-      });
+      const r = await hermesModelGateway.main.write(
+        {
+          provider: p || "auto",
+          model: id,
+          base_url: null,
+        },
+        profileId,
+      );
       if (!r.ok) {
-        setMcError(r.error || "Failed to set main model");
+        setMcError(r.error || t("options.models.config.setMainFailed"));
         return;
       }
       const dp = (r.provider || p || "auto").trim() || "auto";
       const dm = (r.model ?? id).trim();
-      const dbu = (r.base_url ?? "").trim();
+      setMainInfo(r);
       setDiskProvider(dp);
       setDiskModel(dm);
-      setDiskBaseUrl(dbu);
-      setMainContext({
-        auto: r.auto_context_length ?? 0,
-        config: r.config_context_length ?? 0,
-        effective: r.effective_context_length ?? 0,
-      });
-      setMainCapabilities(r.capabilities ?? {});
       setMcSaved(true);
       setTimeout(() => setMcSaved(false), 1500);
     } finally {
@@ -696,24 +969,21 @@ export function HermesModelConfigTab({
     setMcSaving(true);
     setMcError(null);
     try {
-      const r = await setHermesAgentMainModel({
-        provider: "custom",
-        model: id,
-        base_url: bu,
-      });
+      const r = await hermesModelGateway.main.write(
+        {
+          provider: "custom",
+          model: id,
+          base_url: bu,
+        },
+        profileId,
+      );
       if (!r.ok) {
-        setMcError(r.error || "Failed to set custom main model");
+        setMcError(r.error || t("options.models.config.setCustomFailed"));
         return;
       }
       setDiskProvider("custom");
       setDiskModel(id);
-      setDiskBaseUrl(bu);
-      setMainContext({
-        auto: r.auto_context_length ?? 0,
-        config: r.config_context_length ?? 0,
-        effective: r.effective_context_length ?? 0,
-      });
-      setMainCapabilities(r.capabilities ?? {});
+      setMainInfo(r);
       setMcSaved(true);
       setTimeout(() => setMcSaved(false), 1500);
     } finally {
@@ -723,13 +993,24 @@ export function HermesModelConfigTab({
 
   // ── Model Config: set / clear auxiliary slot ──────────────────────────
   // Upstream `/api/model/set` uses `task` (not `slot`) as the slot id.
-  async function setAuxSlot(task: AuxiliarySlotName, provider: string, model: string) {
+  async function setAuxSlot(
+    task: AuxiliarySlotName,
+    provider: string,
+    model: string,
+  ) {
     setAuxSavingSlot(task);
     setAuxError(null);
     try {
-      const r = await setHermesAuxiliarySlot({ task, provider: provider.trim(), model: model.trim() });
+      const r = await hermesModelGateway.auxiliary.write(
+        {
+          task,
+          provider: provider.trim(),
+          model: model.trim(),
+        },
+        profileId,
+      );
       if (!r.ok) {
-        setAuxError(r.error || "Save failed");
+        setAuxError(r.error || t("options.models.config.saveFailed"));
         return;
       }
       const next = tasksToMap(r);
@@ -745,9 +1026,16 @@ export function HermesModelConfigTab({
     setAuxSavingSlot(task);
     setAuxError(null);
     try {
-      const r = await setHermesAuxiliarySlot({ task, provider: "", model: "" });
+      const r = await hermesModelGateway.auxiliary.write(
+        {
+          task,
+          provider: "",
+          model: "",
+        },
+        profileId,
+      );
       if (!r.ok) {
-        setAuxError(r.error || "Clear failed");
+        setAuxError(r.error || t("options.models.config.clearFailed"));
         return;
       }
       const next = tasksToMap(r);
@@ -757,365 +1045,177 @@ export function HermesModelConfigTab({
     }
   }
 
-  /** Reset main back to ``auto`` — same shape as ``clearAuxSlot``, used
-   * by the ModelSlotRow's ✕ button on the Main row.
-   */
-  async function clearMainModel() {
-    setMcSaving(true);
-    setMcError(null);
-    try {
-      const r = await setHermesAgentMainModel({
-        provider: "auto",
-        model: "",
-        base_url: null,
-      });
-      if (!r.ok) {
-        setMcError(r.error || "Clear failed");
-        return;
-      }
-      setDiskProvider((r.provider || "auto").trim() || "auto");
-      setDiskModel((r.model ?? "").trim());
-      setDiskBaseUrl((r.base_url ?? "").trim());
-      setMainContext({
-        auto: r.auto_context_length ?? 0,
-        config: r.config_context_length ?? 0,
-        effective: r.effective_context_length ?? 0,
-      });
-      setMainCapabilities(r.capabilities ?? {});
-    } finally {
-      setMcSaving(false);
-    }
-  }
-
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPaneHeader
-        title={t("options.models.title")}
-        subtitle={
-          catalogLoading
-            ? t("options.models.catalog.loading")
-            : catalog?.ok
-              ? catalog.updated_at
-                ? t("options.models.catalog.updatedAt", {
-                    time: catalog.updated_at,
-                  })
-                : t("options.models.catalog.ready")
-              : t("options.models.catalog.unavailable")
-        }
-      >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 text-xs shrink-0"
-          disabled={catalogRefreshing}
-          onClick={() => void refreshCatalogFromRemote()}
-        >
-          {catalogRefreshing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          {t("options.models.refreshCatalog")}
-        </Button>
-      </SettingsPaneHeader>
-
-      {mainLoading ? (
-        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-          {t("options.models.loadingSettings")}
-        </div>
+      {view === "connection" ? (
+        <ScrollArea className="min-h-0 min-w-0 flex-1">
+          <div className="mx-auto max-w-3xl p-6">
+            <SettingsGateway bridge={bridge} />
+          </div>
+        </ScrollArea>
+      ) : view === "multi-model-collaboration" ? (
+        configurationLoading ? (
+          <ModelSettingsLoadingSkeleton
+            visible={showInitialLoading}
+            view="multi-model-collaboration"
+          />
+        ) : (
+          <VirtualCapabilitiesPanel
+            config={moaConfig}
+            capability={virtualCapabilities[0]}
+            modelSummaries={selectedModelSummaries}
+            profileId={profileId}
+            providerCatalogStatus={catalogStatus}
+            providers={serviceProviders}
+            scopeControl={
+              showProfileScope ? (
+                <ProfileScopeControl
+                  onChange={setProfileId}
+                  profiles={profiles}
+                  value={profileId}
+                />
+              ) : undefined
+            }
+            onSaved={setMoaConfig}
+          />
+        )
+      ) : configurationLoading ? (
+        <ModelSettingsLoadingSkeleton
+          visible={showInitialLoading}
+          view="models"
+        />
       ) : (
-        <div className="flex min-h-0 flex-1">
-          {/* ── Sidebar ── */}
-          <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-muted/15">
-            {/* Model Config entry */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-auto min-h-0 w-full flex-col items-stretch gap-1 rounded-none border-0 border-b border-border/50 px-3 py-2.5 text-left font-normal shadow-none",
-                section === "model-config"
-                  ? "bg-muted text-foreground hover:bg-muted"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-              )}
-              onClick={() => setSection("model-config")}
-            >
-              <span className="text-[11px] font-semibold">Model config</span>
-              <span className="line-clamp-1 text-left text-[10px] leading-snug text-muted-foreground">
-                {diskModel
-                  ? `Main: ${diskModel}`
-                  : "Set main and auxiliary models"}
-              </span>
-            </Button>
-
-            {/* Connection entry — the ex-Gateway pane (bridge URL, backplane
-                key, default chat model), folded in here since "which model,
-                connected how" is one mental model. */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-auto min-h-0 w-full flex-col items-stretch gap-1 rounded-none border-0 border-b border-border/50 px-3 py-2.5 text-left font-normal shadow-none",
-                section === "connection"
-                  ? "bg-muted text-foreground hover:bg-muted"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-              )}
-              onClick={() => setSection("connection")}
-            >
-              <span className="text-[11px] font-semibold">Connection</span>
-              <span className="line-clamp-1 text-left text-[10px] leading-snug text-muted-foreground">
-                Bridge URL, backplane key
-              </span>
-            </Button>
-
-            {/* Provider list — small section label inside the list, not a full h-14 shell row */}
-            <ScrollArea className="min-h-0 flex-1">
-              <nav className="flex flex-col">
-                {sidebarGroups.configured.length > 0 && (
-                  <>
-                    <p className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                      Configured
-                    </p>
-                    {sidebarGroups.configured.map((slug) => (
-                      <SidebarProviderItem
-                        key={slug}
-                        slug={slug}
-                        active={section === slug}
-                        label={providerOptionLabel(slug)}
-                        onClick={() => selectProviderSection(slug)}
-                      />
-                    ))}
-                    <div className="my-1 mx-3 border-t border-border/40" />
-                  </>
-                )}
-                {sidebarGroups.available.length > 0 && (
-                  <>
-                    <p className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                      Available
-                    </p>
-                    {sidebarGroups.available.map((slug) => (
-                      <SidebarProviderItem
-                        key={slug}
-                        slug={slug}
-                        active={section === slug}
-                        label={providerOptionLabel(slug)}
-                        onClick={() => selectProviderSection(slug)}
-                      />
-                    ))}
-                  </>
-                )}
-                {/*
-                 * "+ Custom endpoint" affordance — collapsed entry
-                 * point for the BYO OpenAI-compatible gateway editor.
-                 * Hidden once activated (the editor appears as a
-                 * regular sidebar item via ``customVisible``), so it
-                 * never duplicates with itself.
-                 */}
-                {!sidebarGroups.customVisible && (
-                  <button
-                    type="button"
-                    onClick={() => selectProviderSection("custom")}
-                    className="mt-2 mx-3 mb-3 inline-flex items-center gap-1 self-start rounded-full px-2 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-muted/40 hover:text-foreground"
-                  >
-                    <span aria-hidden>+</span>
-                    <span>Custom endpoint</span>
-                  </button>
-                )}
-              </nav>
-            </ScrollArea>
-          </aside>
-
-          {/* ── Right panel ── */}
-          <ScrollArea className="min-h-0 min-w-0 flex-1">
-            {section === "connection" ? (
-              <div className="p-6">
-                <SettingsGateway bridge={bridge} />
+        <ScrollArea className="min-h-0 min-w-0 flex-1">
+          <div className="mx-auto max-w-3xl space-y-8 p-6">
+            {showProfileScope ? (
+              <div className="flex justify-end">
+                <ProfileScopeControl
+                  onChange={setProfileId}
+                  profiles={profiles}
+                  value={profileId}
+                />
               </div>
-            ) : section === "model-config" ? (
-              <ModelConfigPanel
-                catalog={catalog}
-                diskProvider={diskProvider}
-                diskModel={diskModel}
-                diskBaseUrl={diskBaseUrl}
-                mainContext={mainContext}
-                mainCapabilities={mainCapabilities}
-                auxSlots={auxSlots}
-                auxError={auxError}
-                auxSavingSlot={auxSavingSlot}
-                auxSavedSlot={auxSavedSlot}
-                mcSaving={mcSaving}
-                mcError={mcError}
-                mcSaved={mcSaved}
-                allCatalogModels={allCatalogModels}
-                canonicalLabelBySlug={canonicalLabelBySlug}
-                onSetDefault={setDefaultModel}
-                onClearMain={clearMainModel}
-                onSetAuxSlot={setAuxSlot}
-                onClearAuxSlot={clearAuxSlot}
+            ) : null}
+            <ModelConfigPanel
+              diskProvider={diskProvider}
+              diskModel={diskModel}
+              auxSlots={auxSlots}
+              auxError={auxError}
+              auxSavingSlot={auxSavingSlot}
+              auxSavedSlot={auxSavedSlot}
+              mcSaving={mcSaving}
+              mcError={mcError || mainError}
+              mcSaved={mcSaved}
+              allCatalogModels={allCatalogModels}
+              mainPickerGroups={mainAssignmentPickerGroups}
+              auxiliaryPickerGroups={assignmentProviderGroups}
+              catalogStatus={catalogStatus}
+              catalogError={catalogError}
+              onSetDefault={setDefaultModel}
+              onSetAuxSlot={setAuxSlot}
+              onClearAuxSlot={clearAuxSlot}
+            />
+            <ModelDisplayPanel
+              providers={serviceProviders}
+              connections={Object.fromEntries(
+                serviceProviders.map((provider) => [
+                  provider.id,
+                  credentialsCache[provider.id]?.connection ??
+                    provider.connection,
+                ]),
+              )}
+              error={displayError}
+              loadError={catalogError}
+              loading={catalogLoading && !catalog}
+              pending={displayPending}
+              onConfigureProvider={openProviderConfiguration}
+              onProviderVisibilityChange={setDisplayedProvider}
+              onModelVisibilityChange={setDisplayedModel}
+            />
+            {catalog &&
+            !serviceProviders.some((provider) => provider.id === "custom") ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => openProviderConfiguration("custom")}
+              >
+                {t("options.models.provider.addCustom")}
+              </Button>
+            ) : null}
+          </div>
+        </ScrollArea>
+      )}
+
+      <Dialog
+        open={Boolean(hProvider)}
+        onOpenChange={(open) => {
+          if (!open && !hSaving && !mcSaving) setHProvider("");
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          className="h-[min(85vh,52rem)] w-[min(42rem,92vw)] max-w-2xl !flex flex-col gap-0 overflow-hidden p-0"
+          data-provider-config-dialog
+        >
+          <DialogHeader className="relative z-10 border-b border-border/60 px-5 py-3.5 pr-12">
+            <div className="flex min-w-0 items-center gap-2">
+              <DialogTitle className="flex min-w-0 items-center gap-2 text-sm leading-5">
+                <ModelIcon
+                  className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+                  model=""
+                  provider={hProvider}
+                />
+                <span className="truncate">
+                  {providerOptionLabel(hProvider)}
+                </span>
+              </DialogTitle>
+              <ProviderConnectionStatusBadge
+                connection={providerConnection}
+                fields={credentialFields}
+                provider={hProvider}
               />
-            ) : (
-              <ProviderPanel
-                hProvider={hProvider}
-                hSaving={hSaving}
-                hSaved={hSaved}
-                hError={hError}
-                credentialFields={credentialFields}
-                credentialAuthHint={credentialAuthHint}
-                keyDrafts={keyDrafts}
-                keysLoading={keysLoading}
-                keysError={keysError}
-                catalog={catalog}
-                showHermesModelLoading={showHermesModelLoading}
-                modelEntriesForProvider={modelEntriesForProvider}
-                providerCliMeta={providerCliMeta}
-                providerOptionLabel={providerOptionLabel}
-                onKeyDraftChange={(k, v) =>
-                  setKeyDrafts((prev) => ({ ...prev, [k]: v }))
-                }
-                onSave={() => void saveProviderCredentials()}
-                onRefreshModels={() => void loadProviderModels(true)}
-                customDraftModel={customDraftModel}
-                customDraftBaseUrl={customDraftBaseUrl}
-                customSaving={mcSaving}
-                customError={mcError}
-                onCustomDraftModelChange={setCustomDraftModel}
-                onCustomDraftBaseUrlChange={setCustomDraftBaseUrl}
-                onSetCustomMain={setCustomMainModel}
-              />
-            )}
+            </div>
+          </DialogHeader>
+          <ScrollArea
+            className="h-0 min-h-0 flex-1"
+            data-provider-config-scroll
+          >
+            <ProviderPanel
+              hProvider={hProvider}
+              hSaving={hSaving}
+              hSaved={hSaved}
+              hError={hError}
+              credentialFields={credentialFields}
+              credentialAuthHint={credentialAuthHint}
+              credentialAuthType={credentialAuthType}
+              providerConnection={providerConnection}
+              keyDrafts={keyDrafts}
+              keysLoading={keysLoading}
+              keysError={keysError}
+              catalog={catalog}
+              showHermesModelLoading={showHermesModelLoading}
+              modelEntriesForProvider={modelEntriesForProvider}
+              providerCliMeta={providerCliMeta}
+              onKeyDraftChange={(key, value) =>
+                setKeyDrafts((current) => ({ ...current, [key]: value }))
+              }
+              onSave={(activeCredentialKey) =>
+                void saveProviderCredentials(activeCredentialKey)
+              }
+              onRefreshModels={() => void loadProviderModels(true)}
+              customDraftModel={customDraftModel}
+              customDraftBaseUrl={customDraftBaseUrl}
+              customSaving={mcSaving}
+              customError={mcError}
+              onCustomDraftModelChange={setCustomDraftModel}
+              onCustomDraftBaseUrlChange={setCustomDraftBaseUrl}
+              onSetCustomMain={setCustomMainModel}
+            />
           </ScrollArea>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SidebarProviderItem({
-  slug,
-  active,
-  label,
-  onClick,
-}: {
-  slug: string;
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className={cn(
-        "h-auto min-h-0 w-full flex-col items-stretch gap-1 rounded-none border-0 px-3 py-2.5 text-left font-normal shadow-none",
-        active
-          ? "bg-muted text-foreground hover:bg-muted"
-          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-      )}
-      onClick={onClick}
-    >
-      <span className="line-clamp-2 text-[11px] font-medium">{label}</span>
-      <span className="font-mono text-[10px] text-muted-foreground">{slug}</span>
-    </Button>
-  );
-}
-
-/**
- * Inline chip row under the "Main model" card. Surfaces:
- *
- *   - **Context-length chip**: shows `effective` formatted as ``200K``;
- *     when the user has a ``model.context_length`` override in
- *     ``config.yaml``, badges it as "override" + tooltips the
- *     auto-detected value so they can see what they're overriding.
- *   - **Capability chips**: one per supported feature (vision /
- *     reasoning / tools). Absent fields (model unknown to
- *     ``models.dev``) just don't render — better than showing greyed-out
- *     "Unknown" boxes that imply the feature is missing.
- *   - **Model family**: small muted label at the end when known.
- *
- * All fields are best-effort: missing data hides the chip entirely so
- * the card stays clean for models without metadata coverage.
- */
-function MainModelChips({
-  context,
-  capabilities,
-}: {
-  context: { auto: number; config: number; effective: number };
-  capabilities: ModelConfigPanelProps["mainCapabilities"];
-}) {
-  const ctxLabel = formatContextLength(context.effective);
-  const hasOverride = context.config > 0;
-  const hasContext = ctxLabel.length > 0;
-  const family = capabilities.model_family?.trim();
-  const caps: Array<{ key: string; label: string; tooltip: string }> = [];
-  if (capabilities.supports_vision)
-    caps.push({
-      key: "vision",
-      label: "Vision",
-      tooltip: "Supports image input (per models.dev)",
-    });
-  if (capabilities.supports_reasoning)
-    caps.push({
-      key: "reasoning",
-      label: "Reasoning",
-      tooltip: "Supports reasoning tokens (o1 / extended-thinking models)",
-    });
-  if (capabilities.supports_tools)
-    caps.push({
-      key: "tools",
-      label: "Tools",
-      tooltip: "Supports OpenAI-style function calling",
-    });
-  if (capabilities.max_output_tokens && capabilities.max_output_tokens > 0) {
-    caps.push({
-      key: "max_out",
-      label: `Output ${formatContextLength(capabilities.max_output_tokens)}`,
-      tooltip: `Maximum output of ${capabilities.max_output_tokens} tokens per call`,
-    });
-  }
-  if (!hasContext && caps.length === 0 && !family) return null;
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {hasContext && (
-        <span
-          title={
-            hasOverride
-              ? `config.yaml override: ${context.config.toLocaleString()}\nAuto-detected: ${
-                  context.auto > 0 ? context.auto.toLocaleString() : "unknown"
-                }`
-              : `Auto-detected (agent.model_metadata)`
-          }
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-            hasOverride
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-border bg-background text-muted-foreground",
-          )}
-        >
-          {hasOverride ? "Context (override)" : "Context"}
-          <span className="tabular-nums text-foreground/80">{ctxLabel}</span>
-        </span>
-      )}
-      {caps.map((c) => (
-        <span
-          key={c.key}
-          title={c.tooltip}
-          className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
-        >
-          {c.label}
-        </span>
-      ))}
-      {family && (
-        <span
-          title="Model family per models.dev"
-          className="inline-flex items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground/80"
-        >
-          {family}
-        </span>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1125,26 +1225,8 @@ function MainModelChips({
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ModelConfigPanelProps {
-  catalog: HermesModelCatalogResponse | null;
   diskProvider: string;
   diskModel: string;
-  diskBaseUrl: string;
-  /**
-   * Context-length triple from ``/hermes/model/info``. ``auto`` is what
-   * ``agent.model_metadata.get_model_context_length`` resolved; ``config``
-   * is the user's ``model.context_length`` override from ``config.yaml``;
-   * ``effective`` is what the agent will actually use. All-zero means
-   * the model is unknown to models.dev — UI just hides the chip.
-   */
-  mainContext: { auto: number; config: number; effective: number };
-  mainCapabilities: {
-    supports_tools?: boolean;
-    supports_vision?: boolean;
-    supports_reasoning?: boolean;
-    context_window?: number | null;
-    max_output_tokens?: number | null;
-    model_family?: string | null;
-  };
   auxSlots: Record<AuxiliarySlotName, AuxiliaryTask> | null;
   auxError: string | null;
   auxSavingSlot: AuxiliarySlotName | null;
@@ -1153,20 +1235,22 @@ interface ModelConfigPanelProps {
   mcError: string | null;
   mcSaved: boolean;
   allCatalogModels: { provider: string; entry: HermesCatalogModelEntry }[];
-  canonicalLabelBySlug: Map<string, string>;
+  mainPickerGroups: ModelPickerGroup[];
+  auxiliaryPickerGroups: ModelPickerGroup[];
+  catalogStatus: ModelPickerStatus;
+  catalogError: string | null;
   onSetDefault: (provider: string, modelId: string) => Promise<void>;
-  onClearMain: () => Promise<void>;
-  onSetAuxSlot: (slot: AuxiliarySlotName, provider: string, model: string) => Promise<void>;
+  onSetAuxSlot: (
+    slot: AuxiliarySlotName,
+    provider: string,
+    model: string,
+  ) => Promise<void>;
   onClearAuxSlot: (slot: AuxiliarySlotName) => Promise<void>;
 }
 
 function ModelConfigPanel({
-  catalog,
   diskProvider,
   diskModel,
-  diskBaseUrl,
-  mainContext,
-  mainCapabilities,
   auxSlots,
   auxError,
   auxSavingSlot,
@@ -1175,234 +1259,110 @@ function ModelConfigPanel({
   mcError,
   mcSaved,
   allCatalogModels,
-  canonicalLabelBySlug,
+  mainPickerGroups,
+  auxiliaryPickerGroups,
+  catalogStatus,
+  catalogError,
   onSetDefault,
-  onClearMain,
   onSetAuxSlot,
   onClearAuxSlot,
 }: ModelConfigPanelProps) {
-  const [search, setSearch] = useState("");
+  const { t } = useT();
   const [auxExpanded, setAuxExpanded] = useState(false);
 
   const saving = mcSaving || auxSavingSlot !== null;
-
-  function providerLabel(slug: string): string {
-    if (!slug || slug === "auto") return "Auto";
-    const tui = canonicalLabelBySlug.get(slug);
-    return tui ? tui : slug;
-  }
-
-  const groupedModels = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const groups = new Map<string, HermesCatalogModelEntry[]>();
-    for (const { provider, entry } of allCatalogModels) {
-      if (q) {
-        const inId = entry.id.toLowerCase().includes(q);
-        const inDesc = (entry.description || "").toLowerCase().includes(q);
-        const inProvider = provider.toLowerCase().includes(q);
-        if (!inId && !inDesc && !inProvider) continue;
-      }
-      if (!groups.has(provider)) groups.set(provider, []);
-      groups.get(provider)!.push(entry);
-    }
-    return groups;
-  }, [allCatalogModels, search]);
-
-  const hasAny = allCatalogModels.length > 0;
   const configuredAuxCount = auxSlots
     ? AUXILIARY_SLOT_NAMES.filter((s) => auxSlots[s]?.model).length
     : 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <section className={MODEL_SETTINGS_SECTION_CLASS}>
+      <ModelSettingsSectionHeader
+        title={t("options.models.config.defaultsTitle")}
+      />
       {(mcError || auxError) && (
         <p className="text-[11px] text-amber-600 dark:text-amber-500">
           {mcError || auxError}
         </p>
       )}
 
-      {/* ── Main model ── */}
-      <section className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Crown className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-foreground">Main model</h3>
-          {mcSaved && (
-            <span className="text-[11px] text-[hsl(var(--success))]">Saved</span>
-          )}
-        </div>
+      <div className={MODEL_SETTINGS_SURFACE_CLASS} data-model-settings-surface>
         <ModelSlotRow
-          label="Main"
+          label={t("options.models.config.main")}
+          appearance="primary"
           provider={diskProvider}
           model={diskModel}
-          unsetHint="Not set — pick a model below"
+          unsetHint={t("options.models.config.mainUnset")}
           isSaving={mcSaving}
           isSaved={mcSaved}
           allCatalogModels={allCatalogModels}
-          canonicalLabelBySlug={canonicalLabelBySlug}
+          pickerGroups={mainPickerGroups}
+          pickerStatus={catalogStatus}
+          pickerError={catalogError}
           disabled={saving}
           onSet={(p, m) => void onSetDefault(p, m)}
-          onClear={() => void onClearMain()}
-          detail={
-            (diskBaseUrl ||
-              mainContext.effective > 0 ||
-              Object.keys(mainCapabilities).length > 0) ? (
-              <div className="space-y-0.5">
-                {diskBaseUrl ? (
-                  <p className="break-all font-mono text-[10px] text-muted-foreground">
-                    {diskBaseUrl}
-                  </p>
-                ) : null}
-                <MainModelChips
-                  context={mainContext}
-                  capabilities={mainCapabilities}
-                />
-              </div>
-            ) : null
-          }
         />
-      </section>
 
-      {/* ── Auxiliary models ── */}
-      <section className="space-y-2">
         <button
           type="button"
-          className="flex w-full items-center gap-2 text-left"
+          aria-expanded={auxExpanded}
+          className="flex w-full items-center gap-3 border-t border-border/60 bg-muted/[0.035] px-4 py-3 text-left transition-colors hover:bg-muted/20"
           onClick={() => setAuxExpanded((v) => !v)}
         >
-          {auxExpanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )}
-          <Zap className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-semibold text-foreground">Auxiliary models</span>
-          <span className="text-[11px] text-muted-foreground">
-            ({configuredAuxCount} / {AUXILIARY_SLOT_NAMES.length} configured)
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-foreground">
+              {t("options.models.config.auxiliaryModels")}
+            </span>
           </span>
+          <span className="rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+            {configuredAuxCount}/{AUXILIARY_SLOT_NAMES.length}
+          </span>
+          {auxExpanded ? (
+            <ChevronDown
+              aria-hidden
+              className="h-3.5 w-3.5 text-muted-foreground"
+            />
+          ) : (
+            <ChevronRight
+              aria-hidden
+              className="h-3.5 w-3.5 text-muted-foreground"
+            />
+          )}
         </button>
 
         {auxExpanded && (
-          <div className="space-y-2 pl-6">
+          <div className="border-t border-border/60">
             {auxSlots === null ? (
-              <p className="text-xs text-muted-foreground">Auxiliary model configuration unavailable (bridge not connected).</p>
-            ) : (
-              AUXILIARY_SLOT_NAMES.map((slot) => (
-                <ModelSlotRow
-                  key={slot}
-                  label={AUXILIARY_SLOT_LABELS[slot]}
-                  provider={auxSlots[slot]?.provider ?? ""}
-                  model={auxSlots[slot]?.model ?? ""}
-                  isSaving={auxSavingSlot === slot}
-                  isSaved={auxSavedSlot === slot}
-                  allCatalogModels={allCatalogModels}
-                  canonicalLabelBySlug={canonicalLabelBySlug}
-                  disabled={saving}
-                  onSet={(p, m) => void onSetAuxSlot(slot, p, m)}
-                  onClear={() => void onClearAuxSlot(slot)}
-                />
-              ))
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* ── All models list ── */}
-      <section className="space-y-3 border-t border-border pt-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">All available models</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            From configured providers; click <MoreHorizontal className="inline h-3 w-3" /> to assign a model to Main or any auxiliary slot.
-          </p>
-        </div>
-
-        {!hasAny ? (
-          <div className="rounded-lg border border-dashed border-border/80 bg-muted/15 p-4">
-            <p className="text-xs text-muted-foreground">
-              No models available. Make sure the bridge is connected, or click “Refresh catalog” at the top.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-muted/10">
-            {/*
-             * Search lives inside the same card as the list — they're
-             * one functional unit (filter ↔ result), not two siblings.
-             * Border-bottom is the only separator; the Input itself
-             * drops its native chrome so it reads as a row inside the
-             * card, not a nested control.
-             */}
-            <div className="border-b border-border/60 bg-background/40">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search model id or provider…"
-                className="h-9 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-            </div>
-            {groupedModels.size === 0 ? (
-              <p className="px-3 py-4 text-xs text-muted-foreground">
-                No matching models.
+              <p className="px-4 py-5 text-xs text-muted-foreground">
+                {t("options.models.config.auxiliaryUnavailable")}
               </p>
             ) : (
-              /*
-               * Single flat list. Provider names are sticky subheader
-               * rows inside the same ``<ul>``, not card containers
-               * around their own sub-list — the model is the unit of
-               * attention; provider is just an organizational hint.
-               */
-              <ul className="divide-y divide-border/60">
-                {[...groupedModels.entries()].map(([provider, models]) => {
-                  return (
-                    <Fragment key={provider}>
-                      <li className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
-                        {canonicalLabelBySlug.get(provider) || provider}
-                      </li>
-                      {models.map((entry) => {
-                        const isDefault =
-                          entry.id === diskModel && provider === diskProvider;
-                        return (
-                          <li
-                            key={`${provider}/${entry.id}`}
-                            className={cn(
-                              "flex items-start gap-2 px-3 py-2 text-xs",
-                              isDefault && "bg-amber-50/60 dark:bg-amber-900/10",
-                            )}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="break-all font-mono text-[11px] leading-snug">
-                                {entry.id}
-                              </p>
-                              {entry.description?.trim() ? (
-                                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                  {entry.description.trim()}
-                                </p>
-                              ) : null}
-                              <ModelEntryMetadataLine meta={entry.metadata} />
-                              {isDefault && (
-                                <p className="mt-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                  Current main
-                                </p>
-                              )}
-                            </div>
-                            <AssignToSlotMenu
-                              disabled={saving}
-                              isMain={isDefault}
-                              onAssignMain={() => void onSetDefault(provider, entry.id)}
-                              onAssignAux={(slot) =>
-                                void onSetAuxSlot(slot, provider, entry.id)
-                              }
-                            />
-                          </li>
-                        );
-                      })}
-                    </Fragment>
-                  );
-                })}
-              </ul>
+              <div className="grid gap-px bg-border/50 sm:grid-cols-2">
+                {AUXILIARY_SLOT_NAMES.map((slot) => (
+                  <ModelSlotRow
+                    key={slot}
+                    label={t(AUXILIARY_SLOT_MESSAGE_KEYS[slot])}
+                    appearance="compact"
+                    provider={auxSlots[slot]?.provider ?? ""}
+                    model={auxSlots[slot]?.model ?? ""}
+                    clearOptionLabel={t("options.models.config.useMainModel")}
+                    isSaving={auxSavingSlot === slot}
+                    isSaved={auxSavedSlot === slot}
+                    allCatalogModels={allCatalogModels}
+                    pickerGroups={auxiliaryPickerGroups}
+                    pickerStatus={catalogStatus}
+                    pickerError={catalogError}
+                    disabled={saving}
+                    onSet={(p, m) => void onSetAuxSlot(slot, p, m)}
+                    onClear={() => void onClearAuxSlot(slot)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         )}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -1411,295 +1371,180 @@ function ModelConfigPanel({
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ModelSlotRowProps {
-  /** Display label, e.g. "Main", "Vision", "Web Extract". */
   label: string;
-  /** Current provider slug. Empty / "auto" → unconfigured. */
+  appearance?: "primary" | "compact";
   provider: string;
-  /** Current model id. Empty → unconfigured. */
   model: string;
-  /** Optional richer detail rendered below the provider/model line —
-   * used by Main to show context-window chips, base URL, etc. */
-  detail?: React.ReactNode;
-  /** Shown when no model is set, instead of "Inherits main model". */
   unsetHint?: string;
+  clearOptionLabel?: string;
   isSaving: boolean;
   isSaved: boolean;
   allCatalogModels: { provider: string; entry: HermesCatalogModelEntry }[];
-  canonicalLabelBySlug: Map<string, string>;
+  pickerGroups: ModelPickerGroup[];
+  pickerStatus: ModelPickerStatus;
+  pickerError: string | null;
   disabled: boolean;
   onSet: (provider: string, model: string) => void;
-  /** Optional clear — Main has it too (sets back to ``auto``). */
   onClear?: () => void;
 }
 
 function ModelSlotRow({
   label,
+  appearance = "compact",
   provider,
   model,
-  detail,
-  unsetHint = "Inherits main model",
+  unsetHint,
+  clearOptionLabel,
   isSaving,
   isSaved,
   allCatalogModels,
-  canonicalLabelBySlug,
+  pickerGroups,
+  pickerStatus,
+  pickerError,
   disabled,
   onSet,
   onClear,
 }: ModelSlotRowProps) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropRef = useRef<HTMLDivElement>(null);
 
   const hasModel = Boolean(model);
+  const selectedEntry = allCatalogModels.find(
+    (candidate) =>
+      candidate.provider === provider && candidate.entry.id === model,
+  )?.entry;
+  const displayName = selectedEntry
+    ? resolveCatalogModelDisplayName(selectedEntry)
+    : model;
 
-  const filteredModels = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return allCatalogModels;
-    return allCatalogModels.filter(
-      ({ provider, entry }) =>
-        entry.id.toLowerCase().includes(q) ||
-        provider.toLowerCase().includes(q) ||
-        (entry.description || "").toLowerCase().includes(q),
-    );
-  }, [allCatalogModels, search]);
-
-  /** Group filtered models by provider so we can render the same
-   * "provider sub-header + model rows" layout the main "All available
-   * models" list uses. Picker and main list now share their rendering
-   * shape — same source data, same display. */
-  const groupedFilteredModels = useMemo(() => {
-    const map = new Map<string, HermesCatalogModelEntry[]>();
-    for (const { provider: pid, entry } of filteredModels) {
-      if (!map.has(pid)) map.set(pid, []);
-      map.get(pid)!.push(entry);
-    }
-    return map;
-  }, [filteredModels]);
-
-  useEffect(() => {
-    if (!open) return;
-    function handle(e: MouseEvent) {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open]);
+  const handleOpenChange = (next: boolean) => {
+    if (next && (disabled || isSaving)) return;
+    setOpen(next);
+  };
 
   return (
-    <div className="rounded-lg border border-border bg-muted/10 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium text-foreground">{label}</p>
-          {hasModel ? (
-            <p className="truncate font-mono text-[10px] text-muted-foreground">
-              {provider && provider !== "auto" ? `${provider} / ` : ""}
-              {model}
-            </p>
-          ) : (
-            <p className="text-[10px] text-muted-foreground">{unsetHint}</p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {isSaved && (
-            <span className="text-[10px] text-[hsl(var(--success))]">Saved</span>
-          )}
-          {hasModel && onClear && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 rounded-full text-muted-foreground/60 hover:text-destructive"
-              disabled={disabled || isSaving}
-              title="Clear"
-              onClick={onClear}
-            >
-              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-            </Button>
-          )}
-          <div className="relative" ref={dropRef}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-[10px]"
-              disabled={disabled || isSaving}
-              onClick={() => setOpen((v) => !v)}
-            >
-              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Select"}
-            </Button>
-            {open && (
-              // ``flex flex-col`` so the search input keeps a fixed
-              // height and the model list takes the remaining space.
-              // ``max-h-[24rem]`` caps the whole popover; the inner
-              // ``min-h-0 overflow-y-auto`` is what actually scrolls.
-              // Radix ScrollArea was unreliable here — its viewport
-              // wouldn't pick up a definite height inside the
-              // absolute-positioned popover, so the scrollbar never
-              // appeared even when content overflowed.
-              <div className="absolute right-0 top-7 z-50 flex max-h-[24rem] w-[28rem] max-w-[80vw] flex-col rounded-lg border border-border bg-popover shadow-lg">
-                <div className="shrink-0 border-b border-border/60 bg-background/40">
-                  <Input
-                    autoFocus
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search model id, provider, or description…"
-                    className="h-9 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {filteredModels.length === 0 ? (
-                    <p className="px-3 py-4 text-xs text-muted-foreground">No matching models</p>
-                  ) : (
-                    // Mirror the "All available models" list exactly:
-                    // provider sub-header rows + model rows with id +
-                    // description + metadata chips. The button trigger
-                    // wraps a model row so click anywhere on the row
-                    // selects it.
-                    <ul className="divide-y divide-border/60">
-                      {[...groupedFilteredModels.entries()].map(
-                        ([pid, rows]) => (
-                          <Fragment key={pid}>
-                            <li className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
-                              {canonicalLabelBySlug.get(pid) ?? pid}
-                            </li>
-                            {rows.map((entry) => (
-                              <li key={`${pid}/${entry.id}`}>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs hover:bg-muted/60"
-                                  onClick={() => {
-                                    onSet(pid, entry.id);
-                                    setOpen(false);
-                                    setSearch("");
-                                  }}
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <p className="break-all font-mono text-[11px] leading-snug">
-                                      {entry.id}
-                                    </p>
-                                    {entry.description?.trim() ? (
-                                      <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                        {entry.description.trim()}
-                                      </p>
-                                    ) : null}
-                                    <ModelEntryMetadataLine
-                                      meta={entry.metadata}
-                                    />
-                                  </div>
-                                </button>
-                              </li>
-                            ))}
-                          </Fragment>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      {detail ? <div className="mt-1.5">{detail}</div> : null}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AssignToSlotMenu — the catalog-row action that replaces the old "⭐" button.
-// Opens a small popover listing every assignable slot (Main + each aux task);
-// picking one assigns the row's model to that slot. Mirrors the
-// ``ModelSlotRow`` dropdown shape but going the other direction —
-// model → slot instead of slot → model.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function AssignToSlotMenu({
-  disabled,
-  isMain,
-  onAssignMain,
-  onAssignAux,
-}: {
-  disabled: boolean;
-  /** True when this row's model is already the current Main. Just a
-   * visual hint on the trigger; doesn't disable re-assigning. */
-  isMain: boolean;
-  onAssignMain: () => void;
-  onAssignAux: (slot: AuxiliarySlotName) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open]);
-
-  return (
-    <div className="relative shrink-0" ref={ref}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
+    <>
+      <div
         className={cn(
-          "h-7 w-7 rounded-full transition-colors",
-          isMain
-            ? "text-amber-500 hover:bg-amber-100/50 dark:hover:bg-amber-900/20"
-            : "text-muted-foreground/60 hover:bg-muted/60 hover:text-foreground",
+          "bg-background",
+          appearance === "primary" ? "px-4 py-4" : "px-3 py-3",
         )}
-        disabled={disabled}
-        title={isMain ? "Currently Main — pick another slot to also assign" : "Assign to a slot…"}
-        aria-label="Assign to a slot"
-        onClick={() => setOpen((v) => !v)}
       >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </Button>
-      {open && (
-        <div className="absolute right-0 top-8 z-50 w-44 rounded-lg border border-border bg-popover shadow-lg">
-          <p className="border-b border-border px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Assign as
-          </p>
-          <ul className="flex flex-col py-1">
-            <li>
-              <button
-                type="button"
-                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted/60"
-                onClick={() => {
-                  onAssignMain();
-                  setOpen(false);
-                }}
-              >
-                <Crown className="h-3 w-3 text-amber-500" />
-                Main
-              </button>
-            </li>
-            <li className="my-0.5 mx-2 border-t border-border/50" />
-            {AUXILIARY_SLOT_NAMES.map((slot) => (
-              <li key={slot}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted/60"
-                  onClick={() => {
-                    onAssignAux(slot);
-                    setOpen(false);
-                  }}
-                >
-                  <Zap className="h-3 w-3 text-blue-500/70" />
-                  {AUXILIARY_SLOT_LABELS[slot]}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+        <button
+          type="button"
+          className={cn(
+            "grid w-full items-center text-left transition-opacity",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            appearance === "primary"
+              ? "gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)_auto]"
+              : "grid-cols-[6.75rem_minmax(0,1fr)_auto] gap-2",
+          )}
+          disabled={disabled || isSaving}
+          onClick={() => handleOpenChange(true)}
+        >
+          <span className="min-w-0">
+            <span
+              className={cn(
+                "block font-medium text-foreground",
+                appearance === "primary" ? "text-xs" : "text-[11px]",
+              )}
+            >
+              {label}
+            </span>
+          </span>
+
+          <span
+            className="flex min-w-0 items-center gap-2.5"
+            data-model-slot-identity
+          >
+            {hasModel ? (
+              <ModelIcon
+                className={cn(
+                  "shrink-0 text-muted-foreground",
+                  appearance === "primary" ? "h-5 w-5" : "h-4 w-4",
+                )}
+                model={model}
+                provider={provider}
+              />
+            ) : (
+              <span
+                aria-hidden
+                className={cn(
+                  "shrink-0 rounded-full border border-dashed border-muted-foreground/30",
+                  appearance === "primary" ? "h-5 w-5" : "h-4 w-4",
+                )}
+              />
+            )}
+            <span className="min-w-0" data-model-slot-label>
+              {hasModel ? (
+                <ModelIdentityName
+                  className="flex"
+                  displayName={displayName}
+                  model={model}
+                  variant={appearance === "primary" ? "standard" : "picker"}
+                />
+              ) : (
+                <span className="block truncate text-[10px] leading-none text-muted-foreground">
+                  {unsetHint ?? t("options.models.config.useMainModel")}
+                </span>
+              )}
+            </span>
+          </span>
+
+          <span className="flex items-center justify-end gap-1.5">
+            {isSaving ? (
+              <Loader2
+                aria-hidden
+                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+              />
+            ) : isSaved ? (
+              <Check
+                aria-label={t("options.models.config.saved")}
+                className="h-3.5 w-3.5 text-[hsl(var(--success))]"
+              />
+            ) : null}
+            <ChevronRight
+              aria-hidden
+              className="h-3.5 w-3.5 text-muted-foreground/60"
+            />
+          </span>
+        </button>
+      </div>
+
+      <ModelPickerDialog
+        description={t("options.models.config.pickerDescription")}
+        errorMessage={pickerError ?? undefined}
+        groups={pickerGroups}
+        onOpenChange={handleOpenChange}
+        onSelect={(pid, selectedModel) => {
+          onSet(pid, selectedModel);
+          handleOpenChange(false);
+        }}
+        open={open}
+        resetOption={
+          onClear
+            ? {
+                description: t("options.models.config.useMainModelDescription"),
+                label:
+                  clearOptionLabel ?? t("options.models.config.useMainModel"),
+                onSelect: () => {
+                  onClear();
+                  handleOpenChange(false);
+                },
+                selected: !hasModel,
+              }
+            : undefined
+        }
+        saving={isSaving}
+        status={pickerStatus}
+        searchPlaceholder={t("options.models.config.searchForTask", {
+          task: label,
+        })}
+        selected={{ model, provider }}
+        title={t("options.models.config.pickerTitle", { task: label })}
+      />
+    </>
   );
 }
 
@@ -1714,6 +1559,8 @@ interface ProviderPanelProps {
   hError: string | null;
   credentialFields: HermesProviderCredentialField[];
   credentialAuthHint: string;
+  credentialAuthType?: string;
+  providerConnection?: HermesProviderConnection;
   keyDrafts: Record<string, string>;
   keysLoading: boolean;
   keysError: string | null;
@@ -1725,16 +1572,12 @@ interface ProviderPanelProps {
     cli_loaded?: boolean;
     pricing_loaded?: boolean;
   } | null;
-  providerOptionLabel: (id: string) => string;
   onKeyDraftChange: (k: string, v: string) => void;
-  onSave: () => void;
+  onSave: (activeCredentialKey?: string) => void;
   onRefreshModels: () => void;
   // Custom endpoint (BYO OpenAI-compatible) — only used when
-  // ``hProvider === "custom"``. Lives here rather than in
-  // ``ModelConfigPanel`` so the entire custom-endpoint flow (URL +
-  // model id + API key + "Set as default") is in one place. The
-  // sidebar's "+ Custom endpoint" affordance is the canonical entry
-  // point; the Model Config panel no longer carries this form.
+  // ``hProvider === "custom"``. The provider dialog owns the complete
+  // endpoint flow: URL, model id, credentials, and main-model assignment.
   customDraftModel: string;
   customDraftBaseUrl: string;
   customSaving: boolean;
@@ -1751,6 +1594,8 @@ function ProviderPanel({
   hError,
   credentialFields,
   credentialAuthHint,
+  credentialAuthType,
+  providerConnection,
   keyDrafts,
   keysLoading,
   keysError,
@@ -1758,7 +1603,6 @@ function ProviderPanel({
   showHermesModelLoading,
   modelEntriesForProvider,
   providerCliMeta,
-  providerOptionLabel,
   onKeyDraftChange,
   onSave,
   onRefreshModels,
@@ -1770,57 +1614,53 @@ function ProviderPanel({
   onCustomDraftBaseUrlChange,
   onSetCustomMain,
 }: ProviderPanelProps) {
-  const providerBlock = catalog?.providers?.[hProvider];
-  const defaultBaseUrl = providerBlock?.default_base_url?.trim() ?? "";
+  const { t } = useT();
   return (
     <div className="space-y-4 p-6">
       {catalog?.warning && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-500">{catalog.warning}</p>
+        <p className="text-[11px] text-amber-600 dark:text-amber-500">
+          {catalog.warning}
+        </p>
       )}
       {catalog?.ok && catalog.canonical_loaded === false && (
         <p className="text-[11px] text-amber-600 dark:text-amber-500">
-          Provider metadata partially loaded. Make sure Hermes is installed and connected to the extension.
+          {t("options.models.provider.metadataPartial")}
         </p>
       )}
       {hError && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-500">{hError}</p>
+        <p className="text-[11px] text-amber-600 dark:text-amber-500">
+          {hError}
+        </p>
       )}
 
-      {/* Provider credentials section. Writes ONLY to plugin .env —
-          setting the main model lives in the Model Config panel. */}
+      {/* Credentials write only to Hermes' .env. Main-model assignment lives
+          in the model configuration surface. */}
       <section className="space-y-5">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">Credentials</h3>
-          <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-            <p className="font-mono text-sm text-foreground">{hProvider}</p>
-            <p className="text-xs">{providerOptionLabel(hProvider)}</p>
-            {defaultBaseUrl ? (
-              <p className="font-mono text-[10px] text-muted-foreground">
-                endpoint: {defaultBaseUrl}
-              </p>
-            ) : null}
-          </div>
-        </div>
         <div className="space-y-5">
           {hProvider === "custom" && (
             <div className="space-y-2 rounded-lg border border-border bg-muted/10 px-4 py-3">
               <p className="text-[11px] text-muted-foreground">
-                Use any OpenAI-compatible endpoint as the main model. The API key (or any
-                env var the endpoint expects) goes in the Credentials section below.
+                {t("options.models.provider.customDescription")}
               </p>
               <div className="space-y-1.5">
-                <Label htmlFor="custom-main-model" className="text-xs">Model name</Label>
+                <Label htmlFor="custom-main-model" className="text-xs">
+                  {t("options.models.provider.customModel")}
+                </Label>
                 <Input
                   id="custom-main-model"
                   value={customDraftModel}
                   onChange={(e) => onCustomDraftModelChange(e.target.value)}
-                  placeholder="e.g. gpt-4o, llama-3.3-70b"
+                  placeholder={t(
+                    "options.models.provider.customModelPlaceholder",
+                  )}
                   className="font-mono text-xs"
                   autoComplete="off"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="custom-main-url" className="text-xs">Endpoint URL</Label>
+                <Label htmlFor="custom-main-url" className="text-xs">
+                  {t("options.models.provider.customEndpoint")}
+                </Label>
                 <Input
                   id="custom-main-url"
                   value={customDraftBaseUrl}
@@ -1832,80 +1672,55 @@ function ProviderPanel({
                 />
               </div>
               {customError && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-500">{customError}</p>
+                <p className="text-[11px] text-amber-600 dark:text-amber-500">
+                  {customError}
+                </p>
               )}
               <div className="pt-1">
                 <Button
                   type="button"
                   size="sm"
-                  disabled={customSaving || !customDraftModel.trim() || !customDraftBaseUrl.trim()}
+                  disabled={
+                    customSaving ||
+                    !customDraftModel.trim() ||
+                    !customDraftBaseUrl.trim()
+                  }
                   onClick={() => void onSetCustomMain()}
                 >
-                  {customSaving ? "Saving…" : "Set as default"}
+                  {customSaving
+                    ? t("common.saving")
+                    : t("options.models.provider.setDefault")}
                 </Button>
               </div>
             </div>
           )}
 
-          {keysError && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-500">{keysError}</p>
-          )}
-
-          {keysLoading ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading credentials…
-            </p>
-          ) : credentialFields.length > 0 ? (
-            <>
-              <div className="space-y-3">
-                {credentialFields.map((field) => (
-                  <div key={field.key} className="space-y-1.5">
-                    <Label
-                      htmlFor={`key-${field.key}`}
-                      className="font-mono text-[11px] text-muted-foreground"
-                    >
-                      {field.key}
-                    </Label>
-                    <Input
-                      id={`key-${field.key}`}
-                      type={field.kind === "url" ? "url" : "text"}
-                      value={keyDrafts[field.key] ?? ""}
-                      placeholder={field.placeholder}
-                      onChange={(e) => onKeyDraftChange(field.key, e.target.value)}
-                      className="font-mono text-xs"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button type="button" disabled={hSaving} onClick={onSave}>
-                  {hSaving ? "Saving…" : "Save credentials"}
-                </Button>
-                {hSaved && (
-                  <span className="text-xs text-[hsl(var(--success))]">Saved</span>
-                )}
-              </div>
-            </>
-          ) : credentialAuthHint ? (
-            <p className="text-xs text-muted-foreground">{credentialAuthHint}</p>
-          ) : null}
+          <ProviderCredentialEditor
+            authHint={credentialAuthHint}
+            authType={
+              credentialAuthType ?? catalog?.providers?.[hProvider]?.auth_type
+            }
+            connection={providerConnection}
+            error={keysError}
+            fields={credentialFields}
+            loading={keysLoading}
+            onChange={onKeyDraftChange}
+            onSave={onSave}
+            provider={hProvider}
+            saved={hSaved}
+            saving={hSaving}
+            values={keyDrafts}
+          />
         </div>
       </section>
 
       {/* Model list (display only) */}
       {hProvider && (
-        <section className="space-y-3 border-t border-border pt-8">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="text-sm font-medium text-foreground">Models</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Models available for the current provider. Use the “Model config” section to set a default or auxiliary model.
-              </p>
-            </div>
+        <section className="space-y-3 border-t border-border pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-foreground">
+              {t("options.models.provider.models")}
+            </h3>
             <Button
               type="button"
               variant="outline"
@@ -1913,56 +1728,56 @@ function ProviderPanel({
               className="h-7 shrink-0 gap-1.5 text-xs"
               disabled={showHermesModelLoading}
               onClick={onRefreshModels}
-              title="Refresh model list"
+              title={t("options.models.provider.refreshModels")}
             >
               {showHermesModelLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
                 <RefreshCw className="h-3 w-3" />
               )}
-              Refresh
+              {t("common.refresh")}
             </Button>
           </div>
           <div className="space-y-3">
             {showHermesModelLoading ? (
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                Loading models…
+                {t("options.models.provider.loadingModels")}
               </p>
             ) : modelEntriesForProvider.length > 0 ? (
               <>
-                <div className="max-h-[min(50vh,360px)] overflow-y-auto rounded-lg border border-border bg-muted/15">
-                  <ul className="flex flex-col divide-y divide-border/60">
+                <div className="rounded-lg border border-border bg-background">
+                  <ul className="divide-y divide-border/50">
                     {modelEntriesForProvider.map((entry) => (
-                      <li key={entry.id} className="px-3 py-2.5 text-xs">
-                        <p className="break-all font-mono text-[11px] leading-snug">
-                          {entry.id}
-                        </p>
-                        {entry.description?.trim() ? (
-                          <p className="mt-0.5 text-[10px] text-muted-foreground">
-                            {entry.description.trim()}
-                          </p>
-                        ) : null}
-                        <ModelEntryMetadataLine meta={entry.metadata} />
+                      <li
+                        key={entry.id}
+                        className="transition-colors hover:bg-muted/[0.12]"
+                      >
+                        <ModelCatalogEntryCard
+                          className="rounded-none border-0 bg-transparent px-3 py-2.5"
+                          entry={entry}
+                          provider={hProvider}
+                        />
                       </li>
                     ))}
                   </ul>
                 </div>
-                {!showHermesModelLoading && providerCliMeta?.source === "manifest" ? (
+                {!showHermesModelLoading &&
+                providerCliMeta?.source === "manifest" ? (
                   <p className="text-[10px] text-muted-foreground">
-                    Reference list shown. Add a key and refresh to fetch the full list.
+                    {t("options.models.provider.referenceList")}
                   </p>
                 ) : null}
                 {!showHermesModelLoading && providerCliMeta?.pricing_loaded ? (
                   <p className="text-[10px] text-muted-foreground">
-                    Prices are USD per million tokens, converted from the per-token rate returned by the provider's model API. Different routes or model ids may not match the published rate card — trust your actual bill.
+                    {t("options.models.provider.pricingHint")}
                   </p>
                 ) : null}
               </>
             ) : (
               <div className="rounded-lg border border-dashed border-border/80 bg-muted/15 p-4">
                 <p className="text-xs text-muted-foreground">
-                  No models yet. After entering a key here, click “Refresh catalog” at the top.
+                  {t("options.models.provider.noModels")}
                 </p>
               </div>
             )}

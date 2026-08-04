@@ -100,6 +100,8 @@ export interface WorkspaceAdapter {
    * choose local directories (browser extension, headless main process).
    */
   chooseDirectory?(defaultPath?: string): Promise<string | null>
+  /** Product-level root used when a session has no explicit binding. */
+  getDefaultRoot(): Promise<string>
   bind(sessionId: string, path: string): Promise<void>
   unbind(sessionId: string): Promise<void>
   getCurrent(sessionId: string): Promise<string | null>

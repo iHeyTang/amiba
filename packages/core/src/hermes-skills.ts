@@ -1,5 +1,5 @@
 /**
- * Read-only client for the bridge `/hermes/skills` route.
+ * Client for the bridge `/hermes/skills` routes.
  *
  * Mirrors the discovery rules used by Hermes Agent (`SKILL.md` walk of
  * `$HERMES_HOME/skills` plus `skills.external_dirs`, with platform and
@@ -8,6 +8,13 @@
  */
 
 import { backplaneFetch } from "./backplane-client";
+
+function profileUrl(path: string, profileId?: string): string {
+  const profile = profileId?.trim();
+  if (!profile) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}profile=${encodeURIComponent(profile)}`;
+}
 
 /**
  * Where a skill came from:
@@ -103,7 +110,9 @@ interface SkillMetaItem {
   timestamp_source?: HermesSkillTimestampSource;
 }
 
-export async function getHermesSkills(): Promise<HermesSkillsResponse> {
+export async function getHermesSkills(
+  profileId?: string,
+): Promise<HermesSkillsResponse> {
   // Backplane endpoints are split for upstream parity:
   //   GET /hermes/skills      → strict upstream shape (``name``, ``description``,
   //                              ``category``, ``enabled`` per item; raw list).
@@ -114,13 +123,17 @@ export async function getHermesSkills(): Promise<HermesSkillsResponse> {
   // ``HermesSkillsResponse`` keeps its richer shape unchanged.
   try {
     const [listRes, metaRes] = await Promise.all([
-      backplaneFetch("/hermes/skills", { method: "GET" }),
-      backplaneFetch("/hermes/skills/meta", { method: "GET" }),
+      backplaneFetch(profileUrl("/hermes/skills", profileId), {
+        method: "GET",
+      }),
+      backplaneFetch(profileUrl("/hermes/skills/meta", profileId), {
+        method: "GET",
+      }),
     ]);
     if (!listRes.ok) {
-      const body = (await listRes.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const body = (await listRes.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       return {
         ok: false,
         skills: [],
@@ -133,7 +146,9 @@ export async function getHermesSkills(): Promise<HermesSkillsResponse> {
       };
     }
     const skillsBody = (await listRes.json()) as unknown;
-    const baseSkills: Array<Partial<HermesSkillEntry>> = Array.isArray(skillsBody)
+    const baseSkills: Array<Partial<HermesSkillEntry>> = Array.isArray(
+      skillsBody,
+    )
       ? (skillsBody as Array<Partial<HermesSkillEntry>>)
       : [];
     // Meta is best-effort: a non-2xx leaves the rich fields blank
@@ -163,8 +178,9 @@ export async function getHermesSkills(): Promise<HermesSkillsResponse> {
     // Join. Empty defaults match what the rich fields used to be when
     // the backplane returned them inline — UI code can stay unchanged.
     const skills: HermesSkillEntry[] = baseSkills
-      .filter((s): s is Partial<HermesSkillEntry> & { name: string } =>
-        !!s && typeof s.name === "string"
+      .filter(
+        (s): s is Partial<HermesSkillEntry> & { name: string } =>
+          !!s && typeof s.name === "string",
       )
       .map((s) => {
         const rich: SkillMetaItem = metaByName.get(s.name) ?? { name: s.name };
@@ -254,9 +270,13 @@ export interface HermesSkillFileResponse {
 
 export async function getHermesSkillFiles(
   name: string,
+  profileId?: string,
 ): Promise<HermesSkillFilesResponse> {
   try {
-    const url = `/hermes/skills/${encodeURIComponent(name)}/files`;
+    const url = profileUrl(
+      `/hermes/skills/${encodeURIComponent(name)}/files`,
+      profileId,
+    );
     const res = await backplaneFetch(url, { method: "GET" });
     const data = (await res.json()) as HermesSkillFilesResponse;
     if (!res.ok || data.ok === false) {
@@ -298,9 +318,10 @@ export interface HermesSkillToggleResponse {
 export async function postHermesSkillToggle(
   name: string,
   enabled: boolean,
+  profileId?: string,
 ): Promise<HermesSkillToggleResponse> {
   try {
-    const url = `/hermes/skills/toggle`;
+    const url = profileUrl(`/hermes/skills/toggle`, profileId);
     // Method mirrors upstream PUT /api/skills/toggle.
     const res = await backplaneFetch(url, {
       method: "PUT",
@@ -320,11 +341,14 @@ export async function postHermesSkillToggle(
 export async function getHermesSkillFile(
   name: string,
   path: string,
+  profileId?: string,
 ): Promise<HermesSkillFileResponse> {
   try {
-    const url =
+    const url = profileUrl(
       `/hermes/skills/${encodeURIComponent(name)}/file` +
-      `?path=${encodeURIComponent(path)}`;
+        `?path=${encodeURIComponent(path)}`,
+      profileId,
+    );
     const res = await backplaneFetch(url, { method: "GET" });
     const data = (await res.json()) as HermesSkillFileResponse;
     if (!res.ok || data.ok === false) {

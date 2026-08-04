@@ -14,7 +14,11 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import type { HermesToolProgress } from "@amiba/core";
+import {
+  getHermesKanbanTasks,
+  type HermesKanbanTask,
+  type HermesToolProgress,
+} from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import {
   getPlatform,
@@ -36,6 +40,7 @@ import {
   FileDiff,
   FileText,
   FolderOpen,
+  GitBranch,
   Hash,
   MoreHorizontal,
   PanelRight,
@@ -56,9 +61,10 @@ import {
 } from "react";
 import { tags } from "@lezer/highlight";
 
-import { cn } from "../primitives";
+import { ScrollArea, cn } from "../primitives";
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
+import { KanbanStatusBadge } from "./KanbanStatusBadge";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
@@ -1895,9 +1901,76 @@ function WorkspaceEmptyState() {
   );
 }
 
+function SessionTaskFlow({ tasks }: { tasks: HermesKanbanTask[] }) {
+  const { t } = useT();
+  const ordered = useMemo(
+    () => [...tasks].sort((a, b) => a.created_at - b.created_at),
+    [tasks],
+  );
+  return (
+    <ScrollArea className="h-full">
+      <div className="px-4 pb-5 pt-2">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xs font-semibold">
+            {t("workspacePane.collaboration")}
+          </h3>
+          <span className="text-[10px] tabular-nums text-muted-foreground">
+            {t("workspacePane.taskCount", { count: tasks.length })}
+          </span>
+        </div>
+        <div className="relative space-y-1 before:absolute before:bottom-3 before:left-[7px] before:top-3 before:w-px before:bg-border/70">
+          {ordered.map((task) => (
+            <article
+              key={task.id}
+              className="relative ml-0 grid grid-cols-[16px_minmax(0,1fr)] gap-2.5 rounded-xl px-1 py-2"
+              style={{
+                paddingLeft: `${Math.min(task.parents.length, 3) * 12 + 4}px`,
+              }}
+            >
+              <span
+                className={cn(
+                  "relative z-10 mt-1.5 h-2 w-2 rounded-full ring-4 ring-background",
+                  task.status === "done"
+                    ? "bg-emerald-500"
+                    : task.status === "running"
+                      ? "bg-sky-500"
+                      : task.status === "blocked"
+                        ? "bg-red-500"
+                        : task.status === "review"
+                          ? "bg-amber-500"
+                          : "bg-muted-foreground/45",
+                )}
+              />
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h4 className="min-w-0 flex-1 truncate text-xs font-medium">
+                    {task.title}
+                  </h4>
+                  <KanbanStatusBadge status={task.status} />
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                  {task.assignee && <span>{task.assignee}</span>}
+                  <code className="truncate opacity-65">{task.id}</code>
+                </div>
+                {task.latest_summary && (
+                  <p className="mt-1.5 line-clamp-3 text-[11px] leading-4 text-muted-foreground">
+                    {task.latest_summary}
+                  </p>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </ScrollArea>
+  );
+}
+
 export function WorkspacePane({ visible = true }: { visible?: boolean }) {
   const pane = useWorkspacePane();
   const { t } = useT();
+  const [sessionTasks, setSessionTasks] = useState<HermesKanbanTask[]>([]);
+  const [showCollaboration, setShowCollaboration] = useState(false);
   const widthRef = useRef(pane.width);
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLElement>(null);
@@ -1910,6 +1983,37 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
     },
     [],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!visible || !pane.open || !pane.sessionId) {
+      setSessionTasks([]);
+      setShowCollaboration(false);
+      return;
+    }
+    const refreshTasks = async () => {
+      const result = await getHermesKanbanTasks({
+        sessionId: pane.sessionId,
+      });
+      if (cancelled || !result.ok) return;
+      setSessionTasks(result.tasks);
+    };
+    void refreshTasks();
+    const timer = window.setInterval(() => void refreshTasks(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pane.open, pane.sessionId, visible]);
+
+  useEffect(() => {
+    if (sessionTasks.length > 0 && pane.tabs.length === 0) {
+      setShowCollaboration(true);
+    }
+    if (sessionTasks.length === 0) {
+      setShowCollaboration(false);
+    }
+  }, [pane.tabs.length, sessionTasks.length]);
 
   const onResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -2015,16 +2119,36 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
           maxWidth: "calc(100vw - 52px)",
         }}
       >
-        {pane.tabs.length > 0 && (
-          <div
-            data-workspace-tabbar
-            className="flex h-11 shrink-0 items-center bg-background px-2"
-          >
+        <div
+          data-workspace-tabbar
+          className="flex h-11 shrink-0 items-center bg-background pl-2 pr-11"
+        >
+          {pane.tabs.length > 0 || sessionTasks.length > 0 ? (
             <div
               role="tablist"
               aria-label={t("workspacePane.title")}
               className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
             >
+              {sessionTasks.length > 0 && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={showCollaboration}
+                  onClick={() => setShowCollaboration(true)}
+                  className={cn(
+                    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] transition-colors",
+                    showCollaboration
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                >
+                  <GitBranch className="h-3.5 w-3.5" />
+                  {t("workspacePane.collaboration")}
+                  <span className="tabular-nums opacity-60">
+                    {sessionTasks.length}
+                  </span>
+                </button>
+              )}
               {pane.tabs.map((tab) => {
                 const selected = tab.id === active?.id;
                 const labels =
@@ -2037,17 +2161,26 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
                     tab={tab}
                     selected={selected}
                     labels={labels}
-                    onSelect={() => pane.selectTab(tab.id)}
+                    onSelect={() => {
+                      setShowCollaboration(false);
+                      pane.selectTab(tab.id);
+                    }}
                     onClose={() => pane.closeTab(tab.id)}
                   />
                 );
               })}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="min-w-0 flex-1 truncate px-2 text-[11px] font-medium text-muted-foreground/70">
+              {t("workspacePane.title")}
+            </div>
+          )}
+        </div>
 
         <div className="min-h-0 flex-1">
-          {!active ? (
+          {showCollaboration ? (
+            <SessionTaskFlow tasks={sessionTasks} />
+          ) : !active ? (
             <WorkspaceEmptyState />
           ) : active.resource.kind === "file" && pane.files ? (
             <WorkspaceFileView

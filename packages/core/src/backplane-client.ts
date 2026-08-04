@@ -15,6 +15,19 @@
 import { getPlatform } from "@amiba/platform"
 
 import { BACKPLANE_HTTP_BASE, BACKPLANE_KEY_STORAGE_KEY } from "./config"
+import {
+  HermesVersionCompatibilityError,
+  getHermesVersionCompatibility,
+} from "./hermes-version"
+
+const COMPATIBILITY_CACHE_MS = 30_000
+let compatibilityCheckedAt = 0
+let compatibilityCheck: Promise<void> | null = null
+
+export function invalidateHermesCompatibilityCache(): void {
+  compatibilityCheckedAt = 0
+  compatibilityCheck = null
+}
 
 async function readBackplaneKey(): Promise<string> {
   try {
@@ -32,6 +45,60 @@ function resolveUrl(path: string): string {
   return `${BACKPLANE_HTTP_BASE}${slash}${path}`
 }
 
+function compatibilityExempt(path: string, method?: string): boolean {
+  if ((method || "GET").toUpperCase() === "OPTIONS") return true
+  let pathname = path
+  try {
+    pathname = new URL(resolveUrl(path)).pathname
+  } catch {
+    // Keep the raw value. The actual fetch will surface an invalid URL.
+  }
+  return (
+    pathname === "/health" ||
+    pathname === "/hermes/status" ||
+    pathname === "/hermes/update" ||
+    pathname.startsWith("/hermes/actions/")
+  )
+}
+
+async function verifyHermesCompatibility(headers: Headers): Promise<void> {
+  if (Date.now() - compatibilityCheckedAt < COMPATIBILITY_CACHE_MS) return
+  if (compatibilityCheck) return compatibilityCheck
+
+  compatibilityCheck = (async () => {
+    let response: Response
+    try {
+      response = await fetch(resolveUrl("/hermes/status"), {
+        method: "GET",
+        headers,
+      })
+    } catch {
+      throw new HermesVersionCompatibilityError(
+        getHermesVersionCompatibility(""),
+      )
+    }
+    if (!response.ok) {
+      throw new HermesVersionCompatibilityError(
+        getHermesVersionCompatibility(""),
+      )
+    }
+    const body = (await response.json().catch(() => null)) as
+      | { version?: unknown }
+      | null
+    const compatibility = getHermesVersionCompatibility(body?.version)
+    if (!compatibility.compatible) {
+      throw new HermesVersionCompatibilityError(compatibility)
+    }
+    compatibilityCheckedAt = Date.now()
+  })()
+
+  try {
+    await compatibilityCheck
+  } finally {
+    compatibilityCheck = null
+  }
+}
+
 export async function backplaneFetch(
   path: string,
   init: RequestInit = {}
@@ -41,6 +108,9 @@ export async function backplaneFetch(
   const headers = new Headers(init.headers || {})
   if (key && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${key}`)
+  }
+  if (!compatibilityExempt(path, init.method)) {
+    await verifyHermesCompatibility(headers)
   }
   return fetch(url, { ...init, headers })
 }
