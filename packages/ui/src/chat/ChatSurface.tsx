@@ -272,11 +272,11 @@ export interface ChatSurfaceProps {
   mentionProviders?: TriggerProvider[];
 
   /**
-   * Called when the TabBar gear icon is clicked. Extension uses
-   * `openSettings()`; desktop opens a separate Options
-   * BrowserWindow.
+   * Open Settings, optionally at the recovery pane chosen by ErrorBlock.
+   * Extension hosts may ignore the pane; desktop uses SettingsView hash
+   * routing to land directly on models, connection, voice, or error logs.
    */
-  openSettings: () => void;
+  openSettings: (tab?: string) => void;
 
   /**
    * Open an agent-destination URL in the user's primary browser/window.
@@ -875,7 +875,9 @@ export default function ChatSurface({
     if (kind === "interrupted" && state.error) {
       setError({
         message: state.error.message,
+        status: state.error.status,
         hint: state.error.hint,
+        source: "run",
       });
     }
   }
@@ -1039,7 +1041,12 @@ export default function ChatSurface({
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
     setQueuePaused(false);
     resetApprovals();
-    setError({ message: event.message, hint: event.hint });
+    setError({
+      message: event.message,
+      status: event.status,
+      hint: event.hint,
+      source: "run",
+    });
     if (assistantUiId) {
       sessions.setActiveMessages((prev) =>
         (prev as UiMessage[]).filter((m) => m.uiId !== assistantUiId),
@@ -1643,6 +1650,7 @@ export default function ChatSurface({
             message === "Permission denied"
               ? t("composer.voice.permissionDenied")
               : t("composer.voice.transcribeFailed", { error: message }),
+          source: "voice",
         });
       });
       return;
@@ -1659,6 +1667,7 @@ export default function ChatSurface({
           const message = "error" in result ? result.error : "unknown";
           setError({
             message: t("composer.voice.transcribeFailed", { error: message }),
+            source: "voice",
           });
           return;
         }
@@ -1684,6 +1693,7 @@ export default function ChatSurface({
           message: t("composer.voice.transcribeFailed", {
             error: String((e as Error)?.message || e),
           }),
+          source: "voice",
         });
       } finally {
         setVoiceTranscribing(false);
@@ -1959,7 +1969,7 @@ export default function ChatSurface({
                 {error && (
                   <ErrorBlock
                     error={error}
-                    onOpenSettings={() => openSettings()}
+                    onOpenSettings={openSettings}
                   />
                 )}
               </div>
@@ -1984,7 +1994,7 @@ export default function ChatSurface({
                 {error && (
                   <ErrorBlock
                     error={error}
-                    onOpenSettings={() => openSettings()}
+                    onOpenSettings={openSettings}
                   />
                 )}
               </div>

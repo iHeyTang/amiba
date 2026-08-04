@@ -37,6 +37,22 @@ export const en = {
   "conversationRail.jumpTo": "Jump to message {index}: {message}",
   "conversationRail.messageFallback": "User message",
 
+  // Assistant run boundaries
+  "sidepanel.runBoundary.interrupted": "Response interrupted",
+  "sidepanel.runBoundary.stopped": "Stopped",
+
+  // Chat error recovery
+  "sidepanel.runError.credentials.title": "Model credentials aren't working",
+  "sidepanel.runError.credentials.action": "Review credentials",
+  "sidepanel.runError.modelService.title": "The model service is unavailable",
+  "sidepanel.runError.modelService.action": "Review model settings",
+  "sidepanel.runError.connection.title": "Couldn't reach the model service",
+  "sidepanel.runError.connection.action": "Check connection",
+  "sidepanel.runError.voice.title": "Voice input is unavailable",
+  "sidepanel.runError.voice.action": "Check voice settings",
+  "sidepanel.runError.runtime.title": "The run couldn't continue",
+  "sidepanel.runError.runtime.action": "View error logs",
+
   // Workspace inspector
   "workspacePane.title": "Workbench",
   "workspacePane.open": "Open workbench",

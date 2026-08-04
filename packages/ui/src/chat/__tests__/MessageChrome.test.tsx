@@ -11,6 +11,124 @@ import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
 
 describe("chat message chrome", () => {
+  it("renders an interrupted-only reply as a quiet run boundary", () => {
+    const { container } = render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "user-interrupted",
+              role: "user",
+              content: "Start the task",
+            },
+            {
+              uiId: "assistant-interrupted",
+              role: "assistant",
+              content: "\n\n[interrupted]",
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+
+    const boundary = container.querySelector(
+      '[data-run-boundary="interrupted"]',
+    );
+    expect(boundary).toHaveTextContent("sidepanel.runBoundary.interrupted");
+    expect(screen.queryByText("[interrupted]")).not.toBeInTheDocument();
+  });
+
+  it("places a stopped boundary after partial assistant content", () => {
+    const { container } = render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "user-stopped",
+              role: "user",
+              content: "Draft the release notes",
+            },
+            {
+              uiId: "assistant-stopped",
+              role: "assistant",
+              content: "Partial release notes\n\n[stopped]",
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+
+    const answer = screen.getByText("Partial release notes");
+    const boundary = container.querySelector('[data-run-boundary="stopped"]');
+    expect(boundary).toHaveTextContent("sidepanel.runBoundary.stopped");
+    expect(
+      answer.compareDocumentPosition(boundary as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText("[stopped]")).not.toBeInTheDocument();
+  });
+
+  it("normalizes the legacy stop marker into the stopped boundary", () => {
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "assistant-stop-alias",
+            role: "assistant",
+            content: "[stop]",
+          } as UiMessage
+        }
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-run-boundary="stopped"]'),
+    ).toHaveTextContent("sidepanel.runBoundary.stopped");
+    expect(screen.queryByText("[stop]")).not.toBeInTheDocument();
+  });
+
+  it("keeps the run boundary after the turn execution summary", () => {
+    const { container } = render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "user-stopped-after-tool",
+              role: "user",
+              content: "Inspect the project",
+            },
+            {
+              uiId: "assistant-stopped-after-tool",
+              role: "assistant",
+              content: "I found the entry point.\n\n[stopped]",
+              hermesToolProgress: [
+                {
+                  tool: "read_file",
+                  toolCallId: "call-stopped",
+                  status: "completed",
+                  label: '{"path":"src/main.ts"}',
+                },
+              ],
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+
+    const answer = screen.getByText("I found the entry point.");
+    const execution = container.querySelector("[data-execution-summary]");
+    const boundary = container.querySelector('[data-run-boundary="stopped"]');
+    expect(execution).toBeInTheDocument();
+    expect(
+      answer.compareDocumentPosition(execution as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      (execution as Node).compareDocumentPosition(boundary as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps the original compact user-message bubble", () => {
     const { container } = render(
       <Bubble

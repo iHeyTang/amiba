@@ -93,7 +93,11 @@ export type AssistantTimelineItem =
 /** Errors a chat surface needs to render (top-level banner or per-bubble). */
 export interface ChatError {
   message: string
+  /** HTTP status preserved from the engine whenever one is available. */
+  status?: number
   hint?: string
+  /** Origin for errors raised locally rather than by the chat runtime. */
+  source?: "run" | "voice"
 }
 
 /**

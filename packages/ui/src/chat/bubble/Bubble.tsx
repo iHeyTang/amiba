@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Folder,
   Globe,
+  Pause,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -32,6 +33,8 @@ export interface BubbleProps {
   m: UiMessage;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
+  /** MessageTurns renders terminal run state after the whole execution segment. */
+  suppressRunBoundary?: boolean;
   /**
    * Called when the "Open in my browser →" chip on a finished assistant
    * bubble is clicked. Extension impl opens in a chrome tab; desktop impl
@@ -63,6 +66,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
 export function Bubble({
   m,
   suppressTrace = false,
+  suppressRunBoundary = false,
   onOpenAgentDestination,
 }: BubbleProps) {
   const { t } = useT();
@@ -141,25 +145,39 @@ export function Bubble({
       return (
         <InterleavedAssistantFlow
           message={m}
+          suppressRunBoundary={suppressRunBoundary}
           onOpenAgentDestination={onOpenAgentDestination}
         />
       );
     }
     const hasBody = trace.bodyText.trim().length > 0;
     const traceVisible = trace.hasTrace && !suppressTrace;
+    const runBoundary = suppressRunBoundary ? null : trace.runBoundary;
     const hasFinalDestination =
       !m.streaming && Boolean(m.agentFinalUrl && onOpenAgentDestination);
 
     // A completed assistant message with no answer or inspectable execution
     // record should take up no space in the conversation.
-    if (!m.streaming && !hasBody && !traceVisible && !hasFinalDestination) {
+    if (
+      !m.streaming &&
+      !hasBody &&
+      !traceVisible &&
+      !runBoundary &&
+      !hasFinalDestination
+    ) {
       return null;
     }
 
     // MessageTurns renders this trace once for the whole user turn. Suppress
     // the otherwise-duplicated streaming placeholder while that aggregate is
     // already visible.
-    if (suppressTrace && trace.hasTrace && !hasBody && !hasFinalDestination) {
+    if (
+      suppressTrace &&
+      trace.hasTrace &&
+      !hasBody &&
+      !runBoundary &&
+      !hasFinalDestination
+    ) {
       return null;
     }
 
@@ -240,6 +258,12 @@ export function Bubble({
             onOpen={onOpenAgentDestination}
           />
         )}
+        {runBoundary && (
+          <RunBoundary
+            state={runBoundary}
+            followsContent={hasBody || hasFinalDestination}
+          />
+        )}
       </div>
     );
   }
@@ -254,14 +278,79 @@ export function Bubble({
   );
 }
 
+type RunBoundaryState = "interrupted" | "stopped";
+
+const RUN_BOUNDARY_SUFFIX =
+  /(?:^|(?:\r?\n)+)\[(interrupted|stopped|stop)\][\t \r\n]*$/i;
+
+function splitRunBoundaryFromBody(text: string): {
+  body: string;
+  state: RunBoundaryState | null;
+} {
+  const match = RUN_BOUNDARY_SUFFIX.exec(text);
+  if (!match) return { body: text, state: null };
+  return {
+    body: text.slice(0, match.index).trimEnd(),
+    state:
+      match[1]?.toLowerCase() === "interrupted" ? "interrupted" : "stopped",
+  };
+}
+
+function RunBoundary({
+  state,
+  followsContent = false,
+}: {
+  state: RunBoundaryState;
+  followsContent?: boolean;
+}) {
+  const { t } = useT();
+  const interrupted = state === "interrupted";
+
+  return (
+    <div
+      data-run-boundary={state}
+      className={cn(
+        "flex min-w-0 items-center px-1",
+        followsContent ? "mt-2" : "py-1",
+      )}
+    >
+      <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-normal leading-4 text-muted-foreground/70">
+        <span
+          aria-hidden
+          className={cn(
+            "inline-flex h-4 w-3 shrink-0 items-center justify-center",
+            interrupted
+              ? "text-amber-600/75 dark:text-amber-300/70"
+              : "text-muted-foreground/55",
+          )}
+        >
+          {interrupted ? (
+            <Pause className="h-3 w-3" />
+          ) : (
+            <span className="h-2 w-2 rounded-[1.5px] bg-current" />
+          )}
+        </span>
+        <span className="truncate leading-4 tracking-[0.01em]">
+          {t(
+            interrupted
+              ? "sidepanel.runBoundary.interrupted"
+              : "sidepanel.runBoundary.stopped",
+          )}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 type ResolvedTraceItem =
   | { kind: "tool"; id: string; event: HermesToolProgress }
   | { kind: "approval"; id: string; record: ApprovalRecord };
 
 function resolveAssistantTrace(m: UiMessage) {
-  const rawBody = bubbleTextContent(m.content);
-  const { body: bodyText, thinking: extractedThinking } =
-    splitThinkingFromBody(rawBody);
+  const terminal = splitRunBoundaryFromBody(bubbleTextContent(m.content));
+  const { body: bodyText, thinking: extractedThinking } = splitThinkingFromBody(
+    terminal.body,
+  );
   const verboseText = bubbleTextContent(m.streamVerbose);
   const reasoningText = [
     bubbleTextContent(m.reasoning).trim(),
@@ -318,6 +407,7 @@ function resolveAssistantTrace(m: UiMessage) {
 
   return {
     bodyText,
+    runBoundary: terminal.state,
     reasoningText,
     legacyToolDetails,
     toolProgress,
@@ -573,11 +663,17 @@ type TurnReplyItem =
       id: string;
       message: UiMessage;
       suppressTrace: boolean;
+      suppressRunBoundary: boolean;
     }
   | {
       kind: "execution";
       id: string;
       messages: UiMessage[];
+    }
+  | {
+      kind: "boundary";
+      id: string;
+      state: RunBoundaryState;
     };
 
 /**
@@ -605,6 +701,19 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
     pendingExecution = [];
   };
 
+  const appendBoundary = (
+    message: UiMessage,
+    state: RunBoundaryState | null,
+  ) => {
+    if (!state) return;
+    flushExecution();
+    items.push({
+      kind: "boundary",
+      id: `boundary:${message.uiId}`,
+      state,
+    });
+  };
+
   for (const message of replies) {
     if (
       message.role !== "assistant" ||
@@ -616,6 +725,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
         id: message.uiId,
         message,
         suppressTrace: false,
+        suppressRunBoundary: false,
       });
       continue;
     }
@@ -632,13 +742,31 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
         id: message.uiId,
         message,
         suppressTrace: trace.hasTrace,
+        suppressRunBoundary: Boolean(trace.runBoundary),
       });
       if (trace.hasTrace) pendingExecution.push(message);
+      appendBoundary(message, trace.runBoundary);
       continue;
     }
 
     if (trace.hasTrace) {
       pendingExecution.push(message);
+      appendBoundary(message, trace.runBoundary);
+      continue;
+    }
+
+    if (trace.runBoundary) {
+      if (message.agentFinalUrl) {
+        flushExecution();
+        items.push({
+          kind: "message",
+          id: message.uiId,
+          message,
+          suppressTrace: false,
+          suppressRunBoundary: true,
+        });
+      }
+      appendBoundary(message, trace.runBoundary);
       continue;
     }
 
@@ -652,6 +780,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
       id: message.uiId,
       message,
       suppressTrace: false,
+      suppressRunBoundary: false,
     });
   }
 
@@ -735,7 +864,9 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     .filter((item) => item.kind === "text")
     .map((item) => item.text)
     .join("");
-  const rawBody = bubbleTextContent(message.content);
+  const rawBody = splitRunBoundaryFromBody(
+    bubbleTextContent(message.content),
+  ).body;
   if (
     rawBody.startsWith(timelineText) &&
     rawBody.length > timelineText.length
@@ -765,12 +896,19 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
 
 function InterleavedAssistantFlow({
   message,
+  suppressRunBoundary = false,
   onOpenAgentDestination,
 }: {
   message: UiMessage;
+  suppressRunBoundary?: boolean;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
 }) {
   const flow = buildAssistantFlow(message);
+  const trace = resolveAssistantTrace(message);
+  const runBoundary = suppressRunBoundary ? null : trace.runBoundary;
+  const hasFinalDestination =
+    !message.streaming &&
+    Boolean(message.agentFinalUrl && onOpenAgentDestination);
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div className="flex min-w-0 flex-col gap-2">
@@ -809,6 +947,12 @@ function InterleavedAssistantFlow({
             onOpen={onOpenAgentDestination}
           />
         )}
+      {runBoundary && (
+        <RunBoundary
+          state={runBoundary}
+          followsContent={flow.length > 0 || hasFinalDestination}
+        />
+      )}
     </div>
   );
 }
@@ -953,12 +1097,16 @@ export function MessageTurns({
                   />
                 );
               }
+              if (item.kind === "boundary") {
+                return <RunBoundary key={item.id} state={item.state} />;
+              }
 
               return (
                 <Bubble
                   key={item.id}
                   m={item.message}
                   suppressTrace={item.suppressTrace}
+                  suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />
               );

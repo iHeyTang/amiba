@@ -15,6 +15,8 @@ import {
 } from "../../primitives"
 import { cn } from "../../primitives"
 import {
+  ArrowRight,
+  CircleAlert,
   ExternalLink,
   File as FileIcon,
   FileText,
@@ -27,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { hostnameOf } from "../internal/helpers"
+import { resolveChatErrorPresentation } from "../internal/error-presentation"
 import type { ChatError } from "../internal/types"
 
 export interface EmptyStateProps {
@@ -64,24 +67,53 @@ export function EmptyState({ onNew, onOpenHistory, hasHistory }: EmptyStateProps
 
 export interface ErrorBlockProps {
   error: ChatError
-  onOpenSettings: () => void
+  onOpenSettings: (tab?: string) => void
 }
 
 export function ErrorBlock({ error, onOpenSettings }: ErrorBlockProps) {
   const { t } = useT()
+  const presentation = resolveChatErrorPresentation(error)
   return (
-    <div data-selection="text" className="w-full max-w-sm rounded-md border border-destructive/50 bg-destructive/10 p-3 text-left text-xs text-destructive">
-      <div className="break-all font-mono">{error.message}</div>
-      {error.hint && (
-        <pre className="mt-2 whitespace-pre-wrap break-words text-foreground/90">
-          {error.hint}
-        </pre>
-      )}
-      <div className="mt-2 flex gap-2">
+    <div
+      role="alert"
+      data-selection="text"
+      data-chat-error-kind={presentation.kind}
+      className="w-full max-w-lg rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-left shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]"
+    >
+      <div className="flex items-start gap-2.5">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-destructive/[0.07] text-destructive/75"
+        >
+          <CircleAlert className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <p className="text-xs font-medium leading-5 text-foreground/90">
+              {t(presentation.titleKey)}
+            </p>
+            {presentation.status && (
+              <span className="rounded-md bg-muted/70 px-1.5 py-0.5 font-mono text-[9px] leading-none text-muted-foreground/80">
+                HTTP {presentation.status}
+              </span>
+            )}
+          </div>
+          <p className="break-words text-[11px] leading-4 text-muted-foreground">
+            {presentation.detail}
+          </p>
+          {error.hint && (
+            <p className="mt-1 whitespace-pre-wrap break-words text-[11px] leading-4 text-muted-foreground/80">
+              {error.hint}
+            </p>
+          )}
+        </div>
         <button
-          onClick={onOpenSettings}
-          className="inline-flex items-center gap-1 rounded border border-foreground/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-foreground hover:bg-foreground/10">
-          {t("sidepanel.empty.settings")}
+          type="button"
+          onClick={() => onOpenSettings(presentation.settingsTarget)}
+          className="mt-0.5 inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-muted/55 px-2.5 text-[11px] font-medium text-foreground/75 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+        >
+          {t(presentation.actionKey)}
+          <ArrowRight className="h-3 w-3" />
         </button>
       </div>
     </div>

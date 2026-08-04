@@ -32,6 +32,22 @@ export const zhCN: Messages = {
   "conversationRail.jumpTo": "跳转到第 {index} 条消息：{message}",
   "conversationRail.messageFallback": "用户消息",
 
+  // 助手运行边界
+  "sidepanel.runBoundary.interrupted": "响应已中断",
+  "sidepanel.runBoundary.stopped": "已停止运行",
+
+  // 对话错误恢复
+  "sidepanel.runError.credentials.title": "模型凭据不可用",
+  "sidepanel.runError.credentials.action": "检查模型凭据",
+  "sidepanel.runError.modelService.title": "模型服务暂不可用",
+  "sidepanel.runError.modelService.action": "检查模型设置",
+  "sidepanel.runError.connection.title": "无法连接模型服务",
+  "sidepanel.runError.connection.action": "检查连接",
+  "sidepanel.runError.voice.title": "语音输入暂不可用",
+  "sidepanel.runError.voice.action": "检查语音设置",
+  "sidepanel.runError.runtime.title": "本次运行未能继续",
+  "sidepanel.runError.runtime.action": "查看错误日志",
+
   // 工作台
   "workspacePane.title": "工作台",
   "workspacePane.open": "打开工作台",

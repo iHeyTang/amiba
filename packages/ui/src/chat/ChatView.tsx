@@ -35,7 +35,7 @@ export interface ChatViewProps {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (tab?: string) => void;
 
   // Composer
   onSubmitMessage: (text: string) => void;
