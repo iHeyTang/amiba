@@ -6,7 +6,6 @@ import {
   ChevronUp,
   Folder,
   Globe,
-  Pause,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -317,6 +316,7 @@ function RunBoundary({
       <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-normal leading-4 text-muted-foreground/70">
         <span
           aria-hidden
+          data-run-boundary-icon={interrupted ? "pause-solid" : "stop-solid"}
           className={cn(
             "inline-flex h-4 w-3 shrink-0 items-center justify-center",
             interrupted
@@ -325,7 +325,16 @@ function RunBoundary({
           )}
         >
           {interrupted ? (
-            <Pause className="h-3 w-3" />
+            <span className="inline-flex h-2 w-2 items-center justify-center gap-[2px]">
+              <span
+                data-pause-bar
+                className="h-2 w-[2px] rounded-[0.5px] bg-current"
+              />
+              <span
+                data-pause-bar
+                className="h-2 w-[2px] rounded-[0.5px] bg-current"
+              />
+            </span>
           ) : (
             <span className="h-2 w-2 rounded-[1.5px] bg-current" />
           )}

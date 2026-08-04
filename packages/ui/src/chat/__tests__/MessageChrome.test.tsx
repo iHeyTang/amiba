@@ -35,6 +35,11 @@ describe("chat message chrome", () => {
       '[data-run-boundary="interrupted"]',
     );
     expect(boundary).toHaveTextContent("sidepanel.runBoundary.interrupted");
+    const icon = boundary?.querySelector(
+      '[data-run-boundary-icon="pause-solid"]',
+    );
+    expect(icon?.querySelector("svg")).toBeNull();
+    expect(icon?.querySelectorAll("[data-pause-bar]")).toHaveLength(2);
     expect(screen.queryByText("[interrupted]")).not.toBeInTheDocument();
   });
 
