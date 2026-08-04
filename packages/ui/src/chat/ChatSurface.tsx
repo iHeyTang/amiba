@@ -769,8 +769,10 @@ export default function ChatSurface({
     //     whatever api_server managed to write before the failure;
     //     the engine's state has the (potentially longer) text it had
     //     accumulated locally. Overlay onto the matching bubble if
-    //     present, else synthesize so the [interrupted] tail still
-    //     reaches the user.
+    //     present, else synthesize the partial text. The actionable
+    //     ErrorBlock below is the sole runtime-error indicator: encoding
+    //     another `[interrupted]` marker into transient message content
+    //     made the label jump to the latest turn after a reload.
     const { state } = frame;
     stream.hydrateFromSnapshot(state);
     setBusy(state.streaming);
@@ -813,9 +815,8 @@ export default function ChatSurface({
 
     sessions.setActiveMessages((prev) => {
       const arr = prev as UiMessage[];
-      const suffix = kind === "interrupted" ? "\n\n[interrupted]" : "";
       const merged: Partial<UiMessage> = {
-        content: state.assistantText + suffix,
+        content: state.assistantText,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
         // any panel that opens AFTER the stream finished. While the panel
@@ -1270,6 +1271,9 @@ export default function ChatSurface({
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
         resetApprovals();
+        // The top-level recovery card belongs to the outgoing session.
+        // The incoming snapshot will restore its own error, if any.
+        setError(null);
         setPageError(null);
         // Same fire-and-forget GC as `newChat` — the composer-time
         // attachments belonged to the session we're leaving.
