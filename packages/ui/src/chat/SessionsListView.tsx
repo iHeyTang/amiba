@@ -394,6 +394,16 @@ function SessionRow({
           : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
       )}
     >
+      {session.unread ? (
+        <span
+          aria-label={t("sidepanel.sessions.unread")}
+          title={t("sidepanel.sessions.unread")}
+          className={cn(
+            "pointer-events-none absolute top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--status-unread))]",
+            nested ? "left-6" : "left-0",
+          )}
+        />
+      ) : null}
       <button
         type="button"
         onClick={onOpen}
@@ -410,27 +420,15 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
-        {session.unread ? (
-          <span
-            aria-label={t("sidepanel.sessions.unread")}
-            title={t("sidepanel.sessions.unread")}
-            className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full bg-primary transition-opacity",
-              allowActions &&
-                "group-hover:opacity-0 group-focus-within:opacity-0",
-            )}
-          />
-        ) : (
-          <span
-            className={cn(
-              "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity",
-              allowActions &&
-                "group-hover:opacity-0 group-focus-within:opacity-0",
-            )}
-          >
-            {formatRelativeShort(session.updatedAt)}
-          </span>
-        )}
+        <span
+          className={cn(
+            "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity",
+            allowActions &&
+              "group-hover:opacity-0 group-focus-within:opacity-0",
+          )}
+        >
+          {formatRelativeShort(session.updatedAt)}
+        </span>
       </button>
       {allowActions ? (
         <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">

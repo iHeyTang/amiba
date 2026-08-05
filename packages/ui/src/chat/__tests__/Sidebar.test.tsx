@@ -122,10 +122,13 @@ describe("Sidebar", () => {
       ],
     });
 
-    expect(screen.getByLabelText("Unread update")).toHaveClass(
+    const unread = screen.getByLabelText("Unread update");
+    expect(unread).toHaveClass(
       "rounded-full",
-      "bg-primary",
+      "bg-[hsl(var(--status-unread))]",
     );
+    expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
+    expect(unread.nextElementSibling).toHaveTextContent("First chat");
   });
 
   it("keeps chats and scheduled runs together in the timeline layout", async () => {
