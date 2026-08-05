@@ -7,7 +7,7 @@ import {
 } from "@amiba/core"
 import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
-import { Loader2, ShieldAlert, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 interface ApprovalDecisionMeta {
@@ -218,8 +218,8 @@ export function ApprovalBanner({
 }
 
 /**
- * Compact radial countdown for an approval request. Keeping time attached to
- * the approval icon avoids turning the card edge into a false divider.
+ * Micro info marker with a radial countdown. It stays aligned to the first
+ * line of the explanation without turning approval into a security alert.
  */
 export function ApprovalCountdownBar({
   requestedAt,
@@ -237,27 +237,28 @@ export function ApprovalCountdownBar({
   const remaining = Math.max(0, timeoutMs - elapsed)
   const percent = timeoutMs > 0 ? (remaining / timeoutMs) * 100 : 0
   const warning = remaining > 0 && remaining < 30_000
-  const circumference = 2 * Math.PI * 10.5
+  const circumference = 2 * Math.PI * 7
   const dashOffset = circumference * (1 - percent / 100)
   return (
     <div
       aria-hidden
-      className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background/60 text-warning">
-      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 24 24">
+      data-approval-countdown
+      className="relative mt-px flex h-4 w-4 shrink-0 items-center justify-center text-warning">
+      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 16 16">
         <circle
-          cx="12"
-          cy="12"
-          r="10.5"
+          cx="8"
+          cy="8"
+          r="7"
           fill="none"
-          strokeWidth="1.25"
+          strokeWidth="1"
           className="stroke-border/70"
         />
         <circle
-          cx="12"
-          cy="12"
-          r="10.5"
+          cx="8"
+          cy="8"
+          r="7"
           fill="none"
-          strokeWidth="1.25"
+          strokeWidth="1"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
@@ -271,7 +272,9 @@ export function ApprovalCountdownBar({
           )}
         />
       </svg>
-      <ShieldAlert className="h-3 w-3" />
+      <span className="font-sans text-[8px] font-semibold leading-none text-muted-foreground/80">
+        i
+      </span>
     </div>
   )
 }

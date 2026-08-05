@@ -54,6 +54,11 @@ describe("ApprovalBanner", () => {
     expect(
       screen.queryByText("command parser limit or malformed executable payload")
     ).not.toBeInTheDocument()
+    expect(container.querySelector("[data-approval-countdown]")).toHaveClass(
+      "mt-px",
+      "h-4",
+      "w-4"
+    )
     expect(container.firstElementChild).toHaveClass("mx-4", "-mb-2.5", "z-0")
   })
 })
