@@ -129,13 +129,44 @@ describe("Sidebar", () => {
     });
 
     const unread = screen.getByLabelText("Unread update");
-    expect(unread).toHaveClass(
+    expect(unread).toHaveClass("left-2", "h-4", "w-4");
+    expect(unread.firstElementChild).toHaveClass(
       "rounded-full",
-      "bg-[hsl(var(--status-unread))]",
-      "left-[13px]",
+      "bg-[hsl(var(--status-session))]",
     );
     expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
     expect(unread.nextElementSibling).toHaveTextContent("First chat");
+  });
+
+  it("uses the same leading status slot for a running session", () => {
+    workspaceBindings.current = {
+      supported: true,
+      ready: true,
+      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+    };
+    setup({
+      historyLayout: "grouped",
+      runningSessionIds: new Set(["s1"]),
+      sessions: [
+        {
+          id: "s1",
+          title: "First chat",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 1,
+          unread: true,
+        },
+      ],
+    });
+
+    const running = screen.getByLabelText("Running");
+    expect(screen.queryByLabelText("Unread update")).not.toBeInTheDocument();
+    expect(running).toHaveClass("left-2", "h-4", "w-4");
+    expect(running.firstElementChild).toHaveClass(
+      "animate-pulse",
+      "rounded-full",
+      "bg-[hsl(var(--status-session))]",
+    );
   });
 
   it("keeps chats and scheduled runs together in the timeline layout", async () => {

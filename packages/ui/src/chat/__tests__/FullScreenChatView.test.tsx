@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   streamListener: null as
     | ((sessionId: string, event: { kind: string }) => void)
     | null,
+  snapshotListener: null as
+    | ((frame: { sessionId: string; kind: string }) => void)
+    | null,
+  sidebarRunningSessionIds: [] as string[],
 }))
 
 vi.mock("@amiba/core", () => ({
@@ -36,11 +40,20 @@ vi.mock("../../theme", () => ({
 }))
 
 vi.mock("../Sidebar", () => ({
-  Sidebar: ({ onNewChat }: { onNewChat: () => void }) => (
-    <button type="button" onClick={onNewChat}>
-      new-chat
-    </button>
-  ),
+  Sidebar: ({
+    onNewChat,
+    runningSessionIds,
+  }: {
+    onNewChat: () => void
+    runningSessionIds?: ReadonlySet<string>
+  }) => {
+    mocks.sidebarRunningSessionIds = Array.from(runningSessionIds ?? [])
+    return (
+      <button type="button" onClick={onNewChat}>
+        new-chat
+      </button>
+    )
+  },
 }))
 
 vi.mock("../CommandPalette", () => ({
@@ -108,6 +121,12 @@ function makeSessions() {
 
 function makeClient() {
   return {
+    onSnapshot: vi.fn((listener) => {
+      mocks.snapshotListener = listener
+      return () => {
+        if (mocks.snapshotListener === listener) mocks.snapshotListener = null
+      }
+    }),
     onStreamEvent: vi.fn((listener) => {
       mocks.streamListener = listener
       return () => {
@@ -121,6 +140,8 @@ describe("FullScreenChatView new-chat home", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.streamListener = null
+    mocks.snapshotListener = null
+    mocks.sidebarRunningSessionIds = []
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") {
         return { [key]: "scheduled" }
@@ -284,5 +305,37 @@ describe("FullScreenChatView new-chat home", () => {
 
     mocks.streamListener?.("session-1", { kind: "aborted" })
     expect(sessions.markUnread).toHaveBeenCalledTimes(1)
+  })
+
+  it("tracks running sessions from live events and recovered snapshots", () => {
+    mocks.useSessions.mockReturnValue(makeSessions())
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    )
+
+    act(() => mocks.streamListener?.("session-1", { kind: "begin" }))
+    expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+
+    act(() => mocks.streamListener?.("session-1", { kind: "done" }))
+    expect(mocks.sidebarRunningSessionIds).toEqual([])
+
+    act(() =>
+      mocks.snapshotListener?.({ sessionId: "session-1", kind: "live" }),
+    )
+    expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+
+    act(() =>
+      mocks.snapshotListener?.({
+        sessionId: "session-1",
+        kind: "interrupted",
+      }),
+    )
+    expect(mocks.sidebarRunningSessionIds).toEqual([])
   })
 })

@@ -1409,6 +1409,7 @@ export const en = {
   "sidepanel.nav.section.workspace": "Workspace",
   "sidepanel.sessions.showMore": "Show more",
   "sidepanel.sessions.unread": "Unread update",
+  "sidepanel.sessions.running": "Running",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty":

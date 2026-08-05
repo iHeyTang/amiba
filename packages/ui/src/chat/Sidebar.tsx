@@ -78,6 +78,7 @@ export interface SidebarProps {
   onNewChat: () => void;
   extensionItems?: MainContribution[];
   sessions: SessionMeta[];
+  runningSessionIds?: ReadonlySet<string>;
   activeSessionId: string;
   sessionsReady: boolean;
   onOpenSession: (id: string) => void;
@@ -102,6 +103,7 @@ export function Sidebar({
   onNewChat,
   extensionItems,
   sessions,
+  runningSessionIds,
   activeSessionId,
   sessionsReady,
   onOpenSession,
@@ -256,6 +258,7 @@ export function Sidebar({
         </div>
         <SessionsListView
           sessions={historySessions}
+          runningSessionIds={runningSessionIds}
           activeId={activeSessionId}
           ready={
             sessionsReady &&

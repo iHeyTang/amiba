@@ -215,6 +215,9 @@ function FullScreenChatViewInner({
   const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
     DEFAULT_HISTORY_LAYOUT,
   );
+  const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
 
@@ -222,20 +225,44 @@ function FullScreenChatViewInner({
   // user is looking at Automation, Tasks, or an extension-contributed view.
   // A visible chat is read in place; background completions and failures are
   // persisted in Amiba's local session sidecar. User-initiated aborts are not.
-  useEffect(
-    () =>
-      client.onStreamEvent((sessionId, event) => {
-        const visibleSessionId =
-          sidebarView === "chats" ? sessions.activeId : "";
-        if (
-          sessionId !== visibleSessionId &&
-          (event.kind === "done" || event.kind === "error")
-        ) {
-          void sessions.markUnread(sessionId);
-        }
-      }),
-    [client, sessions.activeId, sessions.markUnread, sidebarView],
-  );
+  useEffect(() => {
+    const setSessionRunning = (sessionId: string, running: boolean) => {
+      setRunningSessionIds((current) => {
+        if (current.has(sessionId) === running) return current;
+        const next = new Set(current);
+        if (running) next.add(sessionId);
+        else next.delete(sessionId);
+        return next;
+      });
+    };
+
+    const unsubscribeSnapshots = client.onSnapshot((frame) => {
+      setSessionRunning(frame.sessionId, frame.kind === "live");
+    });
+    const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
+      if (event.kind === "begin") {
+        setSessionRunning(sessionId, true);
+      } else if (
+        event.kind === "done" ||
+        event.kind === "error" ||
+        event.kind === "aborted"
+      ) {
+        setSessionRunning(sessionId, false);
+      }
+      const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
+      if (
+        sessionId !== visibleSessionId &&
+        (event.kind === "done" || event.kind === "error")
+      ) {
+        void sessions.markUnread(sessionId);
+      }
+    });
+
+    return () => {
+      unsubscribeSnapshots();
+      unsubscribeEvents();
+    };
+  }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
 
   // Chats data: drop archived rows AND any cron-emitted session. We also
   // filter by id prefix even though core's loadIndex already passes
@@ -503,6 +530,7 @@ function FullScreenChatViewInner({
               onNewChat={() => void onNewChatAndShow()}
               extensionItems={extensionMains}
               sessions={chatSessions}
+              runningSessionIds={runningSessionIds}
               activeSessionId={sessions.activeId}
               sessionsReady={sessions.ready}
               onOpenSession={(id) => void onOpenSession(id)}

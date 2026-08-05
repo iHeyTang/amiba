@@ -27,6 +27,7 @@ const HISTORY_PAGE_SIZE = 20;
 
 export interface SessionsListViewProps {
   sessions: SessionMeta[];
+  runningSessionIds?: ReadonlySet<string>;
   activeId: string;
   ready: boolean;
   query: string;
@@ -79,6 +80,7 @@ export interface SessionsListViewProps {
 
 export function SessionsListView({
   sessions,
+  runningSessionIds,
   activeId,
   ready,
   query,
@@ -272,6 +274,7 @@ export function SessionsListView({
                   <SessionRow
                     key={s.id}
                     session={s}
+                    running={runningSessionIds?.has(s.id) ?? false}
                     active={s.id === activeId}
                     onOpen={() => onOpen(s.id)}
                     onRename={(title) => onRename(s.id, title)}
@@ -320,6 +323,7 @@ export function SessionsListView({
 
 interface SessionRowProps {
   session: SessionMeta;
+  running: boolean;
   active: boolean;
   onOpen: () => void;
   onRename: (title: string) => void;
@@ -331,6 +335,7 @@ interface SessionRowProps {
 
 function SessionRow({
   session,
+  running,
   active,
   onOpen,
   onRename,
@@ -364,6 +369,23 @@ function SessionRow({
     }
   }
 
+  const statusLabel = running
+    ? t("sidepanel.sessions.running")
+    : session.unread
+      ? t("sidepanel.sessions.unread")
+      : null;
+  const statusGlyph = running ? (
+    <span
+      aria-hidden
+      className="h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--status-session))] shadow-[0_0_6px_hsl(var(--status-session))] motion-reduce:animate-none"
+    />
+  ) : session.unread ? (
+    <span
+      aria-hidden
+      className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]"
+    />
+  ) : null;
+
   if (editing) {
     return (
       <div
@@ -394,15 +416,14 @@ function SessionRow({
           : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
       )}
     >
-      {session.unread ? (
+      {nested && statusLabel ? (
         <span
-          aria-label={t("sidepanel.sessions.unread")}
-          title={t("sidepanel.sessions.unread")}
-          className={cn(
-            "pointer-events-none absolute top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--status-unread))]",
-            nested ? "left-[13px]" : "left-0",
-          )}
-        />
+          aria-label={statusLabel}
+          title={statusLabel}
+          className="pointer-events-none absolute left-2 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
+        >
+          {statusGlyph}
+        </span>
       ) : null}
       <button
         type="button"
@@ -412,7 +433,15 @@ function SessionRow({
           nested ? "pl-8" : "pl-2",
         )}
       >
-        {icon ? (
+        {!nested && statusLabel ? (
+          <span
+            aria-label={statusLabel}
+            title={statusLabel}
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+          >
+            {statusGlyph}
+          </span>
+        ) : icon ? (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">
             {icon}
           </span>
