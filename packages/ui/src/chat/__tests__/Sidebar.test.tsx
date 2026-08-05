@@ -169,8 +169,7 @@ describe("Sidebar", () => {
     expect(running).toHaveClass("left-2", "h-4", "w-4");
     expect(running.firstElementChild).toHaveClass("h-1.5", "w-1.5");
     expect(running.firstElementChild?.firstElementChild).toHaveClass(
-      "animate-pulse",
-      "opacity-25",
+      "amiba-session-status-breathe",
       "duration-200",
     );
     expect(running.firstElementChild?.lastElementChild).toHaveClass(

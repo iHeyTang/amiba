@@ -379,7 +379,7 @@ function SessionRow({
       <span
         className={cn(
           "absolute -inset-0.5 rounded-full bg-[hsl(var(--status-session))] transition-opacity duration-200 ease-out motion-reduce:animate-none",
-          running ? "animate-pulse opacity-25" : "opacity-0",
+          running ? "amiba-session-status-breathe" : "opacity-0",
         )}
       />
       <span className="relative block h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]" />

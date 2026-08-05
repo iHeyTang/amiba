@@ -396,6 +396,28 @@
 }
 
 /*
+ * Sidebar session activity is deliberately slower and quieter than the
+ * in-message thinking indicator. The solid 6px core stays still; only its
+ * low-opacity halo breathes, so the row reads as active without flickering.
+ */
+@keyframes amiba-session-status-breathe {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+}
+
+.amiba-session-status-breathe {
+  animation: amiba-session-status-breathe 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/*
  * Breathing animation for Streamdown's trailing caret (rendered as the ::after
  * pseudo of the last block via `content: var(--streamdown-caret)`). The
  * caret only has visible content while `isAnimating` is true, so this rule
@@ -419,6 +441,7 @@
 @media (prefers-reduced-motion: reduce) {
   .hermes-thinking-dot,
   .hermes-thinking-text,
+  .amiba-session-status-breathe,
   .chat-md > *:last-child::after {
     animation: none;
   }
