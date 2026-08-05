@@ -1408,6 +1408,7 @@ export const en = {
   "sidepanel.sessions.layout.grouped": "Group chats by workspace",
   "sidepanel.nav.section.workspace": "Workspace",
   "sidepanel.sessions.showMore": "Show more",
+  "sidepanel.sessions.unread": "Unread update",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty":

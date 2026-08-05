@@ -1334,6 +1334,7 @@ export const zhCN: Messages = {
   "sidepanel.sessions.layout.grouped": "按工作目录分组",
   "sidepanel.nav.section.workspace": "工作区",
   "sidepanel.sessions.showMore": "显示更多",
+  "sidepanel.sessions.unread": "有未读更新",
   "sidepanel.sessions.activityBar.aria": "侧边栏视图",
   "sidepanel.sessions.scheduled.loading": "加载中…",
   "sidepanel.sessions.scheduled.empty": "暂无定时任务。在聊天中创建一个试试。",

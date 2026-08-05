@@ -405,6 +405,7 @@ export class SessionsStore {
       this.commit({ activeId: "", activeMessages: [] });
       return;
     }
+    await this.markRead(id);
     if (id === this.state.activeId) return;
     await this.flushActiveBeforeSwitch();
     const token = ++this.switchToken;
@@ -648,6 +649,33 @@ export class SessionsStore {
       titleManual: true,
       updatedAt: Date.now(),
     };
+    this.commit({ sessions: next });
+    await this.persistIndex(next);
+  };
+
+  // -------------------------------------------------------------------------
+  // Action: local unread state
+  // -------------------------------------------------------------------------
+
+  markUnread = async (id: string): Promise<void> => {
+    if (!this.state.ready) await this.initialize();
+    // A completion visible in the current conversation has already been read.
+    if (!id || id === this.state.activeId) return;
+    const idx = this.state.sessions.findIndex((session) => session.id === id);
+    if (idx < 0 || this.state.sessions[idx].unread) return;
+    const next = this.state.sessions.slice();
+    next[idx] = { ...next[idx], unread: true };
+    this.commit({ sessions: next });
+    await this.persistIndex(next);
+  };
+
+  markRead = async (id: string): Promise<void> => {
+    if (!this.state.ready) await this.initialize();
+    if (!id) return;
+    const idx = this.state.sessions.findIndex((session) => session.id === id);
+    if (idx < 0 || !this.state.sessions[idx].unread) return;
+    const next = this.state.sessions.slice();
+    next[idx] = { ...next[idx], unread: undefined };
     this.commit({ sessions: next });
     await this.persistIndex(next);
   };

@@ -123,6 +123,12 @@ export interface SessionsController {
 
   rename: (id: string, title: string) => Promise<void>;
 
+  /** Mark a background session as having an update the user has not opened. */
+  markUnread: (id: string) => Promise<void>;
+
+  /** Clear the local unread marker. Opening a session calls this automatically. */
+  markRead: (id: string) => Promise<void>;
+
   /** Permanent delete from History + open tabs, drops messages file. */
   remove: (id: string) => Promise<void>;
 

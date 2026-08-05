@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   storageSet: vi.fn(),
   storageWatch: vi.fn(() => () => {}),
   paletteSetOpen: vi.fn(),
+  streamListener: null as
+    | ((sessionId: string, event: { kind: string }) => void)
+    | null,
 }))
 
 vi.mock("@amiba/core", () => ({
@@ -97,14 +100,27 @@ function makeSessions() {
     createNew: vi.fn(async () => "new-session"),
     openTab: vi.fn(async () => {}),
     rename: vi.fn(async () => {}),
+    markUnread: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
+  }
+}
+
+function makeClient() {
+  return {
+    onStreamEvent: vi.fn((listener) => {
+      mocks.streamListener = listener
+      return () => {
+        if (mocks.streamListener === listener) mocks.streamListener = null
+      }
+    }),
   }
 }
 
 describe("FullScreenChatView new-chat home", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.streamListener = null
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") {
         return { [key]: "scheduled" }
@@ -120,7 +136,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
       />,
@@ -141,7 +157,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     const { container } = render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
@@ -159,7 +175,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
@@ -177,7 +193,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
       />,
@@ -194,7 +210,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         capabilities={{ workspaceInspector: { files: {} } } as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
@@ -224,7 +240,7 @@ describe("FullScreenChatView new-chat home", () => {
 
     render(
       <FullScreenChatView
-        client={{} as never}
+        client={makeClient() as never}
         openSettings={() => {}}
         openAgentDestination={() => {}}
       />,
@@ -248,5 +264,25 @@ describe("FullScreenChatView new-chat home", () => {
     expect(mocks.storageSet).toHaveBeenCalledWith({
       "settings.chat.sidebarCollapsed": false,
     })
+  })
+
+  it("marks a completion unread while another app view is visible", async () => {
+    const sessions = makeSessions()
+    mocks.useSessions.mockReturnValue(sessions)
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+      />,
+    )
+
+    await screen.findByText("scheduled-page")
+    mocks.streamListener?.("session-1", { kind: "done" })
+    expect(sessions.markUnread).toHaveBeenCalledWith("session-1")
+
+    mocks.streamListener?.("session-1", { kind: "aborted" })
+    expect(sessions.markUnread).toHaveBeenCalledTimes(1)
   })
 })

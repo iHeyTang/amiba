@@ -11,7 +11,8 @@
  *   - ``sessions.activeId``      — which open tab is currently shown
  *   - ``sessions.openTabIds``    — ordered list of tabs in the panel header
  *   - ``sessions.local-meta``    — per-session UI-only flags
- *                                  (``pinned`` / ``archived`` / ``titleManual``)
+ *                                  (``pinned`` / ``archived`` / ``unread`` /
+ *                                  ``titleManual``)
  *
  * What goes to Hermes:
  *   - the session row itself (``id``, ``title``, ``started_at``,
@@ -104,11 +105,11 @@ const _ensuredSessions = new Set<string>();
 /** Snapshot of the last sessions array we saw, keyed by id. */
 let _lastSavedIndex: Map<string, SessionMeta> | null = null;
 
-/** Snapshot of the last local-meta map (pinned/archived/titleManual). */
+/** Snapshot of the last local-meta map (pinned/archived/unread/titleManual). */
 let _lastSavedLocalMeta: Record<string, SessionLocalMeta> = {};
 
 // ---------------------------------------------------------------------------
-// Local sidecar (pinned / archived / titleManual)
+// Local sidecar (pinned / archived / unread / titleManual)
 // ---------------------------------------------------------------------------
 
 async function readLocalMeta(): Promise<Record<string, SessionLocalMeta>> {
@@ -130,6 +131,7 @@ function pickLocalFields(s: SessionMeta): SessionLocalMeta {
   const out: SessionLocalMeta = {};
   if (s.pinned) out.pinned = true;
   if (s.archived) out.archived = true;
+  if (s.unread) out.unread = true;
   if (s.titleManual) out.titleManual = true;
   if (s.agent) out.agent = normalizeAgentContext(s.agent);
   return out;
@@ -139,6 +141,7 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
   return (
     Boolean(a.pinned) === Boolean(b.pinned) &&
     Boolean(a.archived) === Boolean(b.archived) &&
+    Boolean(a.unread) === Boolean(b.unread) &&
     Boolean(a.titleManual) === Boolean(b.titleManual) &&
     JSON.stringify(a.agent ?? null) === JSON.stringify(b.agent ?? null)
   );
@@ -167,6 +170,7 @@ function hermesSessionToMeta(
     preview: s.preview ?? undefined,
     pinned: local?.pinned,
     archived: local?.archived,
+    unread: local?.unread,
     titleManual: local?.titleManual,
     source: s.source,
     agent: {
@@ -466,6 +470,7 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       if (
         !desired.pinned &&
         !desired.archived &&
+        !desired.unread &&
         !desired.titleManual &&
         !desired.agent
       ) {

@@ -18,6 +18,8 @@ export interface SessionMeta {
   updatedAt: number
   pinned?: boolean
   archived?: boolean
+  /** Local viewer state; never written into Hermes SessionDB. */
+  unread?: boolean
   /** Cached count so the sidebar doesn't have to load history just to count. */
   messageCount?: number
   /**
@@ -53,6 +55,7 @@ export type SessionMessage = ChatMessage
 export interface SessionLocalMeta {
   pinned?: boolean
   archived?: boolean
+  unread?: boolean
   titleManual?: boolean
   agent?: AgentExecutionContext
 }
@@ -81,5 +84,5 @@ export const SESSION_KEYS = {
   migratedToHermes: "sessions.migrated.hermes"
 } as const
 
-/** Storage key for the local-only UI-meta sidecar (pinned / archived / titleManual). */
+/** Storage key for local-only UI metadata (pinned / archived / unread / titleManual). */
 export const LOCAL_META_KEY = "sessions.local-meta" as const

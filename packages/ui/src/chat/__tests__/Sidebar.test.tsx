@@ -108,6 +108,26 @@ describe("Sidebar", () => {
     expect(props.onOpenSession).toHaveBeenCalledWith("s1");
   });
 
+  it("renders a quiet status dot for unread session updates", () => {
+    setup({
+      sessions: [
+        {
+          id: "s1",
+          title: "First chat",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 1,
+          unread: true,
+        },
+      ],
+    });
+
+    expect(screen.getByLabelText("Unread update")).toHaveClass(
+      "rounded-full",
+      "bg-primary",
+    );
+  });
+
   it("keeps chats and scheduled runs together in the timeline layout", async () => {
     const props = setup({
       scheduledSessions: [

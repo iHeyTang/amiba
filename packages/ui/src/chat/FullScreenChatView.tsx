@@ -218,6 +218,25 @@ function FullScreenChatViewInner({
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
 
+  // Keep unread tracking above ChatSurface so it remains active while the
+  // user is looking at Automation, Tasks, or an extension-contributed view.
+  // A visible chat is read in place; background completions and failures are
+  // persisted in Amiba's local session sidecar. User-initiated aborts are not.
+  useEffect(
+    () =>
+      client.onStreamEvent((sessionId, event) => {
+        const visibleSessionId =
+          sidebarView === "chats" ? sessions.activeId : "";
+        if (
+          sessionId !== visibleSessionId &&
+          (event.kind === "done" || event.kind === "error")
+        ) {
+          void sessions.markUnread(sessionId);
+        }
+      }),
+    [client, sessions.activeId, sessions.markUnread, sidebarView],
+  );
+
   // Chats data: drop archived rows AND any cron-emitted session. We also
   // filter by id prefix even though core's loadIndex already passes
   // ``excludeSources: ["cron"]``: rows with an empty/missing ``source`` field

@@ -143,6 +143,8 @@ export function useSessions(): SessionsController {
     setAgentContext: store.setAgentContext,
     importSession: store.importSession,
     rename: store.rename,
+    markUnread: store.markUnread,
+    markRead: store.markRead,
     remove: store.remove,
     clearActiveMessages: store.clearActiveMessages,
     touchSession: store.touchSession,
