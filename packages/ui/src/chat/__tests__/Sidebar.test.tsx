@@ -131,11 +131,11 @@ describe("Sidebar", () => {
     const unread = screen.getByLabelText("Unread update");
     expect(unread).toHaveClass("left-2", "h-4", "w-4");
     expect(unread.firstElementChild).toHaveClass(
+      "amiba-session-status-dot",
       "h-1.5",
       "w-1.5",
-      "opacity-100",
-      "duration-300",
     );
+    expect(unread.firstElementChild).not.toHaveClass("duration-300");
     expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
     expect(unread.nextElementSibling).toHaveTextContent("First chat");
   });
@@ -165,11 +165,12 @@ describe("Sidebar", () => {
     expect(screen.queryByLabelText("Unread update")).not.toBeInTheDocument();
     expect(running).toHaveClass("left-2", "h-4", "w-4");
     expect(running.firstElementChild).toHaveClass(
+      "amiba-session-status-dot",
       "h-1.5",
       "w-1.5",
       "amiba-session-status-breathe",
-      "duration-300",
     );
+    expect(running.firstElementChild).not.toHaveClass("duration-300");
   });
 
   it("keeps chats and scheduled runs together in the timeline layout", async () => {

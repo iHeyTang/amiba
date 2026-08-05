@@ -410,6 +410,11 @@
   }
 }
 
+.amiba-session-status-dot {
+  opacity: 1;
+  transition: opacity 300ms ease-out;
+}
+
 .amiba-session-status-breathe {
   animation: amiba-session-status-breathe 3.8s ease-in-out infinite;
   will-change: opacity;
