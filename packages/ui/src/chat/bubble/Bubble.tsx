@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Folder,
   Globe,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -71,14 +70,12 @@ export function Bubble({
   const { t } = useT();
 
   if (m.role === "user") {
-    const { body: bodyText, workspacePath: embeddedWorkspacePath } =
-      splitWorkspaceFromBody(bubbleTextContent(m.content));
-    const workspacePath = m.workspacePath?.trim() || embeddedWorkspacePath;
-    const normalizedWorkspacePath = workspacePath.replace(/[\\/]+$/, "");
-    const workspaceName =
-      normalizedWorkspacePath.split(/[\\/]/).filter(Boolean).at(-1) ||
-      normalizedWorkspacePath ||
-      workspacePath;
+    // Workspace remains session-level execution context and sidebar grouping.
+    // Strip its internal prompt block from persisted messages, but don't echo
+    // the same immutable directory on every user bubble.
+    const { body: bodyText } = splitWorkspaceFromBody(
+      bubbleTextContent(m.content),
+    );
     const pageBadges =
       m.pageBadges && m.pageBadges.length > 0
         ? m.pageBadges
@@ -86,8 +83,7 @@ export function Bubble({
           ? [m.pageBadge]
           : [];
     const fileBadges = m.attachmentBadges ?? [];
-    const hasReferences =
-      Boolean(workspacePath) || pageBadges.length > 0 || fileBadges.length > 0;
+    const hasReferences = pageBadges.length > 0 || fileBadges.length > 0;
     const hasContent = bodyText.length > 0;
     return (
       <div
@@ -101,19 +97,6 @@ export function Bubble({
               hasContent && "mb-2",
             )}
           >
-            {workspacePath && (
-              <div
-                data-workspace-badge
-                aria-label={`${t("workspace.context")}: ${workspaceName}`}
-                title={workspacePath}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] text-muted-foreground"
-              >
-                <Folder className="h-2.5 w-2.5 shrink-0" aria-hidden />
-                <span className="truncate font-medium text-foreground/75">
-                  {workspaceName}
-                </span>
-              </div>
-            )}
             {fileBadges.map((b) => (
               <AttachmentBadgeView key={b.uiId} badge={b} />
             ))}

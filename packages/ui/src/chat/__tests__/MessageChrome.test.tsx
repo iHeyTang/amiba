@@ -160,7 +160,7 @@ describe("chat message chrome", () => {
     );
   });
 
-  it("renders an injected workspace as a compact context badge", () => {
+  it("strips injected workspace context without repeating it on the bubble", () => {
     const { container } = render(
       <Bubble
         m={
@@ -178,9 +178,8 @@ describe("chat message chrome", () => {
       />,
     );
 
-    const badge = container.querySelector("[data-workspace-badge]");
-    expect(badge).toHaveTextContent("HeyClaw");
-    expect(badge).toHaveAttribute("title", "/Users/dev/HeyClaw");
+    expect(container.querySelector("[data-workspace-badge]")).toBeNull();
+    expect(screen.queryByText("HeyClaw")).not.toBeInTheDocument();
     expect(screen.getByText("这是什么")).toBeInTheDocument();
     expect(screen.queryByText("<workspace>")).not.toBeInTheDocument();
     expect(screen.queryByText(/Bound directory:/)).not.toBeInTheDocument();
@@ -189,7 +188,7 @@ describe("chat message chrome", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows workspace metadata on a fresh local user turn", () => {
+  it("keeps fresh workspace metadata out of user-message chrome", () => {
     const { container } = render(
       <Bubble
         m={
@@ -203,9 +202,8 @@ describe("chat message chrome", () => {
       />,
     );
 
-    expect(container.querySelector("[data-workspace-badge]")).toHaveTextContent(
-      "hermes-x",
-    );
+    expect(container.querySelector("[data-workspace-badge]")).toBeNull();
+    expect(screen.queryByText("hermes-x")).not.toBeInTheDocument();
     expect(screen.getByText("Inspect the project")).toBeInTheDocument();
   });
 
