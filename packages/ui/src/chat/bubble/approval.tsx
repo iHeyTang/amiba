@@ -153,7 +153,7 @@ export function ApprovalBanner({
             <section
               key={req.approvalId}
               aria-label={t("sidepanel.permission.approvalNeeded")}
-              className="relative px-4 pb-3.5 pt-2.5">
+              className="relative px-4 pb-2 pt-2.5">
               <div className="flex items-start gap-2">
                 <ApprovalCountdownBar
                   requestedAt={requestedAt}
@@ -181,7 +181,7 @@ export function ApprovalBanner({
                 </pre>
               )}
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div data-approval-actions className="mt-2 flex flex-wrap items-center gap-2">
                 {decisions.map((d) => {
                   const isPending = pending === d.value
                   const anyPending = pending != null

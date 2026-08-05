@@ -59,6 +59,10 @@ describe("ApprovalBanner", () => {
       "h-4",
       "w-4"
     )
+    expect(container.querySelector("[data-approval-actions]")).toHaveClass("mt-2")
+    expect(
+      screen.getByRole("region", { name: "sidepanel.permission.approvalNeeded" })
+    ).toHaveClass("pb-2")
     expect(container.firstElementChild).toHaveClass("mx-4", "-mb-2.5", "z-0")
   })
 })
