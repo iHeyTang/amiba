@@ -7,7 +7,7 @@ import {
 } from "@amiba/core"
 import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
-import { CircleAlert, Loader2, ShieldAlert, X } from "lucide-react"
+import { Loader2, ShieldAlert, X } from "lucide-react"
 import { useEffect, useState } from "react"
 
 interface ApprovalDecisionMeta {
@@ -150,18 +150,23 @@ export function ApprovalBanner({
           const requestedAt =
             typeof tsField === "number" ? tsField * 1000 : Date.now()
           return (
-            <section key={req.approvalId} className="relative px-4 pb-3.5 pt-2.5">
-              <div className="flex items-center gap-2">
+            <section
+              key={req.approvalId}
+              aria-label={t("sidepanel.permission.approvalNeeded")}
+              className="relative px-4 pb-3.5 pt-2.5">
+              <div className="flex items-start gap-2">
                 <ApprovalCountdownBar
                   requestedAt={requestedAt}
                   timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
                 />
-                <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <h3 className="text-[11px] font-medium text-muted-foreground">
-                    {t("sidepanel.permission.approvalNeeded")}
-                  </h3>
+                <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                  <p
+                    title={description !== rawDescription ? rawDescription : undefined}
+                    className="min-w-0 flex-1 break-words text-[11px] leading-relaxed text-foreground/70">
+                    {description || t("sidepanel.permission.approvalNeeded")}
+                  </p>
                   {req.tool && (
-                    <span className="truncate font-mono text-[10px] text-muted-foreground/75">
+                    <span className="shrink-0 truncate font-mono text-[10px] leading-relaxed text-muted-foreground/65">
                       {req.tool}
                     </span>
                   )}
@@ -176,19 +181,7 @@ export function ApprovalBanner({
                 </pre>
               )}
 
-              {description && (
-                <div
-                  title={description !== rawDescription ? rawDescription : undefined}
-                  className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  <CircleAlert
-                    className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/70"
-                    aria-hidden
-                  />
-                  <p className="min-w-0 break-words">{description}</p>
-                </div>
-              )}
-
-              <div className="mt-3.5 flex flex-wrap items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 {decisions.map((d) => {
                   const isPending = pending === d.value
                   const anyPending = pending != null
@@ -216,7 +209,6 @@ export function ApprovalBanner({
                   )
                 })}
               </div>
-
             </section>
           )
         })}

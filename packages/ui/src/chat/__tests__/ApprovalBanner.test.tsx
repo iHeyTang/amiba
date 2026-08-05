@@ -40,12 +40,14 @@ describe("ApprovalBanner", () => {
     expect(screen.getByRole("button", { name: "sidepanel.permission.deny" })).toHaveClass(
       "text-destructive/85"
     )
-    const status = screen.getByText("sidepanel.permission.approvalNeeded")
-    expect(status).toHaveClass("text-[11px]", "font-medium", "text-muted-foreground")
-    expect(status).not.toHaveClass("font-semibold")
     expect(
-      screen.getByText("sidepanel.permission.reason.unverifiedEmbeddedScript")
+      screen.getByRole("region", { name: "sidepanel.permission.approvalNeeded" })
     ).toBeInTheDocument()
+    expect(screen.queryByText("sidepanel.permission.approvalNeeded")).not.toBeInTheDocument()
+    const explanation = screen.getByText(
+      "sidepanel.permission.reason.unverifiedEmbeddedScript"
+    )
+    expect(explanation).toHaveClass("text-[11px]", "text-foreground/70")
     expect(
       screen.getByTitle("command parser limit or malformed executable payload")
     ).toBeInTheDocument()
