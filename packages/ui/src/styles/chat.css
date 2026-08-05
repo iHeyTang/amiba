@@ -397,24 +397,22 @@
 
 /*
  * Sidebar session activity is deliberately slower and quieter than the
- * in-message thinking indicator. The solid 6px core stays still; only its
- * low-opacity halo breathes, so the row reads as active without flickering.
+ * in-message thinking indicator. A single 6px dot changes brightness only;
+ * there is no scaling or separate halo to create subpixel shimmer.
  */
 @keyframes amiba-session-status-breathe {
   0%,
   100% {
-    opacity: 0.12;
-    transform: scale(0.9);
+    opacity: 0.55;
   }
   50% {
-    opacity: 0.28;
-    transform: scale(1);
+    opacity: 0.95;
   }
 }
 
 .amiba-session-status-breathe {
-  animation: amiba-session-status-breathe 3.2s ease-in-out infinite;
-  transform-origin: center;
+  animation: amiba-session-status-breathe 3.8s ease-in-out infinite;
+  will-change: opacity;
 }
 
 /*

@@ -336,6 +336,9 @@ describe("FullScreenChatView new-chat home", () => {
         kind: "interrupted",
       }),
     )
+    expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+
+    act(() => mocks.streamListener?.("session-1", { kind: "error" }))
     expect(mocks.sidebarRunningSessionIds).toEqual([])
   })
 })

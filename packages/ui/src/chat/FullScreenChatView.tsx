@@ -237,7 +237,10 @@ function FullScreenChatViewInner({
     };
 
     const unsubscribeSnapshots = client.onSnapshot((frame) => {
-      setSessionRunning(frame.sessionId, frame.kind === "live");
+      // A live snapshot recovers a run after the window or tab remounts.
+      // Terminal snapshots may be responses to older requests, so stream
+      // events remain authoritative for stopping an already-observed run.
+      if (frame.kind === "live") setSessionRunning(frame.sessionId, true);
     });
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
       const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
