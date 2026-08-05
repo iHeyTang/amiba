@@ -134,6 +134,7 @@ describe("Sidebar", () => {
       "amiba-session-status-dot",
       "h-1.5",
       "w-1.5",
+      "bg-[hsl(var(--status-session))]",
     );
     expect(unread.firstElementChild).not.toHaveClass("duration-300");
     expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
@@ -169,6 +170,10 @@ describe("Sidebar", () => {
       "h-1.5",
       "w-1.5",
       "amiba-session-status-breathe",
+      "bg-muted-foreground/80",
+    );
+    expect(running.firstElementChild).not.toHaveClass(
+      "bg-[hsl(var(--status-session))]",
     );
     expect(running.firstElementChild).not.toHaveClass("duration-300");
   });

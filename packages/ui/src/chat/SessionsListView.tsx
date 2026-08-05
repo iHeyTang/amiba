@@ -378,8 +378,10 @@ function SessionRow({
     <span
       aria-hidden
       className={cn(
-        "amiba-session-status-dot block h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]",
-        running && "amiba-session-status-breathe",
+        "amiba-session-status-dot block h-1.5 w-1.5 rounded-full",
+        running
+          ? "amiba-session-status-breathe bg-muted-foreground/80"
+          : "bg-[hsl(var(--status-session))]",
       )}
     />
   ) : null;
