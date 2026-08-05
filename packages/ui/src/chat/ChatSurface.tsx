@@ -1725,8 +1725,6 @@ export default function ChatSurface({
         !attachmentUploading &&
         !attachmentBusy
       }
-      flatTop={pendingApprovals.length > 0}
-      frameClassName={pendingApprovals.length > 0 ? "shadow-none" : undefined}
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
@@ -2125,8 +2123,6 @@ export default function ChatSurface({
           <div
             className={cn(
               "relative flex w-full flex-col",
-              pendingApprovals.length > 0 &&
-                "rounded-2xl shadow-[0_-12px_30px_-18px_rgb(0_0_0_/_0.12),0_8px_24px_-18px_rgb(0_0_0_/_0.17)] dark:shadow-[0_-14px_36px_-18px_rgb(0_0_0_/_0.48),0_8px_24px_-18px_rgb(0_0_0_/_0.48)]",
               att.dragOver && "rounded-lg ring-2 ring-primary/30",
             )}
           >

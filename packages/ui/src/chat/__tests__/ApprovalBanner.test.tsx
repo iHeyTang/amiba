@@ -9,7 +9,7 @@ import { ApprovalBanner } from "../bubble/approval"
 
 describe("ApprovalBanner", () => {
   it("keeps every allow scope at the same visual priority", () => {
-    render(
+    const { container } = render(
       <ApprovalBanner
         approvals={[
           {
@@ -35,10 +35,11 @@ describe("ApprovalBanner", () => {
     ]
 
     expect(new Set(allowButtons.map((button) => button.className)).size).toBe(1)
-    expect(allowButtons[0]).toHaveClass("bg-muted/65")
+    expect(allowButtons[0]).toHaveClass("bg-background/65")
     expect(allowButtons[0]).not.toHaveClass("bg-foreground")
     expect(screen.getByRole("button", { name: "sidepanel.permission.deny" })).toHaveClass(
       "text-destructive/85"
     )
+    expect(container.firstElementChild).toHaveClass("mx-4", "-mb-2.5", "z-0")
   })
 })

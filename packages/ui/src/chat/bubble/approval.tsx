@@ -115,7 +115,7 @@ export function ApprovalBanner({
   const { t } = useT()
   const decisions = approvalDecisions(t)
   return (
-    <div className="relative z-[1] overflow-hidden rounded-t-2xl border border-b-0 border-border/30 bg-background/95 backdrop-blur-xl">
+    <div className="relative z-0 mx-4 -mb-2.5 overflow-hidden rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 pb-2.5 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] backdrop-blur-xl dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
       {error && (
         <div className="mx-4 mt-3 flex items-start justify-between gap-2 rounded-lg bg-destructive/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-destructive">
           <span className="min-w-0 flex-1 break-words">{error}</span>
@@ -140,9 +140,10 @@ export function ApprovalBanner({
           return (
             <section key={req.approvalId} className="relative px-4 pb-4 pt-3.5">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
-                  <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-                </span>
+                <ApprovalCountdownBar
+                  requestedAt={requestedAt}
+                  timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
+                />
                 <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
                   <h3 className="text-xs font-semibold text-foreground">
                     {t("sidepanel.permission.approvalNeeded")}
@@ -158,7 +159,7 @@ export function ApprovalBanner({
               {command && (
                 <pre
                   data-selection="text"
-                  className="mt-2.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/45 bg-muted/45 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
+                  className="mt-2.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
                   {command}
                 </pre>
               )}
@@ -187,7 +188,7 @@ export function ApprovalBanner({
                       className={cn(
                         "inline-flex h-8 select-none items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium transition-[background-color,color,opacity] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
                         d.variant === "neutral" &&
-                          "bg-muted/65 text-foreground/70 hover:bg-muted hover:text-foreground",
+                          "bg-background/65 text-foreground/70 hover:bg-background hover:text-foreground",
                         d.variant === "destructive" &&
                           "ml-auto text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
                         anyPending && "cursor-not-allowed opacity-50",
@@ -202,10 +203,6 @@ export function ApprovalBanner({
                 })}
               </div>
 
-              <ApprovalCountdownBar
-                requestedAt={requestedAt}
-                timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
-              />
             </section>
           )
         })}
@@ -215,8 +212,8 @@ export function ApprovalBanner({
 }
 
 /**
- * Thin progress bar pinned to the bottom border of an approval card. Width
- * animates from 100% to 0% across the gateway-side approval timeout.
+ * Compact radial countdown for an approval request. Keeping time attached to
+ * the approval icon avoids turning the card edge into a false divider.
  */
 export function ApprovalCountdownBar({
   requestedAt,
@@ -234,21 +231,41 @@ export function ApprovalCountdownBar({
   const remaining = Math.max(0, timeoutMs - elapsed)
   const percent = timeoutMs > 0 ? (remaining / timeoutMs) * 100 : 0
   const warning = remaining > 0 && remaining < 30_000
+  const circumference = 2 * Math.PI * 14
+  const dashOffset = circumference * (1 - percent / 100)
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute bottom-0 left-0 right-0 h-0.5 bg-muted/35">
-      <div
-        className={cn(
-          "h-full transition-[width] duration-500 ease-linear",
-          remaining === 0
-            ? "bg-destructive/50"
-            : warning
-              ? "bg-destructive/60"
-              : "bg-warning/55"
-        )}
-        style={{ width: `${percent}%` }}
-      />
+      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/60 text-warning">
+      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 32 32">
+        <circle
+          cx="16"
+          cy="16"
+          r="14"
+          fill="none"
+          strokeWidth="1.5"
+          className="stroke-border/70"
+        />
+        <circle
+          cx="16"
+          cy="16"
+          r="14"
+          fill="none"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          className={cn(
+            "transition-[stroke-dashoffset,stroke] duration-500 ease-linear",
+            remaining === 0
+              ? "stroke-destructive/55"
+              : warning
+                ? "stroke-destructive/65"
+                : "stroke-warning/70"
+          )}
+        />
+      </svg>
+      <ShieldAlert className="h-3.5 w-3.5" />
     </div>
   )
 }
