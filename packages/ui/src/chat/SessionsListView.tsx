@@ -374,16 +374,16 @@ function SessionRow({
     : session.unread
       ? t("sidepanel.sessions.unread")
       : null;
-  const statusGlyph = running ? (
-    <span
-      aria-hidden
-      className="h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--status-session))] shadow-[0_0_6px_hsl(var(--status-session))] motion-reduce:animate-none"
-    />
-  ) : session.unread ? (
-    <span
-      aria-hidden
-      className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]"
-    />
+  const statusGlyph = statusLabel ? (
+    <span aria-hidden className="relative h-1.5 w-1.5">
+      <span
+        className={cn(
+          "absolute -inset-0.5 rounded-full bg-[hsl(var(--status-session))] transition-opacity duration-200 ease-out motion-reduce:animate-none",
+          running ? "animate-pulse opacity-25" : "opacity-0",
+        )}
+      />
+      <span className="relative block h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]" />
+    </span>
   ) : null;
 
   if (editing) {

@@ -130,9 +130,14 @@ describe("Sidebar", () => {
 
     const unread = screen.getByLabelText("Unread update");
     expect(unread).toHaveClass("left-2", "h-4", "w-4");
-    expect(unread.firstElementChild).toHaveClass(
-      "rounded-full",
-      "bg-[hsl(var(--status-session))]",
+    expect(unread.firstElementChild).toHaveClass("h-1.5", "w-1.5");
+    expect(unread.firstElementChild?.firstElementChild).toHaveClass(
+      "opacity-0",
+      "duration-200",
+    );
+    expect(unread.firstElementChild?.lastElementChild).toHaveClass(
+      "h-1.5",
+      "w-1.5",
     );
     expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
     expect(unread.nextElementSibling).toHaveTextContent("First chat");
@@ -162,10 +167,15 @@ describe("Sidebar", () => {
     const running = screen.getByLabelText("Running");
     expect(screen.queryByLabelText("Unread update")).not.toBeInTheDocument();
     expect(running).toHaveClass("left-2", "h-4", "w-4");
-    expect(running.firstElementChild).toHaveClass(
+    expect(running.firstElementChild).toHaveClass("h-1.5", "w-1.5");
+    expect(running.firstElementChild?.firstElementChild).toHaveClass(
       "animate-pulse",
-      "rounded-full",
-      "bg-[hsl(var(--status-session))]",
+      "opacity-25",
+      "duration-200",
+    );
+    expect(running.firstElementChild?.lastElementChild).toHaveClass(
+      "h-1.5",
+      "w-1.5",
     );
   });
 

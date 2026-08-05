@@ -240,6 +240,11 @@ function FullScreenChatViewInner({
       setSessionRunning(frame.sessionId, frame.kind === "live");
     });
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
+      const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
+      const completedInBackground =
+        sessionId !== visibleSessionId &&
+        (event.kind === "done" || event.kind === "error");
+
       if (event.kind === "begin") {
         setSessionRunning(sessionId, true);
       } else if (
@@ -247,14 +252,11 @@ function FullScreenChatViewInner({
         event.kind === "error" ||
         event.kind === "aborted"
       ) {
+        // Mark the row unread before removing its running state. Both updates
+        // then land in the same render, so the status glyph stays mounted and
+        // can transition from a breathing halo to a quiet static dot.
+        if (completedInBackground) void sessions.markUnread(sessionId);
         setSessionRunning(sessionId, false);
-      }
-      const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
-      if (
-        sessionId !== visibleSessionId &&
-        (event.kind === "done" || event.kind === "error")
-      ) {
-        void sessions.markUnread(sessionId);
       }
     });
 
