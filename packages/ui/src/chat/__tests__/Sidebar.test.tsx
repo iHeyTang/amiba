@@ -109,7 +109,13 @@ describe("Sidebar", () => {
   });
 
   it("renders a quiet status dot for unread session updates", () => {
+    workspaceBindings.current = {
+      supported: true,
+      ready: true,
+      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+    };
     setup({
+      historyLayout: "grouped",
       sessions: [
         {
           id: "s1",
@@ -126,6 +132,7 @@ describe("Sidebar", () => {
     expect(unread).toHaveClass(
       "rounded-full",
       "bg-[hsl(var(--status-unread))]",
+      "left-[13px]",
     );
     expect(unread.nextElementSibling?.tagName).toBe("BUTTON");
     expect(unread.nextElementSibling).toHaveTextContent("First chat");

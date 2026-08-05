@@ -400,7 +400,7 @@ function SessionRow({
           title={t("sidepanel.sessions.unread")}
           className={cn(
             "pointer-events-none absolute top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[hsl(var(--status-unread))]",
-            nested ? "left-6" : "left-0",
+            nested ? "left-[13px]" : "left-0",
           )}
         />
       ) : null}
