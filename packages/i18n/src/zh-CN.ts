@@ -1187,6 +1187,10 @@ export const zhCN: Messages = {
   "sidepanel.permission.deny": "拒绝",
   "sidepanel.permission.deny.desc": "拒绝；代理会收到错误",
   "sidepanel.permission.approvalNeeded": "需要确认",
+  "sidepanel.permission.reason.unverifiedEmbeddedScript":
+    "此命令包含内嵌脚本，Hermes 无法完整验证其内容，请确认是否执行。",
+  "sidepanel.permission.reason.parserLimit":
+    "命令内容过于复杂，Hermes 无法完整验证，请确认是否执行。",
   "sidepanel.permission.allowedOnce": "已允许（仅一次）",
   "sidepanel.permission.allowedOnce.tooltip": "仅对此次执行授权",
   "sidepanel.permission.allowedSession": "本会话已允许",

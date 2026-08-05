@@ -46,6 +46,17 @@ function approvalDecisions(t: TranslateFn): ApprovalDecisionMeta[] {
   ]
 }
 
+function presentApprovalDescription(description: string, t: TranslateFn): string {
+  switch (description) {
+    case "command parser limit or malformed executable payload":
+      return t("sidepanel.permission.reason.unverifiedEmbeddedScript")
+    case "command parser limit exceeded":
+      return t("sidepanel.permission.reason.parserLimit")
+    default:
+      return description
+  }
+}
+
 interface ApprovalOutcomeMeta {
   label: string
   tooltip: string
@@ -132,20 +143,21 @@ export function ApprovalBanner({
         {approvals.map((req) => {
           const pending = inFlight[req.approvalId]
           const command = (req.command ?? "").trim()
-          const description = (req.description ?? req.reason ?? "").trim()
+          const rawDescription = (req.description ?? req.reason ?? "").trim()
+          const description = presentApprovalDescription(rawDescription, t)
           const tsField = (req.raw as Record<string, unknown> | undefined)
             ?.timestamp
           const requestedAt =
             typeof tsField === "number" ? tsField * 1000 : Date.now()
           return (
-            <section key={req.approvalId} className="relative px-4 pb-4 pt-3.5">
-              <div className="flex items-center gap-2.5">
+            <section key={req.approvalId} className="relative px-4 pb-3.5 pt-2.5">
+              <div className="flex items-center gap-2">
                 <ApprovalCountdownBar
                   requestedAt={requestedAt}
                   timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
                 />
                 <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <h3 className="text-xs font-semibold text-foreground">
+                  <h3 className="text-[11px] font-medium text-muted-foreground">
                     {t("sidepanel.permission.approvalNeeded")}
                   </h3>
                   {req.tool && (
@@ -159,13 +171,15 @@ export function ApprovalBanner({
               {command && (
                 <pre
                   data-selection="text"
-                  className="mt-2.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
+                  className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
                   {command}
                 </pre>
               )}
 
               {description && (
-                <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                <div
+                  title={description !== rawDescription ? rawDescription : undefined}
+                  className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
                   <CircleAlert
                     className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/70"
                     aria-hidden
@@ -231,27 +245,27 @@ export function ApprovalCountdownBar({
   const remaining = Math.max(0, timeoutMs - elapsed)
   const percent = timeoutMs > 0 ? (remaining / timeoutMs) * 100 : 0
   const warning = remaining > 0 && remaining < 30_000
-  const circumference = 2 * Math.PI * 14
+  const circumference = 2 * Math.PI * 10.5
   const dashOffset = circumference * (1 - percent / 100)
   return (
     <div
       aria-hidden
-      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background/60 text-warning">
-      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 32 32">
+      className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background/60 text-warning">
+      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 24 24">
         <circle
-          cx="16"
-          cy="16"
-          r="14"
+          cx="12"
+          cy="12"
+          r="10.5"
           fill="none"
-          strokeWidth="1.5"
+          strokeWidth="1.25"
           className="stroke-border/70"
         />
         <circle
-          cx="16"
-          cy="16"
-          r="14"
+          cx="12"
+          cy="12"
+          r="10.5"
           fill="none"
-          strokeWidth="1.5"
+          strokeWidth="1.25"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
@@ -265,7 +279,7 @@ export function ApprovalCountdownBar({
           )}
         />
       </svg>
-      <ShieldAlert className="h-3.5 w-3.5" />
+      <ShieldAlert className="h-3 w-3" />
     </div>
   )
 }

@@ -1250,6 +1250,10 @@ export const en = {
   "sidepanel.permission.deny": "Deny",
   "sidepanel.permission.deny.desc": "Refuse; the agent receives an error",
   "sidepanel.permission.approvalNeeded": "Approval needed",
+  "sidepanel.permission.reason.unverifiedEmbeddedScript":
+    "This command contains an embedded script that Hermes could not fully verify. Confirm before running it.",
+  "sidepanel.permission.reason.parserLimit":
+    "This command is too complex for Hermes to fully verify. Confirm before running it.",
   "sidepanel.permission.allowedOnce": "Allowed once",
   "sidepanel.permission.allowedOnce.tooltip":
     "Approved for this execution only",

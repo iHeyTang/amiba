@@ -17,7 +17,7 @@ describe("ApprovalBanner", () => {
             runId: "run-1",
             tool: "terminal",
             command: "python3 -c 'print(1)'",
-            description: "command parser limit",
+            description: "command parser limit or malformed executable payload",
             raw: { timestamp: Date.now() / 1000 }
           }
         ]}
@@ -40,6 +40,18 @@ describe("ApprovalBanner", () => {
     expect(screen.getByRole("button", { name: "sidepanel.permission.deny" })).toHaveClass(
       "text-destructive/85"
     )
+    const status = screen.getByText("sidepanel.permission.approvalNeeded")
+    expect(status).toHaveClass("text-[11px]", "font-medium", "text-muted-foreground")
+    expect(status).not.toHaveClass("font-semibold")
+    expect(
+      screen.getByText("sidepanel.permission.reason.unverifiedEmbeddedScript")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTitle("command parser limit or malformed executable payload")
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("command parser limit or malformed executable payload")
+    ).not.toBeInTheDocument()
     expect(container.firstElementChild).toHaveClass("mx-4", "-mb-2.5", "z-0")
   })
 })
