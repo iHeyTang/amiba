@@ -26,6 +26,18 @@ export const zhCN: Messages = {
   "common.retry": "重试",
   "common.all": "全部",
   "common.untitled": "未命名",
+  "common.builtin": "内置",
+
+  // 桌面悬浮通知
+  "notifier.dismiss": "关闭通知",
+  "notifier.cron.status": "自动化已完成",
+  "notifier.cron.fallbackTitle": "任务已完成",
+  "notifier.cron.open": "查看任务",
+  "notifier.chat.status": "对话已完成",
+  "notifier.chat.fallbackTitle": "Amiba 已完成本次任务",
+  "notifier.chat.fallbackSummary": "回复已准备好，可以回来查看。",
+  "notifier.chat.open": "查看对话",
+  "notifier.approval.status": "需要你的确认",
 
   // 会话轮次导航
   "conversationRail.label": "会话导航",
@@ -141,7 +153,7 @@ export const zhCN: Messages = {
   "options.agents.customEmptyTitle": "还没有独立智能体预设",
   "options.agents.customEmptyDescription":
     "助手一级入口管理默认配置；在这里新建需要独立行为、模型或技能组合的智能体。",
-  "options.agents.cloneDefault": "助手默认配置",
+  "options.agents.cloneDefault": "Amiba",
   "options.agents.empty": "暂无智能体预设",
   "options.agents.section.behavior": "行为与人设",
   "options.agents.section.models": "模型与服务",
@@ -176,8 +188,6 @@ export const zhCN: Messages = {
   "options.agents.personality.tonePlaceholder": "例如：冷静、直接",
   "options.agents.personality.style": "表达方式",
   "options.agents.personality.stylePlaceholder": "例如：先结论后依据",
-  "options.agents.personality.builtin": "内置",
-  "options.agents.personality.overridden": "已调整",
   "options.agents.personality.reset": "恢复内置",
   "options.agents.personality.duplicate": "复制",
   "options.agents.personality.deleteConfirm": "确定要{action}「{name}」吗？",
@@ -218,10 +228,10 @@ export const zhCN: Messages = {
   "options.skills.origin.agent": "智能体创建",
   "options.skills.origin.manual": "手动添加",
   "options.skills.origin.external": "外部目录",
-  "options.skills.origin.bundledHint": "随 Hermes Agent 提供",
-  "options.skills.origin.hubHint": "通过 Hermes 技能中心安装",
+  "options.skills.origin.bundledHint": "随 Amiba 提供",
+  "options.skills.origin.hubHint": "通过技能中心安装",
   "options.skills.origin.agentHint": "由智能体创建",
-  "options.skills.origin.manualHint": "手动放入 Hermes 技能目录",
+  "options.skills.origin.manualHint": "手动放入本地技能目录",
   "options.skills.origin.externalHint": "来自 config.yaml 的外部技能目录",
   "options.skills.files": "文件（{count}）",
   "options.skills.filesTruncated": "仅显示前 {count} 个",
@@ -234,20 +244,34 @@ export const zhCN: Messages = {
 
   // Task agent picker
   "sidepanel.agentPicker.label": "选择智能体",
-  "sidepanel.agentPicker.description": "选择负责这个任务的 Hermes Profile。",
+  "sidepanel.agentPicker.description": "选择负责这个任务的助手。",
   "sidepanel.agentPicker.search": "搜索智能体…",
   "sidepanel.agentPicker.empty": "没有匹配的智能体",
   "sidepanel.agentPicker.loadFailed": "无法加载智能体",
-  "sidepanel.agentPicker.locked": "智能体已绑定到当前任务；请新建任务后切换",
+  "sidepanel.agentPicker.profileLocked": "当前任务已固定",
   "sidepanel.agentPicker.executionIdentity": "执行身份",
   "sidepanel.agentPicker.executionIdentityDescription":
     "为当前任务选择智能体和响应模式。",
+  "sidepanel.agentPicker.defaultProfile": "Amiba",
   "sidepanel.agentPicker.agent": "智能体",
   "sidepanel.agentPicker.personality": "响应模式",
   "sidepanel.agentPicker.personalityDescription": "只影响当前任务的表达方式。",
   "sidepanel.agentPicker.personalityDefault": "跟随智能体",
   "sidepanel.agentPicker.personalityDefaultDescription":
     "使用这个智能体在设置中选择的默认响应模式与行为准则。",
+
+  // Hermes approval mode
+  "sidepanel.approvalMode.label": "风险操作处理方式",
+  "sidepanel.approvalMode.question": "发现风险操作时：",
+  "sidepanel.approvalMode.manual": "请求批准",
+  "sidepanel.approvalMode.manualDescription": "每次检测到风险，都先等你确认。",
+  "sidepanel.approvalMode.smart": "替我审批",
+  "sidepanel.approvalMode.smartDescription": "低风险直接执行，较高风险再问你。",
+  "sidepanel.approvalMode.off": "直接执行",
+  "sidepanel.approvalMode.offDescription":
+    "不再询问；安全限制和系统权限仍有效。",
+  "sidepanel.approvalMode.loadFailed": "无法读取审批方式，点击重试。",
+  "sidepanel.approvalMode.saveFailed": "无法更改审批方式，请重试。",
 
   // Extensions settings page
   "options.extensions.title": "扩展管理",
@@ -288,7 +312,7 @@ export const zhCN: Messages = {
   "options.plugins.empty": "尚未添加 Agent 插件。",
   "options.plugins.group.yours": "你的插件",
   "options.plugins.group.bundled": "内置（{count}）",
-  "options.plugins.restartHint": "重启 Hermes 使插件改动生效。",
+  "options.plugins.restartHint": "重启本地服务使插件改动生效。",
   "options.plugins.toggleError": "切换插件失败：{error}",
 
   // Mention sources —— composer 的可插拔 @ 提及来源
@@ -321,7 +345,7 @@ export const zhCN: Messages = {
     "{name} 已安装，但它没有 search 能力（{warning}）。",
   "options.plugins.uninstallAction": "卸载",
   "options.plugins.uninstallConfirm":
-    "确定卸载「{name}」？删除后需重启 Hermes 才完全生效，此操作不可撤销。",
+    "确定卸载「{name}」？删除后需重启本地服务才完全生效，此操作不可撤销。",
   "options.plugins.uninstallError": "卸载失败：{error}",
 
   // Featured features —— 被提升为一级设置入口的插件
@@ -402,7 +426,7 @@ export const zhCN: Messages = {
   "options.voice.apiKey.clear": "清除",
   "options.voice.apiKey.confirmClear": "确认清除",
   "options.voice.apiKey.help":
-    "保存到 ~/.hermes/.env。空输入会被忽略；如需删除已存的 key 请点击「清除」。",
+    "保存到 Amiba 托管运行时的 $HERMES_HOME/.env。空输入会被忽略；如需删除已存的 key 请点击「清除」。",
 
   // Status (loading / error)
   "options.voice.status.loading": "读取 STT 配置中…",
@@ -432,9 +456,9 @@ export const zhCN: Messages = {
   // 首次启动 onboarding 向导
   "onboarding.title": "Amiba",
   "onboarding.tagline":
-    "Hermes Agent 的原生桌面客户端。\n随时双击 Command 键唤起对话，让 Amiba 始终在你触手可及处。",
+    "你的原生桌面助手。\n随时双击 Command 键唤起对话，让 Amiba 始终在你触手可及处。",
   "onboarding.subtitle":
-    "我们会一步步帮你装好 Hermes、加载所需插件、启动本地服务。\n整个过程大约 5–10 分钟，你不需要预先准备任何东西。",
+    "Hermes 已经随 Amiba 一起提供，我们只需初始化私有运行环境并启动本地服务。\n无需单独安装，也不会在你的电脑上下载源码。",
   "onboarding.step.install": "安装核心",
   "onboarding.step.plugins": "加载插件",
   "onboarding.step.backplane": "启动服务",
@@ -443,7 +467,7 @@ export const zhCN: Messages = {
   "onboarding.install.manualTitle": "想自己用命令行安装？",
   "onboarding.install.manualHint":
     "依次把下面的命令贴到终端运行，全部跑完后点「重新检查」。",
-  "onboarding.install.manualStep.install": "1. 安装 Hermes 核心",
+  "onboarding.install.manualStep.install": "1. 初始化内置 Hermes 核心",
   "onboarding.install.manualStep.plugin": "{n}. 加载插件 {id}",
   "onboarding.ready.title": "一切就绪",
   "onboarding.ready.subtitle": "马上进入 Amiba。",
@@ -506,7 +530,7 @@ export const zhCN: Messages = {
 
   // Gateway settings
   "options.gateway.baseUrl": "网关地址",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8642/v1",
+  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:18642/v1",
   "options.gateway.baseUrl.desc":
     "网关监听此地址。如果 `hermes chat` 运行在其他端口或主机上，请在此覆盖。",
   "options.gateway.test": "测试连接",
@@ -527,15 +551,15 @@ export const zhCN: Messages = {
   "options.gateway.backplaneKey.placeholder":
     "未设置 AMIBA_BACKPLANE_KEY 时留空",
   "options.gateway.backplaneKey.help":
-    "通常留空即可。如想加鉴权，把 AMIBA_BACKPLANE_KEY 写到 ~/.hermes/.env，重启 Hermes 后把同一个值贴到这里。",
+    "通常留空即可。如想加鉴权，把 AMIBA_BACKPLANE_KEY 写到 $HERMES_HOME/.env，重启本地服务后把同一个值贴到这里。",
   "options.gateway.bridge.title": "桥接服务",
   "options.gateway.bridge.url.label": "桥接地址",
   "options.gateway.bridge.url.help":
-    "默认即可。只有你自己换过 Hermes 那边的端口才需要在这里改。",
+    "默认即可。只有你自己换过本地桥接端口才需要在这里改。",
 
   // Memory settings
   "options.memory.title": "记忆",
-  "options.memory.subtitle": "Hermes Agent 的持久化记忆（只读视图）",
+  "options.memory.subtitle": "助手的持久化记忆（只读）",
   "options.memory.subtitle.tooltip": "$HERMES_HOME/memories/{MEMORY,USER}.md",
   "options.memory.empty": "（暂无记忆条目）",
   "options.memory.refresh": "刷新",
@@ -545,11 +569,10 @@ export const zhCN: Messages = {
   "options.memory.charsLen": "{count} 字符",
   "options.memory.target.memory": "MEMORY.md",
   "options.memory.target.user": "USER.md",
-  "options.memory.desc.memory":
-    "Hermes Agent 自身的观察（环境事实、项目约定、工具特性等）。",
-  "options.memory.desc.user": "Hermes Agent 记录的用户偏好与协作习惯。",
+  "options.memory.desc.memory": "助手对环境、项目和工具的观察。",
+  "options.memory.desc.user": "助手记录的用户偏好与协作习惯。",
   "options.memory.flagTooltip":
-    "Hermes 安全扫描标记：{flag}\n相同的规则会在 MEMORY.md 注入系统提示词之前拦截条目",
+    "安全扫描标记：{flag}\n相同的规则会在 MEMORY.md 注入系统提示词之前拦截条目",
 
   // Models / Hermes model config
   "options.models.title": "模型",
@@ -569,7 +592,7 @@ export const zhCN: Messages = {
   "options.models.providers.sectionTitle": "服务供应商",
   "options.models.display.search": "搜索供应商或模型…",
   "options.models.display.empty": "没有匹配的供应商或模型。",
-  "options.models.display.source.config": "Hermes 配置",
+  "options.models.display.source.config": "本地配置",
   "options.models.display.source.saved": "在此保存",
   "options.models.display.source.detected": "检测到凭证",
   "options.models.display.source.available": "尚未连接",
@@ -620,7 +643,7 @@ export const zhCN: Messages = {
   "options.models.details.dialogDescription": "模型扩展信息及其可用数据来源。",
   "options.models.details.referenceNote": "模型信息参考自 {source}。",
   "options.models.details.noSupplemental":
-    "Hermes 或供应商没有提供扩展资料，社区目录中也没有匹配到这个模型。",
+    "本地运行环境或供应商没有提供扩展资料，社区目录中也没有匹配到这个模型。",
   "options.models.config.defaultsTitle": "模型分配",
   "options.models.config.mainModel": "主模型",
   "options.models.config.main": "默认模型",
@@ -677,7 +700,7 @@ export const zhCN: Messages = {
   "options.models.provider.credentials": "凭证",
   "options.models.provider.endpoint": "接口地址：{url}",
   "options.models.provider.metadataPartial":
-    "服务商元数据仅加载了一部分，请确认 Hermes 已安装并连接。",
+    "服务商元数据仅加载了一部分，请确认本地服务已安装并连接。",
   "options.models.provider.customDescription":
     "将任意 OpenAI 兼容接口作为主模型使用，请在这里填写模型 ID 和接口地址。",
   "options.models.provider.customModel": "模型 ID",
@@ -737,19 +760,19 @@ export const zhCN: Messages = {
   "options.models.provider.method.githubToken": "GitHub Token",
   "options.models.provider.method.claudeCode": "Claude Code 登录",
   "options.models.provider.method.githubCli": "GitHub CLI 登录",
-  "options.models.provider.method.hermesOauth": "Hermes OAuth 登录",
+  "options.models.provider.method.hermesOauth": "设备授权",
   "options.models.provider.authHint.oauthDevice":
-    "也可以通过 Hermes 的设备授权流程登录此服务。",
+    "也可以通过设备授权流程登录此服务。",
   "options.models.provider.authHint.oauthExternal":
-    "也可以使用 Hermes 检测到的外部 CLI 登录。",
+    "也可以使用这台设备上检测到的外部 CLI 登录。",
   "options.models.provider.authHint.externalProcess":
     "此服务也可以由已经登录的外部进程提供。",
   "options.models.provider.authHint.awsSdk":
-    "Hermes 也会读取本机 AWS SDK 配置或 IAM 环境凭证。",
+    "Amiba 也会读取本机 AWS SDK 配置或 IAM 环境凭证。",
   "options.models.provider.authHint.copilot":
     "GitHub 登录与 Copilot 服务权限是两层状态；只有服务验证通过后才代表 Copilot 可用。",
   "options.models.provider.authHint.vertex":
-    "Hermes 也会读取 Google Cloud ADC 或服务账号配置。",
+    "Amiba 也会读取 Google Cloud ADC 或服务账号配置。",
   "options.models.provider.saveCredentials": "保存凭证",
   "options.models.provider.saved": "已保存",
   "options.models.provider.readCredentialsFailed": "无法读取服务商凭证。",
@@ -845,7 +868,7 @@ export const zhCN: Messages = {
   "options.models.virtual.referenceMaxTokensValue": "参考输出 {count}",
   "options.models.virtual.referenceTimeout": "参考等待时间（秒）",
   "options.models.virtual.unlimited": "不限",
-  "options.models.virtual.inheritHermes": "使用 Hermes 默认值",
+  "options.models.virtual.inheritHermes": "使用助手默认值",
   "options.models.virtual.degradedPolicy": "参考模型失败时",
   "options.models.virtual.degraded.loud": "提示已降级",
   "options.models.virtual.degraded.silent": "静默继续",
@@ -864,7 +887,7 @@ export const zhCN: Messages = {
   // Automation
   "options.cron.title": "自动化",
   "options.cron.pageTitle": "自动化",
-  "options.cron.subtitle": "由 Hermes 按计划为你执行的任务",
+  "options.cron.subtitle": "由 Amiba 按计划为你执行的任务",
   "options.cron.refresh": "刷新",
   "options.cron.newJob": "新建任务",
   "options.cron.search": "搜索已安排的任务",
@@ -876,18 +899,18 @@ export const zhCN: Messages = {
   "options.cron.loading": "正在加载定时任务…",
   "options.cron.empty.title": "还没有定时任务",
   "options.cron.empty.description":
-    "新建任务，让 Hermes 按时间自动处理重复工作。",
+    "新建任务，让 Amiba 按时间自动处理重复工作。",
   "options.cron.form.create": "新建自动化",
   "options.cron.form.edit": "编辑自动化",
   "options.cron.form.createAction": "创建",
   "options.cron.form.name": "名称",
-  "options.cron.form.name.placeholder": "可选，Hermes 可以根据任务说明生成",
+  "options.cron.form.name.placeholder": "可选，Amiba 可以根据任务说明生成",
   "options.cron.form.schedule": "执行时间",
   "options.cron.form.schedule.hint":
     "支持 Cron、重复间隔、一次性时长或 ISO 时间",
   "options.cron.form.prompt": "任务说明",
   "options.cron.form.prompt.placeholder":
-    "Hermes 每次执行时使用的完整任务说明。",
+    "Amiba 每次执行时使用的完整任务说明。",
   "options.cron.form.prompt.scriptPlaceholder": "直接运行脚本时可留空",
   "options.cron.form.execution": "执行方式",
   "options.cron.form.model": "模型",
@@ -907,7 +930,7 @@ export const zhCN: Messages = {
     "跳过模型，把脚本本身作为自动化任务执行。",
   "options.cron.form.script": "脚本",
   "options.cron.form.script.placeholder":
-    "~/.hermes/scripts 下的脚本或绝对路径",
+    "$HERMES_HOME/scripts 下的脚本或绝对路径",
   "options.cron.form.repeat": "执行次数上限",
   "options.cron.form.repeat.placeholder": "留空表示不限",
   "options.cron.state.scheduled": "已启用",
@@ -993,6 +1016,7 @@ export const zhCN: Messages = {
   "options.status.actions.update.available": "发现新版本",
   "options.status.actions.update.behind": "落后上游 {count} 个提交",
   "options.status.actions.update.unknown": "暂时无法获取更新状态",
+  "options.status.actions.update.managed": "由 Amiba 管理",
   "options.status.actions.running": "执行中",
   "options.status.actions.success": "已完成",
   "options.status.actions.failed": "执行失败",
@@ -1009,12 +1033,12 @@ export const zhCN: Messages = {
     "Amiba 无法确认当前 Hermes 版本。请先安装 Hermes {required} 或更高版本。",
   "options.status.onboarding.title": "本地服务暂时不可用",
   "options.status.onboarding.description":
-    "Amiba 无法连接本地 Backplane。桌面应用通常会自动启动它；如果持续离线，请按下面步骤检查。",
+    "Amiba 托管的 Hermes 运行时或本地服务还没有准备好，请在下方重试恢复。",
   "options.status.onboarding.retry": "重新检测",
-  "options.status.onboarding.step.install": "确认已经安装 Hermes Agent。",
-  "options.status.onboarding.step.plugin": "安装 Amiba browser-tools 插件。",
-  "options.status.onboarding.step.run": "启动网关和本地 Backplane 服务。",
-  "options.status.onboarding.manual": "手动启动命令",
+  "options.status.onboarding.step.install": "Amiba 检查固定版本的私有 Hermes 运行时。",
+  "options.status.onboarding.step.plugin": "Amiba 检查随应用发布的 Backplane 版本。",
+  "options.status.onboarding.step.run": "Amiba 重启私有 Gateway 和 Backplane 服务。",
+  "options.status.onboarding.manual": "恢复说明",
   "options.status.onboarding.copy": "复制",
   "options.status.onboarding.copied": "已复制",
   "options.status.onboarding.error": "技术详情",
@@ -1175,9 +1199,8 @@ export const zhCN: Messages = {
   "quickAsk.kbd.newline": "换行",
   "quickAsk.kbd.new": "新建任务",
   "quickAsk.kbd.dismiss": "关闭",
-  "quickAsk.continuation.label": "继续 {time} 的对话",
-  "quickAsk.continuation.new": "⌘K 新建",
-  "quickAsk.continuation.dismiss": "关闭",
+  "quickAsk.actions.newConversation": "新对话",
+  "quickAsk.actions.openInMain": "转到主窗口",
   "sidepanel.permission.allowOnce": "仅本次允许",
   "sidepanel.permission.allowOnce.desc": "仅此次允许；下次仍会询问",
   "sidepanel.permission.allowSession": "本会话允许",
@@ -1188,9 +1211,9 @@ export const zhCN: Messages = {
   "sidepanel.permission.deny.desc": "拒绝；代理会收到错误",
   "sidepanel.permission.approvalNeeded": "需要确认",
   "sidepanel.permission.reason.unverifiedEmbeddedScript":
-    "此命令包含内嵌脚本，Hermes 无法完整验证其内容，请确认是否执行。",
+    "此命令包含内嵌脚本，无法完整验证其内容，请确认是否执行。",
   "sidepanel.permission.reason.parserLimit":
-    "命令内容过于复杂，Hermes 无法完整验证，请确认是否执行。",
+    "命令内容过于复杂，无法完整验证，请确认是否执行。",
   "sidepanel.permission.allowedOnce": "已允许（仅一次）",
   "sidepanel.permission.allowedOnce.tooltip": "仅对此次执行授权",
   "sidepanel.permission.allowedSession": "本会话已允许",
@@ -1234,7 +1257,7 @@ export const zhCN: Messages = {
   // the bridge isn't reachable. Submitting a prompt would just error.
   "sidepanel.empty.notConnected.title": "未连接到 Amiba",
   "sidepanel.empty.notConnected.description":
-    "需要先连接 Hermes 桥接服务才能开始对话。",
+    "需要先连接本地服务才能开始对话。",
   "sidepanel.empty.notConnected.button": "连接",
   "sidepanel.empty.notConnected.connecting": "连接中…",
 
@@ -1243,10 +1266,10 @@ export const zhCN: Messages = {
   "sidepanel.status.online": "在线",
   "sidepanel.status.offline": "离线",
   "sidepanel.status.bridgeUrl": "桥接：{url}",
-  "sidepanel.status.tooltip.online": "Hermes 桥接服务可达。点击打开网关设置。",
+  "sidepanel.status.tooltip.online": "本地服务可达。点击打开网关设置。",
   "sidepanel.status.tooltip.offline":
-    "无法连接到 Hermes 网关。请启动 `hermes chat` 并检查网关地址。",
-  "sidepanel.status.tooltip.connecting": "正在连接 Hermes 桥接服务…",
+    "无法连接到本地网关。请启动 `hermes chat` 并检查网关地址。",
+  "sidepanel.status.tooltip.connecting": "正在连接本地服务…",
   "sidepanel.status.tooltipBase": "Amiba 浏览器扩展 · {state}",
   "sidepanel.status.tooltip.agentRunning":
     "代理窗口：#{windowId} · 标签页 {tabId}",
@@ -1521,7 +1544,7 @@ export const zhCN: Messages = {
   "usage.tokens.label.placeholder": "未知",
   "usage.tokens.label.placeholderHint":
     "这个 session 没记录具体模型。当时走的是 gateway 的默认路由——真实模型未按 session 存档。",
-  "usage.tokens.footer.source": "数据来自 hermes-agent · 每 30 秒自动刷新",
+  "usage.tokens.footer.source": "数据来自本地运行环境 · 每 30 秒自动刷新",
   "usage.tools.hero.calls": "调用次数",
   "usage.tools.hero.tools": "工具种类",
   "usage.tools.hero.unfinished": "未完成",
@@ -1543,7 +1566,7 @@ export const zhCN: Messages = {
   "agentCapabilities.back": "返回工具",
   "agentCapabilities.builtin.title": "内置工具",
   "agentCapabilities.builtin.description":
-    "由 Hermes 提供，并按用途整理为易于理解的设置。",
+    "由本地运行环境提供，并按用途整理为易于理解的设置。",
   "agentCapabilities.enabledForAssistant": "允许当前助手使用此工具",
   "agentCapabilities.activity.title": "工具使用记录",
   "agentCapabilities.activity.description": "用于排查问题的近期工具调用记录。",
@@ -1632,9 +1655,9 @@ export const zhCN: Messages = {
   "externalTools.mcp.add": "添加 MCP",
   "externalTools.mcp.source": "MCP",
   "externalTools.mcp.addPrompt":
-    "请为 Hermes 助手预设「{profile}」查找并添加一个 MCP 服务。先询问我希望 Amiba 完成什么，说明可选方案，并在安装任何内容前征求我的确认。",
+    "请为 Amiba 助手预设「{profile}」查找并添加一个 MCP 服务。先询问我希望 Amiba 完成什么，说明可选方案，并在安装任何内容前征求我的确认。",
   "externalTools.mcp.configurePrompt":
-    "请检查并配置 Hermes 助手预设「{profile}」中的 MCP「{name}」（配置名：{slug}）。先说明当前状态；在停用、重新配置或移除之前征求我的确认。",
+    "请检查并配置 Amiba 助手预设「{profile}」中的 MCP「{name}」（配置名：{slug}）。先说明当前状态；在停用、重新配置或移除之前征求我的确认。",
   "externalTools.mcp.emptyTitle": "尚未添加 MCP",
   "externalTools.mcp.emptyDescription":
     "当你希望 Amiba 连接外部工具或数据源时，可以在这里添加。",
@@ -1657,7 +1680,7 @@ export const zhCN: Messages = {
     "启用后，Amiba 就可以在新的会话中使用这项能力。",
   "tools.detail.noSetup.unavailableTitle": "这项能力还没有准备好",
   "tools.detail.noSetup.unavailableDescription":
-    "当前 Hermes 环境没有返回可操作的配置方式，请更新运行环境后重新检查。",
+    "当前运行环境没有返回可操作的配置方式，请更新后重新检查。",
   "tools.detail.understanding.loadFailed": "无法加载可用模型。",
   "tools.detail.understanding.saveFailed": "无法保存理解模型。",
   "tools.detail.understanding.routeTitle": "当前模型来源",
@@ -1733,34 +1756,34 @@ export const zhCN: Messages = {
   "tools.detail.setup.info.changes": "将进行这些操作",
   "tools.detail.setup.info.agentBrowser.title": "本地浏览器组件",
   "tools.detail.setup.info.agentBrowser.description":
-    "在本机准备一套由 Hermes 独立使用的无头浏览器环境。",
+    "在本机为 Amiba 准备一套独立的无头浏览器环境。",
   "tools.detail.setup.info.agentBrowser.detail.cli":
-    "在 Hermes 运行目录安装 Node.js 依赖，其中包括 agent-browser 控制程序。",
+    "安装所需的 Node.js 依赖，其中包括 agent-browser 控制程序。",
   "tools.detail.setup.info.agentBrowser.detail.chromium":
     "下载与控制程序匹配的 Playwright Chromium/headless-shell，通常约 170 MB；已有可用 Chrome 时会复用。",
   "tools.detail.setup.info.agentBrowser.detail.session":
     "任务通过独立的无头会话运行，不会默认读取日常 Chrome 的账号、Cookie 或扩展。",
   "tools.detail.setup.info.agentBrowser.note":
-    "浏览器文件通常位于 Playwright 缓存目录；卸载 Hermes 不一定会自动删除这些缓存。",
+    "浏览器文件通常位于 Playwright 缓存目录；卸载 Amiba 不一定会自动删除这些缓存。",
   "tools.detail.setup.info.cloudBrowser.title": "云浏览器控制组件",
   "tools.detail.setup.info.cloudBrowser.description":
-    "云端负责运行浏览器，Hermes 在本机安装控制程序来发送操作。",
+    "云端负责运行浏览器，Amiba 在本机安装控制程序来发送操作。",
   "tools.detail.setup.info.cloudBrowser.detail.cli":
-    "安装 agent-browser CLI 和 Hermes 运行目录所需的 Node.js 依赖。",
+    "安装 agent-browser CLI 及其所需的 Node.js 依赖。",
   "tools.detail.setup.info.cloudBrowser.detail.hosted":
     "不会下载本地 Chromium；页面运行在 Browserbase、Browser Use 或 Firecrawl 提供的云端浏览器中。",
   "tools.detail.setup.info.camofox.title": "Camofox 浏览器服务",
   "tools.detail.setup.info.camofox.description":
     "安装一个本地的反检测 Firefox/Camoufox 浏览器服务。",
   "tools.detail.setup.info.camofox.detail.package":
-    "在 Hermes 运行目录安装 @askjo/camofox-browser Node.js 包。",
+    "在本地运行环境安装 @askjo/camofox-browser Node.js 包。",
   "tools.detail.setup.info.camofox.detail.engine":
     "第一次启动服务时会额外下载约 300 MB 的 Camoufox 浏览器引擎。",
   "tools.detail.setup.info.camofox.detail.service":
     "安装完成后仍需启动本地 Camofox 服务，或者改用它的 Docker 服务。",
   "tools.detail.setup.info.cuaDriver.title": "电脑控制驱动",
   "tools.detail.setup.info.cuaDriver.description":
-    "安装 cua-driver，让 Hermes 能在后台读取屏幕并执行鼠标和键盘操作。",
+    "安装 cua-driver，让 Amiba 能在后台读取屏幕并执行鼠标和键盘操作。",
   "tools.detail.setup.info.cuaDriver.detail.installer":
     "从 trycua/cua 官方仓库下载安装脚本，并安装适用于当前系统的驱动程序。",
   "tools.detail.setup.info.cuaDriver.detail.process":
@@ -1771,7 +1794,7 @@ export const zhCN: Messages = {
   "tools.detail.setup.info.fasterWhisper.description":
     "安装 faster-whisper，在本机把语音转换为文本。",
   "tools.detail.setup.info.fasterWhisper.detail.package":
-    "把 faster-whisper Python 包安装到 Hermes 使用的 Python 环境。",
+    "把 faster-whisper Python 包安装到本地运行环境。",
   "tools.detail.setup.info.fasterWhisper.detail.model":
     "识别模型在第一次使用时下载；默认模型通常约 150 MB，也可以选择其他大小。",
   "tools.detail.setup.info.fasterWhisper.detail.local":
@@ -1780,7 +1803,7 @@ export const zhCN: Messages = {
   "tools.detail.setup.info.kittenTts.description":
     "安装一个面向 CPU 的轻量本地文字转语音引擎。",
   "tools.detail.setup.info.kittenTts.detail.package":
-    "向 Hermes Python 环境安装 KittenTTS 和 soundfile 依赖。",
+    "向本地 Python 环境安装 KittenTTS 和 soundfile 依赖。",
   "tools.detail.setup.info.kittenTts.detail.model":
     "根据所选模型下载约 25–80 MB 的语音模型。",
   "tools.detail.setup.info.kittenTts.detail.local":
@@ -1789,7 +1812,7 @@ export const zhCN: Messages = {
   "tools.detail.setup.info.piper.description":
     "安装 Piper，在本机把文字转换为语音。",
   "tools.detail.setup.info.piper.detail.package":
-    "向 Hermes Python 环境安装约 14 MB 的 piper-tts 运行包。",
+    "向本地 Python 环境安装约 14 MB 的 piper-tts 运行包。",
   "tools.detail.setup.info.piper.detail.voice":
     "所选声音会在第一次生成语音时另行下载。",
   "tools.detail.setup.info.piper.detail.local":
@@ -1798,29 +1821,29 @@ export const zhCN: Messages = {
   "tools.detail.setup.info.ddgs.description":
     "安装无需 API 密钥的 DuckDuckGo 搜索客户端。",
   "tools.detail.setup.info.ddgs.detail.package":
-    "向 Hermes Python 环境安装 ddgs 包。",
+    "向本地 Python 环境安装 ddgs 包。",
   "tools.detail.setup.info.ddgs.detail.scope":
     "它只提供网页搜索，不提供网页正文提取；如需读取页面，还要选择一个提取服务。",
   "tools.detail.setup.info.ddgs.detail.limits":
     "无需账户，但请求仍受 DuckDuckGo 服务端限流约束。",
   "tools.detail.setup.info.spotify.title": "连接 Spotify",
   "tools.detail.setup.info.spotify.description":
-    "通过 Spotify OAuth 授权 Hermes 访问你的播放和资料库功能。",
+    "通过 Spotify OAuth 授权 Amiba 访问你的播放和资料库功能。",
   "tools.detail.setup.info.spotify.detail.browser":
     "打开系统浏览器完成 Spotify 登录和授权。",
   "tools.detail.setup.info.spotify.detail.client":
     "如果尚未配置 Spotify 应用，会先引导你提供 Client ID。",
   "tools.detail.setup.info.spotify.detail.storage":
-    "授权信息保存在本机 Hermes 配置中；不会安装额外浏览器或媒体播放器。",
+    "授权信息保存在本地；不会安装额外浏览器或媒体播放器。",
   "tools.detail.setup.info.langfuse.title": "Langfuse 观测组件",
   "tools.detail.setup.info.langfuse.description":
     "安装并启用 Langfuse 集成，用于记录 Agent 的运行轨迹。",
   "tools.detail.setup.info.langfuse.detail.sdk":
-    "向 Hermes Python 环境安装 Langfuse SDK。",
+    "向本地 Python 环境安装 Langfuse SDK。",
   "tools.detail.setup.info.langfuse.detail.plugin":
-    "在 Hermes 配置中启用内置的 observability/langfuse 插件。",
+    "在本地配置中启用内置的 observability/langfuse 插件。",
   "tools.detail.setup.info.langfuse.detail.restart":
-    "配置完成后需要重新启动 Hermes，新的追踪设置才会生效。",
+    "配置完成后需要重新启动本地服务，新的追踪设置才会生效。",
   "tools.detail.setup.info.xaiGrok.title": "连接 xAI",
   "tools.detail.setup.info.xaiGrok.description":
     "为需要 xAI 的工具选择一种可用的身份验证方式。",
@@ -1832,9 +1855,9 @@ export const zhCN: Messages = {
     "这个步骤不会安装本地可执行程序或浏览器引擎。",
   "tools.detail.setup.info.unknown.title": "额外配置",
   "tools.detail.setup.info.unknown.description":
-    "Hermes 声明这个服务需要执行额外的配置步骤。",
+    "本地运行环境提示这个服务需要执行额外的配置步骤。",
   "tools.detail.setup.info.unknown.detail":
-    "当前 Hermes 版本没有提供这项配置的结构化说明；执行时会显示具体结果。",
+    "当前运行环境没有提供这项配置的结构化说明；执行时会显示具体结果。",
   "tools.detail.auth.title": "需要登录账户",
   "tools.detail.auth.description":
     "这个选项需要 Nous 账户。请先在“模型”页面登录，然后回来重新检查。",

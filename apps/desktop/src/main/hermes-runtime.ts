@@ -3,12 +3,8 @@
  *
  * Three responsibilities:
  *
- *   1. Detect whether `hermes` is already on the user's machine.
- *      Electron-launched GUI apps inherit a stripped PATH on macOS
- *      (`/usr/bin:/bin:/usr/sbin:/sbin`), so we can't rely on plain
- *      `which`. We probe both PATH (via the candidate name `"hermes"`)
- *      and the well-known directories the official install scripts
- *      drop binaries into.
+ *   1. Detect Amiba's pinned, app-owned Hermes runtime. A system `hermes`
+ *      is deliberately ignored so Amiba never mutates another installation.
  *
  *   2. Run install / plugin-install commands as background jobs and
  *      stream stdout/stderr back to the renderer line by line. The
@@ -17,10 +13,10 @@
  *
  *   3. Supervise the two long-running backend processes: the gateway
  *      (`hermes gateway` — the agent that runs chat/LLM/tools) and the
- *      backplane server (`amiba-backplane` — the 9394 front door that
- *      serves /hermes/* + /integrations/* and proxies /v1/* to the gateway).
+ *      backplane server (`amiba-backplane` — the app-private HTTP front door
+ *      that serves /hermes/* + /integrations/* and proxies /v1/* to the gateway).
  *      Both killed on app quit so the next launch isn't blocked by a stale
- *      9394 listener. (The backplane used to be a plugin loaded *inside* the
+ *      listener. (The backplane used to be a plugin loaded *inside* the
  *      gateway; it's now its own process desktop spawns + supervises.)
  *
  * We deliberately do NOT try to be smart about plugin-list parsing here.
@@ -31,7 +27,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { constants as fsConstants, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -42,12 +38,20 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import type { IPty } from "node-pty";
 import {
   buildHermesRuntimeEnv,
-  discoverHermes,
   fileExists,
   resolveExecutableTarget,
   resolveOnPath,
   runQuiet,
 } from "./hermes-discovery";
+import {
+  MANAGED_HERMES_RUNTIME,
+  bundledHermesRuntimeDir,
+  buildManagedHermesEnvironment,
+  expectedBundledHermesRuntimeMarker,
+  resolveManagedHermesPaths,
+  type BundledHermesRuntimeMarker,
+  type ManagedHermesPaths,
+} from "./managed-hermes-runtime";
 import { getDefaultWorkspaceRoot } from "./workspace-root";
 
 /**
@@ -68,11 +72,76 @@ function getPty(): typeof import("node-pty") {
 
 const USER_HOME = os.homedir();
 const DEFAULT_WORKSPACE_ROOT = getDefaultWorkspaceRoot();
-const HERMES_HOME =
-  process.env.HERMES_HOME && path.isAbsolute(process.env.HERMES_HOME)
-    ? process.env.HERMES_HOME
-    : path.join(USER_HOME, ".hermes");
 const IS_WIN = process.platform === "win32";
+
+function managedHermesPaths(): ManagedHermesPaths {
+  const override = process.env.AMIBA_HERMES_USER_DATA_DIR;
+  const userDataDir =
+    override && path.isAbsolute(override) ? override : app.getPath("userData");
+  return resolveManagedHermesPaths(userDataDir, process.platform);
+}
+
+function bundledRuntimeDir(): string {
+  return bundledHermesRuntimeDir(
+    app.getAppPath(),
+    process.resourcesPath,
+    app.isPackaged,
+    process.env.AMIBA_HERMES_RUNTIME_BUNDLE,
+    process.platform,
+  );
+}
+
+function managedHermesSourceDir(paths = managedHermesPaths()): string {
+  const override = process.env.AMIBA_HERMES_DEV_SOURCE;
+  if (!override) return paths.installDir;
+  if (!path.isAbsolute(override)) {
+    throw new Error("AMIBA_HERMES_DEV_SOURCE must be an absolute path");
+  }
+  return path.normalize(override);
+}
+
+function managedHermesEntrypoint(paths = managedHermesPaths()): string {
+  return path.join(managedHermesSourceDir(paths), "hermes");
+}
+
+function hermesArgs(args: readonly string[], paths = managedHermesPaths()): string[] {
+  return [managedHermesEntrypoint(paths), ...args];
+}
+
+function managedHermesEnv(
+  extraPathEntries: readonly string[] = [],
+  installer = false,
+): NodeJS.ProcessEnv {
+  const paths = managedHermesPaths();
+  const sourceDir = managedHermesSourceDir(paths);
+  // In joint-debug mode the Python entrypoint comes from the live checkout,
+  // but Node helpers (notably agent-browser) remain release-bundle assets.
+  // Keep their .bin directory on PATH so a developer does not need a second
+  // npm install in the live Hermes checkout.
+  const bundledNodeModulesBin = path.join(
+    paths.installDir,
+    "node_modules",
+    ".bin",
+  );
+  const backplaneSource = resolveBackplaneSource();
+  const pythonPath = [sourceDir, backplaneSource, process.env.PYTHONPATH]
+    .filter((value): value is string => !!value)
+    .join(path.delimiter);
+  const source = buildManagedHermesEnvironment(process.env, paths);
+  source.HERMES_INSTALL_DIR = sourceDir;
+  source.PYTHONPATH = pythonPath;
+  if (installer && !IS_WIN) source.HOME = paths.installerHome;
+  return buildHermesRuntimeEnv(
+    source,
+    installer && !IS_WIN ? paths.installerHome : USER_HOME,
+    [
+      paths.nodeBinDir,
+      bundledNodeModulesBin,
+      path.dirname(paths.binary),
+      ...extraPathEntries,
+    ],
+  );
+}
 
 /**
  * Plugins the first-run configure flow installs into the gateway — deliberately
@@ -106,22 +175,143 @@ export async function listInstalledPlugins(
 ): Promise<string[]> {
   const installed: string[] = [];
   for (const id of pluginIds) {
-    const dir = path.join(HERMES_HOME, "plugins", pluginDirName(id));
+    const dir = path.join(
+      managedHermesPaths().hermesHome,
+      "plugins",
+      pluginDirName(id),
+    );
     if (await fileExists(dir)) installed.push(id);
   }
   return installed;
 }
 
 /**
- * Canonical install one-liners from the upstream README. We invoke them
- * via the platform's shell because the user's PATH and HOME need to be
- * the same as if they'd pasted into a terminal — that's what the install
- * scripts assume when they decide where to drop `~/.local/bin/hermes`,
- * `~/.bashrc`, etc.
+ * The release bundle is the only supported runtime source. This string is
+ * renderer-facing status text kept behind the legacy display-command bridge;
+ * it is intentionally not a curl/source-install command.
  */
-export const INSTALL_DISPLAY_COMMAND = IS_WIN
-  ? "iex (irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1)"
-  : "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash";
+export function managedInstallDisplayCommand(): string {
+  return `Bundled Hermes ${MANAGED_HERMES_RUNTIME.version} (${MANAGED_HERMES_RUNTIME.commit.slice(0, 12)}) — no download required`;
+}
+
+function bundleMarkerMatches(marker: BundledHermesRuntimeMarker): boolean {
+  const expected = expectedBundledHermesRuntimeMarker(process.platform, process.arch);
+  return (Object.keys(expected) as (keyof BundledHermesRuntimeMarker)[]).every(
+    (key) => marker[key] === expected[key],
+  );
+}
+
+async function readBundleMarker(directory: string): Promise<BundledHermesRuntimeMarker | null> {
+  try {
+    return JSON.parse(
+      await fs.readFile(path.join(directory, "runtime-manifest.json"), "utf8"),
+    ) as BundledHermesRuntimeMarker;
+  } catch {
+    return null;
+  }
+}
+
+async function runtimeFilesReady(paths = managedHermesPaths()): Promise<boolean> {
+  const marker = await readBundleMarker(paths.runtimeDir);
+  if (!marker || !bundleMarkerMatches(marker)) return false;
+  const node = path.join(paths.nodeBinDir, IS_WIN ? "node.exe" : "node");
+  return (
+    (await fileExists(paths.python)) &&
+    (await fileExists(managedHermesEntrypoint(paths))) &&
+    (await fileExists(node))
+  );
+}
+
+let bundledRuntimeInstall: Promise<ManagedHermesPaths> | null = null;
+
+/**
+ * Copy the platform runtime shipped inside the app into the writable app-owned
+ * runtime directory. The operation is local-only and atomic: a partial copy is
+ * never exposed as the active runtime.
+ */
+async function installBundledRuntime(): Promise<ManagedHermesPaths> {
+  if (bundledRuntimeInstall) return bundledRuntimeInstall;
+  bundledRuntimeInstall = (async () => {
+    const paths = managedHermesPaths();
+    if (await runtimeFilesReady(paths)) return paths;
+
+    const bundle = bundledRuntimeDir();
+    const marker = await readBundleMarker(bundle);
+    if (!marker) {
+      throw new Error(
+        `Hermes runtime bundle is missing at ${bundle}. Run pnpm --filter @amiba/desktop runtime:prepare.`,
+      );
+    }
+    if (!bundleMarkerMatches(marker)) {
+      throw new Error(
+        `Hermes runtime bundle targets ${marker.platform}-${marker.arch} / ${marker.hermesCommit}; ` +
+          `this app requires ${process.platform}-${process.arch} / ${MANAGED_HERMES_RUNTIME.commit}.`,
+      );
+    }
+
+    const staging = `${paths.runtimeDir}.install-${randomUUID()}`;
+    await fs.mkdir(path.dirname(paths.runtimeDir), { recursive: true });
+    await fs.rm(staging, { recursive: true, force: true });
+    try {
+      await fs.cp(bundle, staging, { recursive: true, force: false });
+      await fs.rm(paths.runtimeDir, { recursive: true, force: true });
+      await fs.rename(staging, paths.runtimeDir);
+    } catch (error) {
+      await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+    if (!(await runtimeFilesReady(paths))) {
+      throw new Error("Bundled Hermes runtime failed post-copy validation");
+    }
+    return paths;
+  })();
+  try {
+    return await bundledRuntimeInstall;
+  } finally {
+    bundledRuntimeInstall = null;
+  }
+}
+
+async function copyIfMissing(source: string, destination: string): Promise<void> {
+  if (await fileExists(destination)) return;
+  if (!(await fileExists(source))) return;
+  await fs.copyFile(source, destination, fsConstants.COPYFILE_EXCL).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") throw error;
+  });
+}
+
+/** Create durable configuration scaffolding without contacting the network. */
+async function seedManagedHermesHome(paths: ManagedHermesPaths): Promise<void> {
+  const homeDirs = [
+    "cron",
+    "sessions",
+    "logs",
+    "pairing",
+    "hooks",
+    "image_cache",
+    "audio_cache",
+    "memories",
+    "skills",
+  ];
+  await Promise.all(
+    homeDirs.map((name) => fs.mkdir(path.join(paths.hermesHome, name), { recursive: true })),
+  );
+  const source = managedHermesSourceDir(paths);
+  await copyIfMissing(path.join(source, ".env.example"), path.join(paths.hermesHome, ".env"));
+  await copyIfMissing(
+    path.join(source, "cli-config.yaml.example"),
+    path.join(paths.hermesHome, "config.yaml"),
+  );
+  if (!IS_WIN) await fs.chmod(path.join(paths.hermesHome, ".env"), 0o600).catch(() => {});
+
+  const skillsSync = path.join(source, "tools", "skills_sync.py");
+  if (await fileExists(skillsSync)) {
+    const result = await runQuiet(paths.python, [skillsSync], 60_000, managedHermesEnv());
+    if (result.code !== 0) {
+      console.warn("[hermes:runtime] bundled skills sync failed:", result.stderr || result.stdout);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Detection
@@ -136,34 +326,23 @@ export interface DetectionResult {
 }
 
 export async function detectHermes(): Promise<DetectionResult> {
-  const result = await discoverHermes({
-    cachedBinary: await readCachedHermesBinary(),
-    env: process.env,
-    userHome: USER_HOME,
-  });
-  if (result.installed && result.binary) {
-    await writeCachedHermesBinary(result.binary);
+  const paths = managedHermesPaths();
+  if (!(await runtimeFilesReady(paths))) return { installed: false };
+  if (!(await fileExists(managedHermesEntrypoint(paths)))) return { installed: false };
+  const probe = await runQuiet(
+    paths.python,
+    hermesArgs(["--help"], paths),
+    10_000,
+    managedHermesEnv(),
+  );
+  if (probe.code === 0 && /Hermes Agent/i.test(`${probe.stdout}\n${probe.stderr}`)) {
+    await writeCachedHermesBinary(paths.binary);
+    return { installed: true, binary: paths.binary, version: MANAGED_HERMES_RUNTIME.version };
   }
-  return result;
+  return { installed: false };
 }
 
 const HERMES_RUNTIME_STATE_FILE = "hermes-runtime.json";
-
-async function readCachedHermesBinary(): Promise<string | null> {
-  try {
-    const state = JSON.parse(
-      await fs.readFile(
-        path.join(app.getPath("userData"), HERMES_RUNTIME_STATE_FILE),
-        "utf8",
-      ),
-    ) as { binary?: unknown };
-    return typeof state.binary === "string" && path.isAbsolute(state.binary)
-      ? state.binary
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 async function writeCachedHermesBinary(binary: string): Promise<void> {
   const statePath = path.join(
@@ -175,7 +354,12 @@ async function writeCachedHermesBinary(binary: string): Promise<void> {
     await fs.mkdir(path.dirname(statePath), { recursive: true });
     await fs.writeFile(
       temporaryPath,
-      `${JSON.stringify({ version: 1, binary }, null, 2)}\n`,
+      `${JSON.stringify({
+        version: 2,
+        mode: "managed",
+        commit: MANAGED_HERMES_RUNTIME.commit,
+        binary,
+      }, null, 2)}\n`,
       "utf8",
     );
     await fs.rename(temporaryPath, statePath);
@@ -235,7 +419,7 @@ function broadcast(channel: string, payload: unknown) {
 interface SpawnOpts {
   cwd?: string;
   /** Extra env vars merged on top of `process.env`. */
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   /** Pass `true` to invoke the command through the platform's shell. */
   shell?: boolean | string;
 }
@@ -247,22 +431,21 @@ function startJob(
   opts: SpawnOpts = {},
 ): { id: string; pid: number | undefined } {
   const id = randomUUID();
+  const runtimeEnv = managedHermesEnv(
+    path.isAbsolute(cmd) ? [path.dirname(cmd)] : [],
+  );
   const child = spawn(cmd, args, {
     shell: opts.shell ?? false,
     cwd: opts.cwd ?? DEFAULT_WORKSPACE_ROOT,
-    env: buildHermesRuntimeEnv(
-      {
-        ...process.env,
-        ...opts.env,
-        // Force-disable any "did you mean to use a TTY?" colourisation —
-        // line-buffered streaming to the renderer reads cleaner without
-        // ANSI sequences sprayed everywhere.
-        FORCE_COLOR: "0",
-        NO_COLOR: "1",
-      },
-      USER_HOME,
-      path.isAbsolute(cmd) ? [path.dirname(cmd)] : [],
-    ),
+    env: {
+      ...runtimeEnv,
+      ...opts.env,
+      // Force-disable any "did you mean to use a TTY?" colourisation —
+      // line-buffered streaming to the renderer reads cleaner without
+      // ANSI sequences sprayed everywhere.
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+    },
     // The install scripts MUST NOT prompt for stdin (we have no TTY to
     // forward); attach /dev/null equivalent by ignoring stdin so any
     // read blocks immediately rather than hanging.
@@ -361,54 +544,34 @@ function killJob(jobId: string, signal: NodeJS.Signals = "SIGTERM"): boolean {
 // Specific spawn helpers
 // ---------------------------------------------------------------------------
 
-function startInstallHermes(): { id: string; pid: number | undefined } {
-  if (IS_WIN) {
-    return startJob("install-hermes", "powershell", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "iex (irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1)",
-    ]);
-  }
-  return startJob("install-hermes", "bash", [
-    "-c",
-    "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-  ]);
+async function startInstallHermes(): Promise<{ id: string; pid: number | undefined }> {
+  const paths = await installBundledRuntime();
+  await seedManagedHermesHome(paths);
+  return startJob(
+    "install-hermes",
+    paths.python,
+    hermesArgs(["setup"], paths),
+    { env: managedHermesEnv([], true) },
+  );
 }
 
 /**
- * Run the canonical install one-liner under a PTY so the embedded
- * `hermes setup` wizard sees a real terminal — without this the install
- * script's `(: </dev/tty)` probe fails and the wizard is silently
- * skipped, leaving the user with no API keys or messaging tokens
- * configured. Output streams to renderers as raw chunks over
- * `hermes:pty-data`; input from the renderer's xterm.js gets fed back
- * via {@link ptyWrite}.
+ * Copy the bundled runtime locally, seed the private home, then run
+ * `hermes setup` under a PTY so its configuration wizard sees a real terminal.
+ * There is no source clone or dependency download on the user's machine.
  */
-function startInstallHermesPty(): { id: string; pid: number } {
+async function startInstallHermesPty(): Promise<{ id: string; pid: number }> {
+  const paths = await installBundledRuntime();
+  await seedManagedHermesHome(paths);
   const pty = getPty();
   const id = randomUUID();
-  const cmd = IS_WIN ? "powershell.exe" : "/bin/bash";
-  const args = IS_WIN
-    ? [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "iex (irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1)",
-      ]
-    : [
-        "-lc",
-        "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-      ];
-  const term = pty.spawn(cmd, args, {
+  const term = pty.spawn(paths.python, hermesArgs(["setup"], paths), {
     name: "xterm-256color",
     cols: 100,
     rows: 30,
     cwd: DEFAULT_WORKSPACE_ROOT,
     env: {
-      ...buildHermesRuntimeEnv(process.env, USER_HOME),
+      ...managedHermesEnv([], true),
       // Restore TERM in case the parent Electron process had it unset
       // (macOS GUI launches strip it). install.sh + the python setup
       // wizard both branch on TERM for colour and curses behaviour.
@@ -472,8 +635,13 @@ function killPtyJob(jobId: string): boolean {
   return true;
 }
 
-function startInstallPlugin(binary: string, pluginId: string) {
-  return startJob("install-plugin", binary, ["plugins", "install", pluginId]);
+function startInstallPlugin(_binary: string, pluginId: string) {
+  const paths = managedHermesPaths();
+  return startJob(
+    "install-plugin",
+    paths.python,
+    hermesArgs(["plugins", "install", pluginId], paths),
+  );
 }
 
 /**
@@ -502,10 +670,12 @@ function resolveBackplaneSource(): string {
  * `hermes` script's shebang; fall back to a `python` next to it, then PATH.
  */
 async function resolveHermesPython(hermesBinary: string): Promise<string> {
+  const managedPython = managedHermesPaths().python;
+  if (samePath(hermesBinary, managedPython)) return managedPython;
   // Resolve both PATH names and installer-created symlinks. Hermes 0.19's
   // launcher has a /bin/sh polyglot shebang rather than a Python shebang, so
   // the reliable signal is the `python3` sibling of its canonical venv target.
-  hermesBinary = await resolveExecutableTarget(hermesBinary);
+  hermesBinary = await resolveExecutableTarget(hermesBinary, managedHermesEnv());
   try {
     const head = (await fs.readFile(hermesBinary, "utf8")).slice(0, 256);
     const m = /^#!\s*(\S*python\S*)/.exec(head);
@@ -523,22 +693,25 @@ async function resolveHermesPython(hermesBinary: string): Promise<string> {
   return IS_WIN ? "python" : "python3";
 }
 
-const UV_BINARY_CANDIDATES: string[] = IS_WIN
-  ? [
-      "uv.exe",
-      path.join(HERMES_HOME, "bin", "uv.exe"),
-      path.join(USER_HOME, ".local", "bin", "uv.exe"),
-      path.join(USER_HOME, ".cargo", "bin", "uv.exe"),
-      path.join(process.env.LOCALAPPDATA ?? "", "uv", "uv.exe"),
-    ]
-  : [
-      "uv",
-      path.join(HERMES_HOME, "bin", "uv"),
-      path.join(USER_HOME, ".local", "bin", "uv"),
-      path.join(USER_HOME, ".cargo", "bin", "uv"),
-      "/opt/homebrew/bin/uv",
-      "/usr/local/bin/uv",
-    ];
+function uvBinaryCandidates(): string[] {
+  const hermesHome = managedHermesPaths().hermesHome;
+  return IS_WIN
+    ? [
+        "uv.exe",
+        path.join(hermesHome, "bin", "uv.exe"),
+        path.join(USER_HOME, ".local", "bin", "uv.exe"),
+        path.join(USER_HOME, ".cargo", "bin", "uv.exe"),
+        path.join(process.env.LOCALAPPDATA ?? "", "uv", "uv.exe"),
+      ]
+    : [
+        "uv",
+        path.join(hermesHome, "bin", "uv"),
+        path.join(USER_HOME, ".local", "bin", "uv"),
+        path.join(USER_HOME, ".cargo", "bin", "uv"),
+        "/opt/homebrew/bin/uv",
+        "/usr/local/bin/uv",
+      ];
+}
 
 /**
  * Find uv even when Electron was launched from Finder with a stripped PATH.
@@ -546,12 +719,13 @@ const UV_BINARY_CANDIDATES: string[] = IS_WIN
  * without pip, so uv is the primary package installer rather than a fallback.
  */
 async function resolveUvBinary(): Promise<string | null> {
-  for (const candidate of UV_BINARY_CANDIDATES) {
+  const env = managedHermesEnv();
+  for (const candidate of uvBinaryCandidates()) {
     if (path.isAbsolute(candidate)) {
       if (await fileExists(candidate)) return candidate;
       continue;
     }
-    const resolved = await resolveOnPath(candidate);
+    const resolved = await resolveOnPath(candidate, env);
     if (resolved) return resolved;
   }
   return null;
@@ -616,7 +790,12 @@ async function inspectInstalledBackplane(
     'print(version("amiba-backplane"))',
     "print(Path(amiba_backplane.__file__).resolve())",
   ].join("; ");
-  const result = await runQuiet(python, ["-c", script], 10_000);
+  const result = await runQuiet(
+    python,
+    ["-c", script],
+    10_000,
+    managedHermesEnv(),
+  );
   if (result.code !== 0) return null;
   const [version, modulePath] = result.stdout
     .split(/\r?\n/)
@@ -676,34 +855,43 @@ async function startInstallBackplane(hermesBinary: string) {
 async function resolveBackplaneCmd(
   hermesBinary: string,
 ): Promise<{ cmd: string; args: string[] }> {
-  const name = IS_WIN ? "amiba-backplane.exe" : "amiba-backplane";
   const python = await resolveHermesPython(hermesBinary);
-  const cmd = path.isAbsolute(python)
-    ? path.join(path.dirname(python), name)
-    : name;
-  return { cmd, args: ["--port", "9394"] };
+  return {
+    cmd: python,
+    args: [
+      "-m",
+      "amiba_backplane.runtime.server",
+      "--port",
+      String(MANAGED_HERMES_RUNTIME.backplanePort),
+    ],
+  };
 }
 
 /**
  * Start (and supervise) the backend: two long-running processes —
  *   - the **gateway** (`hermes gateway`): the agent that runs chat/LLM/tools;
- *   - the **backplane server** (`amiba-backplane`): the 9394 front door that
- *     serves /hermes/* + /integrations/* and proxies /v1/* to the gateway.
+ *   - the **backplane server** (`amiba-backplane`): the private HTTP front door
+ *     that serves /hermes/* + /integrations/* and proxies /v1/* to the gateway.
  * Either order is fine — the backplane's /v1/* just 502s until the gateway is
- * up. The returned `id` is the backplane server's job (that's what serves 9394,
- * which the onboarding wizard polls); `alreadyRunning` is true only if BOTH are
+ * up. The returned `id` is the backplane server's job (that's what the
+ * onboarding wizard polls); `alreadyRunning` is true only if BOTH are
  * already up. Both procs' logs still stream via `hermes:job-log`.
  */
 async function startBackend(binary: string) {
+  const paths = managedHermesPaths();
   const gatewayUp = !!gatewayJob && !gatewayJob.child.killed;
   if (!gatewayUp) {
     // Amiba binds every task to a Hermes profile and routes named profiles
     // through `/p/<profile>/...`. The default profile must own the shared
     // listener, regardless of the user's sticky CLI profile.
     const multiplex = await runQuiet(
-      binary,
-      ["-p", "default", "config", "set", "gateway.multiplex_profiles", "true"],
+      paths.python,
+      hermesArgs(
+        ["-p", "default", "config", "set", "gateway.multiplex_profiles", "true"],
+        paths,
+      ),
       10_000,
+      managedHermesEnv(),
     );
     if (multiplex.code !== 0) {
       throw new Error(
@@ -712,7 +900,11 @@ async function startBackend(binary: string) {
         }`,
       );
     }
-    startJob("start-gateway", binary, ["-p", "default", "gateway"]);
+    startJob(
+      "start-gateway",
+      paths.python,
+      hermesArgs(["-p", "default", "gateway"], paths),
+    );
   }
 
   const backplaneUp = !!backplaneServerJob && !backplaneServerJob.child.killed;
@@ -742,7 +934,7 @@ async function startBackend(binary: string) {
  */
 async function installBackplane(binary: string): Promise<boolean> {
   const { cmd, args } = await resolveBackplaneInstallCommand(binary);
-  const result = await runQuiet(cmd, args, 180_000);
+  const result = await runQuiet(cmd, args, 180_000, managedHermesEnv());
   if (result.code !== 0) {
     console.error(
       "[ensureBackend] backplane install failed:",
@@ -752,25 +944,63 @@ async function installBackplane(binary: string): Promise<boolean> {
   return result.code === 0;
 }
 
-/** One main-side health probe of the backplane on :9394. */
-function probeBackplane(timeoutMs = 1500): Promise<boolean> {
+type BackplaneProbe =
+  | { state: "down" }
+  | { state: "managed"; hermesHome: string }
+  | { state: "foreign"; hermesHome?: string };
+
+function samePath(left: string, right: string): boolean {
+  const a = path.resolve(left);
+  const b = path.resolve(right);
+  return IS_WIN ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/** Probe the private port and verify the responder owns Amiba's HERMES_HOME. */
+function probeBackplane(timeoutMs = 1500): Promise<BackplaneProbe> {
   return new Promise((resolve) => {
     const req = http.get(
       {
         host: "127.0.0.1",
-        port: 9394,
+        port: MANAGED_HERMES_RUNTIME.backplanePort,
         path: "/hermes/status",
         timeout: timeoutMs,
       },
       (res) => {
-        res.resume();
-        resolve(res.statusCode === 200);
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          if (body.length < 64 * 1024) body += chunk;
+        });
+        res.on("end", () => {
+          if (res.statusCode !== 200) {
+            resolve({ state: "foreign" });
+            return;
+          }
+          try {
+            const data = JSON.parse(body) as { hermes_home?: unknown };
+            const hermesHome =
+              typeof data.hermes_home === "string" ? data.hermes_home : "";
+            if (
+              hermesHome &&
+              samePath(hermesHome, managedHermesPaths().hermesHome)
+            ) {
+              resolve({ state: "managed", hermesHome });
+            } else {
+              resolve({
+                state: "foreign",
+                ...(hermesHome ? { hermesHome } : {}),
+              });
+            }
+          } catch {
+            resolve({ state: "foreign" });
+          }
+        });
       },
     );
-    req.on("error", () => resolve(false));
+    req.on("error", () => resolve({ state: "down" }));
     req.on("timeout", () => {
       req.destroy();
-      resolve(false);
+      resolve({ state: "down" });
     });
   });
 }
@@ -779,7 +1009,7 @@ function probeBackplane(timeoutMs = 1500): Promise<boolean> {
 async function pollBackplaneUp(timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await probeBackplane()) return true;
+    if ((await probeBackplane()).state === "managed") return true;
     await new Promise((r) => setTimeout(r, 800));
   }
   return false;
@@ -788,10 +1018,10 @@ async function pollBackplaneUp(timeoutMs: number): Promise<boolean> {
 /**
  * SILENT backend initialization — the "this is plumbing, not onboarding" path.
  *
- * Brings :9394 up for an ALREADY-installed hermes with no UI beyond a plain
- * loading state: verify the installed backplane belongs to this app build,
+ * Brings the private backplane up for an ALREADY-installed Hermes with no UI
+ * beyond a plain loading state: verify the installed backplane belongs to this app build,
  * install/update it when necessary, then probe → spawn + supervise → wait for
- * :9394. Merely finding the console script is insufficient: that script can
+ * it. Merely finding the console script is insufficient: that script can
  * point at an older Amiba package after the desktop source/app was updated.
  * Returns {ok}. The renderer runs this behind a spinner; it never shows a
  * wizard. (The hermes-install wizard stays separate, for machines with no
@@ -812,12 +1042,26 @@ async function ensureBackend(
         error: "backplane install failed (see main process log)",
       };
   }
-  if (await probeBackplane(1000)) return { ok: true };
+  const initialProbe = await probeBackplane(1000);
+  if (initialProbe.state === "managed") return { ok: true };
+  if (initialProbe.state === "foreign") {
+    return {
+      ok: false,
+      error:
+        `port ${MANAGED_HERMES_RUNTIME.backplanePort} is already used by ` +
+        (initialProbe.hermesHome
+          ? `another Hermes home (${initialProbe.hermesHome})`
+          : "another local service"),
+    };
+  }
   await startBackend(binary);
   const up = await pollBackplaneUp(60_000);
   return up
     ? { ok: true }
-    : { ok: false, error: "backplane did not come up on :9394" };
+    : {
+        ok: false,
+        error: `backplane did not come up on :${MANAGED_HERMES_RUNTIME.backplanePort}`,
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -871,7 +1115,7 @@ export function registerHermesRuntimeHandlers() {
   );
   ipcMain.handle(
     "hermes:install-display-command",
-    () => INSTALL_DISPLAY_COMMAND,
+    () => managedInstallDisplayCommand(),
   );
 }
 

@@ -57,13 +57,14 @@ export function AgentPickerDialog({
       <DialogContent
         aria-label={t("sidepanel.agentPicker.label")}
         className={cn(
-          "block max-w-md gap-0 overflow-hidden rounded-2xl p-0 sm:rounded-2xl",
+          "block gap-0 overflow-hidden p-0",
           "[&_[cmdk-item]]:mx-1 [&_[cmdk-item]]:flex [&_[cmdk-item]]:min-h-12",
           "[&_[cmdk-item]]:w-[calc(100%-0.5rem)] [&_[cmdk-item]]:cursor-pointer",
           "[&_[cmdk-item]]:items-center [&_[cmdk-item]]:rounded-xl [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2",
           "[&_[cmdk-item][data-selected=true]]:bg-secondary",
         )}
         hideDefaultClose
+        size="compact"
       >
         <DialogTitle className="sr-only">
           {t("sidepanel.agentPicker.label")}

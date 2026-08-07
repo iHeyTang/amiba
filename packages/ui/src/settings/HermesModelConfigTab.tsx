@@ -1156,8 +1156,9 @@ export function HermesModelConfigTab({
       >
         <DialogContent
           aria-describedby={undefined}
-          className="h-[min(85vh,52rem)] w-[min(42rem,92vw)] max-w-2xl !flex flex-col gap-0 overflow-hidden p-0"
+          className="h-[min(85vh,52rem)] !flex flex-col gap-0 overflow-hidden p-0"
           data-provider-config-dialog
+          size="lg"
         >
           <DialogHeader className="relative z-10 border-b border-border/60 px-5 py-3.5 pr-12">
             <div className="flex min-w-0 items-center gap-2">

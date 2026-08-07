@@ -6,10 +6,9 @@
  *   - `detecting`: we're probing the binary, the plugin dirs, and the
  *     gateway health endpoint. Centered spinner; no stepper yet (we
  *     don't know what state to show on it).
- *   - `summary`: detection finished but something is missing. Stepper
- *     shows which milestones are done vs pending. The user hits the
- *     primary CTA to run the auto-install pipeline, or expands the
- *     "do it myself" disclosure to grab the manual install command.
+ *   - `summary`: detection finished but the bundled runtime has not been
+ *     initialized. The user starts a local copy + setup flow; there is no
+ *     source download or external Hermes prerequisite.
  *   - `running`: pipeline is in flight. The stepper's current node
  *     spins, and the rest of the screen is a live terminal — either an
  *     xterm.js PTY (interactive Hermes install + `hermes setup`
@@ -37,7 +36,7 @@ const MAX_LOG_LINES = 600
 const BACKPLANE_POLL_INTERVAL_MS = 1200
 const BACKPLANE_POLL_TIMEOUT_MS = 60_000
 // Short probe: after `startBackplane`, an already-installed backplane binds
-// :9394 within a second or two. If it doesn't answer in this window we treat it
+// private backplane within a second or two. If it doesn't answer in this window we treat it
 // as not-yet-installed and run the one-time pip install before starting again.
 const BACKPLANE_PROBE_TIMEOUT_MS = 5_000
 // macOS keeps the traffic-light cluster at (20, 14) (see main/index.ts).
@@ -54,7 +53,7 @@ type Phase = "detecting" | "summary" | "running" | "ready"
  * This wizard is ONLY shown when `hermes` isn't installed — installing the agent
  * is a real, user-facing decision (and needs a terminal for `hermes setup`).
  * When hermes is already present, App.tsx brings the backend up SILENTLY
- * (ensureBackend) behind a plain spinner — starting :9394 is plumbing, not
+ * (ensureBackend) behind a plain spinner — starting the backplane is plumbing, not
  * onboarding, so it never reaches this wizard.
  */
 
@@ -147,7 +146,6 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logs, setLogs] = useState<LogLine[]>([])
-  const [installCommand, setInstallCommand] = useState("")
   /**
    * Index (within the rendered manual-command list) of the row whose
    * copy button was most recently clicked, or null if no row is
@@ -193,9 +191,8 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
     }
   }, [rt])
 
-  // --- preload install command + run initial detect ------------------------
+  // --- run initial detect --------------------------------------------------
   useEffect(() => {
-    void rt.installDisplayCommand().then(setInstallCommand)
     void runDetect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -250,9 +247,17 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
     clearLogs()
     return new Promise((resolve) => {
       pendingResolveRef.current = resolve
-      void startFn().then(({ id }) => {
-        activeJobIdRef.current = id
-      })
+      void startFn()
+        .then(({ id }) => {
+          activeJobIdRef.current = id
+        })
+        .catch((cause: unknown) => {
+          pendingResolveRef.current = null
+          resolve({
+            exitCode: null,
+            error: cause instanceof Error ? cause.message : String(cause),
+          })
+        })
     })
   }
 
@@ -278,10 +283,19 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
       const r = await new Promise<{ exitCode: number | null; error?: string }>(
         (resolve) => {
           pendingResolveRef.current = resolve
-          void rt.installPty().then(({ id }) => {
-            activeJobIdRef.current = id
-            setPtyJobId(id)
-          })
+          void rt
+            .installPty()
+            .then(({ id }) => {
+              activeJobIdRef.current = id
+              setPtyJobId(id)
+            })
+            .catch((cause: unknown) => {
+              pendingResolveRef.current = null
+              resolve({
+                exitCode: null,
+                error: cause instanceof Error ? cause.message : String(cause),
+              })
+            })
         },
       )
       setPtyJobId(null)
@@ -423,7 +437,6 @@ export function OnboardingWizard({ onReady }: { onReady: () => void }) {
           <SummaryBlock
             detection={detection}
             error={error}
-            installCommand={installCommand}
             copiedIndex={copiedIndex}
             onInstall={() => void runPipeline()}
             onRedetect={() => void runDetect()}
@@ -604,16 +617,9 @@ interface ManualCommand {
  */
 function buildManualCommands(
   detection: Detection,
-  installCommand: string,
   t: TranslateFn,
 ): ManualCommand[] {
   const out: ManualCommand[] = []
-  if (!detection.hermes.installed) {
-    out.push({
-      label: t("onboarding.install.manualStep.install"),
-      command: installCommand,
-    })
-  }
   for (const p of detection.plugins) {
     if (p.installed) continue
     out.push({
@@ -630,7 +636,6 @@ function buildManualCommands(
 function SummaryBlock({
   detection,
   error,
-  installCommand,
   copiedIndex,
   onInstall,
   onRedetect,
@@ -639,14 +644,13 @@ function SummaryBlock({
 }: {
   detection: Detection
   error: string | null
-  installCommand: string
   copiedIndex: number | null
   onInstall: () => void
   onRedetect: () => void
   onCopy: (index: number, command: string) => void
   t: TranslateFn
 }) {
-  const manualCommands = buildManualCommands(detection, installCommand, t)
+  const manualCommands = buildManualCommands(detection, t)
   return (
     /*
      * Native page-level scroll. The earlier "flex-1 justify-center"
@@ -677,8 +681,8 @@ function SummaryBlock({
             {t("onboarding.tagline")}
           </p>
           {/* Utility paragraph: what's about to happen. Muted +
-              `whitespace-pre-line` so the i18n string controls its own
-              break between "we'll do X" and "takes ~10 min". */}
+              `whitespace-pre-line` lets the i18n string separate the local
+              runtime initialization from the interactive account setup. */}
           <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
             {t("onboarding.subtitle")}
           </p>

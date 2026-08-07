@@ -120,6 +120,33 @@ describe("ComposerModelPicker", () => {
     expect(trigger.querySelector(".animate-spin")).not.toBeInTheDocument();
   });
 
+  it("refreshes a hidden renderer's stale model failure when its host is shown", async () => {
+    mocks.getCurrent.mockResolvedValueOnce({
+      ok: false,
+      current: { provider: "", model: "" },
+      summary: null,
+    });
+    mocks.getPicker.mockResolvedValueOnce({
+      ok: false,
+      current: { provider: "", model: "" },
+      groups: [],
+      capabilities: [],
+    });
+    const { rerender } = render(<ComposerModelPicker refreshKey={0} />);
+
+    const trigger = screen.getByRole("button", {
+      name: "sidepanel.modelPicker.label",
+    });
+    await waitFor(() =>
+      expect(trigger).toHaveTextContent("sidepanel.modelPicker.loadFailed"),
+    );
+
+    rerender(<ComposerModelPicker refreshKey={1} />);
+
+    await waitFor(() => expect(trigger).toHaveTextContent("Model A"));
+    expect(mocks.getPicker).toHaveBeenCalledTimes(2);
+  });
+
   it("loads configured models from the input bar and switches Hermes", async () => {
     const user = userEvent.setup();
     render(<ComposerModelPicker />);
@@ -135,6 +162,7 @@ describe("ComposerModelPicker", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "sidepanel.modelPicker.label",
     });
+    expect(dialog).toHaveAttribute("data-composer-overlay");
     expect(
       within(dialog).getByTestId("model-picker-input"),
     ).toBeInTheDocument();
@@ -154,6 +182,39 @@ describe("ComposerModelPicker", () => {
         }),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("keeps model selection modal while making its overlay transparent when requested", async () => {
+    const user = userEvent.setup();
+    render(
+      <ComposerModelPicker
+        dialogSize="tall"
+        overlayVariant="transparent"
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "sidepanel.modelPicker.label",
+    });
+    await waitFor(() => expect(trigger).toHaveTextContent("Model A"));
+    await user.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "sidepanel.modelPicker.label",
+    });
+    expect(dialog).toHaveAttribute("data-model-picker-modal", "true");
+    expect(dialog).toHaveClass("fixed");
+    expect(
+      within(dialog).getByTestId("model-picker-input").closest("[cmdk-root]"),
+    ).toHaveClass("max-h-[min(calc(100vh-2rem),32rem)]");
+    expect(
+      document.querySelector('[data-dialog-overlay="transparent"]'),
+    ).toHaveClass("bg-transparent");
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("dialog", { name: "sidepanel.modelPicker.label" }),
+    ).not.toBeInTheDocument();
   });
 
   it("filters models and providers inside the modal", async () => {

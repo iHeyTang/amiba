@@ -82,17 +82,23 @@ interface AmibaBridgeApi {
   }
   notifier: {
     onMessage(cb: (msg: unknown) => void): () => void
-    activateMain(): Promise<void>
+    hide(): Promise<void>
+    openSession(sessionId: string): Promise<void>
     approve(approvalId: string): Promise<void>
     deny(approvalId: string): Promise<void>
-    demo(kind?: "cron-completed" | "approval-pending"): Promise<void>
+    demo(kind?: "cron-completed" | "chat-completed" | "approval-pending"): Promise<void>
   }
   quickAsk: {
     onPrefill(
       cb: (payload: { text: string; sourceApp: string }) => void,
     ): () => void
     dismiss(): Promise<void>
-    resize(contentHeightPx: number): Promise<void>
+    openInMain(sessionId: string): Promise<void>
+    setIgnoreMouseEvents(ignore: boolean): Promise<void>
+    resize(
+      contentHeightPx: number,
+      anchor?: "top" | "center" | "bottom",
+    ): Promise<void>
   }
   hermesRuntime: {
     detect(): Promise<HermesDetectionResult>
@@ -173,6 +179,8 @@ interface AmibaBridgeApi {
    * Returns an unsubscribe.
    */
   onChatStartSession(cb: (payload: { text: string }) => void): () => void
+  /** Open the conversation selected from a desktop notification. */
+  onOpenSession(cb: (payload: { sessionId: string }) => void): () => void
 }
 
 declare global {

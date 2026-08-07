@@ -13,7 +13,7 @@ from ....common import json_error
 
 
 async def handle_personalities_list(request: web.Request) -> web.Response:
-    """GET /hermes/personalities — agent personalities (builtin + custom)."""
+    """GET /hermes/personalities — active profile's effective CLI list."""
     try:
         with hermes_profile_scope(request.query.get("profile")):
             payload = list_personalities_response()

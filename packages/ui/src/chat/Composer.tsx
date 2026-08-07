@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  type DialogOverlayVariant,
 } from "../primitives";
 import { cn } from "../primitives";
 import { ArrowUp } from "lucide-react";
@@ -21,6 +22,7 @@ import {
 import { MicrophoneButton } from "./useVoiceRecorder";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import { ComposerAgentPicker } from "./ComposerAgentPicker";
+import { ComposerApprovalModePicker } from "./ComposerApprovalModePicker";
 import {
   forwardRef,
   useCallback,
@@ -88,6 +90,9 @@ export interface ComposerHandle {
    *  things like `selectionStart` for paste-time logic. */
   getTextarea(): HTMLTextAreaElement | null;
 }
+
+export type ComposerDensity = "default" | "compact";
+export type ComposerPickerOverlayVariant = DialogOverlayVariant;
 
 interface SendButtonRenderCtx {
   /** What the caller's effective submit handler is. Defaults to `onSubmit`. */
@@ -188,15 +193,23 @@ export interface ComposerProps {
    * It lists models from configured or currently authenticated providers.
    */
   modelPicker?: boolean;
+  /** Show the active Hermes approval policy as a switchable composer pill. */
+  approvalModePicker?: boolean;
+  /** Visual treatment for the modal overlay behind model and Profile dialogs. */
+  pickerOverlayVariant?: ComposerPickerOverlayVariant;
+  /** Height treatment for model and Profile dialogs in constrained hosts. */
+  pickerDialogSize?: "default" | "tall";
+  /** Reload picker state when a persistent host is activated again. */
+  pickerRefreshKey?: number;
   /**
    * Task-scoped Hermes Profile and optional response mode. Once a task has
-   * messages, callers lock this control so execution and history keep using
-   * the same isolated Profile.
+   * messages, callers lock Profile changes so execution and history keep
+   * using the same isolated runtime. Response modes remain turn-switchable.
    */
   agentPicker?: {
     value: AgentExecutionContext;
     onChange: (next: AgentExecutionContext) => void;
-    locked?: boolean;
+    profileLocked?: boolean;
   };
   // ---------------------------------------------------------------------
   // Surface-specific slots — fall back to these only when something
@@ -242,6 +255,11 @@ export interface ComposerProps {
    *     the page rather than a tool bar at the bottom.
    */
   frameVariant?: "default" | "hero";
+  /**
+   * Compact trims the editor and toolbar's vertical chrome for constrained
+   * surfaces such as Quick Ask. It does not change control sizes or hit areas.
+   */
+  density?: ComposerDensity;
   /** Remove the frame's top-left/right radius. Use when a blocking sibling
    * banner needs to visually merge with the frame. Queue tabs belong in
    * `contextRail` instead. */
@@ -321,6 +339,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       attachments,
       microphone,
       modelPicker,
+      approvalModePicker,
+      pickerDialogSize = "default",
+      pickerOverlayVariant = "dimmed",
+      pickerRefreshKey = 0,
       agentPicker,
       extrasAbove,
       contextRail,
@@ -329,6 +351,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       actionsLeft,
       extrasBelow,
       frameVariant = "default",
+      density = "default",
       flatTop = false,
       className,
       frameClassName,
@@ -613,6 +636,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         {extrasAbove}
         {contextRail ? (
           <div
+            data-composer-context-rail=""
             className={cn(
               "relative z-0 mx-4 -mb-2.5 flex h-10 items-start rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 px-3 pt-[3px]",
               "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]",
@@ -638,7 +662,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 "rounded-[24px] border border-border/30 bg-card/85 shadow-[0_-18px_42px_-20px_rgb(0_0_0_/_0.14),0_14px_34px_-24px_rgb(0_0_0_/_0.16)] backdrop-blur-2xl dark:shadow-[0_-20px_48px_-22px_rgb(0_0_0_/_0.55),0_14px_34px_-24px_rgb(0_0_0_/_0.5)]"
               : // Default: a low-contrast static edge restores the input's
                 // boundary without becoming stronger when the editor focuses.
-                "rounded-2xl border border-border/30 bg-background shadow-[0_-12px_30px_-18px_rgb(0_0_0_/_0.12),0_8px_24px_-18px_rgb(0_0_0_/_0.17)] dark:shadow-[0_-14px_36px_-18px_rgb(0_0_0_/_0.48),0_8px_24px_-18px_rgb(0_0_0_/_0.48)]",
+                "rounded-2xl border border-border/30 bg-background shadow-[0_-18px_42px_-24px_rgb(0_0_0_/_0.18),0_8px_24px_-18px_rgb(0_0_0_/_0.17)] dark:shadow-[0_-18px_44px_-24px_rgb(0_0_0_/_0.62),0_8px_24px_-18px_rgb(0_0_0_/_0.48)]",
             flatTop && !contextRail && "rounded-t-none",
             frameClassName,
           )}
@@ -675,13 +699,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             className={cn(
               frameVariant === "hero"
                 ? "min-h-[3.75rem] px-5 pb-1.5 pt-4"
-                : "min-h-[3.75rem] px-3 py-2.5",
+                : density === "compact"
+                  ? "min-h-12 px-3 pb-1 pt-2"
+                  : "min-h-[3.75rem] px-3 py-2.5",
             )}
           />
           <div
             className={cn(
-              "flex items-center justify-between gap-2 pb-2",
-              frameVariant === "hero" ? "px-3 pt-0.5" : "px-2",
+              "flex items-center justify-between gap-2",
+              frameVariant === "hero"
+                ? "px-3 pb-2 pt-0.5"
+                : density === "compact"
+                  ? "px-2 pb-1.5"
+                  : "px-2 pb-2",
             )}
           >
             <div
@@ -696,7 +726,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 Order of items in the bottom action row — same on EVERY
                 surface that uses Composer:
                   1. attachment add button (auto-rendered when attachments prop set)
-                  2. surface-specific extras (actionsLeft slot)
+                  2. Hermes Profile (when enabled)
+                  3. Hermes approval policy (when enabled)
+                  4. surface-specific extras (actionsLeft slot)
               */}
               {attachments ? (
                 <AttachmentButton
@@ -707,23 +739,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   }
                 />
               ) : null}
+              {agentPicker ? (
+                <ComposerAgentPicker
+                  dialogSize={pickerDialogSize}
+                  disabled={disabled}
+                  overlayVariant={pickerOverlayVariant}
+                  profileLocked={agentPicker.profileLocked}
+                  onChange={agentPicker.onChange}
+                  refreshKey={pickerRefreshKey}
+                  value={agentPicker.value}
+                />
+              ) : null}
+              {approvalModePicker ? (
+                <ComposerApprovalModePicker
+                  disabled={disabled}
+                  profileId={agentPicker?.value.profileId}
+                  refreshKey={pickerRefreshKey}
+                />
+              ) : null}
               {actionsLeft}
             </div>
             {/* Mic sits next to the send button — speech-to-text is the
                 output-side affordance, not an attachment. Grouping it on
                 the right keeps the left rail consistent across surfaces. */}
-            {agentPicker ? (
-              <ComposerAgentPicker
-                disabled={disabled}
-                locked={agentPicker.locked}
-                onChange={agentPicker.onChange}
-                value={agentPicker.value}
-              />
-            ) : null}
             {modelPicker ? (
               <ComposerModelPicker
+                dialogSize={pickerDialogSize}
                 disabled={disabled}
+                overlayVariant={pickerOverlayVariant}
                 profileId={agentPicker?.value.profileId}
+                refreshKey={pickerRefreshKey}
               />
             ) : null}
             {microphone ? (

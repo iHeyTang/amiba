@@ -1,6 +1,6 @@
 /**
  * Single fetch entry point for the local backplane plugin
- * (`http://127.0.0.1:9394`).
+ * (`http://127.0.0.1:19394`).
  *
  * Auth: reads the user's `AMIBA_BACKPLANE_KEY` mirror from
  * `getPlatform().storage` and injects it as `Authorization: Bearer …`

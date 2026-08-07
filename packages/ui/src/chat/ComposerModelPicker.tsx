@@ -6,7 +6,14 @@ import {
 } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import { Loader2, Workflow } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   ModelIcon,
@@ -15,11 +22,14 @@ import {
   type ModelPickerGroup,
   type ModelPickerStatus,
 } from "../models";
-import { cn } from "../primitives";
+import { cn, type DialogOverlayVariant } from "../primitives";
 
 export interface ComposerModelPickerProps {
+  dialogSize?: "default" | "tall";
   disabled?: boolean;
+  overlayVariant?: DialogOverlayVariant;
   profileId?: string;
+  refreshKey?: number;
 }
 
 interface CurrentModel {
@@ -36,8 +46,11 @@ interface CurrentModel {
  * (`hermes-agent`), not the underlying inference models.
  */
 export function ComposerModelPicker({
+  dialogSize = "default",
   disabled = false,
+  overlayVariant = "dimmed",
   profileId,
+  refreshKey = 0,
 }: ComposerModelPickerProps) {
   const { t } = useT();
   const [groups, setGroups] = useState<HermesModelPickerGroup[]>([]);
@@ -54,31 +67,42 @@ export function ComposerModelPicker({
   const [saving, setSaving] = useState(false);
   const [selectionError, setSelectionError] = useState(false);
   const [open, setOpen] = useState(false);
-  const loadingRef = useRef(false);
+  const loadGenerationRef = useRef(0);
 
   const loadModels = useCallback(async () => {
-    if (loadingRef.current) return;
-
-    loadingRef.current = true;
+    const generation = ++loadGenerationRef.current;
     setLoadState("loading");
     const snapshot = await hermesModelGateway.picker.read(profileId);
+    if (generation !== loadGenerationRef.current) return;
     if (snapshot.current.model) setCurrent(snapshot.current);
     setGroups(snapshot.groups);
     setCapabilities(snapshot.capabilities ?? []);
     setLoadState(snapshot.ok ? "ready" : "error");
-    loadingRef.current = false;
   }, [profileId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    let active = true;
     void hermesModelGateway.picker.readCurrent(profileId).then((snapshot) => {
+      if (!active) return;
       if (snapshot.current.model) setCurrent(snapshot.current);
       setRememberedCurrent(snapshot.summary ?? null);
     });
     void loadModels();
-    return hermesModelGateway.display.watch(() => {
+    const unwatch = hermesModelGateway.display.watch(() => {
       void loadModels();
     });
-  }, [loadModels, profileId]);
+    return () => {
+      active = false;
+      unwatch();
+    };
+  }, [loadModels, profileId, refreshKey]);
+
+  useEffect(
+    () => () => {
+      loadGenerationRef.current += 1;
+    },
+    [],
+  );
 
   const currentCapability = capabilities.find(
     (capability) =>
@@ -241,6 +265,7 @@ export function ComposerModelPicker({
       </button>
 
       <ModelPickerDialog
+        dialogSize={dialogSize}
         errorMessage={
           selectionError ? t("sidepanel.modelPicker.switchFailed") : undefined
         }
@@ -248,6 +273,7 @@ export function ComposerModelPicker({
         onOpenChange={handleOpenChange}
         onSelect={(provider, model) => void selectModel(provider, model)}
         open={open}
+        overlayVariant={overlayVariant}
         saving={saving}
         selected={current}
         status={loadState}

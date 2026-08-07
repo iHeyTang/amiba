@@ -68,6 +68,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
           <RichTextPlugin
             contentEditable={
               <ContentEditable
+                data-auto-grow-editor=""
                 role="textbox"
                 aria-multiline="true"
                 spellCheck
@@ -99,7 +100,10 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             ErrorBoundary={LexicalErrorBoundary}
           />
           <HistoryPlugin />
-          <AutoGrowPlugin maxHeightPx={maxHeightPx ?? 200} />
+          <AutoGrowPlugin
+            maxHeightPx={maxHeightPx ?? 200}
+            layoutKey={className}
+          />
           <MentionSerializePlugin value={value} onChange={onChange} />
           {onSubmitChord && (
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />

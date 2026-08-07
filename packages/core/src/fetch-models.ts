@@ -2,7 +2,7 @@
  * GET /v1/models — OpenAI-compatible listing.
  *
  * Routed through the backplane (which reverse-proxies to the Hermes
- * gateway at 127.0.0.1:8642/v1/models). The backplane handles
+ * managed gateway at 127.0.0.1:18642/v1/models). The backplane handles
  * upstream auth via `API_SERVER_KEY`; the only key callers need to
  * supply is the backplane key, which `backplaneFetch` injects from
  * storage.

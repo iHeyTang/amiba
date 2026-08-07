@@ -144,8 +144,8 @@ export async function connect() {
     if (ev.code !== 1000) {
       const hint =
         ev.code === 1006
-          ? "Code 1006 usually means the TCP connection failed (nothing listening on the port, or the bridge process exited immediately). Restart Hermes after updating the plugin, or run: `python -m bridge.server` from the plugin repo using the Hermes venv Python."
-          : "If the bridge is not running, start Hermes with this plugin or run `python -m bridge.server` (Hermes venv) from the plugin repo.";
+          ? "Code 1006 usually means the TCP connection failed (nothing listening on the port, or the bridge process exited immediately). Restart the local service after updating the plugin, or run: `python -m bridge.server` from the plugin repo using the local runtime's Python."
+          : "If the bridge is not running, start the local service with this plugin or run `python -m bridge.server` from the plugin repo using the local runtime's Python.";
       console.warn(
         "[amiba-bridge] WebSocket closed:",
         {

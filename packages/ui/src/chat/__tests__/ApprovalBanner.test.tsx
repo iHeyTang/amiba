@@ -38,6 +38,7 @@ describe("ApprovalBanner", () => {
     expect(allowButtons[0]).toHaveClass("bg-background/65")
     expect(allowButtons[0]).not.toHaveClass("bg-foreground")
     expect(screen.getByRole("button", { name: "sidepanel.permission.deny" })).toHaveClass(
+      "bg-background/65",
       "text-destructive/85"
     )
     expect(
@@ -60,6 +61,14 @@ describe("ApprovalBanner", () => {
       "w-4"
     )
     expect(container.querySelector("[data-approval-actions]")).toHaveClass("mt-2")
+    expect(container.querySelector("[data-approval-code]")).toHaveTextContent(
+      "python3 -c 'print(1)'"
+    )
+    expect(container.querySelector("[data-approval-code]")).toHaveAttribute(
+      "data-languages",
+      "shell python"
+    )
+    expect(container.querySelector(".approval-code .token.number")).toHaveTextContent("1")
     expect(
       screen.getByRole("region", { name: "sidepanel.permission.approvalNeeded" })
     ).toHaveClass("pb-2")

@@ -36,6 +36,10 @@ ACTION_LOG_FILES: Dict[str, str] = {
 }
 
 
+def is_amiba_managed_runtime() -> bool:
+    return (os.environ.get("AMIBA_MANAGED_HERMES") or "").strip() == "1"
+
+
 def _action_log_dir() -> Path:
     return hermes_home() / "logs"
 
@@ -277,6 +281,12 @@ def _update_check(force: bool = False) -> Dict[str, Any]:
     upstream check runs so the user gets a fresh remote probe — used by
     the Status page's Refresh button.
     """
+    # Amiba pins the checkout to its desktop release. Moving that checkout to
+    # upstream HEAD would break the tested app/runtime pair; upgrades arrive
+    # with a future Amiba build instead.
+    if is_amiba_managed_runtime():
+        return {"status": "managed", "commits_behind": 0}
+
     if force:
         try:
             (hermes_home() / ".update_check").unlink(missing_ok=True)
@@ -359,6 +369,10 @@ def _build_status_sync(force_update_check: bool = False) -> Dict[str, Any]:
         "version_error": compatibility["hermes_version_error"],
         "release_date": release_date,
         "protocol_version": PROTOCOL_VERSION,
+        "runtime_managed": is_amiba_managed_runtime(),
+        "managed_runtime_commit": os.environ.get(
+            "AMIBA_MANAGED_HERMES_COMMIT"
+        ),
         "hermes_home": str(hermes_home()),
         "config_path": config_path,
         "env_path": env_path,

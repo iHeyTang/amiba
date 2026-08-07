@@ -62,6 +62,46 @@ describe("AgentPersonalitySection", () => {
     });
   });
 
+  it("marks response modes supplied by the underlying defaults", async () => {
+    render(<AgentPersonalitySection profileId="researcher" />);
+
+    await screen.findByRole("button", { name: /helpful/ });
+    expect(
+      screen.getByText("common.builtin"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not label a profile replacement as adjusted or built in", async () => {
+    mocks.getPersonalities.mockResolvedValue({
+      ok: true,
+      personalities: [
+        {
+          key: "helpful",
+          name: "helpful",
+          builtin: true,
+          overridden: true,
+          selected: false,
+          preview: "Profile-specific help",
+          description: "",
+          prompt: "Use the profile instructions.",
+          system_prompt: "Use the profile instructions.",
+          tone: "",
+          style: "",
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AgentPersonalitySection profileId="researcher" />);
+
+    await user.click(await screen.findByRole("button", { name: /helpful/ }));
+    expect(
+      screen.queryByText("common.builtin"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("options.agents.personality.overridden"),
+    ).not.toBeInTheDocument();
+  });
+
   it("edits a mode in the selected Hermes profile", async () => {
     const user = userEvent.setup();
     render(<AgentPersonalitySection profileId="researcher" />);

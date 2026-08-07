@@ -1,4 +1,4 @@
-"""Reverse-proxy ``/v1/*`` to ``127.0.0.1:8642/v1/*``.
+"""Reverse-proxy ``/v1/*`` to the configured Hermes gateway.
 
 See :mod:`runtime.features.gateway_proxy` for the rationale; this
 module is the wire-level plumbing.
@@ -14,7 +14,14 @@ from aiohttp import ClientSession, ClientTimeout, web
 
 logger = logging.getLogger(__name__)
 
-GATEWAY_BASE = "http://127.0.0.1:8642"
+DEFAULT_GATEWAY_BASE = "http://127.0.0.1:8642"
+
+
+def _gateway_base() -> str:
+    """Resolve at request time so each supervised backplane stays isolated."""
+    return (
+        os.environ.get("AMIBA_HERMES_GATEWAY_BASE") or DEFAULT_GATEWAY_BASE
+    ).rstrip("/")
 
 # Hop-by-hop headers (RFC 7230 §6.1) plus things aiohttp derives itself.
 # Forwarding these breaks framing or duplicates host info.
@@ -105,7 +112,7 @@ async def _proxy_handler(request: web.Request) -> web.StreamResponse:
     profile_prefix = (
         f"/p/{quote(profile, safe='')}" if profile and profile != "default" else ""
     )
-    upstream_url = f"{GATEWAY_BASE}{profile_prefix}/v1/{tail}"
+    upstream_url = f"{_gateway_base()}{profile_prefix}/v1/{tail}"
     headers = _filter_request_headers(request.headers, profile=profile)
 
     body = await request.read() if request.can_read_body else None

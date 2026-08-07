@@ -16,6 +16,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -72,7 +73,12 @@ import { ApprovalBanner } from "./bubble/approval";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
 import { useWorkspacePane } from "./WorkspacePane";
-import { Composer, type ComposerHandle } from "./Composer";
+import {
+  Composer,
+  type ComposerDensity,
+  type ComposerHandle,
+  type ComposerPickerOverlayVariant,
+} from "./Composer";
 import { ConversationTurnRail } from "./ConversationTurnRail";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { useVoiceRecorder } from "./useVoiceRecorder";
@@ -193,19 +199,58 @@ export interface ChatSurfaceProps {
   composerAutoFocus?: boolean;
 
   /**
-   * Quick-Ask only. Set true whenever the host has EXPANDED the popup
-   * (an overlay is open, a draft is being composed, the collapse is
-   * animating, …). It renders the composer-only empty state as a
-   * full-height column with the composer pinned to the BOTTOM — so the
-   * surface reads like a chat (composer at the bottom, room above) instead
-   * of a top-anchored input with dead space below. IMPORTANT: drive it off
-   * the host's expansion state, NOT just "an overlay is open" — otherwise
-   * the composer strands at the top whenever the window is tall for some
-   * other reason (e.g. a lingering draft). Never set by sidebar/main-window
-   * surfaces (their layout is unchanged); does NOT alter `isComposerOnlyEmpty`
-   * (kept stable so the composer never remounts).
+   * Quick-Ask only. Set when the host gives its composer-only surface an
+   * explicit card height. The ChatSurface then fills that card and pins its
+   * persistent Composer dock to the bottom, whether the card is compact or
+   * has grown around a multiline draft. Modal visibility must never drive
+   * this flag. Never set by sidebar/main-window surfaces; does NOT alter
+   * `isComposerOnlyEmpty` (kept stable so the Composer never remounts).
    */
   composerOnlyExpanded?: boolean;
+
+  /**
+   * Keep the same Composer DOM host mounted while a composer-only surface
+   * moves between its id-less empty state and an active conversation. Quick
+   * Ask uses this to preserve editor focus and picker state across its first
+   * turn and New chat transitions. Other surfaces retain their existing
+   * empty-state placement by default.
+   */
+  persistComposerAcrossModes?: boolean;
+
+  /**
+   * Optional host-level frame treatment for the shared Composer. Floating
+   * shells such as Quick Ask use this to embed the input into their single
+   * outer surface instead of drawing a second bordered card inside it.
+   */
+  composerFrameClassName?: string;
+
+  /** Density forwarded to the shared Composer. */
+  composerDensity?: ComposerDensity;
+
+  /**
+   * Reports the live outer Composer dock height. Floating shells use this to
+   * grow their visible panel with multiline drafts instead of letting the
+   * editor push the toolbar outside a fixed-height card.
+   */
+  onComposerHeightChange?: (height: number) => void;
+
+  /** Overlay treatment used by the composer's model and Profile modals. */
+  composerPickerOverlayVariant?: ComposerPickerOverlayVariant;
+
+  /** Height treatment used by the composer's model and Profile modals. */
+  composerPickerDialogSize?: "default" | "tall";
+
+  /** Reload composer picker state when a persistent host is shown again. */
+  composerPickerRefreshKey?: number;
+
+  /**
+   * Increment to run ChatSurface's own New chat reset without remounting the
+   * persistent Composer or its picker state.
+   */
+  newConversationRequestKey?: number;
+
+  /** Optional visual treatment for the ChatSurface root. */
+  surfaceClassName?: string;
 
   /**
    * Quick-Ask only. Called whenever the composer draft toggles between
@@ -297,12 +342,46 @@ export function resolveChatSurfaceMode(activeId: string): ChatSurfaceMode {
   return activeId ? "conversation" : "home";
 }
 
+export function shouldMountComposerDock(
+  hasActive: boolean,
+  isComposerOnlyEmpty: boolean,
+  persistComposerAcrossModes: boolean,
+): boolean {
+  return hasActive || (isComposerOnlyEmpty && persistComposerAcrossModes);
+}
+
+/**
+ * Measure the dock at the editor's final auto-grow height. During a CSS height
+ * transition `getBoundingClientRect()` returns an intermediate frame; sizing a
+ * shell from that value makes the outer card trail behind the moving text.
+ */
+export function measureComposerDockTargetHeight(dock: HTMLElement): number {
+  const dockHeight = dock.getBoundingClientRect().height;
+  const editor = dock.querySelector<HTMLElement>("[data-auto-grow-editor]");
+  if (!editor) return Math.ceil(dockHeight);
+
+  const targetHeight = Number(editor.dataset.autoGrowTargetHeight);
+  if (!Number.isFinite(targetHeight)) return Math.ceil(dockHeight);
+
+  const currentEditorHeight = editor.getBoundingClientRect().height;
+  return Math.ceil(dockHeight - currentEditorHeight + targetHeight);
+}
+
 export default function ChatSurface({
   variant = "sidebar",
   messagesMaxWidth = "comfortable",
   emptyState = "hero",
   composerAutoFocus = false,
   composerOnlyExpanded = false,
+  persistComposerAcrossModes = false,
+  composerFrameClassName,
+  composerDensity = "default",
+  onComposerHeightChange,
+  composerPickerDialogSize = "default",
+  composerPickerOverlayVariant = "dimmed",
+  composerPickerRefreshKey = 0,
+  newConversationRequestKey = 0,
+  surfaceClassName,
   onComposerEmptyChange,
   client,
   capabilities = {},
@@ -319,9 +398,12 @@ export default function ChatSurface({
   const { t } = useT();
 
   const sessions = useSessions();
+  const hasActive =
+    resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
 
   const [input, setInput] = useState("");
+  const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
     profileId: "default",
@@ -332,7 +414,7 @@ export default function ChatSurface({
   const effectiveAgent = normalizeAgentContext(
     currentSessionMeta?.agent ?? draftAgent,
   );
-  const agentLocked =
+  const profileLocked =
     Boolean(currentSessionMeta?.messageCount) ||
     sessions.activeMessages.some((message) => message.role === "user");
 
@@ -571,8 +653,76 @@ export default function ChatSurface({
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
+  const composerDockRef = useRef<HTMLElement | null>(null);
+  const composerDockHeightRef = useRef(0);
+  const keepConversationPinnedAfterDockResizeRef = useRef(false);
+  const [composerDockHeight, setComposerDockHeight] = useState(0);
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
+
+  // The composer is a floating dock over the full-height conversation rather
+  // than a flex sibling that removes an invisible, full-width band from the
+  // message viewport. Mirror the dock's live height into the scroll content's
+  // bottom clearance so the final message can always scroll completely above
+  // the composer and a pending approval, no matter how tall either becomes.
+  // Empty floating shells can also consume the same measurement to grow their
+  // visible card around multiline drafts without remounting the Composer.
+  useLayoutEffect(() => {
+    if (!hasActive && !onComposerHeightChange) {
+      composerDockHeightRef.current = 0;
+      setComposerDockHeight(0);
+      return;
+    }
+
+    const dock = composerDockRef.current;
+    if (!dock) return;
+
+    const updateDockHeight = () => {
+      const nextHeight = measureComposerDockTargetHeight(dock);
+      onComposerHeightChange?.(nextHeight);
+
+      if (!hasActive) {
+        composerDockHeightRef.current = 0;
+        setComposerDockHeight(0);
+        return;
+      }
+      if (nextHeight === composerDockHeightRef.current) return;
+
+      const viewport = conversationViewportRef.current;
+      if (viewport) {
+        const distanceFromBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        keepConversationPinnedAfterDockResizeRef.current =
+          distanceFromBottom <= 24;
+      }
+
+      composerDockHeightRef.current = nextHeight;
+      setComposerDockHeight(nextHeight);
+    };
+
+    updateDockHeight();
+    const observer = new ResizeObserver(updateDockHeight);
+    observer.observe(dock);
+    const editor = dock.querySelector<HTMLElement>("[data-auto-grow-editor]");
+    const targetObserver = editor
+      ? new MutationObserver(updateDockHeight)
+      : null;
+    targetObserver?.observe(editor!, {
+      attributes: true,
+      attributeFilter: ["data-auto-grow-target-height"],
+    });
+    return () => {
+      observer.disconnect();
+      targetObserver?.disconnect();
+    };
+  }, [hasActive, onComposerHeightChange]);
+
+  useLayoutEffect(() => {
+    if (!keepConversationPinnedAfterDockResizeRef.current) return;
+    const viewport = conversationViewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    keepConversationPinnedAfterDockResizeRef.current = false;
+  }, [composerDockHeight]);
 
   // Pending-turn queue. `runChatTurn` is referenced by the hook for
   // sendNow / drainHead / send; it's a function declaration further
@@ -1260,6 +1410,11 @@ export default function ChatSurface({
       const wasInitialised = lastSeenActiveRef.current !== "";
       lastSeenActiveRef.current = sessions.activeId;
       stream.reset();
+      // An id-less surface can never own a live turn. Terminal events from
+      // the conversation we just left are intentionally handled as
+      // background events, so they cannot be relied on to clear Composer's
+      // busy/stop state after New chat.
+      if (!sessions.activeId) setBusy(false);
       if (wasInitialised) {
         // Drop in-memory queue; the load-effect below will repopulate
         // from the new session's persisted queue.
@@ -1484,6 +1639,9 @@ export default function ChatSurface({
         try {
           client.submit({
             sessionId,
+            sessionTitle: sessions.sessions.find(
+              (session) => session.id === sessionId,
+            )?.title,
             assistantUiId: assistantMsg.uiId,
             model: config.model,
             history,
@@ -1572,11 +1730,29 @@ export default function ChatSurface({
   }
 
   async function newChat() {
+    const sid = sessions.activeId;
+
+    // New chat is one atomic UI boundary. Settle the outgoing turn locally
+    // before the async abort/deselect work so the persistent Quick Ask
+    // Composer cannot carry its stop button or streaming buffer into Home.
+    // If this renderer owns the pending promise, gate its finally block before
+    // rejecting it; otherwise that old turn could drain its queued follow-up
+    // after the user has already asked for a blank conversation.
+    if (sid && pendingTurnRef.current?.sessionId === sid) {
+      suppressFinallyDrainRef.current = true;
+      rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
+    }
+    markCurrentAssistantStopped();
     setError(null);
     setPageError(null);
-    // The old session's pendingQueue stays with the old session (we
-    // persist it per-session). The switch-effect will swap in-memory
-    // queue to the new session's [] on activeId change.
+    setInput("");
+    setPendingAutosend(false);
+    setPendingSourceApp(null);
+    // The persisted queue still belongs to the outgoing session; only its
+    // in-memory projection is cleared so it cannot flash inside the empty
+    // persistent Composer while the session transition finishes.
+    setPendingQueue([]);
+    setEditingQueueId(null);
     setQueuePaused(false);
     resetApprovals();
     // Drop any composer-time attachments and unlink their on-disk files —
@@ -1584,7 +1760,8 @@ export default function ChatSurface({
     for (const a of attachments) void deleteAttachmentFile(a);
     setAttachments([]);
     setAttachmentError(null);
-    const sid = sessions.activeId;
+    pendingWorkspacePathRef.current = null;
+    setWorkspaceError(null);
     if (sid) {
       try {
         client.abort(sid);
@@ -1595,6 +1772,16 @@ export default function ChatSurface({
     await sessions.deselect();
   }
 
+  useEffect(() => {
+    if (
+      handledNewConversationRequestRef.current === newConversationRequestKey
+    ) {
+      return;
+    }
+    handledNewConversationRequestRef.current = newConversationRequestKey;
+    void newChat();
+  }, [newConversationRequestKey]);
+
   // `addFiles`, `removeAttachment`, `openFilePicker`, `handleComposerPaste`
   // all live in `useComposerAttachments` — destructured up-top. The
   // shared hook is the single source of truth for attachment ingestion
@@ -1602,8 +1789,6 @@ export default function ChatSurface({
   // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
-  const hasActive =
-    resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const showTurnRail =
     variant === "fullscreen" &&
     messages.some((message) => message.role === "user");
@@ -1611,11 +1796,19 @@ export default function ChatSurface({
   // id. A persisted session with zero messages is still a real conversation
   // and therefore uses the normal chat layout.
   const isComposerOnlyEmpty = emptyState === "composer-only" && !hasActive;
+  const persistComposerHost =
+    persistComposerAcrossModes && emptyState === "composer-only";
+  const composerDockInEmptyHost = persistComposerHost && isComposerOnlyEmpty;
+  const showComposerDock = shouldMountComposerDock(
+    hasActive,
+    isComposerOnlyEmpty,
+    persistComposerHost,
+  );
 
-  // When the host has expanded the composer-only surface (Quick-Ask),
-  // make the body fill the column and (below) pin the composer to the
-  // bottom. `expandComposerArea` is exactly `!isComposerOnlyEmpty` unless
-  // the flag is set, so non-Quick-Ask layout is unchanged.
+  // When a host gives the composer-only surface an explicit height, make the
+  // body fill that column and pin the Composer to its bottom. The flag is
+  // host geometry, not conversation or modal state, so the Composer keeps one
+  // containing block across compact and multiline drafts.
   const expandComposerArea = !isComposerOnlyEmpty || composerOnlyExpanded;
 
   // Read-only mode: the active session originates from another channel
@@ -1705,11 +1898,10 @@ export default function ChatSurface({
     })();
   }, [voiceRecorder, voiceTranscribing, voicePrefs.autoSend, t]);
 
-  // Composer JSX captured once so we can mount it either in the bottom
-  // footer (active chat) or in the centred empty state (no session yet).
-  // React reconciles by position, so swapping branches remounts the
-  // Composer — its input value lives in `input` (parent state) so the
-  // user doesn't lose what they were typing across the transition.
+  // Composer JSX shared by the bottom dock and the legacy centred empty
+  // state. Most hosts still choose one branch or the other; Quick Ask opts
+  // into the persistent dock path so React keeps this exact subtree mounted
+  // while the first session is created or New chat returns to empty.
   const composerNode = (
     <Composer
       ref={composerRef}
@@ -1775,6 +1967,7 @@ export default function ChatSurface({
         { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
       ]}
       modelPicker
+      approvalModePicker
       topAffordance={
         editingQueueId != null ? (
           <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
@@ -1805,15 +1998,26 @@ export default function ChatSurface({
       mentionProviders={mentionProviders}
       agentPicker={{
         value: effectiveAgent,
-        locked: agentLocked,
+        profileLocked,
         onChange: (next) => {
           const normalized = normalizeAgentContext(next);
+          if (
+            profileLocked &&
+            normalized.profileId !== effectiveAgent.profileId
+          ) {
+            return;
+          }
           setDraftAgent(normalized);
-          if (sessions.activeId && !agentLocked) {
+          if (sessions.activeId) {
             void sessions.setAgentContext(sessions.activeId, normalized);
           }
         },
       }}
+      frameClassName={composerFrameClassName}
+      density={composerDensity}
+      pickerDialogSize={composerPickerDialogSize}
+      pickerOverlayVariant={composerPickerOverlayVariant}
+      pickerRefreshKey={composerPickerRefreshKey}
       chipRow={undefined}
       actionsLeft={
         hasActive
@@ -1861,6 +2065,7 @@ export default function ChatSurface({
             ? "min-h-0 flex-1"
             : ""
           : "h-screen",
+        surfaceClassName,
       )}
     >
       {variant === "sidebar" && (
@@ -1886,7 +2091,8 @@ export default function ChatSurface({
       <div
         ref={conversationFrameRef}
         className={cn(
-          "relative flex min-h-0 min-w-0 flex-col overflow-hidden",
+          "relative flex min-h-0 min-w-0 flex-col",
+          isComposerOnlyEmpty ? "overflow-visible" : "overflow-hidden",
           // ``flex-1`` makes this body region fill the rest of the column
           // in the normal "hero" / populated paths. Quick-Ask's
           // composer-only empty mode opts out so the wrapper sizes to the
@@ -1897,7 +2103,11 @@ export default function ChatSurface({
       >
         <div
           className={cn(
-            "relative flex min-h-0 min-w-0 flex-col overflow-hidden pt-2",
+            "relative flex min-h-0 min-w-0 flex-col",
+            isComposerOnlyEmpty ? "overflow-visible" : "overflow-hidden",
+            isComposerOnlyEmpty && composerDensity === "compact"
+              ? "pt-0"
+              : "pt-2",
             expandComposerArea && "flex-1",
             // The message column is constrained independently from the
             // panel-level turn rail. This keeps the rail pinned to the
@@ -1908,35 +2118,29 @@ export default function ChatSurface({
         >
           {!hasActive ? (
             isComposerOnlyEmpty ? (
-              // Quick-Ask compact mode: skip the hero entirely and let
-              // the composer flow at its natural height. No
-              // ``absolute inset-0`` here — the wrapper must size to the
-              // composer so the host popup can shrink-wrap. The full
-              // composer (attachments, voice, send) is preserved; only
-              // the surrounding chrome (logo, greeting, queue list,
-              // workspace chips) is dropped. The ``selection from <App>``
-              // hint still renders here so a Spotlight-style selection
-              // hand-off remains visible before the first turn.
-              <div
-                className={cn(
-                  "flex flex-col px-2 pb-2",
-                  // Expanded → fill the (now flex-1) body and push the
-                  // composer to the BOTTOM, so a tall popup reads like a chat
-                  // (composer at the bottom, room above for an upward menu)
-                  // rather than a top-anchored input with dead space below.
-                  composerOnlyExpanded && "h-full justify-end",
-                )}
-              >
-                {pendingSourceApp && (
-                  <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
-                    <span>{t("quickAsk.selectionFrom")}</span>
-                    <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                      {pendingSourceApp}
-                    </span>
-                  </div>
-                )}
-                {readOnlyNoticeNode ?? composerNode}
-              </div>
+              persistComposerHost ? null : (
+                // Quick-Ask compact mode: skip the hero entirely and let
+                // the composer flow at its natural height. Hosts that opt into
+                // persistence render this same Composer in the stable dock
+                // below instead, so it survives the first-session boundary.
+                <div
+                  className={cn(
+                    "flex flex-col px-2",
+                    composerDensity === "compact" ? "pb-1" : "pb-2",
+                    composerOnlyExpanded && "h-full justify-end",
+                  )}
+                >
+                  {pendingSourceApp && (
+                    <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                      <span>{t("quickAsk.selectionFrom")}</span>
+                      <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                        {pendingSourceApp}
+                      </span>
+                    </div>
+                  )}
+                  {readOnlyNoticeNode ?? composerNode}
+                </div>
+              )
             ) : slots?.emptyState ? (
               // Host-provided empty state (desktop hands in
               // ``<HomeView panelMode />`` so the home composer surface
@@ -1970,10 +2174,7 @@ export default function ChatSurface({
                   {readOnlyNoticeNode ?? composerNode}
                 </div>
                 {error && (
-                  <ErrorBlock
-                    error={error}
-                    onOpenSettings={openSettings}
-                  />
+                  <ErrorBlock error={error} onOpenSettings={openSettings} />
                 )}
               </div>
             )
@@ -1988,6 +2189,12 @@ export default function ChatSurface({
                 ref={conversationContentRef}
                 data-selection="text"
                 className="min-w-0 space-y-2 p-3"
+                style={{
+                  paddingBottom:
+                    composerDockHeight > 0
+                      ? `${composerDockHeight + 12}px`
+                      : undefined,
+                }}
               >
                 <MessageTurns
                   messages={messages}
@@ -1995,10 +2202,7 @@ export default function ChatSurface({
                 />
 
                 {error && (
-                  <ErrorBlock
-                    error={error}
-                    onOpenSettings={openSettings}
-                  />
+                  <ErrorBlock error={error} onOpenSettings={openSettings} />
                 )}
               </div>
             </ScrollArea>
@@ -2014,27 +2218,38 @@ export default function ChatSurface({
         )}
       </div>
 
-      {/*
-        Footer is skipped only on the id-less home surface, whose composer is
-        rendered inside the empty-state block above. Existing sessions keep
-        the normal footer even when their message list is empty.
-      */}
-      {hasActive && (
+      {/* A persistent composer-only host keeps this exact bottom-anchored
+          footer mounted on both sides of the first-session boundary. The
+          shell may change its chrome, but the Composer never changes owner. */}
+      {showComposerDock && (
         <footer
+          ref={composerDockRef}
           className={cn(
-            "p-2",
+            // The sticky user-question strip inside the scroll viewport is
+            // z-20. Composer popovers live inside the composer's own z-10
+            // stacking context, so their local z-index cannot outrank that
+            // strip unless the floating dock itself participates above the
+            // message layer. Keeping the dock absolutely positioned also
+            // lets the conversation viewport continue behind its side
+            // gutters instead of losing a full-width white band.
+            composerDockInEmptyHost
+              ? "absolute inset-x-0 bottom-0 z-30 isolate px-2"
+              : "amiba-composer-dock absolute inset-x-0 bottom-0 z-30 isolate p-2",
             // Composer always gets a fixed cap in fullscreen — a wide
             // input line is uncomfortable to type into regardless of how
             // wide the user set the message column above.
-            variant === "fullscreen" && "mx-auto w-full max-w-3xl",
+            variant === "fullscreen" &&
+              !composerDockInEmptyHost &&
+              "mx-auto w-full max-w-3xl",
           )}
         >
           {/*
           Bridge/connection pill is extension-only — provided via the
           `bridgeBar` slot. Desktop omits and the row is hidden.
         */}
-          {slots?.bridgeBar}
-          {(pageError || attachmentError || workspaceError) && (
+          {hasActive ? slots?.bridgeBar : null}
+          {hasActive &&
+            (pageError || attachmentError || workspaceError) && (
             <div className="mb-1 flex flex-col gap-1">
               {pageError && (
                 <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
@@ -2083,7 +2298,7 @@ export default function ChatSurface({
               )}
             </div>
           )}
-          {capabilities.learn && (
+          {hasActive && capabilities.learn && (
             <div className="mb-1 flex shrink-0 flex-wrap items-center gap-1">
               {!learnRecording ? (
                 <Button
@@ -2126,7 +2341,7 @@ export default function ChatSurface({
               att.dragOver && "rounded-lg ring-2 ring-primary/30",
             )}
           >
-            {pendingApprovals.length > 0 && (
+            {hasActive && pendingApprovals.length > 0 && (
               <ApprovalBanner
                 approvals={pendingApprovals}
                 inFlight={approvalInFlight}

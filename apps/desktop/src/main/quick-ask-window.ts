@@ -7,8 +7,9 @@
  *   - Positioned on the display under the **mouse cursor**, NOT the
  *     primary screen — multi-monitor users get the popup on the screen
  *     they were just using.
- *   - 640px wide, height starts compact (input-only) and grows as the
- *     renderer asks for more room (setContentSize on stream).
+ *   - A 640px card inside a small transparent shadow-safe canvas. The
+ *     renderer owns the only visible surface; the BrowserWindow itself is
+ *     deliberately invisible.
  *   - Focusable so typing works; auto-hides on blur and on Esc.
  *   - Pre-filled with the user's current text selection + source app
  *     when available (captured before summon, sent over IPC).
@@ -17,18 +18,28 @@
  * rather than spawning duplicates. Hidden (not destroyed) on dismiss so
  * the second summon is instant.
  */
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { app, BrowserWindow, screen } from "electron"
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow, screen } from "electron";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import {
+  resolveQuickAskResizeBounds,
+  resolveQuickAskSummonBounds,
+  type QuickAskResizeAnchor,
+} from "./quick-ask-geometry";
+import {
+  QUICK_ASK_COMPACT_HEIGHT,
+  QUICK_ASK_PICKER_STAGE_HEIGHT,
+} from "../shared/quick-ask-layout";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const isDev = !process.versions.electron
   ? false
-  : process.env.ELECTRON_RENDERER_URL !== undefined
-const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL
-const IS_MAC = process.platform === "darwin"
+  : process.env.ELECTRON_RENDERER_URL !== undefined;
+const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
+const IS_MAC = process.platform === "darwin";
 
 /**
  * Ignore-blur grace window after a summon. macOS shuffles focus around
@@ -37,27 +48,28 @@ const IS_MAC = process.platform === "darwin"
  * blur → hide and we'd see "double-tap ⌘ does nothing". We track the
  * last summon timestamp and silently drop blurs that arrive inside it.
  */
-const BLUR_GRACE_MS = 400
-let lastSummonAt = 0
+const BLUR_GRACE_MS = 400;
+let lastSummonAt = 0;
 
-const QUICK_ASK_WIDTH = 640
-/**
- * Compact height when only the input is showing. The window grows
- * vertically (via `quick-ask:resize` IPC) once a response is streaming
- * so the user gets enough room for the answer without the empty state
- * taking half the screen.
- */
-const QUICK_ASK_INITIAL_HEIGHT = 84
+/** Width of the single visible Quick Ask surface. */
+const QUICK_ASK_CARD_WIDTH = 640;
+/** Transparent room on every side for the card's CSS shadow to paint into. */
+const QUICK_ASK_SHADOW_GUTTER = 16;
+const QUICK_ASK_WINDOW_WIDTH =
+  QUICK_ASK_CARD_WIDTH + QUICK_ASK_SHADOW_GUTTER * 2;
 /** Hard ceiling so a runaway response can't grow the window past 1 screen. */
-const QUICK_ASK_MAX_HEIGHT = 540
+const QUICK_ASK_MAX_HEIGHT = QUICK_ASK_PICKER_STAGE_HEIGHT;
 /** Vertical offset from the top of the active display's work area. */
-const QUICK_ASK_TOP_OFFSET_RATIO = 0.22
+const QUICK_ASK_TOP_OFFSET_RATIO = 0.22;
+/** Keep the fixed picker stage and its modal shadow inside the work area. */
+const QUICK_ASK_STAGE_EDGE_MARGIN = 12;
 
-let quickAskWindow: BrowserWindow | null = null
+let quickAskWindow: BrowserWindow | null = null;
+let quickAskResizeAnchor: QuickAskResizeAnchor = "center";
 
 export interface QuickAskPrefill {
-  text?: string
-  sourceApp?: string
+  text?: string;
+  sourceApp?: string;
 }
 
 /**
@@ -67,17 +79,34 @@ export interface QuickAskPrefill {
  * the user is" indicator across heterogeneous app focus states.
  */
 function computeBounds(): {
-  x: number
-  y: number
-  width: number
-  height: number
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 } {
-  const cursor = screen.getCursorScreenPoint()
-  const display = screen.getDisplayNearestPoint(cursor)
-  const wa = display.workArea
-  const x = wa.x + Math.round((wa.width - QUICK_ASK_WIDTH) / 2)
-  const y = wa.y + Math.round(wa.height * QUICK_ASK_TOP_OFFSET_RATIO)
-  return { x, y, width: QUICK_ASK_WIDTH, height: QUICK_ASK_INITIAL_HEIGHT }
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const wa = display.workArea;
+  const x = wa.x + Math.round((wa.width - QUICK_ASK_WINDOW_WIDTH) / 2);
+  const preferredY = wa.y + Math.round(wa.height * QUICK_ASK_TOP_OFFSET_RATIO);
+  const pickerStageOverhang = Math.ceil(
+    (QUICK_ASK_PICKER_STAGE_HEIGHT - QUICK_ASK_COMPACT_HEIGHT) / 2,
+  );
+  const minimumY =
+    wa.y + pickerStageOverhang + QUICK_ASK_STAGE_EDGE_MARGIN;
+  const maximumY =
+    wa.y +
+    wa.height -
+    QUICK_ASK_COMPACT_HEIGHT -
+    pickerStageOverhang -
+    QUICK_ASK_STAGE_EDGE_MARGIN;
+  const y = Math.min(Math.max(preferredY, minimumY), maximumY);
+  return {
+    x,
+    y,
+    width: QUICK_ASK_WINDOW_WIDTH,
+    height: QUICK_ASK_COMPACT_HEIGHT,
+  };
 }
 
 /**
@@ -85,9 +114,16 @@ function computeBounds(): {
  * existing window. Hidden by default; surface with `summonQuickAsk`.
  */
 export function createQuickAskWindow(): BrowserWindow {
-  if (quickAskWindow && !quickAskWindow.isDestroyed()) return quickAskWindow
+  if (quickAskWindow && !quickAskWindow.isDestroyed()) return quickAskWindow;
 
-  const { x, y, width, height } = computeBounds()
+  quickAskResizeAnchor = "center";
+
+  const compactBounds = computeBounds();
+  const { x, y, width, height } = resolveQuickAskSummonBounds(
+    compactBounds,
+    QUICK_ASK_PICKER_STAGE_HEIGHT,
+    "center",
+  );
 
   const win = new BrowserWindow({
     width,
@@ -109,14 +145,11 @@ export function createQuickAskWindow(): BrowserWindow {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    // hasShadow=true so macOS draws the popup shadow OUTSIDE the
-    // window. With transparent: true + frame: false, the shadow
-    // follows the opaque rounded shape we render inside. Doing it
-    // here (instead of with a tailwind `shadow-2xl` on the React
-    // tree) avoids the shadow being clipped at the window edge —
-    // which manifested as a visible horizontal strip at the bottom
-    // of the popup.
-    hasShadow: true,
+    // The renderer paints the one and only shadow inside the transparent
+    // gutter. Native panel shadows are disabled: on transparent frameless
+    // windows their bounds vary by macOS release and can be cropped into a
+    // hard horizontal band at the BrowserWindow edge.
+    hasShadow: false,
     focusable: true,
     show: false,
     backgroundColor: "#00000000",
@@ -136,7 +169,7 @@ export function createQuickAskWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
     },
-  })
+  });
 
   // `type: 'panel'` above implicitly demotes the process to
   // "accessory" (no dock icon, no App Switcher). Flip back to
@@ -146,9 +179,9 @@ export function createQuickAskWindow(): BrowserWindow {
   // policy here doesn't interfere with it.
   if (IS_MAC) {
     try {
-      app.setActivationPolicy("regular")
+      app.setActivationPolicy("regular");
     } catch (err) {
-      console.warn("[amiba] setActivationPolicy failed:", err)
+      console.warn("[amiba] setActivationPolicy failed:", err);
     }
   }
 
@@ -173,7 +206,7 @@ export function createQuickAskWindow(): BrowserWindow {
   win.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
     skipTransformProcessType: true,
-  })
+  });
 
   // Auto-dismiss when the user clicks away. Esc-to-dismiss is handled in
   // the renderer (sends `quick-ask:dismiss` back). The grace window
@@ -181,22 +214,22 @@ export function createQuickAskWindow(): BrowserWindow {
   // when macOS hasn't finished settling focus from the AppleScript
   // selection-capture pass yet.
   win.on("blur", () => {
-    if (Date.now() - lastSummonAt < BLUR_GRACE_MS) return
-    if (!win.isDestroyed() && win.isVisible()) win.hide()
-  })
+    if (Date.now() - lastSummonAt < BLUR_GRACE_MS) return;
+    if (!win.isDestroyed() && win.isVisible()) win.hide();
+  });
 
   win.on("closed", () => {
-    if (quickAskWindow === win) quickAskWindow = null
-  })
+    if (quickAskWindow === win) quickAskWindow = null;
+  });
 
   if (isDev && RENDERER_DEV_URL) {
-    void win.loadURL(`${RENDERER_DEV_URL}/quick-ask/index.html`)
+    void win.loadURL(`${RENDERER_DEV_URL}/quick-ask/index.html`);
   } else {
-    void win.loadFile(path.join(__dirname, "../renderer/quick-ask/index.html"))
+    void win.loadFile(path.join(__dirname, "../renderer/quick-ask/index.html"));
   }
 
-  quickAskWindow = win
-  return win
+  quickAskWindow = win;
+  return win;
 }
 
 /**
@@ -208,9 +241,9 @@ export function createQuickAskWindow(): BrowserWindow {
  * a stray second double-tap dismisses rather than refocusing.
  */
 export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
-  let win = quickAskWindow
+  let win = quickAskWindow;
   if (!win || win.isDestroyed()) {
-    win = createQuickAskWindow()
+    win = createQuickAskWindow();
   }
 
   if (win.isVisible()) {
@@ -219,83 +252,90 @@ export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
     // log on every double-tap and the popup is invisible, it means
     // a previous blur missed clearing visibility state and we're
     // toggling at the wrong cadence.
-    console.log("[amiba] summonQuickAsk: already visible → hide")
-    win.hide()
-    return
+    console.log("[amiba] summonQuickAsk: already visible → hide");
+    win.hide();
+    return;
   }
-  console.log("[amiba] summonQuickAsk: showing")
-  const cursor = screen.getCursorScreenPoint()
-  const display = screen.getDisplayNearestPoint(cursor)
+  console.log("[amiba] summonQuickAsk: showing");
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
   console.log(
     "[amiba] cursor=%o display.bounds=%o display.workArea=%o",
     cursor,
     display.bounds,
     display.workArea,
-  )
+  );
 
   // Reposition on every summon so multi-monitor users always get the
   // popup on their current display, and so dock / display arrangement
   // changes don't leave us stranded off-screen. The HEIGHT, however,
   // is preserved from the previous session — the renderer is the
   // source of truth on what size the popup should be (it knows whether
-  // there's a conversation showing). If we resnapped to the construction
-  // default here, every summon would briefly flash short before the
-  // renderer asked for the right size.
-  const target = computeBounds()
-  const current = win.getBounds()
-  const next = {
-    x: target.x,
-    y: target.y,
-    width: target.width,
-    height: current.height || target.height,
-  }
+  // there's a conversation showing). Preserve the last resize anchor too:
+  // an overlay that survived a blur must reopen with the composer at the
+  // same compact screen coordinate, not with the tall transparent window's
+  // top edge placed at the compact Y position.
+  const target = computeBounds();
+  const current = win.getBounds();
+  const currentHeight = current.height || target.height;
+  const next = resolveQuickAskSummonBounds(
+    target,
+    currentHeight,
+    quickAskResizeAnchor,
+  );
   console.log(
     "[amiba] setBounds=%o (was=%o, alwaysOnTop=%s, opacity=%s)",
     next,
     current,
     win.isAlwaysOnTop(),
     win.getOpacity(),
-  )
-  win.setBounds(next)
+  );
+  win.setBounds(next);
 
   const deliver = () => {
-    if (win!.isDestroyed()) return
-    lastSummonAt = Date.now()
+    if (win!.isDestroyed()) return;
+    lastSummonAt = Date.now();
     // No `app.focus({ steal: true })` — NSPanel windows
     // (`type: 'panel'`) can become key window WITHOUT making Electron
     // the active app. That's literally their reason for existing.
     // Calling `app.focus` would yank the main BrowserWindow forward
     // and the popup would end up behind it (which it did, manifesting
     // as "Quick-Ask shows the main window instead").
-    win!.show()
-    if (IS_MAC) win!.moveTop()
-    win!.focus()
-    const b = win!.getBounds()
+    win!.show();
+    if (IS_MAC) win!.moveTop();
+    win!.focus();
+    const b = win!.getBounds();
     console.log(
       "[amiba] after show/focus bounds=%o visible=%s focused=%s minimized=%s",
       b,
       win!.isVisible(),
       win!.isFocused(),
       win!.isMinimized(),
-    )
+    );
     win!.webContents.send("quick-ask:prefill", {
       text: prefill.text ?? "",
       sourceApp: prefill.sourceApp ?? "",
-    })
-  }
+    });
+  };
 
-  const wc = win.webContents
+  const wc = win.webContents;
   if (wc.isLoading()) {
-    wc.once("did-finish-load", deliver)
+    wc.once("did-finish-load", deliver);
   } else {
-    deliver()
+    deliver();
   }
 }
 
 export function hideQuickAsk(): void {
-  const win = quickAskWindow
-  if (!win || win.isDestroyed()) return
-  if (win.isVisible()) win.hide()
+  const win = quickAskWindow;
+  if (!win || win.isDestroyed()) return;
+  if (win.isVisible()) win.hide();
+}
+
+export function setQuickAskIgnoreMouseEvents(ignore: boolean): void {
+  const win = quickAskWindow;
+  if (!win || win.isDestroyed()) return;
+  win.setIgnoreMouseEvents(ignore, { forward: true });
 }
 
 /**
@@ -303,34 +343,43 @@ export function hideQuickAsk(): void {
  * Clamped to `QUICK_ASK_MAX_HEIGHT` so a runaway answer never grows
  * past one screen.
  *
- * macOS gets `animate: true` so the (rare) compact↔expanded transition
- * the renderer triggers on submit / new-conversation is smoothed by the
- * OS's built-in window animation (~200ms ease-out) rather than
- * snapping abruptly. On Windows / Linux the flag is a no-op.
+ * The fixed picker stage does not resize when a picker toggles. Only the
+ * stage↔conversation transition reaches this path; the top-anchored chat
+ * expansion may use macOS's built-in animation, while the center-anchored
+ * return to the picker stage remains atomic.
  */
-export function resizeQuickAsk(contentHeightPx: number): void {
-  const win = quickAskWindow
-  if (!win || win.isDestroyed()) return
+export function resizeQuickAsk(
+  contentHeightPx: number,
+  anchor: QuickAskResizeAnchor = "top",
+): void {
+  const win = quickAskWindow;
+  if (!win || win.isDestroyed()) return;
   const clamped = Math.max(
-    QUICK_ASK_INITIAL_HEIGHT,
+    QUICK_ASK_PICKER_STAGE_HEIGHT,
     Math.min(Math.round(contentHeightPx), QUICK_ASK_MAX_HEIGHT),
-  )
-  const bounds = win.getBounds()
-  if (bounds.height === clamped) return
-  win.setBounds({ ...bounds, height: clamped }, IS_MAC)
+  );
+  const bounds = win.getBounds();
+  quickAskResizeAnchor = anchor;
+  if (bounds.height === clamped) return;
+  // Center anchoring makes the compact composer and its modal dialogs share
+  // exactly the same screen-space origin.
+  const nextBounds = resolveQuickAskResizeBounds(bounds, clamped, anchor);
+  // Keep the smoother animation only for the top-anchored conversation
+  // transition. AppKit interpolation can make a center anchor appear to drift.
+  win.setBounds(nextBounds, IS_MAC && anchor === "top");
 }
 
 export function destroyQuickAskWindow(): void {
-  const win = quickAskWindow
-  quickAskWindow = null
-  if (!win || win.isDestroyed()) return
+  const win = quickAskWindow;
+  quickAskWindow = null;
+  if (!win || win.isDestroyed()) return;
   try {
-    win.destroy()
+    win.destroy();
   } catch {
     // best-effort
   }
 }
 
 export function getQuickAskWindow(): BrowserWindow | null {
-  return quickAskWindow
+  return quickAskWindow;
 }

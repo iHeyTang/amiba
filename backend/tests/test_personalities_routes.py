@@ -1,6 +1,9 @@
 import pytest
 from aiohttp import web
 
+from amiba_backplane.runtime.features.hermes_proxy.settings import (
+    personalities_service,
+)
 from amiba_backplane.runtime.features.hermes_proxy.settings.personalities_service import (
     delete_personality_response,
     list_personalities_response,
@@ -11,6 +14,20 @@ from amiba_backplane.runtime.features.hermes_proxy.settings.personalities_routes
     register_personalities_routes,
 )
 
+_BUILTINS = {
+    "helpful": "You are a helpful, friendly AI assistant.",
+    "concise": "Keep answers brief.",
+}
+
+
+@pytest.fixture(autouse=True)
+def cli_personality_catalog(monkeypatch):
+    monkeypatch.setattr(
+        personalities_service,
+        "load_cli_personality_catalog",
+        lambda: (dict(_BUILTINS), dict(_BUILTINS)),
+    )
+
 
 def test_service_includes_builtins():
     items = list_personalities_response()
@@ -19,7 +36,7 @@ def test_service_includes_builtins():
     assert "concise" in keys
     sample = next(p for p in items if p["key"] == "helpful")
     assert "preview" in sample
-    assert "builtin" in sample
+    assert sample["builtin"] is True
     assert "prompt" in sample
     assert sample["prompt"]
     assert "description" in sample
@@ -29,6 +46,28 @@ def test_service_includes_builtins():
     assert "style" in sample
     assert "overridden" in sample
     assert "selected" in sample
+
+
+def test_service_uses_hermes_effective_list_without_forcing_in_builtins(monkeypatch):
+    monkeypatch.setattr(
+        personalities_service,
+        "load_cli_personality_catalog",
+        lambda: (
+            {
+                "reviewer": {
+                    "name": "Reviewer",
+                    "system_prompt": "Review every claim.",
+                }
+            },
+            dict(_BUILTINS),
+        ),
+    )
+    monkeypatch.setattr(personalities_service, "_read_raw_config", lambda: {})
+
+    items = list_personalities_response()
+
+    assert [item["key"] for item in items] == ["reviewer"]
+    assert items[0]["builtin"] is False
 
 
 def test_service_writes_custom_personality(monkeypatch):
@@ -84,8 +123,43 @@ def test_service_resets_builtin_override(monkeypatch):
     result = delete_personality_response("helpful")
 
     assert result["reset"] is True
-    assert "helpful" not in raw["agent"]["personalities"]
+    assert raw["agent"]["personalities"]["helpful"] == _BUILTINS["helpful"]
     assert raw["agent"]["personalities"]["custom"] == "Custom mode."
+
+
+def test_service_reset_only_override_removes_empty_personality_map(monkeypatch):
+    raw = {
+        "agent": {"personalities": {"helpful": "A profile-specific override."}}
+    }
+    writes = []
+    monkeypatch.setattr(personalities_service, "_read_raw_config", lambda: raw)
+    monkeypatch.setattr(
+        personalities_service,
+        "_write_raw_config",
+        lambda value: writes.append(value),
+    )
+
+    result = delete_personality_response("helpful")
+
+    assert result == {
+        "ok": True,
+        "key": "helpful",
+        "reset": True,
+        "existed": True,
+    }
+    assert "personalities" not in raw["agent"]
+    assert writes == [raw]
+
+
+def test_service_delete_last_custom_removes_empty_personality_map(monkeypatch):
+    raw = {"agent": {"personalities": {"reviewer": "Review every claim."}}}
+    monkeypatch.setattr(personalities_service, "_read_raw_config", lambda: raw)
+    monkeypatch.setattr(personalities_service, "_write_raw_config", lambda value: None)
+
+    result = delete_personality_response("reviewer")
+
+    assert result["reset"] is False
+    assert "personalities" not in raw["agent"]
 
 
 def test_service_renames_custom_personality_and_keeps_default_selection(monkeypatch):

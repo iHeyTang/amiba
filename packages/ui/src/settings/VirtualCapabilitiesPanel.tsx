@@ -7,7 +7,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowDown,
@@ -50,6 +49,9 @@ import {
   Badge,
   Button,
   Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   ScrollArea,
   Select,
   SelectContent,
@@ -220,62 +222,14 @@ function PresetActionsMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
 
-  const closeMenu = useCallback((restoreFocus = false) => {
+  const closeMenu = useCallback(() => {
     setOpen(false);
-    if (restoreFocus) {
-      window.setTimeout(() => triggerRef.current?.focus(), 0);
-    }
   }, []);
 
   const openMenu = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const width = 156;
-    const height = 80;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    setPosition({
-      left: Math.max(
-        8,
-        Math.min(rect.right - width, window.innerWidth - width - 8),
-      ),
-      top:
-        spaceBelow >= height + 8
-          ? rect.bottom + 5
-          : Math.max(8, rect.top - height - 5),
-    });
     setOpen(true);
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        !menuRef.current?.contains(target) &&
-        !triggerRef.current?.contains(target)
-      ) {
-        closeMenu();
-      }
-    };
-    const onWindowChange = () => closeMenu();
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("resize", onWindowChange);
-    window.addEventListener("scroll", onWindowChange, true);
-    const focusTimer = window.setTimeout(() => {
-      menuRef.current
-        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
-        ?.focus();
-    }, 0);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("resize", onWindowChange);
-      window.removeEventListener("scroll", onWindowChange, true);
-    };
-  }, [closeMenu, open]);
 
   const runAndClose = (action: () => void) => {
     closeMenu();
@@ -285,7 +239,7 @@ function PresetActionsMenu({
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeMenu(true);
+      closeMenu();
       return;
     }
     if (event.key === "Tab") {
@@ -320,67 +274,64 @@ function PresetActionsMenu({
   };
 
   return (
-    <>
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="absolute right-1 top-1/2 h-6 w-11 -translate-y-1/2 justify-end rounded-md bg-secondary pr-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover/preset:opacity-100 group-focus-within/preset:opacity-100 data-[state=open]:opacity-100"
-        data-state={open ? "open" : "closed"}
-        disabled={busy}
-        aria-label={t("options.models.virtual.presetActionsNamed", { name })}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            openMenu();
-          }
-        }}
-      >
-        <EllipsisVertical aria-hidden className="h-3.5 w-3.5" />
-      </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1/2 h-6 w-11 -translate-y-1/2 justify-end rounded-md bg-secondary pr-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover/preset:opacity-100 group-focus-within/preset:opacity-100 data-[state=open]:opacity-100"
+          data-state={open ? "open" : "closed"}
+          disabled={busy}
+          aria-label={t("options.models.virtual.presetActionsNamed", { name })}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              openMenu();
+            }
+          }}
+        >
+          <EllipsisVertical aria-hidden className="h-3.5 w-3.5" />
+        </Button>
+      </PopoverTrigger>
 
-      {open
-        ? createPortal(
-            <div
-              ref={menuRef}
-              role="menu"
-              aria-label={t("options.models.virtual.presetActions")}
-              className="fixed z-50 w-[156px] rounded-lg border border-border/70 bg-popover p-1 text-popover-foreground shadow-popover"
-              style={position}
-              onKeyDown={onMenuKeyDown}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted/70"
-                onClick={() => runAndClose(onCopy)}
-              >
-                <Copy
-                  aria-hidden
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                />
-                {t("options.models.virtual.copyPreset")}
-              </button>
-              <div aria-hidden className="mx-1 my-0.5 h-px bg-border/50" />
-              <button
-                type="button"
-                role="menuitem"
-                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-destructive transition-colors hover:bg-destructive/8 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!canDelete}
-                onClick={() => runAndClose(onDelete)}
-              >
-                <Trash2 aria-hidden className="h-3.5 w-3.5" />
-                {t("options.models.virtual.deletePreset")}
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
+      <PopoverContent
+        align="end"
+        aria-label={t("options.models.virtual.presetActions")}
+        onKeyDown={onMenuKeyDown}
+        ref={menuRef}
+        role="menu"
+        side="bottom"
+        size="narrow"
+      >
+        <button
+          type="button"
+          role="menuitem"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted/70"
+          onClick={() => runAndClose(onCopy)}
+        >
+          <Copy
+            aria-hidden
+            className="h-3.5 w-3.5 text-muted-foreground"
+          />
+          {t("options.models.virtual.copyPreset")}
+        </button>
+        <div aria-hidden className="mx-1 my-0.5 h-px bg-border/50" />
+        <button
+          type="button"
+          role="menuitem"
+          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-destructive transition-colors hover:bg-destructive/8 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!canDelete}
+          onClick={() => runAndClose(onDelete)}
+        >
+          <Trash2 aria-hidden className="h-3.5 w-3.5" />
+          {t("options.models.virtual.deletePreset")}
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
 

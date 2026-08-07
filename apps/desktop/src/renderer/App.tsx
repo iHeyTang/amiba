@@ -36,7 +36,7 @@ const TITLE_BAR_HEIGHT = 48;
 const MAC_TRAFFIC_LIGHT_RESERVE = 96;
 
 // loading       — first status probe in flight (brief)
-// initializing  — hermes is installed; silently bringing the backend up on :9394
+// initializing  — managed Hermes is installed; silently bringing its backend up
 //                 (install-if-missing + start). Plumbing, NOT onboarding — just
 //                 a spinner, never a wizard.
 // init-error    — the silent init couldn't bring the backend up (rare); offer retry
@@ -82,6 +82,7 @@ function AppInner(): ReactElement {
   const [view, setView] = useState<View>("chat");
   const [phase, setPhase] = useState<Phase>("loading");
   const [showReadyCurtain, setShowReadyCurtain] = useState(true);
+  const pendingOpenSessionRef = useRef<string | null>(null);
   // Sessions-aware prompt requester. Used by the extension chat.startSession
   // path below — minting the session HERE (not from main) is what makes
   // the ChatSurface drain land on a fresh, freshly-active id; doing the
@@ -131,12 +132,48 @@ function AppInner(): ReactElement {
     });
   }, [requestNewChat]);
 
+  const openSessionFromNotifier = useCallback(
+    async (sessionId: string) => {
+      const target = sessionId.trim();
+      if (!target) return;
+      if (!sessions.ready) {
+        pendingOpenSessionRef.current = target;
+        return;
+      }
+
+      // A completed run may have been written by the background gateway or
+      // cron watcher after this renderer last loaded its index.
+      await sessions.refresh();
+      await sessions.openTab(target);
+      await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
+      setView("chat");
+    },
+    [sessions.openTab, sessions.ready, sessions.refresh],
+  );
+
+  useEffect(() => {
+    return window.amiba.onOpenSession(({ sessionId }) => {
+      void openSessionFromNotifier(sessionId).catch((err) => {
+        console.error("notification session navigation failed:", err);
+      });
+    });
+  }, [openSessionFromNotifier]);
+
+  useEffect(() => {
+    if (!sessions.ready || !pendingOpenSessionRef.current) return;
+    const target = pendingOpenSessionRef.current;
+    pendingOpenSessionRef.current = null;
+    void openSessionFromNotifier(target).catch((err) => {
+      console.error("deferred notification session navigation failed:", err);
+    });
+  }, [openSessionFromNotifier, sessions.ready]);
+
   // Boot decision, split by what actually needs the USER:
   //   - backend already serving → straight in.
   //   - no hermes installed → the guided install wizard (the only user-facing
   //     setup; installing hermes is a real decision + needs a terminal).
   //   - hermes installed but backend down → SILENT init (ensureBackend brings
-  //     :9394 up, installing the backplane the first time). Starting the backend
+  //     private backplane up, installing it the first time). Starting the backend
   //     is plumbing, not onboarding, so it stays behind a plain spinner — no
   //     wizard. Re-runnable so the wizard's onReady (after a hermes install)
   //     falls through to the same silent init.

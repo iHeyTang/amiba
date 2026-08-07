@@ -48,7 +48,13 @@ export {
   wallpaperAmbientTextClass,
 } from "./Wallpaper";
 export { MessageList } from "./MessageList";
-export { Composer, type ComposerHandle, type ComposerProps } from "./Composer";
+export {
+  Composer,
+  type ComposerDensity,
+  type ComposerHandle,
+  type ComposerPickerOverlayVariant,
+  type ComposerProps,
+} from "./Composer";
 export {
   ComposerModelPicker,
   type ComposerModelPickerProps,
@@ -105,8 +111,10 @@ export {
   ApprovalCountdownBar,
   ApprovalRecordChip,
   ApprovalRecordList,
+  presentApprovalDescription,
   type ApprovalBannerProps,
 } from "./bubble/approval";
+export { ApprovalCode, splitApprovalCommand } from "./bubble/approval-syntax";
 
 // Re-export UI message shape + helpers so consumers can build a UiMessage[]
 // to pass into <MessageTurns> / <Bubble>.

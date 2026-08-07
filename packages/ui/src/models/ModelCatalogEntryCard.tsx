@@ -96,7 +96,7 @@ export function ModelCatalogEntryCard({
       />
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="flex max-h-[82vh] w-[min(42rem,92vw)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex max-h-[82vh] flex-col gap-0 overflow-hidden p-0" size="lg">
           <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/45">

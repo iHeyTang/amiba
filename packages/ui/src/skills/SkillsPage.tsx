@@ -161,7 +161,7 @@ function formatAbsolute(iso: string | null): string {
 }
 
 const TS_SOURCE_LABEL: Record<string, string> = {
-  usage: "Hermes usage record",
+  usage: "Usage record",
   hub: "Hub install record",
   fs: "Filesystem time",
 };
@@ -511,11 +511,8 @@ function SkillViewerDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className={cn(
-          // Wide modal for the two-pane layout. Plain `max-w-lg` (the
-          // primitive default) is far too narrow for a code viewer.
-          "flex h-[80vh] max-h-[800px] w-[90vw] max-w-5xl flex-col gap-0 p-0",
-        )}
+        className={cn("flex h-[80vh] max-h-[800px] flex-col gap-0 p-0")}
+        size="full"
       >
         <DialogHeader className="border-b border-border bg-muted/30 px-4 py-3">
           <DialogTitle className="text-sm font-semibold">

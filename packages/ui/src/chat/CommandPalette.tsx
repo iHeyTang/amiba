@@ -55,16 +55,14 @@ export function CommandPalette({
           // chat title blows the width past max-w-xl and overflow-hidden clips
           // it. As a block the width is locked to max-w-xl and the inner
           // `truncate` ellipsizes correctly.
-          // `sm:rounded-2xl` is required alongside the base class: DialogContent
-          // ships `sm:rounded-lg`, and tailwind-merge only dedupes within the
-          // same variant — a bare `rounded-2xl` loses at the sm breakpoint.
-          "block max-w-xl gap-0 overflow-hidden rounded-2xl p-0 sm:rounded-2xl",
+          "block gap-0 overflow-hidden p-0",
           "[&_[cmdk-group]]:py-1",
           "[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-muted-foreground/70",
           "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:w-full [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2 [&_[cmdk-item]]:overflow-hidden [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2.5 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground/80",
           "[&_[cmdk-item][data-selected=true]]:bg-secondary [&_[cmdk-item][data-selected=true]]:text-secondary-foreground",
         )}
         aria-label={t("commandPalette.placeholder")}
+        size="wide"
       >
         <DialogTitle className="sr-only">
           {t("commandPalette.placeholder")}

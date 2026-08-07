@@ -121,16 +121,13 @@ describe("ConversationTurnRail", () => {
     for (const marker of screen.getAllByRole("button", { name: /^Jump/ })) {
       expect(marker).not.toHaveAttribute("style");
     }
-    expect(
-      screen.getByRole("tooltip", {
-        name: "Inspect the workspace structure",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tooltip", {
-        name: "Now simplify the file result card",
-      }),
-    ).toBeInTheDocument();
+    const markers = screen.getAllByRole("button", { name: /^Jump/ });
+    await userEvent.hover(markers[0]!);
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-ui-overlay="tooltip"]'),
+      ).toHaveTextContent("Inspect the workspace structure"),
+    );
   });
 
   it("hides when the panel edge cannot preserve space before the content", async () => {

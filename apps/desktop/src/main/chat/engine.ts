@@ -16,8 +16,13 @@ import {
 } from "@amiba/core";
 import { BrowserWindow, ipcMain } from "electron";
 
-import { sendToNotifier } from "../notifier-window";
+import { getNotifierWindow, sendToNotifier } from "../notifier-window";
 import { workspaceManager } from "../workspace";
+import {
+  buildApprovalPendingNotification,
+  buildChatCompletedNotification,
+  shouldNotifyForWindowState,
+} from "./completion-notification";
 
 /**
  * Per-session running state. Mirrors the renderer's `ChatRuntimeState` so
@@ -109,15 +114,11 @@ export async function resolveApproval(
 function shouldSuppressNotifier(): boolean {
   // When the user is staring at a real (focusable) Amiba window, the
   // in-panel approval bubble is already visible — surfacing a second
-  // floating card on top would be noise. The notifier window itself is
-  // `focusable: false`, so it never gets `isFocused()` and never
-  // suppresses itself.
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (w.isDestroyed()) continue;
-    if (!w.isFocusable()) continue;
-    if (w.isFocused() && w.isVisible() && !w.isMinimized()) return true;
-  }
-  return false;
+  // floating card on top would be noise. Exclude the notifier itself:
+  // it becomes focused after a deliberate click and must not suppress
+  // a newer approval that arrives while the user is acting on it.
+  const notifier = getNotifierWindow();
+  return !shouldNotifyForWindowState(BrowserWindow.getAllWindows(), notifier);
 }
 
 function broadcast(msg: EngineToClientMessage) {
@@ -176,7 +177,8 @@ function snapshotFor(sessionId: string): SnapshotFrame {
 }
 
 async function handleSubmit(payload: SubmitPayload) {
-  const { sessionId, assistantUiId, model, history, agent } = payload;
+  const { sessionId, sessionTitle, assistantUiId, model, history, agent } =
+    payload;
 
   // Make sure the SessionDB row exists with the correct ``source`` BEFORE
   // ``runHermesAgent`` opens the run. Otherwise the first ``/v1/runs`` for a
@@ -468,18 +470,18 @@ async function handleSubmit(payload: SubmitPayload) {
           // main window is already focused — the in-panel approval bubble
           // takes precedence then.
           if (!seen && !shouldSuppressNotifier()) {
-            sendToNotifier({
-              type: "approval-pending",
-              approvalId: request.approvalId,
-              tool: request.tool,
-              command: request.command,
-              message:
-                request.description ||
-                request.reason ||
-                request.command ||
-                "Amiba is requesting approval to continue.",
-              timestamp: Date.now(),
-            });
+            sendToNotifier(
+              buildApprovalPendingNotification({
+                approvalId: request.approvalId,
+                sessionId,
+                sessionTitle,
+                history,
+                tool: request.tool,
+                command: request.command,
+                message: request.description || request.reason || "",
+                timestamp: Date.now(),
+              }),
+            );
           }
           emitEvent(sessionId, { kind: "approvalRequest", request });
         },
@@ -521,6 +523,17 @@ async function handleSubmit(payload: SubmitPayload) {
     state.streaming = false;
     state.updatedAt = Date.now();
     emitEvent(sessionId, { kind: "done" });
+    if (!shouldSuppressNotifier()) {
+      sendToNotifier(
+        buildChatCompletedNotification({
+          sessionId,
+          assistantUiId,
+          history,
+          assistantText: state.assistantText,
+          timestamp: state.updatedAt,
+        }),
+      );
+    }
   } catch (err: unknown) {
     state.streaming = false;
     state.updatedAt = Date.now();

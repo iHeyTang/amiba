@@ -20,14 +20,15 @@ export const BRIDGE_URL = "ws://127.0.0.1:9393"
 export const BRIDGE_URL_STORAGE_KEY = "settings.bridge.url"
 
 /**
- * Local HTTP base for the `amiba-backplane` server (env
- * `AMIBA_BACKPLANE_PORT`, default 9394; spawned + supervised by the desktop
- * app — it is NOT a hermes plugin). Hosts three lanes:
+ * Local HTTP base for the `amiba-backplane` server. The desktop-owned service
+ * uses a private high port so it can coexist with a separately installed
+ * Hermes/legacy Amiba runtime on the conventional ports. It is not a Hermes
+ * plugin and hosts three lanes:
  *   - `/hermes/*`              — proxies to Hermes core
  *   - `/integrations/<name>/*` — built-in integrations framework routes
  *   - `/v1/*`                  — reverse-proxy to Hermes gateway
  */
-export const BACKPLANE_HTTP_BASE = "http://127.0.0.1:9394"
+export const BACKPLANE_HTTP_BASE = "http://127.0.0.1:19394"
 
 /**
  * Storage key for the user's `AMIBA_BACKPLANE_KEY` mirror. When set,
@@ -43,7 +44,7 @@ export const ATTACHMENT_HTTP_BASE = BACKPLANE_HTTP_BASE
  * Hermes gateway HTTP base, OpenAI-compatible Chat Completions endpoint
  * (`gateway/platforms/api_server.py`).
  */
-export const DEFAULT_HERMES_API_BASE = "http://127.0.0.1:8642/v1"
+export const DEFAULT_HERMES_API_BASE = "http://127.0.0.1:18642/v1"
 
 export const DEFAULT_HERMES_MODEL = "hermes-agent"
 

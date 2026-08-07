@@ -20,6 +20,13 @@ describe("DialogContent", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Centered dialog" });
+    expect(dialog).toHaveAttribute("data-ui-overlay", "dialog");
+    expect(dialog).toHaveClass(
+      "rounded-2xl",
+      "border-border/60",
+      "shadow-overlay",
+      "max-w-lg",
+    );
     expect(dialog.style.getPropertyValue("--tw-enter-translate-x")).toBe(
       "-50%",
     );

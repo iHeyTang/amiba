@@ -22,7 +22,6 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 
 import { Button } from "../primitives";
 import {
@@ -42,6 +41,9 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "../primitives";
 import {
   createHermesCronJob,
@@ -326,7 +328,7 @@ function SkillSelectionField({
         )}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[70vh] max-w-lg flex-col gap-0 overflow-hidden rounded-2xl p-0">
+        <DialogContent className="flex max-h-[70vh] flex-col gap-0 overflow-hidden p-0" size="md">
           <DialogTitle className="sr-only">
             {t("options.cron.form.skills")}
           </DialogTitle>
@@ -438,7 +440,7 @@ function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !busy && onClose()}>
-      <DialogContent className="flex max-h-[85vh] w-[90vw] max-w-2xl flex-col gap-0 p-0">
+      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0" size="lg">
         <DialogHeader className="border-b border-border/60 px-5 py-4">
           <DialogTitle className="text-sm font-semibold">
             {mode === "create"
@@ -890,62 +892,14 @@ function TaskActionsMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
 
   const openMenu = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const width = 208;
-    const height = 176;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    setPosition({
-      left: Math.max(
-        8,
-        Math.min(rect.right - width, window.innerWidth - width - 8),
-      ),
-      top:
-        spaceBelow >= height + 8
-          ? rect.bottom + 6
-          : Math.max(8, rect.top - height - 6),
-    });
     setOpen(true);
   }, []);
 
-  const closeMenu = useCallback((restoreFocus = false) => {
+  const closeMenu = useCallback(() => {
     setOpen(false);
-    if (restoreFocus) {
-      window.setTimeout(() => triggerRef.current?.focus(), 0);
-    }
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        !menuRef.current?.contains(target) &&
-        !triggerRef.current?.contains(target)
-      ) {
-        closeMenu();
-      }
-    };
-    const onWindowChange = () => closeMenu();
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("resize", onWindowChange);
-    window.addEventListener("scroll", onWindowChange, true);
-    const focusTimer = window.setTimeout(() => {
-      menuRef.current
-        ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
-        ?.focus();
-    }, 0);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("resize", onWindowChange);
-      window.removeEventListener("scroll", onWindowChange, true);
-    };
-  }, [closeMenu, open]);
 
   const runAndClose = (action: () => void) => {
     closeMenu();
@@ -955,7 +909,7 @@ function TaskActionsMenu({
   const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      closeMenu(true);
+      closeMenu();
       return;
     }
     if (event.key === "Tab") {
@@ -990,66 +944,64 @@ function TaskActionsMenu({
   };
 
   return (
-    <>
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-muted-foreground"
-        disabled={busy}
-        aria-label={t("options.cron.action.moreNamed", {
-          name: job.name || job.id,
-        })}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            openMenu();
-          }
-        }}
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground"
+          disabled={busy}
+          aria-label={t("options.cron.action.moreNamed", {
+            name: job.name || job.id,
+          })}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              openMenu();
+            }
+          }}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
 
-      {open &&
-        createPortal(
-          <div
-            ref={menuRef}
-            role="menu"
-            aria-label={t("options.cron.action.menu")}
-            onKeyDown={onMenuKeyDown}
-            className="fixed z-50 w-52 rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-popover"
-            style={position}
-          >
-            <TaskMenuItem
-              icon={<CirclePlay />}
-              label={t("options.cron.action.runNow")}
-              onClick={() => runAndClose(onTrigger)}
-            />
-            <TaskMenuItem
-              icon={<Pencil />}
-              label={t("options.cron.action.edit")}
-              onClick={() => runAndClose(onEdit)}
-            />
-            <TaskMenuItem
-              icon={<Copy />}
-              label={t("options.cron.action.copyId")}
-              onClick={() => runAndClose(onCopyId)}
-            />
-            <div className="my-1 h-px bg-border/50" />
-            <TaskMenuItem
-              destructive
-              icon={<Trash2 />}
-              label={t("options.cron.action.delete")}
-              onClick={() => runAndClose(onDelete)}
-            />
-          </div>,
-          document.body,
-        )}
-    </>
+      <PopoverContent
+        align="end"
+        aria-label={t("options.cron.action.menu")}
+        onKeyDown={onMenuKeyDown}
+        ref={menuRef}
+        role="menu"
+        side="bottom"
+        size="menu"
+      >
+        <TaskMenuItem
+          icon={<CirclePlay />}
+          label={t("options.cron.action.runNow")}
+          onClick={() => runAndClose(onTrigger)}
+        />
+        <TaskMenuItem
+          icon={<Pencil />}
+          label={t("options.cron.action.edit")}
+          onClick={() => runAndClose(onEdit)}
+        />
+        <TaskMenuItem
+          icon={<Copy />}
+          label={t("options.cron.action.copyId")}
+          onClick={() => runAndClose(onCopyId)}
+        />
+        <div className="my-1 h-px bg-border/50" />
+        <TaskMenuItem
+          destructive
+          icon={<Trash2 />}
+          label={t("options.cron.action.delete")}
+          onClick={() => runAndClose(onDelete)}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

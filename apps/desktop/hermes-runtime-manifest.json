@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "bundleSchemaVersion": 1,
+  "repository": "NousResearch/hermes-agent",
+  "branch": "main",
+  "commit": "863e31318553cda8ad61df681d08175364d4164b",
+  "version": "0.20.0",
+  "pythonVersion": "3.11.13",
+  "nodeVersion": "22.22.0",
+  "playwrightVersion": "1.58.2",
+  "backplanePort": 19394,
+  "gatewayPort": 18642
+}

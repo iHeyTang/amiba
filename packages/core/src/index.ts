@@ -11,6 +11,7 @@ export * from "./attachments";
 export * from "./hermes-client";
 export * from "./fetch-models";
 export * from "./hermes-agent-model";
+export * from "./hermes-approval-mode";
 export * from "./hermes-model-gateway";
 export * from "./hermes-version";
 export * from "./hermes-cron";

@@ -6,6 +6,7 @@ from ....common import json_error
 from .service import (
     ACTION_LOG_FILES,
     action_status,
+    is_amiba_managed_runtime,
     spawn_hermes_action,
     status_response,
 )
@@ -33,6 +34,11 @@ async def handle_gateway_restart(_request: web.Request) -> web.Response:
 
 
 async def handle_update(_request: web.Request) -> web.Response:
+    if is_amiba_managed_runtime():
+        return json_error(
+            409,
+            "This Hermes runtime is managed by Amiba and updates with the desktop app",
+        )
     try:
         proc = spawn_hermes_action(["update"], "hermes-update")
     except Exception as exc:

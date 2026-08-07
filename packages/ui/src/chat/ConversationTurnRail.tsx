@@ -8,7 +8,13 @@ import {
   type RefObject,
 } from "react";
 
-import { cn } from "../primitives";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  cn,
+} from "../primitives";
 import { bubbleTextContent, splitWorkspaceFromBody } from "./internal/helpers";
 import type { UiMessage } from "./internal/types";
 
@@ -190,54 +196,61 @@ export function ConversationTurnRail({
       aria-label={t("conversationRail.label")}
       className="pointer-events-none absolute inset-y-3 left-2 z-30 flex w-8 flex-col justify-center"
     >
-      <div
-        data-conversation-turn-markers
-        className="flex w-full flex-col gap-0.5"
-      >
-        {userMessages.map((message, index) => {
-          const active = index === activeIndex;
-          const preview =
-            messagePreview(message) || t("conversationRail.messageFallback");
-          const distanceFromActive = Math.abs(index - activeIndex);
-          const distanceFromHover =
-            hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
+      <TooltipProvider delayDuration={120} skipDelayDuration={80}>
+        <div
+          data-conversation-turn-markers
+          className="flex w-full flex-col gap-0.5"
+        >
+          {userMessages.map((message, index) => {
+            const active = index === activeIndex;
+            const preview =
+              messagePreview(message) || t("conversationRail.messageFallback");
+            const distanceFromActive = Math.abs(index - activeIndex);
+            const distanceFromHover =
+              hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
 
-          return (
-            <button
-              key={message.uiId}
-              type="button"
-              data-conversation-turn-marker
-              aria-current={active ? "location" : undefined}
-              aria-label={t("conversationRail.jumpTo", {
-                index: index + 1,
-                message: preview,
-              })}
-              onClick={() => jumpToTurn(index)}
-              onPointerEnter={() => setHoveredIndex(index)}
-              onPointerLeave={() => setHoveredIndex(null)}
-              onFocus={() => setHoveredIndex(index)}
-              onBlur={() => setHoveredIndex(null)}
-              className="group/turn-marker pointer-events-auto relative flex h-3 w-8 shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              <span
-                aria-hidden
-                data-conversation-turn-stroke
-                className={cn(
-                  "h-[3px] rounded-full bg-foreground transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none",
-                  markerWidthClass(distanceFromHover),
-                )}
-                style={{ opacity: markerOpacity(distanceFromActive) }}
-              />
-              <span
-                role="tooltip"
-                className="pointer-events-none absolute left-8 top-1/2 z-50 w-max max-w-[min(20rem,calc(100vw-7rem))] -translate-y-1/2 rounded-lg border border-border/55 bg-popover px-2.5 py-2 text-left text-[11px] leading-[1.5] text-popover-foreground opacity-0 shadow-sm transition-opacity duration-150 group-hover/turn-marker:opacity-100 group-focus-visible/turn-marker:opacity-100"
-              >
-                <span className="line-clamp-3">{preview}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+            return (
+              <Tooltip key={message.uiId}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    data-conversation-turn-marker
+                    aria-current={active ? "location" : undefined}
+                    aria-label={t("conversationRail.jumpTo", {
+                      index: index + 1,
+                      message: preview,
+                    })}
+                    onClick={() => jumpToTurn(index)}
+                    onPointerEnter={() => setHoveredIndex(index)}
+                    onPointerLeave={() => setHoveredIndex(null)}
+                    onFocus={() => setHoveredIndex(index)}
+                    onBlur={() => setHoveredIndex(null)}
+                    className="pointer-events-auto relative flex h-3 w-8 shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  >
+                    <span
+                      aria-hidden
+                      data-conversation-turn-stroke
+                      className={cn(
+                        "h-[3px] rounded-full bg-foreground transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none",
+                        markerWidthClass(distanceFromHover),
+                      )}
+                      style={{ opacity: markerOpacity(distanceFromActive) }}
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  align="center"
+                  className="max-w-[min(20rem,calc(100vw-7rem))] text-left text-[11px] leading-[1.5]"
+                  side="right"
+                  sideOffset={6}
+                >
+                  <span className="line-clamp-3">{preview}</span>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
     </nav>
   );
 }

@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogTitle,
   cn,
+  type DialogOverlayVariant,
 } from "../primitives";
 import { ModelSummary, ModelSummaryOption } from "./ModelSummary";
 import {
@@ -48,11 +49,13 @@ export interface ModelPickerResetOption {
 
 export interface ModelPickerDialogProps {
   description?: string;
+  dialogSize?: "default" | "tall";
   errorMessage?: string;
   groups: ModelPickerGroup[];
   onOpenChange: (open: boolean) => void;
   onSelect: (provider: string, model: string) => void;
   open: boolean;
+  overlayVariant?: DialogOverlayVariant;
   resetOption?: ModelPickerResetOption;
   searchPlaceholder?: string;
   selected?: {
@@ -71,11 +74,13 @@ export interface ModelPickerDialogProps {
  */
 export function ModelPickerDialog({
   description,
+  dialogSize = "default",
   errorMessage,
   groups,
   onOpenChange,
   onSelect,
   open,
+  overlayVariant = "dimmed",
   resetOption,
   searchPlaceholder,
   selected,
@@ -132,92 +137,106 @@ export function ModelPickerDialog({
   );
   const hasModels = filteredGroups.length > 0;
   const dialogTitle = title ?? t("sidepanel.modelPicker.label");
+  const descriptionText = description ?? t("sidepanel.modelPicker.description");
+  const pickerSurfaceClassName = cn(
+    "gap-0 overflow-hidden p-0",
+    "[&_[cmdk-group]]:py-1",
+    "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5",
+    "[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground/70",
+    "[&_[cmdk-item]]:mx-1 [&_[cmdk-item]]:flex [&_[cmdk-item]]:min-h-10 [&_[cmdk-item]]:w-[calc(100%-0.5rem)]",
+    "[&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:overflow-hidden",
+    "[&_[cmdk-item]]:rounded-lg [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-1.5 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground/85",
+    "[&_[cmdk-item][data-selected=true]]:bg-secondary [&_[cmdk-item][data-selected=true]]:text-secondary-foreground",
+    "[&_[cmdk-item][data-disabled=true]]:cursor-not-allowed [&_[cmdk-item][data-disabled=true]]:opacity-50",
+  );
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        aria-label={dialogTitle}
-        className={cn(
-          "block max-w-lg gap-0 overflow-hidden rounded-2xl p-0 sm:rounded-2xl",
-          "[&_[cmdk-group]]:py-1",
-          "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2.5",
-          "[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground/70",
-          "[&_[cmdk-item]]:mx-1 [&_[cmdk-item]]:flex [&_[cmdk-item]]:min-h-10 [&_[cmdk-item]]:w-[calc(100%-0.5rem)]",
-          "[&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:overflow-hidden",
-          "[&_[cmdk-item]]:rounded-lg [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-1.5 [&_[cmdk-item]]:text-sm [&_[cmdk-item]]:text-foreground/85",
-          "[&_[cmdk-item][data-selected=true]]:bg-secondary [&_[cmdk-item][data-selected=true]]:text-secondary-foreground",
-          "[&_[cmdk-item][data-disabled=true]]:cursor-not-allowed [&_[cmdk-item][data-disabled=true]]:opacity-50",
-        )}
-        data-model-picker-modal="true"
-        hideDefaultClose
-      >
-        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
-        <DialogDescription className="sr-only">
-          {description ?? t("sidepanel.modelPicker.description")}
-        </DialogDescription>
-        <Command
-          className="flex max-h-[min(68vh,32rem)] w-full min-w-0 flex-col"
-          shouldFilter={false}
-        >
-          <div className="flex items-center border-b border-border px-4">
-            <Command.Input
-              autoFocus
-              className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              data-testid="model-picker-input"
-              onValueChange={setQuery}
-              placeholder={
-                searchPlaceholder ?? t("sidepanel.modelPicker.search")
-              }
-              value={query}
-            />
-            {saving ? (
-              <Loader2
-                aria-label={t("common.loading")}
-                className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
-              />
-            ) : null}
-          </div>
+  const picker = (
+    <Command
+      className={cn(
+        "flex w-full min-w-0 flex-col",
+        dialogSize === "tall"
+          ? "max-h-[min(calc(100vh-2rem),32rem)]"
+          : "max-h-[min(68vh,32rem)]",
+      )}
+      shouldFilter={false}
+    >
+      <div className="flex items-center border-b border-border px-4">
+        <Command.Input
+          autoFocus
+          className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          data-testid="model-picker-input"
+          onValueChange={setQuery}
+          placeholder={searchPlaceholder ?? t("sidepanel.modelPicker.search")}
+          value={query}
+        />
+        {saving ? (
+          <Loader2
+            aria-label={t("common.loading")}
+            className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+          />
+        ) : null}
+      </div>
 
-          <Command.List className="overflow-y-auto p-2">
-            {resetOption ? (
-              <Command.Group>
-                <ModelCommandItem
-                  disabled={saving}
-                  icon={
-                    <RotateCcw
-                      aria-hidden
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                    />
-                  }
-                  isCurrent={Boolean(resetOption.selected)}
-                  label={resetOption.label}
-                  description={resetOption.description}
-                  model=""
-                  onSelect={resetOption.onSelect}
-                  provider=""
-                  value={`reset ${resetOption.label} ${
-                    resetOption.description ?? ""
-                  }`}
+      <Command.List className="overflow-y-auto p-2">
+        {resetOption ? (
+          <Command.Group>
+            <ModelCommandItem
+              disabled={saving}
+              icon={
+                <RotateCcw
+                  aria-hidden
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
                 />
-              </Command.Group>
-            ) : null}
+              }
+              isCurrent={Boolean(resetOption.selected)}
+              label={resetOption.label}
+              description={resetOption.description}
+              model=""
+              onSelect={resetOption.onSelect}
+              provider=""
+              value={`reset ${resetOption.label} ${
+                resetOption.description ?? ""
+              }`}
+            />
+          </Command.Group>
+        ) : null}
 
-            {!hasModels ? (
-              <div className="px-3 py-10 text-center text-sm text-muted-foreground">
-                {status === "loading" ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
-                    {t("sidepanel.modelPicker.loading")}
-                  </span>
-                ) : status === "error" ? (
-                  t("sidepanel.modelPicker.loadFailed")
-                ) : (
-                  t("sidepanel.modelPicker.noMatches")
-                )}
-              </div>
+        {!hasModels ? (
+          <div className="px-3 py-10 text-center text-sm text-muted-foreground">
+            {status === "loading" ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                {t("sidepanel.modelPicker.loading")}
+              </span>
+            ) : status === "error" ? (
+              t("sidepanel.modelPicker.loadFailed")
             ) : (
+              t("sidepanel.modelPicker.noMatches")
+            )}
+          </div>
+        ) : (
+          <>
+            {providerGroups.map((group) => (
+              <ModelCommandGroup
+                disabled={saving}
+                group={group}
+                key={group.id}
+                onSelect={onSelect}
+                selected={selected}
+              />
+            ))}
+
+            {virtualGroups.length > 0 ? (
               <>
-                {providerGroups.map((group) => (
+                {providerGroups.length > 0 ? (
+                  <div className="mx-1 my-2 h-px bg-border/55" />
+                ) : null}
+                <ModelSectionLabel
+                  count={virtualModelCount}
+                  icon={<Workflow className="h-3.5 w-3.5" />}
+                  label={t("sidepanel.modelPicker.virtualCapabilities")}
+                />
+                {virtualGroups.map((group) => (
                   <ModelCommandGroup
                     disabled={saving}
                     group={group}
@@ -226,41 +245,39 @@ export function ModelPickerDialog({
                     selected={selected}
                   />
                 ))}
-
-                {virtualGroups.length > 0 ? (
-                  <>
-                    {providerGroups.length > 0 ? (
-                      <div className="mx-1 my-2 h-px bg-border/55" />
-                    ) : null}
-                    <ModelSectionLabel
-                      count={virtualModelCount}
-                      icon={<Workflow className="h-3.5 w-3.5" />}
-                      label={t("sidepanel.modelPicker.virtualCapabilities")}
-                    />
-                    {virtualGroups.map((group) => (
-                      <ModelCommandGroup
-                        disabled={saving}
-                        group={group}
-                        key={group.id}
-                        onSelect={onSelect}
-                        selected={selected}
-                      />
-                    ))}
-                  </>
-                ) : null}
               </>
-            )}
-
-            {errorMessage ? (
-              <div
-                className="mx-2 mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                role="alert"
-              >
-                {errorMessage}
-              </div>
             ) : null}
-          </Command.List>
-        </Command>
+          </>
+        )}
+
+        {errorMessage ? (
+          <div
+            className="mx-2 mt-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            role="alert"
+          >
+            {errorMessage}
+          </div>
+        ) : null}
+      </Command.List>
+    </Command>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        aria-label={dialogTitle}
+        className={cn("block", pickerSurfaceClassName)}
+        data-composer-overlay=""
+        data-model-picker-modal="true"
+        hideDefaultClose
+        overlayVariant={overlayVariant}
+        size="md"
+      >
+        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {descriptionText}
+        </DialogDescription>
+        {picker}
       </DialogContent>
     </Dialog>
   );

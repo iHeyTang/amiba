@@ -7,10 +7,14 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "concurrently --names \"runner,desktop\" --prefix-colors \"yellow,cyan\" --kill-others-on-fail \"vite build --config vite.runner.config.ts --watch\" \"electron-vite dev\"",
+    "dev:hermes": "node scripts/dev-with-hermes.mjs",
+    "runtime:prepare": "node scripts/prepare-hermes-runtime.mjs",
+    "runtime:prepare:local": "node scripts/prepare-hermes-runtime.mjs --dev --source ../../../hermes-agent",
+    "runtime:verify": "node scripts/prepare-hermes-runtime.mjs --verify",
     "build": "vite build --config vite.runner.config.ts && electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron .",
-    "package": "vite build --config vite.runner.config.ts && electron-vite build && electron-builder",
+    "package": "pnpm runtime:prepare && vite build --config vite.runner.config.ts && electron-vite build && electron-builder",
     "postinstall": "electron-builder install-app-deps",
     "test": "node --experimental-strip-types --test src/main/__tests__/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
@@ -47,11 +51,7 @@
       "category": "public.app-category.productivity",
       "target": [
         {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "target": "dmg"
         }
       ],
       "extendInfo": {

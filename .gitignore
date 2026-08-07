@@ -14,3 +14,5 @@ out
 coverage
 *.tsbuildinfo
 sdk-dist/
+apps/desktop/resources/hermes-runtime/
+apps/desktop/.hermes-runtime-build-*/

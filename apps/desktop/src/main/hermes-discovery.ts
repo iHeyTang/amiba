@@ -268,23 +268,23 @@ export function hermesBinaryCandidates({
 }
 
 interface DiscoverOptions extends CandidateOptions {
+  /** Restrict discovery to an explicit ordered ladder (managed runtimes use this). */
+  candidates?: readonly string[];
   timeoutMs?: number;
 }
 
 export async function discoverHermes({
   cachedBinary,
+  candidates,
   env = process.env,
   userHome = os.homedir(),
   platform = process.platform,
   timeoutMs = 5000,
 }: DiscoverOptions = {}): Promise<HermesDiscoveryResult> {
   const runtimeEnv = buildHermesRuntimeEnv(env, userHome, [], platform);
-  for (const candidate of hermesBinaryCandidates({
-    cachedBinary,
-    env,
-    userHome,
-    platform,
-  })) {
+  const candidateList = candidates ??
+    hermesBinaryCandidates({ cachedBinary, env, userHome, platform });
+  for (const candidate of candidateList) {
     const isAbsolute = path.isAbsolute(candidate);
     if (isAbsolute && !(await fileExists(candidate))) continue;
 

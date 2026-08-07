@@ -104,8 +104,8 @@ export interface SessionsController {
 
   /**
    * Bind the profile/response mode used by this task. Callers should only
-   * switch profiles before the first user message; the store accepts the
-   * update generically so migrations and explicit reset flows stay possible.
+   * switch profiles before the first user message. Response modes may change
+   * between turns while the task remains in the same Profile.
    */
   setAgentContext: (id: string, agent: AgentExecutionContext) => Promise<void>;
 

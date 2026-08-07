@@ -30,6 +30,25 @@ type WorkspaceChange =
 type ChatClientMessage = unknown;
 type ChatEngineMessage = unknown;
 
+type OpenSessionPayload = { sessionId: string };
+const openSessionListeners = new Set<(payload: OpenSessionPayload) => void>();
+let pendingOpenSession: OpenSessionPayload | null = null;
+
+// Main may recreate the primary BrowserWindow in response to a notification.
+// Buffer the navigation request until React has attached its listener so the
+// first click cannot land between `did-finish-load` and effect mounting.
+ipcRenderer.on(
+  "ui:open-session",
+  (_event: unknown, payload: OpenSessionPayload) => {
+    if (!payload?.sessionId) return;
+    if (openSessionListeners.size === 0) {
+      pendingOpenSession = payload;
+      return;
+    }
+    for (const listener of openSessionListeners) listener(payload);
+  },
+);
+
 const api = {
   storage: {
     get: (keys?: string | string[]) => ipcRenderer.invoke("storage:get", keys),
@@ -182,8 +201,15 @@ const api = {
       return () => ipcRenderer.off("quick-ask:prefill", handler);
     },
     dismiss: () => ipcRenderer.invoke("quick-ask:dismiss"),
-    resize: (contentHeightPx: number) =>
-      ipcRenderer.invoke("quick-ask:resize", contentHeightPx),
+    openInMain: (sessionId: string) =>
+      ipcRenderer.invoke("quick-ask:open-in-main", sessionId),
+    setIgnoreMouseEvents: (ignore: boolean) =>
+      ipcRenderer.invoke("quick-ask:set-ignore-mouse", ignore),
+    resize: (
+      contentHeightPx: number,
+      anchor: "top" | "center" | "bottom" = "top",
+    ) =>
+      ipcRenderer.invoke("quick-ask:resize", contentHeightPx, anchor),
   },
 
   /**
@@ -204,7 +230,9 @@ const api = {
       ipcRenderer.on("notifier:message", handler);
       return () => ipcRenderer.off("notifier:message", handler);
     },
-    activateMain: () => ipcRenderer.invoke("notifier:activate-main"),
+    hide: () => ipcRenderer.invoke("notifier:hide"),
+    openSession: (sessionId: string) =>
+      ipcRenderer.invoke("notifier:open-session", sessionId),
     approve: (approvalId: string) =>
       ipcRenderer.invoke("notifier:approve", approvalId),
     deny: (approvalId: string) =>
@@ -216,7 +244,7 @@ const api = {
      *   window.amiba.notifier.demo()                  // cron card
      *   window.amiba.notifier.demo("approval-pending") // approval card
      */
-    demo: (kind?: "cron-completed" | "approval-pending") =>
+    demo: (kind?: "cron-completed" | "chat-completed" | "approval-pending") =>
       ipcRenderer.invoke("notifier:demo", kind),
   },
 
@@ -250,6 +278,23 @@ const api = {
     const handler = (_e: unknown, payload: { text: string }) => cb(payload);
     ipcRenderer.on("ui:chat-start-session", handler);
     return () => ipcRenderer.off("ui:chat-start-session", handler);
+  },
+
+  /**
+   * Deliver a notification's explicit View action to the primary renderer.
+   * The module-level buffer covers a newly-created window whose React effect
+   * has not mounted yet when main sends the first navigation request.
+   */
+  onOpenSession: (cb: (payload: OpenSessionPayload) => void) => {
+    openSessionListeners.add(cb);
+    const pending = pendingOpenSession;
+    if (pending) {
+      pendingOpenSession = null;
+      queueMicrotask(() => {
+        if (openSessionListeners.has(cb)) cb(pending);
+      });
+    }
+    return () => openSessionListeners.delete(cb);
   },
 
   /**

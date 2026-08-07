@@ -12,6 +12,51 @@ body,
 }
 
 /*
+ * Quick Ask lets the Composer's real frame shadow paint beyond its dock.
+ * Keep only the dock's wide conversation fade inside the panel width; its
+ * shared -4rem inline inset is useful in the main window but would otherwise
+ * wash across the transparent shadow gutter here.
+ */
+.quick-ask-chat-surface .amiba-composer-dock::before {
+  inset-inline: 0;
+}
+
+/* Pull the auxiliary New chat action closer to the input without overlapping
+ * the Composer shadow or changing the shared main-window dock spacing. */
+.quick-ask-chat-surface .amiba-composer-dock {
+  padding-bottom: 0;
+}
+
+/* The card and its editor share one transition clock. AutoGrow publishes the
+ * editor's final target height so the card can animate directly to the same
+ * destination instead of following intermediate ResizeObserver frames. */
+.quick-ask-composer-motion [data-auto-grow-editor] {
+  transition: height 200ms ease-out;
+}
+
+/* Queue/source context is a lightweight status row in Quick Ask, not the
+ * main window's attached shelf. The queue chip keeps all of its actions while
+ * the full-width tinted backing, border and overlap are removed. */
+.quick-ask-composer-motion [data-composer-context-rail] {
+  height: auto;
+  min-height: 1.75rem;
+  margin-inline: 0;
+  margin-bottom: 0;
+  align-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0.5rem 0.25rem;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-ask-composer-motion [data-auto-grow-editor] {
+    transition: none;
+  }
+}
+
+/*
  * Startup continuity
  * ------------------
  * These class names mirror the tiny critical shell in index.html. The shell
@@ -323,4 +368,25 @@ body,
 }
 .animate-notifier-in {
   animation: notifier-in 160ms ease-out both;
+}
+
+/*
+ * The floating notifier owns a finite transparent BrowserWindow canvas.
+ * Scaling from its bottom-right anchor keeps the card and shadow inside
+ * that canvas for the entire entrance animation; a Y translation would
+ * temporarily push the lower shadow back into the native window edge.
+ */
+@keyframes notifier-card-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-notifier-card-in {
+  animation: notifier-card-in 160ms ease-out both;
+  transform-origin: right bottom;
 }

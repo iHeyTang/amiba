@@ -357,8 +357,9 @@ function TabContextMenu({ x, y, items, onDismiss }: TabContextMenuProps) {
     <div
       ref={ref}
       role="menu"
+      data-ui-overlay="menu"
       style={{ position: "fixed", left: pos.x, top: pos.y, zIndex: 50 }}
-      className="min-w-[170px] select-none rounded-md border border-border bg-popover p-1 text-xs text-popover-foreground shadow-md"
+      className="min-w-[170px] select-none rounded-xl border border-border/60 bg-popover p-1 text-xs text-popover-foreground shadow-popover duration-150 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none"
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((it, i) => {

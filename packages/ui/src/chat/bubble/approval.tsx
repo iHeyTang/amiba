@@ -9,6 +9,7 @@ import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
 import { Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
+import { ApprovalCode } from "./approval-syntax"
 
 interface ApprovalDecisionMeta {
   value: HermesApprovalDecision
@@ -46,7 +47,7 @@ function approvalDecisions(t: TranslateFn): ApprovalDecisionMeta[] {
   ]
 }
 
-function presentApprovalDescription(description: string, t: TranslateFn): string {
+export function presentApprovalDescription(description: string, t: TranslateFn): string {
   switch (description) {
     case "command parser limit or malformed executable payload":
       return t("sidepanel.permission.reason.unverifiedEmbeddedScript")
@@ -176,8 +177,8 @@ export function ApprovalBanner({
               {command && (
                 <pre
                   data-selection="text"
-                  className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
-                  {command}
+                  className="approval-code mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
+                  <ApprovalCode command={command} tool={req.tool} />
                 </pre>
               )}
 
@@ -197,7 +198,7 @@ export function ApprovalBanner({
                         d.variant === "neutral" &&
                           "bg-background/65 text-foreground/70 hover:bg-background hover:text-foreground",
                         d.variant === "destructive" &&
-                          "ml-auto text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
+                          "ml-auto bg-background/65 text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
                         anyPending && "cursor-not-allowed opacity-50",
                         isPending && "opacity-100"
                       )}>

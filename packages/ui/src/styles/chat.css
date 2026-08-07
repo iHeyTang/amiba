@@ -24,6 +24,51 @@
   container-type: inline-size;
 }
 
+/*
+ * The conversation continues behind the floating composer so its side
+ * gutters remain visually open. Fade the final few lines into the canvas
+ * before they reach the composer instead of ending them against a hard card
+ * edge. The mask belongs to the dock rather than the composer itself so
+ * approval banners and attachment errors share the same quiet landing zone.
+ */
+.amiba-composer-dock::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -5rem -4rem -0.75rem;
+  pointer-events: none;
+  background: hsl(var(--background) / 0.96);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(0 0 0 / 0.04) 10%,
+    rgb(0 0 0 / 0.16) 24%,
+    rgb(0 0 0 / 0.42) 40%,
+    rgb(0 0 0 / 0.72) 56%,
+    rgb(0 0 0 / 0.94) 72%,
+    black 84%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(0 0 0 / 0.04) 10%,
+    rgb(0 0 0 / 0.16) 24%,
+    rgb(0 0 0 / 0.42) 40%,
+    rgb(0 0 0 / 0.72) 56%,
+    rgb(0 0 0 / 0.94) 72%,
+    black 84%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.amiba-composer-dock > * {
+  position: relative;
+  z-index: 1;
+}
+
 @container amiba-chat-column (min-width: 80rem) {
   .amiba-chat-header--wide-overlay {
     display: contents;
@@ -307,6 +352,79 @@
 .chat-md.chat-md [data-streamdown="strong"] {
   font-weight: 600;
   color: hsl(var(--foreground));
+}
+
+/* Approval payloads must remain exact, selectable source text. Prism only
+ * adds semantic spans; this restrained palette mirrors the workspace editor
+ * so reviewed commands and inspected files share one visual language. */
+.approval-code .token.comment,
+.approval-code .token.prolog,
+.approval-code .token.doctype,
+.approval-code .token.cdata {
+  color: hsl(var(--muted-foreground) / 0.72);
+  font-style: italic;
+}
+
+.approval-code .token.punctuation,
+.approval-code .token.operator,
+.approval-code .token.entity,
+.approval-code .token.url {
+  color: hsl(var(--foreground) / 0.66);
+}
+
+.approval-code .token.keyword,
+.approval-code .token.atrule,
+.approval-code .token.important {
+  color: light-dark(#6d28d9, #c4b5fd);
+}
+
+.approval-code .token.string,
+.approval-code .token.char,
+.approval-code .token.attr-value,
+.approval-code .token.selector,
+.approval-code .token.builtin,
+.approval-code .token.inserted {
+  color: light-dark(#15803d, #86efac);
+}
+
+.approval-code .token.number,
+.approval-code .token.boolean,
+.approval-code .token.constant,
+.approval-code .token.symbol {
+  color: light-dark(#0369a1, #7dd3fc);
+}
+
+.approval-code .token.function,
+.approval-code .token.function-variable,
+.approval-code .token.method {
+  color: light-dark(#1d4ed8, #93c5fd);
+}
+
+.approval-code .token.class-name,
+.approval-code .token.type,
+.approval-code .token.namespace {
+  color: light-dark(#b45309, #fcd34d);
+}
+
+.approval-code .token.property,
+.approval-code .token.tag,
+.approval-code .token.attr-name,
+.approval-code .token.variable,
+.approval-code .token.regex {
+  color: light-dark(#9f1239, #fda4af);
+}
+
+.approval-code .token.deleted {
+  color: hsl(var(--destructive));
+}
+
+.approval-code .token.bold,
+.approval-code .token.important {
+  font-weight: 600;
+}
+
+.approval-code .token.italic {
+  font-style: italic;
 }
 
 /* Links */

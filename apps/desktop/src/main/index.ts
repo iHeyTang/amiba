@@ -35,6 +35,7 @@ import { startCronWatcher, stopCronWatcher } from "./cron-watcher"
 import {
   createNotifierWindow,
   destroyNotifierWindow,
+  hideNotifier,
   showDemoNotifier,
 } from "./notifier-window"
 import {
@@ -42,6 +43,7 @@ import {
   destroyQuickAskWindow,
   hideQuickAsk,
   resizeQuickAsk,
+  setQuickAskIgnoreMouseEvents,
   summonQuickAsk,
 } from "./quick-ask-window"
 import {
@@ -309,33 +311,63 @@ function summonQuickAskFromHotkey(): void {
   summonQuickAsk({})
 }
 
+/** Raise the primary window and route its renderer to a persisted session. */
+function openSessionInMainWindow(
+  rawSessionId: string,
+  summon: () => void,
+): boolean {
+  if (typeof rawSessionId !== "string" || !rawSessionId.trim()) return false
+  const sessionId = rawSessionId.trim()
+  summon()
+
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return false
+  const send = () => {
+    if (!win.isDestroyed()) {
+      win.webContents.send("ui:open-session", { sessionId })
+    }
+  }
+  if (win.webContents.isLoadingMainFrame()) {
+    win.webContents.once("did-finish-load", send)
+  } else {
+    send()
+  }
+  return true
+}
+
 /**
  * Wire the renderer-side actions from the Heads-up Notifier back to main:
  *
- *   - `notifier:activate-main` — clicking the cron-completed card raises
- *     the primary window via the same `summon` flow the hotkey uses.
+ *   - `notifier:open-session` — the explicit View action raises the primary
+ *     window and asks its renderer to open the matching conversation.
  *   - `notifier:approve` / `notifier:deny` — forward the verdict to the
  *     chat engine so the gateway's pending approval resolves.
  */
 function registerNotifierIpcHandlers(summon: () => void): void {
-  ipcMain.handle("notifier:activate-main", () => {
-    summon()
+  ipcMain.handle("notifier:open-session", (_event, sessionId: string) => {
+    if (!openSessionInMainWindow(sessionId, summon)) return
+    hideNotifier()
   })
+  ipcMain.handle("notifier:hide", () =>
+    hideNotifier({ restorePreviousApp: true }),
+  )
   // Manual demo trigger so users can confirm the notifier window
   // appears + clicks register without having to provoke a real
   // approval or wait for a cron run. Exposed via the preload bridge as
   // `window.amiba.notifier.demo(kind?)`.
   ipcMain.handle(
     "notifier:demo",
-    (_e, kind?: "cron-completed" | "approval-pending") => {
+    (_e, kind?: "cron-completed" | "chat-completed" | "approval-pending") => {
       showDemoNotifier(kind ?? "cron-completed")
     },
   )
   ipcMain.handle("notifier:approve", (_e, approvalId: string) => {
     resolveApproval(approvalId, "approve")
+    hideNotifier({ restorePreviousApp: true })
   })
   ipcMain.handle("notifier:deny", (_e, approvalId: string) => {
     resolveApproval(approvalId, "deny")
+    hideNotifier({ restorePreviousApp: true })
   })
 }
 
@@ -345,15 +377,35 @@ function registerNotifierIpcHandlers(summon: () => void): void {
  * IPC like any other surface, so we only need to expose the window-
  * level ops here.
  */
-function registerQuickAskIpcHandlers(): void {
+function registerQuickAskIpcHandlers(summon: () => void): void {
   ipcMain.handle("quick-ask:dismiss", () => {
     hideQuickAsk()
   })
-  ipcMain.handle("quick-ask:resize", (_e, contentHeightPx: number) => {
-    if (typeof contentHeightPx === "number" && Number.isFinite(contentHeightPx)) {
-      resizeQuickAsk(contentHeightPx)
-    }
+  ipcMain.handle("quick-ask:open-in-main", (_e, sessionId: string) => {
+    if (!openSessionInMainWindow(sessionId, summon)) return
+    hideQuickAsk()
   })
+  ipcMain.handle("quick-ask:set-ignore-mouse", (_e, ignore: boolean) => {
+    setQuickAskIgnoreMouseEvents(ignore === true)
+  })
+  ipcMain.handle(
+    "quick-ask:resize",
+    (
+      _e,
+      contentHeightPx: number,
+      anchor: "top" | "center" | "bottom" = "top",
+    ) => {
+      if (
+        typeof contentHeightPx === "number" &&
+        Number.isFinite(contentHeightPx)
+      ) {
+        resizeQuickAsk(
+          contentHeightPx,
+          anchor === "bottom" ? "bottom" : "top",
+        )
+      }
+    },
+  )
 }
 
 function createWindow() {
@@ -675,7 +727,7 @@ if (!gotSingleInstanceLock) {
       app.on("activate", pinDockIcon)
     }
     registerNotifierIpcHandlers(summonWindow)
-    registerQuickAskIpcHandlers()
+    registerQuickAskIpcHandlers(summonWindow)
     // Poll the gateway for new cron-run completions and push them to
     // the Heads-up Notifier. The watcher tolerates a not-yet-ready
     // backplane (silent retry every 30s) so it's safe to start before

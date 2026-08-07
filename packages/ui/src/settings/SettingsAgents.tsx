@@ -503,7 +503,7 @@ export function SettingsAgents({
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md rounded-2xl">
+        <DialogContent size="compact">
           <DialogHeader>
             <DialogTitle>{t("options.agents.create")}</DialogTitle>
           </DialogHeader>

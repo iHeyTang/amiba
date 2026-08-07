@@ -29,7 +29,7 @@ export function AmibaLogo({
   size = 24,
   variant = "auto",
   className,
-  alt = "Hermes Agent"
+  alt = "Amiba"
 }: AmibaLogoProps) {
   const theme = useDocumentTheme()
   // `light-bg` means "render so it looks good on a light surface" — i.e.

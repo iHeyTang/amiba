@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from aiohttp import web
 
+from .approvals_routes import register_approvals_routes
 from .commands_routes import register_commands_routes
 from .memory_routes import register_memory_routes
 from .model_routes import register_model_routes
@@ -37,6 +38,7 @@ from .tools_routes import register_tools_routes
 
 
 def register(app: web.Application) -> None:
+    register_approvals_routes(app)
     register_model_routes(app)
     register_memory_routes(app)
     register_skills_routes(app)

@@ -299,11 +299,9 @@ export function AgentPersonalitySection({ profileId }: { profileId: string }) {
                     <span className="truncate text-xs font-medium">
                       {item.name || item.key}
                     </span>
-                    {item.builtin ? (
+                    {item.builtin && !item.overridden ? (
                       <span className="shrink-0 text-[9px] text-muted-foreground/75">
-                        {item.overridden
-                          ? t("options.agents.personality.overridden")
-                          : t("options.agents.personality.builtin")}
+                        {t("common.builtin")}
                       </span>
                     ) : null}
                     {item.selected ? (
@@ -333,7 +331,7 @@ export function AgentPersonalitySection({ profileId }: { profileId: string }) {
         open={Boolean(draft)}
         onOpenChange={(open) => !open && setDraft(null)}
       >
-        <DialogContent className="max-h-[min(82vh,42rem)] max-w-lg overflow-y-auto rounded-2xl">
+        <DialogContent className="max-h-[min(82vh,42rem)] overflow-y-auto" size="md">
           {draft ? (
             <>
               <DialogHeader>
@@ -341,11 +339,9 @@ export function AgentPersonalitySection({ profileId }: { profileId: string }) {
                   {draft.existing
                     ? t("options.agents.personality.edit")
                     : t("options.agents.personality.create")}
-                  {draft.builtin ? (
+                  {draft.builtin && !draft.overridden ? (
                     <Badge className="rounded-full" variant="secondary">
-                      {draft.overridden
-                        ? t("options.agents.personality.overridden")
-                        : t("options.agents.personality.builtin")}
+                      {t("common.builtin")}
                     </Badge>
                   ) : null}
                 </DialogTitle>

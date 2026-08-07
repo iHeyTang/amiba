@@ -9,14 +9,14 @@
 export interface AgentPersonalitySelection {
   /** Stable key from `agent.personalities`. */
   key: string;
-  /** Resolved prompt captured when the task selected the mode. */
+  /** Resolved prompt captured when this response mode was selected. */
   prompt: string;
 }
 
 export interface AgentExecutionContext {
   /** Hermes profile id. `default` uses the unprefixed gateway routes. */
   profileId: string;
-  /** Optional task-scoped overlay applied on top of the profile's SOUL. */
+  /** Optional turn-switchable overlay applied on top of the profile's SOUL. */
   personality?: AgentPersonalitySelection;
 }
 

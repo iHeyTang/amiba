@@ -976,7 +976,7 @@ export class HermesHttpError extends Error {
     if (this.status === 404) {
       return (
         "Endpoint not found. Verify the API base URL in Settings — it should " +
-        "end in /v1, e.g. http://127.0.0.1:8642/v1"
+        "end in /v1, e.g. http://127.0.0.1:18642/v1"
       );
     }
     if (this.status >= 500) {

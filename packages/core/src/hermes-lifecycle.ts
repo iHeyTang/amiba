@@ -58,6 +58,9 @@ export interface HermesStatusResponse {
   update_check?: HermesUpdateCheck;
   /** The protocol version reported by the running backplane plugin. */
   protocol_version?: number;
+  /** True when Hermes is pinned and upgraded as part of the Amiba app. */
+  runtime_managed?: boolean;
+  managed_runtime_commit?: string | null;
   /** Set when the running backplane's protocol_version != EXPECTED_BACKPLANE_PROTOCOL. */
   protocol_mismatch?: {
     backplane: number;        // what the backplane reports

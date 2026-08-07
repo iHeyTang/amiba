@@ -9,8 +9,14 @@ so that upstream changes only require edits in one place.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
+import os
+import subprocess
+import sys
+import threading
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
@@ -24,6 +30,39 @@ _ACTIVE_PROFILE_ID: ContextVar[str] = ContextVar(
     "amiba_active_hermes_profile_id",
     default="default",
 )
+_PERSONALITY_EXPORT_MARKER = "__AMIBA_HERMES_PERSONALITIES__="
+_PERSONALITY_EXPORT_SCRIPT = r"""
+import json
+import os
+
+from cli import load_cli_config
+
+
+def personality_map():
+    config = load_cli_config()
+    agent = config.get("agent") if isinstance(config, dict) else None
+    personalities = agent.get("personalities") if isinstance(agent, dict) else None
+    return personalities if isinstance(personalities, dict) else {}
+
+
+effective = personality_map()
+os.environ["HERMES_IGNORE_USER_CONFIG"] = "1"
+builtins = personality_map()
+print(
+    "__AMIBA_HERMES_PERSONALITIES__="
+    + json.dumps(
+        {"effective": effective, "builtins": builtins},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+)
+"""
+_PERSONALITY_CACHE_TTL_SECONDS = 5.0
+_personality_catalog_cache: Dict[
+    str,
+    Tuple[float, Tuple[Any, ...], Dict[str, Any], Dict[str, Any]],
+] = {}
+_personality_catalog_cache_lock = threading.Lock()
 
 
 def hermes_home() -> Path:
@@ -38,6 +77,117 @@ def hermes_home() -> Path:
         return Path(get_hermes_home())
     except Exception:
         return _FALLBACK_HERMES_HOME
+
+
+def _file_stamp(path: Path) -> Tuple[int, int]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (0, 0)
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _cli_personality_source_stamp() -> Tuple[Any, ...]:
+    """Track the upstream module and its project fallback without importing it."""
+    try:
+        spec = importlib.util.find_spec("cli")
+        origin = Path(spec.origin) if spec and spec.origin else None
+    except (ImportError, AttributeError, OSError, ValueError):
+        origin = None
+    if origin is None:
+        return ("", (0, 0), (0, 0))
+    return (
+        str(origin),
+        _file_stamp(origin),
+        _file_stamp(origin.with_name("cli-config.yaml")),
+    )
+
+
+def clear_cli_personality_catalog_cache(home: Path | None = None) -> None:
+    """Invalidate the exported CLI personality catalogue after local writes."""
+    with _personality_catalog_cache_lock:
+        if home is None:
+            _personality_catalog_cache.clear()
+            return
+        _personality_catalog_cache.pop(str(home.expanduser().resolve()), None)
+
+
+def load_cli_personality_catalog() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Export the active and built-in personalities from Hermes' real CLI loader.
+
+    ``cli.py`` captures ``HERMES_HOME`` and creates a process-global
+    ``CLI_CONFIG`` while importing. Importing it into this long-lived backplane
+    would therefore pin whichever profile happened to make the first request.
+    A short-lived child process gives every request an isolated Hermes config
+    scope while still executing the exact loader used by Hermes itself.
+
+    Returns ``(effective, builtins)``. The effective map honors the active
+    profile. The built-in map is a second load with
+    ``HERMES_IGNORE_USER_CONFIG=1`` and is used only for UI classification and
+    reset behavior.
+    """
+    home = hermes_home().expanduser().resolve()
+    cache_key = str(home)
+    signature: Tuple[Any, ...] = (
+        _file_stamp(home / "config.yaml"),
+        _cli_personality_source_stamp(),
+    )
+    now = time.monotonic()
+    with _personality_catalog_cache_lock:
+        cached = _personality_catalog_cache.get(cache_key)
+        if cached and cached[0] > now and cached[1] == signature:
+            return dict(cached[2]), dict(cached[3])
+
+    env = dict(os.environ)
+    env["HERMES_HOME"] = cache_key
+    # This flag belongs to an individual CLI invocation. The settings API
+    # always describes the persisted profile before deriving the baseline.
+    env.pop("HERMES_IGNORE_USER_CONFIG", None)
+    completed = subprocess.run(  # noqa: S603 - fixed, non-user-controlled argv
+        [sys.executable, "-c", _PERSONALITY_EXPORT_SCRIPT],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()[-2000:]
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(
+            f"Hermes CLI personality export exited with {completed.returncode}{suffix}"
+        )
+
+    marker_line = next(
+        (
+            line
+            for line in reversed(completed.stdout.splitlines())
+            if line.startswith(_PERSONALITY_EXPORT_MARKER)
+        ),
+        "",
+    )
+    if not marker_line:
+        raise RuntimeError("Hermes CLI personality export returned no catalogue")
+    try:
+        payload = json.loads(marker_line[len(_PERSONALITY_EXPORT_MARKER) :])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Hermes CLI personality export returned invalid JSON") from exc
+
+    effective = payload.get("effective") if isinstance(payload, dict) else None
+    builtins = payload.get("builtins") if isinstance(payload, dict) else None
+    if not isinstance(effective, dict) or not isinstance(builtins, dict):
+        raise RuntimeError("Hermes CLI personality export returned an invalid catalogue")
+
+    effective_copy = dict(effective)
+    builtin_copy = dict(builtins)
+    with _personality_catalog_cache_lock:
+        _personality_catalog_cache[cache_key] = (
+            now + _PERSONALITY_CACHE_TTL_SECONDS,
+            signature,
+            effective_copy,
+            builtin_copy,
+        )
+    return dict(effective_copy), dict(builtin_copy)
 
 
 def normalize_profile_id(profile: str | None) -> str:

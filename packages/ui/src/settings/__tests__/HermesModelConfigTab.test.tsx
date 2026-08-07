@@ -479,7 +479,7 @@ describe("HermesModelConfigTab", () => {
     });
     await user.click(statusBadge);
     expect(
-      within(dialog).getByRole("dialog", { name: "Connection details" }),
+      screen.getByRole("dialog", { name: "Connection details" }),
     ).toHaveTextContent("Google API Key");
     expect(
       within(dialog).queryByText("Connection methods"),

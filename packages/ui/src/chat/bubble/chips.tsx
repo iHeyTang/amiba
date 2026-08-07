@@ -256,7 +256,8 @@ function ImagePreviewDialog({
         // a translucent backdrop so it stays legible on any wallpaper / dark
         // photo / light screenshot.
         hideDefaultClose
-        className="flex w-fit max-w-[92vw] items-center justify-center border-none bg-transparent p-0 shadow-none sm:rounded-none"
+        appearance="bare"
+        className="flex w-fit max-w-[92vw] items-center justify-center"
       >
         <img
           src={src}

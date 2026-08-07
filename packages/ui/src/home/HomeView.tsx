@@ -43,7 +43,14 @@ import { getPlatform } from "@amiba/platform";
 import { shortId } from "@amiba/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
-import { AmibaLogo, Input } from "../primitives";
+import {
+  AmibaLogo,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+  Input,
+} from "../primitives";
 import { cn } from "../primitives";
 import type {
   FaviconCapability,
@@ -491,6 +498,7 @@ function Home({
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
             modelPicker
+            approvalModePicker
             agentPicker={{
               value: agent,
               onChange: (next) => setAgent(normalizeAgentContext(next)),
@@ -811,47 +819,31 @@ function ShortcutsManager({
   const { t } = useT();
   const { items, add, remove, rename, reorder } = controller;
 
-  useEffect(() => {
-    function onKey(e: globalThis.KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto",
-        "bg-black/40 backdrop-blur-[2px] px-4 py-12",
-      )}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("newtab.shortcuts.manage.title")}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          "w-full max-w-lg rounded-xl border border-border bg-background shadow-2xl",
-        )}
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent
+        aria-label={t("newtab.shortcuts.manage.title")}
+        className="max-h-[calc(100vh-6rem)] gap-0 overflow-y-auto p-0"
+        hideDefaultClose
+        size="md"
       >
+        <DialogTitle className="sr-only">
+          {t("newtab.shortcuts.manage.title")}
+        </DialogTitle>
         <header className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <h2 className="text-sm font-semibold tracking-tight">
             {t("newtab.shortcuts.manage.title")}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("newtab.shortcuts.manage.close")}
-            title={t("newtab.shortcuts.manage.close")}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <DialogClose asChild>
+            <button
+              type="button"
+              aria-label={t("newtab.shortcuts.manage.close")}
+              title={t("newtab.shortcuts.manage.close")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </DialogClose>
         </header>
 
         <div className="px-4 pb-4 pt-3">
@@ -880,8 +872,8 @@ function ShortcutsManager({
             </ul>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

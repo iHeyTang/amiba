@@ -45,9 +45,8 @@ const STATUS_POLL_MS = 10_000;
 const ACTION_POLL_MS = 1_000;
 
 const INSTALL_COMMANDS = [
-  "hermes plugins install amiba-desktop/amiba-plugin-browser-tools",
-  "hermes gateway",
-  "amiba-backplane --port 9394",
+  "Hermes is installed and supervised by Amiba.",
+  "Use Check again; if recovery still fails, restart Amiba and inspect the technical details below.",
 ];
 
 interface ActionRunState {
@@ -582,6 +581,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
     status?.latest_config_version != null &&
     status.config_version !== status.latest_config_version;
   const updateAvailable = status?.update_check?.status === "behind";
+  const runtimeManaged = !!status?.runtime_managed;
   const healthKind: HealthKind =
     status?.protocol_mismatch || status?.hermes_version_mismatch
     ? "mismatch"
@@ -624,7 +624,9 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
   const HealthIcon = healthConfig.icon;
 
   let updateSummary = t("options.status.actions.update.unknown");
-  if (status?.update_check?.status === "up_to_date") {
+  if (runtimeManaged) {
+    updateSummary = t("options.status.actions.update.managed");
+  } else if (status?.update_check?.status === "up_to_date") {
     updateSummary = t("options.status.actions.update.latest");
   } else if (updateAvailable) {
     const commits = status?.update_check?.commits_behind;
@@ -740,33 +742,39 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                     <StatusLine
                       label={t("options.status.runtime.release")}
                       actions={
-                        <>
-                          <ActionStateBadge state={updState} t={t} />
-                          <Button
-                            size="sm"
-                            variant={updateAvailable ? "default" : "outline"}
-                            className="h-7 px-2.5 text-[10px]"
-                            onClick={() => void triggerUpdate()}
-                            disabled={updState.running || triggering.upd}
-                          >
-                            {updState.running || triggering.upd ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Download className="h-3 w-3" />
-                            )}
-                            {t("options.status.actions.update.button")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-[10px]"
-                            onClick={onViewUpdateLogs}
-                            disabled={!onViewUpdateLogs}
-                          >
-                            <FileText className="h-3 w-3" />
-                            {t("options.status.viewUpdateLogs")}
-                          </Button>
-                        </>
+                        runtimeManaged ? (
+                          <Badge variant="secondary" className="text-[9px]">
+                            {t("options.status.actions.update.managed")}
+                          </Badge>
+                        ) : (
+                          <>
+                            <ActionStateBadge state={updState} t={t} />
+                            <Button
+                              size="sm"
+                              variant={updateAvailable ? "default" : "outline"}
+                              className="h-7 px-2.5 text-[10px]"
+                              onClick={() => void triggerUpdate()}
+                              disabled={updState.running || triggering.upd}
+                            >
+                              {updState.running || triggering.upd ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3" />
+                              )}
+                              {t("options.status.actions.update.button")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[10px]"
+                              onClick={onViewUpdateLogs}
+                              disabled={!onViewUpdateLogs}
+                            >
+                              <FileText className="h-3 w-3" />
+                              {t("options.status.viewUpdateLogs")}
+                            </Button>
+                          </>
+                        )
                       }
                     >
                       <span className="flex flex-wrap items-center gap-2">

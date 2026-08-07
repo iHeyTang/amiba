@@ -62,7 +62,7 @@ describe("getHermesPersonalities", () => {
 
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:9394/hermes/personalities/fact-checker?profile=researcher",
+      "http://127.0.0.1:19394/hermes/personalities/fact-checker?profile=researcher",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -76,7 +76,7 @@ describe("getHermesPersonalities", () => {
     );
     expect(global.fetch).toHaveBeenNthCalledWith(
       3,
-      "http://127.0.0.1:9394/hermes/personalities/fact-checker?profile=researcher",
+      "http://127.0.0.1:19394/hermes/personalities/fact-checker?profile=researcher",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
@@ -102,7 +102,7 @@ describe("getHermesPersonalities", () => {
 
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:9394/hermes/personalities/fact-checker?profile=researcher",
+      "http://127.0.0.1:19394/hermes/personalities/fact-checker?profile=researcher",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -127,7 +127,7 @@ describe("getHermesPersonalities", () => {
 
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:9394/hermes/personalities/active?profile=researcher",
+      "http://127.0.0.1:19394/hermes/personalities/active?profile=researcher",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ key: "concise" }),

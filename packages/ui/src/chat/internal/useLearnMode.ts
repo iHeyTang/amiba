@@ -193,14 +193,14 @@ export function useLearnMode(args: UseLearnModeArgs): UseLearnModeResult {
           options: { sessionId, uiId: pendingUiId },
         }),
         130_000,
-        "Recorded-trace upload timed out (keep Hermes online; large traces are slower)",
+        "Recorded-trace upload timed out (keep Amiba online; large traces are slower)",
       )) as AttachmentReadResult;
       if (!isAttachmentReadOk(read)) {
         const hint =
           read.error.includes("No Hermes plugin peer") ||
           read.error.includes("role=agent")
-            ? "Extension is connected to the bridge, but Hermes hasn't joined as the plugin (agent side missing). Start Hermes and load this browser plugin."
-            : "Check that Hermes is running, the bridge is connected, and the gateway is healthy.";
+            ? "The extension is connected, but the assistant-side plugin is missing. Start the local service and load the browser plugin."
+            : "Check that Amiba is running and the local service is healthy.";
         setAttachmentError(`${read.name}: ${read.error} ${hint}`);
         setAttachments((prev) => prev.filter((a) => a.uiId !== pendingUiId));
         return;

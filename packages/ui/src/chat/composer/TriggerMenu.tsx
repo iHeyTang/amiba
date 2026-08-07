@@ -195,8 +195,13 @@ export function TriggerMenu({
   return (
     <div
       data-composer-overlay=""
+      data-ui-overlay="popover"
       className={cn(
-        "absolute left-0 right-0 bottom-full z-50 mb-1 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md",
+        // The editor supplies a virtual text trigger and must retain focus, so
+        // this cannot use Radix Popover's trigger/focus lifecycle. It still
+        // follows the shared Popover frame and enter motion contract.
+        "absolute bottom-full left-0 right-0 z-50 mb-1 overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-popover",
+        "origin-bottom duration-150 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 motion-reduce:animate-none",
         anchorClassName,
       )}
     >

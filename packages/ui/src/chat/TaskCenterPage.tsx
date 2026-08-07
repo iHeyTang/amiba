@@ -324,7 +324,7 @@ export function TaskCenterPage() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>{t("tasks.create")}</DialogTitle>
           </DialogHeader>
@@ -427,7 +427,7 @@ export function TaskCenterPage() {
         open={!!selected}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <DialogContent className="max-h-[78vh] max-w-xl overflow-y-auto">
+        <DialogContent className="max-h-[78vh] overflow-y-auto" size="wide">
           {selected && (
             <>
               <DialogHeader>

@@ -31,6 +31,18 @@ export const en = {
   "common.retry": "Retry",
   "common.all": "All",
   "common.untitled": "Untitled",
+  "common.builtin": "Built in",
+
+  // Heads-up notifier
+  "notifier.dismiss": "Dismiss notification",
+  "notifier.cron.status": "Automation finished",
+  "notifier.cron.fallbackTitle": "Task completed",
+  "notifier.cron.open": "Open task",
+  "notifier.chat.status": "Conversation completed",
+  "notifier.chat.fallbackTitle": "Amiba finished this task",
+  "notifier.chat.fallbackSummary": "The response is ready to review.",
+  "notifier.chat.open": "Open conversation",
+  "notifier.approval.status": "Your approval is needed",
 
   // Conversation turn navigation
   "conversationRail.label": "Conversation navigation",
@@ -147,7 +159,7 @@ export const en = {
   "options.agents.customEmptyTitle": "No independent agent presets",
   "options.agents.customEmptyDescription":
     "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, models, or skills.",
-  "options.agents.cloneDefault": "Assistant default configuration",
+  "options.agents.cloneDefault": "Amiba",
   "options.agents.empty": "No agent presets",
   "options.agents.section.behavior": "Behavior & identity",
   "options.agents.section.models": "Models & services",
@@ -185,8 +197,6 @@ export const en = {
   "options.agents.personality.style": "Response style",
   "options.agents.personality.stylePlaceholder":
     "For example: conclusion before evidence",
-  "options.agents.personality.builtin": "Built in",
-  "options.agents.personality.overridden": "Adjusted",
   "options.agents.personality.reset": "Restore built-in",
   "options.agents.personality.duplicate": "Duplicate",
   "options.agents.personality.deleteConfirm":
@@ -230,11 +240,10 @@ export const en = {
   "options.skills.origin.agent": "Agent-authored",
   "options.skills.origin.manual": "Manual",
   "options.skills.origin.external": "External",
-  "options.skills.origin.bundledHint": "Shipped with Hermes Agent",
-  "options.skills.origin.hubHint": "Installed from the Hermes Skill Hub",
+  "options.skills.origin.bundledHint": "Shipped with Amiba",
+  "options.skills.origin.hubHint": "Installed from the Skill Hub",
   "options.skills.origin.agentHint": "Created by an agent",
-  "options.skills.origin.manualHint":
-    "Added manually to the Hermes skills directory",
+  "options.skills.origin.manualHint": "Added manually to the skills directory",
   "options.skills.origin.externalHint":
     "Loaded from an external skills directory in config.yaml",
   "options.skills.files": "Files ({count})",
@@ -249,15 +258,15 @@ export const en = {
   // Task agent picker
   "sidepanel.agentPicker.label": "Choose agent",
   "sidepanel.agentPicker.description":
-    "Choose the Hermes Profile responsible for this task.",
+    "Choose the assistant responsible for this task.",
   "sidepanel.agentPicker.search": "Search agents…",
   "sidepanel.agentPicker.empty": "No matching agents",
   "sidepanel.agentPicker.loadFailed": "Couldn't load agents",
-  "sidepanel.agentPicker.locked":
-    "This agent is bound to the task; start a new task to switch",
+  "sidepanel.agentPicker.profileLocked": "Fixed for this task",
   "sidepanel.agentPicker.executionIdentity": "Execution identity",
   "sidepanel.agentPicker.executionIdentityDescription":
     "Choose an agent and response mode for this task.",
+  "sidepanel.agentPicker.defaultProfile": "Amiba",
   "sidepanel.agentPicker.agent": "Agent",
   "sidepanel.agentPicker.personality": "Response mode",
   "sidepanel.agentPicker.personalityDescription":
@@ -265,6 +274,23 @@ export const en = {
   "sidepanel.agentPicker.personalityDefault": "Follow agent",
   "sidepanel.agentPicker.personalityDefaultDescription":
     "Use this agent's configured default response mode and working principles.",
+
+  // Hermes approval mode
+  "sidepanel.approvalMode.label": "Risk handling",
+  "sidepanel.approvalMode.question": "When a risky operation is detected:",
+  "sidepanel.approvalMode.manual": "Ask me every time",
+  "sidepanel.approvalMode.manualDescription":
+    "Ask before any operation marked risky.",
+  "sidepanel.approvalMode.smart": "Decide automatically",
+  "sidepanel.approvalMode.smartDescription":
+    "Run low-risk operations; ask about higher risk.",
+  "sidepanel.approvalMode.off": "Run without asking",
+  "sidepanel.approvalMode.offDescription":
+    "Do not ask; safety and system limits still apply.",
+  "sidepanel.approvalMode.loadFailed":
+    "Couldn't load approval mode. Click to retry.",
+  "sidepanel.approvalMode.saveFailed":
+    "Couldn't change approval mode. Try again.",
 
   // Extensions settings page
   "options.extensions.title": "Extension management",
@@ -306,7 +332,8 @@ export const en = {
   "options.plugins.empty": "No user-added plugins.",
   "options.plugins.group.yours": "Your plugins",
   "options.plugins.group.bundled": "Bundled ({count})",
-  "options.plugins.restartHint": "Restart Hermes to apply plugin changes.",
+  "options.plugins.restartHint":
+    "Restart the local service to apply plugin changes.",
   "options.plugins.toggleError": "Couldn't change plugin: {error}",
 
   // Mention sources — pluggable @-mention sources for the composer
@@ -340,7 +367,7 @@ export const en = {
     "{name} installed, but it has no search capability ({warning}).",
   "options.plugins.uninstallAction": "Uninstall",
   "options.plugins.uninstallConfirm":
-    'Uninstall "{name}"? It fully unloads after a Hermes restart. This can\'t be undone.',
+    'Uninstall "{name}"? It fully unloads after the local service restarts. This can\'t be undone.',
   "options.plugins.uninstallError": "Couldn't uninstall: {error}",
 
   // Featured features — plugins promoted to a first-class Settings surface
@@ -429,7 +456,7 @@ export const en = {
   "options.voice.apiKey.clear": "Clear",
   "options.voice.apiKey.confirmClear": "Confirm clear",
   "options.voice.apiKey.help":
-    "Stored in ~/.hermes/.env. Empty input is ignored; use Clear to remove a saved key.",
+    "Stored in $HERMES_HOME/.env inside Amiba's managed runtime. Empty input is ignored; use Clear to remove a saved key.",
 
   // Status (loading / error)
   "options.voice.status.loading": "Reading STT config…",
@@ -460,9 +487,9 @@ export const en = {
   // First-run onboarding wizard
   "onboarding.title": "Amiba",
   "onboarding.tagline":
-    "A native desktop client for Hermes Agent.\nDouble-tap ⌘ from anywhere to summon a chat — Amiba stays within reach.",
+    "Your native desktop assistant.\nDouble-tap ⌘ from anywhere to summon a chat — Amiba stays within reach.",
   "onboarding.subtitle":
-    "We'll install Hermes, load the plugins it needs, and boot the local service for you.\nAbout 5–10 minutes from here — nothing to prepare on your end.",
+    "Hermes is already included with Amiba. We'll initialize its private runtime and start the local service.\nNo separate install or source download is required.",
   "onboarding.step.install": "Install core",
   "onboarding.step.plugins": "Load plugins",
   "onboarding.step.backplane": "Start service",
@@ -471,7 +498,7 @@ export const en = {
   "onboarding.install.manualTitle": "Rather run it yourself in a terminal?",
   "onboarding.install.manualHint":
     "Run these commands in your terminal one by one, then come back and tap Re-check.",
-  "onboarding.install.manualStep.install": "1. Install Hermes core",
+  "onboarding.install.manualStep.install": "1. Initialize bundled Hermes core",
   "onboarding.install.manualStep.plugin": "{n}. Load plugin {id}",
   "onboarding.ready.title": "You're all set",
   "onboarding.ready.subtitle": "Heading into Amiba…",
@@ -537,7 +564,7 @@ export const en = {
 
   // Gateway settings
   "options.gateway.baseUrl": "Gateway base URL",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:8642/v1",
+  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:18642/v1",
   "options.gateway.baseUrl.desc":
     "The gateway listens on this URL. Override it if you ran `hermes chat` on a different port or host.",
   "options.gateway.test": "Test connection",
@@ -559,16 +586,15 @@ export const en = {
   "options.gateway.backplaneKey.placeholder":
     "leave empty unless you've set AMIBA_BACKPLANE_KEY",
   "options.gateway.backplaneKey.help":
-    "Usually leave empty. If you want to require auth, set AMIBA_BACKPLANE_KEY in ~/.hermes/.env, restart Hermes, then paste the same value here.",
+    "Usually leave empty. If you want to require auth, set AMIBA_BACKPLANE_KEY in $HERMES_HOME/.env, restart the local service, then paste the same value here.",
   "options.gateway.bridge.title": "Bridge",
   "options.gateway.bridge.url.label": "Bridge URL",
   "options.gateway.bridge.url.help":
-    "Leave as default. Only change this if you've moved the bridge to a different port on the Hermes side.",
+    "Leave as default. Only change this if you've moved the local bridge to a different port.",
 
   // Memory settings
   "options.memory.title": "Memory",
-  "options.memory.subtitle":
-    "Hermes Agent's persistent memory (read-only view)",
+  "options.memory.subtitle": "The assistant's persistent memory (read-only)",
   "options.memory.subtitle.tooltip": "$HERMES_HOME/memories/{MEMORY,USER}.md",
   "options.memory.empty": "(No memory entries yet)",
   "options.memory.refresh": "Refresh",
@@ -579,11 +605,11 @@ export const en = {
   "options.memory.target.memory": "MEMORY.md",
   "options.memory.target.user": "USER.md",
   "options.memory.desc.memory":
-    "Hermes Agent's own observations (environment facts, project conventions, tool quirks, etc.).",
+    "The assistant's observations about environments, projects, and tools.",
   "options.memory.desc.user":
-    "User preferences and collaboration habits noted by Hermes Agent.",
+    "User preferences and collaboration habits noted by the assistant.",
   "options.memory.flagTooltip":
-    "Hermes safety-scan flag: {flag}\nThe same rules block entries before MEMORY.md is injected into the system prompt",
+    "Safety-scan flag: {flag}\nThe same rules block entries before MEMORY.md is injected into the system prompt",
 
   // Models / Hermes model config
   "options.models.title": "Models",
@@ -603,7 +629,7 @@ export const en = {
   "options.models.providers.sectionTitle": "Service providers",
   "options.models.display.search": "Search providers or models…",
   "options.models.display.empty": "No matching providers or models.",
-  "options.models.display.source.config": "Hermes config",
+  "options.models.display.source.config": "Local config",
   "options.models.display.source.saved": "Saved here",
   "options.models.display.source.detected": "Credential detected",
   "options.models.display.source.available": "Not connected",
@@ -659,7 +685,7 @@ export const en = {
   "options.models.details.referenceNote":
     "Model information references {source}.",
   "options.models.details.noSupplemental":
-    "Hermes or the provider did not supply an extended profile, and no community catalog entry matched this model.",
+    "The local runtime or provider did not supply an extended profile, and no community catalog entry matched this model.",
   "options.models.config.defaultsTitle": "Model assignments",
   "options.models.config.mainModel": "Main model",
   "options.models.config.main": "Default model",
@@ -721,7 +747,7 @@ export const en = {
   "options.models.provider.credentials": "Credentials",
   "options.models.provider.endpoint": "Endpoint: {url}",
   "options.models.provider.metadataPartial":
-    "Provider metadata is only partially available. Make sure Hermes is installed and connected.",
+    "Provider metadata is only partially available. Make sure the local service is installed and connected.",
   "options.models.provider.customDescription":
     "Use any OpenAI-compatible endpoint as the main model. Enter its model id and endpoint here.",
   "options.models.provider.customModel": "Model id",
@@ -784,19 +810,19 @@ export const en = {
   "options.models.provider.method.githubToken": "GitHub Token",
   "options.models.provider.method.claudeCode": "Claude Code login",
   "options.models.provider.method.githubCli": "GitHub CLI login",
-  "options.models.provider.method.hermesOauth": "Hermes OAuth login",
+  "options.models.provider.method.hermesOauth": "Device authorization",
   "options.models.provider.authHint.oauthDevice":
-    "You can also sign in through Hermes' device authorization flow.",
+    "You can also sign in through the device authorization flow.",
   "options.models.provider.authHint.oauthExternal":
-    "You can also use an external CLI login detected by Hermes.",
+    "You can also use an external CLI login detected on this device.",
   "options.models.provider.authHint.externalProcess":
     "This service can also be supplied by an authenticated external process.",
   "options.models.provider.authHint.awsSdk":
-    "Hermes also reads local AWS SDK configuration or IAM environment credentials.",
+    "Amiba also reads local AWS SDK configuration or IAM environment credentials.",
   "options.models.provider.authHint.copilot":
     "GitHub identity and Copilot service access are separate states. Copilot is usable only after service verification succeeds.",
   "options.models.provider.authHint.vertex":
-    "Hermes also reads Google Cloud ADC or service-account configuration.",
+    "Amiba also reads Google Cloud ADC or service-account configuration.",
   "options.models.provider.saveCredentials": "Save credentials",
   "options.models.provider.saved": "Saved",
   "options.models.provider.readCredentialsFailed":
@@ -896,7 +922,7 @@ export const en = {
   "options.models.virtual.referenceMaxTokensValue": "Advisor output {count}",
   "options.models.virtual.referenceTimeout": "Advisor timeout (seconds)",
   "options.models.virtual.unlimited": "Unlimited",
-  "options.models.virtual.inheritHermes": "Use Hermes default",
+  "options.models.virtual.inheritHermes": "Use assistant default",
   "options.models.virtual.degradedPolicy": "When an advisor fails",
   "options.models.virtual.degraded.loud": "Show degraded state",
   "options.models.virtual.degraded.silent": "Continue silently",
@@ -915,7 +941,7 @@ export const en = {
   // Automation
   "options.cron.title": "Automation",
   "options.cron.pageTitle": "Automation",
-  "options.cron.subtitle": "Tasks Hermes runs for you on a schedule",
+  "options.cron.subtitle": "Tasks Amiba runs for you on a schedule",
   "options.cron.refresh": "Refresh",
   "options.cron.newJob": "New job",
   "options.cron.search": "Search scheduled tasks",
@@ -927,19 +953,19 @@ export const en = {
   "options.cron.loading": "Loading scheduled tasks…",
   "options.cron.empty.title": "No scheduled tasks yet",
   "options.cron.empty.description":
-    "Create one to let Hermes handle recurring or time-based work.",
+    "Create one to let Amiba handle recurring or time-based work.",
   "options.cron.form.create": "New automation",
   "options.cron.form.edit": "Edit automation",
   "options.cron.form.createAction": "Create",
   "options.cron.form.name": "Name",
   "options.cron.form.name.placeholder":
-    "Optional — Hermes can derive it from the instructions",
+    "Optional — Amiba can derive it from the instructions",
   "options.cron.form.schedule": "Schedule",
   "options.cron.form.schedule.hint":
     "Cron expression, recurring duration, one-shot duration, or ISO time",
   "options.cron.form.prompt": "Instructions",
   "options.cron.form.prompt.placeholder":
-    "Self-contained instructions Hermes should execute.",
+    "Self-contained instructions Amiba should execute.",
   "options.cron.form.prompt.scriptPlaceholder":
     "Optional when running a script directly",
   "options.cron.form.execution": "Execution",
@@ -960,7 +986,7 @@ export const en = {
     "Skip the model and run the script as the automation.",
   "options.cron.form.script": "Script",
   "options.cron.form.script.placeholder":
-    "A script under ~/.hermes/scripts or an absolute path",
+    "A script under $HERMES_HOME/scripts or an absolute path",
   "options.cron.form.repeat": "Run limit",
   "options.cron.form.repeat.placeholder": "Blank means unlimited",
   "options.cron.state.scheduled": "Enabled",
@@ -1047,6 +1073,7 @@ export const en = {
   "options.status.actions.update.available": "A newer version is available",
   "options.status.actions.update.behind": "{count} commits behind upstream",
   "options.status.actions.update.unknown": "Update status unavailable",
+  "options.status.actions.update.managed": "Managed by Amiba",
   "options.status.actions.running": "Running",
   "options.status.actions.success": "Completed",
   "options.status.actions.failed": "Failed",
@@ -1063,15 +1090,15 @@ export const en = {
     "Amiba could not verify the installed Hermes version. Install Hermes {required} or newer before continuing.",
   "options.status.onboarding.title": "Local service is unavailable",
   "options.status.onboarding.description":
-    "Amiba cannot reach the local backplane. The desktop app normally starts it automatically; use the checks below if it stays offline.",
+    "Amiba's managed Hermes runtime or local services are not ready. Retry recovery below.",
   "options.status.onboarding.retry": "Check again",
   "options.status.onboarding.step.install":
-    "Confirm Hermes Agent is installed.",
+    "Amiba verifies its pinned private Hermes runtime.",
   "options.status.onboarding.step.plugin":
-    "Install the Amiba browser-tools plugin.",
+    "Amiba verifies the bundled backplane version.",
   "options.status.onboarding.step.run":
-    "Start the gateway and local backplane services.",
-  "options.status.onboarding.manual": "Manual startup commands",
+    "Amiba restarts its private gateway and backplane services.",
+  "options.status.onboarding.manual": "Recovery notes",
   "options.status.onboarding.copy": "Copy",
   "options.status.onboarding.copied": "Copied",
   "options.status.onboarding.error": "Technical details",
@@ -1235,9 +1262,8 @@ export const en = {
   "quickAsk.kbd.newline": "newline",
   "quickAsk.kbd.new": "new",
   "quickAsk.kbd.dismiss": "dismiss",
-  "quickAsk.continuation.label": "Continuing chat from {time}",
-  "quickAsk.continuation.new": "⌘K new",
-  "quickAsk.continuation.dismiss": "Dismiss",
+  "quickAsk.actions.newConversation": "New conversation",
+  "quickAsk.actions.openInMain": "Open in main window",
   "sidepanel.permission.allowOnce": "Allow once",
   "sidepanel.permission.allowOnce.desc":
     "Allow this time only; ask again next time",
@@ -1251,9 +1277,9 @@ export const en = {
   "sidepanel.permission.deny.desc": "Refuse; the agent receives an error",
   "sidepanel.permission.approvalNeeded": "Approval needed",
   "sidepanel.permission.reason.unverifiedEmbeddedScript":
-    "This command contains an embedded script that Hermes could not fully verify. Confirm before running it.",
+    "This command contains an embedded script that could not be fully verified. Confirm before running it.",
   "sidepanel.permission.reason.parserLimit":
-    "This command is too complex for Hermes to fully verify. Confirm before running it.",
+    "This command is too complex to fully verify. Confirm before running it.",
   "sidepanel.permission.allowedOnce": "Allowed once",
   "sidepanel.permission.allowedOnce.tooltip":
     "Approved for this execution only",
@@ -1300,7 +1326,7 @@ export const en = {
   // the bridge isn't reachable. Submitting a prompt would just error.
   "sidepanel.empty.notConnected.title": "Not connected to Amiba",
   "sidepanel.empty.notConnected.description":
-    "Connect to the Hermes bridge first to start chatting.",
+    "Connect to the local service first to start chatting.",
   "sidepanel.empty.notConnected.button": "Connect",
   "sidepanel.empty.notConnected.connecting": "Connecting…",
 
@@ -1310,10 +1336,10 @@ export const en = {
   "sidepanel.status.offline": "Offline",
   "sidepanel.status.bridgeUrl": "Bridge: {url}",
   "sidepanel.status.tooltip.online":
-    "Hermes bridge is reachable. Click to open Gateway settings.",
+    "The local service is reachable. Click to open Gateway settings.",
   "sidepanel.status.tooltip.offline":
-    "Hermes gateway is not reachable. Start `hermes chat` and check the Gateway URL.",
-  "sidepanel.status.tooltip.connecting": "Connecting to the Hermes bridge…",
+    "The local gateway is not reachable. Start `hermes chat` and check the Gateway URL.",
+  "sidepanel.status.tooltip.connecting": "Connecting to the local service…",
   "sidepanel.status.tooltipBase": "Amiba Browser Extension · {state}",
   "sidepanel.status.tooltip.agentRunning":
     "Agent window: #{windowId} · tab {tabId}",
@@ -1606,7 +1632,7 @@ export const en = {
   "usage.tokens.label.placeholderHint":
     "No specific model was recorded for this session. The gateway used its default routing — the real model that ran isn't stored per-session.",
   "usage.tokens.footer.source":
-    "Data from hermes-agent · auto-refreshes every 30 s",
+    "Data from the local runtime · auto-refreshes every 30 s",
   "usage.tools.hero.calls": "Calls",
   "usage.tools.hero.tools": "Tools",
   "usage.tools.hero.unfinished": "Unfinished",
@@ -1629,7 +1655,7 @@ export const en = {
   "agentCapabilities.back": "Back to tools",
   "agentCapabilities.builtin.title": "Built-in tools",
   "agentCapabilities.builtin.description":
-    "Provided by Hermes and organized by purpose for easier setup.",
+    "Provided by the local runtime and organized by purpose for easier setup.",
   "agentCapabilities.enabledForAssistant":
     "Allow this assistant to use this tool",
   "agentCapabilities.activity.title": "Tool usage",
@@ -1725,9 +1751,9 @@ export const en = {
   "externalTools.mcp.add": "Add MCP",
   "externalTools.mcp.source": "MCP",
   "externalTools.mcp.addPrompt":
-    "Help me find and add an MCP service for Hermes assistant profile “{profile}”. First ask what I want Amiba to do, explain the options, and ask for confirmation before installing anything.",
+    "Help me find and add an MCP service for Amiba assistant profile “{profile}”. First ask what I want Amiba to do, explain the options, and ask for confirmation before installing anything.",
   "externalTools.mcp.configurePrompt":
-    "Help me inspect and configure MCP “{name}” (configuration name: {slug}) in Hermes assistant profile “{profile}”. Explain its current state first, and ask for confirmation before disabling, reconfiguring or removing it.",
+    "Help me inspect and configure MCP “{name}” (configuration name: {slug}) in Amiba assistant profile “{profile}”. Explain its current state first, and ask for confirmation before disabling, reconfiguring or removing it.",
   "externalTools.mcp.emptyTitle": "No MCP services added",
   "externalTools.mcp.emptyDescription":
     "Add one when you want Amiba to connect to an external tool or data source.",
@@ -1752,7 +1778,7 @@ export const en = {
     "Enable this capability and Amiba can use it in a new conversation.",
   "tools.detail.noSetup.unavailableTitle": "This capability is not ready yet",
   "tools.detail.noSetup.unavailableDescription":
-    "The current Hermes environment did not provide an actionable setup method. Update the runtime and check again.",
+    "The current runtime did not provide an actionable setup method. Update it and check again.",
   "tools.detail.understanding.loadFailed": "Could not load available models.",
   "tools.detail.understanding.saveFailed":
     "Could not save the understanding model.",
@@ -1833,34 +1859,34 @@ export const en = {
   "tools.detail.setup.info.changes": "What this will do",
   "tools.detail.setup.info.agentBrowser.title": "Local browser components",
   "tools.detail.setup.info.agentBrowser.description":
-    "Prepares an isolated headless browser environment for Hermes on this device.",
+    "Prepares an isolated headless browser environment for Amiba on this device.",
   "tools.detail.setup.info.agentBrowser.detail.cli":
-    "Installs the Node.js dependencies in the Hermes runtime, including the agent-browser controller.",
+    "Installs the required Node.js dependencies, including the agent-browser controller.",
   "tools.detail.setup.info.agentBrowser.detail.chromium":
     "Downloads a matching Playwright Chromium/headless-shell build, usually about 170 MB; an existing compatible Chrome can be reused.",
   "tools.detail.setup.info.agentBrowser.detail.session":
     "Tasks run in isolated headless sessions and do not read your everyday Chrome accounts, cookies, or extensions by default.",
   "tools.detail.setup.info.agentBrowser.note":
-    "Browser files normally live in Playwright's cache. Removing Hermes may not remove that cache automatically.",
+    "Browser files normally live in Playwright's cache. Removing Amiba may not remove that cache automatically.",
   "tools.detail.setup.info.cloudBrowser.title": "Cloud browser controller",
   "tools.detail.setup.info.cloudBrowser.description":
-    "The provider runs the browser in the cloud; Hermes installs a local controller to send it actions.",
+    "The provider runs the browser in the cloud; Amiba installs a local controller to send it actions.",
   "tools.detail.setup.info.cloudBrowser.detail.cli":
-    "Installs the agent-browser CLI and the Node.js dependencies required by the Hermes runtime.",
+    "Installs the agent-browser CLI and its required Node.js dependencies.",
   "tools.detail.setup.info.cloudBrowser.detail.hosted":
     "Does not download local Chromium. Pages run in the cloud browser hosted by Browserbase, Browser Use, or Firecrawl.",
   "tools.detail.setup.info.camofox.title": "Camofox browser service",
   "tools.detail.setup.info.camofox.description":
     "Installs a local anti-detection Firefox/Camoufox browser service.",
   "tools.detail.setup.info.camofox.detail.package":
-    "Installs the @askjo/camofox-browser Node.js package in the Hermes runtime.",
+    "Installs the @askjo/camofox-browser Node.js package in the local runtime.",
   "tools.detail.setup.info.camofox.detail.engine":
     "The first service start downloads the Camoufox browser engine, approximately 300 MB.",
   "tools.detail.setup.info.camofox.detail.service":
     "After installation, the local Camofox service still needs to be started, or you can use its Docker service.",
   "tools.detail.setup.info.cuaDriver.title": "Computer control driver",
   "tools.detail.setup.info.cuaDriver.description":
-    "Installs cua-driver so Hermes can read the screen and perform mouse and keyboard actions in the background.",
+    "Installs cua-driver so Amiba can read the screen and perform mouse and keyboard actions in the background.",
   "tools.detail.setup.info.cuaDriver.detail.installer":
     "Downloads the official installer from the trycua/cua repository and installs the driver for this operating system.",
   "tools.detail.setup.info.cuaDriver.detail.process":
@@ -1871,7 +1897,7 @@ export const en = {
   "tools.detail.setup.info.fasterWhisper.description":
     "Installs faster-whisper to transcribe speech on this device.",
   "tools.detail.setup.info.fasterWhisper.detail.package":
-    "Installs the faster-whisper Python package into the environment used by Hermes.",
+    "Installs the faster-whisper Python package into the local runtime.",
   "tools.detail.setup.info.fasterWhisper.detail.model":
     "The recognition model downloads on first use; the default is usually about 150 MB and other sizes are available.",
   "tools.detail.setup.info.fasterWhisper.detail.local":
@@ -1880,7 +1906,7 @@ export const en = {
   "tools.detail.setup.info.kittenTts.description":
     "Installs a lightweight CPU-oriented local text-to-speech engine.",
   "tools.detail.setup.info.kittenTts.detail.package":
-    "Installs KittenTTS and soundfile into the Hermes Python environment.",
+    "Installs KittenTTS and soundfile into the local Python environment.",
   "tools.detail.setup.info.kittenTts.detail.model":
     "Downloads a voice model of approximately 25–80 MB, depending on the selected model.",
   "tools.detail.setup.info.kittenTts.detail.local":
@@ -1889,7 +1915,7 @@ export const en = {
   "tools.detail.setup.info.piper.description":
     "Installs Piper to generate speech locally on this device.",
   "tools.detail.setup.info.piper.detail.package":
-    "Installs the roughly 14 MB piper-tts runtime into the Hermes Python environment.",
+    "Installs the roughly 14 MB piper-tts runtime into the local Python environment.",
   "tools.detail.setup.info.piper.detail.voice":
     "The selected voice downloads separately on the first speech request.",
   "tools.detail.setup.info.piper.detail.local":
@@ -1898,29 +1924,29 @@ export const en = {
   "tools.detail.setup.info.ddgs.description":
     "Installs a DuckDuckGo search client that requires no API key.",
   "tools.detail.setup.info.ddgs.detail.package":
-    "Installs the ddgs package into the Hermes Python environment.",
+    "Installs the ddgs package into the local Python environment.",
   "tools.detail.setup.info.ddgs.detail.scope":
     "It provides web search only, not page extraction; choose a separate extraction provider if you also need to read pages.",
   "tools.detail.setup.info.ddgs.detail.limits":
     "No account is required, but requests are still subject to DuckDuckGo's server-side rate limits.",
   "tools.detail.setup.info.spotify.title": "Connect Spotify",
   "tools.detail.setup.info.spotify.description":
-    "Uses Spotify OAuth to let Hermes access playback and library features.",
+    "Uses Spotify OAuth to let Amiba access playback and library features.",
   "tools.detail.setup.info.spotify.detail.browser":
     "Opens your system browser to complete Spotify sign-in and authorization.",
   "tools.detail.setup.info.spotify.detail.client":
     "If no Spotify app is configured yet, it first asks for a Client ID.",
   "tools.detail.setup.info.spotify.detail.storage":
-    "Authorization data is stored in the local Hermes configuration; no extra browser or media player is installed.",
+    "Authorization data is stored in the local configuration; no extra browser or media player is installed.",
   "tools.detail.setup.info.langfuse.title": "Langfuse observability component",
   "tools.detail.setup.info.langfuse.description":
     "Installs and enables the Langfuse integration for recording Agent traces.",
   "tools.detail.setup.info.langfuse.detail.sdk":
-    "Installs the Langfuse SDK into the Hermes Python environment.",
+    "Installs the Langfuse SDK into the local Python environment.",
   "tools.detail.setup.info.langfuse.detail.plugin":
-    "Enables the bundled observability/langfuse plugin in Hermes configuration.",
+    "Enables the bundled observability/langfuse plugin in the local configuration.",
   "tools.detail.setup.info.langfuse.detail.restart":
-    "Hermes must be restarted after setup before the tracing configuration takes effect.",
+    "The local service must be restarted before the tracing configuration takes effect.",
   "tools.detail.setup.info.xaiGrok.title": "Connect xAI",
   "tools.detail.setup.info.xaiGrok.description":
     "Chooses an available authentication method for tools that use xAI.",
@@ -1932,9 +1958,9 @@ export const en = {
     "This step installs no local executable or browser engine.",
   "tools.detail.setup.info.unknown.title": "Additional setup",
   "tools.detail.setup.info.unknown.description":
-    "Hermes declares that this service needs an additional setup step.",
+    "The local runtime reports that this service needs an additional setup step.",
   "tools.detail.setup.info.unknown.detail":
-    "This Hermes version did not provide structured details for the setup; its result will be shown when it runs.",
+    "The current runtime did not provide structured setup details; its result will be shown when it runs.",
   "tools.detail.auth.title": "Sign in required",
   "tools.detail.auth.description":
     "This option uses your Nous account. Sign in from the Models page, then come back and refresh.",

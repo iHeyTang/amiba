@@ -20,17 +20,11 @@
  *     mechanism the main window uses for HomeView / Region Snip / URL
  *     handler hand-offs — no parallel composer-prefill code path.
  *
- * Session lifecycle (A+D design): every summon KEEPS the previous active
- * session — the user is more often returning to a thought than starting
- * a brand-new question, and Spotlight precedent (always-fresh) gets
- * frustrating in a conversational surface. When there's content to
- * resume, we surface an inline ``Continuing chat from N min ago · ⌘K
- * new`` strip above the messages so the state is explicit and a reset
- * is one keystroke away. ⌘K calls ``sessions.deselect()``; the first
- * turn after that auto-creates a fresh session row via ChatSurface's
- * ``sessions.ensureActive()``. The session is tagged ``source="desktop"``
- * by the main-process chat engine, so Quick-Ask conversations show up in
- * the main window's history drawer alongside everything else.
+ * Every summon keeps the previous active session. The persistent New chat
+ * action (and ⌘K) asks ChatSurface to run its own draft reset before
+ * deselecting; the first turn after that auto-creates a fresh session row via
+ * ``sessions.ensureActive()``. Quick-Ask conversations still appear in the
+ * main window's history drawer alongside everything else.
  */
 import { useSessions } from "@amiba/core";
 import { useResolvedTheme } from "@amiba/ui";
@@ -39,7 +33,7 @@ import { cn } from "@amiba/ui";
 import type { PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui";
 import { useT } from "@amiba/i18n";
 import { getPlatform } from "@amiba/platform";
-import { Clock, X } from "lucide-react";
+import { ArrowUpRight, SquarePen } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -50,16 +44,15 @@ import {
 } from "react";
 
 import { ElectronChatEngineClient } from "../chat/electron-engine-client";
+import {
+  resolveQuickAskCardLayout,
+  resolveQuickAskSurfaceLayout,
+} from "../../shared/quick-ask-layout";
 
 type QuickAskPrefill = { text?: string; sourceApp?: string };
 
-/**
- * Window height locked to as soon as the conversation has anything to
- * show. Streaming content scrolls inside the ChatSurface's internal
- * ScrollArea so the window itself never resizes during a stream —
- * eliminating per-chunk jitter.
- */
-const EXPANDED_HEIGHT_PX = 480;
+/** Shadow-safe room inside the transparent BrowserWindow stage. */
+const SHADOW_GUTTER_X_PX = 16;
 
 export function QuickAskView() {
   // Each BrowserWindow is its own renderer process, so the theme hook
@@ -83,61 +76,26 @@ export function QuickAskView() {
   const prefillRef = useRef<PendingPromptResult | null>(null);
   const prefillSubscribersRef = useRef<Set<() => void>>(new Set());
 
-  const messages = sessions.activeMessages;
   const hasActive = !!sessions.activeId;
-  // True while a composer overlay (slash/@ TriggerMenu, tagged with
-  // data-composer-overlay) is open. Drives expansion so the upward menu
-  // has room. See the MutationObserver effect below.
+  // True while any composer-owned menu/dialog is open. Detection remains
+  // document-wide so slash/@ surfaces and any future portals share Escape.
   const [overlayOpen, setOverlayOpen] = useState(false);
-  // Whether the composer has a draft (reported by ChatSurface via
-  // onComposerEmptyChange). Keeps the popup expanded mid-compose.
-  const [composerNonEmpty, setComposerNonEmpty] = useState(false);
-  const onComposerEmptyChange = useCallback(
-    (empty: boolean) => setComposerNonEmpty(!empty),
-    [],
-  );
-  // Sticky expansion: an open overlay SETS it; it releases only once the
-  // composer is empty AND no overlay is open — so dismissing the slash/@
-  // menu while a draft remains keeps the expanded layout instead of
-  // snapping back to compact.
-  const [stuck, setStuck] = useState(false);
-  // Collapse animation. `resizeQuickAsk` animates the window both ways,
-  // but on collapse the compact layout reverts instantly — the composer
-  // snaps from the bottom (expanded) to the top before the window finishes
-  // shrinking, so the motion reads as "no animation". We hold the tall
-  // layout (composer bottom-pinned + `h-full`) for the shrink's duration
-  // so the composer rides UP with the window edge, symmetric with expand.
-  const [collapsing, setCollapsing] = useState(false);
-  // Last measured compact (content) height. Used as the collapse target
-  // because while `collapsing` the layout is still tall — measuring
-  // `rootRef` would return the window height, not the composer height.
-  const compactHeightRef = useRef(84);
-  const prevExpandedRef = useRef(false);
-  // ``expanded`` flips the moment we have a session with content, OR
-  // when a composer overlay (slash/@ TriggerMenu) is open — the upward
-  // menu needs vertical room that the compact window doesn't have.
-  // The transition is smoothed by macOS's animated setBounds in
-  // main/quick-ask-window.ts.
-  const expanded = (hasActive && messages.length > 0) || overlayOpen || stuck;
-  // Drives layout fill + composer bottom-pin: true while expanded AND
-  // throughout the collapse animation.
-  const tall = expanded || collapsing;
-
-  // Continuation hint state (A+D). Snapshotted ON summon so we can hide
-  // the strip the moment the user actually sends a turn (message count
-  // grows past the snapshot). Manual dismiss via X also flips
-  // ``hintDismissed``. ⌘K → deselect makes ``hasActive`` false, the
-  // render gate falls naturally — no extra wiring needed.
-  const [summonMessageCount, setSummonMessageCount] = useState<number | null>(
-    null,
-  );
-  const [hintDismissed, setHintDismissed] = useState(false);
-  // ``messages.length`` read inside the long-lived onPrefill listener
-  // would close over the initial render's empty array. The ref keeps the
-  // current count visible without re-binding the listener on every
-  // message update.
-  const messageCountRef = useRef(messages.length);
-  messageCountRef.current = messages.length;
+  const [pickerRefreshKey, setPickerRefreshKey] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const [newConversationRequestKey, setNewConversationRequestKey] =
+    useState(0);
+  // Expand as soon as the session id exists. Waiting for the first message
+  // creates an intermediate compact frame where ChatSurface has already
+  // switched to conversation mode but the outer card has not caught up.
+  const conversationExpanded = hasActive;
+  const fillCard = conversationExpanded;
+  const cardLayout = resolveQuickAskCardLayout(fillCard, composerHeight);
+  const handleComposerHeightChange = useCallback((height: number) => {
+    setComposerHeight((current) => (current === height ? current : height));
+  }, []);
+  const requestNewConversation = useCallback(() => {
+    setNewConversationRequestKey((current) => current + 1);
+  }, []);
 
   // Pending-prompt capability — bridges the Quick-Ask IPC prefill payload
   // into ChatSurface's standard ``capabilities.pendingPrompt`` slot.
@@ -177,11 +135,10 @@ export function QuickAskView() {
         ? payload.sourceApp
         : undefined;
       prefillRef.current = text || sourceApp ? { text, sourceApp } : null;
-      // Snapshot message count + un-dismiss the hint so a re-summon
-      // re-surfaces "continuing chat from N min ago" — same window can
-      // host many summons in a session.
-      setSummonMessageCount(messageCountRef.current);
-      setHintDismissed(false);
+      // This renderer is created while hidden, before the backplane is always
+      // ready. Refresh model/Profile state on each real summon so a transient
+      // mount-time failure never becomes the visible Quick Ask state.
+      setPickerRefreshKey((current) => current + 1);
       // Notify ChatSurface's drain subscription so it re-pulls even
       // when the active id didn't change (consecutive empty re-summons,
       // or summon while the same session is still active).
@@ -206,248 +163,202 @@ export function QuickAskView() {
     return () => off();
   }, [bridge]);
 
-  // Esc → dismiss the window. ⌘K / Ctrl+K → start a new conversation
-  // (deselect; the next submit auto-creates a fresh session row).
+  // Esc → dismiss the window. ⌘K / Ctrl+K asks ChatSurface to clear the
+  // persistent draft and then deselect the current session.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Composer-owned menus/dialogs consume the first Escape. A second
+        // Escape, once the overlay has closed, dismisses Quick Ask itself.
+        if (overlayOpen) return;
         e.preventDefault();
         void bridge.quickAsk.dismiss();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        void sessions.deselect();
+        requestNewConversation();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [bridge, sessions]);
+  }, [bridge, overlayOpen, requestNewConversation]);
 
-  // Watch for a composer overlay (slash/@ TriggerMenu) opening inside the
-  // popup. The menu opens upward and the compact window is too short for
-  // it, so when one appears we flip `overlayOpen` → `expanded`, which
-  // grows the window to EXPANDED_HEIGHT_PX and switches ChatSurface to the
-  // bottom-pinned composer layout (room above for the menu). The overlay
-  // is tagged with `data-composer-overlay`; any future composer popup that
-  // wants this treatment can carry the same attribute.
+  // A shared data attribute makes every current and future picker follow the
+  // same Escape and hit-testing contract without coupling this shell to each
+  // picker implementation.
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
     const sync = () =>
-      setOverlayOpen(!!el.querySelector("[data-composer-overlay]"));
+      setOverlayOpen(
+        !!document.querySelector(
+          '[data-ui-overlay="dialog"], [data-ui-overlay="popover"], [data-composer-overlay]',
+        ),
+      );
     const observer = new MutationObserver(sync);
-    observer.observe(el, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
     sync();
     return () => observer.disconnect();
   }, []);
 
-  // Sticky-expansion latch: an open overlay sets it; it releases only when
-  // the composer is empty AND no overlay is open, so closing the menu with
-  // a draft still present keeps the popup expanded.
-  useEffect(() => {
-    if (overlayOpen) setStuck(true);
-    else if (!composerNonEmpty) setStuck(false);
-  }, [overlayOpen, composerNonEmpty]);
-
-  // When we drop from expanded → compact, hold the tall layout for the
-  // window-shrink animation (~macOS 200ms) so the collapse is animated:
-  // the composer stays bottom-pinned and rides UP with the shrinking
-  // window instead of snapping to the top.
-  useEffect(() => {
-    const wasExpanded = prevExpandedRef.current;
-    prevExpandedRef.current = expanded;
-    if (wasExpanded && !expanded) {
-      setCollapsing(true);
-      const t = setTimeout(() => setCollapsing(false), 260);
-      return () => clearTimeout(t);
-    }
-  }, [expanded]);
-
-  // Window-resize strategy: same two-mode design the previous Quick-Ask
-  // used. Compact mode follows the inner content height via
-  // ResizeObserver (fires AFTER layout so the textarea's auto-grow is
-  // captured accurately); expanded snaps once to EXPANDED_HEIGHT_PX so
-  // streaming chunks never cause the window itself to resize.
+  // Empty Quick Ask always uses the same transparent modal stage. Opening
+  // model/Profile/approval changes only overlay DOM — never the window height
+  // or composer layout. A real conversation remains the sole reason to switch
+  // to the taller chat window.
   useLayoutEffect(() => {
-    if (expanded) {
-      void bridge.quickAsk.resize(EXPANDED_HEIGHT_PX);
-      return;
-    }
-    // Collapsing → animate down to the last measured compact height while
-    // the layout is still tall (composer rides the shrinking window up).
-    // Use the remembered height, not a fresh measure: the tall layout
-    // would make rootRef report the window height, not the content.
-    if (collapsing) {
-      void bridge.quickAsk.resize(compactHeightRef.current);
-      return;
-    }
-    const el = rootRef.current;
-    if (!el) return;
-    let raf = 0;
-    let lastSent = -1;
-    const measure = () => {
-      raf = 0;
-      if (!el) return;
-      const target = el.scrollHeight + 12;
-      compactHeightRef.current = target;
-      if (target === lastSent) return;
-      lastSent = target;
-      void bridge.quickAsk.resize(target);
-    };
-    const observer = new ResizeObserver(() => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    // First fire — observers don't reliably callback on initial
-    // observation in all browsers.
-    measure();
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      observer.disconnect();
-    };
-  }, [expanded, collapsing, bridge]);
+    const layout = resolveQuickAskSurfaceLayout(conversationExpanded);
+    void bridge.quickAsk.resize(layout.height, layout.anchor);
+  }, [conversationExpanded, bridge]);
 
-  // Resolve the active session's last-update timestamp for the
-  // continuation hint. The sessions index is shared cross-window via
-  // SessionDB so the desktop main window's edits propagate here too.
-  const activeSession = hasActive
-    ? sessions.sessions.find((s) => s.id === sessions.activeId)
-    : undefined;
-  const showContinuationHint =
-    !hintDismissed &&
-    hasActive &&
-    messages.length > 0 &&
-    summonMessageCount !== null &&
-    messages.length === summonMessageCount;
+  // The fixed stage is intentionally much taller than the visible card.
+  // Make its fully transparent pixels click-through while keeping the card
+  // and any open modal interactive. `forward: true` in main keeps mousemove
+  // events flowing so the window can become interactive again on re-entry.
+  useEffect(() => {
+    let lastIgnored: boolean | null = null;
+    const syncHitTesting = (event: MouseEvent) => {
+      const hit = document.elementFromPoint(event.clientX, event.clientY);
+      const interactive = Boolean(
+        hit?.closest(
+          "[data-quick-ask-hit-area], [data-ui-overlay], [data-composer-overlay], [data-dialog-overlay]",
+        ),
+      );
+      const ignore = !interactive;
+      if (ignore === lastIgnored) return;
+      lastIgnored = ignore;
+      void bridge.quickAsk.setIgnoreMouseEvents(ignore);
+    };
+    document.addEventListener("mousemove", syncHitTesting);
+    return () => {
+      document.removeEventListener("mousemove", syncHitTesting);
+      void bridge.quickAsk.setIgnoreMouseEvents(false);
+    };
+  }, [bridge]);
 
   return (
     <div
       ref={rootRef}
-      className={cn(
-        // ``h-full`` in expanded mode lets ChatSurface fill the entire
-        // window. In compact mode the card is content-sized so the popup
-        // hugs the input row. No CSS shadow — main/quick-ask-window.ts
-        // sets ``hasShadow: true`` and macOS paints the shadow outside
-        // the BrowserWindow where it can't be clipped at the edge.
-        //
-        // ``overflow-hidden`` clips the inner ChatSurface's
-        // ``bg-background`` rectangle to the rounded shape — without it
-        // the composer's square bottom edge paints over the outer
-        // ``rounded-xl`` and the popup looks half-rounded.
-        "animate-notifier-in relative mx-auto flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-background text-foreground",
-        tall && "h-full",
-      )}
+      className="relative mx-auto h-full w-full text-foreground"
     >
-      {/* Drag handle. Sits above all content so the user always has a
-          predictable region to grab the borderless window from. The
-          visible strip is only 12px so it reads as discreet chrome,
-          but the ``after:`` pseudo-element extends the hit region 10px
-          further down — invisibly — so the hover animation fires as
-          the cursor *approaches* the grip rather than only on direct
-          contact. The pseudo is part of the parent's box, so:
-            · it inherits ``app-drag-region`` (more area to grab)
-            · ``group-hover:`` on the grip glyph below picks up hover
-              in the extended zone, since the parent IS the group
-          On hover the grip widens + darkens — the iOS modal-grip
-          convention, and the only visual feedback this borderless
-          window has to communicate "you can drag me".
-          The global CSS rule auto opts buttons/textareas out, so the
-          chips and composer below are unaffected. */}
-      <div
-        className="app-drag-region group relative flex h-3 w-full shrink-0 items-center justify-center after:absolute after:inset-x-0 after:top-full after:h-2.5 after:content-['']"
-        title="Drag to reposition"
+      <section
+        data-quick-ask-hit-area=""
+        className={cn(
+          // One continuous surface owns the radius, edge and depth. Compact
+          // mode keeps its Composer frameless; expanded mode restores the main
+          // window Composer chrome so the working input has clear structure.
+          "quick-ask-card absolute isolate flex min-h-0 flex-col rounded-[18px] border border-border/45 bg-background shadow-[0_12px_28px_-14px_rgb(0_0_0_/_0.28),0_3px_10px_-5px_rgb(0_0_0_/_0.16)] dark:shadow-[0_14px_34px_-15px_rgb(0_0_0_/_0.72),0_3px_12px_-5px_rgb(0_0_0_/_0.48)]",
+          "overflow-visible transition-[height,top] duration-200 ease-out motion-reduce:transition-none",
+          // Never clip here: the main-window Composer deliberately paints a
+          // soft shadow beyond its frame. Its own scroll regions already own
+          // their content clipping, while the action bar rounds its bottom.
+        )}
+        style={{
+          left: `${SHADOW_GUTTER_X_PX}px`,
+          right: `${SHADOW_GUTTER_X_PX}px`,
+          top: `${cardLayout.top}px`,
+          height: `${cardLayout.height}px`,
+        }}
       >
-        <span
+        {/* The drag target overlays the card edge instead of consuming flex
+            height. It must never push the Composer beyond the visible card. */}
+        <div
+          className="app-drag-region absolute inset-x-0 top-0 z-50 h-2"
+          title="Drag to reposition"
           aria-hidden
-          className="h-0.5 w-8 rounded-full bg-border/70 transition-[width,background-color,opacity] duration-150 ease-out group-hover:w-12 group-hover:bg-foreground/40"
         />
-      </div>
 
-      <ChatSurface
-        variant="fullscreen"
-        emptyState="composer-only"
-        composerAutoFocus
-        composerOnlyExpanded={tall}
-        onComposerEmptyChange={onComposerEmptyChange}
-        client={client}
-        capabilities={capabilities}
-        openSettings={() => {}}
-        openAgentDestination={openExternal}
-      />
-
-      {showContinuationHint && (
-        <ContinuationHint
-          label={t("quickAsk.continuation.label", {
-            time: formatRelativeTime(activeSession?.updatedAt ?? Date.now(), t),
-          })}
-          newLabel={t("quickAsk.continuation.new")}
-          dismissLabel={t("quickAsk.continuation.dismiss")}
-          onNew={() => void sessions.deselect()}
-          onDismiss={() => setHintDismissed(true)}
+        {/* The card owns the available height in both modes. Keeping the
+            surface full-height lets its persistent dock stay bottom-anchored
+            while the card grows upward around multiline drafts. */}
+        <ChatSurface
+          variant="fullscreen"
+          emptyState="composer-only"
+          composerAutoFocus
+          composerOnlyExpanded
+          persistComposerAcrossModes
+          composerDensity={fillCard ? "default" : "compact"}
+          onComposerHeightChange={handleComposerHeightChange}
+          composerPickerDialogSize="tall"
+          composerPickerOverlayVariant="transparent"
+          composerPickerRefreshKey={pickerRefreshKey}
+          newConversationRequestKey={newConversationRequestKey}
+          composerFrameClassName={
+            fillCard
+              ? undefined
+              : "rounded-none border-0 bg-transparent shadow-none dark:shadow-none"
+          }
+          surfaceClassName={cn(
+            "quick-ask-composer-motion bg-transparent",
+            fillCard && "quick-ask-chat-surface",
+          )}
+          client={client}
+          capabilities={capabilities}
+          openSettings={() => {}}
+          openAgentDestination={openExternal}
         />
-      )}
+
+        <QuickAskActionBar
+          visible={fillCard}
+          newConversationLabel={t("quickAsk.actions.newConversation")}
+          openInMainLabel={t("quickAsk.actions.openInMain")}
+          onNewConversation={requestNewConversation}
+          onOpenInMain={() => {
+            if (!sessions.activeId) return;
+            void bridge.quickAsk.openInMain(sessions.activeId);
+          }}
+        />
+      </section>
     </div>
   );
 }
 
-interface ContinuationHintProps {
-  label: string;
-  newLabel: string;
-  dismissLabel: string;
-  onNew: () => void;
-  onDismiss: () => void;
+interface QuickAskActionBarProps {
+  visible: boolean;
+  newConversationLabel: string;
+  openInMainLabel: string;
+  onNewConversation: () => void;
+  onOpenInMain: () => void;
 }
 
-function ContinuationHint({
-  label,
-  newLabel,
-  dismissLabel,
-  onNew,
-  onDismiss,
-}: ContinuationHintProps) {
+function QuickAskActionBar({
+  visible,
+  newConversationLabel,
+  openInMainLabel,
+  onNewConversation,
+  onOpenInMain,
+}: QuickAskActionBarProps) {
+  const actionClassName =
+    "inline-flex h-5 items-center gap-1 px-1.5 text-[10px] font-normal text-muted-foreground/65 transition-colors duration-150 hover:text-foreground focus:outline-none focus-visible:text-foreground focus-visible:underline focus-visible:underline-offset-2";
+
   return (
-    <div className="flex shrink-0 items-center gap-1.5 pb-1.5 pl-3 pr-2 text-[10px] text-muted-foreground/80">
-      <Clock className="h-2.5 w-2.5 shrink-0" />
-      <span className="min-w-0 truncate">{label}</span>
-      <span className="text-muted-foreground/50">·</span>
+    <div
+      aria-hidden={!visible}
+      className={cn(
+        "app-no-drag relative z-40 flex shrink-0 items-center justify-center gap-3 overflow-hidden bg-transparent px-2",
+        "transition-[height,opacity] duration-200 ease-out motion-reduce:transition-none",
+        visible ? "h-6 opacity-100" : "pointer-events-none h-0 opacity-0",
+      )}
+      data-quick-ask-action-bar=""
+    >
       <button
         type="button"
-        onClick={onNew}
-        className="rounded underline-offset-2 hover:text-foreground hover:underline"
+        disabled={!visible}
+        tabIndex={visible ? 0 : -1}
+        onClick={onNewConversation}
+        className={actionClassName}
       >
-        {newLabel}
+        <SquarePen className="h-2.5 w-2.5 shrink-0" />
+        <span>{newConversationLabel}</span>
       </button>
       <button
         type="button"
-        onClick={onDismiss}
-        className="ml-auto shrink-0 rounded p-0.5 hover:bg-muted hover:text-foreground"
-        aria-label={dismissLabel}
-        title={dismissLabel}
+        disabled={!visible}
+        tabIndex={visible ? 0 : -1}
+        onClick={onOpenInMain}
+        className={actionClassName}
       >
-        <X className="h-2.5 w-2.5" />
+        <ArrowUpRight className="h-2.5 w-2.5 shrink-0" />
+        <span>{openInMainLabel}</span>
       </button>
     </div>
   );
-}
-
-/**
- * Relative-time formatter. Coarse buckets ("just now", "Nm ago",
- * "Nh ago", "Nd ago") using the same i18n keys the new-tab recents
- * list uses, so the strings stay consistent across surfaces.
- */
-function formatRelativeTime(
-  ms: number,
-  t: ReturnType<typeof useT>["t"],
-): string {
-  const diffSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (diffSec < 60) return t("newtab.relative.justNow");
-  if (diffSec < 3600) {
-    return t("newtab.relative.mAgo", { n: Math.floor(diffSec / 60) });
-  }
-  if (diffSec < 86400) {
-    return t("newtab.relative.hAgo", { n: Math.floor(diffSec / 3600) });
-  }
-  return t("newtab.relative.dAgo", { n: Math.floor(diffSec / 86400) });
 }

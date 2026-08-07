@@ -55,6 +55,11 @@ export interface BrowserTabSnapshot {
 /** Payload the UI sends on `submit` to start one assistant turn. */
 export interface SubmitPayload {
   sessionId: string;
+  /**
+   * User-facing title captured when the turn starts. Notification surfaces
+   * use this instead of reconstructing a task title from message content.
+   */
+  sessionTitle?: string;
   /** Stable uiId of the assistant placeholder bubble the UI just appended. */
   assistantUiId: string;
   model: string;
@@ -62,7 +67,7 @@ export interface SubmitPayload {
   /**
    * Profile-scoped Hermes runtime for this task. The profile is bound when the
    * task is created and remains stable for its lifetime; the optional
-   * personality is a task-scoped prompt overlay.
+   * personality is a turn-scoped prompt overlay that may change between turns.
    */
   agent?: AgentExecutionContext;
   /**

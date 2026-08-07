@@ -1017,7 +1017,7 @@ function PostSetupInfoDialog({
           <Info className="h-3.5 w-3.5" />
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+      <DialogContent className="gap-0 overflow-hidden p-0" size="compact">
         <DialogHeader className="px-5 pb-4 pt-5 pr-12">
           <DialogTitle className="text-base">{t(info.titleKey)}</DialogTitle>
           <DialogDescription className="pt-1 text-xs leading-relaxed">
@@ -1047,7 +1047,7 @@ function PostSetupInfoDialog({
         </div>
         <div className="flex items-center justify-between gap-4 border-t border-border/60 bg-muted/20 px-5 py-2.5 text-[11px] text-muted-foreground">
           <span className="truncate">{providerName}</span>
-          <span className="shrink-0 font-mono">Hermes · {setupKey}</span>
+          <span className="shrink-0 font-mono">Amiba · {setupKey}</span>
         </div>
       </DialogContent>
     </Dialog>

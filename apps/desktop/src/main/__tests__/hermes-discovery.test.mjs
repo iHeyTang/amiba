@@ -86,3 +86,23 @@ test("custom install directories are part of the same discovery ladder", () => {
 
   assert.ok(candidates.includes("/opt/custom-hermes/venv/bin/hermes"));
 });
+
+test("an explicit managed ladder never falls through to a system Hermes", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "amiba-managed-detect-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const systemBin = path.join(root, "bin");
+  const systemHermes = path.join(systemBin, "hermes");
+  await fs.mkdir(systemBin, { recursive: true });
+  await fs.writeFile(systemHermes, '#!/bin/sh\necho "Hermes Agent - system"\n', {
+    mode: 0o755,
+  });
+
+  const managedHermes = path.join(root, "managed", "hermes");
+  const result = await discoverHermes({
+    candidates: [managedHermes],
+    env: { PATH: systemBin },
+    userHome: root,
+  });
+
+  assert.deepEqual(result, { installed: false });
+});

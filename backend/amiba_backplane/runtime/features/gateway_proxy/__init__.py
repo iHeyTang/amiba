@@ -1,4 +1,4 @@
-"""HTTP reverse proxy for ``/v1/*`` → Hermes gateway (port 8642).
+"""HTTP reverse proxy for ``/v1/*`` → the configured Hermes gateway.
 
 Bridges the chat-side OpenAI-compatible surface (chat/completions,
 runs, models, approval) into the backplane so callers only ever have

@@ -8,14 +8,43 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
+export type DialogOverlayVariant = "dimmed" | "transparent";
+export type DialogContentSize =
+  | "sm"
+  | "compact"
+  | "md"
+  | "wide"
+  | "lg"
+  | "xl"
+  | "full";
+export type DialogContentAppearance = "surface" | "bare";
+
+const DIALOG_SIZE_CLASS: Record<DialogContentSize, string> = {
+  sm: "max-w-sm",
+  compact: "max-w-md",
+  md: "max-w-lg",
+  wide: "max-w-xl",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+  full: "max-w-5xl",
+};
+
+interface DialogOverlayProps
+  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> {
+  variant?: DialogOverlayVariant;
+}
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+  DialogOverlayProps
+>(({ className, variant = "dimmed", ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
+    data-dialog-overlay={variant}
+    data-ui-overlay="dialog-overlay"
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
+      variant === "transparent" ? "bg-transparent" : "bg-black/80",
       className,
     )}
     {...props}
@@ -31,6 +60,12 @@ interface DialogContentProps
    * places a floating circular close badge outside the content padding).
    */
   hideDefaultClose?: boolean;
+  /** Keep modal semantics while allowing transparent-window hosts to omit dimming. */
+  overlayVariant?: DialogOverlayVariant;
+  /** Semantic width preset; the shared frame remains invariant. */
+  size?: DialogContentSize;
+  /** `bare` is reserved for media lightboxes whose content is the surface. */
+  appearance?: DialogContentAppearance;
 }
 
 const CENTERED_DIALOG_ANIMATION_STYLE = {
@@ -44,28 +79,48 @@ const CENTERED_DIALOG_ANIMATION_STYLE = {
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, hideDefaultClose = false, style, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-popover text-popover-foreground p-6 shadow-overlay duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
-        className,
-      )}
-      style={{ ...style, ...CENTERED_DIALOG_ANIMATION_STYLE }}
-      {...props}
-    >
-      {children}
-      {hideDefaultClose ? null : (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(
+  (
+    {
+      className,
+      children,
+      appearance = "surface",
+      hideDefaultClose = false,
+      overlayVariant = "dimmed",
+      size = "md",
+      style,
+      ...props
+    },
+    ref,
+  ) => (
+    <DialogPortal>
+      <DialogOverlay variant={overlayVariant} />
+      <DialogPrimitive.Content
+        ref={ref}
+        data-ui-overlay="dialog"
+        className={cn(
+          "fixed left-[50%] top-[50%] z-50 w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] text-popover-foreground outline-none",
+          "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:animate-none",
+          appearance === "surface"
+            ? "grid gap-4 rounded-2xl border border-border/60 bg-popover p-6 shadow-overlay"
+            : "border-0 bg-transparent p-0 shadow-none",
+          DIALOG_SIZE_CLASS[size],
+          className,
+        )}
+        style={{ ...style, ...CENTERED_DIALOG_ANIMATION_STYLE }}
+        {...props}
+      >
+        {children}
+        {hideDefaultClose ? null : (
+          <DialogPrimitive.Close className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:pointer-events-none">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  ),
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

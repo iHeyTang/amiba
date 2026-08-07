@@ -74,6 +74,41 @@ describe("RichComposerEditor", () => {
     expect(["auto", "hidden"]).toContain(editable.style.overflowY)
   })
 
+  it("remeasures when layout classes change without an editor update", () => {
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("density-default") ? 60 : 48
+      })
+
+    try {
+      const { container, rerender } = render(
+        <RichComposerEditor
+          value=""
+          onChange={() => {}}
+          className="density-compact"
+        />,
+      )
+      const editable = container.querySelector(
+        '[role="textbox"]',
+      ) as HTMLElement
+      expect(editable.style.height).toBe("48px")
+      expect(editable.dataset.autoGrowTargetHeight).toBe("48")
+
+      rerender(
+        <RichComposerEditor
+          value=""
+          onChange={() => {}}
+          className="density-default"
+        />,
+      )
+      expect(editable.style.height).toBe("60px")
+      expect(editable.dataset.autoGrowTargetHeight).toBe("60")
+    } finally {
+      scrollHeight.mockRestore()
+    }
+  })
+
   it("Enter submits, Shift+Enter inserts newline, IME-composing Enter does not submit", async () => {
     const onSubmit = vi.fn()
     const editorRef: { current: LexicalEditor | null } = { current: null }

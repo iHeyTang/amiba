@@ -400,9 +400,15 @@ export class SessionsStore {
    */
   private async activateOpen(id: string): Promise<void> {
     if (!id) {
-      await this.flushActiveBeforeSwitch();
+      // Returning to Home is a UI state transition, so publish it before
+      // waiting for the outgoing session's best-effort persistence. This is
+      // especially important when a live turn is being aborted: the Hermes
+      // row ensure can be slow (or fail), but it must never leave the
+      // composer visually attached to the conversation the user just left.
+      const flush = this.flushActiveBeforeSwitch();
       ++this.switchToken;
       this.commit({ activeId: "", activeMessages: [] });
+      await flush;
       return;
     }
     await this.markRead(id);

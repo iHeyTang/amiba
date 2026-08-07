@@ -61,7 +61,13 @@ import {
 } from "react";
 import { tags } from "@lezer/highlight";
 
-import { ScrollArea, cn } from "../primitives";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  ScrollArea,
+  cn,
+} from "../primitives";
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
 import { KanbanStatusBadge } from "./KanbanStatusBadge";
@@ -956,64 +962,43 @@ function PreviewAction({
 function PreviewMoreMenu({ items }: { items: PreviewMenuItem[] }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
 
   if (!items.length) return null;
   return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        title={t("workspacePane.moreActions")}
-        aria-label={t("workspacePane.moreActions")}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-      >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-8 z-50 min-w-44 rounded-lg border border-border/70 bg-popover p-1 text-popover-foreground shadow-lg"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title={t("workspacePane.moreActions")}
+          aria-label={t("workspacePane.moreActions")}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
         >
-          {items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  item.onSelect();
-                }}
-                className="flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground"
-              >
-                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" role="menu" side="bottom" size="compact">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              className="flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground"
+            >
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+              {item.label}
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import type {
   HermesProviderConnection,
@@ -9,7 +9,12 @@ import type {
 } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 
-import { cn } from "../primitives";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  cn,
+} from "../primitives";
 
 const FIELD_LABEL_KEYS: Record<string, MessageKey> = {
   ANTHROPIC_API_KEY: "options.models.provider.method.anthropicApiKey",
@@ -147,23 +152,6 @@ export function ProviderConnectionStatusBadge({
 }: ProviderConnectionStatusBadgeProps) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutsidePointer(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
 
   if (!connection) return null;
 
@@ -178,81 +166,84 @@ export function ProviderConnectionStatusBadge({
     : t("options.models.provider.connection.notDetected");
 
   return (
-    <div className="relative shrink-0" ref={rootRef}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className={cn(
-          "inline-flex h-[18px] items-center gap-1 rounded-full border px-1.5 text-[9px] font-normal leading-none transition-colors",
-          "hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-          statusClasses(connection.status),
-        )}
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <StatusDot status={connection.status} />
-        {providerConnectionScopeLabel(connection, t)}
-      </button>
-
-      {open ? (
-        <div
-          aria-label={t("options.models.provider.connection.details")}
-          className="absolute left-0 top-full z-[70] mt-1.5 w-64 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md"
-          data-provider-connection-details
-          role="dialog"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          className={cn(
+            "inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-normal leading-none transition-colors",
+            "hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            statusClasses(connection.status),
+          )}
+          type="button"
         >
-          <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[10px] leading-4">
-            <dt className="text-muted-foreground">
-              {provider === "copilot"
-                ? t("options.models.provider.connection.githubIdentity")
-                : t("options.models.provider.connection.credentialSource")}
-            </dt>
-            <dd className="min-w-0 truncate font-medium" title={activeLabel}>
-              {activeLabel}
-            </dd>
+          <StatusDot status={connection.status} />
+          {providerConnectionScopeLabel(connection, t)}
+        </button>
+      </PopoverTrigger>
 
-            <dt className="text-muted-foreground">
-              {t("options.models.provider.connection.scope.title")}
-            </dt>
-            <dd className="font-medium">
-              {providerConnectionScopeLabel(connection, t)}
-            </dd>
+      <PopoverContent
+        align="start"
+        aria-label={t("options.models.provider.connection.details")}
+        data-provider-connection-details
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        padding="md"
+        role="dialog"
+        side="bottom"
+        size="sm"
+      >
+        <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-[10px] leading-4">
+          <dt className="text-muted-foreground">
+            {provider === "copilot"
+              ? t("options.models.provider.connection.githubIdentity")
+              : t("options.models.provider.connection.credentialSource")}
+          </dt>
+          <dd className="min-w-0 truncate font-medium" title={activeLabel}>
+            {activeLabel}
+          </dd>
 
-            {provider === "copilot" ? (
-              <>
-                <dt className="text-muted-foreground">
-                  {t("options.models.provider.connection.copilotService")}
-                </dt>
-                <dd className="font-medium">
-                  {serviceStatusLabel(connection.service.status, t)}
-                </dd>
-                {connection.service.status !== "verified" ? (
-                  <>
-                    <dt className="text-muted-foreground">
-                      {t("options.models.provider.connection.reason")}
-                    </dt>
-                    <dd className="text-muted-foreground">
-                      {copilotServiceHint(connection.service.reason, t)}
-                    </dd>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <dt className="text-muted-foreground">
-                  {t("options.models.provider.connection.title")}
-                </dt>
-                <dd className="flex items-center gap-1.5 font-medium">
-                  <span className={statusClasses(connection.status)}>
-                    <StatusDot status={connection.status} />
-                  </span>
-                  {connectionStatusLabel(connection.status, t)}
-                </dd>
-              </>
-            )}
-          </dl>
-        </div>
-      ) : null}
-    </div>
+          <dt className="text-muted-foreground">
+            {t("options.models.provider.connection.scope.title")}
+          </dt>
+          <dd className="font-medium">
+            {providerConnectionScopeLabel(connection, t)}
+          </dd>
+
+          {provider === "copilot" ? (
+            <>
+              <dt className="text-muted-foreground">
+                {t("options.models.provider.connection.copilotService")}
+              </dt>
+              <dd className="font-medium">
+                {serviceStatusLabel(connection.service.status, t)}
+              </dd>
+              {connection.service.status !== "verified" ? (
+                <>
+                  <dt className="text-muted-foreground">
+                    {t("options.models.provider.connection.reason")}
+                  </dt>
+                  <dd className="text-muted-foreground">
+                    {copilotServiceHint(connection.service.reason, t)}
+                  </dd>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <dt className="text-muted-foreground">
+                {t("options.models.provider.connection.title")}
+              </dt>
+              <dd className="flex items-center gap-1.5 font-medium">
+                <span className={statusClasses(connection.status)}>
+                  <StatusDot status={connection.status} />
+                </span>
+                {connectionStatusLabel(connection.status, t)}
+              </dd>
+            </>
+          )}
+        </dl>
+      </PopoverContent>
+    </Popover>
   );
 }
