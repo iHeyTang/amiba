@@ -11,7 +11,8 @@ runs once on startup to move any keys still living in the old location
 so existing installs don't lose their saved credentials.
 
 Bridge startup uses ``setdefault`` only. User edits from the extension use
-``merge_dotenv_file_and_apply`` so the running process sees new keys immediately.
+``merge_dotenv_file_and_apply`` so Backplane sees new keys immediately; the
+credential-save route then restarts Gateway through Hermes's lifecycle command.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
+import threading
 from pathlib import Path
 from typing import Dict, List
 
@@ -27,6 +30,7 @@ logger = logging.getLogger("my-browser-bridge")
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_DOTENV_WRITE_LOCK = threading.RLock()
 
 
 def _hermes_home() -> Path:
@@ -115,21 +119,48 @@ def merge_dotenv_file_and_apply(
     shared backplane process.
     """
     path = plugin_dotenv_path(base)
-    cur = read_dotenv_as_dict(path)
-    for k, v in updates.items():
-        if not is_valid_env_key(k):
-            continue
-        if v == "":
-            cur.pop(k, None)
-            if apply_process:
-                os.environ.pop(k, None)
-        else:
-            cur[k] = v
-            if apply_process:
-                os.environ[k] = v
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = "\n".join(f"{k}={_fmt_dotenv_value(v)}" for k, v in sorted(cur.items()))
-    path.write_text(body + ("\n" if body else ""), encoding="utf-8")
+    applied: Dict[str, str] = {}
+    with _DOTENV_WRITE_LOCK:
+        cur = read_dotenv_as_dict(path)
+        for k, v in updates.items():
+            if not is_valid_env_key(k):
+                continue
+            applied[k] = v
+            if v == "":
+                cur.pop(k, None)
+            else:
+                cur[k] = v
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = "\n".join(
+            f"{k}={_fmt_dotenv_value(v)}" for k, v in sorted(cur.items())
+        )
+        fd, temporary = tempfile.mkstemp(
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(body + ("\n" if body else ""))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, path)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+
+        # Publish into Backplane only after the durable file replacement has
+        # succeeded. The credential route restarts Gateway after this returns.
+        if apply_process:
+            for key, value in applied.items():
+                if value == "":
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
     logger.info("Updated %s (%d keys)", path, len(cur))
     return cur
 

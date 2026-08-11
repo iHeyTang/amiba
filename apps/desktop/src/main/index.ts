@@ -730,8 +730,8 @@ if (!gotSingleInstanceLock) {
     registerQuickAskIpcHandlers(summonWindow)
     // Poll the gateway for new cron-run completions and push them to
     // the Heads-up Notifier. The watcher tolerates a not-yet-ready
-    // backplane (silent retry every 30s) so it's safe to start before
-    // the onboarding wizard has actually launched `hermes gateway`.
+    // backplane (silent retry every 30s) so it's safe to start while the
+    // built-in Runtime services are still initializing.
     startCronWatcher()
 
     // Load the persisted summon-hotkey config and start listening. The

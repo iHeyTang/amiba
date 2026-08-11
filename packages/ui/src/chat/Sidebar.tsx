@@ -79,6 +79,7 @@ export interface SidebarProps {
   extensionItems?: MainContribution[];
   sessions: SessionMeta[];
   runningSessionIds?: ReadonlySet<string>;
+  failedSessionIds?: ReadonlySet<string>;
   activeSessionId: string;
   sessionsReady: boolean;
   onOpenSession: (id: string) => void;
@@ -104,6 +105,7 @@ export function Sidebar({
   extensionItems,
   sessions,
   runningSessionIds,
+  failedSessionIds,
   activeSessionId,
   sessionsReady,
   onOpenSession,
@@ -259,6 +261,7 @@ export function Sidebar({
         <SessionsListView
           sessions={historySessions}
           runningSessionIds={runningSessionIds}
+          failedSessionIds={failedSessionIds}
           activeId={activeSessionId}
           ready={
             sessionsReady &&

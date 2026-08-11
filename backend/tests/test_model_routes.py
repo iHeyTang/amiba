@@ -7,6 +7,15 @@ import pytest
 from amiba_backplane.runtime.features.hermes_proxy.settings import model_routes
 
 
+class _JsonRequest:
+    def __init__(self, payload):
+        self._payload = payload
+        self.app = {}
+
+    async def read(self):
+        return json.dumps(self._payload).encode("utf-8")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("refresh_value", "expected_refresh"),
@@ -108,3 +117,84 @@ def test_profile_runtime_connection_overrides_ambient_inventory_auth(monkeypatch
     assert row["authenticated"] is False
     assert row["credential_scope"] == "none"
     assert row["connection"]["status"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_provider_credentials_save_restarts_gateway_before_success(monkeypatch):
+    monkeypatch.setattr(
+        model_routes,
+        "merge_credentials_for_provider",
+        lambda provider, values: ["DEEPSEEK_API_KEY"],
+    )
+
+    async def restart():
+        return {
+            "ok": True,
+            "name": "gateway-restart",
+            "previous_gateway_pid": 10,
+            "gateway_pid": 11,
+            "gateway_state": "running",
+        }
+
+    monkeypatch.setattr(model_routes, "restart_gateway_and_wait", restart)
+    monkeypatch.setattr(
+        model_routes,
+        "read_provider_credentials_response",
+        lambda provider, verify_service=False: {
+            "ok": True,
+            "provider": provider,
+            "fields": [],
+        },
+    )
+    request = _JsonRequest(
+        {"provider": "deepseek", "values": {"DEEPSEEK_API_KEY": "new-secret"}}
+    )
+
+    response = await model_routes.handle_provider_credentials_post(request)
+    payload = json.loads(response.text)
+
+    assert response.status == 200
+    assert payload["written"] == ["DEEPSEEK_API_KEY"]
+    assert payload["gateway_restart"]["gateway_pid"] == 11
+    assert payload["gateway_restart"]["gateway_state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_provider_credentials_save_reports_incomplete_gateway_restart(
+    monkeypatch,
+):
+    writes = []
+
+    def merge(provider, values):
+        writes.append(dict(values))
+        return ["OPENROUTER_API_KEY"]
+
+    monkeypatch.setattr(
+        model_routes,
+        "merge_credentials_for_provider",
+        merge,
+    )
+
+    async def fail_restart():
+        raise model_routes.GatewayRestartError("replacement not ready")
+
+    monkeypatch.setattr(
+        model_routes,
+        "restart_gateway_and_wait",
+        fail_restart,
+    )
+    request = _JsonRequest(
+        {
+            "provider": "openrouter",
+            "values": {"OPENROUTER_API_KEY": "new-secret"},
+        }
+    )
+
+    response = await model_routes.handle_provider_credentials_post(request)
+    payload = json.loads(response.text)
+
+    assert response.status == 502
+    assert payload["ok"] is False
+    assert "credentials were saved" in payload["error"]
+    assert "replacement not ready" in payload["error"]
+    assert writes == [{"OPENROUTER_API_KEY": "new-secret"}]

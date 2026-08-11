@@ -6,11 +6,15 @@ out
 .turbo
 .vite
 .cache
+__pycache__/
+*.py[cod]
 *.log
 .DS_Store
 .env
 .env.*
 !.env.example
+.amiba.local.ts
+.amiba.local.generated-*.mjs
 coverage
 *.tsbuildinfo
 sdk-dist/

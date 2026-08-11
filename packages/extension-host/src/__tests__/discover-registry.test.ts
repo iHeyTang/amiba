@@ -2,7 +2,10 @@ import { describe, expect, it, afterEach } from "vitest"
 import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { discoverFromRegistry } from "../main/discover-registry"
+import {
+  discoverFromRegistry,
+  listRegistryInventory,
+} from "../main/discover-registry"
 import { saveRegistry, type Registry } from "../main/registry-store"
 
 function makeTmpDir(): string {
@@ -35,7 +38,9 @@ describe("discoverFromRegistry", () => {
   })
 
   it("1. empty registry → 0 entries", () => {
-    const result = discoverFromRegistry("/nonexistent/path/extensions-registry.json")
+    const result = discoverFromRegistry(
+      "/nonexistent/path/extensions-registry.json",
+    )
     expect(result.entries).toHaveLength(0)
     expect(result.failed).toHaveLength(0)
   })
@@ -49,7 +54,14 @@ describe("discoverFromRegistry", () => {
     const registryPath = join(root, "extensions-registry.json")
     const reg: Registry = {
       version: 1,
-      entries: [{ id: "io.amiba.test", source: "local", path: extDir, addedAt: "2024-01-01T00:00:00.000Z" }],
+      entries: [
+        {
+          id: "io.amiba.test",
+          source: "local",
+          path: extDir,
+          addedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     }
     saveRegistry(registryPath, reg)
 
@@ -72,7 +84,11 @@ describe("discoverFromRegistry", () => {
     const reg: Registry = {
       version: 1,
       entries: [
-        { id: "io.amiba.missing", source: "local", path: join(root, "does-not-exist") },
+        {
+          id: "io.amiba.missing",
+          source: "local",
+          path: join(root, "does-not-exist"),
+        },
         { id: "io.amiba.good", source: "local", path: goodDir },
       ],
     }
@@ -83,7 +99,7 @@ describe("discoverFromRegistry", () => {
     expect(result.entries[0]!.manifest.id).toBe("io.amiba.good")
     expect(result.failed).toHaveLength(1)
     expect(result.failed[0]!.id).toBe("io.amiba.missing")
-    expect(result.failed[0]!.error).toMatch(/manifest\.json missing/)
+    expect(result.failed[0]!.error).toMatch(/extension directory missing/)
   })
 
   it("4. local entry whose manifest.id doesn't match registry id → in failed list", () => {
@@ -116,7 +132,9 @@ describe("discoverFromRegistry", () => {
     const registryPath = join(root, "extensions-registry.json")
     const reg: Registry = {
       version: 1,
-      entries: [{ id: "io.amiba.test", source: "local", path: extDir, disabled: true }],
+      entries: [
+        { id: "io.amiba.test", source: "local", path: extDir, disabled: true },
+      ],
     }
     saveRegistry(registryPath, reg)
 
@@ -152,6 +170,93 @@ describe("discoverFromRegistry", () => {
     expect(result.entries[0]!.source).toBe("marketplace")
     expect(result.entries[0]!.registry.version).toBe("1.2.3")
     expect(result.entries[0]!.registry.sha256).toBe("abc123def456")
-    expect(result.entries[0]!.registry.installedAt).toBe("2024-06-01T00:00:00.000Z")
+    expect(result.entries[0]!.registry.installedAt).toBe(
+      "2024-06-01T00:00:00.000Z",
+    )
+  })
+
+  it("7. inventory retains a broken registry row without a manifest", () => {
+    const root = makeTmpDir()
+    tmps.push(root)
+    const missingPath = join(root, "removed-extension")
+    const registryPath = join(root, "extensions-registry.json")
+    saveRegistry(registryPath, {
+      version: 1,
+      entries: [
+        {
+          id: "io.amiba.removed",
+          source: "local",
+          path: missingPath,
+          addedAt: "2026-06-12T08:37:06.931Z",
+        },
+      ],
+    })
+
+    expect(listRegistryInventory(registryPath, [])).toEqual([
+      {
+        id: "io.amiba.removed",
+        source: "local",
+        path: missingPath,
+        version: undefined,
+        disabled: false,
+        status: "failed",
+        error: "extension directory missing",
+        manifest: undefined,
+      },
+    ])
+  })
+
+  it("8. inventory merges valid manifests with runtime state", () => {
+    const root = makeTmpDir()
+    tmps.push(root)
+    const extDir = join(root, "io.amiba.test")
+    writeManifest(extDir, validManifest)
+    const registryPath = join(root, "extensions-registry.json")
+    saveRegistry(registryPath, {
+      version: 1,
+      entries: [{ id: "io.amiba.test", source: "marketplace", path: extDir }],
+    })
+
+    const manifest = discoverFromRegistry(registryPath).entries[0]!.manifest
+    const inventory = listRegistryInventory(registryPath, [
+      {
+        id: "io.amiba.test",
+        manifest,
+        status: "loaded",
+      },
+    ])
+
+    expect(inventory).toHaveLength(1)
+    expect(inventory[0]).toMatchObject({
+      id: "io.amiba.test",
+      source: "marketplace",
+      path: extDir,
+      version: "0.1.0",
+      status: "loaded",
+      manifest: validManifest,
+    })
+  })
+
+  it("9. inventory includes disabled rows", () => {
+    const root = makeTmpDir()
+    tmps.push(root)
+    const registryPath = join(root, "extensions-registry.json")
+    saveRegistry(registryPath, {
+      version: 1,
+      entries: [
+        {
+          id: "io.amiba.disabled",
+          source: "local",
+          path: join(root, "disabled-extension"),
+          disabled: true,
+        },
+      ],
+    })
+
+    expect(listRegistryInventory(registryPath, [])[0]).toMatchObject({
+      id: "io.amiba.disabled",
+      disabled: true,
+      status: "disabled",
+    })
   })
 })

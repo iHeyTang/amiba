@@ -113,7 +113,8 @@ export const zhCN: Messages = {
   "app.title": "Amiba",
   "app.subtitle": "扩展控制台",
   "app.initializing": "正在唤醒本地智能体",
-  "app.initError": "本地服务启动失败。请确认已安装 Hermes 后重试。",
+  "app.initError":
+    "Amiba 内置 Hermes Runtime 初始化失败，或本地服务未能启动。请重试或查看应用日志。",
   "app.initRetry": "重试",
 
   // Options nav
@@ -275,15 +276,18 @@ export const zhCN: Messages = {
 
   // Extensions settings page
   "options.extensions.title": "扩展管理",
-  "options.extensions.subtitle": "你主动添加到 Amiba 的应用扩展。",
+  "options.extensions.subtitle": "所有登记到 Amiba 的应用扩展及其当前状态。",
   "options.extensions.status.loaded": "已加载",
   "options.extensions.status.failed": "加载失败",
   "options.extensions.status.incompatible": "不兼容",
+  "options.extensions.status.disabled": "已停用",
+  "options.extensions.status.registered": "未加载",
   "options.extensions.showError": "查看错误信息",
   "options.extensions.showDetails": "查看详情",
   "options.extensions.addLocal": "添加本地扩展…",
   "options.extensions.source.marketplace": "市场",
   "options.extensions.source.local": "本地",
+  "options.extensions.source.bundled": "内置",
   "options.extensions.refresh": "刷新",
   "options.extensions.reload": "重载",
   "options.extensions.uninstall": "卸载",
@@ -293,6 +297,7 @@ export const zhCN: Messages = {
   "options.extensions.uninstall.confirm.body.local":
     "仅从注册表移除 {name}。源目录 {path} 不会被删除。",
   "options.extensions.sideload.error": "添加本地扩展失败：{error}",
+  "options.extensions.actionFailed": "扩展操作失败：{error}",
   "options.extensions.empty": "暂无已安装扩展。点击「添加本地扩展…」开始。",
   "options.extensions.tab.installed": "已安装",
   "options.extensions.tab.browse": "浏览",
@@ -453,39 +458,6 @@ export const zhCN: Messages = {
   "options.preference.hotkey.macHint":
     "首次启用双击模式时，macOS 会弹窗请求「辅助功能」权限，授权后才能监听全局按键。",
 
-  // 首次启动 onboarding 向导
-  "onboarding.title": "Amiba",
-  "onboarding.tagline":
-    "你的原生桌面助手。\n随时双击 Command 键唤起对话，让 Amiba 始终在你触手可及处。",
-  "onboarding.subtitle":
-    "Hermes 已经随 Amiba 一起提供，我们只需初始化私有运行环境并启动本地服务。\n无需单独安装，也不会在你的电脑上下载源码。",
-  "onboarding.step.install": "安装核心",
-  "onboarding.step.plugins": "加载插件",
-  "onboarding.step.backplane": "启动服务",
-  "onboarding.step.ready": "就绪",
-  "onboarding.detect.checking": "正在检查你的环境…",
-  "onboarding.install.manualTitle": "想自己用命令行安装？",
-  "onboarding.install.manualHint":
-    "依次把下面的命令贴到终端运行，全部跑完后点「重新检查」。",
-  "onboarding.install.manualStep.install": "1. 初始化内置 Hermes 核心",
-  "onboarding.install.manualStep.plugin": "{n}. 加载插件 {id}",
-  "onboarding.ready.title": "一切就绪",
-  "onboarding.ready.subtitle": "马上进入 Amiba。",
-  "onboarding.error.install": "安装失败，下方终端有详细日志。",
-  "onboarding.error.plugin": "插件加载失败",
-  "onboarding.error.backplane": "本地服务启动超时",
-  "onboarding.configure.errorTitle": "配置未完成",
-  "onboarding.configure.errorHint":
-    "Hermes 已安装就绪，只是本地服务没能启动。可以重试，或查看下方日志。",
-  "onboarding.configure.retry": "重试",
-  "onboarding.action.copy": "复制命令",
-  "onboarding.action.copied": "已复制",
-  "onboarding.log.title": "实时进度",
-  "onboarding.log.empty": "（暂时还没有输出）",
-  "onboarding.summary.action.install": "一键安装",
-  "onboarding.summary.action.recheck": "重新检查",
-  "onboarding.running.caption":
-    "正在 {step}。下方终端会显示进度，部分步骤（如填写 API Key）需要你在终端里直接回答提示。",
   "options.preference.theme": "主题",
   "options.preference.theme.auto": "自动",
   "options.preference.theme.light": "浅色",
@@ -1031,17 +1003,20 @@ export const zhCN: Messages = {
     "当前安装的是 Hermes {current}。此版本 Amiba 要求 Hermes {required} 或更高版本；完成更新前，其他 Hermes 操作将被停用。",
   "options.status.hermesVersion.unverifiable":
     "Amiba 无法确认当前 Hermes 版本。请先安装 Hermes {required} 或更高版本。",
-  "options.status.onboarding.title": "本地服务暂时不可用",
-  "options.status.onboarding.description":
+  "options.status.recovery.title": "本地服务暂时不可用",
+  "options.status.recovery.description":
     "Amiba 托管的 Hermes 运行时或本地服务还没有准备好，请在下方重试恢复。",
-  "options.status.onboarding.retry": "重新检测",
-  "options.status.onboarding.step.install": "Amiba 检查固定版本的私有 Hermes 运行时。",
-  "options.status.onboarding.step.plugin": "Amiba 检查随应用发布的 Backplane 版本。",
-  "options.status.onboarding.step.run": "Amiba 重启私有 Gateway 和 Backplane 服务。",
-  "options.status.onboarding.manual": "恢复说明",
-  "options.status.onboarding.copy": "复制",
-  "options.status.onboarding.copied": "已复制",
-  "options.status.onboarding.error": "技术详情",
+  "options.status.recovery.retry": "重新检测",
+  "options.status.recovery.step.runtime":
+    "Amiba 检查固定版本的私有 Hermes 运行时。",
+  "options.status.recovery.step.backplane":
+    "Amiba 检查随应用发布的 Backplane 版本。",
+  "options.status.recovery.step.services":
+    "Amiba 重启私有 Gateway 和 Backplane 服务。",
+  "options.status.recovery.manual": "恢复说明",
+  "options.status.recovery.copy": "复制",
+  "options.status.recovery.copied": "已复制",
+  "options.status.recovery.error": "技术详情",
   "options.status.viewUpdateLogs": "查看更新日志",
   "options.logs.title": "日志",
   "options.logs.subtitle": "查看 Hermes Agent 及 Hermes 更新日志",
@@ -1363,6 +1338,7 @@ export const zhCN: Messages = {
   "sidepanel.sessions.showMore": "显示更多",
   "sidepanel.sessions.unread": "有未读更新",
   "sidepanel.sessions.running": "运行中",
+  "sidepanel.sessions.failed": "运行失败",
   "sidepanel.sessions.activityBar.aria": "侧边栏视图",
   "sidepanel.sessions.scheduled.loading": "加载中…",
   "sidepanel.sessions.scheduled.empty": "暂无定时任务。在聊天中创建一个试试。",
@@ -1642,7 +1618,6 @@ export const zhCN: Messages = {
   "externalTools.tab.extensions": "应用扩展",
   "externalTools.tab.plugins": "Agent 插件",
   "externalTools.tab.mcp": "MCP",
-  "externalTools.tab.cli": "CLI 工具",
   "externalTools.status.enabled": "已启用",
   "externalTools.status.disabled": "已停用",
   "externalTools.configure": "配置",
@@ -1661,14 +1636,6 @@ export const zhCN: Messages = {
   "externalTools.mcp.emptyTitle": "尚未添加 MCP",
   "externalTools.mcp.emptyDescription":
     "当你希望 Amiba 连接外部工具或数据源时，可以在这里添加。",
-  "externalTools.cli.subtitle": "你明确指定给 Amiba 使用的命令行程序。",
-  "externalTools.cli.privacy": "Amiba 不会自动扫描电脑上安装的所有命令。",
-  "externalTools.cli.title": "通过 Agent 添加 CLI 工具",
-  "externalTools.cli.description":
-    "告诉 Amiba 你需要哪个命令行工具。它会检查环境、说明安装或登录步骤，并在修改前征求你的确认。",
-  "externalTools.cli.add": "添加 CLI 工具",
-  "externalTools.cli.addPrompt":
-    "请帮我添加或配置一个供 Amiba 使用的 CLI 工具。先询问我的用途，检查它是否已经安装，说明处理方案，并在安装或修改任何内容前征求我的确认。",
 
   // Agent capability configuration
   "tools.toggleFailed": "切换失败，请重试。",

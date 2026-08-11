@@ -38,6 +38,7 @@ from ....adapters.hermes_core import (
     hermes_profile_scope,
 )
 from ....adapters.hermes_provider_env import env_var_names_for_slug
+from ..lifecycle.service import GatewayRestartError, restart_gateway_and_wait
 from .model_catalog_service import (
     build_provider_models_http_response,
     enrich_models_payload,
@@ -60,6 +61,9 @@ from .virtual_capabilities_service import (
     read_moa_config_response,
     write_moa_config_response,
 )
+
+
+_PROVIDER_CREDENTIAL_SAVE_LOCK = asyncio.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -678,19 +682,34 @@ async def handle_provider_credentials_post(request: web.Request) -> web.Response
     try:
         import asyncio as _asyncio
 
-        written = await _asyncio.to_thread(
-            merge_credentials_for_provider,
-            provider,
-            values,
-        )
-        payload = await _asyncio.to_thread(
-            read_provider_credentials_response,
-            provider,
-            verify_service=True,
-        )
+        # Serialize saves because every credential change restarts the shared
+        # multiplexing Gateway. Return success only after Hermes's own restart
+        # command has produced a ready replacement process.
+        async with _PROVIDER_CREDENTIAL_SAVE_LOCK:
+            written = await _asyncio.to_thread(
+                merge_credentials_for_provider,
+                provider,
+                values,
+            )
+            gateway_restart = (
+                await restart_gateway_and_wait()
+                if written
+                else {"ok": True, "name": "gateway-restart", "mode": "unchanged"}
+            )
+            payload = await _asyncio.to_thread(
+                read_provider_credentials_response,
+                provider,
+                verify_service=True,
+            )
     except ValueError as exc:
         return json_error(400, str(exc))
+    except GatewayRestartError as exc:
+        return json_error(
+            502,
+            f"credentials were saved but Gateway restart did not complete: {exc}",
+        )
     payload["written"] = written
+    payload["gateway_restart"] = gateway_restart
     return web.json_response(payload)
 
 

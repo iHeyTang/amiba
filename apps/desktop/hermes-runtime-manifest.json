@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "bundleSchemaVersion": 1,
+  "schemaVersion": 3,
+  "bundleSchemaVersion": 3,
   "repository": "NousResearch/hermes-agent",
   "branch": "main",
   "commit": "863e31318553cda8ad61df681d08175364d4164b",
@@ -8,6 +8,15 @@
   "pythonVersion": "3.11.13",
   "nodeVersion": "22.22.0",
   "playwrightVersion": "1.58.2",
+  "patches": [
+    {
+      "id": "forward-moa-run-events",
+      "file": "hermes-patches/0001-forward-moa-run-events.patch",
+      "sha256": "7872e95e60e6137b0118b482e92a169a33960585a0fe707361a42fb80e6316bc",
+      "verifier": "hermes-patches/tests/verify_moa_run_events.py",
+      "verifierSha256": "1b57cdd395bb452e0e596fb2082eca8dedcf0d63c8c15045cd539db55c5c1419"
+    }
+  ],
   "backplanePort": 19394,
   "gatewayPort": 18642
 }

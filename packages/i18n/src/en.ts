@@ -119,7 +119,7 @@ export const en = {
   "app.subtitle": "Extension console",
   "app.initializing": "Waking your local agent",
   "app.initError":
-    "Couldn't start the local service. Make sure Hermes is installed and try again.",
+    "Couldn't initialize Amiba's built-in Hermes Runtime or start the local service. Try again, or check the application log.",
   "app.initRetry": "Retry",
 
   // Options nav
@@ -294,15 +294,19 @@ export const en = {
 
   // Extensions settings page
   "options.extensions.title": "Extension management",
-  "options.extensions.subtitle": "App extensions you added to Amiba.",
+  "options.extensions.subtitle":
+    "Every app extension registered with Amiba and its current state.",
   "options.extensions.status.loaded": "Loaded",
   "options.extensions.status.failed": "Failed",
   "options.extensions.status.incompatible": "Incompatible",
+  "options.extensions.status.disabled": "Disabled",
+  "options.extensions.status.registered": "Not loaded",
   "options.extensions.showError": "Show error",
   "options.extensions.showDetails": "Show details",
   "options.extensions.addLocal": "Add local extension…",
   "options.extensions.source.marketplace": "Marketplace",
   "options.extensions.source.local": "Local",
+  "options.extensions.source.bundled": "Built-in",
   "options.extensions.refresh": "Refresh",
   "options.extensions.reload": "Reload",
   "options.extensions.uninstall": "Uninstall",
@@ -312,6 +316,7 @@ export const en = {
   "options.extensions.uninstall.confirm.body.local":
     "Only removes {name} from the registry. The source folder at {path} is not touched.",
   "options.extensions.sideload.error": "Could not add local extension: {error}",
+  "options.extensions.actionFailed": "Extension action failed: {error}",
   "options.extensions.empty":
     "No extensions installed yet. Add a local extension to get started.",
   "options.extensions.tab.installed": "Installed",
@@ -484,40 +489,6 @@ export const en = {
   "options.preference.hotkey.macHint":
     "First time you turn double-tap on, macOS asks for Accessibility access; the hook can only see global key presses after you grant it.",
 
-  // First-run onboarding wizard
-  "onboarding.title": "Amiba",
-  "onboarding.tagline":
-    "Your native desktop assistant.\nDouble-tap ⌘ from anywhere to summon a chat — Amiba stays within reach.",
-  "onboarding.subtitle":
-    "Hermes is already included with Amiba. We'll initialize its private runtime and start the local service.\nNo separate install or source download is required.",
-  "onboarding.step.install": "Install core",
-  "onboarding.step.plugins": "Load plugins",
-  "onboarding.step.backplane": "Start service",
-  "onboarding.step.ready": "Ready",
-  "onboarding.detect.checking": "Checking your environment…",
-  "onboarding.install.manualTitle": "Rather run it yourself in a terminal?",
-  "onboarding.install.manualHint":
-    "Run these commands in your terminal one by one, then come back and tap Re-check.",
-  "onboarding.install.manualStep.install": "1. Initialize bundled Hermes core",
-  "onboarding.install.manualStep.plugin": "{n}. Load plugin {id}",
-  "onboarding.ready.title": "You're all set",
-  "onboarding.ready.subtitle": "Heading into Amiba…",
-  "onboarding.error.install":
-    "Install failed — the terminal below has the details.",
-  "onboarding.error.plugin": "Failed to load a plugin",
-  "onboarding.error.backplane": "Local service didn't come up in time",
-  "onboarding.configure.errorTitle": "Setup didn't finish",
-  "onboarding.configure.errorHint":
-    "Hermes is installed and ready — only its local service couldn't start. Try again, or check the log.",
-  "onboarding.configure.retry": "Retry",
-  "onboarding.action.copy": "Copy command",
-  "onboarding.action.copied": "Copied",
-  "onboarding.log.title": "Live progress",
-  "onboarding.log.empty": "(no output yet)",
-  "onboarding.summary.action.install": "One-click install",
-  "onboarding.summary.action.recheck": "Re-check",
-  "onboarding.running.caption":
-    "Working on {step}. The terminal below shows live progress — some prompts (e.g. API keys) need you to type a reply right there.",
   "options.preference.theme": "Theme",
   "options.preference.theme.auto": "Auto",
   "options.preference.theme.light": "Light",
@@ -1088,20 +1059,20 @@ export const en = {
     "Hermes {current} is installed. This version of Amiba requires Hermes {required} or newer; other Hermes operations are disabled until you update.",
   "options.status.hermesVersion.unverifiable":
     "Amiba could not verify the installed Hermes version. Install Hermes {required} or newer before continuing.",
-  "options.status.onboarding.title": "Local service is unavailable",
-  "options.status.onboarding.description":
+  "options.status.recovery.title": "Local service is unavailable",
+  "options.status.recovery.description":
     "Amiba's managed Hermes runtime or local services are not ready. Retry recovery below.",
-  "options.status.onboarding.retry": "Check again",
-  "options.status.onboarding.step.install":
+  "options.status.recovery.retry": "Check again",
+  "options.status.recovery.step.runtime":
     "Amiba verifies its pinned private Hermes runtime.",
-  "options.status.onboarding.step.plugin":
+  "options.status.recovery.step.backplane":
     "Amiba verifies the bundled backplane version.",
-  "options.status.onboarding.step.run":
+  "options.status.recovery.step.services":
     "Amiba restarts its private gateway and backplane services.",
-  "options.status.onboarding.manual": "Recovery notes",
-  "options.status.onboarding.copy": "Copy",
-  "options.status.onboarding.copied": "Copied",
-  "options.status.onboarding.error": "Technical details",
+  "options.status.recovery.manual": "Recovery notes",
+  "options.status.recovery.copy": "Copy",
+  "options.status.recovery.copied": "Copied",
+  "options.status.recovery.error": "Technical details",
   "options.status.viewUpdateLogs": "View update logs",
   "options.logs.title": "Logs",
   "options.logs.subtitle": "Tail Hermes Agent and Hermes update logs",
@@ -1440,6 +1411,7 @@ export const en = {
   "sidepanel.sessions.showMore": "Show more",
   "sidepanel.sessions.unread": "Unread update",
   "sidepanel.sessions.running": "Running",
+  "sidepanel.sessions.failed": "Run failed",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
   "sidepanel.sessions.scheduled.loading": "Loading…",
   "sidepanel.sessions.scheduled.empty":
@@ -1737,7 +1709,6 @@ export const en = {
   "externalTools.tab.extensions": "App extensions",
   "externalTools.tab.plugins": "Agent plugins",
   "externalTools.tab.mcp": "MCP",
-  "externalTools.tab.cli": "CLI tools",
   "externalTools.status.enabled": "Enabled",
   "externalTools.status.disabled": "Disabled",
   "externalTools.configure": "Configure",
@@ -1757,16 +1728,6 @@ export const en = {
   "externalTools.mcp.emptyTitle": "No MCP services added",
   "externalTools.mcp.emptyDescription":
     "Add one when you want Amiba to connect to an external tool or data source.",
-  "externalTools.cli.subtitle":
-    "Command-line programs you explicitly choose for Amiba to use.",
-  "externalTools.cli.privacy":
-    "Amiba does not scan every command installed on your computer.",
-  "externalTools.cli.title": "Add a CLI tool through the Agent",
-  "externalTools.cli.description":
-    "Tell Amiba which command-line tool you need. It will inspect the environment, explain the installation or sign-in steps, and ask before making changes.",
-  "externalTools.cli.add": "Add CLI tool",
-  "externalTools.cli.addPrompt":
-    "Help me add or configure a CLI tool for use in Amiba. Ask what I need it for, inspect whether it is already installed, explain the plan, and ask for confirmation before installing or changing anything.",
 
   // Agent capability configuration
   "tools.toggleFailed": "Toggle failed, please try again.",

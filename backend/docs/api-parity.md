@@ -237,7 +237,7 @@ grep -nE '^@app\.(get|post|put|delete|patch|websocket)' \
 | **Memory** | `GET /hermes/memories` | **yes ⭐** | upstream 完全没有，干净候选 |
 | | `GET /hermes/memories/{target}` | **yes ⭐** | 同上 |
 | Provider credentials | `GET /hermes/provider-credentials?provider=` | maybe | 单 provider 的 `.env` 凭据键/值（mine-only；upstream 没等价接口） |
-| | `POST /hermes/provider-credentials` | maybe | 仅写 `.env`，不动 `config.yaml: model.*` |
+| | `POST /hermes/provider-credentials` | maybe | 原子写 `.env`，随后由 Backplane 执行 `hermes gateway restart`；确认替换进程进入 `running` 后才返回成功，不动 `config.yaml: model.*` |
 | | `GET /hermes/provider-models?provider=` | maybe | 单 provider 的 model list，upstream 没单独接口 |
 | **Attachments** | `POST /hermes/attachments?session_id=&name=&mime=` | **yes ⭐** | 会话附件上传，upstream 完全没有 |
 | | `DELETE /hermes/attachments?path=` | **yes ⭐** | 删单文件 |

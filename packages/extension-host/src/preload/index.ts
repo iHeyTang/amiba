@@ -1,6 +1,13 @@
 // packages/extension-host/src/preload/index.ts
 import { ipcRenderer } from "electron"
 import type { ExtensionManifest } from "@amiba/extension-api"
+import type { ExtensionRegistryItem } from "../shared/registry"
+
+export type {
+  ExtensionRegistryItem,
+  ExtensionRegistrySource,
+  ExtensionRegistryStatus,
+} from "../shared/registry"
 
 export interface MarketplaceEntry {
   id: string
@@ -28,6 +35,8 @@ export interface MarketplaceBridge {
 
 export interface ExtensionsBridge {
   listManifests(): Promise<Array<{ manifest: ExtensionManifest; path: string }>>
+  /** Every persisted registration, including disabled or undiscoverable rows. */
+  listRegistry(): Promise<ExtensionRegistryItem[]>
   invoke(extensionId: string, channel: string, args: unknown): Promise<unknown>
   i18nResources(
     extensionId: string,
@@ -66,6 +75,7 @@ let _httpBaseUrlPromise: Promise<string> | null = null
 export function createExtensionsBridge(): ExtensionsBridge {
   return {
     listManifests: () => ipcRenderer.invoke("extensions:list"),
+    listRegistry: () => ipcRenderer.invoke("extensions:registry"),
     invoke: (extensionId, channel, args) =>
       ipcRenderer.invoke("ext-invoke", { extensionId, channel, args }),
     i18nResources: (extensionId, locale) =>

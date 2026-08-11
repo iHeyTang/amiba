@@ -208,8 +208,7 @@ const api = {
     resize: (
       contentHeightPx: number,
       anchor: "top" | "center" | "bottom" = "top",
-    ) =>
-      ipcRenderer.invoke("quick-ask:resize", contentHeightPx, anchor),
+    ) => ipcRenderer.invoke("quick-ask:resize", contentHeightPx, anchor),
   },
 
   /**
@@ -297,98 +296,10 @@ const api = {
     return () => openSessionListeners.delete(cb);
   },
 
-  /**
-   * Hermes-agent lifecycle bridge — drives the first-run install wizard
-   * and the supervised backplane subprocess. Logs from long-running
-   * spawns stream back via `onJobLog`; completion lands in `onJobEnd`.
-   */
+  /** Validate and start Amiba's immutable built-in Hermes services. */
   hermesRuntime: {
-    detect: (): Promise<{
-      installed: boolean;
-      binary?: string;
-      version?: string;
-    }> => ipcRenderer.invoke("hermes:detect"),
-    install: (): Promise<{ id: string; pid: number | undefined }> =>
-      ipcRenderer.invoke("hermes:install"),
-    /**
-     * Same install command, but spawned under a PTY so the embedded
-     * `hermes setup` wizard sees a real terminal. Output arrives as raw
-     * chunks via `onPtyData`; keystrokes from xterm.js go back through
-     * `ptyInput`. Completion still lands on `onJobEnd`.
-     */
-    installPty: (): Promise<{ id: string; pid: number }> =>
-      ipcRenderer.invoke("hermes:install-pty"),
-    installPlugin: (args: {
-      binary: string;
-      pluginId: string;
-    }): Promise<{ id: string; pid: number | undefined }> =>
-      ipcRenderer.invoke("hermes:install-plugin", args),
-    installBackplane: (args: {
-      binary: string;
-    }): Promise<{ id: string; pid: number | undefined }> =>
-      ipcRenderer.invoke("hermes:install-backplane", args),
-    startBackplane: (args: {
-      binary: string;
-    }): Promise<{
-      id: string;
-      pid: number | undefined;
-      alreadyRunning: boolean;
-    }> => ipcRenderer.invoke("hermes:start-backplane", args),
-    ensureBackend: (args: {
-      binary: string;
-    }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke("hermes:ensure-backend", args),
-    stopBackplane: (): Promise<boolean> =>
-      ipcRenderer.invoke("hermes:stop-backplane"),
-    cancelJob: (jobId: string): Promise<boolean> =>
-      ipcRenderer.invoke("hermes:cancel-job", jobId),
-    ptyInput: (args: { jobId: string; data: string }): Promise<boolean> =>
-      ipcRenderer.invoke("hermes:pty-input", args),
-    ptyResize: (args: {
-      jobId: string;
-      cols: number;
-      rows: number;
-    }): Promise<boolean> => ipcRenderer.invoke("hermes:pty-resize", args),
-    requiredPlugins: (): Promise<readonly string[]> =>
-      ipcRenderer.invoke("hermes:required-plugins"),
-    installedPlugins: (): Promise<readonly string[]> =>
-      ipcRenderer.invoke("hermes:installed-plugins"),
-    installDisplayCommand: (): Promise<string> =>
-      ipcRenderer.invoke("hermes:install-display-command"),
-    onJobLog: (
-      cb: (msg: {
-        jobId: string;
-        stream: "stdout" | "stderr";
-        line: string;
-      }) => void,
-    ) => {
-      const handler = (
-        _e: unknown,
-        msg: { jobId: string; stream: "stdout" | "stderr"; line: string },
-      ) => cb(msg);
-      ipcRenderer.on("hermes:job-log", handler);
-      return () => ipcRenderer.off("hermes:job-log", handler);
-    },
-    onJobEnd: (
-      cb: (msg: {
-        jobId: string;
-        exitCode: number | null;
-        error?: string;
-      }) => void,
-    ) => {
-      const handler = (
-        _e: unknown,
-        msg: { jobId: string; exitCode: number | null; error?: string },
-      ) => cb(msg);
-      ipcRenderer.on("hermes:job-end", handler);
-      return () => ipcRenderer.off("hermes:job-end", handler);
-    },
-    onPtyData: (cb: (msg: { jobId: string; data: string }) => void) => {
-      const handler = (_e: unknown, msg: { jobId: string; data: string }) =>
-        cb(msg);
-      ipcRenderer.on("hermes:pty-data", handler);
-      return () => ipcRenderer.off("hermes:pty-data", handler);
-    },
+    ensureBackend: (): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke("hermes:ensure-backend"),
   },
 };
 

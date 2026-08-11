@@ -1,8 +1,9 @@
 // packages/extension-host/src/main/ipc-router.ts
 import { BrowserWindow, dialog, ipcMain, shell, webContents } from "electron"
-import { existsSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 import type { ExtensionManifest } from "@amiba/extension-api"
+import type { ExtensionRegistryItem } from "../shared/registry"
 import { validateManifest } from "./discover"
 import {
   fetchIndex,
@@ -11,7 +12,8 @@ import {
   resolveRelease,
   type MarketplaceEntry,
 } from "./marketplace"
-import { addEntry, findEntry, removeEntry } from "./registry-store"
+import { addEntry, findEntry } from "./registry-store"
+import { uninstallRegisteredExtension } from "./uninstall-extension"
 import type { createRunnerManagerWithRpc } from "./runner-controller"
 
 type RunnerManager = ReturnType<typeof createRunnerManagerWithRpc>
@@ -57,12 +59,14 @@ export function registerStatusChannel(
 export function registerMetadataChannels(opts: {
   getManifests: () => ExtensionManifest[]
   getManifestEntries: () => Array<{ manifest: ExtensionManifest; path: string }>
+  getRegistryInventory: () => ExtensionRegistryItem[]
   getI18n: (
     extensionId: string,
     locale: "en" | "zh-CN",
   ) => Promise<Record<string, string>>
 }) {
   ipcMain.handle("extensions:list", () => opts.getManifestEntries())
+  ipcMain.handle("extensions:registry", () => opts.getRegistryInventory())
   ipcMain.handle(
     "extensions:i18n",
     async (
@@ -287,8 +291,8 @@ export function registerExtensionActionChannels(opts: {
     if (typeof extensionId !== "string") {
       return { ok: false, error: "extensionId is required" }
     }
-    if (!opts.getManifests().some((m) => m.id === extensionId)) {
-      return { ok: false, error: `extension ${extensionId} is not loaded` }
+    if (!findEntry(opts.registryPath, extensionId)) {
+      return { ok: false, error: `extension ${extensionId} is not registered` }
     }
     try {
       await opts.reloadExtension(extensionId)
@@ -308,37 +312,15 @@ export function registerExtensionActionChannels(opts: {
     if (typeof extensionId !== "string") {
       return { ok: false, error: "extensionId is required" }
     }
-    if (!opts.getManifests().some((m) => m.id === extensionId)) {
-      return { ok: false, error: `extension ${extensionId} is not loaded` }
-    }
-
-    // Look up source before unloading.
-    const entry = findEntry(opts.registryPath, extensionId)
-    const source = entry?.source ?? "marketplace"
-
-    try {
-      await opts.unloadExtension(extensionId)
-    } catch (e) {
-      return { ok: false, error: `failed to unload: ${e instanceof Error ? e.message : String(e)}` }
-    }
-
-    if (source === "marketplace") {
-      const extPath = join(opts.extensionsRoot, extensionId)
-      try {
-        if (existsSync(extPath)) {
-          rmSync(extPath, { recursive: true, force: true })
-        }
-      } catch (e) {
-        return { ok: false, error: `unloaded but failed to remove directory: ${e instanceof Error ? e.message : String(e)}` }
-      }
-    }
-    // For local: do NOT touch the source directory.
-
-    // Remove registry entry.
-    removeEntry(opts.registryPath, extensionId)
-
-    broadcastExtensionsChanged(extensionId)
-    return { ok: true }
+    const result = await uninstallRegisteredExtension({
+      registryPath: opts.registryPath,
+      extensionsRoot: opts.extensionsRoot,
+      extensionId,
+      getManifests: opts.getManifests,
+      unloadExtension: opts.unloadExtension,
+    })
+    if (result.ok) broadcastExtensionsChanged(extensionId)
+    return result
   })
 }
 

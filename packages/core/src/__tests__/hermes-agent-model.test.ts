@@ -115,19 +115,26 @@ describe("Hermes model catalog client", () => {
   });
 
   it("scopes auxiliary and credential operations to the selected profile", async () => {
-    backplaneFetch.mockResolvedValue(
+    backplaneFetch.mockImplementation(async () =>
       Response.json({
         ok: true,
         provider: "deepseek",
         fields: [],
         auth_hint: "",
+        gateway_restart: {
+          ok: true,
+          name: "gateway-restart",
+          previous_gateway_pid: 10,
+          gateway_pid: 11,
+          gateway_state: "running",
+        },
         tasks: [],
       }),
     );
 
     await getHermesAuxiliaryModels("researcher");
     await getHermesProviderCredentials("deepseek", false, "researcher");
-    await saveHermesProviderCredentials(
+    const saved = await saveHermesProviderCredentials(
       "deepseek",
       { DEEPSEEK_API_KEY: "secret" },
       "researcher",
@@ -154,6 +161,13 @@ describe("Hermes model catalog client", () => {
         }),
       }),
     );
+    expect(saved.gateway_restart).toEqual({
+      ok: true,
+      name: "gateway-restart",
+      previous_gateway_pid: 10,
+      gateway_pid: 11,
+      gateway_state: "running",
+    });
   });
 
   it("reads and writes MoA through the dedicated Hermes surface", async () => {

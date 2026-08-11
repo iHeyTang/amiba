@@ -218,6 +218,9 @@ function FullScreenChatViewInner({
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [failedSessionIds, setFailedSessionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
 
@@ -235,12 +238,26 @@ function FullScreenChatViewInner({
         return next;
       });
     };
+    const setSessionFailed = (sessionId: string, failed: boolean) => {
+      setFailedSessionIds((current) => {
+        if (current.has(sessionId) === failed) return current;
+        const next = new Set(current);
+        if (failed) next.add(sessionId);
+        else next.delete(sessionId);
+        return next;
+      });
+    };
 
     const unsubscribeSnapshots = client.onSnapshot((frame) => {
       // A live snapshot recovers a run after the window or tab remounts.
       // Terminal snapshots may be responses to older requests, so stream
       // events remain authoritative for stopping an already-observed run.
-      if (frame.kind === "live") setSessionRunning(frame.sessionId, true);
+      if (frame.kind === "live") {
+        setSessionFailed(frame.sessionId, false);
+        setSessionRunning(frame.sessionId, true);
+      } else if (frame.kind === "interrupted") {
+        setSessionFailed(frame.sessionId, true);
+      }
     });
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
       const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
@@ -249,6 +266,7 @@ function FullScreenChatViewInner({
         (event.kind === "done" || event.kind === "error");
 
       if (event.kind === "begin") {
+        setSessionFailed(sessionId, false);
         setSessionRunning(sessionId, true);
       } else if (
         event.kind === "done" ||
@@ -259,6 +277,7 @@ function FullScreenChatViewInner({
         // then land in the same render, so the status glyph stays mounted and
         // can transition from a breathing halo to a quiet static dot.
         if (completedInBackground) void sessions.markUnread(sessionId);
+        setSessionFailed(sessionId, event.kind === "error");
         setSessionRunning(sessionId, false);
       }
     });
@@ -536,6 +555,7 @@ function FullScreenChatViewInner({
               extensionItems={extensionMains}
               sessions={chatSessions}
               runningSessionIds={runningSessionIds}
+              failedSessionIds={failedSessionIds}
               activeSessionId={sessions.activeId}
               sessionsReady={sessions.ready}
               onOpenSession={(id) => void onOpenSession(id)}

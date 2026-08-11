@@ -202,6 +202,16 @@ export interface HermesProviderCredentialsResponse {
   /** Profile whose .env is being read or written. */
   profile?: string;
   written?: string[];
+  /** Hermes command result after the saved credentials restart Gateway. */
+  gateway_restart?: {
+    ok: boolean;
+    name: "gateway-restart";
+    mode?: "unchanged";
+    command_pid?: number;
+    previous_gateway_pid?: number | null;
+    gateway_pid?: number;
+    gateway_state?: string;
+  };
 }
 
 /** Per-provider model list resolved from `/hermes/provider-models`. */
@@ -453,6 +463,10 @@ export async function saveHermesProviderCredentials(
           : undefined,
       written: data.written ?? [],
       profile: typeof data.profile === "string" ? data.profile : profileId,
+      gateway_restart:
+        data.gateway_restart && typeof data.gateway_restart === "object"
+          ? data.gateway_restart
+          : undefined,
     };
   } catch (e) {
     return {

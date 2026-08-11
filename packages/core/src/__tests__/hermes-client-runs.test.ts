@@ -32,19 +32,13 @@ describe("runHermesAgent workspace cwd", () => {
   });
 
   it("sends the selected workspace as structured cwd", async () => {
-    await runHermesAgent(
-      [{ role: "user", content: "Inspect this repo" }],
-      {
-        sessionId: "session-1",
-        model: "test-model",
-        workingDirectory: "/workspaces/hermes-x",
-      },
-    );
+    await runHermesAgent([{ role: "user", content: "Inspect this repo" }], {
+      sessionId: "session-1",
+      model: "test-model",
+      workingDirectory: "/workspaces/hermes-x",
+    });
 
-    const [, init] = backplaneFetch.mock.calls[0] as [
-      string,
-      RequestInit,
-    ];
+    const [, init] = backplaneFetch.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toMatchObject({
       session_id: "session-1",
       cwd: "/workspaces/hermes-x",
@@ -56,10 +50,7 @@ describe("runHermesAgent workspace cwd", () => {
       sessionId: "session-2",
     });
 
-    const [, init] = backplaneFetch.mock.calls[0] as [
-      string,
-      RequestInit,
-    ];
+    const [, init] = backplaneFetch.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).not.toHaveProperty("cwd");
   });
 
@@ -88,9 +79,7 @@ describe("runHermesAgent workspace cwd", () => {
       },
     });
 
-    expect(backplaneFetch.mock.calls[0]?.[0]).toBe(
-      "/p/researcher/v1/runs",
-    );
+    expect(backplaneFetch.mock.calls[0]?.[0]).toBe("/p/researcher/v1/runs");
     expect(backplaneFetch.mock.calls[1]?.[0]).toBe(
       "/p/researcher/v1/runs/run_profile/events",
     );
@@ -161,9 +150,13 @@ describe("runHermesAgent workspace cwd", () => {
       }
       return new Response(
         [
-          'data: {"event":"moa.progress","label":"openai/gpt-5","refs_done":1,"refs_total":2}',
+          'data: {"event":"moa.progress","label":"reference-model","refs_done":1,"refs_total":2}',
           "",
-          'data: {"event":"moa.phase","phase":"aggregator","aggregator":"anthropic/claude-opus-5","refs_done":2,"refs_total":2}',
+          'data: {"event":"moa.reference","label":"reference-model","text":"first reference","index":1,"count":2}',
+          "",
+          'data: {"event":"moa.phase","phase":"aggregator","aggregator":"aggregator-model","refs_done":2,"refs_total":2}',
+          "",
+          'data: {"event":"moa.aggregating","aggregator":"aggregator-model","ref_count":2}',
           "",
           'data: {"event":"run.completed","output":"done"}',
           "",
@@ -184,16 +177,29 @@ describe("runHermesAgent workspace cwd", () => {
 
     expect(onMoaEvent).toHaveBeenNthCalledWith(1, {
       kind: "progress",
-      label: "openai/gpt-5",
+      label: "reference-model",
       refsDone: 1,
       refsTotal: 2,
     });
     expect(onMoaEvent).toHaveBeenNthCalledWith(2, {
+      kind: "reference",
+      label: "reference-model",
+      text: "first reference",
+      index: 1,
+      count: 2,
+    });
+    expect(onMoaEvent).toHaveBeenNthCalledWith(3, {
       kind: "phase",
       phase: "aggregator",
-      aggregator: "anthropic/claude-opus-5",
+      aggregator: "aggregator-model",
       refsDone: 2,
       refsTotal: 2,
     });
+    expect(onMoaEvent).toHaveBeenNthCalledWith(4, {
+      kind: "aggregating",
+      aggregator: "aggregator-model",
+      refCount: 2,
+    });
+    expect(onMoaEvent).toHaveBeenCalledTimes(4);
   });
 });

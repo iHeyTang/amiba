@@ -15,7 +15,7 @@ import {
 import { createExtensionStorage } from "./storage-fs"
 import { validateManifest } from "./discover"
 import { watchManifests } from "./manifest-watcher"
-import { discoverFromRegistry } from "./discover-registry"
+import { discoverFromRegistry, listRegistryInventory } from "./discover-registry"
 import { findEntry, type ExtensionSource } from "./registry-store"
 import { createRunnerManagerWithRpc } from "./runner-controller"
 import { checkCompat } from "../compat"
@@ -147,11 +147,14 @@ export async function bootMainExtensionHost(
   const getManifests = () => manifestEntries.map((m) => m.manifest)
   const getManifestEntries = () =>
     manifestEntries.map((m) => ({ manifest: m.manifest, path: m.rootDir }))
+  const getRegistryInventory = () =>
+    listRegistryInventory(opts.registryPath, registry.list())
 
   registerInvokeRouter(runnerManager, getManifests)
   registerMetadataChannels({
     getManifests,
     getManifestEntries,
+    getRegistryInventory,
     getI18n: opts.getI18n,
   })
 
@@ -231,7 +234,7 @@ export async function bootMainExtensionHost(
         const v = validateManifest(raw)
         if (!v.ok) {
           console.error(`[extension-host] reloadExtension: invalid manifest for ${id}: ${v.error}`)
-          return
+          throw new Error(v.error)
         }
         const newEntry = { manifest: v.manifest, rootDir: regEntry.path, source: regEntry.source }
         manifestEntries.push(newEntry)
@@ -240,7 +243,9 @@ export async function bootMainExtensionHost(
           watcher.setExtensionPaths(buildPathMap())
         }
       } catch (e) {
+        const error = e instanceof Error ? e.message : String(e)
         console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
+        throw new Error(error)
       }
       return
     }
@@ -254,7 +259,7 @@ export async function bootMainExtensionHost(
       const v = validateManifest(raw)
       if (!v.ok) {
         console.error(`[extension-host] reloadExtension: invalid manifest for ${id}: ${v.error}`)
-        return
+        throw new Error(v.error)
       }
       // Re-check source from registry in case it changed.
       const regEntry2 = findEntry(opts.registryPath, id)
@@ -266,7 +271,9 @@ export async function bootMainExtensionHost(
         watcher.setExtensionPaths(buildPathMap())
       }
     } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
       console.error(`[extension-host] reloadExtension: failed to reload ${id}:`, e)
+      throw new Error(error)
     }
   }
 
@@ -357,6 +364,7 @@ export async function bootMainExtensionHost(
 
 export { validateManifest } from "./discover"
 export { discoverFromRegistry } from "./discover-registry"
+export { listRegistryInventory } from "./discover-registry"
 export type { DiscoveredEntry } from "./discover-registry"
 export { loadRegistry, saveRegistry, addEntry, removeEntry, findEntry } from "./registry-store"
 export type { RegistryEntry, Registry, ExtensionSource } from "./registry-store"

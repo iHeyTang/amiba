@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp.test_utils import make_mocked_request
@@ -22,3 +22,69 @@ async def test_managed_runtime_rejects_in_place_update(monkeypatch):
         response = await routes.handle_update(request)
     assert response.status == 409
     spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_restart_gateway_command_waits_for_ready_replacement(monkeypatch):
+    class Proc:
+        pid = 99
+
+        @staticmethod
+        def poll():
+            return None
+
+    observations = iter(
+        [
+            (10, {"gateway_state": "running"}),
+            (10, {"gateway_state": "stopping"}),
+            (11, {"gateway_state": "running"}),
+        ]
+    )
+    monkeypatch.setattr(
+        service,
+        "_default_gateway_observation",
+        lambda: next(observations),
+    )
+    spawn = MagicMock(return_value=Proc())
+    monkeypatch.setattr(service, "spawn_hermes_action", spawn)
+
+    result = await service.restart_gateway_and_wait(
+        timeout_seconds=1,
+        poll_interval=0.001,
+    )
+
+    spawn.assert_called_once_with(
+        ["-p", "default", "gateway", "restart"],
+        "gateway-restart",
+    )
+    assert result == {
+        "ok": True,
+        "name": "gateway-restart",
+        "command_pid": 99,
+        "previous_gateway_pid": 10,
+        "gateway_pid": 11,
+        "gateway_state": "running",
+    }
+
+
+@pytest.mark.asyncio
+async def test_restart_gateway_command_surfaces_early_failure(monkeypatch):
+    class Proc:
+        pid = 100
+
+        @staticmethod
+        def poll():
+            return 7
+
+    monkeypatch.setattr(
+        service,
+        "_default_gateway_observation",
+        lambda: (10, {"gateway_state": "stopping"}),
+    )
+    monkeypatch.setattr(service, "spawn_hermes_action", lambda *args: Proc())
+
+    with pytest.raises(service.GatewayRestartError, match="code 7"):
+        await service.restart_gateway_and_wait(
+            timeout_seconds=1,
+            poll_interval=0.001,
+        )

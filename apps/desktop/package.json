@@ -7,9 +7,8 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "concurrently --names \"runner,desktop\" --prefix-colors \"yellow,cyan\" --kill-others-on-fail \"vite build --config vite.runner.config.ts --watch\" \"electron-vite dev\"",
-    "dev:hermes": "node scripts/dev-with-hermes.mjs",
     "runtime:prepare": "node scripts/prepare-hermes-runtime.mjs",
-    "runtime:prepare:local": "node scripts/prepare-hermes-runtime.mjs --dev --source ../../../hermes-agent",
+    "runtime:prepare:local": "node scripts/prepare-hermes-runtime.mjs --dev",
     "runtime:verify": "node scripts/prepare-hermes-runtime.mjs --verify",
     "build": "vite build --config vite.runner.config.ts && electron-vite build",
     "preview": "electron-vite preview",
@@ -33,17 +32,6 @@
       {
         "from": "resources",
         "to": "resources"
-      },
-      {
-        "from": "../../backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!.venv/**",
-          "!**/__pycache__/**",
-          "!**/*.egg-info/**",
-          "!**/.pytest_cache/**"
-        ]
       }
     ],
     "mac": {
@@ -74,7 +62,7 @@
   },
   "dependencies": {
     "@amiba/core": "workspace:*",
-"@amiba/extension-api": "workspace:*",
+    "@amiba/extension-api": "workspace:*",
     "@amiba/extension-host": "workspace:*",
     "@amiba/i18n": "workspace:*",
     "@amiba/platform": "workspace:*",
@@ -90,14 +78,11 @@
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.4",
-    "@xterm/addon-fit": "^0.10.0",
-    "@xterm/xterm": "^5.5.0",
     "chokidar": "^3.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lexical": "^0.21.0",
     "lucide-react": "^0.460.0",
-    "node-pty": "^1.0.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "^6.27.0",

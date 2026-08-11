@@ -44,7 +44,7 @@ import { SettingsPaneHeader } from "./SettingsPaneHeader";
 const STATUS_POLL_MS = 10_000;
 const ACTION_POLL_MS = 1_000;
 
-const INSTALL_COMMANDS = [
+const RECOVERY_NOTES = [
   "Hermes is installed and supervised by Amiba.",
   "Use Check again; if recovery still fails, restart Amiba and inspect the technical details below.",
 ];
@@ -234,7 +234,7 @@ function GatewayActionDetails({
   );
 }
 
-function OnboardingGate({
+function ServiceUnavailableGate({
   error,
   onRetry,
   loading,
@@ -245,7 +245,7 @@ function OnboardingGate({
   loading: boolean;
   t: TranslateFn;
 }) {
-  const allCommands = INSTALL_COMMANDS.join("\n");
+  const allCommands = RECOVERY_NOTES.join("\n");
   const [copied, setCopied] = useState(false);
 
   async function copyAll() {
@@ -255,9 +255,9 @@ function OnboardingGate({
   }
 
   const steps = [
-    t("options.status.onboarding.step.install"),
-    t("options.status.onboarding.step.plugin"),
-    t("options.status.onboarding.step.run"),
+    t("options.status.recovery.step.runtime"),
+    t("options.status.recovery.step.backplane"),
+    t("options.status.recovery.step.services"),
   ];
 
   return (
@@ -271,10 +271,10 @@ function OnboardingGate({
             </span>
             <div className="min-w-0 space-y-1.5">
               <h3 className="text-base font-semibold tracking-tight text-foreground">
-                {t("options.status.onboarding.title")}
+                {t("options.status.recovery.title")}
               </h3>
               <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
-                {t("options.status.onboarding.description")}
+                {t("options.status.recovery.description")}
               </p>
             </div>
           </div>
@@ -289,7 +289,7 @@ function OnboardingGate({
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            {t("options.status.onboarding.retry")}
+            {t("options.status.recovery.retry")}
           </Button>
         </div>
 
@@ -313,7 +313,7 @@ function OnboardingGate({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-foreground">
             <span className="flex items-center gap-1.5">
               <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-              {t("options.status.onboarding.manual")}
+              {t("options.status.recovery.manual")}
             </span>
             <Button
               size="sm"
@@ -331,8 +331,8 @@ function OnboardingGate({
               )}
               {t(
                 copied
-                  ? "options.status.onboarding.copied"
-                  : "options.status.onboarding.copy",
+                  ? "options.status.recovery.copied"
+                  : "options.status.recovery.copy",
               )}
             </Button>
           </summary>
@@ -346,7 +346,7 @@ function OnboardingGate({
 
         <details className="mt-3 text-[10px] text-muted-foreground">
           <summary className="cursor-pointer">
-            {t("options.status.onboarding.error")}
+            {t("options.status.recovery.error")}
           </summary>
           <pre
             data-selection="text"
@@ -647,7 +647,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-8 pt-3">
         <div className="mx-auto w-full max-w-[880px] space-y-3">
           {statusErr ? (
-            <OnboardingGate
+            <ServiceUnavailableGate
               error={statusErr}
               onRetry={() => void refreshStatus()}
               loading={statusLoading}

@@ -4,7 +4,6 @@ import {
   runHermesAgent,
   SOURCE_LOCAL,
   type AssistantTimelineItem,
-  type ChatRuntimeError,
   type ChatRuntimeState,
   type ClientToEngineMessage,
   type EngineToClientMessage,
@@ -23,6 +22,7 @@ import {
   buildChatCompletedNotification,
   shouldNotifyForWindowState,
 } from "./completion-notification";
+import { toChatRuntimeError } from "./runtime-error";
 
 /**
  * Per-session running state. Mirrors the renderer's `ChatRuntimeState` so
@@ -193,12 +193,20 @@ async function handleSubmit(payload: SubmitPayload) {
   // extension — writes the same canonical "local" source; the optional
   // ``source`` on SubmitPayload is a future-proofing hook for surfaces
   // that genuinely warrant their own channel, not used today.
-  await ensureHermesSession(
-    sessionId,
-    payload.source ?? SOURCE_LOCAL,
-    undefined,
-    agent?.profileId,
-  );
+  try {
+    await ensureHermesSession(
+      sessionId,
+      payload.source ?? SOURCE_LOCAL,
+      undefined,
+      agent?.profileId,
+    );
+  } catch (err) {
+    // This preflight runs before the per-turn state is created, but the
+    // renderer has already optimistically entered its busy state. Always send
+    // a clone-safe terminal event so a Backplane outage cannot strand it.
+    emitEvent(sessionId, { kind: "error", ...toChatRuntimeError(err) });
+    return;
+  }
 
   // Cancel any in-flight stream on this session before starting the new one.
   const prev = sessions.get(sessionId);
@@ -540,12 +548,7 @@ async function handleSubmit(payload: SubmitPayload) {
     if ((err as { name?: string })?.name === "AbortError") {
       emitEvent(sessionId, { kind: "aborted" });
     } else {
-      const e = err as { message?: string; status?: number; hint?: string };
-      const error: ChatRuntimeError = {
-        message: e?.message || String(err),
-        status: e?.status,
-        hint: e?.hint,
-      };
+      const error = toChatRuntimeError(err);
       state.error = error;
       emitEvent(sessionId, { kind: "error", ...error });
     }

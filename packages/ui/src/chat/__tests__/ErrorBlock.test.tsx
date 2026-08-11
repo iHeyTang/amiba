@@ -67,4 +67,34 @@ describe("chat error recovery", () => {
       settingsTarget: "logs?source=errors",
     })
   })
+
+  it("keeps long diagnostics and the recovery action in one full-width content rail", () => {
+    const detail =
+      "This request requires more credits, or fewer max_tokens. Visit https://openrouter.ai/settings/credits to continue."
+
+    render(
+      <ErrorBlock
+        error={{ message: `HTTP 402: ${detail}`, status: 402, source: "run" }}
+        onOpenSettings={vi.fn()}
+      />,
+    )
+
+    const content = screen
+      .getByText(detail)
+      .closest('[data-slot="chat-error-content"]')
+    const action = screen.getByRole("button", {
+      name: "sidepanel.runError.runtime.action",
+    })
+
+    expect(content).not.toBeNull()
+    expect(content).toContainElement(action)
+    expect(screen.getByText(detail)).toHaveClass("[overflow-wrap:anywhere]")
+
+    const icon = screen
+      .getByRole("alert")
+      .querySelector('[data-slot="chat-error-icon"] svg')
+    expect(icon).toHaveClass("h-3", "w-3")
+    expect(icon?.parentElement).toHaveClass("text-[hsl(var(--warning))]")
+    expect(icon?.parentElement).not.toHaveClass("text-destructive/75")
+  })
 })

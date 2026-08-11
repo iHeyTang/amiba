@@ -178,6 +178,33 @@ describe("Sidebar", () => {
     expect(running.firstElementChild).not.toHaveClass("duration-300");
   });
 
+  it("shows an orange status dot when a session ends with an error", () => {
+    setup({
+      failedSessionIds: new Set(["s1"]),
+      sessions: [
+        {
+          id: "s1",
+          title: "First chat",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 1,
+          unread: true,
+        },
+      ],
+    });
+
+    const failed = screen.getByLabelText("Run failed");
+    expect(screen.queryByLabelText("Unread update")).not.toBeInTheDocument();
+    expect(failed.firstElementChild).toHaveClass(
+      "amiba-session-status-dot",
+      "bg-[hsl(var(--warning))]",
+    );
+    expect(failed.firstElementChild).not.toHaveClass(
+      "amiba-session-status-breathe",
+      "bg-[hsl(var(--status-session))]",
+    );
+  });
+
   it("keeps chats and scheduled runs together in the timeline layout", async () => {
     const props = setup({
       scheduledSessions: [

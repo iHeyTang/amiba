@@ -23,7 +23,6 @@ const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 import { ElectronChatEngineClient } from "./chat/electron-engine-client";
 import { desktopCapabilities } from "./chat/desktop-capabilities";
 import { makeDesktopFilesProvider } from "./chat/files-provider";
-import { OnboardingWizard } from "./onboarding/OnboardingWizard";
 import { StartupScreen } from "./StartupScreen";
 
 type View = "chat" | "settings";
@@ -36,13 +35,10 @@ const TITLE_BAR_HEIGHT = 48;
 const MAC_TRAFFIC_LIGHT_RESERVE = 96;
 
 // loading       — first status probe in flight (brief)
-// initializing  — managed Hermes is installed; silently bringing its backend up
-//                 (install-if-missing + start). Plumbing, NOT onboarding — just
-//                 a spinner, never a wizard.
+// initializing  — validating the built-in Runtime and starting its services
 // init-error    — the silent init couldn't bring the backend up (rare); offer retry
-// onboarding    — no hermes on the machine → the guided install wizard
 // ready         — backend serving; show the app
-type Phase = "loading" | "initializing" | "init-error" | "onboarding" | "ready";
+type Phase = "loading" | "initializing" | "init-error" | "ready";
 
 export default function App() {
   return (
@@ -168,32 +164,19 @@ function AppInner(): ReactElement {
     });
   }, [openSessionFromNotifier, sessions.ready]);
 
-  // Boot decision, split by what actually needs the USER:
-  //   - backend already serving → straight in.
-  //   - no hermes installed → the guided install wizard (the only user-facing
-  //     setup; installing hermes is a real decision + needs a terminal).
-  //   - hermes installed but backend down → SILENT init (ensureBackend brings
-  //     private backplane up, installing it the first time). Starting the backend
-  //     is plumbing, not onboarding, so it stays behind a plain spinner — no
-  //     wizard. Re-runnable so the wizard's onReady (after a hermes install)
-  //     falls through to the same silent init.
+  // Healthy services enter immediately. Otherwise main validates the immutable
+  // built-in Runtime, seeds HERMES_HOME, and starts both local services without
+  // presenting an installation flow to the user.
   const runBoot = useCallback(async (signal: { cancelled: boolean }) => {
     try {
       setPhase("loading");
-      if ((await getHermesStatus()).ok) {
+      const status = await getHermesStatus();
+      if (status.ok && status.gateway_running === true) {
         if (!signal.cancelled) setPhase("ready");
         return;
       }
-      const det = await window.amiba.hermesRuntime.detect();
-      if (signal.cancelled) return;
-      if (!det.installed || !det.binary) {
-        setPhase("onboarding");
-        return;
-      }
       setPhase("initializing");
-      const r = await window.amiba.hermesRuntime.ensureBackend({
-        binary: det.binary,
-      });
+      const r = await window.amiba.hermesRuntime.ensureBackend();
       if (!signal.cancelled) setPhase(r.ok ? "ready" : "init-error");
     } catch (err) {
       console.error("[boot] local service initialization failed:", err);
@@ -288,26 +271,18 @@ function AppInner(): ReactElement {
     );
   }
 
-  if (phase === "init-error") {
-    return (
-      <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background px-8 text-center text-foreground">
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {t("app.initError")}
-        </p>
-        <button
-          type="button"
-          onClick={reboot}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
-        >
-          {t("app.initRetry")}
-        </button>
-      </div>
-    );
-  }
-
-  if (phase === "onboarding") {
-    return <OnboardingWizard onReady={reboot} />;
-  }
-
-  return <OnboardingWizard onReady={reboot} />;
+  return (
+    <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background px-8 text-center text-foreground">
+      <p className="max-w-sm text-sm text-muted-foreground">
+        {t("app.initError")}
+      </p>
+      <button
+        type="button"
+        onClick={reboot}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+      >
+        {t("app.initRetry")}
+      </button>
+    </div>
+  );
 }

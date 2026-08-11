@@ -21,37 +21,15 @@ export {
 // useExtensionRegistry is used by the SettingsExtensions tab to list installed
 // extensions and their status.
 import { useEffect, useState } from "react"
-import type { ExtensionManifest } from "@amiba/extension-api"
+import type { ExtensionRegistryItem } from "../preload"
 import { desktopBridge } from "./bridge"
 
 export function useExtensionRegistry(refreshKey: number = 0) {
-  const [items, setItems] = useState<
-    Array<{
-      id: string
-      status: string
-      error?: string
-      source?: string
-      manifest: ExtensionManifest
-    }>
-  >([])
+  const [items, setItems] = useState<ExtensionRegistryItem[]>([])
   useEffect(() => {
     const { extensions } = desktopBridge()
-    void Promise.all([
-      extensions.listManifests(),
-      extensions.status(),
-    ]).then(([entries, statuses]) => {
-      const byId = new Map(statuses.map((s) => [s.id, s]))
-      setItems(
-        entries.map(({ manifest }) => ({
-          id: manifest.id,
-          manifest,
-          status: byId.get(manifest.id)?.status ?? "loaded",
-          error: byId.get(manifest.id)?.error,
-          source: byId.get(manifest.id)?.source,
-        })),
-      )
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    void extensions.listRegistry().then(setItems)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
   return items
 }

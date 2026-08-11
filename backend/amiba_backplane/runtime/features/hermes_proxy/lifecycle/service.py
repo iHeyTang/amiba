@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ....adapters.hermes_core import hermes_home
+from ....adapters.hermes_core import hermes_home, hermes_profile_scope
 from ....hermes_compatibility import hermes_compatibility_status
 from ....protocol import PROTOCOL_VERSION
 
@@ -50,6 +50,10 @@ def _action_log_dir() -> Path:
 # manual tools can poke us from any thread).
 _ACTION_PROCS: Dict[str, subprocess.Popen] = {}
 _ACTION_LOCK = threading.Lock()
+
+
+class GatewayRestartError(RuntimeError):
+    """The Gateway restart command did not produce a ready replacement."""
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +148,64 @@ def action_status(name: str, lines: int = 200) -> Optional[Dict[str, Any]]:
         "pid": pid,
         "lines": tail,
     }
+
+
+async def restart_gateway_and_wait(
+    *,
+    timeout_seconds: float = 75.0,
+    poll_interval: float = 0.25,
+) -> Dict[str, Any]:
+    """Run ``hermes gateway restart`` and wait for the replacement Gateway.
+
+    The command is the lifecycle boundary owned by Hermes. Backplane only
+    observes its PID/status files so a credential-save response cannot claim
+    success while the old process is still serving requests.
+    """
+    previous_pid, _ = await asyncio.to_thread(_default_gateway_observation)
+    try:
+        # Amiba's default-profile Gateway is the profile multiplexer. Pin the
+        # CLI invocation explicitly so a sticky named CLI profile cannot make
+        # a credential save restart the wrong process.
+        with hermes_profile_scope("default"):
+            proc = spawn_hermes_action(
+                ["-p", "default", "gateway", "restart"],
+                "gateway-restart",
+            )
+    except Exception as exc:
+        raise GatewayRestartError(f"could not start restart command: {exc}") from exc
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(float(timeout_seconds), 0.0)
+    while loop.time() < deadline:
+        current_pid, runtime = await asyncio.to_thread(
+            _default_gateway_observation
+        )
+        gateway_state = (
+            str(runtime.get("gateway_state") or "")
+            if isinstance(runtime, dict)
+            else ""
+        )
+        replaced = current_pid is not None and current_pid != previous_pid
+        if replaced and gateway_state == "running":
+            return {
+                "ok": True,
+                "name": "gateway-restart",
+                "command_pid": proc.pid,
+                "previous_gateway_pid": previous_pid,
+                "gateway_pid": current_pid,
+                "gateway_state": gateway_state,
+            }
+
+        exit_code = proc.poll()
+        if exit_code not in (None, 0):
+            raise GatewayRestartError(
+                f"restart command exited with code {exit_code}"
+            )
+        await asyncio.sleep(max(float(poll_interval), 0.01))
+
+    raise GatewayRestartError(
+        "timed out waiting for a replacement Gateway to become ready"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +311,12 @@ def _gateway_runtime_status() -> Optional[Dict[str, Any]]:
         return read()
     except Exception:
         return None
+
+
+def _default_gateway_observation() -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+    """Read the multiplexer PID and runtime state from the default Profile."""
+    with hermes_profile_scope("default"):
+        return _gateway_pid(), _gateway_runtime_status()
 
 
 def _configured_gateway_platforms() -> Optional[set]:

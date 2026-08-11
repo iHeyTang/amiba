@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     | ((frame: { sessionId: string; kind: string }) => void)
     | null,
   sidebarRunningSessionIds: [] as string[],
+  sidebarFailedSessionIds: [] as string[],
 }))
 
 vi.mock("@amiba/core", () => ({
@@ -43,11 +44,14 @@ vi.mock("../Sidebar", () => ({
   Sidebar: ({
     onNewChat,
     runningSessionIds,
+    failedSessionIds,
   }: {
     onNewChat: () => void
     runningSessionIds?: ReadonlySet<string>
+    failedSessionIds?: ReadonlySet<string>
   }) => {
     mocks.sidebarRunningSessionIds = Array.from(runningSessionIds ?? [])
+    mocks.sidebarFailedSessionIds = Array.from(failedSessionIds ?? [])
     return (
       <button type="button" onClick={onNewChat}>
         new-chat
@@ -142,6 +146,7 @@ describe("FullScreenChatView new-chat home", () => {
     mocks.streamListener = null
     mocks.snapshotListener = null
     mocks.sidebarRunningSessionIds = []
+    mocks.sidebarFailedSessionIds = []
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") {
         return { [key]: "scheduled" }
@@ -321,14 +326,17 @@ describe("FullScreenChatView new-chat home", () => {
 
     act(() => mocks.streamListener?.("session-1", { kind: "begin" }))
     expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+    expect(mocks.sidebarFailedSessionIds).toEqual([])
 
     act(() => mocks.streamListener?.("session-1", { kind: "done" }))
     expect(mocks.sidebarRunningSessionIds).toEqual([])
+    expect(mocks.sidebarFailedSessionIds).toEqual([])
 
     act(() =>
       mocks.snapshotListener?.({ sessionId: "session-1", kind: "live" }),
     )
     expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+    expect(mocks.sidebarFailedSessionIds).toEqual([])
 
     act(() =>
       mocks.snapshotListener?.({
@@ -337,8 +345,17 @@ describe("FullScreenChatView new-chat home", () => {
       }),
     )
     expect(mocks.sidebarRunningSessionIds).toEqual(["session-1"])
+    expect(mocks.sidebarFailedSessionIds).toEqual(["session-1"])
 
     act(() => mocks.streamListener?.("session-1", { kind: "error" }))
     expect(mocks.sidebarRunningSessionIds).toEqual([])
+    expect(mocks.sidebarFailedSessionIds).toEqual(["session-1"])
+
+    act(() => mocks.streamListener?.("session-1", { kind: "begin" }))
+    expect(mocks.sidebarFailedSessionIds).toEqual([])
+
+    act(() => mocks.streamListener?.("session-1", { kind: "aborted" }))
+    expect(mocks.sidebarRunningSessionIds).toEqual([])
+    expect(mocks.sidebarFailedSessionIds).toEqual([])
   })
 })

@@ -27,7 +27,10 @@ async def handle_status(request: web.Request) -> web.Response:
 
 async def handle_gateway_restart(_request: web.Request) -> web.Response:
     try:
-        proc = spawn_hermes_action(["gateway", "restart"], "gateway-restart")
+        proc = spawn_hermes_action(
+            ["-p", "default", "gateway", "restart"],
+            "gateway-restart",
+        )
     except Exception as exc:
         return json_error(500, f"failed to restart gateway: {exc}")
     return web.json_response({"ok": True, "pid": proc.pid, "name": "gateway-restart"})

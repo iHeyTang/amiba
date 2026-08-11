@@ -28,6 +28,7 @@ const HISTORY_PAGE_SIZE = 20;
 export interface SessionsListViewProps {
   sessions: SessionMeta[];
   runningSessionIds?: ReadonlySet<string>;
+  failedSessionIds?: ReadonlySet<string>;
   activeId: string;
   ready: boolean;
   query: string;
@@ -81,6 +82,7 @@ export interface SessionsListViewProps {
 export function SessionsListView({
   sessions,
   runningSessionIds,
+  failedSessionIds,
   activeId,
   ready,
   query,
@@ -275,6 +277,7 @@ export function SessionsListView({
                     key={s.id}
                     session={s}
                     running={runningSessionIds?.has(s.id) ?? false}
+                    failed={failedSessionIds?.has(s.id) ?? false}
                     active={s.id === activeId}
                     onOpen={() => onOpen(s.id)}
                     onRename={(title) => onRename(s.id, title)}
@@ -324,6 +327,7 @@ export function SessionsListView({
 interface SessionRowProps {
   session: SessionMeta;
   running: boolean;
+  failed: boolean;
   active: boolean;
   onOpen: () => void;
   onRename: (title: string) => void;
@@ -336,6 +340,7 @@ interface SessionRowProps {
 function SessionRow({
   session,
   running,
+  failed,
   active,
   onOpen,
   onRename,
@@ -371,9 +376,11 @@ function SessionRow({
 
   const statusLabel = running
     ? t("sidepanel.sessions.running")
-    : session.unread
-      ? t("sidepanel.sessions.unread")
-      : null;
+    : failed
+      ? t("sidepanel.sessions.failed")
+      : session.unread
+        ? t("sidepanel.sessions.unread")
+        : null;
   const statusGlyph = statusLabel ? (
     <span
       aria-hidden
@@ -381,7 +388,9 @@ function SessionRow({
         "amiba-session-status-dot block h-1.5 w-1.5 rounded-full",
         running
           ? "amiba-session-status-breathe bg-muted-foreground/80"
-          : "bg-[hsl(var(--status-session))]",
+          : failed
+            ? "bg-[hsl(var(--warning))]"
+            : "bg-[hsl(var(--status-session))]",
       )}
     />
   ) : null;
