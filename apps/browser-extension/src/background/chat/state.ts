@@ -121,6 +121,7 @@ export async function hydrateFromStorage(): Promise<void> {
       if (!key.startsWith(STORAGE_KEY_PREFIX)) continue;
       const s = value as ChatRuntimeState | undefined;
       if (!s || typeof s.sessionId !== "string" || !s.sessionId) continue;
+      s.liveAgents = Array.isArray(s.liveAgents) ? s.liveAgents : [];
       if (s.streaming) {
         s.streaming = false;
         s.error = s.error ?? {

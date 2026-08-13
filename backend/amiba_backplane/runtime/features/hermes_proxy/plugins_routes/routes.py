@@ -16,6 +16,7 @@ config only (no hot-reload); the response says ``applies_on_restart``.
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import subprocess
 import sys
@@ -26,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from aiohttp import web
 
 from ....adapters.hermes_core import hermes_profile_scope
-from ....common import json_error
+from ....common import json_error, read_json_object
 
 
 def _list_plugins() -> Optional[List[Dict[str, Any]]]:
@@ -303,6 +304,78 @@ async def handle_uninstall(request: web.Request) -> web.Response:
     return web.json_response(body) if status == 200 else json_error(status, body.get("error", "error"))
 
 
+def _dashboard_plugin_action(action: str, **kwargs: Any) -> Dict[str, Any]:
+    """Run Hermes' non-interactive dashboard helpers without blocking aiohttp."""
+    try:
+        from hermes_cli.plugins_cmd import (
+            dashboard_install_plugin,
+            dashboard_update_user_plugin,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"hermes_cli plugins unavailable: {exc}"}
+    try:
+        if action == "install":
+            return dict(dashboard_install_plugin(**kwargs))
+        if action == "update":
+            return dict(dashboard_update_user_plugin(**kwargs))
+        return {"ok": False, "error": f"unsupported plugin action: {action}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+async def handle_install(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    identifier = str(body.get("identifier") or "").strip()
+    if not identifier:
+        return json_error(400, "identifier is required")
+    payload = await asyncio.to_thread(
+        _dashboard_plugin_action,
+        "install",
+        identifier=identifier,
+        force=bool(body.get("force", False)),
+        enable=bool(body.get("enable", True)),
+    )
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
+async def handle_update(request: web.Request) -> web.Response:
+    name = _ident(request)
+    if not name:
+        return json_error(400, "missing ?name= (or ?key=)")
+    payload = await asyncio.to_thread(
+        _dashboard_plugin_action, "update", name=name
+    )
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
+async def handle_test(request: web.Request) -> web.Response:
+    name = _ident(request)
+    if not name:
+        return json_error(400, "missing ?name= (or ?key=)")
+
+    def discover() -> Dict[str, Any]:
+        plugin = _find_plugin(name)
+        if plugin is None:
+            return {"ok": False, "error": f"plugin '{name}' was not discovered"}
+        if plugin.get("error"):
+            return {"ok": False, "error": str(plugin["error"]), "plugin": plugin}
+        return {
+            "ok": True,
+            "plugin": plugin,
+            "summary": {
+                "tools": int(plugin.get("tools") or 0),
+                "hooks": int(plugin.get("hooks") or 0),
+                "commands": int(plugin.get("commands") or 0),
+            },
+        }
+
+    payload = await asyncio.to_thread(discover)
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
 def register(app: web.Application) -> None:
     def profiled(handler):
         @wraps(handler)
@@ -317,6 +390,9 @@ def register(app: web.Application) -> None:
             web.get("/hermes/plugins", profiled(handle_list)),
             web.post("/hermes/plugins/enable", profiled(handle_enable)),
             web.post("/hermes/plugins/disable", profiled(handle_disable)),
+            web.post("/hermes/plugins/install", profiled(handle_install)),
+            web.post("/hermes/plugins/update", profiled(handle_update)),
+            web.post("/hermes/plugins/test", profiled(handle_test)),
             web.post("/hermes/plugins/uninstall", profiled(handle_uninstall)),
         ]
     )

@@ -1208,6 +1208,7 @@ export function HermesModelConfigTab({
               showHermesModelLoading={showHermesModelLoading}
               modelEntriesForProvider={modelEntriesForProvider}
               providerCliMeta={providerCliMeta}
+              profileId={profileId}
               onKeyDraftChange={(key, value) =>
                 setKeyDrafts((current) => ({ ...current, [key]: value }))
               }
@@ -1215,6 +1216,30 @@ export function HermesModelConfigTab({
                 void saveProviderCredentials(activeCredentialKey)
               }
               onRefreshModels={() => void loadProviderModels(true)}
+              onOAuthComplete={() => {
+                const provider = hProvider.trim();
+                if (!provider) return;
+                void hermesModelGateway.provider
+                  .readCredentials(provider, true, profileId)
+                  .then((result) => {
+                    if (!result.ok) return;
+                    setCredentialsCache((current) => ({
+                      ...current,
+                      [provider]: {
+                        fields: result.fields,
+                        authHint: result.auth_hint,
+                        authType: result.auth_type,
+                        connection: result.connection,
+                        endpoint: result.endpoint,
+                      },
+                    }));
+                    setKeyDrafts(
+                      Object.fromEntries(
+                        result.fields.map((field) => [field.key, field.value]),
+                      ),
+                    );
+                  });
+              }}
               customDraftModel={customDraftModel}
               customDraftBaseUrl={customDraftBaseUrl}
               customSaving={mcSaving}
@@ -1583,9 +1608,11 @@ interface ProviderPanelProps {
     cli_loaded?: boolean;
     pricing_loaded?: boolean;
   } | null;
+  profileId?: string;
   onKeyDraftChange: (k: string, v: string) => void;
   onSave: (activeCredentialKey?: string) => void;
   onRefreshModels: () => void;
+  onOAuthComplete: () => void;
   // Custom endpoint (BYO OpenAI-compatible) — only used when
   // ``hProvider === "custom"``. The provider dialog owns the complete
   // endpoint flow: URL, model id, credentials, and main-model assignment.
@@ -1615,9 +1642,11 @@ function ProviderPanel({
   showHermesModelLoading,
   modelEntriesForProvider,
   providerCliMeta,
+  profileId,
   onKeyDraftChange,
   onSave,
   onRefreshModels,
+  onOAuthComplete,
   customDraftModel,
   customDraftBaseUrl,
   customSaving,
@@ -1720,6 +1749,8 @@ function ProviderPanel({
             onChange={onKeyDraftChange}
             onSave={onSave}
             provider={hProvider}
+            profileId={profileId}
+            onOAuthComplete={onOAuthComplete}
             saved={hSaved}
             saving={hSaving}
             values={keyDrafts}

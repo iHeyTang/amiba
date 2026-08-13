@@ -10,6 +10,9 @@
 
 import {
   Check,
+  Archive,
+  BrainCircuit,
+  Bug,
   ChevronDown,
   CircleCheck,
   CircleDot,
@@ -17,10 +20,12 @@ import {
   Download,
   FileText,
   Gauge,
+  HeartPulse,
   Loader2,
   RefreshCw,
   RotateCw,
   Server,
+  ShieldCheck,
   Terminal,
   TriangleAlert,
   WifiOff,
@@ -31,9 +36,11 @@ import {
   type ActionStatusResponse,
   type HermesStatusResponse,
   type LifecycleActionName,
+  type MaintenanceActionName,
   getActionStatus,
   getHermesStatus,
   restartHermesGateway,
+  runHermesMaintenance,
   updateHermes,
 } from "@amiba/core";
 import { useT, type TranslateFn } from "@amiba/i18n";
@@ -449,6 +456,10 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
 
   const [gwState, setGwState] = useState<ActionRunState>(INITIAL_ACTION);
   const [updState, setUpdState] = useState<ActionRunState>(INITIAL_ACTION);
+  const [maintenanceName, setMaintenanceName] =
+    useState<MaintenanceActionName | null>(null);
+  const [maintenanceState, setMaintenanceState] =
+    useState<ActionRunState>(INITIAL_ACTION);
   const [triggering, setTriggering] = useState<{ gw: boolean; upd: boolean }>({
     gw: false,
     upd: false,
@@ -456,6 +467,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
 
   const gwAbort = useRef<AbortController | null>(null);
   const updAbort = useRef<AbortController | null>(null);
+  const maintenanceAbort = useRef<AbortController | null>(null);
 
   const refreshStatus = useCallback(
     async (opts?: { forceUpdateCheck?: boolean }) => {
@@ -531,8 +543,34 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
     return () => {
       gwAbort.current?.abort();
       updAbort.current?.abort();
+      maintenanceAbort.current?.abort();
     };
   }, [pollAction]);
+
+  const triggerMaintenance = useCallback(
+    async (name: MaintenanceActionName) => {
+      if (maintenanceState.running) return;
+      setMaintenanceName(name);
+      setMaintenanceState({ ...INITIAL_ACTION, running: true });
+      const result = await runHermesMaintenance(name);
+      if (!result.ok) {
+        setMaintenanceState({
+          ...INITIAL_ACTION,
+          error: result.error || "spawn failed",
+        });
+        return;
+      }
+      setMaintenanceState({
+        running: true,
+        exitCode: null,
+        pid: result.pid ?? null,
+        lines: [],
+        error: null,
+      });
+      void pollAction(name, setMaintenanceState, maintenanceAbort);
+    },
+    [maintenanceState.running, pollAction],
+  );
 
   const triggerGateway = useCallback(async () => {
     setTriggering((current) => ({ ...current, gw: true }));
@@ -944,6 +982,64 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
                     )}
                     <GatewayActionDetails state={gwState} t={t} />
                   </div>
+                </section>
+
+                <section>
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <HeartPulse className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Maintenance
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {(
+                      [
+                        ["doctor", "Doctor", HeartPulse],
+                        ["security-audit", "Security", ShieldCheck],
+                        ["backup", "Backup", Archive],
+                        ["debug-bundle", "Debug bundle", Bug],
+                        ["curator", "Curate memory", BrainCircuit],
+                      ] as const
+                    ).map(([name, label, Icon]) => (
+                      <Button
+                        className="h-auto min-h-16 flex-col gap-1.5 py-2 text-[10px]"
+                        disabled={maintenanceState.running}
+                        key={name}
+                        onClick={() => void triggerMaintenance(name)}
+                        type="button"
+                        variant="outline"
+                      >
+                        {maintenanceState.running &&
+                        maintenanceName === name ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Icon className="h-4 w-4" />
+                        )}
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                  {maintenanceName &&
+                  (maintenanceState.lines.length > 0 ||
+                    maintenanceState.error ||
+                    maintenanceState.exitCode != null) ? (
+                    <details
+                      className="mt-2 rounded-lg border border-border/60 bg-muted/15"
+                      open={maintenanceState.running}
+                    >
+                      <summary className="cursor-pointer px-3 py-2 text-xs font-medium">
+                        {maintenanceName}
+                        {maintenanceState.error
+                          ? ` · ${maintenanceState.error}`
+                          : maintenanceState.running
+                            ? " · running"
+                            : ` · exit ${maintenanceState.exitCode ?? 0}`}
+                      </summary>
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap border-t border-border/50 px-3 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                        {maintenanceState.lines.join("\n")}
+                      </pre>
+                    </details>
+                  ) : null}
                 </section>
               </div>
             </>

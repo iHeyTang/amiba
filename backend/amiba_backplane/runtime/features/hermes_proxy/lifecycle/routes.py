@@ -5,6 +5,7 @@ from aiohttp import web
 from ....common import json_error
 from .service import (
     ACTION_LOG_FILES,
+    MAINTENANCE_ACTIONS,
     action_status,
     is_amiba_managed_runtime,
     spawn_hermes_action,
@@ -69,12 +70,25 @@ async def handle_action_status(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
+async def handle_maintenance(request: web.Request) -> web.Response:
+    name = request.match_info.get("name", "")
+    command = MAINTENANCE_ACTIONS.get(name)
+    if command is None:
+        return json_error(404, f"unknown maintenance action: {name}")
+    try:
+        proc = spawn_hermes_action(command, name)
+    except Exception as exc:
+        return json_error(500, f"failed to start {name}: {exc}")
+    return web.json_response({"ok": True, "pid": proc.pid, "name": name})
+
+
 def register(app: web.Application) -> None:
     app.add_routes(
         [
             web.get("/hermes/status", handle_status),
             web.post("/hermes/gateway/restart", handle_gateway_restart),
             web.post("/hermes/update", handle_update),
+            web.post("/hermes/maintenance/{name}", handle_maintenance),
             web.get("/hermes/actions/{name}/status", handle_action_status),
         ]
     )

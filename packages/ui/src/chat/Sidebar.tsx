@@ -86,6 +86,15 @@ export interface SidebarProps {
   onOpenSession: (id: string) => void;
   onRenameSession: (id: string, title: string) => void;
   onDeleteSession: (id: string) => void;
+  onPinSession?: (id: string, pinned: boolean) => void | Promise<void>;
+  onArchiveSession?: (id: string, archived: boolean) => void | Promise<void>;
+  onBranchSession?: (id: string) => void | Promise<void>;
+  onExportSession?: (id: string) => void | Promise<void>;
+  onImportSessions?: (file: File) => void | Promise<void>;
+  onBulkSessions?: (
+    ids: string[],
+    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  ) => void | Promise<void>;
   onRefreshSessions: () => void | Promise<void>;
   scheduledSessions: SessionMeta[];
   scheduledReady: boolean;
@@ -113,6 +122,12 @@ export function Sidebar({
   onOpenSession,
   onRenameSession,
   onDeleteSession,
+  onPinSession,
+  onArchiveSession,
+  onBranchSession,
+  onExportSession,
+  onImportSessions,
+  onBulkSessions,
   onRefreshSessions,
   scheduledSessions,
   scheduledReady,
@@ -286,6 +301,12 @@ export function Sidebar({
           }
           onRename={onRenameSession}
           onDelete={onDeleteSession}
+          onPin={onPinSession}
+          onArchive={onArchiveSession}
+          onBranch={onBranchSession}
+          onExport={onExportSession}
+          onImport={onImportSessions}
+          onBulkAction={onBulkSessions}
           onRefresh={() => {
             void onRefreshSessions();
             void onRefreshScheduledSessions();

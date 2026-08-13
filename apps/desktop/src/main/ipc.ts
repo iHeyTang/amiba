@@ -1,5 +1,5 @@
-import { open, readdir, stat } from "node:fs/promises"
-import { basename, join, resolve as resolvePath } from "node:path"
+import { open, stat } from "node:fs/promises";
+import { basename, resolve as resolvePath } from "node:path";
 
 import {
   BrowserWindow,
@@ -7,52 +7,74 @@ import {
   ipcMain,
   shell,
   type OpenDialogOptions,
-} from "electron"
-import type { WorkspaceChange } from "@amiba/platform"
+} from "electron";
+import type { WorkspaceChange } from "@amiba/platform";
 
-import { mainStore, type StorageChangeMap } from "./storage"
-import { workspaceManager } from "./workspace"
+import { mainStore, type StorageChangeMap } from "./storage";
+import { workspaceManager } from "./workspace";
+import {
+  addWorkspaceProjectFolder,
+  bindWorkspaceProjectLocation,
+  createWorkspaceCheckpoint,
+  createWorkspaceProject,
+  createWorkspaceWorktree,
+  deleteWorkspaceCheckpoint,
+  ensureWorkspaceProject,
+  getWorkspaceGitDiff,
+  getWorkspaceGitState,
+  getWorkspaceTerminal,
+  listWorkspaceCheckpoints,
+  listWorkspaceProjects,
+  listWorkspaceTree,
+  listWorkspaceWorktrees,
+  mutateWorkspaceGit,
+  restoreWorkspaceCheckpoint,
+  searchWorkspaceTree,
+  startWorkspaceTerminal,
+  stopWorkspaceTerminal,
+  writeWorkspaceTerminal,
+} from "./workspace-development";
 
-const MAX_FILE_VIEW_BYTES = 2 * 1024 * 1024
+const MAX_FILE_VIEW_BYTES = 2 * 1024 * 1024;
 
 interface FileWatchSubscription {
-  webContentsId: number
-  sessionId: string
-  paths: Set<string>
+  webContentsId: number;
+  sessionId: string;
+  paths: Set<string>;
 }
 
-const fileWatchSubscriptions = new Map<string, FileWatchSubscription>()
-const observedFileWatchSenders = new Set<number>()
+const fileWatchSubscriptions = new Map<string, FileWatchSubscription>();
+const observedFileWatchSenders = new Set<number>();
 
 async function readWorkspaceFile(sessionId: string, candidate: string) {
   const resolved = await workspaceManager.resolveFileForSession(
     sessionId,
     candidate,
-  )
-  const fileStat = await stat(resolved.path)
+  );
+  const fileStat = await stat(resolved.path);
   if (!fileStat.isFile()) {
-    throw new Error("The selected workspace resource is not a file.")
+    throw new Error("The selected workspace resource is not a file.");
   }
 
-  const bytesToRead = Math.min(fileStat.size, MAX_FILE_VIEW_BYTES)
-  const buffer = Buffer.alloc(bytesToRead)
-  const handle = await open(resolved.path, "r")
-  let bytesRead = 0
+  const bytesToRead = Math.min(fileStat.size, MAX_FILE_VIEW_BYTES);
+  const buffer = Buffer.alloc(bytesToRead);
+  const handle = await open(resolved.path, "r");
+  let bytesRead = 0;
   try {
     if (bytesToRead > 0) {
-      const result = await handle.read(buffer, 0, bytesToRead, 0)
-      bytesRead = result.bytesRead
+      const result = await handle.read(buffer, 0, bytesToRead, 0);
+      bytesRead = result.bytesRead;
     }
   } finally {
-    await handle.close()
+    await handle.close();
   }
 
-  const contentBuffer = buffer.subarray(0, bytesRead)
+  const contentBuffer = buffer.subarray(0, bytesRead);
   const binaryProbe = contentBuffer.subarray(
     0,
     Math.min(contentBuffer.length, 8_192),
-  )
-  const binary = binaryProbe.includes(0)
+  );
+  const binary = binaryProbe.includes(0);
   return {
     path: resolved.path,
     relativePath: resolved.relativePath,
@@ -63,21 +85,21 @@ async function readWorkspaceFile(sessionId: string, candidate: string) {
     revision: `${fileStat.mtimeMs}:${fileStat.size}`,
     truncated: fileStat.size > MAX_FILE_VIEW_BYTES,
     binary,
-  }
+  };
 }
 
 function broadcastChange(changes: StorageChangeMap) {
-  if (Object.keys(changes).length === 0) return
+  if (Object.keys(changes).length === 0) return;
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.webContents.isDestroyed()) continue
-    win.webContents.send("storage:changed", changes)
+    if (win.webContents.isDestroyed()) continue;
+    win.webContents.send("storage:changed", changes);
   }
 }
 
 function broadcastWorkspaceChange(change: WorkspaceChange) {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.webContents.isDestroyed()) continue
-    win.webContents.send("workspace:changed", change)
+    if (win.webContents.isDestroyed()) continue;
+    win.webContents.send("workspace:changed", change);
   }
 }
 
@@ -85,17 +107,25 @@ export function registerIpcHandlers() {
   // Storage handlers route to the shared `mainStore`, the same instance the
   // main-process PlatformAdapter uses. Renderer writes and main-side reads
   // therefore see the same state.
-  ipcMain.handle("storage:get", (_e, keys?: string | string[]) => mainStore.get(keys))
-  ipcMain.handle("storage:set", (_e, patch: Record<string, unknown>) => mainStore.set(patch))
-  ipcMain.handle("storage:remove", (_e, keys: string | string[]) => mainStore.remove(keys))
+  ipcMain.handle("storage:get", (_e, keys?: string | string[]) =>
+    mainStore.get(keys),
+  );
+  ipcMain.handle("storage:set", (_e, patch: Record<string, unknown>) =>
+    mainStore.set(patch),
+  );
+  ipcMain.handle("storage:remove", (_e, keys: string | string[]) =>
+    mainStore.remove(keys),
+  );
 
   // Any mutation (renderer- or main-initiated) gets broadcast to every
   // renderer so `storage.watch()` works across surfaces. The bus runs in
   // process — no fs.watch — so the listener fires synchronously after the
   // store finishes its persist().
-  mainStore.watch(broadcastChange)
+  mainStore.watch(broadcastChange);
 
-  ipcMain.handle("shell:open-external", (_e, url: string) => shell.openExternal(url))
+  ipcMain.handle("shell:open-external", (_e, url: string) =>
+    shell.openExternal(url),
+  );
 
   ipcMain.handle(
     "workspace:choose-directory",
@@ -103,59 +133,159 @@ export function registerIpcHandlers() {
       const options: OpenDialogOptions = {
         properties: ["openDirectory", "createDirectory"],
         ...(defaultPath ? { defaultPath } : {}),
-      }
-      const parent = BrowserWindow.fromWebContents(event.sender)
+      };
+      const parent = BrowserWindow.fromWebContents(event.sender);
       const result = parent
         ? await dialog.showOpenDialog(parent, options)
-        : await dialog.showOpenDialog(options)
-      return result.canceled ? null : (result.filePaths[0] ?? null)
+        : await dialog.showOpenDialog(options);
+      return result.canceled ? null : (result.filePaths[0] ?? null);
     },
-  )
+  );
 
   ipcMain.handle(
     "workspace:bind",
     (_e, args: { sessionId: string; path: string }) =>
       workspaceManager.bind(args.sessionId, args.path),
-  )
+  );
   ipcMain.handle("workspace:unbind", (_e, sessionId: string) =>
     workspaceManager.unbind(sessionId),
-  )
+  );
   ipcMain.handle("workspace:get-default-root", () =>
     workspaceManager.getDefaultRoot(),
-  )
+  );
   ipcMain.handle("workspace:get-current", (_e, sessionId: string) =>
     workspaceManager.getForSession(sessionId),
-  )
-  ipcMain.handle("workspace:list-bindings", () => workspaceManager.listBindings())
+  );
+  ipcMain.handle("workspace:list-bindings", () =>
+    workspaceManager.listBindings(),
+  );
+  ipcMain.handle("workspace:projects:list", () => listWorkspaceProjects());
+  ipcMain.handle("workspace:projects:ensure", (_e, sessionId: string) =>
+    ensureWorkspaceProject(sessionId),
+  );
+  ipcMain.handle(
+    "workspace:projects:create",
+    (_e, input: { name: string; folders: string[] }) =>
+      createWorkspaceProject(input.name, input.folders),
+  );
+  ipcMain.handle(
+    "workspace:projects:add-folder",
+    (_e, input: { projectId: string; folder: string }) =>
+      addWorkspaceProjectFolder(input.projectId, input.folder),
+  );
+  ipcMain.handle(
+    "workspace:projects:bind-location",
+    (_e, input: { sessionId: string; projectId: string; path: string }) =>
+      bindWorkspaceProjectLocation(
+        input.sessionId,
+        input.projectId,
+        input.path,
+      ),
+  );
+  ipcMain.handle("workspace:worktrees:list", (_e, sessionId: string) =>
+    listWorkspaceWorktrees(sessionId),
+  );
+  ipcMain.handle(
+    "workspace:worktrees:create",
+    (_e, input: { sessionId: string; branch: string; baseRef?: string }) =>
+      createWorkspaceWorktree(input.sessionId, input.branch, input.baseRef),
+  );
+  ipcMain.handle("workspace:git:status", (_e, sessionId: string) =>
+    getWorkspaceGitState(sessionId),
+  );
+  ipcMain.handle(
+    "workspace:git:diff",
+    (_e, input: { sessionId: string; staged?: boolean; paths?: string[] }) =>
+      getWorkspaceGitDiff(input.sessionId, input),
+  );
+  ipcMain.handle(
+    "workspace:git:stage",
+    (_e, input: { sessionId: string; paths?: string[] }) =>
+      mutateWorkspaceGit(input.sessionId, "stage", input),
+  );
+  ipcMain.handle(
+    "workspace:git:unstage",
+    (_e, input: { sessionId: string; paths?: string[] }) =>
+      mutateWorkspaceGit(input.sessionId, "unstage", input),
+  );
+  ipcMain.handle(
+    "workspace:git:commit",
+    (_e, input: { sessionId: string; message: string }) =>
+      mutateWorkspaceGit(input.sessionId, "commit", input),
+  );
+  ipcMain.handle(
+    "workspace:git:ship",
+    (_e, input: { sessionId: string; remote?: string }) =>
+      mutateWorkspaceGit(input.sessionId, "ship", input),
+  );
+  ipcMain.handle("workspace:checkpoints:list", (_e, sessionId: string) =>
+    listWorkspaceCheckpoints(sessionId),
+  );
+  ipcMain.handle(
+    "workspace:checkpoints:create",
+    (_e, input: { sessionId: string; label: string }) =>
+      createWorkspaceCheckpoint(input.sessionId, input.label),
+  );
+  ipcMain.handle(
+    "workspace:checkpoints:restore",
+    (_e, input: { sessionId: string; checkpointId: string }) =>
+      restoreWorkspaceCheckpoint(input.sessionId, input.checkpointId),
+  );
+  ipcMain.handle(
+    "workspace:checkpoints:delete",
+    (_e, input: { sessionId: string; checkpointId: string }) =>
+      deleteWorkspaceCheckpoint(input.sessionId, input.checkpointId),
+  );
+  ipcMain.handle("workspace:terminal:start", (_e, sessionId: string) =>
+    startWorkspaceTerminal(sessionId),
+  );
+  ipcMain.handle("workspace:terminal:get", (_e, sessionId: string) =>
+    getWorkspaceTerminal(sessionId),
+  );
+  ipcMain.handle(
+    "workspace:terminal:write",
+    (_e, input: { sessionId: string; text: string }) =>
+      writeWorkspaceTerminal(input.sessionId, input.text),
+  );
+  ipcMain.handle("workspace:terminal:stop", (_e, sessionId: string) =>
+    stopWorkspaceTerminal(sessionId),
+  );
 
-  // @file mention source for the desktop chat. Lists the active session's
-  // bound workspace dir (top level only — recursion is a later enhancement),
-  // filtered by the typed query and excluding dotfiles. Returns [] when the
-  // session has no bound workspace or the dir can't be read.
+  // @file mention source for the desktop chat. It uses the same bounded,
+  // recursive workspace index as the files pane so nested files are directly
+  // discoverable without letting a large repository flood the renderer.
   ipcMain.handle(
     "files:list",
-    async (_e, args: { sessionId: string; query: string }): Promise<{ path: string; isDir: boolean }[]> => {
-      const root = workspaceManager.getForSession(args.sessionId)
-      if (!root) return []
-      const q = (args.query || "").toLowerCase()
+    async (
+      _e,
+      args: { sessionId: string; query: string },
+    ): Promise<{ path: string; isDir: boolean }[]> => {
       try {
-        const entries = await readdir(root, { withFileTypes: true })
+        const entries = await searchWorkspaceTree(args.sessionId, args.query);
         return entries
-          .filter((e) => !e.name.startsWith("."))
-          .filter((e) => e.name.toLowerCase().includes(q))
           .slice(0, 30)
-          .map((e) => ({ path: join(root, e.name), isDir: e.isDirectory() }))
+          .map((entry) => ({ path: entry.path, isDir: entry.isDirectory }));
       } catch {
-        return []
+        return [];
       }
     },
-  )
+  );
+  ipcMain.handle(
+    "files:tree",
+    (_e, args: { sessionId: string; path?: string }) =>
+      listWorkspaceTree(args.sessionId, args.path),
+  );
+  ipcMain.handle(
+    "files:search",
+    (_e, args: { sessionId: string; query: string }) =>
+      searchWorkspaceTree(args.sessionId, args.query),
+  );
 
   ipcMain.handle(
     "files:read",
     (_e, args: { sessionId: string; path: string }) =>
       readWorkspaceFile(args.sessionId, args.path),
-  )
+  );
 
   ipcMain.handle(
     "files:reveal",
@@ -163,10 +293,10 @@ export function registerIpcHandlers() {
       const resolved = await workspaceManager.resolveFileForSession(
         args.sessionId,
         args.path,
-      )
-      shell.showItemInFolder(resolved.path)
+      );
+      shell.showItemInFolder(resolved.path);
     },
-  )
+  );
 
   ipcMain.handle(
     "files:open-external",
@@ -174,11 +304,11 @@ export function registerIpcHandlers() {
       const resolved = await workspaceManager.resolveFileForSession(
         args.sessionId,
         args.path,
-      )
-      const error = await shell.openPath(resolved.path)
-      if (error) throw new Error(error)
+      );
+      const error = await shell.openPath(resolved.path);
+      if (error) throw new Error(error);
     },
-  )
+  );
 
   ipcMain.handle(
     "files:watch",
@@ -187,16 +317,16 @@ export function registerIpcHandlers() {
       args: { subscriptionId: string; sessionId: string; paths: string[] },
     ): Promise<void> => {
       if (!args.subscriptionId || !args.sessionId) {
-        throw new Error("Invalid file watch subscription.")
+        throw new Error("Invalid file watch subscription.");
       }
-      const paths = new Set<string>()
+      const paths = new Set<string>();
       for (const candidate of args.paths.slice(0, 32)) {
         try {
           const resolved = await workspaceManager.resolveFileForSession(
             args.sessionId,
             candidate,
-          )
-          paths.add(resolved.path)
+          );
+          paths.add(resolved.path);
         } catch {
           // A file can disappear between read and watch registration. The
           // viewer already owns the corresponding missing-file state.
@@ -206,46 +336,46 @@ export function registerIpcHandlers() {
         webContentsId: event.sender.id,
         sessionId: args.sessionId,
         paths,
-      })
-      if (observedFileWatchSenders.has(event.sender.id)) return
-      observedFileWatchSenders.add(event.sender.id)
+      });
+      if (observedFileWatchSenders.has(event.sender.id)) return;
+      observedFileWatchSenders.add(event.sender.id);
       event.sender.once("destroyed", () => {
-        observedFileWatchSenders.delete(event.sender.id)
+        observedFileWatchSenders.delete(event.sender.id);
         for (const [id, subscription] of fileWatchSubscriptions) {
           if (subscription.webContentsId === event.sender.id) {
-            fileWatchSubscriptions.delete(id)
+            fileWatchSubscriptions.delete(id);
           }
         }
-      })
+      });
     },
-  )
+  );
 
   ipcMain.handle("files:unwatch", (event, subscriptionId: string): void => {
-    const subscription = fileWatchSubscriptions.get(subscriptionId)
+    const subscription = fileWatchSubscriptions.get(subscriptionId);
     if (subscription?.webContentsId === event.sender.id) {
-      fileWatchSubscriptions.delete(subscriptionId)
+      fileWatchSubscriptions.delete(subscriptionId);
     }
-  })
+  });
 
-  workspaceManager.onChange(broadcastWorkspaceChange)
+  workspaceManager.onChange(broadcastWorkspaceChange);
   workspaceManager.onFile((change) => {
-    const changedPath = resolvePath(change.path)
+    const changedPath = resolvePath(change.path);
     for (const [subscriptionId, subscription] of fileWatchSubscriptions) {
-      if (subscription.sessionId !== change.sessionId) continue
+      if (subscription.sessionId !== change.sessionId) continue;
       if (
         !subscription.paths.has(change.path) &&
         !subscription.paths.has(changedPath)
       ) {
-        continue
+        continue;
       }
       const target = BrowserWindow.getAllWindows()
         .map((win) => win.webContents)
-        .find((contents) => contents.id === subscription.webContentsId)
+        .find((contents) => contents.id === subscription.webContentsId);
       if (!target || target.isDestroyed()) {
-        fileWatchSubscriptions.delete(subscriptionId)
-        continue
+        fileWatchSubscriptions.delete(subscriptionId);
+        continue;
       }
-      target.send("files:changed", { ...change, subscriptionId })
+      target.send("files:changed", { ...change, subscriptionId });
     }
-  })
+  });
 }

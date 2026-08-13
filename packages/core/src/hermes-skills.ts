@@ -359,3 +359,136 @@ export async function getHermesSkillFile(
     return { ok: false, error: String((e as Error)?.message || e) };
   }
 }
+
+export interface HermesSkillHubResult {
+  name: string;
+  description: string;
+  source: string;
+  identifier: string;
+  trust_level: string;
+  tags?: string[];
+}
+
+export async function searchHermesSkillHub(
+  query: string,
+  profileId?: string,
+): Promise<{ ok: boolean; results: HermesSkillHubResult[]; error?: string }> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl(
+        `/hermes/skills/hub/search?q=${encodeURIComponent(query)}`,
+        profileId,
+      ),
+      { method: "GET" },
+    );
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      results?: HermesSkillHubResult[];
+      error?: string;
+    } | null;
+    if (!res.ok || data?.ok === false)
+      return {
+        ok: false,
+        results: [],
+        error: data?.error || `HTTP ${res.status}`,
+      };
+    return {
+      ok: true,
+      results: Array.isArray(data?.results) ? data.results : [],
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      results: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+export interface HermesSkillMutationResult {
+  ok: boolean;
+  error?: string;
+  output?: string;
+}
+
+async function skillMutation(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body: Record<string, unknown> | undefined,
+  profileId?: string,
+): Promise<HermesSkillMutationResult> {
+  try {
+    const res = await backplaneFetch(profileUrl(path, profileId), {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      success?: boolean;
+      error?: string;
+      output?: string;
+    } | null;
+    if (!res.ok || data?.ok === false || data?.success === false)
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    return { ok: true, output: data?.output };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+export function installHermesSkill(identifier: string, profileId?: string) {
+  return skillMutation(
+    "/hermes/skills/hub/install",
+    "POST",
+    { identifier },
+    profileId,
+  );
+}
+
+export function updateHermesSkills(name?: string, profileId?: string) {
+  return skillMutation(
+    "/hermes/skills/hub/update",
+    "POST",
+    name ? { name } : {},
+    profileId,
+  );
+}
+
+export function uninstallHermesHubSkill(name: string, profileId?: string) {
+  return skillMutation(
+    "/hermes/skills/hub/uninstall",
+    "POST",
+    { name },
+    profileId,
+  );
+}
+
+export function createHermesSkill(
+  input: { name: string; content: string; category?: string },
+  profileId?: string,
+) {
+  return skillMutation("/hermes/skills", "POST", input, profileId);
+}
+
+export function updateHermesSkill(
+  name: string,
+  content: string,
+  profileId?: string,
+) {
+  return skillMutation(
+    `/hermes/skills/${encodeURIComponent(name)}`,
+    "PUT",
+    { content },
+    profileId,
+  );
+}
+
+export function deleteHermesSkill(name: string, profileId?: string) {
+  return skillMutation(
+    `/hermes/skills/${encodeURIComponent(name)}`,
+    "DELETE",
+    undefined,
+    profileId,
+  );
+}

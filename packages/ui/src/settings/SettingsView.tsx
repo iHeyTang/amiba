@@ -15,6 +15,7 @@ import {
   Home,
   Keyboard,
   Mic,
+  MessagesSquare,
   Palette,
   RefreshCw,
   UserRound,
@@ -54,6 +55,7 @@ import { ScriptEditor } from "./ScriptEditor";
 import { ScriptList } from "./ScriptList";
 import { SettingsLogs, type SettingsLogSource } from "./SettingsLogs";
 import { SettingsMemory } from "./SettingsMemory";
+import { SettingsMessaging } from "./SettingsMessaging";
 import { SettingsAgents } from "./SettingsAgents";
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
@@ -91,6 +93,7 @@ const ALL_TABS = [
   "tokens",
   "tools",
   "memory",
+  "messaging",
   "voice",
   "logs",
 ] as const;
@@ -504,6 +507,14 @@ export function SettingsView({
                   active={mainTab === "memory"}
                   onClick={() => onMainTabChange("memory")}
                 />
+                <NavBtn
+                  icon={
+                    <MessagesSquare className="h-4 w-4 shrink-0 opacity-70" />
+                  }
+                  label={t("options.nav.messaging")}
+                  active={mainTab === "messaging"}
+                  onClick={() => onMainTabChange("messaging")}
+                />
 
                 {showScriptsTab || extensionSettings.length > 0 ? (
                   <>
@@ -620,6 +631,8 @@ export function SettingsView({
               />
             ) : mainTab === "memory" ? (
               <SettingsMemory profileId="default" />
+            ) : mainTab === "messaging" ? (
+              <SettingsMessaging profileId="default" />
             ) : mainTab === "voice" ? (
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <SettingsPaneHeader

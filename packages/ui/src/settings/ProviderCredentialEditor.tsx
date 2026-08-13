@@ -1,10 +1,14 @@
 import {
   CircleDashed,
+  ExternalLink,
   Eye,
   EyeOff,
   Github,
   KeyRound,
+  LogIn,
+  Plus,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -13,6 +17,17 @@ import type {
   HermesProviderConnectionMethod,
   HermesProviderCredentialField,
   HermesProviderEndpointResolution,
+  HermesOAuthSession,
+  HermesCredentialPoolEntry,
+} from "@amiba/core";
+import {
+  cancelHermesOAuth,
+  getHermesOAuthSession,
+  sendHermesOAuthInput,
+  startHermesOAuth,
+  getHermesCredentialPool,
+  addHermesCredentialPoolEntry,
+  removeHermesCredentialPoolEntry,
 } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 
@@ -42,6 +57,8 @@ export interface ProviderCredentialEditorProps {
   saved: boolean;
   saving: boolean;
   values: Record<string, string>;
+  profileId?: string;
+  onOAuthComplete?: () => void;
 }
 
 const AUTH_HINT_KEYS: Record<string, MessageKey> = {
@@ -154,6 +171,8 @@ export function ProviderCredentialEditor({
   saved,
   saving,
   values,
+  profileId,
+  onOAuthComplete,
 }: ProviderCredentialEditorProps) {
   const { t } = useT();
   const localizedAuthHint = authType
@@ -176,6 +195,14 @@ export function ProviderCredentialEditor({
     secretFields.find(isConfigured) ??
     null;
   const [selectedCredential, setSelectedCredential] = useState("");
+  const [oauth, setOauth] = useState<HermesOAuthSession | null>(null);
+  const [oauthInput, setOauthInput] = useState("");
+  const [oauthBusy, setOauthBusy] = useState(false);
+  const [pool, setPool] = useState<HermesCredentialPoolEntry[]>([]);
+  const [poolLabel, setPoolLabel] = useState("");
+  const [poolKey, setPoolKey] = useState("");
+  const [poolError, setPoolError] = useState<string | null>(null);
+  const [poolBusy, setPoolBusy] = useState(false);
 
   useEffect(() => {
     setSelectedCredential(
@@ -185,6 +212,49 @@ export function ProviderCredentialEditor({
     // the user back to the currently effective method.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, secretFieldKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getHermesCredentialPool(provider, profileId).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setPool(result.entries);
+      else setPoolError(result.error || "Could not load credential pool");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, provider]);
+
+  async function refreshPool() {
+    const result = await getHermesCredentialPool(provider, profileId);
+    if (result.ok) setPool(result.entries);
+    else setPoolError(result.error || "Could not load credential pool");
+  }
+
+  useEffect(() => {
+    if (!oauth?.session_id || !oauth.running) return;
+    const id = window.setInterval(() => {
+      void getHermesOAuthSession(oauth.session_id!, profileId).then((next) => {
+        setOauth(next);
+        if (next.ok && !next.running && next.exit_code === 0)
+          onOAuthComplete?.();
+      });
+    }, 1_000);
+    return () => window.clearInterval(id);
+  }, [oauth?.running, oauth?.session_id, onOAuthComplete, profileId]);
+
+  const supportsOAuth = Boolean(
+    authType?.trim().toLowerCase().startsWith("oauth") ||
+      connection?.methods.some((method) => method.kind === "oauth"),
+  );
+  const oauthUrl = oauth?.output?.match(/https?:\/\/[^\s\]\[()<>"']+/)?.[0];
+
+  async function startOAuth() {
+    setOauthBusy(true);
+    const result = await startHermesOAuth(provider, profileId);
+    setOauthBusy(false);
+    setOauth(result);
+  }
 
   if (loading) {
     return (
@@ -224,6 +294,212 @@ export function ProviderCredentialEditor({
           {error}
         </p>
       ) : null}
+
+      {supportsOAuth ? (
+        <div className="space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
+          <div className="flex items-center gap-2">
+            <LogIn className="h-4 w-4 text-muted-foreground" />
+            <span className="min-w-0 flex-1 text-xs font-medium">
+              OAuth sign-in
+            </span>
+            {!oauth?.running ? (
+              <Button
+                disabled={oauthBusy}
+                onClick={() => void startOAuth()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {oauthBusy ? (
+                  <CircleDashed className="animate-spin" />
+                ) : (
+                  <LogIn />
+                )}
+                Sign in
+              </Button>
+            ) : (
+              <Button
+                onClick={() =>
+                  void cancelHermesOAuth(oauth.session_id!, profileId).then(
+                    () => setOauth(null),
+                  )
+                }
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
+          {oauth ? (
+            <>
+              {oauthUrl ? (
+                <Button
+                  onClick={() =>
+                    window.open(oauthUrl, "_blank", "noopener,noreferrer")
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <ExternalLink />
+                  Open sign-in page
+                </Button>
+              ) : null}
+              <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-md bg-background px-2.5 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                {oauth.output || "Starting sign-in…"}
+              </pre>
+              {oauth.running ? (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!oauthInput.trim()) return;
+                    void sendHermesOAuthInput(
+                      oauth.session_id!,
+                      oauthInput,
+                      profileId,
+                    ).then(setOauth);
+                    setOauthInput("");
+                  }}
+                >
+                  <Input
+                    className="h-8 flex-1 font-mono text-xs"
+                    onChange={(event) => setOauthInput(event.target.value)}
+                    placeholder="Paste authorization code or answer"
+                    value={oauthInput}
+                  />
+                  <Button disabled={!oauthInput.trim()} size="sm" type="submit">
+                    Send
+                  </Button>
+                </form>
+              ) : (
+                <p
+                  className={cn(
+                    "text-[10px]",
+                    oauth.exit_code === 0
+                      ? "text-[hsl(var(--success))]"
+                      : "text-destructive",
+                  )}
+                >
+                  {oauth.exit_code === 0
+                    ? "Sign-in complete"
+                    : oauth.error ||
+                      `Sign-in exited with code ${oauth.exit_code}`}
+                </p>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      <details className="rounded-lg border border-border/60 bg-muted/10">
+        <summary className="cursor-pointer px-3 py-2.5 text-xs font-medium">
+          Credential pool · {pool.length}
+        </summary>
+        <div className="space-y-2 border-t border-border/50 p-3">
+          {poolError ? (
+            <p className="text-[10px] text-destructive">{poolError}</p>
+          ) : null}
+          {pool.length ? (
+            <ul className="divide-y divide-border/50 rounded-lg border border-border/50 bg-background">
+              {pool.map((entry) => (
+                <li
+                  className="flex items-center gap-2 px-2.5 py-2 text-[10px]"
+                  key={`${entry.index}:${entry.id}`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {entry.label || entry.source || `Key ${entry.index}`}
+                    </span>
+                    <span className="font-mono text-muted-foreground">
+                      {entry.token_preview} · {entry.request_count} requests
+                      {entry.last_status ? ` · ${entry.last_status}` : ""}
+                    </span>
+                  </span>
+                  <Button
+                    className="text-destructive hover:text-destructive"
+                    disabled={poolBusy}
+                    onClick={() =>
+                      void (async () => {
+                        if (
+                          !confirm(
+                            `Remove credential “${entry.label || entry.index}”?`,
+                          )
+                        )
+                          return;
+                        setPoolBusy(true);
+                        const result = await removeHermesCredentialPoolEntry(
+                          provider,
+                          entry.index,
+                          profileId,
+                        );
+                        setPoolBusy(false);
+                        if (!result.ok)
+                          setPoolError(result.error || "Remove failed");
+                        else await refreshPool();
+                      })()
+                    }
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Trash2 />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">
+              No rotating credentials for this provider.
+            </p>
+          )}
+          <div className="grid gap-2 sm:grid-cols-[140px_1fr_auto]">
+            <Input
+              className="h-8 text-xs"
+              onChange={(event) => setPoolLabel(event.target.value)}
+              placeholder="Label"
+              value={poolLabel}
+            />
+            <Input
+              autoComplete="off"
+              className="h-8 font-mono text-xs"
+              onChange={(event) => setPoolKey(event.target.value)}
+              placeholder="Additional API key"
+              type="password"
+              value={poolKey}
+            />
+            <Button
+              disabled={poolBusy || !poolKey.trim()}
+              onClick={() =>
+                void (async () => {
+                  setPoolBusy(true);
+                  setPoolError(null);
+                  const result = await addHermesCredentialPoolEntry(
+                    provider,
+                    poolKey,
+                    poolLabel,
+                    profileId,
+                  );
+                  setPoolBusy(false);
+                  if (!result.ok) setPoolError(result.error || "Add failed");
+                  else {
+                    setPoolKey("");
+                    setPoolLabel("");
+                    await refreshPool();
+                  }
+                })()
+              }
+              size="sm"
+              type="button"
+            >
+              <Plus />
+              Add
+            </Button>
+          </div>
+        </div>
+      </details>
 
       {secretFields.length > 0 ? (
         <div>

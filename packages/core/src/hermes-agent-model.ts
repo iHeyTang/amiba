@@ -229,6 +229,163 @@ export interface HermesProviderCredentialsResponse {
   };
 }
 
+export interface HermesOAuthSession {
+  ok: boolean;
+  error?: string;
+  session_id?: string;
+  provider?: string;
+  running?: boolean;
+  exit_code?: number | null;
+  output?: string;
+  started_at?: number;
+}
+
+async function oauthRequest(
+  path: string,
+  init: RequestInit,
+  profileId?: string,
+): Promise<HermesOAuthSession> {
+  try {
+    const response = await backplaneFetch(profileUrl(path, profileId), init);
+    const data = (await response
+      .json()
+      .catch(() => null)) as HermesOAuthSession | null;
+    if (!response.ok || data?.ok === false)
+      return { ok: false, error: data?.error || `HTTP ${response.status}` };
+    return { ...(data ?? {}), ok: true };
+  } catch (error) {
+    return { ok: false, error: String((error as Error)?.message || error) };
+  }
+}
+
+export function startHermesOAuth(provider: string, profileId?: string) {
+  return oauthRequest(
+    `/hermes/providers/oauth/${encodeURIComponent(provider)}/start`,
+    { method: "POST" },
+    profileId,
+  );
+}
+
+export function getHermesOAuthSession(sessionId: string, profileId?: string) {
+  return oauthRequest(
+    `/hermes/providers/oauth/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "GET" },
+    profileId,
+  );
+}
+
+export function sendHermesOAuthInput(
+  sessionId: string,
+  input: string,
+  profileId?: string,
+) {
+  return oauthRequest(
+    `/hermes/providers/oauth/sessions/${encodeURIComponent(sessionId)}/input`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input }),
+    },
+    profileId,
+  );
+}
+
+export function cancelHermesOAuth(sessionId: string, profileId?: string) {
+  return oauthRequest(
+    `/hermes/providers/oauth/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+    profileId,
+  );
+}
+
+export interface HermesCredentialPoolEntry {
+  index: number;
+  id?: string;
+  label?: string;
+  auth_type?: string;
+  source?: string;
+  priority: number;
+  last_status?: string | null;
+  request_count: number;
+  token_preview: string;
+  has_refresh: boolean;
+}
+
+export async function getHermesCredentialPool(
+  provider: string,
+  profileId?: string,
+): Promise<{
+  ok: boolean;
+  entries: HermesCredentialPoolEntry[];
+  error?: string;
+}> {
+  try {
+    const response = await backplaneFetch(
+      profileUrl(
+        `/hermes/credentials/pool?provider=${encodeURIComponent(provider)}`,
+        profileId,
+      ),
+    );
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      providers?: Array<{
+        provider: string;
+        entries: HermesCredentialPoolEntry[];
+      }>;
+      error?: string;
+    } | null;
+    if (!response.ok || data?.ok === false)
+      return {
+        ok: false,
+        entries: [],
+        error: data?.error || `HTTP ${response.status}`,
+      };
+    return {
+      ok: true,
+      entries:
+        data?.providers?.find((item) => item.provider === provider)?.entries ??
+        [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      entries: [],
+      error: String((error as Error)?.message || error),
+    };
+  }
+}
+
+export async function addHermesCredentialPoolEntry(
+  provider: string,
+  apiKey: string,
+  label: string,
+  profileId?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const result = await oauthRequest(
+    "/hermes/credentials/pool",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, api_key: apiKey, label }),
+    },
+    profileId,
+  );
+  return { ok: result.ok, error: result.error };
+}
+
+export async function removeHermesCredentialPoolEntry(
+  provider: string,
+  index: number,
+  profileId?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const result = await oauthRequest(
+    `/hermes/credentials/pool/${encodeURIComponent(provider)}/${index}`,
+    { method: "DELETE" },
+    profileId,
+  );
+  return { ok: result.ok, error: result.error };
+}
+
 /** Per-provider model list resolved from `/hermes/provider-models`. */
 export interface HermesProviderModelsResponse {
   ok: boolean;

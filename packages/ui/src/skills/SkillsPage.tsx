@@ -5,7 +5,11 @@ import {
   Folder,
   FolderOpen,
   Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -31,7 +35,14 @@ import {
   getHermesSkills,
   getHermesSkillFiles,
   getHermesSkillFile,
+  createHermesSkill,
+  deleteHermesSkill,
+  installHermesSkill,
   postHermesSkillToggle,
+  searchHermesSkillHub,
+  uninstallHermesHubSkill,
+  updateHermesSkill,
+  updateHermesSkills,
 } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 import type {
@@ -40,6 +51,7 @@ import type {
   HermesSkillFileResponse,
   HermesSkillsResponse,
   HermesSkillOrigin,
+  HermesSkillHubResult,
 } from "@amiba/core";
 
 const ALL_KEY = "__all__";
@@ -151,11 +163,17 @@ function SkillRow({
   onView,
   onToggle,
   toggling,
+  onEdit,
+  onRemove,
+  onUpdate,
 }: {
   skill: HermesSkillEntry;
   onView: (skill: HermesSkillEntry) => void;
   onToggle: (skill: HermesSkillEntry, next: boolean) => void;
   toggling: boolean;
+  onEdit: (skill: HermesSkillEntry) => void;
+  onRemove: (skill: HermesSkillEntry) => void;
+  onUpdate: (skill: HermesSkillEntry) => void;
 }) {
   const { t } = useT();
   const origin = originMeta(skill.origin, t);
@@ -225,11 +243,46 @@ function SkillRow({
         {origin.label}
       </span>
       <div
-        className="flex shrink-0 items-center"
+        className="flex shrink-0 items-center gap-1"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         title={toggleTooltip}
       >
+        {skill.origin === "hub" ? (
+          <Button
+            disabled={toggling}
+            onClick={() => onUpdate(skill)}
+            size="icon"
+            title="Update skill"
+            variant="ghost"
+          >
+            <RefreshCw className={cn(toggling && "animate-spin")} />
+          </Button>
+        ) : skill.origin === "manual" || skill.origin === "agent" ? (
+          <Button
+            disabled={toggling}
+            onClick={() => onEdit(skill)}
+            size="icon"
+            title="Edit skill"
+            variant="ghost"
+          >
+            <Pencil />
+          </Button>
+        ) : null}
+        {skill.origin === "hub" ||
+        skill.origin === "manual" ||
+        skill.origin === "agent" ? (
+          <Button
+            className="text-destructive hover:text-destructive"
+            disabled={toggling}
+            onClick={() => onRemove(skill)}
+            size="icon"
+            title="Delete skill"
+            variant="ghost"
+          >
+            <Trash2 />
+          </Button>
+        ) : null}
         <Switch
           aria-label={toggleTooltip}
           checked={skill.enabled}
@@ -716,6 +769,10 @@ export function SkillsPage({
     () => new Set(),
   );
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [manager, setManager] = useState<
+    "hub" | "create" | HermesSkillEntry | null
+  >(null);
+  const [managingName, setManagingName] = useState<string | null>(null);
 
   const toggleOrigin = useCallback((o: HermesSkillOrigin) => {
     setOriginFilter((prev) => {
@@ -871,6 +928,36 @@ export function SkillsPage({
 
   const hasAnyChipFilter = originFilter.size + enabledFilter.size > 0;
 
+  const handleRemove = useCallback(
+    async (skill: HermesSkillEntry) => {
+      if (!confirm(`Delete skill “${skill.name}”?`)) return;
+      setManagingName(skill.name);
+      setToggleError(null);
+      const result =
+        skill.origin === "hub"
+          ? await uninstallHermesHubSkill(skill.name, profileId)
+          : await deleteHermesSkill(skill.name, profileId);
+      setManagingName(null);
+      if (!result.ok)
+        setToggleError(`${skill.name}: ${result.error || "Delete failed"}`);
+      else await refresh();
+    },
+    [profileId, refresh],
+  );
+
+  const handleUpdate = useCallback(
+    async (skill: HermesSkillEntry) => {
+      setManagingName(skill.name);
+      setToggleError(null);
+      const result = await updateHermesSkills(skill.name, profileId);
+      setManagingName(null);
+      if (!result.ok)
+        setToggleError(`${skill.name}: ${result.error || "Update failed"}`);
+      else await refresh();
+    },
+    [profileId, refresh],
+  );
+
   const currentBucket = useMemo(
     () => buckets.find((b) => b.key === category),
     [buckets, category],
@@ -928,6 +1015,59 @@ export function SkillsPage({
             title={showPageTitle ? t("options.nav.skills") : undefined}
             bodyClassName="space-y-4"
           >
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                onClick={() => setManager(manager === "hub" ? null : "hub")}
+                size="sm"
+                variant="outline"
+              >
+                <Search />
+                Browse Hub
+              </Button>
+              <Button
+                onClick={() =>
+                  setManager(manager === "create" ? null : "create")
+                }
+                size="sm"
+                variant="outline"
+              >
+                <Plus />
+                Create skill
+              </Button>
+              <Button
+                onClick={() =>
+                  void (async () => {
+                    setManagingName("__all__");
+                    const result = await updateHermesSkills(
+                      undefined,
+                      profileId,
+                    );
+                    setManagingName(null);
+                    if (!result.ok)
+                      setToggleError(result.error || "Update failed");
+                    else await refresh();
+                  })()
+                }
+                size="sm"
+                variant="ghost"
+              >
+                <RefreshCw
+                  className={cn(managingName === "__all__" && "animate-spin")}
+                />
+                Update all
+              </Button>
+            </div>
+            {manager ? (
+              <SkillManagerPanel
+                mode={manager}
+                onCancel={() => setManager(null)}
+                onChanged={async () => {
+                  setManager(null);
+                  await refresh();
+                }}
+                profileId={profileId}
+              />
+            ) : null}
             {error && <p className="text-xs text-destructive">{error}</p>}
             {toggleError && (
               <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">
@@ -1109,7 +1249,12 @@ export function SkillsPage({
                     skill={s}
                     onView={setViewingSkill}
                     onToggle={handleToggle}
-                    toggling={togglingNames.has(s.name)}
+                    toggling={
+                      togglingNames.has(s.name) || managingName === s.name
+                    }
+                    onEdit={setManager}
+                    onRemove={(skill) => void handleRemove(skill)}
+                    onUpdate={(skill) => void handleUpdate(skill)}
                   />
                 ))}
               </ul>
@@ -1123,6 +1268,197 @@ export function SkillsPage({
         onClose={() => setViewingSkill(null)}
       />
     </div>
+  );
+}
+
+function SkillManagerPanel({
+  mode,
+  profileId,
+  onCancel,
+  onChanged,
+}: {
+  mode: "hub" | "create" | HermesSkillEntry;
+  profileId?: string;
+  onCancel: () => void;
+  onChanged: () => void | Promise<void>;
+}) {
+  const editing = typeof mode === "object" ? mode : null;
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<HermesSkillHubResult[]>([]);
+  const [name, setName] = useState(editing?.name ?? "");
+  const [category, setCategory] = useState(editing?.category ?? "");
+  const [content, setContent] = useState(
+    editing ? "" : "---\nname: \ndescription: \n---\n\n# Instructions\n\n",
+  );
+  const [busy, setBusy] = useState<string | null>(editing ? "__load__" : null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    void getHermesSkillFile(editing.name, "SKILL.md", profileId).then(
+      (result) => {
+        if (cancelled) return;
+        setBusy(null);
+        if (!result.ok || result.content == null)
+          setError(result.error || "Could not load SKILL.md");
+        else setContent(result.content);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, profileId]);
+
+  async function searchHub(event: React.FormEvent) {
+    event.preventDefault();
+    if (!query.trim()) return;
+    setBusy("__search__");
+    setError(null);
+    const response = await searchHermesSkillHub(query.trim(), profileId);
+    setBusy(null);
+    if (!response.ok) setError(response.error || "Hub search failed");
+    else setResults(response.results);
+  }
+
+  async function install(result: HermesSkillHubResult) {
+    setBusy(result.identifier);
+    setError(null);
+    const response = await installHermesSkill(result.identifier, profileId);
+    setBusy(null);
+    if (!response.ok) setError(response.error || "Install failed");
+    else await onChanged();
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy("__save__");
+    setError(null);
+    const response = editing
+      ? await updateHermesSkill(editing.name, content, profileId)
+      : await createHermesSkill(
+          {
+            name: name.trim(),
+            category: category.trim() || undefined,
+            content,
+          },
+          profileId,
+        );
+    setBusy(null);
+    if (!response.ok) setError(response.error || "Save failed");
+    else await onChanged();
+  }
+
+  if (mode === "hub") {
+    return (
+      <section className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-3">
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => void searchHub(event)}
+        >
+          <Input
+            autoFocus
+            className="h-8 flex-1"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search Skills Hub"
+            value={query}
+          />
+          <Button
+            disabled={!query.trim() || busy === "__search__"}
+            size="sm"
+            type="submit"
+          >
+            {busy === "__search__" ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Search />
+            )}
+            Search
+          </Button>
+          <Button onClick={onCancel} size="sm" type="button" variant="ghost">
+            <X />
+          </Button>
+        </form>
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {results.length ? (
+          <ul className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50 bg-background">
+            {results.map((result) => (
+              <li
+                className="flex items-center gap-3 px-3 py-2.5"
+                key={result.identifier}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{result.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {result.description || result.identifier}
+                  </p>
+                </div>
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {result.trust_level}
+                </span>
+                <Button
+                  disabled={!!busy}
+                  onClick={() => void install(result)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {busy === result.identifier ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Plus />
+                  )}
+                  Install
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : query && busy !== "__search__" ? (
+          <p className="text-xs text-muted-foreground">No hub results</p>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-3"
+      onSubmit={(event) => void save(event)}
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Input
+          disabled={!!editing}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Skill name"
+          value={name}
+        />
+        <Input
+          disabled={!!editing}
+          onChange={(event) => setCategory(event.target.value)}
+          placeholder="Category (optional)"
+          value={category ?? ""}
+        />
+      </div>
+      <textarea
+        className="min-h-64 w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+        disabled={busy === "__load__"}
+        onChange={(event) => setContent(event.target.value)}
+        spellCheck={false}
+        value={content}
+      />
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button onClick={onCancel} type="button" variant="ghost">
+          Cancel
+        </Button>
+        <Button
+          disabled={!!busy || !content.trim() || (!editing && !name.trim())}
+          type="submit"
+        >
+          {busy ? <Loader2 className="animate-spin" /> : null}
+          {editing ? "Save changes" : "Create skill"}
+        </Button>
+      </div>
+    </form>
   );
 }
 

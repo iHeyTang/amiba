@@ -9,10 +9,25 @@
  * down and we filter accordingly.
  */
 
-import { Pencil, Trash2 } from "lucide-react";
 import {
+  Archive,
+  ArchiveRestore,
+  CheckSquare,
+  Download,
+  GitBranch,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -20,7 +35,14 @@ import {
 
 import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
-import { Input, cn } from "../primitives";
+import {
+  Input,
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+  cn,
+} from "../primitives";
 import { TopSection } from "./SessionGroups";
 
 const HISTORY_PAGE_SIZE = 20;
@@ -35,6 +57,15 @@ export interface SessionsListViewProps {
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onPin?: (id: string, pinned: boolean) => void | Promise<void>;
+  onArchive?: (id: string, archived: boolean) => void | Promise<void>;
+  onBranch?: (id: string) => void | Promise<void>;
+  onExport?: (id: string) => void | Promise<void>;
+  onImport?: (file: File) => void | Promise<void>;
+  onBulkAction?: (
+    ids: string[],
+    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  ) => void | Promise<void>;
   /**
    * Fired once on mount so the host can re-fetch the underlying index —
    * multi-channel rows authored elsewhere (gateway / CLI / cron) appear
@@ -89,6 +120,12 @@ export function SessionsListView({
   onOpen,
   onRename,
   onDelete,
+  onPin,
+  onArchive,
+  onBranch,
+  onExport,
+  onImport,
+  onBulkAction,
   onRefresh,
   emptyLabel,
   noMatchesLabel,
@@ -105,6 +142,33 @@ export function SessionsListView({
   allowActionsFor,
 }: SessionsListViewProps) {
   const { t } = useT();
+  const [showArchived, setShowArchived] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const leaveSelection = useCallback(() => {
+    setSelecting(false);
+    setSelected(new Set());
+  }, []);
+
+  const runBulk = useCallback(
+    async (action: "archive" | "unarchive" | "pin" | "unpin" | "delete") => {
+      if (!onBulkAction || selected.size === 0) return;
+      await onBulkAction(Array.from(selected), action);
+      leaveSelection();
+    },
+    [leaveSelection, onBulkAction, selected],
+  );
 
   useEffect(() => {
     if (onRefresh) void onRefresh();
@@ -120,7 +184,7 @@ export function SessionsListView({
    */
   const channelSections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const live = sessions.filter((s) => !s.archived);
+    const live = sessions.filter((s) => Boolean(s.archived) === showArchived);
     const matching = q
       ? live.filter((s) =>
           (s.title || t("chat.untitled")).toLowerCase().includes(q),
@@ -139,7 +203,11 @@ export function SessionsListView({
     // to enforce it explicitly — keep the guarantee now that the flat
     // render order alone determines the user-visible sequence.
     for (const arr of bySource.values()) {
-      arr.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+      arr.sort(
+        (a, b) =>
+          Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+          (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+      );
     }
 
     const sections: {
@@ -198,7 +266,7 @@ export function SessionsListView({
       }
     }
     return sections;
-  }, [sessions, query, t, sectionLabelFor, groupKeyFor, sectionOrder]);
+  }, [sessions, query, t, sectionLabelFor, groupKeyFor, sectionOrder, showArchived]);
 
   const totalMatching = useMemo(
     () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
@@ -234,6 +302,40 @@ export function SessionsListView({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      {(sessions.some((session) => session.archived) || onBulkAction || onImport) ? (
+        <div className="sticky top-0 z-10 flex min-h-8 items-center gap-1 bg-background/95 px-1 py-1 backdrop-blur">
+          {selecting ? (
+            <>
+              <span className="min-w-0 flex-1 truncate px-1 text-[10px] text-muted-foreground">
+                {t("sidepanel.sessions.selected", { count: selected.size })}
+              </span>
+              <BulkButton label={t("sidepanel.sessions.pin")} icon={<Pin />} disabled={!selected.size} onClick={() => void runBulk("pin")} />
+              <BulkButton label={showArchived ? t("sidepanel.sessions.unarchive") : t("sidepanel.sessions.archive")} icon={showArchived ? <ArchiveRestore /> : <Archive />} disabled={!selected.size} onClick={() => void runBulk(showArchived ? "unarchive" : "archive")} />
+              <BulkButton label={t("chat.delete")} icon={<Trash2 />} destructive disabled={!selected.size} onClick={() => {
+                if (confirm(t("sidepanel.sessions.bulkDeleteConfirm", { count: selected.size }))) void runBulk("delete");
+              }} />
+              <BulkButton label={t("common.cancel")} icon={<X />} onClick={leaveSelection} />
+            </>
+          ) : (
+            <>
+              {sessions.some((session) => session.archived) ? (
+                <div className="flex rounded-full bg-muted/70 p-0.5 text-[10px]">
+                  <button type="button" className={cn("rounded-full px-2 py-0.5", !showArchived && "bg-background text-foreground shadow-sm")} onClick={() => setShowArchived(false)}>{t("sidepanel.sessions.active")}</button>
+                  <button type="button" className={cn("rounded-full px-2 py-0.5", showArchived && "bg-background text-foreground shadow-sm")} onClick={() => setShowArchived(true)}>{t("sidepanel.sessions.archived")}</button>
+                </div>
+              ) : <span className="flex-1" />}
+              <span className="flex-1" />
+              {onImport ? <BulkButton label={t("sidepanel.sessions.import")} icon={<Upload />} onClick={() => fileInputRef.current?.click()} /> : null}
+              {onBulkAction ? <BulkButton label={t("sidepanel.sessions.select")} icon={<CheckSquare />} onClick={() => setSelecting(true)} /> : null}
+              <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file && onImport) void onImport(file);
+              }} />
+            </>
+          )}
+        </div>
+      ) : null}
       {totalMatching === 0 ? (
         showSectionHeaders ? (
           <TopSection
@@ -282,6 +384,13 @@ export function SessionsListView({
                     onOpen={() => onOpen(s.id)}
                     onRename={(title) => onRename(s.id, title)}
                     onDelete={() => onDelete(s.id)}
+                    onPin={onPin ? (pinned) => onPin(s.id, pinned) : undefined}
+                    onArchive={onArchive ? (archived) => onArchive(s.id, archived) : undefined}
+                    onBranch={onBranch ? () => onBranch(s.id) : undefined}
+                    onExport={onExport ? () => onExport(s.id) : undefined}
+                    selecting={selecting}
+                    selected={selected.has(s.id)}
+                    onToggleSelected={() => toggleSelected(s.id)}
                     icon={rowIconFor?.(s)}
                     nested={indentRows}
                     allowActions={allowActionsFor?.(s) ?? true}
@@ -332,6 +441,13 @@ interface SessionRowProps {
   onOpen: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
+  onPin?: (pinned: boolean) => void | Promise<void>;
+  onArchive?: (archived: boolean) => void | Promise<void>;
+  onBranch?: () => void | Promise<void>;
+  onExport?: () => void | Promise<void>;
+  selecting: boolean;
+  selected: boolean;
+  onToggleSelected: () => void;
   icon?: ReactNode;
   nested?: boolean;
   allowActions: boolean;
@@ -345,6 +461,13 @@ function SessionRow({
   onOpen,
   onRename,
   onDelete,
+  onPin,
+  onArchive,
+  onBranch,
+  onExport,
+  selecting,
+  selected,
+  onToggleSelected,
   icon,
   nested,
   allowActions,
@@ -436,12 +559,17 @@ function SessionRow({
       ) : null}
       <button
         type="button"
-        onClick={onOpen}
+        onClick={selecting ? onToggleSelected : onOpen}
         className={cn(
           "flex h-full min-w-0 flex-1 items-center gap-2 pr-2 text-left focus-visible:outline-none",
           nested ? "pl-8" : "pl-2",
         )}
       >
+        {selecting ? (
+          <span className={cn("inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-border", selected && "border-foreground bg-foreground text-background")}>
+            {selected ? <CheckSquare className="h-3 w-3" /> : null}
+          </span>
+        ) : null}
         {!nested && statusLabel ? (
           <span
             aria-label={statusLabel}
@@ -458,8 +586,9 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
+        {session.pinned && !selecting ? <Pin className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
       </button>
-      {allowActions ? (
+      {allowActions && !selecting ? (
         <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
@@ -473,26 +602,61 @@ function SessionRow({
           >
             <Pencil className="h-3 w-3" />
           </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (
-                confirm(
-                  `Delete "${session.title?.trim() || "this chat"}"? This removes it from history.`,
-                )
-              ) {
-                onDelete();
-              }
-            }}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
-            title={t("chat.delete")}
-            aria-label={t("chat.delete")}
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" onClick={(event) => event.stopPropagation()} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground" title={t("workspacePane.moreActions")} aria-label={t("workspacePane.moreActions")}><MoreHorizontal className="h-3.5 w-3.5" /></button>
+            </PopoverTrigger>
+            <PopoverContent align="end" size="narrow" padding="sm" className="space-y-0.5">
+              {onPin ? <PopoverClose asChild><SessionMenuButton icon={session.pinned ? <PinOff /> : <Pin />} label={session.pinned ? t("sidepanel.sessions.unpin") : t("sidepanel.sessions.pin")} onClick={() => void onPin(!session.pinned)} /></PopoverClose> : null}
+              {onArchive ? <PopoverClose asChild><SessionMenuButton icon={session.archived ? <ArchiveRestore /> : <Archive />} label={session.archived ? t("sidepanel.sessions.unarchive") : t("sidepanel.sessions.archive")} onClick={() => void onArchive(!session.archived)} /></PopoverClose> : null}
+              {onBranch ? <PopoverClose asChild><SessionMenuButton icon={<GitBranch />} label={t("sidepanel.sessions.branch")} onClick={() => void onBranch()} /></PopoverClose> : null}
+              {onExport ? <PopoverClose asChild><SessionMenuButton icon={<Download />} label={t("sidepanel.sessions.export")} onClick={() => void onExport()} /></PopoverClose> : null}
+              <PopoverClose asChild><SessionMenuButton destructive icon={<Trash2 />} label={t("chat.delete")} onClick={() => {
+                if (confirm(t("sidepanel.sessions.deleteConfirm", { title: session.title?.trim() || t("chat.untitled") }))) onDelete();
+              }} /></PopoverClose>
+            </PopoverContent>
+          </Popover>
         </span>
       ) : null}
     </div>
+  );
+}
+
+function BulkButton({
+  label,
+  icon,
+  disabled,
+  destructive,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={cn("inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:h-3.5 [&_svg]:w-3.5", destructive && "hover:bg-destructive/10 hover:text-destructive")}>
+      {icon}
+    </button>
+  );
+}
+
+function SessionMenuButton({
+  icon,
+  label,
+  destructive,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={(event) => { event.stopPropagation(); onClick(); }} className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-foreground/80 hover:bg-accent", destructive && "text-destructive hover:bg-destructive/10")}>
+      <span className="[&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>
+      <span>{label}</span>
+    </button>
   );
 }

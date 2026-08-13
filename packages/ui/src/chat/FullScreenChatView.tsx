@@ -592,6 +592,16 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
+  const onOpenAgentSession = useCallback(
+    async (id: string) => {
+      if (!sessions.ready) return;
+      await sessions.refresh();
+      await sessions.openTab(id);
+      onSidebarViewChange("chats");
+    },
+    [sessions, onSidebarViewChange],
+  );
+
   // Scheduled runs live in History, not in the registered-task workspace.
   // Opening one behaves like opening any other conversation output.
   const onOpenRun = useCallback(
@@ -675,6 +685,47 @@ function FullScreenChatViewInner({
             onOpenSession={(id) => void onOpenSession(id)}
             onRenameSession={(id, title) => void sessions.rename(id, title)}
             onDeleteSession={(id) => void sessions.remove(id)}
+            onPinSession={(id, pinned) => sessions.setPinned(id, pinned)}
+            onArchiveSession={(id, archived) => sessions.setArchived(id, archived)}
+            onBranchSession={async (id) => {
+              await sessions.branchSession(id);
+            }}
+            onExportSession={async (id) => {
+              try {
+                const payload = await sessions.exportSession(id);
+                const title = sessions.sessions.find((item) => item.id === id)?.title || "task";
+                const filename = `${title.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 60) || "task"}.amiba-session.json`;
+                const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = filename;
+                anchor.click();
+                URL.revokeObjectURL(url);
+              } catch (error) {
+                window.alert(error instanceof Error ? error.message : String(error));
+              }
+            }}
+            onImportSessions={async (file) => {
+              try {
+                const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+                const rawSession = parsed.session;
+                let imports: Array<Record<string, unknown>>;
+                if (Array.isArray(parsed.sessions)) {
+                  imports = parsed.sessions.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+                } else if (rawSession && typeof rawSession === "object" && !Array.isArray(rawSession)) {
+                  const session = rawSession as Record<string, unknown>;
+                  imports = Array.isArray(session.segments)
+                    ? session.segments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+                    : [session];
+                } else {
+                  throw new Error(t("sidepanel.sessions.importInvalid"));
+                }
+                await sessions.importSessions(imports);
+              } catch (error) {
+                window.alert(error instanceof Error ? error.message : String(error));
+              }
+            }}
+            onBulkSessions={(ids, action) => sessions.bulkUpdate(ids, action)}
             onRefreshSessions={() => void sessions.refresh()}
             scheduledSessions={scheduled.runs}
             scheduledReady={scheduled.ready}
@@ -803,7 +854,11 @@ function FullScreenChatViewInner({
             </>
           ) : null}
         </div>
-        <WorkspacePane visible={sidebarView === "chats"} />
+        <WorkspacePane
+          visible={sidebarView === "chats"}
+          client={client}
+          onOpenSession={(id) => void onOpenAgentSession(id)}
+        />
         {sidebarView === "chats" && (
           <div
             data-workspace-edge-toggle
@@ -821,6 +876,7 @@ function FullScreenChatViewInner({
         onOpenSession={(id) => void onOpenSession(id)}
         onNewChat={() => void onNewChatAndShow()}
         onOpenSettings={() => openSettings()}
+        onSearchSessions={sessions.searchHistory}
       />
     </div>
   );

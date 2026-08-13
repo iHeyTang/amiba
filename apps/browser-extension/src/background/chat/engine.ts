@@ -123,6 +123,7 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
     toolCalls: [],
     hermesOrder: [],
     hermesToolProgress: [],
+    liveAgents: [],
     timeline: [],
     error: null,
     agentFinalUrl: null,

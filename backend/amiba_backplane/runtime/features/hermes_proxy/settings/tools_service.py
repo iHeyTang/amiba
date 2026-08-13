@@ -1193,10 +1193,121 @@ def list_installed_mcps() -> List[Dict[str, Any]]:
                 "installed": True,
                 "enabled": _mcp_is_enabled(server_cfg),
                 "transport_kind": _transport_kind(server_cfg),
+                "url": str(server_cfg.get("url") or ""),
+                "command": str(server_cfg.get("command") or ""),
+                "args": [str(item) for item in server_cfg.get("args", [])]
+                if isinstance(server_cfg.get("args"), list)
+                else [],
+                "cwd": str(server_cfg.get("cwd") or ""),
+                "env_keys": sorted((server_cfg.get("env") or {}).keys())
+                if isinstance(server_cfg.get("env"), dict)
+                else [],
+                "header_keys": sorted((server_cfg.get("headers") or {}).keys())
+                if isinstance(server_cfg.get("headers"), dict)
+                else [],
             }
         )
     out.sort(key=lambda row: row["slug"])
     return out
+
+
+def _valid_mcp_slug(slug: str) -> str:
+    value = str(slug or "").strip()
+    if not value or len(value) > 128 or not all(
+        character.isalnum() or character in "._-" for character in value
+    ):
+        raise ValueError("invalid MCP server name")
+    return value
+
+
+def save_mcp_server(slug: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and persist a renderer-authored MCP server definition."""
+    name = _valid_mcp_slug(slug)
+    url = str(payload.get("url") or "").strip()
+    command = str(payload.get("command") or "").strip()
+    if bool(url) == bool(command):
+        raise ValueError("provide exactly one of url or command")
+
+    existing_servers = _load_config().get("mcp_servers") or {}
+    existing = existing_servers.get(name) if isinstance(existing_servers, dict) else None
+    config: Dict[str, Any] = {
+        "enabled": bool(payload.get("enabled", True)),
+    }
+    config["url" if url else "command"] = url or command
+    for key in ("description", "cwd"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            config[key] = value.strip()
+    args = payload.get("args")
+    if isinstance(args, list) and all(isinstance(item, str) for item in args):
+        config["args"] = args
+    for key in ("env", "headers"):
+        value = payload.get(key)
+        if value is None and isinstance(existing, dict) and isinstance(existing.get(key), dict):
+            config[key] = existing[key]
+        elif isinstance(value, dict) and all(
+            isinstance(item_key, str) and isinstance(item_value, str)
+            for item_key, item_value in value.items()
+        ):
+            config[key] = value
+        elif value is not None:
+            raise ValueError(f"{key} must be an object of string values")
+    try:
+        from hermes_cli.mcp_security import validate_mcp_server_entry  # type: ignore
+
+        issues = validate_mcp_server_entry(name, config)
+        if issues:
+            raise ValueError("; ".join(issues))
+        from hermes_cli.mcp_config import _save_mcp_server  # type: ignore
+
+        if not _save_mcp_server(name, config):
+            raise ValueError("MCP configuration was rejected by the security validator")
+    except ImportError:
+        cfg = _load_config()
+        servers = cfg.setdefault("mcp_servers", {})
+        if not isinstance(servers, dict):
+            servers = {}
+            cfg["mcp_servers"] = servers
+        servers[name] = config
+        _save_config(cfg)
+    return {"ok": True, "slug": name}
+
+
+def remove_mcp_server(slug: str) -> Dict[str, Any]:
+    name = _valid_mcp_slug(slug)
+    try:
+        from hermes_cli.mcp_config import _remove_mcp_server  # type: ignore
+
+        removed = bool(_remove_mcp_server(name))
+    except ImportError:
+        cfg = _load_config()
+        servers = cfg.get("mcp_servers")
+        removed = isinstance(servers, dict) and servers.pop(name, None) is not None
+        if removed:
+            _save_config(cfg)
+    if not removed:
+        raise KeyError(name)
+    return {"ok": True, "slug": name, "removed": True}
+
+
+def test_mcp_server(slug: str) -> Dict[str, Any]:
+    name = _valid_mcp_slug(slug)
+    cfg = _load_config()
+    servers = cfg.get("mcp_servers") if isinstance(cfg, dict) else None
+    server = servers.get(name) if isinstance(servers, dict) else None
+    if not isinstance(server, dict):
+        raise KeyError(name)
+    from hermes_cli.mcp_config import _probe_single_server  # type: ignore
+
+    details: Dict[str, Any] = {}
+    tools = _probe_single_server(name, server, connect_timeout=15, details=details)
+    return {
+        "ok": True,
+        "slug": name,
+        "tools": [{"name": tool, "description": description} for tool, description in tools],
+        "prompts": int(details.get("prompts") or 0),
+        "resources": int(details.get("resources") or 0),
+    }
 
 
 def get_installed_mcp_connection(slug: str) -> Dict[str, Any]:

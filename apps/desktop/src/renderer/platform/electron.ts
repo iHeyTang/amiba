@@ -70,11 +70,15 @@ export function createElectronAdapter(): PlatformAdapter {
     },
 
     workspaceFiles: {
+      list: (sessionId, path) => bridge.files.tree(sessionId, path),
+      search: (sessionId, query) => bridge.files.search(sessionId, query),
       read: (sessionId, path) => bridge.files.read(sessionId, path),
       reveal: (sessionId, path) => bridge.files.reveal(sessionId, path),
       openExternal: (sessionId, path) => bridge.files.openExternal(sessionId, path),
       watch: (sessionId, paths, listener) =>
         bridge.files.watch(sessionId, paths, listener)
-    }
+    },
+
+    workspaceDevelopment: bridge.workspaceDevelopment
   }
 }

@@ -110,7 +110,9 @@ describe("Hermes update logs", () => {
     expect(
       within(gatewayCard!).getByRole("button", { name: "Restart gateway" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Maintenance")).not.toBeInTheDocument();
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Doctor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Security" })).toBeInTheDocument();
     expect(screen.queryByText("gateway restarted")).not.toBeInTheDocument();
   });
 

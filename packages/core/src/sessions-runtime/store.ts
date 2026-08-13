@@ -63,6 +63,7 @@ import {
   type HermesMessage,
   type HermesSession,
   listHermesSessions,
+  searchHermesSessions,
   secToMs,
   updateHermesSession,
 } from "../hermes-sessions";
@@ -134,6 +135,8 @@ function pickLocalFields(s: SessionMeta): SessionLocalMeta {
   if (s.unread) out.unread = true;
   if (s.titleManual) out.titleManual = true;
   if (s.agent) out.agent = normalizeAgentContext(s.agent);
+  if (s.parentSessionId) out.parentSessionId = s.parentSessionId;
+  if (s.branchMessageId != null) out.branchMessageId = s.branchMessageId;
   return out;
 }
 
@@ -144,6 +147,8 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
     Boolean(a.unread) === Boolean(b.unread) &&
     Boolean(a.titleManual) === Boolean(b.titleManual) &&
     JSON.stringify(a.agent ?? null) === JSON.stringify(b.agent ?? null)
+    && a.parentSessionId === b.parentSessionId
+    && a.branchMessageId === b.branchMessageId
   );
 }
 
@@ -161,6 +166,20 @@ function hermesSessionToMeta(
   // with no messages yet.
   const createdAt = secToMs(s.started_at);
   const updatedAt = secToMs(s.last_active ?? s.started_at);
+  let modelConfig: Record<string, unknown> | undefined;
+  if (s.model_config && typeof s.model_config === "object") {
+    modelConfig = s.model_config;
+  } else if (typeof s.model_config === "string") {
+    try {
+      const parsed = JSON.parse(s.model_config) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        modelConfig = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Ignore malformed provenance metadata from legacy sessions.
+    }
+  }
+  const branchMessage = modelConfig?._branched_from_message;
   return {
     id: s.id,
     title: s.title ?? "",
@@ -168,8 +187,17 @@ function hermesSessionToMeta(
     updatedAt,
     messageCount: s.message_count ?? 0,
     preview: s.preview ?? undefined,
-    pinned: local?.pinned,
-    archived: local?.archived,
+    pinned: Boolean(s.pinned) || local?.pinned,
+    archived: Boolean(s.archived) || local?.archived,
+    parentSessionId:
+      (typeof modelConfig?._branched_from === "string"
+        ? modelConfig._branched_from
+        : s.parent_session_id) ?? local?.parentSessionId ?? undefined,
+    branchMessageId:
+      typeof branchMessage === "number"
+        ? branchMessage
+        : local?.branchMessageId,
+    searchSnippet: s.search_snippet ?? undefined,
     unread: local?.unread,
     titleManual: local?.titleManual,
     source: s.source,
@@ -373,6 +401,8 @@ export async function loadIndex(): Promise<SessionMeta[]> {
         limit: LIST_FETCH_PAGE,
         offset: 0,
         excludeSources: HIDDEN_SESSION_SOURCES,
+        includeArchived: true,
+        includePinned: true,
         profileId,
       }),
     })),
@@ -405,6 +435,39 @@ export async function loadIndex(): Promise<SessionMeta[]> {
   // Snapshot for diff-in-saveIndex.
   _lastSavedIndex = new Map(out.map((s) => [s.id, { ...s }]));
   return out;
+}
+
+/** Search every configured profile by title and transcript body. */
+export async function searchIndex(query: string): Promise<SessionMeta[]> {
+  const needle = query.trim();
+  if (!needle) return [];
+  const profileResult = await getHermesProfiles();
+  const profileIds = profileResult.ok
+    ? profileResult.profiles.map((profile) => profile.name)
+    : ["default"];
+  const [local, ...results] = await Promise.all([
+    readLocalMeta(),
+    ...profileIds.map((profileId) =>
+      searchHermesSessions(needle, { limit: 100, profileId }),
+    ),
+  ]);
+  const deduped = new Map<string, SessionMeta>();
+  results.forEach((response, index) => {
+    if (!response.ok) return;
+    const profileId = profileIds[index];
+    for (const session of response.sessions) {
+      if (HIDDEN_SESSION_SOURCES.includes(session.source)) continue;
+      if (!deduped.has(session.id)) {
+        deduped.set(
+          session.id,
+          hermesSessionToMeta(session, local[session.id], profileId),
+        );
+      }
+    }
+  });
+  return Array.from(deduped.values()).sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -444,14 +507,24 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
       } else {
         console.warn("[hermes-sessions] createHermesSession failed:", create);
       }
-    } else if ((cur.title || "") !== (prev.title || "")) {
-      // Title changed — PATCH. 409 means another session owns that
-      // title; surface as a warning but keep the local title (the user
-      // will see it un-synced; they can rename to resolve).
+    } else if (
+      (cur.title || "") !== (prev.title || "") ||
+      Boolean(cur.pinned) !== Boolean(prev.pinned) ||
+      Boolean(cur.archived) !== Boolean(prev.archived)
+    ) {
+      // User-managed session metadata changed — persist it atomically.
       const upd = await updateHermesSession(
         cur.id,
         {
-          title: cur.title || "",
+          ...((cur.title || "") !== (prev.title || "")
+            ? { title: cur.title || "" }
+            : {}),
+          ...(Boolean(cur.pinned) !== Boolean(prev.pinned)
+            ? { pinned: Boolean(cur.pinned) }
+            : {}),
+          ...(Boolean(cur.archived) !== Boolean(prev.archived)
+            ? { archived: Boolean(cur.archived) }
+            : {}),
         },
         cur.agent?.profileId,
       );
@@ -472,7 +545,9 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
         !desired.archived &&
         !desired.unread &&
         !desired.titleManual &&
-        !desired.agent
+        !desired.agent &&
+        !desired.parentSessionId &&
+        desired.branchMessageId == null
       ) {
         delete localMeta[cur.id];
       } else {

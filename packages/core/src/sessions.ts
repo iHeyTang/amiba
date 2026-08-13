@@ -18,6 +18,11 @@ export interface SessionMeta {
   updatedAt: number
   pinned?: boolean
   archived?: boolean
+  /** Branch provenance retained when this task was forked from another task. */
+  parentSessionId?: string
+  branchMessageId?: number
+  /** Matching transcript excerpt shown while searching task history. */
+  searchSnippet?: string
   /** Local viewer state; never written into Hermes SessionDB. */
   unread?: boolean
   /** Cached count so the sidebar doesn't have to load history just to count. */
@@ -58,6 +63,8 @@ export interface SessionLocalMeta {
   unread?: boolean
   titleManual?: boolean
   agent?: AgentExecutionContext
+  parentSessionId?: string
+  branchMessageId?: number
 }
 
 /**

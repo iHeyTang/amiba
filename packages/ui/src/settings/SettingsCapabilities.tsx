@@ -7,7 +7,6 @@ import { Button, PageContent, ScrollArea, cn } from "../primitives";
 import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import { PluginsTab } from "./PluginsTab";
 import { SettingsApplets, type SettingsAppletsHandle } from "./SettingsApplets";
-import { useStartAgentTask } from "./agent-task";
 
 type CapabilityTab = "applets" | "plugins" | "skills";
 
@@ -29,20 +28,12 @@ export function SettingsCapabilities({
   onExpandSidebar,
 }: SettingsCapabilitiesProps = {}) {
   const { t } = useT();
-  const startAgentTask = useStartAgentTask();
   const appletsRef = useRef<SettingsAppletsHandle>(null);
   const [tab, setTab] = useState<CapabilityTab>("applets");
   const [appletsRefreshing, setAppletsRefreshing] = useState(false);
 
   function selectTab(next: CapabilityTab) {
     setTab(next);
-  }
-
-  function installPlugin() {
-    if (!startAgentTask) return;
-    void startAgentTask(t("externalTools.plugin.addPrompt"), {
-      sourceApp: t("options.plugins.heading"),
-    });
   }
 
   return (
@@ -121,16 +112,6 @@ export function SettingsCapabilities({
                 {t("common.add")}
               </Button>
             </Fragment>
-          ) : tab === "plugins" && startAgentTask ? (
-            <Button
-              key="plugins-add-action"
-              size="sm"
-              className="h-7 gap-1.5 rounded-lg px-2.5 text-xs [&_svg]:size-3.5"
-              onClick={installPlugin}
-            >
-              <Plus />
-              {t("common.add")}
-            </Button>
           ) : null}
         </div>
       </header>
@@ -145,7 +126,7 @@ export function SettingsCapabilities({
       ) : tab === "plugins" ? (
         <ScrollArea className="min-h-0 flex-1">
           <PageContent title={t("options.plugins.heading")}>
-            <PluginsTab showAddAction={false} />
+            <PluginsTab />
           </PageContent>
         </ScrollArea>
       ) : (

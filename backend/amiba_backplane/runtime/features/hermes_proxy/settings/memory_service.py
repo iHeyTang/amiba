@@ -139,3 +139,21 @@ def read_memory_entries(target: str) -> Dict[str, Any]:
 
 def read_memory_entries_response(target: str) -> Dict[str, Any]:
     return {"ok": True, **read_memory_entries(target)}
+
+
+def reset_memory(target: str) -> Dict[str, Any]:
+    value = str(target or "all").strip().lower()
+    if value not in {"all", *MEMORY_TARGETS}:
+        raise ValueError("target must be all, memory, or user")
+    targets = MEMORY_TARGETS if value == "all" else (value,)
+    deleted: List[str] = []
+    for item in targets:
+        path = _path_for(item)
+        try:
+            path.unlink()
+            deleted.append(path.name)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise OSError(f"failed to reset {path}: {exc}") from exc
+    return {"ok": True, "deleted": deleted}

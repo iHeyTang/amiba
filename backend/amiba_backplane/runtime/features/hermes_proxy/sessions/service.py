@@ -76,6 +76,8 @@ def list_sessions_response(
     offset: int = 0,
     source: Optional[str] = None,
     exclude_sources: Optional[list] = None,
+    include_archived: bool = False,
+    include_pinned: bool = True,
 ) -> Dict[str, Any]:
     """List sessions, optionally filtered by ``source``.
 
@@ -99,6 +101,9 @@ def list_sessions_response(
             kwargs["source"] = source
         if exclude_sources:
             kwargs["exclude_sources"] = list(exclude_sources)
+        kwargs["include_archived"] = include_archived
+        kwargs["include_pinned"] = include_pinned
+        kwargs["order_by_last_active"] = True
         sessions = db.list_sessions_rich(**kwargs)
         total = db.session_count(source=source) if source else db.session_count()
         now = time.time()
@@ -597,12 +602,12 @@ def trigger_auto_title_response(
 
 
 # ---------------------------------------------------------------------------
-# Update session (title only for now)
+# Update session metadata
 # ---------------------------------------------------------------------------
 
 
 def update_session_response(session_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
-    """Mutate session metadata. Today the only patchable field is ``title``.
+    """Mutate the user-managed title, pin, and archive flags.
 
     Routing maps the three failure cases distinctly:
     - ``title_conflict`` — another session owns that title → 409
@@ -631,10 +636,315 @@ def update_session_response(session_id: str, body: Dict[str, Any]) -> Dict[str, 
                 kind = "title_conflict" if "already in use" in msg else "invalid_title"
                 return {"ok": False, "error": msg, "kind": kind}
 
+        if "pinned" in body:
+            pinned = body["pinned"]
+            if not isinstance(pinned, bool):
+                return {"ok": False, "error": "pinned must be a boolean"}
+            db.set_session_pinned(sid, pinned)
+
+        if "archived" in body:
+            archived = body["archived"]
+            if not isinstance(archived, bool):
+                return {"ok": False, "error": "archived must be a boolean"}
+            db.set_session_archived(sid, archived)
+
         session = db.get_session(sid)
         return {"ok": True, "session": session}
     except Exception as exc:
         logger.exception("update_session failed (id=%s)", session_id)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Search, branch, rewind, and portability
+# ---------------------------------------------------------------------------
+
+
+def search_sessions_response(
+    query: str,
+    limit: int = 50,
+    include_archived: bool = False,
+) -> Dict[str, Any]:
+    """Search both session titles and message bodies.
+
+    SessionDB has separate optimized paths for title/id and transcript search.
+    This merges them into one stable result set and annotates body matches with
+    the matching message id/snippet so the UI can explain why a row matched.
+    """
+    needle = (query or "").strip()
+    if not needle:
+        return {"ok": True, "sessions": [], "total": 0}
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        title_rows = db.list_sessions_rich(
+            limit=limit,
+            offset=0,
+            search_query=needle,
+            order_by_last_active=True,
+            include_archived=include_archived,
+            include_pinned=True,
+        )
+        message_rows = db.search_messages(
+            needle,
+            limit=max(limit * 4, limit),
+            offset=0,
+            sort="newest",
+        )
+
+        results: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in title_rows:
+            sid = str(row.get("id") or "")
+            if sid and sid not in seen:
+                seen.add(sid)
+                results.append(dict(row))
+
+        for match in message_rows:
+            sid = str(match.get("session_id") or "")
+            if not sid or sid in seen:
+                continue
+            session = db.get_session(sid)
+            if not session:
+                continue
+            if bool(session.get("archived")) and not include_archived:
+                continue
+            enriched = dict(session)
+            enriched["last_active"] = match.get("timestamp") or session.get("started_at")
+            enriched["search_snippet"] = match.get("snippet") or match.get("content")
+            enriched["search_message_id"] = match.get("id")
+            seen.add(sid)
+            results.append(enriched)
+            if len(results) >= limit:
+                break
+
+        results.sort(
+            key=lambda item: float(item.get("last_active") or item.get("started_at") or 0),
+            reverse=True,
+        )
+        results = results[:limit]
+        return {"ok": True, "sessions": results, "total": len(results)}
+    except Exception as exc:
+        logger.exception("session search failed (query=%r)", needle)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+_BRANCH_MESSAGE_FIELDS = (
+    "role",
+    "content",
+    "tool_name",
+    "tool_calls",
+    "tool_call_id",
+    "token_count",
+    "finish_reason",
+    "reasoning",
+    "reasoning_content",
+    "reasoning_details",
+    "codex_reasoning_items",
+    "codex_message_items",
+    "platform_message_id",
+    "timestamp",
+    "api_content",
+    "display_kind",
+    "display_metadata",
+)
+
+
+def _unique_branch_title(db: Any, source_title: Optional[str]) -> str:
+    base = f"{(source_title or 'Task').strip()} (branch)"
+    for index in range(1, 100):
+        candidate = base if index == 1 else f"{base} {index}"
+        try:
+            # set_session_title performs the authoritative validation/unique check.
+            return candidate
+        except ValueError:
+            continue
+    return f"Branch {uuid.uuid4().hex[:8]}"
+
+
+def branch_session_response(session_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        sid: Optional[str] = db.resolve_session_id(session_id)
+        source_session = db.get_session(sid) if sid else None
+        if not sid or not source_session:
+            return {"ok": False, "error": "session not found"}
+
+        message_id = body.get("message_id")
+        if message_id is not None:
+            if not isinstance(message_id, int):
+                return {"ok": False, "error": "message_id must be an integer"}
+            if not any(m.get("id") == message_id for m in db.get_messages(sid)):
+                return {"ok": False, "error": "message not found"}
+
+        branch_id = uuid.uuid4().hex
+        marker: Dict[str, Any] = {"_branched_from": sid}
+        if message_id is not None:
+            marker["_branched_from_message"] = message_id
+        create_kwargs: Dict[str, Any] = {
+            "parent_session_id": sid,
+            "model_config": marker,
+        }
+        for key in ("model", "system_prompt", "user_id", "cwd", "git_branch", "git_repo_root"):
+            value = source_session.get(key)
+            if value is not None:
+                create_kwargs[key] = value
+        db.create_session(branch_id, source_session.get("source") or _DEFAULT_SOURCE, **create_kwargs)
+
+        requested_title = body.get("title")
+        title = requested_title.strip() if isinstance(requested_title, str) else _unique_branch_title(db, source_session.get("title"))
+        try:
+            db.set_session_title(branch_id, title)
+        except ValueError:
+            fallback = f"Branch {branch_id[:8]}"
+            db.set_session_title(branch_id, fallback)
+
+        copied = 0
+        for message in db.get_messages(sid):
+            if message_id is not None and int(message.get("id") or 0) > message_id:
+                break
+            kwargs = {
+                key: message.get(key)
+                for key in _BRANCH_MESSAGE_FIELDS
+                if message.get(key) is not None
+            }
+            if not kwargs.get("role"):
+                continue
+            db.append_message(branch_id, **kwargs)
+            copied += 1
+
+        return {
+            "ok": True,
+            "session": db.get_session(branch_id),
+            "provenance": {"session_id": sid, "message_id": message_id},
+            "copied_messages": copied,
+        }
+    except Exception as exc:
+        logger.exception("branch session failed (id=%s)", session_id)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+def rewind_session_response(session_id: str, message_id: Any) -> Dict[str, Any]:
+    if not isinstance(message_id, int):
+        return {"ok": False, "error": "message_id must be an integer"}
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        sid: Optional[str] = db.resolve_session_id(session_id)
+        if not sid:
+            return {"ok": False, "error": "session not found"}
+        result = db.rewind_to_message(sid, message_id)
+        return {"ok": True, "session_id": sid, **result}
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "kind": "invalid_message"}
+    except Exception as exc:
+        logger.exception("rewind session failed (id=%s)", session_id)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+def restore_session_response(session_id: str, since_message_id: Any) -> Dict[str, Any]:
+    if not isinstance(since_message_id, int):
+        return {"ok": False, "error": "since_message_id must be an integer"}
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        sid: Optional[str] = db.resolve_session_id(session_id)
+        if not sid:
+            return {"ok": False, "error": "session not found"}
+        restored = db.restore_rewound(sid, since_message_id)
+        return {"ok": True, "session_id": sid, "restored_count": restored}
+    except Exception as exc:
+        logger.exception("restore session failed (id=%s)", session_id)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+def export_session_response(session_id: str) -> Dict[str, Any]:
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        sid: Optional[str] = db.resolve_session_id(session_id)
+        exported = db.export_session_lineage(sid) if sid else None
+        if not exported:
+            return {"ok": False, "error": "session not found"}
+        return {"ok": True, "session": exported, "export_version": 1}
+    except Exception as exc:
+        logger.exception("export session failed (id=%s)", session_id)
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+def import_sessions_response(body: Dict[str, Any]) -> Dict[str, Any]:
+    payload = body.get("sessions")
+    if payload is None and isinstance(body.get("session"), dict):
+        payload = [body["session"]]
+    if not isinstance(payload, list):
+        return {"ok": False, "error": "sessions must be a list"}
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    try:
+        result = db.import_sessions(payload)
+        return {"ok": True, **result}
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "kind": "invalid_import"}
+    except Exception as exc:
+        logger.exception("session import failed")
+        return {"ok": False, "error": _unavailable_error(exc)}
+    finally:
+        db.close()
+
+
+def bulk_sessions_response(body: Dict[str, Any]) -> Dict[str, Any]:
+    session_ids = body.get("session_ids")
+    action = body.get("action")
+    if not isinstance(session_ids, list) or not session_ids or not all(isinstance(item, str) for item in session_ids):
+        return {"ok": False, "error": "session_ids must be a non-empty string list"}
+    if action not in {"archive", "unarchive", "pin", "unpin", "delete"}:
+        return {"ok": False, "error": "unsupported bulk action"}
+    db, err = _open_db()
+    if db is None:
+        return {"ok": False, "error": err}
+    changed: List[str] = []
+    failures: List[Dict[str, str]] = []
+    try:
+        for raw_id in session_ids[:200]:
+            sid = db.resolve_session_id(raw_id)
+            if not sid:
+                failures.append({"session_id": raw_id, "error": "session not found"})
+                continue
+            try:
+                if action == "delete":
+                    ok = db.delete_session(sid)
+                elif action in {"archive", "unarchive"}:
+                    ok = db.set_session_archived(sid, action == "archive")
+                else:
+                    ok = db.set_session_pinned(sid, action == "pin")
+                if ok:
+                    changed.append(sid)
+                else:
+                    failures.append({"session_id": sid, "error": "not changed"})
+            except Exception as exc:
+                failures.append({"session_id": sid, "error": str(exc)})
+        return {"ok": True, "changed": changed, "failures": failures}
+    except Exception as exc:
+        logger.exception("bulk session action failed")
         return {"ok": False, "error": _unavailable_error(exc)}
     finally:
         db.close()

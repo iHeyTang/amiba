@@ -4,75 +4,96 @@
  * implementation at boot via `setPlatform()`.
  */
 
-export type Json = string | number | boolean | null | Json[] | { [k: string]: Json }
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | Json[]
+  | { [k: string]: Json };
 
 export interface StorageChange {
-  oldValue?: unknown
-  newValue?: unknown
+  oldValue?: unknown;
+  newValue?: unknown;
 }
 
-export type StorageChangeMap = Record<string, StorageChange>
+export type StorageChangeMap = Record<string, StorageChange>;
 
 export interface StorageAdapter {
-  get(keys?: string | string[]): Promise<Record<string, unknown>>
-  set(patch: Record<string, unknown>): Promise<void>
-  remove(keys: string | string[]): Promise<void>
+  get(keys?: string | string[]): Promise<Record<string, unknown>>;
+  set(patch: Record<string, unknown>): Promise<void>;
+  remove(keys: string | string[]): Promise<void>;
   /**
    * Subscribe to storage changes. `keys = undefined` means all keys.
    * Returns an unsubscribe function.
    */
   watch(
     keys: string | string[] | undefined,
-    listener: (changes: StorageChangeMap) => void
-  ): () => void
+    listener: (changes: StorageChangeMap) => void,
+  ): () => void;
 }
 
 export interface RuntimeAdapter {
-  sendMessage<T = unknown>(message: unknown): Promise<T>
-  onMessage(listener: (msg: unknown) => void): () => void
-  getInstallId(): Promise<string>
+  sendMessage<T = unknown>(message: unknown): Promise<T>;
+  onMessage(listener: (msg: unknown) => void): () => void;
+  getInstallId(): Promise<string>;
 }
 
 export interface TabInfo {
-  id: number
-  url?: string
-  title?: string
-  active?: boolean
-  windowId?: number
+  id: number;
+  url?: string;
+  title?: string;
+  active?: boolean;
+  windowId?: number;
 }
 
 export interface TabsAdapter {
-  query(filter: { active?: boolean; currentWindow?: boolean }): Promise<TabInfo[]>
-  create(opts: { url: string; active?: boolean }): Promise<TabInfo>
-  update(tabId: number, opts: { url?: string; active?: boolean }): Promise<TabInfo>
-  remove(tabId: number | number[]): Promise<void>
+  query(filter: {
+    active?: boolean;
+    currentWindow?: boolean;
+  }): Promise<TabInfo[]>;
+  create(opts: { url: string; active?: boolean }): Promise<TabInfo>;
+  update(
+    tabId: number,
+    opts: { url?: string; active?: boolean },
+  ): Promise<TabInfo>;
+  remove(tabId: number | number[]): Promise<void>;
 }
 
 export interface ScriptingAdapter {
-  executeScript<R>(opts: { tabId: number; func: () => R }): Promise<R[]>
+  executeScript<R>(opts: { tabId: number; func: () => R }): Promise<R[]>;
 }
 
 export interface BookmarksAdapter {
-  search(query: string): Promise<Array<{ id: string; title: string; url?: string }>>
+  search(
+    query: string,
+  ): Promise<Array<{ id: string; title: string; url?: string }>>;
 }
 
 export interface HistoryAdapter {
-  search(opts: { text: string; maxResults?: number }): Promise<
+  search(opts: {
+    text: string;
+    maxResults?: number;
+  }): Promise<
     Array<{ id: string; url?: string; title?: string; lastVisitTime?: number }>
-  >
+  >;
 }
 
 export interface WindowsAdapter {
-  getCurrent(): Promise<{ id: number; focused: boolean }>
-  create(opts: { url?: string; focused?: boolean }): Promise<{ id: number }>
+  getCurrent(): Promise<{ id: number; focused: boolean }>;
+  create(opts: { url?: string; focused?: boolean }): Promise<{ id: number }>;
 }
 
 export interface NotificationsAdapter {
-  notify(opts: { title: string; body: string; iconUrl?: string }): Promise<void>
+  notify(opts: {
+    title: string;
+    body: string;
+    iconUrl?: string;
+  }): Promise<void>;
 }
 
 export interface ShellAdapter {
-  openExternal(url: string): Promise<void>
+  openExternal(url: string): Promise<void>;
 }
 
 /**
@@ -85,7 +106,7 @@ export interface ShellAdapter {
  */
 export type WorkspaceChange =
   | { kind: "bound"; sessionId: string; path: string }
-  | { kind: "unbound"; sessionId: string }
+  | { kind: "unbound"; sessionId: string };
 
 /**
  * Workspace binding — per chat session. Each session can pin a different
@@ -99,36 +120,99 @@ export interface WorkspaceAdapter {
    * Open the host's native folder picker. Omitted on runtimes that cannot
    * choose local directories (browser extension, headless main process).
    */
-  chooseDirectory?(defaultPath?: string): Promise<string | null>
+  chooseDirectory?(defaultPath?: string): Promise<string | null>;
   /** Product-level root used when a session has no explicit binding. */
-  getDefaultRoot(): Promise<string>
-  bind(sessionId: string, path: string): Promise<void>
-  unbind(sessionId: string): Promise<void>
-  getCurrent(sessionId: string): Promise<string | null>
+  getDefaultRoot(): Promise<string>;
+  bind(sessionId: string, path: string): Promise<void>;
+  unbind(sessionId: string): Promise<void>;
+  getCurrent(sessionId: string): Promise<string | null>;
   /** Snapshot every persisted session binding for workspace-grouped history. */
-  listBindings(): Promise<Record<string, string>>
-  onChange(cb: (change: WorkspaceChange) => void): () => void
+  listBindings(): Promise<Record<string, string>>;
+  onChange(cb: (change: WorkspaceChange) => void): () => void;
 }
 
 export interface WorkspaceFileDocument {
   /** Canonical absolute path after main-process workspace validation. */
-  path: string
+  path: string;
   /** Slash-normalised path relative to the bound workspace root. */
-  relativePath: string
-  name: string
-  content: string
-  size: number
-  modifiedAt: number
-  revision: string
-  truncated: boolean
-  binary: boolean
+  relativePath: string;
+  name: string;
+  content: string;
+  size: number;
+  modifiedAt: number;
+  revision: string;
+  truncated: boolean;
+  binary: boolean;
 }
 
 export interface WorkspaceFileChange {
-  subscriptionId: string
-  sessionId: string
-  path: string
-  event: "add" | "change" | "unlink"
+  subscriptionId: string;
+  sessionId: string;
+  path: string;
+  event: "add" | "change" | "unlink";
+}
+
+export interface WorkspaceTreeEntry {
+  name: string;
+  /** Slash-normalised path relative to the active workspace root. */
+  path: string;
+  isDirectory: boolean;
+  isSymlink?: boolean;
+  size?: number;
+  modifiedAt?: number;
+}
+
+export interface WorkspaceGitFile {
+  path: string;
+  indexStatus: string;
+  worktreeStatus: string;
+  staged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+}
+
+export interface WorkspaceGitState {
+  root: string;
+  branch: string;
+  upstream?: string;
+  ahead: number;
+  behind: number;
+  clean: boolean;
+  files: WorkspaceGitFile[];
+}
+
+export interface WorkspaceCheckpoint {
+  id: string;
+  sessionId: string;
+  label: string;
+  createdAt: number;
+  changedFiles: number;
+}
+
+export interface WorkspaceProject {
+  id: string;
+  name: string;
+  folders: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WorkspaceWorktree {
+  path: string;
+  head: string;
+  branch?: string;
+  bare?: boolean;
+  detached?: boolean;
+  locked?: string;
+}
+
+export interface WorkspaceTerminalSnapshot {
+  sessionId: string;
+  cwd: string;
+  output: string;
+  running: boolean;
+  startedAt: number;
+  exitCode?: number;
 }
 
 /**
@@ -139,40 +223,105 @@ export interface WorkspaceFileChange {
  * rejects traversal / symlink escapes before touching the file.
  */
 export interface WorkspaceFilesAdapter {
-  read(sessionId: string, path: string): Promise<WorkspaceFileDocument>
-  reveal(sessionId: string, path: string): Promise<void>
-  openExternal(sessionId: string, path: string): Promise<void>
-  watch(sessionId: string, paths: string[], listener: (change: WorkspaceFileChange) => void): () => void
+  list(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
+  search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
+  read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
+  reveal(sessionId: string, path: string): Promise<void>;
+  openExternal(sessionId: string, path: string): Promise<void>;
+  watch(
+    sessionId: string,
+    paths: string[],
+    listener: (change: WorkspaceFileChange) => void,
+  ): () => void;
+}
+
+export interface WorkspaceDevelopmentAdapter {
+  ensureProject(sessionId: string): Promise<WorkspaceProject>;
+  listProjects(): Promise<WorkspaceProject[]>;
+  createProject(name: string, folders: string[]): Promise<WorkspaceProject>;
+  addProjectFolder(
+    projectId: string,
+    folder: string,
+  ): Promise<WorkspaceProject>;
+  bindProjectLocation(
+    sessionId: string,
+    projectId: string,
+    path: string,
+  ): Promise<WorkspaceProject>;
+  listWorktrees(sessionId: string): Promise<WorkspaceWorktree[]>;
+  createWorktree(
+    sessionId: string,
+    branch: string,
+    baseRef?: string,
+  ): Promise<WorkspaceWorktree>;
+  gitStatus(sessionId: string): Promise<WorkspaceGitState>;
+  gitDiff(
+    sessionId: string,
+    options?: { staged?: boolean; paths?: string[] },
+  ): Promise<string>;
+  gitStage(sessionId: string, paths?: string[]): Promise<WorkspaceGitState>;
+  gitUnstage(sessionId: string, paths?: string[]): Promise<WorkspaceGitState>;
+  gitCommit(sessionId: string, message: string): Promise<WorkspaceGitState>;
+  gitShip(sessionId: string, remote?: string): Promise<WorkspaceGitState>;
+  listCheckpoints(sessionId: string): Promise<WorkspaceCheckpoint[]>;
+  createCheckpoint(
+    sessionId: string,
+    label: string,
+  ): Promise<WorkspaceCheckpoint>;
+  restoreCheckpoint(
+    sessionId: string,
+    checkpointId: string,
+  ): Promise<WorkspaceGitState>;
+  deleteCheckpoint(sessionId: string, checkpointId: string): Promise<void>;
+  terminalStart(sessionId: string): Promise<WorkspaceTerminalSnapshot>;
+  terminalGet(sessionId: string): Promise<WorkspaceTerminalSnapshot | null>;
+  terminalWrite(
+    sessionId: string,
+    input: string,
+  ): Promise<WorkspaceTerminalSnapshot>;
+  terminalStop(sessionId: string): Promise<void>;
+  onTerminalData(
+    listener: (event: {
+      sessionId: string;
+      chunk: string;
+      snapshot: WorkspaceTerminalSnapshot;
+    }) => void,
+  ): () => void;
 }
 
 export interface PlatformAdapter {
-  kind: "extension" | "desktop"
-  storage: StorageAdapter
-  runtime: RuntimeAdapter
-  tabs: TabsAdapter
-  scripting: ScriptingAdapter
-  bookmarks: BookmarksAdapter
-  history: HistoryAdapter
-  windows: WindowsAdapter
-  notifications: NotificationsAdapter
-  shell: ShellAdapter
+  kind: "extension" | "desktop";
+  storage: StorageAdapter;
+  runtime: RuntimeAdapter;
+  tabs: TabsAdapter;
+  scripting: ScriptingAdapter;
+  bookmarks: BookmarksAdapter;
+  history: HistoryAdapter;
+  windows: WindowsAdapter;
+  notifications: NotificationsAdapter;
+  shell: ShellAdapter;
   /** Desktop-only. The extension leaves this undefined. */
-  workspaces?: WorkspaceAdapter
+  workspaces?: WorkspaceAdapter;
   /** Desktop-only, read-only file surface for the workspace workbench. */
-  workspaceFiles?: WorkspaceFilesAdapter
+  workspaceFiles?: WorkspaceFilesAdapter;
+  /** Desktop-only Project/Worktree/terminal/Git/checkpoint control surface. */
+  workspaceDevelopment?: WorkspaceDevelopmentAdapter;
 }
 
-let current: PlatformAdapter | null = null
+let current: PlatformAdapter | null = null;
 
 export function setPlatform(adapter: PlatformAdapter) {
-  current = adapter
+  current = adapter;
 }
 
 export function getPlatform(): PlatformAdapter {
-  if (!current) throw new Error("PlatformAdapter not initialized — call setPlatform() at boot")
-  return current
+  if (!current)
+    throw new Error(
+      "PlatformAdapter not initialized — call setPlatform() at boot",
+    );
+  return current;
 }
 
 export function hasPlatform(): boolean {
-  return current !== null
+  return current !== null;
 }

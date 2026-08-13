@@ -191,7 +191,7 @@ class WorkspaceManager extends EventEmitter {
    * paths are anchored to the workspace root; authoritative absolute paths
    * reported by Hermes are accepted when they remain inside the same root.
    */
-  async resolveFileForSession(
+  async resolvePathForSession(
     sessionId: string,
     candidate: string,
   ): Promise<{ root: string; path: string; relativePath: string }> {
@@ -199,12 +199,10 @@ class WorkspaceManager extends EventEmitter {
     if (!boundRoot) {
       throw new Error("No workspace is bound to this conversation.")
     }
-    if (!candidate || !candidate.trim()) {
-      throw new Error("A file path is required.")
-    }
-
     const root = await fs.realpath(boundRoot)
-    const requested = path.isAbsolute(candidate)
+    const requested = !candidate || candidate === "."
+      ? root
+      : path.isAbsolute(candidate)
       ? path.resolve(candidate)
       : path.resolve(root, candidate)
     const resolved = await fs.realpath(requested)
@@ -223,6 +221,16 @@ class WorkspaceManager extends EventEmitter {
       path: resolved,
       relativePath: relativePath.split(path.sep).join("/"),
     }
+  }
+
+  async resolveFileForSession(
+    sessionId: string,
+    candidate: string,
+  ): Promise<{ root: string; path: string; relativePath: string }> {
+    if (!candidate || !candidate.trim()) {
+      throw new Error("A file path is required.")
+    }
+    return this.resolvePathForSession(sessionId, candidate)
   }
 
   async bind(sessionId: string, target: string): Promise<void> {

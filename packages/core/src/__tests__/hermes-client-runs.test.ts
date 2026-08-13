@@ -202,4 +202,66 @@ describe("runHermesAgent workspace cwd", () => {
     });
     expect(onMoaEvent).toHaveBeenCalledTimes(4);
   });
+
+  it("forwards delegated-agent activity and completion metadata", async () => {
+    backplaneFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/runs") {
+        return Response.json(
+          { run_id: "run_agents", status: "started" },
+          { status: 202 },
+        );
+      }
+      return new Response(
+        [
+          'data: {"event":"subagent.start","timestamp":10,"subagent_id":"agent-1","child_session_id":"child-1","goal":"Inspect files","model":"test-model","status":"running","task_index":0,"task_count":1}',
+          "",
+          'data: {"event":"subagent.tool","timestamp":11,"subagent_id":"agent-1","goal":"Inspect files","tool_name":"read_file","preview":"src/app.ts"}',
+          "",
+          'data: {"event":"subagent.complete","timestamp":12,"subagent_id":"agent-1","child_session_id":"child-1","goal":"Inspect files","status":"completed","tool_count":3,"input_tokens":120,"output_tokens":30,"files_read":["src/app.ts"],"summary":"Inspection complete"}',
+          "",
+          'data: {"event":"run.completed","output":"done"}',
+          "",
+        ].join("\n"),
+        { status: 200 },
+      );
+    });
+    const onSubagentEvent = vi.fn();
+
+    await runHermesAgent(
+      [{ role: "user", content: "Delegate this" }],
+      { sessionId: "session-agents" },
+      { onSubagentEvent },
+    );
+
+    expect(onSubagentEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        id: "agent-1",
+        childSessionId: "child-1",
+        goal: "Inspect files",
+        status: "running",
+        model: "test-model",
+      }),
+    );
+    expect(onSubagentEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        id: "agent-1",
+        currentTool: "read_file",
+        status: "running",
+      }),
+    );
+    expect(onSubagentEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        id: "agent-1",
+        status: "completed",
+        inputTokens: 120,
+        outputTokens: 30,
+        toolCount: 3,
+        filesRead: ["src/app.ts"],
+        summary: "Inspection complete",
+      }),
+    );
+  });
 });

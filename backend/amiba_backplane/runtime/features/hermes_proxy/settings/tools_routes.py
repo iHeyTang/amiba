@@ -18,13 +18,16 @@ from .tools_service import (
     grant_computer_use_permissions,
     list_installed_mcps,
     list_toolsets,
+    remove_mcp_server,
     run_toolset_post_setup,
     save_terminal_env,
+    save_mcp_server,
     save_toolset_env,
     select_terminal_backend,
     select_toolset_model,
     select_toolset_provider,
     toggle_toolset,
+    test_mcp_server,
 )
 
 
@@ -304,6 +307,46 @@ async def handle_installed_mcp_connection(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "connection": payload})
 
 
+async def handle_save_mcp(request: web.Request) -> web.Response:
+    slug = request.match_info.get("slug", "")
+    try:
+        body = await read_json_object(request)
+        payload = await asyncio.to_thread(save_mcp_server, slug, body)
+    except web.HTTPBadRequest as exc:
+        return exc
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload)
+
+
+async def handle_remove_mcp(request: web.Request) -> web.Response:
+    slug = request.match_info.get("slug", "")
+    try:
+        payload = await asyncio.to_thread(remove_mcp_server, slug)
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except KeyError:
+        return json_error(404, "MCP server not found")
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload)
+
+
+async def handle_test_mcp(request: web.Request) -> web.Response:
+    slug = request.match_info.get("slug", "")
+    try:
+        payload = await asyncio.to_thread(test_mcp_server, slug)
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except KeyError:
+        return json_error(404, "MCP server not found")
+    except Exception as exc:  # noqa: BLE001
+        return json_error(400, str(exc))
+    return web.json_response(payload)
+
+
 async def handle_managed_apps_federation(request: web.Request) -> web.Response:
     """PUT Amiba's loopback-only, process-owned MCP federation endpoint."""
 
@@ -390,6 +433,18 @@ def register_tools_routes(app: web.Application) -> None:
             web.get(
                 "/hermes/tools/installed-mcps/{slug}/connection",
                 profiled(handle_installed_mcp_connection),
+            ),
+            web.put(
+                "/hermes/tools/installed-mcps/{slug}",
+                profiled(handle_save_mcp),
+            ),
+            web.delete(
+                "/hermes/tools/installed-mcps/{slug}",
+                profiled(handle_remove_mcp),
+            ),
+            web.post(
+                "/hermes/tools/installed-mcps/{slug}/test",
+                profiled(handle_test_mcp),
             ),
             web.put(
                 "/hermes/tools/managed-apps-federation",

@@ -14,6 +14,7 @@ import type { ChatMessage } from "./chat-messages";
 import type { AgentExecutionContext } from "./agent-context";
 import type {
   HermesApprovalRequest,
+  HermesLiveAgent,
   HermesToolProgress,
   StreamedToolCall,
 } from "./hermes-gateway-types";
@@ -124,6 +125,8 @@ export interface ChatRuntimeState {
   toolCalls: StreamedToolCall[];
   hermesOrder: string[];
   hermesToolProgress: HermesToolProgress[];
+  /** Delegated agents observed during the current turn. */
+  liveAgents: HermesLiveAgent[];
   timeline: AssistantTimelineItem[];
   error: ChatRuntimeError | null;
   /** URL/title the agent tab ended on (agent-window surface only). */
@@ -200,6 +203,7 @@ export type StreamEvent =
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: StreamedToolCall[] }
   | { kind: "hermesToolProgress"; event: HermesToolProgress }
+  | { kind: "liveAgent"; event: HermesLiveAgent }
   | { kind: "session"; sessionId: string }
   | { kind: "run"; runId: string }
   | { kind: "approvalRequest"; request: HermesApprovalRequest }

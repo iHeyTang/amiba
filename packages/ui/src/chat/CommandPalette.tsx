@@ -1,6 +1,6 @@
 import { Command } from "cmdk";
 import { MessageSquare, Plus, Settings } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
@@ -22,6 +22,7 @@ export interface CommandPaletteProps {
   onOpenSession: (id: string) => void;
   onNewChat: () => void;
   onOpenSettings: () => void;
+  onSearchSessions?: (query: string) => Promise<SessionMeta[]>;
 }
 
 export function CommandPalette({
@@ -31,8 +32,34 @@ export function CommandPalette({
   onOpenSession,
   onNewChat,
   onOpenSettings,
+  onSearchSessions,
 }: CommandPaletteProps) {
   const { t } = useT();
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<SessionMeta[]>([]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setMatches([]);
+      return;
+    }
+    const needle = query.trim();
+    if (!needle || !onSearchSessions) {
+      setMatches([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void onSearchSessions(needle).then((result) => {
+        if (!cancelled) setMatches(result);
+      });
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [onSearchSessions, open, query]);
 
   // Close first, then perform — so the palette never lingers over the result.
   const run = (fn: () => void) => {
@@ -40,7 +67,17 @@ export function CommandPalette({
     fn();
   };
 
-  const recent = sessions.slice(0, MAX_SESSION_ITEMS);
+  const needle = query.trim().toLocaleLowerCase();
+  const localMatches = needle
+    ? sessions.filter((session) =>
+        `${session.title ?? ""}\n${session.searchSnippet ?? ""}`
+          .toLocaleLowerCase()
+          .includes(needle),
+      )
+    : sessions;
+  const recent = (
+    needle && onSearchSessions ? matches : localMatches
+  ).slice(0, MAX_SESSION_ITEMS);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,10 +107,12 @@ export function CommandPalette({
         <DialogDescription className="sr-only">
           {t("commandPalette.description")}
         </DialogDescription>
-        <Command className="flex max-h-[60vh] w-full min-w-0 flex-col">
+        <Command shouldFilter={false} className="flex max-h-[60vh] w-full min-w-0 flex-col">
           <div className="flex items-center border-b border-border px-4">
             <Command.Input
               autoFocus
+              value={query}
+              onValueChange={setQuery}
               data-testid="command-palette-input"
               placeholder={t("commandPalette.placeholder")}
               className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -111,6 +150,7 @@ export function CommandPalette({
                       value={`${title} ${s.id}`}
                       icon={<MessageSquare className="h-4 w-4" />}
                       label={title}
+                      description={s.searchSnippet}
                       onSelect={() => run(() => onOpenSession(s.id))}
                     />
                   );
@@ -134,18 +174,27 @@ function PaletteRow({
   label,
   shortcut,
   value,
+  description,
   onSelect,
 }: {
   icon: ReactNode;
   label: string;
   shortcut?: string;
   value?: string;
+  description?: string;
   onSelect: () => void;
 }) {
   return (
     <Command.Item value={value ?? label} onSelect={onSelect}>
       <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {description ? (
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {description.replace(/>>>|<<</g, "")}
+          </span>
+        ) : null}
+      </span>
       {shortcut && (
         <span className="shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
           {shortcut}

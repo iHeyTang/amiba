@@ -1,15 +1,25 @@
 import {
   getHermesPlugins,
+  installPlugin,
   setPluginEnabled,
+  testPlugin,
   uninstallPlugin,
+  updatePlugin,
   type HermesPlugin,
 } from "@amiba/core";
-import { Plug, Plus, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Plug,
+  Plus,
+  RefreshCw,
+  Stethoscope,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useT } from "@amiba/i18n";
-import { Button, CollectionState, Switch, cn } from "../primitives";
-import { useStartAgentTask } from "./agent-task";
+import { Button, CollectionState, Input, Switch, cn } from "../primitives";
 
 type State =
   | { kind: "loading" }
@@ -18,18 +28,21 @@ type State =
 
 export function PluginsTab({
   showAddAction = true,
-}: { showAddAction?: boolean } = {}) {
+  profileId,
+}: { showAddAction?: boolean; profileId?: string } = {}) {
   const { t } = useT();
-  const startAgentTask = useStartAgentTask();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
+  const [installOpen, setInstallOpen] = useState(false);
+  const [identifier, setIdentifier] = useState("");
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [restartHint, setRestartHint] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: "loading" });
-    void getHermesPlugins().then((res) => {
+    void getHermesPlugins(profileId).then((res) => {
       if (cancelled) return;
       setState(
         res.ok
@@ -40,14 +53,19 @@ export function PluginsTab({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [profileId]);
+
+  async function refresh() {
+    const res = await getHermesPlugins(profileId);
+    if (res.ok) setState({ kind: "loaded", plugins: res.plugins });
+  }
 
   async function onToggle(p: HermesPlugin) {
     if (state.kind !== "loaded" || busy) return;
     setBusy(p.name);
     setToggleError(null);
     const next = !p.enabled;
-    const res = await setPluginEnabled(p.name, next);
+    const res = await setPluginEnabled(p.name, next, profileId);
     setBusy(null);
     if (!res.ok) {
       setToggleError(
@@ -70,7 +88,7 @@ export function PluginsTab({
       return;
     setBusy(p.name);
     setToggleError(null);
-    const res = await uninstallPlugin(p.name);
+    const res = await uninstallPlugin(p.name, profileId);
     setBusy(null);
     if (!res.ok) {
       setToggleError(
@@ -85,24 +103,107 @@ export function PluginsTab({
     setRestartHint(true);
   }
 
-  function onInstall() {
-    if (!startAgentTask) return;
-    void startAgentTask(t("externalTools.plugin.addPrompt"), {
-      sourceApp: t("options.plugins.heading"),
-    });
+  async function onInstall() {
+    const value = identifier.trim();
+    if (!value || busy) return;
+    setBusy("__install__");
+    setToggleError(null);
+    setActionMessage(null);
+    const res = await installPlugin(value, profileId);
+    setBusy(null);
+    if (!res.ok) {
+      setToggleError(res.error || "Plugin installation failed");
+      return;
+    }
+    setIdentifier("");
+    setInstallOpen(false);
+    const notes = [
+      ...(res.warnings ?? []),
+      ...(res.missingEnv?.length
+        ? [`Missing environment: ${res.missingEnv.join(", ")}`]
+        : []),
+    ];
+    setActionMessage(notes.join(" · ") || "Plugin installed and enabled");
+    setRestartHint(true);
+    await refresh();
+  }
+
+  async function onUpdate(p: HermesPlugin) {
+    if (busy) return;
+    setBusy(p.name);
+    setToggleError(null);
+    const res = await updatePlugin(p.key || p.name, profileId);
+    setBusy(null);
+    if (!res.ok) setToggleError(res.error || "Plugin update failed");
+    else {
+      setActionMessage(
+        res.unchanged ? `${p.name} is already current` : `${p.name} updated`,
+      );
+      setRestartHint(true);
+      await refresh();
+    }
+  }
+
+  async function onTest(p: HermesPlugin) {
+    if (busy) return;
+    setBusy(p.name);
+    setToggleError(null);
+    const res = await testPlugin(p.key || p.name, profileId);
+    setBusy(null);
+    if (!res.ok) setToggleError(res.error || "Plugin test failed");
+    else
+      setActionMessage(
+        `${p.name}: ${res.summary?.tools ?? 0} tools · ${res.summary?.hooks ?? 0} hooks · ${res.summary?.commands ?? 0} commands`,
+      );
   }
 
   return (
     <div className="flex flex-col gap-5">
       {showAddAction ? (
         <div className="flex justify-end">
-          {startAgentTask && (
-            <Button type="button" size="sm" onClick={onInstall}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setInstallOpen((v) => !v)}
+          >
+            {installOpen ? (
+              <X className="h-3.5 w-3.5" />
+            ) : (
               <Plus className="h-3.5 w-3.5" />
-              {t("externalTools.plugin.add")}
-            </Button>
-          )}
+            )}
+            {t("externalTools.plugin.add")}
+          </Button>
         </div>
+      ) : null}
+
+      {installOpen ? (
+        <form
+          className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onInstall();
+          }}
+        >
+          <Input
+            autoFocus
+            className="h-8 flex-1 font-mono text-xs"
+            onChange={(event) => setIdentifier(event.target.value)}
+            placeholder="Git URL, local path, or plugin identifier"
+            value={identifier}
+          />
+          <Button
+            disabled={!identifier.trim() || busy === "__install__"}
+            size="sm"
+            type="submit"
+          >
+            {busy === "__install__" ? (
+              <RefreshCw className="animate-spin" />
+            ) : (
+              <Plus />
+            )}
+            Install
+          </Button>
+        </form>
       ) : null}
 
       {restartHint && (
@@ -111,6 +212,12 @@ export function PluginsTab({
         </p>
       )}
       {toggleError && <p className="text-sm text-destructive">{toggleError}</p>}
+      {actionMessage && (
+        <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="h-4 w-4" />
+          {actionMessage}
+        </p>
+      )}
 
       {state.kind === "loading" && (
         <CollectionState role="status">
@@ -127,6 +234,8 @@ export function PluginsTab({
           plugins={state.plugins}
           busy={busy}
           onToggle={onToggle}
+          onTest={onTest}
+          onUpdate={onUpdate}
           onUninstall={onUninstall}
         />
       )}
@@ -147,11 +256,15 @@ function PluginGroups({
   plugins,
   busy,
   onToggle,
+  onTest,
+  onUpdate,
   onUninstall,
 }: {
   plugins: HermesPlugin[];
   busy: string | null;
   onToggle: (p: HermesPlugin) => void;
+  onTest: (p: HermesPlugin) => void;
+  onUpdate: (p: HermesPlugin) => void;
   onUninstall: (p: HermesPlugin) => void;
 }) {
   const { t } = useT();
@@ -166,6 +279,8 @@ function PluginGroups({
           plugins={yours}
           busy={busy}
           onToggle={onToggle}
+          onTest={onTest}
+          onUpdate={onUpdate}
           onUninstall={onUninstall}
         />
       )}
@@ -177,11 +292,15 @@ function PluginList({
   plugins,
   busy,
   onToggle,
+  onTest,
+  onUpdate,
   onUninstall,
 }: {
   plugins: HermesPlugin[];
   busy: string | null;
   onToggle: (p: HermesPlugin) => void;
+  onTest: (p: HermesPlugin) => void;
+  onUpdate: (p: HermesPlugin) => void;
   onUninstall: (p: HermesPlugin) => void;
 }) {
   return (
@@ -192,6 +311,8 @@ function PluginList({
           p={p}
           busy={busy === p.name}
           onToggle={() => onToggle(p)}
+          onTest={() => onTest(p)}
+          onUpdate={() => onUpdate(p)}
           onUninstall={() => onUninstall(p)}
         />
       ))}
@@ -203,11 +324,15 @@ function PluginRow({
   p,
   busy,
   onToggle,
+  onTest,
+  onUpdate,
   onUninstall,
 }: {
   p: HermesPlugin;
   busy: boolean;
   onToggle: () => void;
+  onTest: () => void;
+  onUpdate: () => void;
   onUninstall: () => void;
 }) {
   const { t } = useT();
@@ -248,6 +373,26 @@ function PluginRow({
       <div
         className={cn("flex shrink-0 items-center gap-1", busy && "opacity-50")}
       >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onTest}
+          title="Test discovery"
+          disabled={busy}
+        >
+          <Stethoscope />
+        </Button>
+        {p.source === "user" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onUpdate}
+            title="Update plugin"
+            disabled={busy}
+          >
+            <RefreshCw className={cn(busy && "animate-spin")} />
+          </Button>
+        ) : null}
         {canUninstall && (
           <Button
             variant="ghost"

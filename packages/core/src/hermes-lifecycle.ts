@@ -21,8 +21,7 @@ function responseError(
   body: { error?: string; detail?: string } | null | undefined,
 ): string {
   return (
-    (body && (body.error || body.detail)) ||
-    `${res.status} ${res.statusText}`
+    (body && (body.error || body.detail)) || `${res.status} ${res.statusText}`
   );
 }
 
@@ -63,9 +62,9 @@ export interface HermesStatusResponse {
   managed_runtime_commit?: string | null;
   /** Set when the running backplane's protocol_version != EXPECTED_BACKPLANE_PROTOCOL. */
   protocol_mismatch?: {
-    backplane: number;        // what the backplane reports
-    expected: number;         // EXPECTED_BACKPLANE_PROTOCOL
-    advise: "update-backplane" | "update-client";  // backplane<expected → update-backplane; backplane>expected → update-client
+    backplane: number; // what the backplane reports
+    expected: number; // EXPECTED_BACKPLANE_PROTOCOL
+    advise: "update-backplane" | "update-client"; // backplane<expected → update-backplane; backplane>expected → update-client
   };
   /** Minimum version required by the running backplane, when reported. */
   minimum_supported_version?: string;
@@ -103,7 +102,10 @@ export async function getHermesStatus(
     if (!res.ok) {
       return { ok: false, error: responseError(res, data ?? null) };
     }
-    const status: HermesStatusResponse = { ...((data as HermesStatusResponse) ?? {}), ok: true };
+    const status: HermesStatusResponse = {
+      ...((data as HermesStatusResponse) ?? {}),
+      ok: true,
+    };
     // Compute protocol compatibility.
     const reportedVersion = (data as HermesStatusResponse)?.protocol_version;
     if (reportedVersion == null) {
@@ -117,7 +119,10 @@ export async function getHermesStatus(
       status.protocol_mismatch = {
         backplane: reportedVersion,
         expected: EXPECTED_BACKPLANE_PROTOCOL,
-        advise: reportedVersion < EXPECTED_BACKPLANE_PROTOCOL ? "update-backplane" : "update-client",
+        advise:
+          reportedVersion < EXPECTED_BACKPLANE_PROTOCOL
+            ? "update-backplane"
+            : "update-client",
       };
     }
     const compatibility = getHermesVersionCompatibility(
@@ -143,7 +148,17 @@ export async function getHermesStatus(
 // /hermes/gateway/restart  +  /hermes/update
 // ---------------------------------------------------------------------------
 
-export type LifecycleActionName = "gateway-restart" | "hermes-update";
+export type MaintenanceActionName =
+  | "doctor"
+  | "security-audit"
+  | "backup"
+  | "debug-bundle"
+  | "curator";
+
+export type LifecycleActionName =
+  | "gateway-restart"
+  | "hermes-update"
+  | MaintenanceActionName;
 
 export interface SpawnActionResponse {
   ok: boolean;
@@ -180,6 +195,12 @@ export function updateHermes(): Promise<SpawnActionResponse> {
   return postAction("/hermes/update", "hermes-update");
 }
 
+export function runHermesMaintenance(
+  name: MaintenanceActionName,
+): Promise<SpawnActionResponse> {
+  return postAction(`/hermes/maintenance/${encodeURIComponent(name)}`, name);
+}
+
 // ---------------------------------------------------------------------------
 // /hermes/actions/{name}/status
 // ---------------------------------------------------------------------------
@@ -201,8 +222,7 @@ export async function getActionStatus(
 ): Promise<ActionStatusResponse> {
   try {
     const q = new URLSearchParams({ lines: String(lines) });
-    const url =
-      `/hermes/actions/${encodeURIComponent(name)}/status?${q.toString()}`;
+    const url = `/hermes/actions/${encodeURIComponent(name)}/status?${q.toString()}`;
     const res = await backplaneFetch(url, { method: "GET", signal });
     const data = (await res.json().catch(() => null)) as
       | ActionStatusResponse

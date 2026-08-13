@@ -47,6 +47,47 @@ export interface HermesToolProgress {
   durationMs?: number
 }
 
+export type HermesLiveAgentStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "interrupted"
+
+export type HermesLiveAgentEventType =
+  | "subagent.spawn_requested"
+  | "subagent.start"
+  | "subagent.tool"
+  | "subagent.progress"
+  | "subagent.thinking"
+  | "subagent.complete"
+
+/** Incremental state for one delegated Hermes agent. */
+export interface HermesLiveAgent {
+  id: string
+  eventType: HermesLiveAgentEventType
+  parentId: string | null
+  goal: string
+  childSessionId?: string
+  model?: string
+  status: HermesLiveAgentStatus
+  taskCount: number
+  taskIndex: number
+  startedAt: number
+  updatedAt: number
+  durationSeconds?: number
+  costUsd?: number
+  inputTokens?: number
+  outputTokens?: number
+  reasoningTokens?: number
+  toolCount?: number
+  filesRead: string[]
+  filesWritten: string[]
+  currentTool?: string
+  progress?: string
+  summary?: string
+}
+
 /**
  * One `event: approval.request` frame. Sent when the agent is about to
  * execute something dangerous and needs user consent before it proceeds.

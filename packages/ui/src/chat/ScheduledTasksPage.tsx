@@ -169,6 +169,48 @@ interface JobFormState {
   deliver: string;
 }
 
+const CRON_BLUEPRINTS: Array<{
+  label: string;
+  values: Pick<JobFormState, "name" | "prompt" | "schedule">;
+}> = [
+  {
+    label: "Daily brief",
+    values: {
+      name: "Daily brief",
+      schedule: "0 9 * * *",
+      prompt:
+        "Summarize today's calendar, unfinished tasks, and anything that needs my attention.",
+    },
+  },
+  {
+    label: "Weekly review",
+    values: {
+      name: "Weekly review",
+      schedule: "0 17 * * 5",
+      prompt:
+        "Review this week's completed work, open loops, risks, and priorities for next week.",
+    },
+  },
+  {
+    label: "Project health",
+    values: {
+      name: "Project health",
+      schedule: "0 10 * * 1",
+      prompt:
+        "Inspect the current project for failing checks, dependency risks, stale work, and recommended next actions.",
+    },
+  },
+  {
+    label: "Inbox follow-up",
+    values: {
+      name: "Inbox follow-up",
+      schedule: "0 16 * * 1-5",
+      prompt:
+        "Find messages and requests that still need a reply or follow-up and prepare a concise action list.",
+    },
+  },
+];
+
 function emptyForm(): JobFormState {
   return {
     name: "",
@@ -453,6 +495,28 @@ function JobDialog({
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-5 px-5 py-5">
+            {mode === "create" ? (
+              <div className="space-y-2">
+                <Label className="text-xs">Start from a blueprint</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CRON_BLUEPRINTS.map((blueprint) => (
+                    <button
+                      className="rounded-full border border-border/70 px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
+                      key={blueprint.label}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          ...blueprint.values,
+                        }))
+                      }
+                      type="button"
+                    >
+                      {blueprint.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="cron-name" className="text-xs">
                 {t("options.cron.form.name")}

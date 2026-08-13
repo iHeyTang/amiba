@@ -58,7 +58,10 @@ function responseError(
   );
 }
 
-function emptyEntries(target: HermesMemoryTarget, error: string): HermesMemoryEntries {
+function emptyEntries(
+  target: HermesMemoryTarget,
+  error: string,
+): HermesMemoryEntries {
   return {
     ok: false,
     target,
@@ -83,7 +86,11 @@ export async function getHermesMemoryList(
     }
     return { ok: true, targets: data.targets ?? [] };
   } catch (e) {
-    return { ok: false, targets: [], error: String((e as Error)?.message || e) };
+    return {
+      ok: false,
+      targets: [],
+      error: String((e as Error)?.message || e),
+    };
   }
 }
 
@@ -109,5 +116,31 @@ export async function getHermesMemoryTarget(
     };
   } catch (e) {
     return emptyEntries(target, String((e as Error)?.message || e));
+  }
+}
+
+export async function resetHermesMemory(
+  target: HermesMemoryTarget | "all",
+  profileId?: string,
+): Promise<{ ok: boolean; deleted?: string[]; error?: string }> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/memories/reset", profileId),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      deleted?: string[];
+      error?: string;
+    } | null;
+    if (!res.ok || data?.ok === false)
+      return { ok: false, error: responseError(res, data) };
+    return { ok: true, deleted: data?.deleted ?? [] };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
   }
 }

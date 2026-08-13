@@ -48,14 +48,17 @@ describe("SettingsCapabilities", () => {
       </AgentTaskProvider>,
     );
 
+    const appletAddAction = screen.getByRole("button", { name: "Add" });
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Plugins" }));
-    const pluginAction = screen.getByRole("button", { name: "Add" });
+    expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Applets" }));
-    const refreshAction = screen.getByRole("button", { name: "Refresh" });
+    const restoredRefreshAction = screen.getByRole("button", { name: "Refresh" });
 
-    expect(refreshAction).not.toBe(pluginAction);
-    expect(refreshAction).toHaveClass("bg-transparent");
-    expect(refreshAction).not.toHaveClass("bg-primary");
+    expect(restoredRefreshAction).not.toBe(appletAddAction);
+    expect(restoredRefreshAction).toHaveClass("bg-transparent");
+    expect(restoredRefreshAction).not.toHaveClass("bg-primary");
   });
 });

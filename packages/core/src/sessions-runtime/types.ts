@@ -123,6 +123,26 @@ export interface SessionsController {
 
   rename: (id: string, title: string) => Promise<void>;
 
+  setPinned: (id: string, pinned: boolean) => Promise<void>;
+  setArchived: (id: string, archived: boolean) => Promise<void>;
+  bulkUpdate: (
+    ids: string[],
+    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  ) => Promise<void>;
+  branchSession: (id: string, messageId?: number) => Promise<string>;
+  rewindSession: (
+    id: string,
+    messageId: number,
+  ) => Promise<{ content: string; rewoundCount: number }>;
+  restoreSession: (id: string, sinceMessageId: number) => Promise<number>;
+  exportSession: (id: string) => Promise<Record<string, unknown>>;
+  importSessions: (
+    payload: Array<Record<string, unknown>>,
+    profileId?: string,
+  ) => Promise<Record<string, unknown>>;
+  searchHistory: (query: string) => Promise<SessionMeta[]>;
+  resolveUserMessageId: (id: string, userOrdinal: number) => Promise<number | null>;
+
   /** Mark a background session as having an update the user has not opened. */
   markUnread: (id: string) => Promise<void>;
 

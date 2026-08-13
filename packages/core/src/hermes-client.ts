@@ -16,6 +16,7 @@ import type {
   ApprovalRecord,
   HermesApprovalDecision,
   HermesApprovalRequest,
+  HermesLiveAgent,
   HermesToolProgress,
   StreamedToolCall,
 } from "./hermes-gateway-types";
@@ -489,6 +490,8 @@ export interface RunHandlers {
   onToolCompleted?: (event: RunToolCompleted) => void;
   /** Structured lifecycle emitted while a Mixture-of-Agents preset runs. */
   onMoaEvent?: (event: RunMoaEvent) => void;
+  /** Native delegated-agent lifecycle and activity updates. */
+  onSubagentEvent?: (event: HermesLiveAgent) => void;
   /** `event: "approval.request"` — agent paused waiting for user consent. */
   onApprovalRequest?: (request: HermesApprovalRequest) => void;
   /**
@@ -796,6 +799,77 @@ export async function runHermesAgent(
               typeof obj.aggregator === "string" ? obj.aggregator : undefined,
             refCount:
               typeof obj.ref_count === "number" ? obj.ref_count : undefined,
+          });
+          break;
+        }
+        case "subagent.spawn_requested":
+        case "subagent.start":
+        case "subagent.tool":
+        case "subagent.progress":
+        case "subagent.thinking":
+        case "subagent.complete": {
+          const stringValue = (key: string): string | undefined =>
+            typeof obj[key] === "string" && obj[key]
+              ? String(obj[key])
+              : undefined;
+          const numberValue = (key: string): number | undefined =>
+            typeof obj[key] === "number" && Number.isFinite(obj[key])
+              ? Number(obj[key])
+              : undefined;
+          const stringList = (key: string): string[] =>
+            Array.isArray(obj[key])
+              ? (obj[key] as unknown[]).filter(
+                  (item): item is string => typeof item === "string",
+                )
+              : [];
+          const goal =
+            stringValue("goal") || stringValue("preview") || "Agent";
+          const parentId = stringValue("parent_id") ?? null;
+          const taskIndex = numberValue("task_index") ?? 0;
+          const id =
+            stringValue("subagent_id") ||
+            `${parentId || "root"}:${taskIndex}:${goal}`;
+          const rawStatus = stringValue("status");
+          const status =
+            rawStatus === "queued" ||
+            rawStatus === "completed" ||
+            rawStatus === "failed" ||
+            rawStatus === "interrupted"
+              ? rawStatus
+              : evt === "subagent.spawn_requested"
+                ? "queued"
+                : evt === "subagent.complete"
+                  ? "completed"
+                  : "running";
+          const timestamp = numberValue("timestamp");
+          const now = timestamp ? timestamp * 1_000 : Date.now();
+          handlers.onSubagentEvent?.({
+            id,
+            eventType: evt,
+            parentId,
+            goal,
+            childSessionId: stringValue("child_session_id"),
+            model: stringValue("model"),
+            status,
+            taskCount: numberValue("task_count") ?? 1,
+            taskIndex,
+            startedAt: now,
+            updatedAt: now,
+            durationSeconds: numberValue("duration_seconds"),
+            costUsd: numberValue("cost_usd"),
+            inputTokens: numberValue("input_tokens"),
+            outputTokens: numberValue("output_tokens"),
+            reasoningTokens: numberValue("reasoning_tokens"),
+            toolCount: numberValue("tool_count"),
+            filesRead: stringList("files_read"),
+            filesWritten: stringList("files_written"),
+            currentTool:
+              evt === "subagent.tool" ? stringValue("tool_name") : undefined,
+            progress:
+              evt === "subagent.progress" || evt === "subagent.thinking"
+                ? stringValue("preview")
+                : undefined,
+            summary: stringValue("summary"),
           });
           break;
         }

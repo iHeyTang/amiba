@@ -3,9 +3,9 @@ import { insertMentionAtTrigger } from "@amiba/ui"
 import type { MenuItem, MentionData, TriggerProvider } from "@amiba/ui"
 
 /**
- * Desktop `@file` mention provider. Lists the active session's bound
- * workspace dir (top level only) via the `files:list` IPC bridge and maps
- * each row into a composer menu item. `getSessionId` is a getter so the
+ * Desktop `@file` mention provider. Recursively searches the active session's
+ * bounded workspace index via the `files:list` IPC bridge and maps each row
+ * into a composer menu item. `getSessionId` is a getter so the
  * provider always lists against the currently-active session rather than a
  * stale id captured at construction time.
  */

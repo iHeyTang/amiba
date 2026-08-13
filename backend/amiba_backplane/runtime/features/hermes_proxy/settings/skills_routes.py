@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 from functools import wraps
 
 from aiohttp import web
 
 from .skills_service import (
+    _run_hub_action,
+    create_custom_skill,
+    delete_custom_skill,
     list_skill_files,
     list_skills_response,
     read_skill_file,
+    search_skill_hub,
     toggle_skill,
+    update_custom_skill,
 )
 from ....common import json_error, read_json_object
 from ....adapters.hermes_core import hermes_profile_scope
@@ -149,6 +155,74 @@ async def handle_skill_toggle(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
+async def handle_skill_hub_search(request: web.Request) -> web.Response:
+    try:
+        payload = await asyncio.to_thread(
+            search_skill_hub,
+            request.query.get("q", ""),
+            int(request.query.get("limit", "24")),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return json_error(502, str(exc))
+    return web.json_response(payload)
+
+
+async def handle_skill_hub_action(request: web.Request) -> web.Response:
+    action = request.match_info.get("action", "")
+    if action not in {"install", "update", "uninstall"}:
+        return json_error(404, "unsupported skill action")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    value = body.get("identifier") if action == "install" else body.get("name")
+    if action != "update" and (not isinstance(value, str) or not value.strip()):
+        return json_error(400, "identifier is required" if action == "install" else "name is required")
+    payload = await asyncio.to_thread(_run_hub_action, action, value)
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
+async def handle_create_skill(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    name = body.get("name")
+    content = body.get("content")
+    if not isinstance(name, str) or not name.strip() or not isinstance(content, str):
+        return json_error(400, "name and content are required")
+    try:
+        payload = await asyncio.to_thread(create_custom_skill, name, content, body.get("category"))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
+async def handle_update_skill(request: web.Request) -> web.Response:
+    name = request.match_info.get("name", "")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    content = body.get("content")
+    if not isinstance(content, str):
+        return json_error(400, "content is required")
+    try:
+        payload = await asyncio.to_thread(update_custom_skill, name, content)
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
+async def handle_delete_skill(request: web.Request) -> web.Response:
+    name = request.match_info.get("name", "")
+    try:
+        payload = await asyncio.to_thread(delete_custom_skill, name)
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload, status=200 if payload.get("ok") else 400)
+
+
 def register_skills_routes(app: web.Application) -> None:
     def profiled(handler):
         @wraps(handler)
@@ -178,5 +252,10 @@ def register_skills_routes(app: web.Application) -> None:
             ),
             # PUT mirrors upstream PUT /api/skills/toggle.
             web.put("/hermes/skills/toggle", profiled(handle_skill_toggle)),
+            web.get("/hermes/skills/hub/search", profiled(handle_skill_hub_search)),
+            web.post("/hermes/skills/hub/{action}", profiled(handle_skill_hub_action)),
+            web.post("/hermes/skills", profiled(handle_create_skill)),
+            web.put("/hermes/skills/{name}", profiled(handle_update_skill)),
+            web.delete("/hermes/skills/{name}", profiled(handle_delete_skill)),
         ]
     )

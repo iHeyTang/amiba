@@ -9,6 +9,8 @@ import type { ClientToEngineMessage, EngineToClientMessage } from "@amiba/core";
 import type {
   WorkspaceFileChange,
   WorkspaceFileDocument,
+  WorkspaceDevelopmentAdapter,
+  WorkspaceTreeEntry,
 } from "@amiba/platform";
 
 type StorageChange = { oldValue?: unknown; newValue?: unknown };
@@ -51,6 +53,8 @@ interface AmibaBridgeApi {
       sessionId: string,
       query: string,
     ): Promise<{ path: string; isDir: boolean }[]>;
+    tree(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
+    search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
     read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
     reveal(sessionId: string, path: string): Promise<void>;
     openExternal(sessionId: string, path: string): Promise<void>;
@@ -60,6 +64,7 @@ interface AmibaBridgeApi {
       cb: (change: WorkspaceFileChange) => void,
     ): () => void;
   };
+  workspaceDevelopment: WorkspaceDevelopmentAdapter;
   notifier: {
     onMessage(cb: (msg: unknown) => void): () => void;
     hide(): Promise<void>;

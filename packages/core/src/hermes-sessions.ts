@@ -36,6 +36,13 @@ export interface HermesSession {
   last_active?: number;
   /** Computed by the backplane: `ended_at IS NULL && last_active within 5min`. */
   is_active?: boolean;
+  pinned?: boolean | number;
+  archived?: boolean | number;
+  parent_session_id?: string | null;
+  model_config?: Record<string, unknown> | string | null;
+  /** Present when the row matched transcript search rather than its title. */
+  search_snippet?: string | null;
+  search_message_id?: number | null;
   /** Aggregate prompt tokens across the session (upstream `/api/sessions`). */
   input_tokens?: number;
   /** Aggregate completion tokens across the session. */
@@ -106,6 +113,50 @@ export interface UpdateSessionResponse {
 
 export interface DeleteSessionResponse {
   ok: true;
+}
+
+export interface SearchSessionsResponse {
+  ok: true;
+  sessions: HermesSession[];
+  total: number;
+}
+
+export interface BranchSessionResponse {
+  ok: true;
+  session: HermesSession;
+  provenance: { session_id: string; message_id: number | null };
+  copied_messages: number;
+}
+
+export interface RewindSessionResponse {
+  ok: true;
+  session_id: string;
+  rewound_count: number;
+  target_message: HermesMessage;
+  new_head_id: number | null;
+}
+
+export interface RestoreSessionResponse {
+  ok: true;
+  session_id: string;
+  restored_count: number;
+}
+
+export interface ExportSessionResponse {
+  ok: true;
+  export_version: number;
+  session: Record<string, unknown> & { id: string; messages?: unknown[] };
+}
+
+export interface ImportSessionsResponse {
+  ok: true;
+  [key: string]: unknown;
+}
+
+export interface BulkSessionsResponse {
+  ok: true;
+  changed: string[];
+  failures: Array<{ session_id: string; error: string }>;
 }
 
 export interface HermesError {
@@ -204,6 +255,8 @@ export interface ListSessionsParams {
    * from the chat-history sidebar.
    */
   excludeSources?: string[];
+  includeArchived?: boolean;
+  includePinned?: boolean;
   /** Hermes profile whose isolated SessionDB should be queried. */
   profileId?: string;
 }
@@ -221,6 +274,8 @@ export async function listHermesSessions(
     // long.
     q.set("exclude_sources", params.excludeSources.join(","));
   }
+  if (params.includeArchived) q.set("include_archived", "true");
+  if (params.includePinned === false) q.set("include_pinned", "false");
   q.set("profile", normalizeAgentProfileId(params.profileId));
   const qs = q.toString();
   // Wire body matches upstream GET /api/sessions: {sessions, total, limit, offset}.
@@ -230,6 +285,23 @@ export async function listHermesSessions(
     limit: number;
     offset: number;
   }>(`/hermes/sessions${qs ? `?${qs}` : ""}`);
+  if (isReqErr(r)) return r;
+  return { ok: true, ...r.value };
+}
+
+export async function searchHermesSessions(
+  query: string,
+  params: { limit?: number; includeArchived?: boolean; profileId?: string } = {},
+): Promise<SearchSessionsResponse | HermesError> {
+  const q = new URLSearchParams({
+    q: query,
+    profile: normalizeAgentProfileId(params.profileId),
+  });
+  if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.includeArchived) q.set("include_archived", "true");
+  const r = await request<{ sessions: HermesSession[]; total: number }>(
+    `/hermes/sessions/search?${q.toString()}`,
+  );
   if (isReqErr(r)) return r;
   return { ok: true, ...r.value };
 }
@@ -437,6 +509,8 @@ export async function triggerHermesAutoTitle(
 export interface UpdateSessionInput {
   /** Empty / whitespace-only string clears the title (Hermes semantics). */
   title?: string;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export async function updateHermesSession(
@@ -468,6 +542,96 @@ export async function deleteHermesSession(
   );
   if (isReqErr(r)) return r;
   return { ok: true };
+}
+
+export async function branchHermesSession(
+  sessionId: string,
+  input: { messageId?: number; title?: string } = {},
+  profileId?: string,
+): Promise<BranchSessionResponse | HermesError> {
+  const r = await request<BranchSessionResponse>(
+    `/hermes/sessions/${encodeURIComponent(sessionId)}/branch?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", {
+      message_id: input.messageId,
+      title: input.title,
+    }),
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
+}
+
+export async function rewindHermesSession(
+  sessionId: string,
+  messageId: number,
+  profileId?: string,
+): Promise<RewindSessionResponse | HermesError> {
+  const r = await request<RewindSessionResponse>(
+    `/hermes/sessions/${encodeURIComponent(sessionId)}/rewind?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", { message_id: messageId }),
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
+}
+
+export async function restoreHermesSession(
+  sessionId: string,
+  sinceMessageId: number,
+  profileId?: string,
+): Promise<RestoreSessionResponse | HermesError> {
+  const r = await request<RestoreSessionResponse>(
+    `/hermes/sessions/${encodeURIComponent(sessionId)}/restore?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", { since_message_id: sinceMessageId }),
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
+}
+
+export async function exportHermesSession(
+  sessionId: string,
+  profileId?: string,
+): Promise<ExportSessionResponse | HermesError> {
+  const r = await request<ExportSessionResponse>(
+    `/hermes/sessions/${encodeURIComponent(sessionId)}/export?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
+}
+
+export async function importHermesSessions(
+  sessions: Array<Record<string, unknown>>,
+  profileId?: string,
+): Promise<ImportSessionsResponse | HermesError> {
+  const r = await request<ImportSessionsResponse>(
+    `/hermes/sessions/import?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", { sessions }),
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
+}
+
+export async function bulkUpdateHermesSessions(
+  sessionIds: string[],
+  action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  profileId?: string,
+): Promise<BulkSessionsResponse | HermesError> {
+  const r = await request<BulkSessionsResponse>(
+    `/hermes/sessions/bulk?profile=${encodeURIComponent(
+      normalizeAgentProfileId(profileId),
+    )}`,
+    jsonInit("POST", { session_ids: sessionIds, action }),
+  );
+  if (isReqErr(r)) return r;
+  return { ...r.value, ok: true };
 }
 
 // ---------------------------------------------------------------------------

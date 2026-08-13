@@ -52,9 +52,16 @@ import {
 } from "../agent-context";
 import {
   appendHermesMessage,
+  branchHermesSession,
+  bulkUpdateHermesSessions,
   createHermesSession,
   deleteHermesSession,
+  exportHermesSession,
   forgetEnsuredHermesSession,
+  getHermesMessages,
+  importHermesSessions,
+  restoreHermesSession,
+  rewindHermesSession,
 } from "../hermes-sessions";
 import { getLocalSource } from "../channels";
 import {
@@ -71,6 +78,7 @@ import {
   newSessionMeta,
   saveIndex,
   saveMessages,
+  searchIndex,
 } from "./store";
 import type { SessionsState } from "./types";
 
@@ -657,6 +665,139 @@ export class SessionsStore {
     };
     this.commit({ sessions: next });
     await this.persistIndex(next);
+  };
+
+  setPinned = async (id: string, pinned: boolean): Promise<void> => {
+    const index = this.state.sessions.findIndex((session) => session.id === id);
+    if (index < 0 || Boolean(this.state.sessions[index].pinned) === pinned) return;
+    const next = this.state.sessions.slice();
+    next[index] = { ...next[index], pinned, updatedAt: Date.now() };
+    this.commit({ sessions: next });
+    await this.persistIndex(next);
+  };
+
+  setArchived = async (id: string, archived: boolean): Promise<void> => {
+    const index = this.state.sessions.findIndex((session) => session.id === id);
+    if (index < 0 || Boolean(this.state.sessions[index].archived) === archived) return;
+    const next = this.state.sessions.slice();
+    next[index] = { ...next[index], archived, updatedAt: Date.now() };
+    this.commit({ sessions: next });
+    await this.persistIndex(next);
+    if (archived && this.state.openTabIds.includes(id)) {
+      await this.closeTab(id);
+    }
+  };
+
+  bulkUpdate = async (
+    ids: string[],
+    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  ): Promise<void> => {
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
+    const byProfile = new Map<string, string[]>();
+    for (const id of uniqueIds) {
+      const profile = this.profileIdForSession(id);
+      byProfile.set(profile, [...(byProfile.get(profile) ?? []), id]);
+    }
+    const failures: string[] = [];
+    for (const [profileId, sessionIds] of byProfile) {
+      const response = await bulkUpdateHermesSessions(sessionIds, action, profileId);
+      if (!response.ok) {
+        failures.push(response.error);
+      } else {
+        failures.push(...response.failures.map((item) => item.error));
+      }
+    }
+    await this.refresh();
+    if (failures.length) throw new Error(failures.join("; "));
+  };
+
+  branchSession = async (id: string, messageId?: number): Promise<string> => {
+    const response = await branchHermesSession(
+      id,
+      { messageId },
+      this.profileIdForSession(id),
+    );
+    if (!response.ok) throw new Error(response.error);
+    await this.refresh();
+    await this.openTab(response.session.id);
+    return response.session.id;
+  };
+
+  private reloadMessages = async (id: string): Promise<SessionMessage[]> => {
+    const messages = await loadMessages(id, this.profileIdForSession(id));
+    const next = this.state.sessions.map((session) =>
+      session.id === id
+        ? { ...session, messageCount: messages.length, updatedAt: Date.now() }
+        : session,
+    );
+    this.commit({
+      sessions: next,
+      ...(this.state.activeId === id ? { activeMessages: messages } : {}),
+    });
+    return messages;
+  };
+
+  rewindSession = async (
+    id: string,
+    messageId: number,
+  ): Promise<{ content: string; rewoundCount: number }> => {
+    const response = await rewindHermesSession(
+      id,
+      messageId,
+      this.profileIdForSession(id),
+    );
+    if (!response.ok) throw new Error(response.error);
+    await this.reloadMessages(id);
+    const content = response.target_message.content;
+    return {
+      content: typeof content === "string" ? content : "",
+      rewoundCount: response.rewound_count,
+    };
+  };
+
+  restoreSession = async (id: string, sinceMessageId: number): Promise<number> => {
+    const response = await restoreHermesSession(
+      id,
+      sinceMessageId,
+      this.profileIdForSession(id),
+    );
+    if (!response.ok) throw new Error(response.error);
+    await this.reloadMessages(id);
+    return response.restored_count;
+  };
+
+  exportSession = async (id: string): Promise<Record<string, unknown>> => {
+    const response = await exportHermesSession(id, this.profileIdForSession(id));
+    if (!response.ok) throw new Error(response.error);
+    return {
+      export_version: response.export_version,
+      session: response.session,
+    };
+  };
+
+  importSessions = async (
+    payload: Array<Record<string, unknown>>,
+    profileId?: string,
+  ): Promise<Record<string, unknown>> => {
+    const response = await importHermesSessions(payload, profileId);
+    if (!response.ok) throw new Error(response.error);
+    await this.refresh();
+    return response;
+  };
+
+  searchHistory = async (query: string): Promise<SessionMeta[]> =>
+    searchIndex(query);
+
+  resolveUserMessageId = async (
+    id: string,
+    userOrdinal: number,
+  ): Promise<number | null> => {
+    const response = await getHermesMessages(id, this.profileIdForSession(id));
+    if (!response.ok) throw new Error(response.error);
+    return (
+      response.messages.filter((message) => message.role === "user")[userOrdinal]
+        ?.id ?? null
+    );
   };
 
   // -------------------------------------------------------------------------

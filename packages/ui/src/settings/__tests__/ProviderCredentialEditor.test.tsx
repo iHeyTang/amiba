@@ -36,7 +36,9 @@ describe("ProviderCredentialEditor", () => {
       />,
     );
 
-    expect(screen.getByRole("textbox")).toHaveAttribute(
+    expect(
+      screen.getByPlaceholderText("https://api.deepseek.com/v1"),
+    ).toHaveAttribute(
       "placeholder",
       "https://api.deepseek.com/v1",
     );

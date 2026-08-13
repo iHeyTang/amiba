@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -297,6 +298,78 @@ def _extract_description(frontmatter: Dict[str, Any], body: str) -> str:
     if len(result) > MAX_DESCRIPTION_CHARS:
         result = result[: MAX_DESCRIPTION_CHARS - 3] + "..."
     return result
+
+
+def search_skill_hub(query: str, limit: int = 24) -> Dict[str, Any]:
+    from tools.skills_hub import create_source_router, parallel_search_sources  # type: ignore
+
+    value = str(query or "").strip()
+    if not value:
+        return {"ok": True, "results": [], "source_counts": {}, "timed_out": []}
+    results, counts, timed_out = parallel_search_sources(
+        create_source_router(),
+        query=value,
+        overall_timeout=30,
+    )
+    seen: Set[str] = set()
+    items = []
+    for result in results:
+        if result.identifier in seen:
+            continue
+        seen.add(result.identifier)
+        items.append(asdict(result))
+        if len(items) >= min(max(int(limit), 1), 50):
+            break
+    return {
+        "ok": True,
+        "results": items,
+        "source_counts": counts,
+        "timed_out": timed_out,
+    }
+
+
+def _run_hub_action(action: str, value: Optional[str] = None) -> Dict[str, Any]:
+    from rich.console import Console  # type: ignore
+    from hermes_cli.skills_hub import do_install, do_uninstall, do_update  # type: ignore
+
+    console = Console(record=True, width=100)
+    try:
+        if action == "install":
+            do_install(str(value or ""), console=console, skip_confirm=True)
+        elif action == "update":
+            do_update(value or None, console=console)
+        elif action == "uninstall":
+            do_uninstall(str(value or ""), console=console, skip_confirm=True)
+        else:
+            return {"ok": False, "error": f"unsupported skill action: {action}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    output = console.export_text(clear=False).strip()
+    lowered = output.lower()
+    if "error:" in lowered or "not installed" in lowered or "was not installed" in lowered:
+        return {"ok": False, "error": output or f"skill {action} failed"}
+    return {"ok": True, "output": output}
+
+
+def create_custom_skill(name: str, content: str, category: Optional[str] = None) -> Dict[str, Any]:
+    from tools.skill_manager_tool import _create_skill  # type: ignore
+
+    result = dict(_create_skill(name, content, category or None))
+    return {"ok": bool(result.get("success")), **result}
+
+
+def update_custom_skill(name: str, content: str) -> Dict[str, Any]:
+    from tools.skill_manager_tool import _edit_skill  # type: ignore
+
+    result = dict(_edit_skill(name, content))
+    return {"ok": bool(result.get("success")), **result}
+
+
+def delete_custom_skill(name: str) -> Dict[str, Any]:
+    from tools.skill_manager_tool import _delete_skill  # type: ignore
+
+    result = dict(_delete_skill(name, absorbed_into=""))
+    return {"ok": bool(result.get("success")), **result}
 
 
 def _category_from_path(skill_md: Path, root: Path) -> Optional[str]:

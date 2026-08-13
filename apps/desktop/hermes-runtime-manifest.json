@@ -15,6 +15,13 @@
       "sha256": "7872e95e60e6137b0118b482e92a169a33960585a0fe707361a42fb80e6316bc",
       "verifier": "hermes-patches/tests/verify_moa_run_events.py",
       "verifierSha256": "1b57cdd395bb452e0e596fb2082eca8dedcf0d63c8c15045cd539db55c5c1419"
+    },
+    {
+      "id": "forward-subagent-run-events",
+      "file": "hermes-patches/0002-forward-subagent-run-events.patch",
+      "sha256": "19f37768fc50d74c3b03fee0e079a9697517511cedaf114b7d43d9dfd13a6b36",
+      "verifier": "hermes-patches/tests/verify_subagent_run_events.py",
+      "verifierSha256": "4d50a40450565a575093c9963a51dafb15713e783b157a2c70d4ce640d37774c"
     }
   ],
   "backplanePort": 19394,

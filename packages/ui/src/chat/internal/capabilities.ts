@@ -20,8 +20,12 @@
  *                                 it on mount.
  */
 
-import type { AgentExecutionContext, ChatMessage } from "@amiba/core"
-import type { WorkspaceFilesAdapter } from "@amiba/platform"
+import type { AgentExecutionContext, ChatMessage } from "@amiba/core";
+import type {
+  WorkspaceAdapter,
+  WorkspaceDevelopmentAdapter,
+  WorkspaceFilesAdapter,
+} from "@amiba/platform";
 
 // ---------------------------------------------------------------------------
 // page-context
@@ -29,19 +33,19 @@ import type { WorkspaceFilesAdapter } from "@amiba/platform"
 
 /** A captured snapshot of a web page. Mirrors `PageContext` in extension. */
 export interface PageContextSnapshot {
-  url?: string
-  title?: string
-  favIconUrl?: string
-  text?: string
-  html?: string
-  [k: string]: unknown
+  url?: string;
+  title?: string;
+  favIconUrl?: string;
+  text?: string;
+  html?: string;
+  [k: string]: unknown;
 }
 
 export interface ActiveTabInfo {
-  id?: number
-  url?: string
-  title?: string
-  favIconUrl?: string
+  id?: number;
+  url?: string;
+  title?: string;
+  favIconUrl?: string;
 }
 
 /**
@@ -54,22 +58,22 @@ export interface ActiveTabInfo {
  * the handler substitutes verbatim.
  */
 export interface BrowserTabSnapshot {
-  tab_id?: number
-  window_id?: number
-  url?: string
-  title?: string
-  favicon?: string
-  text?: string
-  truncated?: boolean
-  full_length?: number
-  captured_at: number
+  tab_id?: number;
+  window_id?: number;
+  url?: string;
+  title?: string;
+  favicon?: string;
+  text?: string;
+  truncated?: boolean;
+  full_length?: number;
+  captured_at: number;
 }
 
 export interface PageContextCapability {
   /** Capture the currently active page. Returns null if unavailable. */
-  capturePage(): Promise<PageContextSnapshot | null>
+  capturePage(): Promise<PageContextSnapshot | null>;
   /** Get current active browser tab metadata. */
-  getActiveBrowserTab(): Promise<ActiveTabInfo | null>
+  getActiveBrowserTab(): Promise<ActiveTabInfo | null>;
   /**
    * Capture a per-turn snapshot of the currently active tab (id + url +
    * title + extracted text), returned in the wire shape the agent's
@@ -78,17 +82,17 @@ export interface PageContextCapability {
    * tab is restricted (chrome://, etc.) or capture fails — the agent then
    * falls back to its live behaviour.
    */
-  captureBrowserTabSnapshot(): Promise<BrowserTabSnapshot | null>
+  captureBrowserTabSnapshot(): Promise<BrowserTabSnapshot | null>;
   /** Format pinned + live context for inclusion in a chat prompt. */
-  formatPageContextsForPrompt(snapshots: PageContextSnapshot[]): string
+  formatPageContextsForPrompt(snapshots: PageContextSnapshot[]): string;
   /** "This page can't be captured because…" — or null when capture is OK. */
-  getPageRestrictedReason(url: string | undefined): string | null
+  getPageRestrictedReason(url: string | undefined): string | null;
   /**
    * React hook: live-tracking the user's currently active tab. Returns the
    * latest `tab` info and a `refresh()` to force a re-read. Must be a
    * stable function reference across renders (rules of hooks).
    */
-  useActiveTab(): { tab: ActiveTabInfo | null; refresh: () => void }
+  useActiveTab(): { tab: ActiveTabInfo | null; refresh: () => void };
 }
 
 // ---------------------------------------------------------------------------
@@ -96,35 +100,39 @@ export interface PageContextCapability {
 // ---------------------------------------------------------------------------
 
 export interface LearnStatus {
-  active: boolean
-  eventCount: number
+  active: boolean;
+  eventCount: number;
 }
 
 export interface LearnTraceResult {
-  ok: boolean
-  trace?: unknown
-  error?: string
+  ok: boolean;
+  trace?: unknown;
+  error?: string;
 }
 
 export interface LearnCapability {
-  getStatus(): Promise<LearnStatus>
-  start(tabId: number): Promise<{ ok: boolean; error?: string }>
-  stop(): Promise<LearnTraceResult>
+  getStatus(): Promise<LearnStatus>;
+  start(tabId: number): Promise<{ ok: boolean; error?: string }>;
+  stop(): Promise<LearnTraceResult>;
   /** Subscribe to live status broadcasts; returns unsubscribe. */
-  onStateChange(cb: (status: LearnStatus) => void): () => void
+  onStateChange(cb: (status: LearnStatus) => void): () => void;
 }
 
 // ---------------------------------------------------------------------------
 // navigateOpenPolicy
 // ---------------------------------------------------------------------------
 
-export type NavigateOpenPolicy = "auto" | "agent" | "user_new_tab" | "user_same_tab"
+export type NavigateOpenPolicy =
+  | "auto"
+  | "agent"
+  | "user_new_tab"
+  | "user_same_tab";
 
 export interface NavigateOpenPolicyCapability {
   /** Apply the policy + broadcast the change to anyone interested (e.g. SW). */
-  apply(policy: NavigateOpenPolicy): Promise<void>
+  apply(policy: NavigateOpenPolicy): Promise<void>;
   /** Subscribe to changes coming from other surfaces (e.g. Options page). */
-  onChange(cb: (policy: NavigateOpenPolicy) => void): () => void
+  onChange(cb: (policy: NavigateOpenPolicy) => void): () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,34 +160,34 @@ export interface NavigateOpenPolicyCapability {
  * that's parked in storage is already settled.
  */
 export interface PendingPromptAttachment {
-  uiId: string
-  name: string
-  mime: string
-  size: number
-  kind: "image" | "text" | "pdf" | "binary"
+  uiId: string;
+  name: string;
+  mime: string;
+  size: number;
+  kind: "image" | "text" | "pdf" | "binary";
   /** Absolute path to a file the agent can read from. */
-  path: string
-  thumbDataUrl?: string
-  textPreview?: string
+  path: string;
+  thumbDataUrl?: string;
+  textPreview?: string;
 }
 
 export interface PendingPromptResult {
   /** Prefill text for the composer. Optional — a snip-only hand-off has none. */
-  text?: string
+  text?: string;
   /** Attachments to pre-populate alongside the text. */
-  attachments?: PendingPromptAttachment[]
+  attachments?: PendingPromptAttachment[];
   /**
    * Human-readable origin hint (e.g. "Safari", "VS Code") shown in the
    * composer header. Only set by Quick-Ask Spotlight on macOS today.
    */
-  sourceApp?: string
+  sourceApp?: string;
   /**
    * Absolute directory selected before a conversation existed. ChatSurface
    * binds it to the session created by the first submitted message.
    */
-  workspacePath?: string
+  workspacePath?: string;
   /** Profile-scoped runtime selected by the originating surface. */
-  agent?: AgentExecutionContext
+  agent?: AgentExecutionContext;
 }
 
 export interface PendingPromptCapability {
@@ -191,7 +199,7 @@ export interface PendingPromptCapability {
    * older surfaces that haven't migrated; callers should treat that as
    * `{ text }` with no attachments.
    */
-  drain(): Promise<PendingPromptResult | string | null>
+  drain(): Promise<PendingPromptResult | string | null>;
   /**
    * Optional subscription so the chat surface can re-drain when a NEW
    * payload lands while it's already mounted. Without this the
@@ -203,7 +211,7 @@ export interface PendingPromptCapability {
    * Returns an unsubscribe callback. Hosts that don't implement push
    * notifications can simply omit this.
    */
-  subscribe?(onChanged: () => void): () => void
+  subscribe?(onChanged: () => void): () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +219,9 @@ export interface PendingPromptCapability {
 // ---------------------------------------------------------------------------
 
 export interface WorkspaceInspectorCapability {
-  files: WorkspaceFilesAdapter
+  files: WorkspaceFilesAdapter;
+  development?: WorkspaceDevelopmentAdapter;
+  workspaces?: WorkspaceAdapter;
 }
 
 // ---------------------------------------------------------------------------
@@ -219,11 +229,11 @@ export interface WorkspaceInspectorCapability {
 // ---------------------------------------------------------------------------
 
 export interface ChatSurfaceCapabilities {
-  pageContext?: PageContextCapability
-  learn?: LearnCapability
-  navigateOpenPolicy?: NavigateOpenPolicyCapability
-  pendingPrompt?: PendingPromptCapability
-  workspaceInspector?: WorkspaceInspectorCapability
+  pageContext?: PageContextCapability;
+  learn?: LearnCapability;
+  navigateOpenPolicy?: NavigateOpenPolicyCapability;
+  pendingPrompt?: PendingPromptCapability;
+  workspaceInspector?: WorkspaceInspectorCapability;
 }
 
 /**
@@ -236,12 +246,12 @@ export function buildHistoryWithPageContext(
   baseHistory: ChatMessage[],
   userText: string,
   pageSnapshots: PageContextSnapshot[],
-  pageContext?: PageContextCapability
+  pageContext?: PageContextCapability,
 ): ChatMessage[] {
-  let augmented = userText
+  let augmented = userText;
   if (pageContext && pageSnapshots.length > 0) {
-    const ctx = pageContext.formatPageContextsForPrompt(pageSnapshots)
-    if (ctx) augmented = `${ctx}\n\n${userText}`
+    const ctx = pageContext.formatPageContextsForPrompt(pageSnapshots);
+    if (ctx) augmented = `${ctx}\n\n${userText}`;
   }
-  return [...baseHistory, { role: "user", content: augmented }]
+  return [...baseHistory, { role: "user", content: augmented }];
 }

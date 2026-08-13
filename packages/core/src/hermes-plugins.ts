@@ -44,17 +44,18 @@ export async function getHermesPlugins(
   profileId?: string,
 ): Promise<HermesPluginsResponse> {
   try {
-    const res = await backplaneFetch(
-      profileUrl("/hermes/plugins", profileId),
-      { method: "GET" },
-    );
+    const res = await backplaneFetch(profileUrl("/hermes/plugins", profileId), {
+      method: "GET",
+    });
     if (!res.ok) return { ok: false, plugins: [] };
-    const data = (await res.json().catch(() => null)) as
-      | { plugins?: HermesPlugin[] }
-      | null;
+    const data = (await res.json().catch(() => null)) as {
+      plugins?: HermesPlugin[];
+    } | null;
     return {
       ok: true,
-      plugins: Array.isArray(data?.plugins) ? (data!.plugins as HermesPlugin[]) : [],
+      plugins: Array.isArray(data?.plugins)
+        ? (data!.plugins as HermesPlugin[])
+        : [],
     };
   } catch {
     return { ok: false, plugins: [] };
@@ -85,15 +86,19 @@ export async function setPluginEnabled(
   );
   try {
     const res = await backplaneFetch(path, { method: "POST" });
-    const data = (await res.json().catch(() => null)) as
-      | { error?: string; applies_on_restart?: boolean }
-      | null;
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      applies_on_restart?: boolean;
+    } | null;
     if (!res.ok) {
       return { ok: false, error: data?.error || `HTTP ${res.status}` };
     }
     return { ok: true, appliesOnRestart: data?.applies_on_restart ?? true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "request failed" };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "request failed",
+    };
   }
 }
 
@@ -111,18 +116,120 @@ export interface PluginUninstallResult {
  * bundled/project → refused with a message. Does NOT hot-unload — a removed
  * plugin disappears from the list immediately but fully unloads on restart.
  */
-export async function uninstallPlugin(name: string): Promise<PluginUninstallResult> {
-  const path = `/hermes/plugins/uninstall?name=${encodeURIComponent(name)}`;
+export async function uninstallPlugin(
+  name: string,
+  profileId?: string,
+): Promise<PluginUninstallResult> {
+  const path = profileUrl(
+    `/hermes/plugins/uninstall?name=${encodeURIComponent(name)}`,
+    profileId,
+  );
   try {
     const res = await backplaneFetch(path, { method: "POST" });
-    const data = (await res.json().catch(() => null)) as
-      | { error?: string; applies_on_restart?: boolean }
-      | null;
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      applies_on_restart?: boolean;
+    } | null;
     if (!res.ok) {
       return { ok: false, error: data?.error || `HTTP ${res.status}` };
     }
     return { ok: true, appliesOnRestart: data?.applies_on_restart ?? true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "request failed" };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "request failed",
+    };
   }
+}
+
+export interface PluginActionResult {
+  ok: boolean;
+  error?: string;
+  pluginName?: string;
+  warnings?: string[];
+  missingEnv?: string[];
+  unchanged?: boolean;
+  summary?: { tools: number; hooks: number; commands: number };
+}
+
+async function pluginAction(
+  action: "install" | "update" | "test",
+  options: {
+    name?: string;
+    identifier?: string;
+    force?: boolean;
+    enable?: boolean;
+  },
+  profileId?: string,
+): Promise<PluginActionResult> {
+  const suffix = options.name
+    ? `?name=${encodeURIComponent(options.name)}`
+    : "";
+  try {
+    const res = await backplaneFetch(
+      profileUrl(`/hermes/plugins/${action}${suffix}`, profileId),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      error?: string;
+      plugin_name?: string;
+      warnings?: string[];
+      missing_env?: string[];
+      unchanged?: boolean;
+      summary?: { tools?: number; hooks?: number; commands?: number };
+    } | null;
+    if (!res.ok || data?.ok === false) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return {
+      ok: true,
+      pluginName: data?.plugin_name,
+      warnings: data?.warnings,
+      missingEnv: data?.missing_env,
+      unchanged: data?.unchanged,
+      summary: data?.summary
+        ? {
+            tools: Number(data.summary.tools || 0),
+            hooks: Number(data.summary.hooks || 0),
+            commands: Number(data.summary.commands || 0),
+          }
+        : undefined,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "request failed",
+    };
+  }
+}
+
+export function installPlugin(
+  identifier: string,
+  profileId?: string,
+  options: { force?: boolean; enable?: boolean } = {},
+): Promise<PluginActionResult> {
+  return pluginAction(
+    "install",
+    { identifier, force: options.force, enable: options.enable ?? true },
+    profileId,
+  );
+}
+
+export function updatePlugin(
+  name: string,
+  profileId?: string,
+): Promise<PluginActionResult> {
+  return pluginAction("update", { name }, profileId);
+}
+
+export function testPlugin(
+  name: string,
+  profileId?: string,
+): Promise<PluginActionResult> {
+  return pluginAction("test", { name }, profileId);
 }

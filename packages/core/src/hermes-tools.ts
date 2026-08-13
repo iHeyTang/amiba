@@ -586,6 +586,77 @@ export interface HermesInstalledMcp {
   enabled: boolean;
   /** "stdio" | "http" | "" when we can't tell from the saved record. */
   transport_kind: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  env_keys?: string[];
+  header_keys?: string[];
+}
+
+export interface HermesMcpInput {
+  url?: string;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  description?: string;
+  enabled?: boolean;
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+}
+
+export interface HermesMcpMutationResponse {
+  ok: boolean;
+  error?: string;
+  tools?: Array<{ name: string; description: string }>;
+  prompts?: number;
+  resources?: number;
+}
+
+async function mutateMcp(
+  slug: string,
+  method: "PUT" | "DELETE" | "POST",
+  profileId?: string,
+  input?: HermesMcpInput,
+  suffix = "",
+): Promise<HermesMcpMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl(
+        `/hermes/tools/installed-mcps/${encodeURIComponent(slug)}${suffix}`,
+        profileId,
+      ),
+      {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: input ? JSON.stringify(input) : undefined,
+      },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesMcpMutationResponse | null;
+    if (!res.ok || !data?.ok)
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    return data;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+export function saveHermesMcp(
+  slug: string,
+  input: HermesMcpInput,
+  profileId?: string,
+) {
+  return mutateMcp(slug, "PUT", profileId, input);
+}
+
+export function removeHermesMcp(slug: string, profileId?: string) {
+  return mutateMcp(slug, "DELETE", profileId);
+}
+
+export function testHermesMcp(slug: string, profileId?: string) {
+  return mutateMcp(slug, "POST", profileId, undefined, "/test");
 }
 
 export interface HermesInstalledMcpsResponse {

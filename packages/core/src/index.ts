@@ -18,6 +18,7 @@ export * from "./hermes-cron";
 export * from "./hermes-lifecycle";
 export * from "./hermes-logs";
 export * from "./hermes-memory";
+export * from "./hermes-messaging";
 export * from "./hermes-sessions";
 export * from "./hermes-skills";
 export * from "./hermes-mention-resources";

@@ -1,9 +1,10 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button, PageContent, ScrollArea } from "../primitives";
 import {
   getHermesMemoryList,
+  resetHermesMemory,
   type HermesMemoryEntries,
   type HermesMemoryTarget,
 } from "@amiba/core";
@@ -157,6 +158,21 @@ export function SettingsMemory({
     setItems(r.targets);
   }, [profileId, t]);
 
+  const reset = useCallback(async () => {
+    if (
+      !confirm(
+        "Clear all curated memory for this profile? This cannot be undone.",
+      )
+    )
+      return;
+    setLoading(true);
+    setError(null);
+    const result = await resetHermesMemory("all", profileId);
+    setLoading(false);
+    if (!result.ok) setError(result.error || "Failed to reset memory");
+    else await refresh();
+  }, [profileId, refresh]);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -169,6 +185,19 @@ export function SettingsMemory({
           subtitle={t("options.memory.subtitle")}
           subtitleTooltip={t("options.memory.subtitle.tooltip")}
         >
+          <Button
+            className="h-8 shrink-0 gap-1.5 text-xs text-destructive hover:text-destructive"
+            disabled={
+              loading || items.every((item) => item.entries.length === 0)
+            }
+            onClick={() => void reset()}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Reset
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -212,6 +241,19 @@ export function SettingsMemory({
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
+              </Button>
+              <Button
+                aria-label="Reset memory"
+                className="h-7 w-7 rounded-full text-destructive hover:text-destructive"
+                disabled={
+                  loading || items.every((item) => item.entries.length === 0)
+                }
+                onClick={() => void reset()}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           ) : null}

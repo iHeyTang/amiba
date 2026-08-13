@@ -33,6 +33,19 @@ logger = logging.getLogger(__name__)
 ACTION_LOG_FILES: Dict[str, str] = {
     "gateway-restart": "gateway-restart.log",
     "hermes-update": "hermes-update.log",
+    "doctor": "doctor.log",
+    "security-audit": "security-audit.log",
+    "backup": "backup.log",
+    "debug-bundle": "debug-bundle.log",
+    "curator": "curator.log",
+}
+
+MAINTENANCE_ACTIONS: Dict[str, List[str]] = {
+    "doctor": ["doctor"],
+    "security-audit": ["security", "audit"],
+    "backup": ["backup", "--quick"],
+    "debug-bundle": ["debug", "share", "--local", "--yes"],
+    "curator": ["curator", "run"],
 }
 
 

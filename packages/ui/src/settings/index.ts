@@ -8,6 +8,7 @@ export { ScriptList } from "./ScriptList";
 export { SettingsGateway } from "./SettingsGateway";
 export { SettingsLogs } from "./SettingsLogs";
 export { SettingsMemory } from "./SettingsMemory";
+export { SettingsMessaging } from "./SettingsMessaging";
 export { SettingsAgents } from "./SettingsAgents";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";

@@ -4,9 +4,13 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  GitBranch,
   Globe,
+  Pencil,
+  RotateCcw,
+  Scissors,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 import { useT } from "@amiba/i18n";
 
@@ -961,10 +965,21 @@ function InterleavedAssistantFlow({
 export function UserStickyBubble({
   m,
   onOpenAgentDestination,
+  userOrdinal,
+  onEdit,
+  onRetry,
+  onBranch,
+  onTruncate,
 }: {
   m: UiMessage;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
+  userOrdinal: number;
+  onEdit?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onRetry?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onTruncate?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
 }) {
+  const { t } = useT();
   const innerRef = useRef<HTMLDivElement>(null);
   const [overflowed, setOverflowed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -1032,6 +1047,14 @@ export function UserStickyBubble({
             )}
           </button>
         )}
+        {(onEdit || onRetry || onBranch || onTruncate) && !m.streaming ? (
+          <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 rounded-lg border border-border/50 bg-background/90 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            {onEdit ? <UserActionButton label={t("sidepanel.message.edit")} icon={<Pencil />} onClick={() => void onEdit(m, userOrdinal)} /> : null}
+            {onRetry ? <UserActionButton label={t("sidepanel.message.retry")} icon={<RotateCcw />} onClick={() => void onRetry(m, userOrdinal)} /> : null}
+            {onBranch ? <UserActionButton label={t("sidepanel.message.branch")} icon={<GitBranch />} onClick={() => void onBranch(m, userOrdinal)} /> : null}
+            {onTruncate ? <UserActionButton label={t("sidepanel.message.truncate")} icon={<Scissors />} onClick={() => void onTruncate(m, userOrdinal)} /> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1047,21 +1070,31 @@ export function UserStickyBubble({
 export function MessageTurns({
   messages,
   onOpenAgentDestination,
+  onEditUserMessage,
+  onRetryUserMessage,
+  onBranchUserMessage,
+  onTruncateUserMessage,
 }: {
   messages: UiMessage[];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
+  onEditUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onRetryUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onBranchUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onTruncateUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
 }) {
-  type Turn = { user: UiMessage | null; replies: UiMessage[] };
+  type Turn = { user: UiMessage | null; replies: UiMessage[]; userOrdinal: number };
   const turns: Turn[] = [];
   let cur: Turn | null = null;
+  let userOrdinal = 0;
   for (const m of messages) {
     if (m.role === "user") {
-      cur = { user: m, replies: [] };
+      cur = { user: m, replies: [], userOrdinal };
+      userOrdinal += 1;
       turns.push(cur);
     } else if (cur) {
       cur.replies.push(m);
     } else {
-      cur = { user: null, replies: [m] };
+      cur = { user: null, replies: [m], userOrdinal: -1 };
       turns.push(cur);
     }
   }
@@ -1080,6 +1113,11 @@ export function MessageTurns({
               <UserStickyBubble
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
+                userOrdinal={turn.userOrdinal}
+                onEdit={onEditUserMessage}
+                onRetry={onRetryUserMessage}
+                onBranch={onBranchUserMessage}
+                onTruncate={onTruncateUserMessage}
               />
             )}
             {replyItems.map((item) => {
@@ -1109,5 +1147,21 @@ export function MessageTurns({
         );
       })}
     </>
+  );
+}
+
+function UserActionButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:h-3 [&_svg]:w-3">
+      {icon}
+    </button>
   );
 }

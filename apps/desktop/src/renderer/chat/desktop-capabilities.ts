@@ -17,33 +17,44 @@
  * Everything funnels through the same `home.pendingPrompt` key with the
  * shape `{ text?, attachments?, sourceApp?, workspacePath? }`.
  */
-import type { AgentExecutionContext } from "@amiba/core"
-import type { PendingPromptAttachment, PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui"
-import { getPlatform } from "@amiba/platform"
+import type { AgentExecutionContext } from "@amiba/core";
+import type {
+  PendingPromptAttachment,
+  PendingPromptResult,
+  ChatSurfaceCapabilities,
+} from "@amiba/ui";
+import { getPlatform } from "@amiba/platform";
 
-const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"
+const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
 
 function coerceKind(value: unknown): PendingPromptAttachment["kind"] {
-  if (value === "image" || value === "text" || value === "pdf") return value
-  return "binary"
+  if (value === "image" || value === "text" || value === "pdf") return value;
+  return "binary";
 }
 
 function normalizeAttachment(raw: unknown): PendingPromptAttachment | null {
-  if (!raw || typeof raw !== "object") return null
-  const r = raw as Record<string, unknown>
-  const path = typeof r.path === "string" ? r.path : ""
-  if (!path) return null
-  const name = typeof r.name === "string" && r.name ? r.name : path.split(/[\\/]/).pop() || "file"
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const path = typeof r.path === "string" ? r.path : "";
+  if (!path) return null;
+  const name =
+    typeof r.name === "string" && r.name
+      ? r.name
+      : path.split(/[\\/]/).pop() || "file";
   return {
-    uiId: typeof r.uiId === "string" && r.uiId ? r.uiId : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    uiId:
+      typeof r.uiId === "string" && r.uiId
+        ? r.uiId
+        : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
     mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
     size: typeof r.size === "number" && Number.isFinite(r.size) ? r.size : 0,
     kind: coerceKind(r.kind),
     path,
-    thumbDataUrl: typeof r.thumbDataUrl === "string" ? r.thumbDataUrl : undefined,
-    textPreview: typeof r.textPreview === "string" ? r.textPreview : undefined
-  }
+    thumbDataUrl:
+      typeof r.thumbDataUrl === "string" ? r.thumbDataUrl : undefined,
+    textPreview: typeof r.textPreview === "string" ? r.textPreview : undefined,
+  };
 }
 
 /**
@@ -53,53 +64,62 @@ function normalizeAttachment(raw: unknown): PendingPromptAttachment | null {
  */
 async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
   try {
-    const storage = getPlatform().storage
-    const r = await storage.get(HOME_PENDING_PROMPT_KEY)
-    const raw = r[HOME_PENDING_PROMPT_KEY]
-    await storage.remove(HOME_PENDING_PROMPT_KEY)
-    if (!raw || typeof raw !== "object") return null
+    const storage = getPlatform().storage;
+    const r = await storage.get(HOME_PENDING_PROMPT_KEY);
+    const raw = r[HOME_PENDING_PROMPT_KEY];
+    await storage.remove(HOME_PENDING_PROMPT_KEY);
+    if (!raw || typeof raw !== "object") return null;
     const obj = raw as {
-      text?: unknown
-      attachments?: unknown
-      sourceApp?: unknown
-      workspacePath?: unknown
-      agent?: unknown
-    }
-    const text = typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined
-    const sourceApp = typeof obj.sourceApp === "string" && obj.sourceApp.trim() ? obj.sourceApp : undefined
+      text?: unknown;
+      attachments?: unknown;
+      sourceApp?: unknown;
+      workspacePath?: unknown;
+      agent?: unknown;
+    };
+    const text =
+      typeof obj.text === "string" && obj.text.trim() ? obj.text : undefined;
+    const sourceApp =
+      typeof obj.sourceApp === "string" && obj.sourceApp.trim()
+        ? obj.sourceApp
+        : undefined;
     const workspacePath =
-      typeof obj.workspacePath === "string" && obj.workspacePath.trim() ? obj.workspacePath : undefined
+      typeof obj.workspacePath === "string" && obj.workspacePath.trim()
+        ? obj.workspacePath
+        : undefined;
     const rawAgent =
       obj.agent && typeof obj.agent === "object"
         ? (obj.agent as Record<string, unknown>)
-        : null
+        : null;
     const agent: AgentExecutionContext | undefined =
       rawAgent && typeof rawAgent.profileId === "string"
         ? {
             profileId: rawAgent.profileId,
             ...(rawAgent.personality &&
             typeof rawAgent.personality === "object" &&
-            typeof (rawAgent.personality as Record<string, unknown>).key === "string" &&
-            typeof (rawAgent.personality as Record<string, unknown>).prompt === "string"
+            typeof (rawAgent.personality as Record<string, unknown>).key ===
+              "string" &&
+            typeof (rawAgent.personality as Record<string, unknown>).prompt ===
+              "string"
               ? {
-                  personality: rawAgent.personality as AgentExecutionContext["personality"],
+                  personality:
+                    rawAgent.personality as AgentExecutionContext["personality"],
                 }
               : {}),
           }
-        : undefined
-    let attachments: PendingPromptAttachment[] | undefined
+        : undefined;
+    let attachments: PendingPromptAttachment[] | undefined;
     if (Array.isArray(obj.attachments)) {
-      const out: PendingPromptAttachment[] = []
+      const out: PendingPromptAttachment[] = [];
       for (const item of obj.attachments) {
-        const norm = normalizeAttachment(item)
-        if (norm) out.push(norm)
+        const norm = normalizeAttachment(item);
+        if (norm) out.push(norm);
       }
-      if (out.length > 0) attachments = out
+      if (out.length > 0) attachments = out;
     }
-    if (!text && !attachments) return null
-    return { text, attachments, sourceApp, workspacePath, agent }
+    if (!text && !attachments) return null;
+    return { text, attachments, sourceApp, workspacePath, agent };
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -117,41 +137,62 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
  * payload itself).
  */
 function subscribePendingPrompt(onChanged: () => void): () => void {
-  const storage = getPlatform().storage
+  const storage = getPlatform().storage;
   return storage.watch([HOME_PENDING_PROMPT_KEY], (changes) => {
-    const ch = changes[HOME_PENDING_PROMPT_KEY]
-    if (!ch) return
-    if (ch.newValue == null) return
-    onChanged()
-  })
+    const ch = changes[HOME_PENDING_PROMPT_KEY];
+    if (!ch) return;
+    if (ch.newValue == null) return;
+    onChanged();
+  });
 }
 
 export const desktopCapabilities: ChatSurfaceCapabilities = {
   pendingPrompt: {
     drain: drainPendingPrompt,
-    subscribe: subscribePendingPrompt
+    subscribe: subscribePendingPrompt,
   },
   workspaceInspector: {
+    development: window.amiba.workspaceDevelopment,
+    workspaces: {
+      chooseDirectory: (defaultPath) =>
+        window.amiba.workspaces.chooseDirectory(defaultPath),
+      getDefaultRoot: () => window.amiba.workspaces.getDefaultRoot(),
+      bind: (sessionId, path) => window.amiba.workspaces.bind(sessionId, path),
+      unbind: (sessionId) => window.amiba.workspaces.unbind(sessionId),
+      getCurrent: (sessionId) => window.amiba.workspaces.getCurrent(sessionId),
+      listBindings: () => window.amiba.workspaces.listBindings(),
+      onChange: (listener) => window.amiba.workspaces.onChanged(listener),
+    },
     files: {
+      list: (sessionId, path) => {
+        const files = getPlatform().workspaceFiles;
+        if (!files) throw new Error("Workspace file access is unavailable.");
+        return files.list(sessionId, path);
+      },
+      search: (sessionId, query) => {
+        const files = getPlatform().workspaceFiles;
+        if (!files) throw new Error("Workspace file access is unavailable.");
+        return files.search(sessionId, query);
+      },
       read: (sessionId, path) => {
-        const files = getPlatform().workspaceFiles
-        if (!files) throw new Error("Workspace file access is unavailable.")
-        return files.read(sessionId, path)
+        const files = getPlatform().workspaceFiles;
+        if (!files) throw new Error("Workspace file access is unavailable.");
+        return files.read(sessionId, path);
       },
       reveal: (sessionId, path) => {
-        const files = getPlatform().workspaceFiles
-        if (!files) throw new Error("Workspace file access is unavailable.")
-        return files.reveal(sessionId, path)
+        const files = getPlatform().workspaceFiles;
+        if (!files) throw new Error("Workspace file access is unavailable.");
+        return files.reveal(sessionId, path);
       },
       openExternal: (sessionId, path) => {
-        const files = getPlatform().workspaceFiles
-        if (!files) throw new Error("Workspace file access is unavailable.")
-        return files.openExternal(sessionId, path)
+        const files = getPlatform().workspaceFiles;
+        if (!files) throw new Error("Workspace file access is unavailable.");
+        return files.openExternal(sessionId, path);
       },
       watch: (sessionId, paths, listener) => {
-        const files = getPlatform().workspaceFiles
-        return files ? files.watch(sessionId, paths, listener) : () => {}
-      }
-    }
-  }
-}
+        const files = getPlatform().workspaceFiles;
+        return files ? files.watch(sessionId, paths, listener) : () => {};
+      },
+    },
+  },
+};

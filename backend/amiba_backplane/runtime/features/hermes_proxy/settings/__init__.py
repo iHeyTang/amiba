@@ -33,6 +33,8 @@ from .memory_routes import register_memory_routes
 from .model_routes import register_model_routes
 from .personalities_routes import register_personalities_routes
 from .profiles_routes import register_profiles_routes
+from .messaging_routes import register_messaging_routes
+from .oauth_routes import register_oauth_routes
 from .skills_routes import register_skills_routes
 from .tools_routes import register_tools_routes
 
@@ -46,6 +48,8 @@ def register(app: web.Application) -> None:
     register_commands_routes(app)
     register_personalities_routes(app)
     register_profiles_routes(app)
+    register_messaging_routes(app)
+    register_oauth_routes(app)
 
 
 __all__ = ["register"]

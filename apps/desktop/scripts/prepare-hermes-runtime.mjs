@@ -345,7 +345,10 @@ function nodeArchName() {
 async function installPortableNode(runtimeDir, scratchDir) {
   const base = `node-v${manifest.nodeVersion}-${nodePlatformName()}-${nodeArchName()}`;
   const archiveName = platform === "win32" ? `${base}.zip` : `${base}.tar.gz`;
-  const distBase = `https://nodejs.org/dist/v${manifest.nodeVersion}`;
+  const nodeDistRoot = (
+    process.env.AMIBA_NODE_DIST_URL ?? "https://nodejs.org/dist"
+  ).replace(/\/+$/, "");
+  const distBase = `${nodeDistRoot}/v${manifest.nodeVersion}`;
   const sums = new TextDecoder().decode(
     await download(
       `${distBase}/SHASUMS256.txt`,

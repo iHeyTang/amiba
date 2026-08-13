@@ -8,6 +8,7 @@ import {
   type ClientToEngineMessage,
   type EngineToClientMessage,
   type HermesApprovalRequest,
+  type HermesLiveAgent,
   type HermesToolProgress,
   type SnapshotFrame,
   type StreamEvent,
@@ -150,6 +151,7 @@ function makeInitialState(
     toolCalls: [],
     hermesOrder: [],
     hermesToolProgress: [],
+    liveAgents: [],
     timeline: [],
     error: null,
     agentFinalUrl: null,
@@ -330,6 +332,49 @@ async function handleSubmit(payload: SubmitPayload) {
     }
   }
 
+  function applyLiveAgent(event: HermesLiveAgent) {
+    const existingIdx = state.liveAgents.findIndex(
+      (agent) => agent.id === event.id,
+    );
+    const prior = existingIdx >= 0 ? state.liveAgents[existingIdx] : undefined;
+    const terminal =
+      event.status === "completed" ||
+      event.status === "failed" ||
+      event.status === "interrupted";
+    const merged: HermesLiveAgent = {
+      ...(prior ?? event),
+      ...event,
+      parentId: event.parentId ?? prior?.parentId ?? null,
+      goal: event.goal === "Agent" ? (prior?.goal ?? event.goal) : event.goal,
+      childSessionId: event.childSessionId ?? prior?.childSessionId,
+      model: event.model ?? prior?.model,
+      taskCount: event.taskCount || prior?.taskCount || 1,
+      taskIndex: event.taskIndex ?? prior?.taskIndex ?? 0,
+      startedAt: prior?.startedAt ?? event.startedAt,
+      durationSeconds: event.durationSeconds ?? prior?.durationSeconds,
+      costUsd: event.costUsd ?? prior?.costUsd,
+      inputTokens: event.inputTokens ?? prior?.inputTokens,
+      outputTokens: event.outputTokens ?? prior?.outputTokens,
+      reasoningTokens: event.reasoningTokens ?? prior?.reasoningTokens,
+      toolCount: event.toolCount ?? prior?.toolCount,
+      filesRead: event.filesRead.length
+        ? event.filesRead
+        : (prior?.filesRead ?? []),
+      filesWritten: event.filesWritten.length
+        ? event.filesWritten
+        : (prior?.filesWritten ?? []),
+      currentTool: terminal
+        ? undefined
+        : (event.currentTool ?? prior?.currentTool),
+      progress: event.progress ?? prior?.progress,
+      summary: event.summary ?? prior?.summary,
+    };
+    if (existingIdx >= 0) state.liveAgents[existingIdx] = merged;
+    else state.liveAgents.push(merged);
+    state.updatedAt = Date.now();
+    emitEvent(sessionId, { kind: "liveAgent", event: merged });
+  }
+
   try {
     // Drive the turn through the `/v1/runs` surface (not `/v1/chat/
     // completions`): only the runs surface registers the server-side
@@ -399,6 +444,7 @@ async function handleSubmit(payload: SubmitPayload) {
           state.updatedAt = Date.now();
           emitEvent(sessionId, { kind: "reasoning", text: progress });
         },
+        onSubagentEvent: applyLiveAgent,
         onToolStarted: ({ tool, toolCallId: stableId, preview, args }) => {
           const toolCallId =
             stableId ?? `rt_${state.runId ?? sessionId}_${toolSeq++}`;

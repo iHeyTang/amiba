@@ -5,8 +5,8 @@ from functools import wraps
 from aiohttp import web
 
 from ....adapters.hermes_core import hermes_profile_scope
-from ....common import json_error
-from .memory_service import MEMORY_TARGETS, read_memory_entries_response
+from ....common import json_error, read_json_object
+from .memory_service import MEMORY_TARGETS, read_memory_entries_response, reset_memory
 
 
 async def handle_memory_list(_request: web.Request) -> web.Response:
@@ -27,6 +27,18 @@ async def handle_memory_target(request: web.Request) -> web.Response:
         return json_error(500, str(exc))
 
 
+async def handle_memory_reset(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+        return web.json_response(reset_memory(str(body.get("target") or "all")))
+    except web.HTTPBadRequest as exc:
+        return exc
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except OSError as exc:
+        return json_error(500, str(exc))
+
+
 def register_memory_routes(app: web.Application) -> None:
     def profiled(handler):
         @wraps(handler)
@@ -39,6 +51,7 @@ def register_memory_routes(app: web.Application) -> None:
     app.add_routes(
         [
             web.get("/hermes/memories", profiled(handle_memory_list)),
+            web.post("/hermes/memories/reset", profiled(handle_memory_reset)),
             web.get(
                 "/hermes/memories/{target}",
                 profiled(handle_memory_target),

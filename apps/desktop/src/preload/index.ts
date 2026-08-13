@@ -136,6 +136,10 @@ const api = {
       query: string,
     ): Promise<{ path: string; isDir: boolean }[]> =>
       ipcRenderer.invoke("files:list", { sessionId, query }),
+    tree: (sessionId: string, path?: string) =>
+      ipcRenderer.invoke("files:tree", { sessionId, path }),
+    search: (sessionId: string, query: string) =>
+      ipcRenderer.invoke("files:search", { sessionId, query }),
     read: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read", { sessionId, path }),
     reveal: (sessionId: string, path: string): Promise<void> =>
@@ -176,6 +180,74 @@ const api = {
           ipcRenderer.invoke("files:unwatch", subscriptionId),
         );
       };
+    },
+  },
+
+  workspaceDevelopment: {
+    ensureProject: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:projects:ensure", sessionId),
+    listProjects: () => ipcRenderer.invoke("workspace:projects:list"),
+    createProject: (name: string, folders: string[]) =>
+      ipcRenderer.invoke("workspace:projects:create", { name, folders }),
+    addProjectFolder: (projectId: string, folder: string) =>
+      ipcRenderer.invoke("workspace:projects:add-folder", {
+        projectId,
+        folder,
+      }),
+    bindProjectLocation: (sessionId: string, projectId: string, path: string) =>
+      ipcRenderer.invoke("workspace:projects:bind-location", {
+        sessionId,
+        projectId,
+        path,
+      }),
+    listWorktrees: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:worktrees:list", sessionId),
+    createWorktree: (sessionId: string, branch: string, baseRef?: string) =>
+      ipcRenderer.invoke("workspace:worktrees:create", {
+        sessionId,
+        branch,
+        baseRef,
+      }),
+    gitStatus: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:git:status", sessionId),
+    gitDiff: (
+      sessionId: string,
+      options?: { staged?: boolean; paths?: string[] },
+    ) => ipcRenderer.invoke("workspace:git:diff", { sessionId, ...options }),
+    gitStage: (sessionId: string, paths?: string[]) =>
+      ipcRenderer.invoke("workspace:git:stage", { sessionId, paths }),
+    gitUnstage: (sessionId: string, paths?: string[]) =>
+      ipcRenderer.invoke("workspace:git:unstage", { sessionId, paths }),
+    gitCommit: (sessionId: string, message: string) =>
+      ipcRenderer.invoke("workspace:git:commit", { sessionId, message }),
+    gitShip: (sessionId: string, remote?: string) =>
+      ipcRenderer.invoke("workspace:git:ship", { sessionId, remote }),
+    listCheckpoints: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:checkpoints:list", sessionId),
+    createCheckpoint: (sessionId: string, label: string) =>
+      ipcRenderer.invoke("workspace:checkpoints:create", { sessionId, label }),
+    restoreCheckpoint: (sessionId: string, checkpointId: string) =>
+      ipcRenderer.invoke("workspace:checkpoints:restore", {
+        sessionId,
+        checkpointId,
+      }),
+    deleteCheckpoint: (sessionId: string, checkpointId: string) =>
+      ipcRenderer.invoke("workspace:checkpoints:delete", {
+        sessionId,
+        checkpointId,
+      }),
+    terminalStart: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:terminal:start", sessionId),
+    terminalGet: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:terminal:get", sessionId),
+    terminalWrite: (sessionId: string, text: string) =>
+      ipcRenderer.invoke("workspace:terminal:write", { sessionId, text }),
+    terminalStop: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:terminal:stop", sessionId),
+    onTerminalData: (cb: (event: unknown) => void) => {
+      const handler = (_e: unknown, event: unknown) => cb(event);
+      ipcRenderer.on("workspace-terminal:data", handler);
+      return () => ipcRenderer.off("workspace-terminal:data", handler);
     },
   },
 
@@ -258,36 +330,52 @@ const api = {
     requestChange: (appId: string, request: string) =>
       ipcRenderer.invoke("managed-apps:request-change", appId, request),
     attachSession: (appId: string, draftId: string, sessionId: string) =>
-      ipcRenderer.invoke("managed-apps:attach-session", appId, draftId, sessionId),
+      ipcRenderer.invoke(
+        "managed-apps:attach-session",
+        appId,
+        draftId,
+        sessionId,
+      ),
     updateMetadata: (
       appId: string,
       patch: import("@amiba/managed-apps").ManagedAppMetadataPatch,
     ) => ipcRenderer.invoke("managed-apps:update-metadata", appId, patch),
-    archive: (appId: string) => ipcRenderer.invoke("managed-apps:archive", appId),
-    restore: (appId: string) => ipcRenderer.invoke("managed-apps:restore", appId),
-    exportProject: (appId: string) => ipcRenderer.invoke("managed-apps:export", appId),
-    listOutputs: (appId: string) => ipcRenderer.invoke("managed-apps:list-outputs", appId),
+    archive: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:archive", appId),
+    restore: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:restore", appId),
+    exportProject: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:export", appId),
+    listOutputs: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:list-outputs", appId),
     updateOutput: (
       appId: string,
       outputId: string,
       patch: { pinned?: boolean; tags?: string[] },
-    ) => ipcRenderer.invoke("managed-apps:update-output", appId, outputId, patch),
-    listPresets: (appId: string) => ipcRenderer.invoke("managed-apps:list-presets", appId),
-    savePreset: (appId: string, input: {
-      revisionId: string;
-      providerAlias: string;
-      toolName: string;
-      name: string;
-      arguments: Record<string, unknown>;
-    }) => ipcRenderer.invoke("managed-apps:save-preset", appId, input),
+    ) =>
+      ipcRenderer.invoke("managed-apps:update-output", appId, outputId, patch),
+    listPresets: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:list-presets", appId),
+    savePreset: (
+      appId: string,
+      input: {
+        revisionId: string;
+        providerAlias: string;
+        toolName: string;
+        name: string;
+        arguments: Record<string, unknown>;
+      },
+    ) => ipcRenderer.invoke("managed-apps:save-preset", appId, input),
     deletePreset: (appId: string, presetId: string) =>
       ipcRenderer.invoke("managed-apps:delete-preset", appId, presetId),
     confirm: (appId: string, revisionId: string) =>
       ipcRenderer.invoke("managed-apps:confirm", appId, revisionId),
     reject: (appId: string, revisionId: string) =>
       ipcRenderer.invoke("managed-apps:reject", appId, revisionId),
-    rollback: (appId: string) => ipcRenderer.invoke("managed-apps:rollback", appId),
-    markUsed: (appId: string) => ipcRenderer.invoke("managed-apps:mark-used", appId),
+    rollback: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:rollback", appId),
+    markUsed: (appId: string) =>
+      ipcRenderer.invoke("managed-apps:mark-used", appId),
     surface: (
       appId: string,
       target?: "active" | "candidate",

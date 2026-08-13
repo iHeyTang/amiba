@@ -403,6 +403,10 @@ export default function ChatSurface({
   const workspacePane = useWorkspacePane();
 
   const [input, setInput] = useState("");
+  const [lastRewind, setLastRewind] = useState<{
+    sessionId: string;
+    sinceMessageId: number;
+  } | null>(null);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -417,6 +421,10 @@ export default function ChatSurface({
   const profileLocked =
     Boolean(currentSessionMeta?.messageCount) ||
     sessions.activeMessages.some((message) => message.role === "user");
+
+  useEffect(() => {
+    setLastRewind(null);
+  }, [sessions.activeId]);
 
   useEffect(() => {
     let alive = true;
@@ -928,6 +936,7 @@ export default function ChatSurface({
     setBusy(state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
     setActiveRunId(state.runId ?? null);
+    workspacePane.setLiveAgents(state.liveAgents ?? []);
 
     if (kind === "completed") {
       // No content rewrite — SessionDB is authoritative for completed
@@ -1237,6 +1246,9 @@ export default function ChatSurface({
       case "hermesToolProgress":
         stream.onHermesToolProgress(event.event);
         workspacePane.observeToolEvent(event.event);
+        break;
+      case "liveAgent":
+        workspacePane.observeLiveAgent(event.event);
         break;
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
@@ -1700,6 +1712,96 @@ export default function ChatSurface({
   // call the latest `send` closure without listing it as a dep.
   sendRef.current = send;
 
+  const resolveUserMessageId = useCallback(
+    async (message: UiMessage, userOrdinal: number): Promise<number> => {
+      const direct = /^hermes:(\d+)$/.exec(message.uiId);
+      if (direct) return Number(direct[1]);
+      const resolved = await sessions.resolveUserMessageId(
+        sessions.activeId,
+        userOrdinal,
+      );
+      if (resolved == null) {
+        throw new Error(t("sidepanel.message.notPersisted"));
+      }
+      return resolved;
+    },
+    [sessions, t],
+  );
+
+  const editUserMessage = useCallback(
+    async (message: UiMessage, userOrdinal: number) => {
+      if (!sessions.activeId || busy) return;
+      try {
+        const messageId = await resolveUserMessageId(message, userOrdinal);
+        const result = await sessions.rewindSession(sessions.activeId, messageId);
+        setLastRewind({ sessionId: sessions.activeId, sinceMessageId: messageId });
+        setInput(result.content);
+        requestAnimationFrame(() => composerRef.current?.focus());
+      } catch (cause) {
+        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+      }
+    },
+    [busy, resolveUserMessageId, sessions],
+  );
+
+  const retryUserMessage = useCallback(
+    async (message: UiMessage, userOrdinal: number) => {
+      if (!sessions.activeId || busy) return;
+      try {
+        const messageId = await resolveUserMessageId(message, userOrdinal);
+        const result = await sessions.rewindSession(sessions.activeId, messageId);
+        setLastRewind(null);
+        await send(result.content);
+      } catch (cause) {
+        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+      }
+    },
+    [busy, resolveUserMessageId, send, sessions],
+  );
+
+  const branchUserMessage = useCallback(
+    async (message: UiMessage, userOrdinal: number) => {
+      if (!sessions.activeId || busy) return;
+      try {
+        const sourceSessionId = sessions.activeId;
+        const messageId = await resolveUserMessageId(message, userOrdinal);
+        const sourceWorkspace = await getPlatform().workspaces?.getCurrent(sourceSessionId);
+        const branchId = await sessions.branchSession(sourceSessionId, messageId);
+        if (sourceWorkspace) {
+          await getPlatform().workspaces?.bind(branchId, sourceWorkspace);
+        }
+      } catch (cause) {
+        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+      }
+    },
+    [busy, resolveUserMessageId, sessions],
+  );
+
+  const truncateAtUserMessage = useCallback(
+    async (message: UiMessage, userOrdinal: number) => {
+      if (!sessions.activeId || busy) return;
+      if (!window.confirm(t("sidepanel.message.truncateConfirm"))) return;
+      try {
+        const messageId = await resolveUserMessageId(message, userOrdinal);
+        await sessions.rewindSession(sessions.activeId, messageId);
+        setLastRewind({ sessionId: sessions.activeId, sinceMessageId: messageId });
+      } catch (cause) {
+        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+      }
+    },
+    [busy, resolveUserMessageId, sessions, t],
+  );
+
+  const restoreLastRewind = useCallback(async () => {
+    if (!lastRewind || lastRewind.sessionId !== sessions.activeId) return;
+    try {
+      await sessions.restoreSession(lastRewind.sessionId, lastRewind.sinceMessageId);
+      setLastRewind(null);
+    } catch (cause) {
+      setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+    }
+  }, [lastRewind, sessions]);
+
   /**
    * Append (or refresh) the persistent approval record on whichever
    * assistant message is currently streaming. Idempotent: re-emits of
@@ -1746,6 +1848,7 @@ export default function ChatSurface({
     setError(null);
     setPageError(null);
     setInput("");
+    setLastRewind(null);
     setPendingAutosend(false);
     setPendingSourceApp(null);
     // The persisted queue still belongs to the outgoing session; only its
@@ -1907,7 +2010,10 @@ export default function ChatSurface({
       ref={composerRef}
       value={input}
       onChange={setInput}
-      onSubmit={(t) => void send(t)}
+      onSubmit={(text) => {
+        setLastRewind(null);
+        void send(text);
+      }}
       busy={busy}
       onAbort={stop}
       autoFocus={composerAutoFocus}
@@ -1981,6 +2087,14 @@ export default function ChatSurface({
               aria-label={t("sidepanel.composer.cancelEdit.aria")}
             >
               <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        ) : lastRewind?.sessionId === sessions.activeId ? (
+          <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
+            <History className="h-2.5 w-2.5" />
+            <span>{t("sidepanel.message.historyTrimmed")}</span>
+            <button type="button" onClick={() => void restoreLastRewind()} className="rounded px-1 py-0.5 font-medium text-foreground transition-colors hover:bg-muted">
+              {t("sidepanel.message.undo")}
             </button>
           </div>
         ) : undefined
@@ -2199,6 +2313,10 @@ export default function ChatSurface({
                 <MessageTurns
                   messages={messages}
                   onOpenAgentDestination={openAgentDestination}
+                  onEditUserMessage={editUserMessage}
+                  onRetryUserMessage={retryUserMessage}
+                  onBranchUserMessage={branchUserMessage}
+                  onTruncateUserMessage={truncateAtUserMessage}
                 />
 
                 {error && (

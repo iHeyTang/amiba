@@ -30,11 +30,18 @@ from ....adapters.hermes_core import hermes_profile_scope
 from .service import (
     MAX_MESSAGE_BODY_BYTES,
     append_message_response,
+    branch_session_response,
+    bulk_sessions_response,
     create_session_response,
     delete_session_response,
+    export_session_response,
     get_messages_response,
     get_session_response,
+    import_sessions_response,
     list_sessions_response,
+    restore_session_response,
+    rewind_session_response,
+    search_sessions_response,
     trigger_auto_title_response,
     update_session_response,
 )
@@ -64,6 +71,12 @@ def _profile(request: web.Request) -> str:
     return str(request.query.get("profile") or "default").strip().lower()
 
 
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 async def handle_list_sessions(request: web.Request) -> web.Response:
     limit = min(_parse_int(request.query.get("limit"), _DEFAULT_LIMIT), _MAX_LIMIT)
     offset = _parse_int(request.query.get("offset"), 0)
@@ -86,6 +99,8 @@ async def handle_list_sessions(request: web.Request) -> web.Response:
                 offset=offset,
                 source=source,
                 exclude_sources=exclude_sources or None,
+                include_archived=_parse_bool(request.query.get("include_archived")),
+                include_pinned=_parse_bool(request.query.get("include_pinned"), True),
             )
     except (ValueError, FileNotFoundError) as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=404)
@@ -140,6 +155,13 @@ _VALIDATION_PREFIXES = (
     "id must be a string",
     "role is required",
     "title must be a string",
+    "pinned must be a boolean",
+    "archived must be a boolean",
+    "message_id must be an integer",
+    "since_message_id must be an integer",
+    "sessions must be a list",
+    "session_ids must be",
+    "unsupported bulk action",
 )
 
 
@@ -246,11 +268,130 @@ async def handle_delete_session(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
+async def handle_search_sessions(request: web.Request) -> web.Response:
+    query = str(request.query.get("q") or "").strip()
+    limit = min(_parse_int(request.query.get("limit"), 50), _MAX_LIMIT)
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = search_sessions_response(
+                query,
+                limit=limit,
+                include_archived=_parse_bool(request.query.get("include_archived")),
+            )
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        return web.json_response(payload, status=503)
+    return web.json_response(strip_ok(payload))
+
+
+async def handle_branch_session(request: web.Request) -> web.Response:
+    session_id = request.match_info.get("session_id", "")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = branch_session_response(session_id, body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        error = str(payload.get("error") or "")
+        status = 404 if error in {"session not found", "message not found"} else (400 if _is_validation_error(error) else 503)
+        return web.json_response(payload, status=status)
+    return web.json_response(payload, status=201)
+
+
+async def handle_rewind_session(request: web.Request) -> web.Response:
+    session_id = request.match_info.get("session_id", "")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = rewind_session_response(session_id, body.get("message_id"))
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        error = str(payload.get("error") or "")
+        status = 404 if error == "session not found" else (400 if payload.get("kind") == "invalid_message" or _is_validation_error(error) else 503)
+        return web.json_response(payload, status=status)
+    return web.json_response(payload)
+
+
+async def handle_restore_session(request: web.Request) -> web.Response:
+    session_id = request.match_info.get("session_id", "")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = restore_session_response(session_id, body.get("since_message_id"))
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        error = str(payload.get("error") or "")
+        status = 404 if error == "session not found" else (400 if _is_validation_error(error) else 503)
+        return web.json_response(payload, status=status)
+    return web.json_response(payload)
+
+
+async def handle_export_session(request: web.Request) -> web.Response:
+    session_id = request.match_info.get("session_id", "")
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = export_session_response(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        status = 404 if payload.get("error") == "session not found" else 503
+        return web.json_response(payload, status=status)
+    return web.json_response(payload)
+
+
+async def handle_import_sessions(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request, max_bytes=MAX_MESSAGE_BODY_BYTES * 8)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = import_sessions_response(body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        status = 400 if payload.get("kind") == "invalid_import" or _is_validation_error(str(payload.get("error") or "")) else 503
+        return web.json_response(payload, status=status)
+    return web.json_response(payload, status=201)
+
+
+async def handle_bulk_sessions(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    try:
+        with hermes_profile_scope(_profile(request)):
+            payload = bulk_sessions_response(body)
+    except (ValueError, FileNotFoundError) as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=404)
+    if not payload.get("ok"):
+        status = 400 if _is_validation_error(str(payload.get("error") or "")) else 503
+        return web.json_response(payload, status=status)
+    return web.json_response(payload)
+
+
 def register(app: web.Application) -> None:
     app.add_routes(
         [
             web.get("/hermes/sessions", handle_list_sessions),
             web.post("/hermes/sessions", handle_create_session),
+            web.get("/hermes/sessions/search", handle_search_sessions),
+            web.post("/hermes/sessions/import", handle_import_sessions),
+            web.post("/hermes/sessions/bulk", handle_bulk_sessions),
             web.get("/hermes/sessions/{session_id}", handle_get_session),
             web.patch("/hermes/sessions/{session_id}", handle_update_session),
             web.delete("/hermes/sessions/{session_id}", handle_delete_session),
@@ -264,5 +405,9 @@ def register(app: web.Application) -> None:
                 "/hermes/sessions/{session_id}/auto-title",
                 handle_trigger_auto_title,
             ),
+            web.post("/hermes/sessions/{session_id}/branch", handle_branch_session),
+            web.post("/hermes/sessions/{session_id}/rewind", handle_rewind_session),
+            web.post("/hermes/sessions/{session_id}/restore", handle_restore_session),
+            web.get("/hermes/sessions/{session_id}/export", handle_export_session),
         ]
     )
