@@ -31,7 +31,7 @@ import {
 import { useT, type MessageKey } from "@amiba/i18n";
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
-import { Button, ScrollArea, Switch, cn } from "../primitives";
+import { Button, PageContent, ScrollArea, Switch, cn } from "../primitives";
 import { SettingsBrowser } from "../settings/SettingsBrowser";
 import { McpToolsTab } from "../settings/McpToolsTab";
 import {
@@ -331,7 +331,7 @@ export function AgentCapabilitiesPage({
       {!embedded ? <SettingsPaneHeader /> : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto w-full max-w-3xl space-y-8 p-6">
+        <PageContent bodyClassName="space-y-8" size="md">
           <section className={MODEL_SETTINGS_SECTION_CLASS}>
             <ModelSettingsSectionHeader
               title={t("agentCapabilities.builtin.title")}
@@ -390,7 +390,7 @@ export function AgentCapabilitiesPage({
           </section>
 
           <McpToolsTab profileId={profileId} />
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   );
@@ -413,7 +413,12 @@ function PageHeader({
 }) {
   return (
     <header className="shrink-0 border-b border-border/60">
-      <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-6 py-4">
+      <PageContent
+        bodyClassName="flex items-center gap-3"
+        className="px-7 py-4"
+        padding="none"
+        size="md"
+      >
         {onBack ? (
           <button
             type="button"
@@ -438,7 +443,7 @@ function PageHeader({
         {actions && (
           <div className="flex shrink-0 items-center gap-1">{actions}</div>
         )}
-      </div>
+      </PageContent>
     </header>
   );
 }
@@ -601,7 +606,7 @@ function CapabilitySetupView({
         }
       />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto w-full max-w-3xl px-6 py-5">
+        <PageContent className="py-5" size="md">
           {loading && !detail ? (
             <CapabilitySetupSkeleton />
           ) : error ? (
@@ -621,7 +626,7 @@ function CapabilitySetupView({
               )}
             </div>
           ) : null}
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   );

@@ -19,6 +19,14 @@ export function bubbleTextContent(content: unknown): string {
   return String(content)
 }
 
+/** Hide agent-only Applet Resource payloads while retaining the visible @label. */
+export function stripManagedResourceContext(text: string): string {
+  return text
+    .replace(/(?:[ \t]*\r?\n)?[ \t]*<amiba-resource\b[^>]*>[\s\S]*?<\/amiba-resource>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd()
+}
+
 /**
  * Remove the internal workspace instruction that the desktop engine prepends
  * to a user turn while retaining its bound directory as renderable metadata.

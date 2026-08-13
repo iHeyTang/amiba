@@ -16,6 +16,7 @@ import {
   ListTree,
   MessageSquare,
   Plus,
+  PlugZap,
   Settings,
   Wallet,
   Workflow,
@@ -95,6 +96,7 @@ export interface SidebarProps {
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
   onOpenTaskCenter: () => void;
   onOpenSettings: () => void;
+  showCapabilityExtensions?: boolean;
   className?: string;
 }
 
@@ -121,6 +123,7 @@ export function Sidebar({
   onHistoryLayoutChange,
   onOpenTaskCenter,
   onOpenSettings,
+  showCapabilityExtensions = false,
   className,
 }: SidebarProps) {
   const { t } = useT();
@@ -176,9 +179,7 @@ export function Sidebar({
 
   // Built-in non-chat destinations get low implicit orders so extension items
   // (manifest default order 100) sort after them, while an extension that sets
-  // order=0 can still sort first. Skills / Tokens / Tools live in the
-  // Settings window (packages/ui/src/skills and /usage as settings panes),
-  // not here.
+  // order=0 can still sort first.
   const coreNav: NavRow[] = [
     {
       id: "scheduled",
@@ -186,6 +187,16 @@ export function Sidebar({
       label: t("options.cron.title"),
       order: 1,
     },
+    ...(showCapabilityExtensions
+      ? [
+          {
+            id: "capability-extensions",
+            icon: <PlugZap className="h-4 w-4" />,
+            label: t("options.extensions.library.title"),
+            order: 2,
+          },
+        ]
+      : []),
   ];
   const extNav: NavRow[] = (extensionItems ?? []).map((e) => ({
     id: e.extensionId,

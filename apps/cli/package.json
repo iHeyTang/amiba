@@ -1,7 +1,7 @@
 {
   "name": "@amiba/cli",
   "version": "0.1.0",
-  "description": "The amiba CLI (bin: amiba) — scaffold extensions and mention sources, and more.",
+  "description": "Developer tooling for Amiba Applets.",
   "type": "module",
   "bin": {
     "amiba": "dist/cli.js"
@@ -16,7 +16,7 @@
     "dev": "tsc --watch",
     "prepare": "tsc"
   },
-  "files": ["dist", "src/template", "src/template-mention-source"],
+  "files": ["dist", "src/template"],
   "publishConfig": {
     "access": "public"
   },

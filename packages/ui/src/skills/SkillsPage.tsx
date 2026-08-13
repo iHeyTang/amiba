@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
+  CollectionState,
   cn,
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
   Input,
   ScrollArea,
   Switch,
+  PageContent,
 } from "../primitives";
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
@@ -53,17 +55,17 @@ const ORIGIN_INFO: Record<string, OriginInfo> = {
   bundled: {
     labelKey: "options.skills.origin.bundled",
     tooltipKey: "options.skills.origin.bundledHint",
-    className: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+    className: "bg-muted text-muted-foreground",
   },
   hub: {
     labelKey: "options.skills.origin.hub",
     tooltipKey: "options.skills.origin.hubHint",
-    className: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+    className: "bg-muted text-muted-foreground",
   },
   agent: {
     labelKey: "options.skills.origin.agent",
     tooltipKey: "options.skills.origin.agentHint",
-    className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    className: "bg-muted text-muted-foreground",
   },
   manual: {
     labelKey: "options.skills.origin.manual",
@@ -73,7 +75,7 @@ const ORIGIN_INFO: Record<string, OriginInfo> = {
   external: {
     labelKey: "options.skills.origin.external",
     tooltipKey: "options.skills.origin.externalHint",
-    className: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
+    className: "bg-muted text-muted-foreground",
   },
 };
 
@@ -113,7 +115,7 @@ const ENABLED_INFO: Record<
   enabled: {
     labelKey: "options.skills.enabled",
     tooltipKey: "options.skills.enabledHint",
-    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    className: "bg-muted text-foreground",
   },
   disabled: {
     labelKey: "options.skills.disabled",
@@ -129,28 +131,6 @@ interface CategoryBucket {
   label: string;
   count: number;
   enabledCount: number;
-}
-
-function formatRelative(iso: string | null, language: string): string {
-  if (!iso) return "";
-  const timestamp = Date.parse(iso);
-  if (Number.isNaN(timestamp)) return "";
-  const elapsed = timestamp - Date.now();
-  const absoluteSeconds = Math.abs(elapsed / 1000);
-  const formatter = new Intl.RelativeTimeFormat(language, {
-    numeric: "auto",
-  });
-  if (absoluteSeconds < 60)
-    return formatter.format(Math.round(elapsed / 1000), "second");
-  if (absoluteSeconds < 3600)
-    return formatter.format(Math.round(elapsed / 60000), "minute");
-  if (absoluteSeconds < 86400)
-    return formatter.format(Math.round(elapsed / 3600000), "hour");
-  if (absoluteSeconds < 86400 * 30)
-    return formatter.format(Math.round(elapsed / 86400000), "day");
-  if (absoluteSeconds < 86400 * 365)
-    return formatter.format(Math.round(elapsed / (86400000 * 30)), "month");
-  return formatter.format(Math.round(elapsed / (86400000 * 365)), "year");
 }
 
 function formatAbsolute(iso: string | null): string {
@@ -177,11 +157,9 @@ function SkillRow({
   onToggle: (skill: HermesSkillEntry, next: boolean) => void;
   toggling: boolean;
 }) {
-  const { t, language } = useT();
+  const { t } = useT();
   const origin = originMeta(skill.origin, t);
   const muted = !skill.enabled;
-
-  const updatedRel = formatRelative(skill.updated_at, language);
 
   const hoverParts: string[] = [];
   if (skill.description) hoverParts.push(skill.description);
@@ -196,9 +174,6 @@ function SkillRow({
   hoverParts.push("Click the row to browse files");
   const hoverTitle = hoverParts.join("\n");
 
-  const toggleLabel = skill.enabled
-    ? t("options.skills.enabled")
-    : t("options.skills.disabled");
   const toggleTooltip = skill.enabled
     ? t("options.skills.toggleOn")
     : t("options.skills.toggleOff");
@@ -216,13 +191,16 @@ function SkillRow({
       role="button"
       tabIndex={0}
       className={cn(
-        "flex cursor-pointer items-start gap-3 border-b border-border/40 px-2 py-2 transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none",
+        "flex min-h-[76px] cursor-pointer items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/35 focus-visible:bg-muted/45 focus-visible:outline-none",
         muted && "opacity-60",
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-border/60 bg-background text-muted-foreground">
+        <FileText className="h-[18px] w-[18px]" />
+      </span>
+      <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-sm font-normal tracking-tight">
+          <span className="truncate text-sm font-medium tracking-tight">
             {skill.name}
           </span>
           {skill.version && (
@@ -231,27 +209,15 @@ function SkillRow({
             </span>
           )}
         </div>
-        <div className="flex min-w-0 items-baseline gap-2">
-          {skill.description ? (
-            <p className="line-clamp-2 min-w-0 flex-1 text-xs leading-snug text-muted-foreground">
-              {skill.description}
-            </p>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {updatedRel && (
-            <span
-              className="shrink-0 text-xs tabular-nums text-muted-foreground/70"
-              title={`Updated ${formatAbsolute(skill.updated_at)}`}
-            >
-              {updatedRel}
-            </span>
-          )}
-        </div>
+        {skill.description ? (
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {skill.description}
+          </p>
+        ) : null}
       </div>
       <span
         className={cn(
-          "mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
+          "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
           origin.className,
         )}
         title={origin.tooltip}
@@ -259,14 +225,11 @@ function SkillRow({
         {origin.label}
       </span>
       <div
-        className="mt-0.5 flex shrink-0 items-center gap-2"
+        className="flex shrink-0 items-center"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         title={toggleTooltip}
       >
-        <span className="text-[11px] text-muted-foreground">
-          {toggleLabel}
-        </span>
         <Switch
           aria-label={toggleTooltip}
           checked={skill.enabled}
@@ -515,7 +478,7 @@ function SkillViewerDialog({
         size="full"
       >
         <DialogHeader className="border-b border-border bg-muted/30 px-4 py-3">
-          <DialogTitle className="text-sm font-semibold">
+          <DialogTitle className="text-sm font-medium">
             {skill?.name ?? ""}
             {skill?.version && (
               <span className="ml-2 text-xs font-normal text-muted-foreground/80">
@@ -723,9 +686,11 @@ const EMPTY_RESPONSE: HermesSkillsResponse = {
 export function SkillsPage({
   profileId,
   embedded = false,
+  showPageTitle = false,
 }: {
   profileId?: string;
   embedded?: boolean;
+  showPageTitle?: boolean;
 } = {}) {
   const { t } = useT();
   const [data, setData] = useState<HermesSkillsResponse>(EMPTY_RESPONSE);
@@ -957,7 +922,12 @@ export function SkillsPage({
 
         {/* ── Right panel ── */}
         <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <div className={cn("space-y-4 p-6", embedded && "pt-3")}>
+          <PageContent
+            size={embedded ? "lg" : "full"}
+            padding={embedded ? "page" : "compact"}
+            title={showPageTitle ? t("options.nav.skills") : undefined}
+            bodyClassName="space-y-4"
+          >
             {error && <p className="text-xs text-destructive">{error}</p>}
             {toggleError && (
               <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive">
@@ -975,24 +945,27 @@ export function SkillsPage({
               </div>
             )}
 
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold tracking-tight">
-                  {category === ALL_KEY
-                    ? t("options.skills.all")
-                    : (currentBucket?.label ?? category)}
-                </h3>
-                <p
-                  className="text-xs text-muted-foreground"
-                  title={data.skills_dirs.join("\n") || "$HERMES_HOME/skills"}
-                >
-                  {t("options.skills.totalEnabled", {
-                    total: currentBucket?.count ?? data.totals.total,
-                    enabled: currentBucket?.enabledCount ?? data.totals.enabled,
-                  })}
-                </p>
+            {!embedded ? (
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium tracking-tight">
+                    {category === ALL_KEY
+                      ? t("options.skills.all")
+                      : (currentBucket?.label ?? category)}
+                  </h3>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    title={data.skills_dirs.join("\n") || "$HERMES_HOME/skills"}
+                  >
+                    {t("options.skills.totalEnabled", {
+                      total: currentBucket?.count ?? data.totals.total,
+                      enabled:
+                        currentBucket?.enabledCount ?? data.totals.enabled,
+                    })}
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {embedded && buckets.length > 0 ? (
               <div
@@ -1114,12 +1087,22 @@ export function SkillsPage({
               </div>
             )}
 
-            {filtered.length === 0 && !loading && !error ? (
-              <p className="text-xs text-muted-foreground">
+            {loading && data.skills.length === 0 ? (
+              <CollectionState className="min-h-48" role="status">
+                {t("options.skills.loading")}
+              </CollectionState>
+            ) : filtered.length === 0 && !error ? (
+              <CollectionState className="min-h-48">
                 {t("options.skills.noMatches")}
-              </p>
+              </CollectionState>
             ) : (
-              <ul className="overflow-hidden rounded-xl border border-border/60">
+              <ul
+                className={cn(
+                  embedded
+                    ? "grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2"
+                    : "overflow-hidden rounded-xl border border-border/60 px-2",
+                )}
+              >
                 {filtered.map((s) => (
                   <SkillRow
                     key={`${s.category ?? ""}/${s.name}`}
@@ -1131,7 +1114,7 @@ export function SkillsPage({
                 ))}
               </ul>
             )}
-          </div>
+          </PageContent>
         </ScrollArea>
       </div>
       <SkillViewerDialog

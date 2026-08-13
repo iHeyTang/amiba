@@ -203,16 +203,19 @@ export function ModelPickerDialog({
 
         {!hasModels ? (
           <div className="px-3 py-10 text-center text-sm text-muted-foreground">
-            {status === "loading" ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
-                {t("sidepanel.modelPicker.loading")}
-              </span>
-            ) : status === "error" ? (
-              t("sidepanel.modelPicker.loadFailed")
-            ) : (
-              t("sidepanel.modelPicker.noMatches")
-            )}
+            <span className="relative inline-flex items-center justify-center">
+              {status === "loading" ? (
+                <Loader2
+                  aria-hidden
+                  className="absolute right-full mr-2 h-3.5 w-3.5 animate-spin"
+                />
+              ) : null}
+              {status === "loading"
+                ? t("sidepanel.modelPicker.loading")
+                : status === "error"
+                  ? t("sidepanel.modelPicker.loadFailed")
+                  : t("sidepanel.modelPicker.noMatches")}
+            </span>
           </div>
         ) : (
           <>

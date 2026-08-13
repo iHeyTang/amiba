@@ -15,6 +15,104 @@ def _profile(auth_type: str):
     )
 
 
+def _stub_connection(*args, **kwargs):
+    return {
+        "status": "none",
+        "active_method": "",
+        "methods": [],
+        "service": {"status": "not_checked", "reason": ""},
+    }
+
+
+def test_endpoint_default_and_placeholder_share_runtime_registry_source(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "env_var_names_for_slug",
+        lambda slug: ["DEEPSEEK_API_KEY"],
+    )
+    monkeypatch.setattr(
+        service,
+        "base_url_env_var_for_slug",
+        lambda slug: "DEEPSEEK_BASE_URL",
+    )
+    monkeypatch.setattr(
+        service,
+        "provider_endpoint_definition_for_slug",
+        lambda slug: {
+            "default_base_url": "https://api.deepseek.com/v1",
+            "override_env_var": "DEEPSEEK_BASE_URL",
+        },
+    )
+    monkeypatch.setattr(service, "read_dotenv_as_dict", lambda path: {})
+    monkeypatch.setattr(service, "plugin_dotenv_path", lambda: object())
+    monkeypatch.setattr(
+        service,
+        "get_provider_profile",
+        # Deliberately disagree: the UI must not read this duplicate value.
+        lambda slug: SimpleNamespace(
+            auth_type="api_key",
+            base_url="https://wrong-profile.example/v1",
+        ),
+    )
+    monkeypatch.setattr(service, "build_provider_connection", _stub_connection)
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+
+    response = service.read_provider_credentials_response("deepseek")
+    url_field = next(
+        field for field in response["fields"] if field["kind"] == "url"
+    )
+
+    assert response["endpoint"] == {
+        "default_base_url": "https://api.deepseek.com/v1",
+        "override_env_var": "DEEPSEEK_BASE_URL",
+        "override_base_url": "",
+        "effective_base_url": "https://api.deepseek.com/v1",
+        "source": "default",
+    }
+    assert url_field["placeholder"] == response["endpoint"]["default_base_url"]
+
+
+def test_saved_provider_url_override_is_the_effective_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "env_var_names_for_slug",
+        lambda slug: ["DEEPSEEK_API_KEY"],
+    )
+    monkeypatch.setattr(
+        service,
+        "base_url_env_var_for_slug",
+        lambda slug: "DEEPSEEK_BASE_URL",
+    )
+    monkeypatch.setattr(
+        service,
+        "provider_endpoint_definition_for_slug",
+        lambda slug: {
+            "default_base_url": "https://api.deepseek.com/v1",
+            "override_env_var": "DEEPSEEK_BASE_URL",
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "read_dotenv_as_dict",
+        lambda path: {"DEEPSEEK_BASE_URL": "https://deepseek-proxy.example/v1"},
+    )
+    monkeypatch.setattr(service, "plugin_dotenv_path", lambda: object())
+    monkeypatch.setattr(
+        service, "get_provider_profile", lambda slug: _profile("api_key")
+    )
+    monkeypatch.setattr(service, "build_provider_connection", _stub_connection)
+
+    response = service.read_provider_credentials_response("deepseek")
+
+    assert response["endpoint"]["override_base_url"] == (
+        "https://deepseek-proxy.example/v1"
+    )
+    assert response["endpoint"]["effective_base_url"] == (
+        "https://deepseek-proxy.example/v1"
+    )
+    assert response["endpoint"]["source"] == "saved"
+
+
 def test_provider_credentials_return_maskable_ambient_secrets_and_report_source(
     monkeypatch,
 ):

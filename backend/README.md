@@ -1,9 +1,9 @@
 # amiba-backplane
 
 amiba desktop 的**本地 HTTP 后端 server**(独立进程,**不是 hermes plugin**)。
-由 desktop spawn + 监管(desktop 是进程主管),把 Hermes core(以及内置的
-**mention-sources 框架**)的能力暴露成本机客户端(浏览器扩展、桌面渲染端)能消费的
-HTTP。默认监听 `127.0.0.1:9394`(用 `HERMES_BACKPLANE_PORT` 覆盖)。
+由 desktop spawn + 监管(desktop 是进程主管),把 Hermes core 的能力暴露成本机客户端
+(浏览器扩展、桌面渲染端)能消费的 HTTP。默认监听 `127.0.0.1:9394`(用
+`HERMES_BACKPLANE_PORT` 覆盖)。
 
 启动:`python -m amiba_backplane.server --port 9394`(或 console
 script `amiba-backplane`)。
@@ -23,13 +23,9 @@ entry-point 都已删除。
 > 对比:`amiba-plugin-browser-tools`(注册 `my_browser_*` tools + WS hub)**仍是
 > 真 plugin** —— 它确实给 agent 加能力。
 >
-> 而 **mention-sources 框架在本仓**(`runtime/mention_sources/`)。它**不是** hermes
-> 意义上的 "integration"/连接器 —— 真连接器(agent 动作 / 入站触发 / 鉴权)是 hermes
-> 自己的 `plugins` / `mcp` / `platforms`。mention source 只填 hermes 填不了的那个洞:
-> **给桌面 composer 的 @ 提及发现(search)**。曾经它叫 `amiba-plugin-integrations`
-> 插件,但 `provides_tools: []`、`hooks: []` —— 是个 composer/backplane 的事穿了插件
-> 马甲,已脱掉搬进本仓。源**实例**(如 lark)仍是可插拔的独立 **git 仓**,装在
-> `~/.hermes/mention-sources/`。作者指南见 [`docs/mention-sources.md`](docs/mention-sources.md)。
+> 新的 @ 提及能力由 Applet manifest 声明，并跟随 Applet 安装、升级和移除。本仓只
+> 对升级前已经位于 `~/.hermes/mention-sources/` 的来源保留只读兼容加载；不再提供
+> 独立的安装、更新或删除生命周期。
 
 设计见 amiba 仓 `docs/superpowers/specs/2026-06-09-desktop-centric-backend-design.md`。
 
@@ -39,8 +35,8 @@ entry-point 都已删除。
 
 | Repo | 角色 |
 |---|---|
-| **this repo** | 本地 HTTP server：`/hermes/*` + mention-sources gateway（`/mention-sources/<name>/search`、`/hermes/mention-resources`、`/hermes/mention-sources*`）+ **内置 mention-sources 框架**（`runtime/mention_sources/`：loader/manager + skills 接线） |
-| `~/.hermes/mention-sources/<name>/`（如 [amiba-mention-source-lark](https://github.com/amiba-desktop/amiba-mention-source-lark)） | 可插拔的源**实例**（git 仓：`search` + `mention-source.yaml` + resolver skill）；由本仓的框架经 git 加载/管理 |
+| **this repo** | 本地 HTTP server：`/hermes/*`，以及升级前 mention source 的只读 search/resource 兼容路由 |
+| `~/.hermes/mention-sources/<name>/` | 旧版来源数据；只读加载，等待迁移到所属 Applet，不再由 backplane 管理生命周期 |
 | [amiba-plugin-browser-tools](https://github.com/amiba-desktop/amiba-plugin-browser-tools) | 给 agent 的 browser 工具（screenshot / navigate / inbox 等），通过 WS bridge 连扩展（**仍是真 plugin**） |
 | [hermes-my-browser-extension](https://github.com/iHeyTang/hermes-my-browser-extension) | Chrome 扩展前端，调本插件的 `/hermes/*` 端点 |
 
@@ -78,31 +74,24 @@ hermes gateway run
 | `settings.memory_routes` | `/hermes/memories*` | MEMORY.md / USER.md 视图（mine-only） |
 | `settings.skills_routes` | `/hermes/skills*` | 技能列表 / 文件浏览 / 启停 |
 | `attachments` | `/hermes/attachments*` | 会话附件上传/删除 |
-| `mention_sources_gateway` | `/hermes/mention-sources*` + `/mention-sources/<name>/search` + `/hermes/mention-resources` | 本仓内置 mention-sources 框架（`runtime/mention_sources/`）的 HTTP 适配层（**不是** agent tool） |
+| `mention_sources_gateway` | `/mention-sources/<name>/search` + `/hermes/mention-resources` | 旧版来源的只读兼容适配层（**不是** agent tool） |
 
-### mention-sources gateway —— `/mention-sources/<name>/search` 等
+### 旧版 mention source 兼容
 
-**框架**（loader / manager / skills 接线）就在本仓 `runtime/mention_sources/`。源**实例**
-是 **HTTP-agnostic 的纯能力**（声明一个 `search` + `mention-source.yaml` manifest，不碰
-aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<name>/`。
-`mention_sources_gateway` 是 **HTTP 适配层**，进程内读框架注册表，适配成 HTTP：
+`mention_sources_gateway` 只为升级前已经安装的来源保留两个只读能力：
 
 - `GET  /mention-sources/<name>/search?type=&q=` —— 进程内调源声明的 `search`；
 - `GET  /hermes/mention-resources` —— 聚合各源的 `mention_resources`，给 composer 的 `@` 提及；
-- `GET/POST/DELETE /hermes/mention-sources*` + `POST …/update` —— lifecycle admin
-  (list / install / update / reload / remove)；底下就是 **git**（clone/pull/rm），
-  desktop UI 调它。`/integrations/<name>/search` 保留为 legacy alias。
 
-万一框架不可用，这几条路由优雅降级（空注册表 / 503），backplane 其余部分不受影响。
-**写一个源** 见作者指南 [`docs/mention-sources.md`](docs/mention-sources.md)
-（或 `amiba create-mention-source <name>` 一键生成模板）。
+没有 `/hermes/mention-sources*` 管理 API。新的提及能力使用 Applet manifest 的
+`mentions` 声明，并与 Applet 共用一套生命周期。
 
 ## 关键设计点
 
 - **独立 server,不是 plugin**：由 desktop spawn(`amiba-backplane` /
   `python -m …server`),不再有 `register(ctx)` / `plugin.yaml` /
   `_is_agent_invocation` 那套 plugin-mode 机制 —— 见开头「定位」一节。
-- **自己加载源**：启动时 `server.py:_load_mention_sources()` 调内置框架的
+- **兼容加载旧来源**：启动时 `server.py:_load_mention_sources()` 调兼容 loader 的
   `runtime.mention_sources.load_all_and_wire()`,把 `~/.hermes/mention-sources/`
   载进注册表 + 把各源的 `skills/` 接进 agent 的 `skills.external_dirs`。没装源就空
   注册表降级。
@@ -115,10 +104,7 @@ aiohttp），是可插拔的 **git 仓**，装在 `~/.hermes/mention-sources/<na
 - [`docs/api-parity.md`](docs/api-parity.md) —— 与 Hermes 官方 `/api/*` 的逐端点
   对照（共有 / 官方独有 / 我们独有 / 全局残留 / 变更日志）。**持续维护，
   每次改 backplane 或 upstream 升级要同步更新。**
-- 怎么写一个源（`search` + `mention-source.yaml` + resolver skill）—— 见作者指南
-  [`docs/mention-sources.md`](docs/mention-sources.md)、`amiba
-  create-mention-source` 脚手架,和参考实现
-  [`amiba-mention-source-lark`](https://github.com/amiba-desktop/amiba-mention-source-lark)。
+- Applet 与 Mention Contribution 的长期设计见仓库根目录的统一 Extension 设计文档。
 
 ## 配置
 
@@ -150,16 +136,14 @@ amiba_backplane/
     http_app.py                     # aiohttp Application 工厂
     common.py                       # json_error / strip_ok / read_json_object
     adapters/                       # 适配 Hermes core 的薄包装
-    mention_sources/                # 内置框架（loader / manager / skills 接线 + management_skill/）
+    mention_sources/                # 旧版来源的只读兼容 loader + resolver skill 接线
     features/
       hermes_proxy/                 # 全部路由：/hermes/* + mention_sources_gateway
 tests/                              # pytest（无需 conftest 桩，src-layout 原生可跑）
-docs/mention-sources.md             # 源作者指南
 docs/api-parity.md                  # 与官方 API 对照
 ```
 
-（**框架**在 `amiba_backplane/runtime/mention_sources/`；源**实例**（如 lark）是独立
-可插拔的 git 仓,装在 `~/.hermes/mention-sources/`。)
+（`runtime/mention_sources/` 仅用于已有用户数据的只读迁移兼容。）
 
 ## License
 

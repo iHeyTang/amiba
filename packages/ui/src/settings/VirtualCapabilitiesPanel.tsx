@@ -49,6 +49,7 @@ import {
   Badge,
   Button,
   Input,
+  PageContent,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -812,10 +813,12 @@ export function VirtualCapabilitiesPanel({
 
   if (!config.ok || !draft || !preset) {
     return (
-      <div className="min-h-0 flex-1 p-6">
-        <div className="mx-auto max-w-3xl rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
-          {config.error || t("options.models.virtual.unavailable")}
-        </div>
+      <div className="min-h-0 flex-1">
+        <PageContent size="md">
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
+            {config.error || t("options.models.virtual.unavailable")}
+          </div>
+        </PageContent>
       </div>
     );
   }
@@ -970,7 +973,7 @@ export function VirtualCapabilitiesPanel({
       </aside>
 
       <ScrollArea className="min-h-0 min-w-0 flex-1">
-        <div className="mx-auto max-w-3xl space-y-4 p-6">
+        <PageContent bodyClassName="space-y-4" size="md">
           <section className="overflow-hidden rounded-xl border border-border/70 bg-background">
             <div
               className="flex min-h-12 flex-wrap items-center gap-2 px-3 py-2"
@@ -1452,7 +1455,7 @@ export function VirtualCapabilitiesPanel({
                 : t("options.models.virtual.save")}
             </Button>
           </div>
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   );

@@ -35,6 +35,18 @@ describe("composer chrome", () => {
     expect(composerSource).not.toContain("QuickActionChips");
   });
 
+  it("keeps floating notices outside composer layout flow", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const composerSource = readFileSync(
+      resolve(here, "../Composer.tsx"),
+      "utf8",
+    );
+
+    expect(composerSource).toContain(
+      'className="pointer-events-none absolute inset-x-2 top-full',
+    );
+  });
+
   it("uses quiet borderless attachment and voice controls", () => {
     const { rerender } = render(<AttachmentButton onClick={() => {}} />);
 

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Button } from "../primitives";
+import { Button, PageContent } from "../primitives";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +58,7 @@ import {
   type HermesMoaConfigResponse,
   type HermesProviderConnection,
   type HermesProviderCredentialField,
+  type HermesProviderEndpointResolution,
   type HermesProfile,
   type HermesSelectedModelSummary,
 } from "@amiba/core";
@@ -180,7 +181,7 @@ function ModelSettingsLoadingSkeleton({
           </div>
         </aside>
         <div className="min-w-0 flex-1">
-          <div className="mx-auto max-w-3xl space-y-5 p-6">
+          <PageContent bodyClassName="space-y-5" size="md">
             <div className="h-12 rounded-xl border border-border/60 bg-muted/[0.08]" />
             <div className="space-y-2">
               <LoadingBar className="h-3 w-24" />
@@ -198,7 +199,7 @@ function ModelSettingsLoadingSkeleton({
                 </div>
               ))}
             </div>
-          </div>
+          </PageContent>
         </div>
       </div>
     );
@@ -208,7 +209,10 @@ function ModelSettingsLoadingSkeleton({
       className="min-h-0 min-w-0 flex-1"
       data-model-settings-loading="models"
     >
-      <div className="mx-auto max-w-3xl space-y-8 p-6 motion-safe:animate-pulse">
+      <PageContent
+        bodyClassName="space-y-8 motion-safe:animate-pulse"
+        size="md"
+      >
         {[2, 4].map((rows, section) => (
           <section className="space-y-4" key={rows}>
             <LoadingBar className={section === 0 ? "h-3 w-28" : "h-3 w-24"} />
@@ -226,7 +230,7 @@ function ModelSettingsLoadingSkeleton({
             </div>
           </section>
         ))}
-      </div>
+      </PageContent>
     </ScrollArea>
   );
 }
@@ -335,6 +339,7 @@ export function HermesModelConfigTab({
         authHint: string;
         authType?: string;
         connection?: HermesProviderConnection;
+        endpoint?: HermesProviderEndpointResolution;
       }
     >
   >({});
@@ -353,6 +358,7 @@ export function HermesModelConfigTab({
   const providerConnection =
     currentCredentials?.connection ??
     catalog?.providers?.[hProvider]?.connection;
+  const providerEndpoint = currentCredentials?.endpoint;
 
   // ── Model-Config panel state ──────────────────────────────────────────
   const [mcSaving, setMcSaving] = useState(false);
@@ -680,6 +686,7 @@ export function HermesModelConfigTab({
             authHint: r.auth_hint,
             authType: r.auth_type,
             connection: r.connection,
+            endpoint: r.endpoint,
           },
         }));
         const drafts: Record<string, string> = {};
@@ -864,6 +871,7 @@ export function HermesModelConfigTab({
             authHint: r.auth_hint || cached.authHint,
             authType: r.auth_type || cached.authType,
             connection: r.connection,
+            endpoint: r.endpoint ?? cached.endpoint,
           },
         };
       });
@@ -1050,9 +1058,9 @@ export function HermesModelConfigTab({
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {view === "connection" ? (
         <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <div className="mx-auto max-w-3xl p-6">
+          <PageContent size="md">
             <SettingsGateway bridge={bridge} />
-          </div>
+          </PageContent>
         </ScrollArea>
       ) : view === "multi-model-collaboration" ? (
         configurationLoading ? (
@@ -1087,7 +1095,7 @@ export function HermesModelConfigTab({
         />
       ) : (
         <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <div className="mx-auto max-w-3xl space-y-8 p-6">
+          <PageContent bodyClassName="space-y-8" size="md">
             {showProfileScope ? (
               <div className="flex justify-end">
                 <ProfileScopeControl
@@ -1144,7 +1152,7 @@ export function HermesModelConfigTab({
                 {t("options.models.provider.addCustom")}
               </Button>
             ) : null}
-          </div>
+          </PageContent>
         </ScrollArea>
       )}
 
@@ -1191,6 +1199,7 @@ export function HermesModelConfigTab({
               credentialFields={credentialFields}
               credentialAuthHint={credentialAuthHint}
               credentialAuthType={credentialAuthType}
+              providerEndpoint={providerEndpoint}
               providerConnection={providerConnection}
               keyDrafts={keyDrafts}
               keysLoading={keysLoading}
@@ -1561,6 +1570,7 @@ interface ProviderPanelProps {
   credentialFields: HermesProviderCredentialField[];
   credentialAuthHint: string;
   credentialAuthType?: string;
+  providerEndpoint?: HermesProviderEndpointResolution;
   providerConnection?: HermesProviderConnection;
   keyDrafts: Record<string, string>;
   keysLoading: boolean;
@@ -1596,6 +1606,7 @@ function ProviderPanel({
   credentialFields,
   credentialAuthHint,
   credentialAuthType,
+  providerEndpoint,
   providerConnection,
   keyDrafts,
   keysLoading,
@@ -1702,6 +1713,7 @@ function ProviderPanel({
               credentialAuthType ?? catalog?.providers?.[hProvider]?.auth_type
             }
             connection={providerConnection}
+            endpoint={providerEndpoint}
             error={keysError}
             fields={credentialFields}
             loading={keysLoading}

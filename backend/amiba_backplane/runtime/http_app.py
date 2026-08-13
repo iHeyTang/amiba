@@ -80,10 +80,9 @@ def build_http_app() -> web.Application:
     app.router.add_get("/health", _health_handler)
     register_native(app)
     register_gateway_proxy(app)
-    # ``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` +
-    # lifecycle admin are served by the hermes_proxy ``mention_sources_gateway``
-    # adapter, which reads the in-process registry loaded at startup
-    # (``runtime.mention_sources``).
+    # Legacy ``/mention-sources/<name>/search`` +
+    # ``/hermes/mention-resources`` are served read-only by the hermes_proxy
+    # compatibility adapter. New mention capabilities belong to Applets.
     app.router.add_route(
         "OPTIONS", "/{path_info:.*}", lambda _req: web.Response(status=204)
     )

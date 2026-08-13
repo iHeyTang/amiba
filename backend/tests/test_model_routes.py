@@ -17,6 +17,66 @@ class _JsonRequest:
 
 
 @pytest.mark.asyncio
+async def test_canonical_main_model_always_clears_generic_base_url(monkeypatch):
+    received = {}
+
+    def write(payload):
+        received.update(payload)
+        return {"ok": True, **payload}
+
+    monkeypatch.setattr(model_routes, "write_main_model_response", write)
+
+    response = await model_routes.handle_model_set(
+        _JsonRequest(
+            {
+                "scope": "main",
+                "provider": "deepseek",
+                "model": "deepseek-chat",
+                # Even a stale/malicious client value may not override the
+                # canonical provider's endpoint chain.
+                "base_url": "https://openrouter.ai/api/v1",
+            }
+        )
+    )
+
+    assert response.status == 200
+    assert received == {
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "base_url": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_custom_main_model_keeps_explicit_base_url(monkeypatch):
+    received = {}
+
+    def write(payload):
+        received.update(payload)
+        return {"ok": True, **payload}
+
+    monkeypatch.setattr(model_routes, "write_main_model_response", write)
+
+    response = await model_routes.handle_model_set(
+        _JsonRequest(
+            {
+                "scope": "main",
+                "provider": "custom",
+                "model": "my-model",
+                "base_url": "https://models.example/v1",
+            }
+        )
+    )
+
+    assert response.status == 200
+    assert received == {
+        "provider": "custom",
+        "model": "my-model",
+        "base_url": "https://models.example/v1",
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("refresh_value", "expected_refresh"),
     [("0", False), ("1", True)],

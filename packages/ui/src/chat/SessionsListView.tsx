@@ -458,15 +458,6 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
-        <span
-          className={cn(
-            "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground/70 transition-opacity",
-            allowActions &&
-              "group-hover:opacity-0 group-focus-within:opacity-0",
-          )}
-        >
-          {formatRelativeShort(session.updatedAt)}
-        </span>
       </button>
       {allowActions ? (
         <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
@@ -504,17 +495,4 @@ function SessionRow({
       ) : null}
     </div>
   );
-}
-
-function formatRelativeShort(ms: number | undefined): string {
-  if (!ms) return "";
-  const diffSec = Math.round((Date.now() - ms) / 1000);
-  if (diffSec < 60) return "now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
-  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d`;
-  const d = new Date(ms);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${mm}-${dd}`;
 }

@@ -9,9 +9,8 @@
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
  * The main pane renders by `sidebarView`: the chat surface ("chats"), the
- * registered scheduled-tasks page ("scheduled"), or an extension webview for
- * extension-contributed main panels. (Skills / Tokens / Tools live in
- * the Settings window as settings panes.)
+ * registered scheduled-tasks page ("scheduled"), the first-class capability
+ * library, or an extension webview for extension-contributed main panels.
  *
  * Extension uses this as the standalone ``tabs/chat.html`` page; desktop uses
  * it as the chat view inside the main BrowserWindow.
@@ -19,21 +18,22 @@
 
 import {
   BookOpen,
-  Clock,
   Folder,
   Home,
   ListTodo,
   PanelLeftClose,
-  PanelLeftOpen,
   Search,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type TransitionEvent as ReactTransitionEvent,
 } from "react";
 
 import { useSessions, type ChatEngineClient } from "@amiba/core";
@@ -42,6 +42,7 @@ import { useT } from "@amiba/i18n";
 import { getPlatform, type StorageChangeMap } from "@amiba/platform";
 import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
+import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
 import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
@@ -61,6 +62,14 @@ import {
   ExtensionWebView,
   useExtensionMains,
 } from "@amiba/extension-host/renderer";
+import { SettingsCapabilities } from "../settings/SettingsCapabilities";
+import { AgentTaskProvider } from "../settings/agent-task";
+import type { StartAgentTask } from "../settings/capabilities";
+import {
+  APP_SIDEBAR_DEFAULT_WIDTH,
+  clampAppSidebarWidth,
+  snapAppSidebarWidth,
+} from "../navigation/sidebar-layout";
 
 const MESSAGES_WIDTH_KEY = "settings.chat.messagesWidth";
 const DEFAULT_MESSAGES_WIDTH: MessagesMaxWidth = "comfortable";
@@ -70,17 +79,31 @@ const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 
 const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
 const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
-const DEFAULT_SIDEBAR_WIDTH = 240;
-const MIN_SIDEBAR_WIDTH = 180;
-const MAX_SIDEBAR_WIDTH = 420;
+const SIDEBAR_TRANSITION_FALLBACK_MS = 240;
+
+type SidebarMotion = "idle" | "collapsing" | "expanding";
 
 const HISTORY_LAYOUT_KEY = "settings.chat.historyLayout";
 const DEFAULT_HISTORY_LAYOUT: HistoryLayout = "timeline";
 
-function clampSidebarWidth(v: number): number {
-  return Math.min(
-    MAX_SIDEBAR_WIDTH,
-    Math.max(MIN_SIDEBAR_WIDTH, Math.round(v)),
+function PrimaryWorkspaceView({
+  active,
+  testId,
+  children,
+}: {
+  active: boolean;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={!active}
+      {...(!active ? { inert: "" } : {})}
+      className={cn("min-h-0 flex-1 flex-col", active ? "flex" : "hidden")}
+      data-testid={testId}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -168,6 +191,11 @@ export interface FullScreenChatViewProps {
    * the existing persisted-navigation behaviour by default.
    */
   restoreSidebarViewOnMount?: boolean;
+  /** Desktop-only first-class capability library shown in the main sidebar. */
+  capabilityExtensions?: {
+    startAgentTask?: StartAgentTask;
+    managedApps?: import("@amiba/managed-apps/bridge").ManagedAppsBridge;
+  };
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -199,6 +227,7 @@ function FullScreenChatViewInner({
   topBarClassName,
   mentionProviders,
   restoreSidebarViewOnMount = true,
+  capabilityExtensions,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -210,8 +239,9 @@ function FullScreenChatViewInner({
   );
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [sidebarWidth, setSidebarWidth] = useState(APP_SIDEBAR_DEFAULT_WIDTH);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarMotion, setSidebarMotion] = useState<SidebarMotion>("idle");
   const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
     DEFAULT_HISTORY_LAYOUT,
   );
@@ -223,6 +253,53 @@ function FullScreenChatViewInner({
   );
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
+  const sidebarCollapsedRef = useRef(sidebarCollapsed);
+  const sidebarTransitionTimerRef = useRef<number | null>(null);
+
+  const finishSidebarTransition = useCallback(() => {
+    if (sidebarTransitionTimerRef.current !== null) {
+      window.clearTimeout(sidebarTransitionTimerRef.current);
+      sidebarTransitionTimerRef.current = null;
+    }
+    setSidebarMotion("idle");
+  }, []);
+
+  const setSidebarCollapsedTarget = useCallback(
+    (next: boolean) => {
+      if (sidebarCollapsedRef.current === next) return;
+      sidebarCollapsedRef.current = next;
+
+      if (sidebarTransitionTimerRef.current !== null) {
+        window.clearTimeout(sidebarTransitionTimerRef.current);
+        sidebarTransitionTimerRef.current = null;
+      }
+
+      const reduceMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      setSidebarMotion(
+        reduceMotion ? "idle" : next ? "collapsing" : "expanding",
+      );
+      setSidebarCollapsed(next);
+
+      if (!reduceMotion) {
+        sidebarTransitionTimerRef.current = window.setTimeout(
+          finishSidebarTransition,
+          SIDEBAR_TRANSITION_FALLBACK_MS,
+        );
+      }
+    },
+    [finishSidebarTransition],
+  );
+
+  useEffect(
+    () => () => {
+      if (sidebarTransitionTimerRef.current !== null) {
+        window.clearTimeout(sidebarTransitionTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Keep unread tracking above ChatSurface so it remains active while the
   // user is looking at Automation, Tasks, or an extension-contributed view.
@@ -313,16 +390,26 @@ function FullScreenChatViewInner({
 
   // The workspace destination owns the title while it is selected. Otherwise
   // the active conversation (including a cron-run output) provides context.
+  const activeScheduledRunTitle = sessions.activeId
+    ? scheduled.activeRunTitle(sessions.activeId)
+    : null;
+  const chatTopBarPlaceholder =
+    externalTitleOverride || activeScheduledRunTitle || activeChatTitle;
   const topBarPlaceholder =
-    sidebarView === "scheduled"
-      ? t("options.cron.title")
-      : sidebarView === "tasks"
-        ? t("tasks.title")
-        : externalTitleOverride ||
-          (sessions.activeId
-            ? scheduled.activeRunTitle(sessions.activeId)
-            : null) ||
-          activeChatTitle;
+    sidebarView === "tasks" ? t("tasks.title") : chatTopBarPlaceholder;
+  const canRenameActiveChatTitle = Boolean(
+    sessions.activeId &&
+      activeChatTitle &&
+      !externalTitleOverride &&
+      !activeScheduledRunTitle,
+  );
+  const renameActiveChatTitle = useCallback(
+    (title: string) => {
+      if (!sessions.activeId) return;
+      void sessions.rename(sessions.activeId, title);
+    },
+    [sessions.activeId, sessions.rename],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -352,21 +439,21 @@ function FullScreenChatViewInner({
     void storage.get(SIDEBAR_COLLAPSED_KEY).then((r) => {
       if (cancelled) return;
       const v = r[SIDEBAR_COLLAPSED_KEY];
-      if (isSidebarCollapsed(v)) setSidebarCollapsed(v);
+      if (isSidebarCollapsed(v)) setSidebarCollapsedTarget(v);
     });
     const unsub = storage.watch(
       [SIDEBAR_COLLAPSED_KEY],
       (changes: StorageChangeMap) => {
         const ch = changes[SIDEBAR_COLLAPSED_KEY];
         if (ch && isSidebarCollapsed(ch.newValue))
-          setSidebarCollapsed(ch.newValue);
+          setSidebarCollapsedTarget(ch.newValue);
       },
     );
     return () => {
       cancelled = true;
       unsub();
     };
-  }, []);
+  }, [setSidebarCollapsedTarget]);
 
   useEffect(() => {
     let cancelled = false;
@@ -418,14 +505,14 @@ function FullScreenChatViewInner({
     void storage.get(SIDEBAR_WIDTH_KEY).then((r) => {
       if (cancelled) return;
       const v = r[SIDEBAR_WIDTH_KEY];
-      if (isSidebarWidth(v)) setSidebarWidth(clampSidebarWidth(v));
+      if (isSidebarWidth(v)) setSidebarWidth(clampAppSidebarWidth(v));
     });
     const unsub = storage.watch(
       [SIDEBAR_WIDTH_KEY],
       (changes: StorageChangeMap) => {
         const ch = changes[SIDEBAR_WIDTH_KEY];
         if (ch && isSidebarWidth(ch.newValue))
-          setSidebarWidth(clampSidebarWidth(ch.newValue));
+          setSidebarWidth(clampAppSidebarWidth(ch.newValue));
       },
     );
     return () => {
@@ -445,7 +532,7 @@ function FullScreenChatViewInner({
       const startWidth = sidebarWidthRef.current;
       let width = startWidth;
       const onMove = (ev: PointerEvent) => {
-        width = clampSidebarWidth(startWidth + (ev.clientX - startX));
+        width = snapAppSidebarWidth(startWidth + (ev.clientX - startX));
         setSidebarWidth(width);
       };
       const onUp = () => {
@@ -473,10 +560,13 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
   }, []);
 
-  const onSidebarCollapsedChange = useCallback((next: boolean) => {
-    setSidebarCollapsed(next);
-    void getPlatform().storage.set({ [SIDEBAR_COLLAPSED_KEY]: next });
-  }, []);
+  const onSidebarCollapsedChange = useCallback(
+    (next: boolean) => {
+      setSidebarCollapsedTarget(next);
+      void getPlatform().storage.set({ [SIDEBAR_COLLAPSED_KEY]: next });
+    },
+    [setSidebarCollapsedTarget],
+  );
 
   // New-chat row is navigation to the id-less home surface. A real session is
   // minted only when that surface submits its first message.
@@ -519,98 +609,129 @@ function FullScreenChatViewInner({
 
   const activeMain = extensionMains.find((m) => m.extensionId === sidebarView);
   const contentHeaderIcon =
-    sidebarView === "scheduled" ? (
-      <Clock className="h-4 w-4" />
-    ) : sidebarView === "tasks" ? (
+    sidebarView === "tasks" ? (
       <ListTodo className="h-4 w-4" />
-    ) : sidebarView === "chats" ? (
-      <Folder className="h-4 w-4" />
     ) : (
       <BookOpen className="h-4 w-4" />
     );
+  const primaryWorkspaceActive =
+    sidebarView === "chats" ||
+    sidebarView === "scheduled" ||
+    (sidebarView === "capability-extensions" && !!capabilityExtensions);
+  const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
+  const showSidebarCollapseControl =
+    !sidebarCollapsed && sidebarMotion === "idle";
+  const headerIconBoxesVisible = sidebarMotion === "idle";
 
+  const onSidebarWidthTransitionEnd = useCallback(
+    (event: ReactTransitionEvent<HTMLElement>) => {
+      if (
+        event.target === event.currentTarget &&
+        event.propertyName === "width"
+      ) {
+        finishSidebarTransition();
+      }
+    },
+    [finishSidebarTransition],
+  );
   // Layout: the sidebar and content region are direct siblings. Inside the
   // content region, chat and workspace preview are independent full-height
   // columns; the preview must not inherit or sit below the chat header.
   return (
     <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
-      {!sidebarCollapsed && (
-        <>
-          <aside
-            className="flex min-h-0 shrink-0 flex-col bg-muted/30"
-            style={{ width: sidebarWidth }}
-          >
-            <SidebarHeader
-              onGoHome={onGoHome}
-              onSearch={() => palette.setOpen(true)}
-              onCollapse={() => onSidebarCollapsedChange(true)}
-              leftInset={topBarLeftInset}
-              heightPx={topBarHeightPx}
-              className={topBarClassName}
-            />
-            <Sidebar
-              activeView={sidebarView}
-              onSelectView={onSidebarViewChange}
-              onNewChat={() => void onNewChatAndShow()}
-              extensionItems={extensionMains}
-              sessions={chatSessions}
-              runningSessionIds={runningSessionIds}
-              failedSessionIds={failedSessionIds}
-              activeSessionId={sessions.activeId}
-              sessionsReady={sessions.ready}
-              onOpenSession={(id) => void onOpenSession(id)}
-              onRenameSession={(id, title) => void sessions.rename(id, title)}
-              onDeleteSession={(id) => void sessions.remove(id)}
-              onRefreshSessions={() => void sessions.refresh()}
-              scheduledSessions={scheduled.runs}
-              scheduledReady={scheduled.ready}
-              onOpenScheduledSession={(id) => void onOpenRun(id)}
-              onRefreshScheduledSessions={scheduled.refresh}
-              scheduledLabelFor={scheduled.labelFor}
-              historyLayout={historyLayout}
-              onHistoryLayoutChange={onHistoryLayoutChange}
-              onOpenTaskCenter={() => onSidebarViewChange("tasks")}
-              onOpenSettings={() => openSettings()}
-              className="min-w-0 flex-1"
-            />
-          </aside>
-          {/* Resize divider: invisible 4px hit area straddling the sidebar
-              edge; shows an accent line on hover / while dragging. */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t("chat.resizeSidebar")}
-            data-testid="sidebar-resize-handle"
-            onPointerDown={onSidebarResizeStart}
-            className="group relative -ml-1 w-1 shrink-0 cursor-col-resize touch-none"
-          >
-            <div className="absolute inset-y-0 right-0 w-px bg-border/55 transition-colors group-hover:bg-border group-active:bg-primary/30" />
-          </div>
-        </>
-      )}
-      <section className="relative flex min-h-0 min-w-0 flex-1">
-        <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <ContentHeader
-            title={activeMain?.label || topBarPlaceholder}
-            icon={contentHeaderIcon}
-            sidebarCollapsed={sidebarCollapsed}
-            onExpandSidebar={() => onSidebarCollapsedChange(false)}
+      <aside
+        data-testid="main-sidebar"
+        aria-hidden={sidebarCollapsed}
+        {...(sidebarCollapsed ? { inert: "" } : {})}
+        className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none"
+        onTransitionEnd={onSidebarWidthTransitionEnd}
+        style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+      >
+        <div
+          data-testid="main-sidebar-content"
+          className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
+          style={{ width: sidebarWidth }}
+        >
+          <SidebarHeader
+            onGoHome={onGoHome}
+            onSearch={() => palette.setOpen(true)}
+            onCollapse={() => onSidebarCollapsedChange(true)}
+            showCollapseControl={showSidebarCollapseControl}
+            iconBoxVisible={headerIconBoxesVisible}
             leftInset={topBarLeftInset}
             heightPx={topBarHeightPx}
-            className={cn(
-              topBarClassName,
-              sidebarView === "chats" &&
-                messagesWidth !== "full" &&
-                "amiba-chat-header--wide-overlay",
-            )}
-            seamless={sidebarView === "chats"}
+            className={topBarClassName}
           />
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {sidebarView === "scheduled" ? (
-              <ScheduledTasksPage />
-            ) : sidebarView === "tasks" ? (
-              <TaskCenterPage />
-            ) : sidebarView === "chats" ? (
+          <Sidebar
+            activeView={sidebarView}
+            onSelectView={onSidebarViewChange}
+            onNewChat={() => void onNewChatAndShow()}
+            extensionItems={extensionMains}
+            sessions={chatSessions}
+            runningSessionIds={runningSessionIds}
+            failedSessionIds={failedSessionIds}
+            activeSessionId={sessions.activeId}
+            sessionsReady={sessions.ready}
+            onOpenSession={(id) => void onOpenSession(id)}
+            onRenameSession={(id, title) => void sessions.rename(id, title)}
+            onDeleteSession={(id) => void sessions.remove(id)}
+            onRefreshSessions={() => void sessions.refresh()}
+            scheduledSessions={scheduled.runs}
+            scheduledReady={scheduled.ready}
+            onOpenScheduledSession={(id) => void onOpenRun(id)}
+            onRefreshScheduledSessions={scheduled.refresh}
+            scheduledLabelFor={scheduled.labelFor}
+            historyLayout={historyLayout}
+            onHistoryLayoutChange={onHistoryLayoutChange}
+            onOpenTaskCenter={() => onSidebarViewChange("tasks")}
+            onOpenSettings={() => openSettings()}
+            showCapabilityExtensions={!!capabilityExtensions}
+            className="min-w-0 flex-1"
+          />
+        </div>
+      </aside>
+      {/* Resize divider: invisible 4px hit area straddling the sidebar edge. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t("chat.resizeSidebar")}
+        aria-hidden={sidebarCollapsed}
+        data-testid="sidebar-resize-handle"
+        onPointerDown={onSidebarResizeStart}
+        className={cn(
+          "group relative -ml-1 w-1 shrink-0 touch-none",
+          sidebarCollapsed
+            ? "pointer-events-none opacity-0"
+            : "cursor-col-resize opacity-100",
+        )}
+      >
+        <div className="absolute inset-y-0 right-0 w-px bg-border/35 transition-colors group-hover:bg-foreground/[0.07] group-active:bg-foreground/[0.10]" />
+      </div>
+      <section className="relative flex min-h-0 min-w-0 flex-1">
+        <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <PrimaryWorkspaceView
+            active={sidebarView === "chats"}
+            testId="chats-view"
+          >
+            <ContentHeader
+              title={chatTopBarPlaceholder}
+              icon={<Folder className="h-4 w-4" />}
+              onRenameTitle={
+                canRenameActiveChatTitle ? renameActiveChatTitle : undefined
+              }
+              sidebarCollapsed={sidebarCollapsed}
+              showExpandControl={showSidebarExpandControl}
+              iconBoxVisible={headerIconBoxesVisible}
+              onExpandSidebar={() => onSidebarCollapsedChange(false)}
+              leftInset={topBarLeftInset}
+              heightPx={topBarHeightPx}
+              className={cn(
+                topBarClassName,
+                messagesWidth !== "full" && "amiba-chat-header--wide-overlay",
+              )}
+              seamless
+            />
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col">
               <ChatSurface
                 variant="fullscreen"
                 messagesMaxWidth={messagesWidth}
@@ -621,13 +742,66 @@ function FullScreenChatViewInner({
                 openAgentDestination={openAgentDestination}
                 mentionProviders={mentionProviders}
               />
-            ) : activeMain ? (
-              <ExtensionWebView
-                src={activeMain.viewUrl}
-                className="h-full w-full"
+            </main>
+          </PrimaryWorkspaceView>
+          {capabilityExtensions ? (
+            <PrimaryWorkspaceView
+              active={sidebarView === "capability-extensions"}
+              testId="capability-extensions-view"
+            >
+              <AgentTaskProvider
+                value={capabilityExtensions.startAgentTask}
+                managedApps={capabilityExtensions.managedApps}
+              >
+                <SettingsCapabilities
+                  topBarHeightPx={topBarHeightPx}
+                  topBarClassName={topBarClassName}
+                  topBarLeftInset={topBarLeftInset}
+                  sidebarCollapsed={sidebarCollapsed}
+                  showSidebarExpandControl={showSidebarExpandControl}
+                  onExpandSidebar={() => onSidebarCollapsedChange(false)}
+                />
+              </AgentTaskProvider>
+            </PrimaryWorkspaceView>
+          ) : null}
+          <PrimaryWorkspaceView
+            active={sidebarView === "scheduled"}
+            testId="scheduled-view"
+          >
+            <ScheduledTasksPage
+              topBarHeightPx={topBarHeightPx}
+              topBarClassName={topBarClassName}
+              topBarLeftInset={topBarLeftInset}
+              sidebarCollapsed={sidebarCollapsed}
+              showSidebarExpandControl={showSidebarExpandControl}
+              onExpandSidebar={() => onSidebarCollapsedChange(false)}
+            />
+          </PrimaryWorkspaceView>
+          {!primaryWorkspaceActive ? (
+            <>
+              <ContentHeader
+                title={activeMain?.label || topBarPlaceholder}
+                icon={contentHeaderIcon}
+                sidebarCollapsed={sidebarCollapsed}
+                showExpandControl={showSidebarExpandControl}
+                iconBoxVisible={headerIconBoxesVisible}
+                onExpandSidebar={() => onSidebarCollapsedChange(false)}
+                leftInset={topBarLeftInset}
+                heightPx={topBarHeightPx}
+                className={topBarClassName}
               />
-            ) : null}
-          </main>
+              <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {sidebarView === "tasks" ? (
+                  <TaskCenterPage />
+                ) : activeMain ? (
+                  <ExtensionWebView
+                    src={activeMain.viewUrl}
+                    className="h-full w-full"
+                  />
+                ) : null}
+              </main>
+            </>
+          ) : null}
         </div>
         <WorkspacePane visible={sidebarView === "chats"} />
         {sidebarView === "chats" && (
@@ -660,9 +834,38 @@ interface SidebarHeaderProps {
   onGoHome?: () => void;
   onSearch: () => void;
   onCollapse: () => void;
+  showCollapseControl?: boolean;
+  iconBoxVisible?: boolean;
   leftInset?: number;
   heightPx?: number;
   className?: string;
+}
+
+function HeaderIconBox({
+  visible,
+  testId,
+  className,
+  children,
+}: {
+  visible: boolean;
+  testId: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={!visible}
+      {...(!visible ? { inert: "" } : {})}
+      className={cn(
+        "flex shrink-0 items-center",
+        visible ? "visible" : "invisible pointer-events-none",
+        className,
+      )}
+      data-testid={testId}
+    >
+      {children}
+    </div>
+  );
 }
 
 function HeaderAction({
@@ -691,6 +894,8 @@ function SidebarHeader({
   onGoHome,
   onSearch,
   onCollapse,
+  showCollapseControl = true,
+  iconBoxVisible = true,
   leftInset = 0,
   heightPx = 40,
   className,
@@ -704,19 +909,32 @@ function SidebarHeader({
         paddingLeft: Math.max(leftInset, 8),
       }}
     >
-      {onGoHome && (
-        <HeaderAction label={t("chat.goHome")} onClick={onGoHome}>
-          <Home className="h-4 w-4" />
-        </HeaderAction>
-      )}
-      <div className="ml-auto flex items-center gap-0.5">
-        <HeaderAction label={t("chat.search")} onClick={onSearch}>
-          <Search className="h-4 w-4" />
-        </HeaderAction>
-        <HeaderAction label={t("chat.collapseSidebar")} onClick={onCollapse}>
-          <PanelLeftClose className="h-4 w-4" />
-        </HeaderAction>
-      </div>
+      <HeaderIconBox
+        visible={iconBoxVisible}
+        testId="sidebar-header-icon-box"
+        className="w-full"
+      >
+        {onGoHome && (
+          <HeaderAction label={t("chat.goHome")} onClick={onGoHome}>
+            <Home className="h-4 w-4" />
+          </HeaderAction>
+        )}
+        <div className="ml-auto flex items-center gap-0.5">
+          <HeaderAction label={t("chat.search")} onClick={onSearch}>
+            <Search className="h-4 w-4" />
+          </HeaderAction>
+          <span className="h-7 w-7 shrink-0">
+            {showCollapseControl ? (
+              <HeaderAction
+                label={t("chat.collapseSidebar")}
+                onClick={onCollapse}
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </HeaderAction>
+            ) : null}
+          </span>
+        </div>
+      </HeaderIconBox>
     </header>
   );
 }
@@ -724,7 +942,10 @@ function SidebarHeader({
 interface ContentHeaderProps {
   title: string;
   icon: ReactNode;
+  onRenameTitle?: (title: string) => void;
   sidebarCollapsed: boolean;
+  showExpandControl?: boolean;
+  iconBoxVisible?: boolean;
   onExpandSidebar: () => void;
   leftInset?: number;
   heightPx?: number;
@@ -735,53 +956,172 @@ interface ContentHeaderProps {
 function ContentHeader({
   title,
   icon,
+  onRenameTitle,
   sidebarCollapsed,
+  showExpandControl = sidebarCollapsed,
+  iconBoxVisible = true,
   onExpandSidebar,
   leftInset = 0,
   heightPx = 40,
   className,
   seamless = false,
 }: ContentHeaderProps) {
-  const { t } = useT();
+  const [titleEditing, setTitleEditing] = useState(false);
+
   return (
     <header
       className={cn(
         "flex shrink-0 items-center bg-background px-3",
         !seamless && "border-b border-border/45",
+        titleEditing && "app-no-drag",
         className,
       )}
+      onPointerDown={(event) => {
+        if (!titleEditing) return;
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-content-header-title-editor]")
+        ) {
+          return;
+        }
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      }}
       style={{
         height: heightPx,
+        paddingLeft: sidebarCollapsed ? Math.max(leftInset, 12) : 12,
       }}
     >
       <div
         data-content-header-leading
-        className="flex min-w-0 items-center gap-2"
+        className="flex min-w-0 items-center gap-2.5"
         style={{
           height: heightPx,
           left: sidebarCollapsed ? Math.max(leftInset, 12) : 12,
         }}
       >
-        {sidebarCollapsed && (
-          <HeaderAction
-            label={t("chat.expandSidebar")}
-            onClick={onExpandSidebar}
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </HeaderAction>
-        )}
-        {title && (
-          <div
-            data-content-header-title
-            className="pointer-events-none flex min-w-0 items-center gap-2 text-foreground/75"
-          >
-            <span className="shrink-0 text-muted-foreground">{icon}</span>
-            <span className="truncate text-[13px] font-medium tracking-tight">
-              {title}
+        <HeaderIconBox
+          visible={iconBoxVisible}
+          testId="content-header-icon-box"
+        >
+          <SidebarExpandControl
+            collapsed={sidebarCollapsed}
+            onExpand={onExpandSidebar}
+            visible={showExpandControl}
+          />
+          {title ? (
+            <span
+              className={cn(
+                "pointer-events-none shrink-0 text-muted-foreground",
+                sidebarCollapsed && "ml-2",
+              )}
+            >
+              {icon}
             </span>
-          </div>
+          ) : null}
+        </HeaderIconBox>
+        {title && (
+          <EditableContentHeaderTitle
+            title={title}
+            onRename={onRenameTitle}
+            onEditingChange={setTitleEditing}
+          />
         )}
       </div>
     </header>
+  );
+}
+
+function EditableContentHeaderTitle({
+  title,
+  onRename,
+  onEditingChange,
+}: {
+  title: string;
+  onRename?: (title: string) => void;
+  onEditingChange?: (editing: boolean) => void;
+}) {
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const editorRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (!editing) return;
+    editorRef.current?.focus();
+    editorRef.current?.select();
+  }, [editing]);
+
+  useEffect(() => {
+    if (!editing) setDraft(title);
+  }, [editing, title]);
+
+  useEffect(() => {
+    if (!onRename) {
+      setEditing(false);
+      onEditingChange?.(false);
+    }
+  }, [onEditingChange, onRename]);
+
+  const commit = useCallback(() => {
+    const next = draft.trim();
+    if (next && next !== title.trim()) onRename?.(next);
+    setEditing(false);
+    onEditingChange?.(false);
+  }, [draft, onEditingChange, onRename, title]);
+
+  const cancel = useCallback(() => {
+    setDraft(title);
+    setEditing(false);
+    onEditingChange?.(false);
+  }, [onEditingChange, title]);
+
+  const onEditorKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        cancel();
+      }
+    },
+    [cancel, commit],
+  );
+
+  return (
+    <div data-content-header-title className="min-w-0 text-foreground/75">
+      {editing ? (
+        <input
+          ref={editorRef}
+          data-content-header-title-editor
+          aria-label={t("chat.rename")}
+          className="app-no-drag -my-1 -ml-1 min-w-[8ch] max-w-[min(32rem,50vw)] rounded-md bg-foreground/[0.045] px-1 py-1 text-[13px] font-medium tracking-tight text-foreground outline-none [field-sizing:content] selection:bg-primary/20 focus-visible:ring-1 focus-visible:ring-ring/40"
+          value={draft}
+          onBlur={commit}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={onEditorKeyDown}
+        />
+      ) : onRename ? (
+        <button
+          type="button"
+          aria-label={t("chat.rename")}
+          title={t("chat.rename")}
+          className="app-no-drag -my-1 -ml-1.5 min-w-0 cursor-default truncate rounded-xl px-1.5 py-1 text-left text-[13px] font-medium tracking-tight transition-colors hover:bg-foreground/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+          onClick={() => {
+            setDraft(title);
+            setEditing(true);
+            onEditingChange?.(true);
+          }}
+        >
+          {title}
+        </button>
+      ) : (
+        <span className="pointer-events-none truncate text-[13px] font-medium tracking-tight">
+          {title}
+        </span>
+      )}
+    </div>
   );
 }

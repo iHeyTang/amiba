@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useT } from "@amiba/i18n"
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus"
-import { cn, ScrollArea } from "../primitives"
+import { cn, PageContent, ScrollArea } from "../primitives"
 import { ChipSwitcher, Heatmap } from "../viz"
 
 import { readUsagePref, writeUsagePref } from "./prefs"
@@ -49,7 +49,6 @@ type DayRange = (typeof DAY_RANGES)[number]
 const TREND_RANGE_SETTING_KEY = "usage.tokens.ui.trend.days"
 const BYMODEL_RANGE_SETTING_KEY = "usage.tokens.ui.bymodel.days"
 const AUTO_REFRESH_INTERVAL_MS = 30_000
-const CONTENT_MAX_W_CLASS = "max-w-3xl"
 
 // ---------------------------------------------------------------------------
 // Formatting
@@ -193,12 +192,7 @@ export function TokensTab() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <ScrollArea className="min-h-0 flex-1">
-        <div
-          className={cn(
-            "mx-auto w-full space-y-6 px-4 py-4",
-            CONTENT_MAX_W_CLASS,
-          )}
-        >
+        <PageContent bodyClassName="space-y-6" size="md">
           {error && (
             <p className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
               {error}
@@ -316,7 +310,7 @@ export function TokensTab() {
           <p className="pt-2 text-center text-xs text-muted-foreground/60">
             {t("usage.tokens.footer.source")}
           </p>
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   )

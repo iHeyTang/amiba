@@ -19,7 +19,7 @@ import type { ToolActivityDayBucket, ToolActivitySource, ToolInvocation } from "
 import { useT, type TranslateFn } from "@amiba/i18n"
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus"
-import { cn, ScrollArea } from "../primitives"
+import { cn, PageContent, ScrollArea } from "../primitives"
 import { ChipSwitcher, Heatmap } from "../viz"
 import { readUsagePref, writeUsagePref } from "./prefs"
 import {
@@ -36,7 +36,6 @@ const DAY_RANGES = [1, 3, 7] as const
 type DayRange = (typeof DAY_RANGES)[number]
 const TREND_RANGE_SETTING_KEY = "usage.tools.ui.trend.days"
 const BYTOOL_RANGE_SETTING_KEY = "usage.tools.ui.bytool.days"
-const CONTENT_MAX_W_CLASS = "max-w-3xl"
 
 const MONTH_NAMES_ZH = [
   "1月", "2月", "3月", "4月", "5月", "6月",
@@ -178,9 +177,9 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
   if (!reader) {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <div className={cn("mx-auto w-full px-4 py-4", CONTENT_MAX_W_CLASS)}>
+        <PageContent size="md">
           <Empty>{t("usage.label.noData")}</Empty>
-        </div>
+        </PageContent>
       </div>
     )
   }
@@ -188,12 +187,7 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <ScrollArea className="min-h-0 flex-1">
-        <div
-          className={cn(
-            "mx-auto w-full space-y-6 px-4 py-4",
-            CONTENT_MAX_W_CLASS,
-          )}
-        >
+        <PageContent bodyClassName="space-y-6" size="md">
           {error && (
             <p className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
               {error}
@@ -309,7 +303,7 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
           <p className="pt-2 text-center text-xs text-muted-foreground/60">
             {t("usage.tools.footer.source")}
           </p>
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   )

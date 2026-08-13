@@ -16,9 +16,8 @@ Sub-modules:
 - ``mention_sources_gateway``: HTTP adapter over the mention-source registry
   (``runtime/mention_sources``) — ``/mention-sources/<name>/search`` (calls the
   source's in-process ``search`` capability), ``/hermes/mention-resources``
-  (flattened registry for the composer), and ``/hermes/mention-sources*``
-  lifecycle admin (git install / update / remove). Degrades gracefully if the
-  framework is unavailable.
+  (flattened registry for the composer). This is a read-only compatibility
+  adapter for sources installed before mentions became Applet capabilities.
 - ``turn_metadata``: ``/hermes/turn-metadata`` — small in-memory TTL
   store for per-turn snapshots (browser tab freeze, etc.) that the
   agent's tool handlers fetch over loopback. Keeps out-of-band turn

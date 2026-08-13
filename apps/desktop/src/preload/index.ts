@@ -249,6 +249,70 @@ const api = {
 
   extensions: createExtensionsBridge(),
 
+  managedApps: {
+    list: (options?: { includeArchived?: boolean }) =>
+      ipcRenderer.invoke("managed-apps:list", options),
+    get: (appId: string) => ipcRenderer.invoke("managed-apps:get", appId),
+    create: (request: import("@amiba/managed-apps").ManagedAppCreateRequest) =>
+      ipcRenderer.invoke("managed-apps:create", request),
+    requestChange: (appId: string, request: string) =>
+      ipcRenderer.invoke("managed-apps:request-change", appId, request),
+    attachSession: (appId: string, draftId: string, sessionId: string) =>
+      ipcRenderer.invoke("managed-apps:attach-session", appId, draftId, sessionId),
+    updateMetadata: (
+      appId: string,
+      patch: import("@amiba/managed-apps").ManagedAppMetadataPatch,
+    ) => ipcRenderer.invoke("managed-apps:update-metadata", appId, patch),
+    archive: (appId: string) => ipcRenderer.invoke("managed-apps:archive", appId),
+    restore: (appId: string) => ipcRenderer.invoke("managed-apps:restore", appId),
+    exportProject: (appId: string) => ipcRenderer.invoke("managed-apps:export", appId),
+    listOutputs: (appId: string) => ipcRenderer.invoke("managed-apps:list-outputs", appId),
+    updateOutput: (
+      appId: string,
+      outputId: string,
+      patch: { pinned?: boolean; tags?: string[] },
+    ) => ipcRenderer.invoke("managed-apps:update-output", appId, outputId, patch),
+    listPresets: (appId: string) => ipcRenderer.invoke("managed-apps:list-presets", appId),
+    savePreset: (appId: string, input: {
+      revisionId: string;
+      providerAlias: string;
+      toolName: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }) => ipcRenderer.invoke("managed-apps:save-preset", appId, input),
+    deletePreset: (appId: string, presetId: string) =>
+      ipcRenderer.invoke("managed-apps:delete-preset", appId, presetId),
+    confirm: (appId: string, revisionId: string) =>
+      ipcRenderer.invoke("managed-apps:confirm", appId, revisionId),
+    reject: (appId: string, revisionId: string) =>
+      ipcRenderer.invoke("managed-apps:reject", appId, revisionId),
+    rollback: (appId: string) => ipcRenderer.invoke("managed-apps:rollback", appId),
+    markUsed: (appId: string) => ipcRenderer.invoke("managed-apps:mark-used", appId),
+    surface: (
+      appId: string,
+      target?: "active" | "candidate",
+      surfaceName?: "main" | "settings",
+    ) => ipcRenderer.invoke("managed-apps:surface", appId, target, surfaceName),
+    callTool: (input: {
+      appId: string;
+      providerAlias: string;
+      name: string;
+      arguments?: Record<string, unknown>;
+      revisionId?: string;
+    }) => ipcRenderer.invoke("managed-apps:call-tool", input),
+    readResource: (input: {
+      appId: string;
+      providerAlias: string;
+      uri: string;
+      revisionId?: string;
+    }) => ipcRenderer.invoke("managed-apps:read-resource", input),
+    onChanged: (cb: (appId: string | null) => void) => {
+      const handler = (_event: unknown, appId: string | null) => cb(appId);
+      ipcRenderer.on("managed-apps:changed", handler);
+      return () => ipcRenderer.off("managed-apps:changed", handler);
+    },
+  },
+
   ...createWebviewPreloadBridge(),
 
   /**

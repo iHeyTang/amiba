@@ -1,9 +1,9 @@
 """Per-provider credential schema — what env vars to render + their current values.
 
-Each provider profile self-declares which env vars matter via
-``ProviderProfile.env_vars``. We surface those plus, for each one, a
-placeholder when there's a meaningful default (URL fields get the
-provider's stock ``base_url``).
+Provider profiles declare authentication fields via
+``ProviderProfile.env_vars``. Endpoint defaults and override variables come
+from ``hermes_cli.auth.PROVIDER_REGISTRY`` — the same registry Hermes uses at
+request time — and are returned as one resolved endpoint object.
 
 Providers with a non-env authentication path return an ``auth_hint`` even
 when editable env credentials also exist. This lets clients present external
@@ -29,6 +29,7 @@ from ....adapters.hermes_core import (
 from ....adapters.hermes_provider_env import (
     base_url_env_var_for_slug,
     env_var_names_for_slug,
+    provider_endpoint_definition_for_slug,
 )
 from .provider_connection_service import (
     allows_ambient_credentials,
@@ -43,14 +44,6 @@ _CUSTOM_PROVIDER_ENV_KEYS = (
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
 )
-
-
-def _provider_default_base_url(slug: str) -> str:
-    prof = get_provider_profile(slug)
-    if prof is None:
-        return ""
-    bu = getattr(prof, "base_url", "") or ""
-    return str(bu).strip()
 
 
 def _field_kind(key: str) -> str:
@@ -69,6 +62,52 @@ def _field_placeholder(key: str, default_base_url: str) -> str:
     if _field_kind(key) == "url":
         return default_base_url
     return ""
+
+
+def _resolve_provider_endpoint(
+    slug: str,
+    *,
+    saved_values: Dict[str, str],
+    allow_ambient_env: bool,
+) -> Dict[str, str]:
+    """Resolve the exact provider endpoint chain exposed to the desktop.
+
+    The definition and precedence mirror Hermes runtime resolution for a
+    canonical API-key provider: provider-specific saved override, ambient
+    override (default Profile only), then the registry default.  The generic
+    ``model.base_url`` is intentionally absent: Amiba reserves that setting
+    for the explicit ``custom`` provider and clears it for canonical writes.
+    """
+    definition = provider_endpoint_definition_for_slug(slug)
+    default_base_url = definition["default_base_url"]
+    override_env_var = definition["override_env_var"]
+    saved_override = (
+        str(saved_values.get(override_env_var, "") or "").strip()
+        if override_env_var
+        else ""
+    )
+    ambient_override = (
+        str(os.environ.get(override_env_var, "") or "").strip()
+        if override_env_var and allow_ambient_env
+        else ""
+    )
+    override_base_url = saved_override or ambient_override
+    effective_base_url = override_base_url or default_base_url
+    if saved_override:
+        source = "saved"
+    elif ambient_override:
+        source = "environment"
+    elif default_base_url:
+        source = "default"
+    else:
+        source = "none"
+    return {
+        "default_base_url": default_base_url,
+        "override_env_var": override_env_var,
+        "override_base_url": override_base_url,
+        "effective_base_url": effective_base_url,
+        "source": source,
+    }
 
 
 def allowed_credential_keys_for_provider(slug: str) -> List[str]:
@@ -131,6 +170,12 @@ def read_provider_credentials_response(
         auth_type,
         current_profile_id(),
     )
+    saved_values = read_dotenv_as_dict(plugin_dotenv_path())
+    endpoint = _resolve_provider_endpoint(
+        raw,
+        saved_values=saved_values,
+        allow_ambient_env=allow_ambient_env,
+    )
     if not keys:
         return {
             "ok": True,
@@ -146,10 +191,9 @@ def read_provider_credentials_response(
                 verify_service=verify_service,
                 allow_ambient_env=allow_ambient_env,
             ),
+            "endpoint": endpoint,
             "profile": current_profile_id(),
         }
-    default_base_url = _provider_default_base_url(raw)
-    saved_values = read_dotenv_as_dict(plugin_dotenv_path())
     fields: List[Dict[str, Any]] = []
     for k in keys:
         saved_value = saved_values.get(k, "")
@@ -172,7 +216,9 @@ def read_provider_credentials_response(
                 # entries remain metadata-only because Hermes does not expose
                 # their underlying tokens here.
                 "value": saved_value or ambient_value,
-                "placeholder": _field_placeholder(k, default_base_url),
+                "placeholder": _field_placeholder(
+                    k, endpoint["default_base_url"]
+                ),
                 "kind": kind,
                 "origin": origin,
                 "configured": bool(saved_value.strip() or ambient_value.strip()),
@@ -193,6 +239,7 @@ def read_provider_credentials_response(
             verify_service=verify_service,
             allow_ambient_env=allow_ambient_env,
         ),
+        "endpoint": endpoint,
         "profile": current_profile_id(),
     }
 

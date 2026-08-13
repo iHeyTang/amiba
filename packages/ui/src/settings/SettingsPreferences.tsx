@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Label } from "../primitives";
 import { Switch } from "../primitives";
 import { Input } from "../primitives";
-import { Button, ScrollArea } from "../primitives";
+import { Button, PageContent, ScrollArea } from "../primitives";
 import {
   type LanguagePreference,
   useStoredLanguagePreference,
@@ -136,43 +136,41 @@ export function SettingsAppearance() {
         subtitle={t("options.preference.subtitle")}
       />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-6">
-          <div className="mx-auto w-full max-w-2xl space-y-8">
-            <AppearanceSection
-              t={t}
-              langPref={langPref}
-              themePref={themePref}
-              accentPref={accentPref}
-              languageOptions={languageOptions}
-              themeOptions={themeOptions}
-              onLangChange={(v) => void setLangPref(v)}
-              onThemeChange={(v) => void setThemePref(v)}
-              onAccentChange={(v) => void setAccentPref(v)}
-              // Wallpaper backdrop is rendered by the extension's new-tab
-              // surface; the desktop home doesn't surface it, so we hide
-              // the toggle there to avoid a no-op control.
-              showWallpaper={!isDesktop}
-              wallpaperEnabled={wallpaperEnabled}
-              onWallpaperChange={(next) => {
-                setWallpaperEnabled(next);
-                void getPlatform().storage.set({
-                  [NEWTAB_WALLPAPER_KEY]: next,
-                });
-              }}
-            />
-            <ChatSection
-              t={t}
-              messagesWidth={messagesWidth}
-              widthOptions={widthOptions}
-              onWidthChange={(v) => {
-                setMessagesWidth(v);
-                void getPlatform().storage.set({
-                  [MESSAGES_WIDTH_KEY]: v,
-                });
-              }}
-            />
-          </div>
-        </div>
+        <PageContent bodyClassName="space-y-8" size="md">
+          <AppearanceSection
+            t={t}
+            langPref={langPref}
+            themePref={themePref}
+            accentPref={accentPref}
+            languageOptions={languageOptions}
+            themeOptions={themeOptions}
+            onLangChange={(v) => void setLangPref(v)}
+            onThemeChange={(v) => void setThemePref(v)}
+            onAccentChange={(v) => void setAccentPref(v)}
+            // Wallpaper backdrop is rendered by the extension's new-tab
+            // surface; the desktop home doesn't surface it, so we hide
+            // the toggle there to avoid a no-op control.
+            showWallpaper={!isDesktop}
+            wallpaperEnabled={wallpaperEnabled}
+            onWallpaperChange={(next) => {
+              setWallpaperEnabled(next);
+              void getPlatform().storage.set({
+                [NEWTAB_WALLPAPER_KEY]: next,
+              });
+            }}
+          />
+          <ChatSection
+            t={t}
+            messagesWidth={messagesWidth}
+            widthOptions={widthOptions}
+            onWidthChange={(v) => {
+              setMessagesWidth(v);
+              void getPlatform().storage.set({
+                [MESSAGES_WIDTH_KEY]: v,
+              });
+            }}
+          />
+        </PageContent>
       </ScrollArea>
     </div>
   );
@@ -214,19 +212,17 @@ export function SettingsShortcuts() {
         subtitle={t("options.preference.hotkey.desc")}
       />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-6">
-          <div className="mx-auto w-full max-w-2xl">
-            <HotkeySection
-              summonHotkey={summonHotkey}
-              onSummonHotkeyChange={(next) => {
-                setSummonHotkey(next);
-                void getPlatform().storage.set({
-                  [SUMMON_HOTKEY_KEY]: next,
-                });
-              }}
-            />
-          </div>
-        </div>
+        <PageContent size="md">
+          <HotkeySection
+            summonHotkey={summonHotkey}
+            onSummonHotkeyChange={(next) => {
+              setSummonHotkey(next);
+              void getPlatform().storage.set({
+                [SUMMON_HOTKEY_KEY]: next,
+              });
+            }}
+          />
+        </PageContent>
       </ScrollArea>
     </div>
   );

@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set
+from urllib.parse import urlparse
 
 from ....adapters.dotenv_local import merge_dotenv_file_and_apply
 from ....adapters.hermes_core import is_default_profile
@@ -1196,3 +1197,71 @@ def list_installed_mcps() -> List[Dict[str, Any]]:
         )
     out.sort(key=lambda row: row["slug"])
     return out
+
+
+def get_installed_mcp_connection(slug: str) -> Dict[str, Any]:
+    """Return one configured MCP connection to the trusted desktop host.
+
+    This is deliberately not part of the renderer-facing catalog response:
+    stdio environment variables and HTTP headers can contain credentials.
+    The desktop main process uses it only to resolve a managed Applet's
+    ``providerId`` into the same connection Hermes already owns.
+    """
+
+    value = str(slug or "").strip()
+    if not value or len(value) > 128 or not all(
+        character.isalnum() or character in "._-" for character in value
+    ):
+        raise ValueError("invalid MCP provider id")
+    cfg = _load_config()
+    servers = cfg.get("mcp_servers") if isinstance(cfg, dict) else None
+    server = servers.get(value) if isinstance(servers, dict) else None
+    if not isinstance(server, dict) or not _mcp_is_enabled(server):
+        raise KeyError(value)
+    result: Dict[str, Any] = {"providerId": value}
+    for key in ("url", "command", "cwd"):
+        if isinstance(server.get(key), str) and server[key].strip():
+            result[key] = server[key]
+    args = server.get("args")
+    if isinstance(args, list) and all(isinstance(item, str) for item in args):
+        result["args"] = args
+    for source_key, target_key in (("env", "env"), ("headers", "headers")):
+        values = server.get(source_key)
+        if isinstance(values, dict) and all(
+            isinstance(key, str) and isinstance(item, str)
+            for key, item in values.items()
+        ):
+            result[target_key] = values
+    if "url" not in result and "command" not in result:
+        raise ValueError(f"MCP provider {value} has no url or command")
+    return result
+
+
+def configure_managed_apps_federation(url: str) -> Dict[str, Any]:
+    """Persist Amiba's process-owned MCP federation endpoint.
+
+    The endpoint is deliberately restricted to loopback.  This route is not a
+    general MCP installer; it only refreshes the ephemeral port of the one
+    server Amiba itself starts and supervises.
+    """
+
+    parsed = urlparse(str(url or "").strip())
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost"}
+        or parsed.path != "/mcp"
+        or not parsed.port
+    ):
+        raise ValueError("url must be an http://127.0.0.1:<port>/mcp endpoint")
+    config = _load_config()
+    servers = config.setdefault("mcp_servers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+        config["mcp_servers"] = servers
+    servers["amiba-applets"] = {
+        "url": url,
+        "enabled": True,
+        "description": "Tools and resources from the user's active Amiba Applets",
+    }
+    _save_config(config)
+    return {"ok": True, "url": url}

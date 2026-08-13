@@ -13,6 +13,7 @@ import { useT } from "@amiba/i18n";
 import {
   bubbleTextContent,
   hostnameOf,
+  stripManagedResourceContext,
   splitThinkingFromBody,
   splitWorkspaceFromBody,
 } from "../internal/helpers";
@@ -73,9 +74,10 @@ export function Bubble({
     // Workspace remains session-level execution context and sidebar grouping.
     // Strip its internal prompt block from persisted messages, but don't echo
     // the same immutable directory on every user bubble.
-    const { body: bodyText } = splitWorkspaceFromBody(
+    const { body: expandedBodyText } = splitWorkspaceFromBody(
       bubbleTextContent(m.content),
     );
+    const bodyText = stripManagedResourceContext(expandedBodyText);
     const pageBadges =
       m.pageBadges && m.pageBadges.length > 0
         ? m.pageBadges

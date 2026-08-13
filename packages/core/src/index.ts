@@ -21,7 +21,6 @@ export * from "./hermes-memory";
 export * from "./hermes-sessions";
 export * from "./hermes-skills";
 export * from "./hermes-mention-resources";
-export * from "./hermes-mention-sources-admin";
 export * from "./hermes-plugins";
 export * from "./hermes-commands";
 export * from "./hermes-personalities";

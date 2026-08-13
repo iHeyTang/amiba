@@ -4,10 +4,9 @@ All routes live under the ``hermes_proxy`` lane — thin HTTP wrappers over
 Hermes core APIs (cron, sessions, model catalog, provider settings, memory,
 skills, attachment uploads) that the gateway doesn't expose itself, mounted at
 ``/hermes/*``, plus the ``mention_sources_gateway`` adapter that serves
-``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` + lifecycle
-admin by reading the mention-source registry in-process. The framework itself
-(loader / manager / skills wiring) lives in ``runtime/mention_sources/``; this
-lane just adapts its ``search`` capability to HTTP.
+``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` by reading
+the legacy mention-source registry in-process. New mention capabilities belong
+to Applets; this lane only preserves read compatibility during migration.
 """
 
 from __future__ import annotations

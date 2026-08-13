@@ -13,13 +13,15 @@ export interface ExtensionManifest {
   /** Minimum host extension-API level this extension requires (integer ≥ 1). Absent ⇒ 1. */
   apiVersion?: number
   /** Host version constraint. Phase 1: read but not enforced. */
-  engines?: { "amiba"?: string }
+  engines?: { amiba?: string }
   /** Relative bundle paths. Only main remains; renderer bundles are gone. */
   entries: {
     main?: string
   }
   /** Static contribution declarations. Loader registers them whether or not activate runs. */
   contributes?: ManifestContributes
+  /** Composer @-mention projections owned by this Applet. */
+  mentions?: ManifestMentionContribution[]
   /** Hermes-agent plugin dependencies. */
   hermesPlugins?: Array<{
     id: string
@@ -28,6 +30,29 @@ export interface ExtensionManifest {
   }>
   /** Permission tokens declared by the extension. Phase 1: not enforced. */
   permissions?: Permission[]
+}
+
+/**
+ * Projects one MCP Resource family into the composer's @ menu.
+ *
+ * The Applet remains the lifecycle root: this declaration is metadata for the
+ * Amiba host, while discovery, search and reads stay on the referenced MCP
+ * provider. A mention is therefore an Applet capability, never an installable
+ * package of its own.
+ */
+export interface ManifestMentionContribution {
+  /** Stable id within the Applet. */
+  id: string
+  /** Alias of the MCP provider declared by the Applet. */
+  provider: string
+  /** User-facing category name. */
+  label: string
+  /** Optional icon name understood by the host. */
+  icon?: string
+  /** MCP Resource URI template used to read the selected item. */
+  resourceUriTemplate?: string
+  /** MCP tool used to search or list candidates. */
+  searchTool?: string
 }
 
 export interface ManifestContributes {

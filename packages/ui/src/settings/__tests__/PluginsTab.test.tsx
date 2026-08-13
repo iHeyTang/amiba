@@ -41,4 +41,27 @@ describe("PluginsTab", () => {
       screen.queryByText("Bundled browser implementation"),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps loading and empty copy in the same state container", async () => {
+    let resolvePlugins!: (value: { ok: true; plugins: [] }) => void;
+    core.getHermesPlugins.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePlugins = resolve;
+      }),
+    );
+
+    render(<PluginsTab showAddAction={false} />);
+
+    const loading = screen.getByText("Loading plugins…").closest("[data-ui]");
+    expect(loading).toHaveAttribute("data-ui", "collection-state");
+    const loadingClassName = loading?.className;
+
+    resolvePlugins({ ok: true, plugins: [] });
+
+    const empty = (await screen.findByText("No plugins installed")).closest(
+      "[data-ui]",
+    );
+    expect(empty).toHaveAttribute("data-ui", "collection-state");
+    expect(empty?.className).toBe(loadingClassName);
+  });
 });

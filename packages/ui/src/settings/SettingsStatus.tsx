@@ -38,7 +38,7 @@ import {
 } from "@amiba/core";
 import { useT, type TranslateFn } from "@amiba/i18n";
 
-import { Badge, Button, cn } from "../primitives";
+import { Badge, Button, PageContent, cn } from "../primitives";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
 
 const STATUS_POLL_MS = 10_000;
@@ -584,10 +584,10 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
   const runtimeManaged = !!status?.runtime_managed;
   const healthKind: HealthKind =
     status?.protocol_mismatch || status?.hermes_version_mismatch
-    ? "mismatch"
-    : status?.gateway_running
-      ? "healthy"
-      : "offline";
+      ? "mismatch"
+      : status?.gateway_running
+        ? "healthy"
+        : "offline";
   const platformNames = Object.keys(status?.gateway_platforms ?? {});
   const lastCheckedLabel = lastCheckedAt
     ? lastCheckedAt.toLocaleTimeString(language === "zh-CN" ? "zh-CN" : "en", {
@@ -641,11 +641,10 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
       <SettingsPaneHeader
         title={t("options.status.title")}
         subtitle={t("options.status.subtitle")}
-        contentClassName="mx-auto max-w-[880px]"
       />
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 pb-8 pt-3">
-        <div className="mx-auto w-full max-w-[880px] space-y-3">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <PageContent bodyClassName="space-y-3" className="pt-3" size="md">
           {statusErr ? (
             <ServiceUnavailableGate
               error={statusErr}
@@ -949,7 +948,7 @@ export function SettingsStatus({ onViewUpdateLogs }: SettingsStatusProps = {}) {
               </div>
             </>
           )}
-        </div>
+        </PageContent>
       </div>
     </div>
   );

@@ -7,7 +7,6 @@ import {
   Loader2,
   MoreHorizontal,
   Pencil,
-  Play,
   Plus,
   RefreshCw,
   Search,
@@ -23,7 +22,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { Button } from "../primitives";
+import { Button, CollectionState } from "../primitives";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +35,7 @@ import { Label } from "../primitives";
 import { ScrollArea } from "../primitives";
 import { Switch } from "../primitives";
 import { Textarea } from "../primitives";
+import { PageContent } from "../primitives";
 import {
   Tooltip,
   TooltipContent,
@@ -62,6 +62,7 @@ import {
 import { useT } from "@amiba/i18n";
 import { getPlatform } from "@amiba/platform";
 import { cn } from "../primitives";
+import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import { ModelSelectionField } from "../models";
 
 type Language = "en" | "zh-CN";
@@ -328,16 +329,19 @@ function SkillSelectionField({
         )}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[70vh] flex-col gap-0 overflow-hidden p-0" size="md">
+        <DialogContent
+          className="flex max-h-[70vh] flex-col gap-0 overflow-hidden p-0"
+          size="md"
+        >
           <DialogTitle className="sr-only">
             {t("options.cron.form.skills")}
           </DialogTitle>
-          <div className="border-b border-border px-4">
+          <div className="px-4 pt-3">
             <Input
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="h-12 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              className="h-10 rounded-lg bg-muted/35 px-3 shadow-none"
               placeholder={t("options.cron.form.skills.search")}
             />
           </div>
@@ -390,7 +394,7 @@ function SkillSelectionField({
               </div>
             )}
           </ScrollArea>
-          <DialogFooter className="border-t border-border/60 px-4 py-3">
+          <DialogFooter className="px-4 py-3">
             <Button size="sm" onClick={() => setOpen(false)}>
               {t("common.confirm")}
             </Button>
@@ -420,9 +424,7 @@ function JobDialog({
       setForm(initial);
       // Open the advanced panel automatically if any advanced field is set,
       // so editing an existing job doesn't hide non-default values.
-      setAdvancedOpen(
-        !!(initial.repeat || initial.noAgent || initial.script),
-      );
+      setAdvancedOpen(!!(initial.repeat || initial.noAgent || initial.script));
       const workspaces = getPlatform().workspaces;
       if (!initial.workdir && workspaces) {
         void workspaces.getDefaultRoot().then((root) => {
@@ -441,8 +443,8 @@ function JobDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !busy && onClose()}>
       <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0" size="lg">
-        <DialogHeader className="border-b border-border/60 px-5 py-4">
-          <DialogTitle className="text-sm font-semibold">
+        <DialogHeader className="px-5 pb-1 pt-5">
+          <DialogTitle className="text-sm font-medium">
             {mode === "create"
               ? t("options.cron.form.create")
               : t("options.cron.form.edit")}
@@ -478,9 +480,6 @@ function JobDialog({
                 className="font-mono text-xs"
                 disabled={busy}
               />
-              <p className="text-[10px] text-muted-foreground">
-                {t("options.cron.form.schedule.hint")}
-              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -506,10 +505,7 @@ function JobDialog({
               />
             </div>
 
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold">
-                {t("options.cron.form.execution")}
-              </h3>
+            <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">
@@ -594,11 +590,8 @@ function JobDialog({
                   <option value="origin" />
                   <option value="all" />
                 </datalist>
-                <p className="text-[10px] text-muted-foreground">
-                  {t("options.cron.form.delivery.hint")}
-                </p>
               </div>
-            </section>
+            </div>
 
             <div className="flex justify-end">
               <button
@@ -613,16 +606,11 @@ function JobDialog({
             </div>
 
             {advancedOpen && (
-              <div className="space-y-3 rounded-xl border border-border/60 px-3 py-3">
+              <div className="space-y-3 rounded-xl bg-muted/30 px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-medium">
-                      {t("options.cron.form.directScript")}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {t("options.cron.form.directScript.hint")}
-                    </p>
-                  </div>
+                  <p className="text-xs font-medium">
+                    {t("options.cron.form.directScript")}
+                  </p>
                   <Switch
                     checked={form.noAgent}
                     onCheckedChange={(v) => patch("noAgent", v)}
@@ -666,7 +654,7 @@ function JobDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="border-t border-border/60 px-5 py-3">
+        <DialogFooter className="px-5 pb-4 pt-2">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>
@@ -738,73 +726,20 @@ function JobRow({
         : t("options.cron.meta.noNextRun");
 
   return (
-    <li className="group relative rounded-md px-2 py-2.5 transition-colors duration-150 hover:bg-muted/20 focus-within:bg-muted/20">
-      <div className="flex min-w-0 items-start gap-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={!paused && !completed}
-              aria-label={
-                completed
-                  ? t("options.cron.state.completed")
-                  : paused
-                    ? t("options.cron.action.resumeNamed", {
-                        name: job.name || job.id,
-                      })
-                    : t("options.cron.action.pauseNamed", {
-                        name: job.name || job.id,
-                      })
-              }
-              disabled={busy || completed}
-              onClick={() => (paused ? onResume(job) : onPause(job))}
-              className="group/task-toggle mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-offset-1 disabled:cursor-default disabled:opacity-35"
-            >
-              <span
-                className={cn(
-                  "flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current transition-colors duration-150",
-                  paused
-                    ? "text-muted-foreground/30 group-hover/task-toggle:text-muted-foreground/44"
-                    : job.state === "error" || job.last_status === "error"
-                      ? "text-destructive/30 group-hover/task-toggle:text-destructive/45"
-                      : "text-foreground/20 group-hover/task-toggle:text-foreground/30",
-                )}
-              >
-                {busy ? (
-                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                ) : paused ? (
-                  <Play
-                    className="ml-[0.5px] h-1.5 w-1.5 fill-current"
-                    strokeWidth={1}
-                  />
-                ) : completed ? null : (
-                  <span className="flex h-2 items-center gap-px opacity-0 transition-opacity duration-150 group-hover/task-toggle:opacity-100 group-focus-visible/task-toggle:opacity-100">
-                    <span className="h-1.5 w-[1.5px] rounded-full bg-current" />
-                    <span className="h-1.5 w-[1.5px] rounded-full bg-current" />
-                  </span>
-                )}
-              </span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            {completed
-              ? t("options.cron.state.completed")
-              : paused
-                ? t("options.cron.action.resume")
-                : t("options.cron.action.pause")}
-          </TooltipContent>
-        </Tooltip>
-
+    <li className="group relative rounded-xl px-2.5 py-3 transition-colors duration-150 hover:bg-muted/30 focus-within:bg-muted/30">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-muted/55 text-muted-foreground/80">
+          <CalendarClock className="h-[18px] w-[18px]" />
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <h3 className="truncate text-[13px] font-medium tracking-[-0.005em] text-foreground">
+            <h3 className="truncate text-sm font-medium tracking-[-0.005em] text-foreground">
               {job.name || job.id}
             </h3>
             {showStateLabel && (
               <span
                 className={cn(
-                  "shrink-0 text-[10.5px]",
+                  "shrink-0 text-[11px]",
                   job.state === "error" || job.last_status === "error"
                     ? "text-destructive"
                     : "text-muted-foreground/75",
@@ -815,7 +750,7 @@ function JobRow({
             )}
             {job.no_agent && (
               <span
-                className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 text-[9.5px] font-medium text-muted-foreground/80"
+                className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/80"
                 title="no_agent"
               >
                 {t("options.cron.mode.directScript")}
@@ -823,7 +758,7 @@ function JobRow({
             )}
           </div>
 
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground/75">
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground/75">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-default text-foreground/58">
@@ -834,9 +769,6 @@ function JobRow({
                 <code className="font-mono">{job.schedule_display}</code>
               </TooltipContent>
             </Tooltip>
-            <span aria-hidden className="text-border">
-              ·
-            </span>
             <span
               title={
                 paused || completed
@@ -849,14 +781,37 @@ function JobRow({
           </div>
 
           {issue && (
-            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-destructive">
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-destructive">
               <CircleAlert className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{issue}</span>
             </div>
           )}
         </div>
 
-        <div className="flex h-7 shrink-0 items-center">
+        <div className="flex h-7 shrink-0 items-center gap-1">
+          {busy ? (
+            <span className="flex h-7 w-8 items-center justify-center text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            </span>
+          ) : (
+            <Switch
+              checked={!paused && !completed}
+              aria-label={
+                completed
+                  ? t("options.cron.state.completed")
+                  : paused
+                    ? t("options.cron.action.resumeNamed", {
+                        name: job.name || job.id,
+                      })
+                    : t("options.cron.action.pauseNamed", {
+                        name: job.name || job.id,
+                      })
+              }
+              disabled={completed}
+              onCheckedChange={() => (paused ? onResume(job) : onPause(job))}
+              className="scale-[0.86]"
+            />
+          )}
           <TaskActionsMenu
             job={job}
             busy={busy}
@@ -993,7 +948,6 @@ function TaskActionsMenu({
           label={t("options.cron.action.copyId")}
           onClick={() => runAndClose(onCopyId)}
         />
-        <div className="my-1 h-px bg-border/50" />
         <TaskMenuItem
           destructive
           icon={<Trash2 />}
@@ -1035,12 +989,30 @@ function TaskMenuItem({
   );
 }
 
-export function ScheduledTasksPage() {
+export interface ScheduledTasksPageProps {
+  topBarHeightPx?: number;
+  topBarClassName?: string;
+  topBarLeftInset?: number;
+  sidebarCollapsed?: boolean;
+  showSidebarExpandControl?: boolean;
+  onExpandSidebar?: () => void;
+}
+
+export function ScheduledTasksPage({
+  topBarHeightPx = 40,
+  topBarClassName,
+  topBarLeftInset = 0,
+  sidebarCollapsed = false,
+  showSidebarExpandControl = sidebarCollapsed,
+  onExpandSidebar,
+}: ScheduledTasksPageProps = {}) {
   const { t } = useT();
   const [jobs, setJobs] = useState<HermesCronJob[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<JobFilter>("all");
-  const [loading, setLoading] = useState(false);
+  // The first request starts on mount. Treat that first frame as loading so
+  // an unresolved list is never presented as the real empty state.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
@@ -1251,52 +1223,68 @@ export function ScheduledTasksPage() {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="flex min-h-0 flex-1 flex-col bg-background">
+        <header
+          className={cn(
+            "flex shrink-0 items-center bg-background pr-2",
+            topBarClassName,
+          )}
+          style={{
+            height: topBarHeightPx,
+            paddingLeft: sidebarCollapsed ? Math.max(topBarLeftInset, 12) : 10,
+          }}
+        >
+          {onExpandSidebar ? (
+            <SidebarExpandControl
+              collapsed={sidebarCollapsed}
+              onExpand={onExpandSidebar}
+              visible={showSidebarExpandControl}
+            />
+          ) : null}
+          <div className="app-no-drag ml-auto flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+                  disabled={loading}
+                  aria-label={t("options.cron.refresh")}
+                  onClick={() => void refresh()}
+                >
+                  <RefreshCw className={cn(loading && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("options.cron.refresh")}
+              </TooltipContent>
+            </Tooltip>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none [&_svg]:size-3.5"
+              onClick={() => setCreating(true)}
+            >
+              <Plus />
+              {t("options.cron.newJob")}
+            </Button>
+          </div>
+        </header>
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto w-full max-w-[808px] px-6 pb-14 pt-4">
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  aria-hidden
-                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70"
-                />
-                <Input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  aria-label={t("options.cron.search")}
-                  placeholder={t("options.cron.search")}
-                  className="h-9 rounded-full border-border/65 bg-transparent pl-9 pr-4 text-xs shadow-none placeholder:text-muted-foreground/65 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-ring/30"
-                />
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full text-muted-foreground/80"
-                    disabled={loading}
-                    aria-label={t("options.cron.refresh")}
-                    onClick={() => void refresh()}
-                  >
-                    <RefreshCw
-                      className={cn("h-3.5 w-3.5", loading && "animate-spin")}
-                    />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {t("options.cron.refresh")}
-                </TooltipContent>
-              </Tooltip>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 gap-1.5 rounded-lg px-3 text-xs shadow-none"
-                onClick={() => setCreating(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t("options.cron.newJob")}
-              </Button>
+          <PageContent title={t("options.cron.title")}>
+            <div className="relative min-w-0">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70"
+              />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                aria-label={t("options.cron.search")}
+                placeholder={t("options.cron.search")}
+                className="h-9 rounded-lg border-border/65 bg-transparent pl-9 pr-4 text-xs shadow-none placeholder:text-muted-foreground/65 focus-visible:border-foreground/20 focus-visible:ring-1 focus-visible:ring-ring/30"
+              />
             </div>
 
             <div className="mt-4 flex min-h-8 items-center justify-between gap-3">
@@ -1343,33 +1331,26 @@ export function ScheduledTasksPage() {
             )}
 
             {loading && jobs.length === 0 ? (
-              <div
+              <CollectionState
+                className="min-h-0 py-20"
+                icon={<Loader2 className="animate-spin" />}
                 role="status"
-                className="flex items-center justify-center gap-2 py-16 text-xs text-muted-foreground"
               >
-                <Loader2 className="h-4 w-4 animate-spin" />
                 {t("options.cron.loading")}
-              </div>
+              </CollectionState>
             ) : !error && jobs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <span className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-muted/55 text-muted-foreground/70">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                </span>
-                <p className="text-[12px] font-medium text-foreground/85">
-                  {t("options.cron.empty.title")}
-                </p>
-                <p className="mt-1 max-w-sm text-[11px] leading-5 text-muted-foreground/75">
-                  {t("options.cron.empty.description")}
-                </p>
-              </div>
+              <CollectionState
+                className="min-h-0 py-20"
+                icon={<CalendarClock />}
+              >
+                {t("options.cron.empty.title")}
+              </CollectionState>
             ) : filteredJobs.length === 0 && hasActiveSearch ? (
-              <div className="py-16 text-center">
-                <p className="text-[12px] text-muted-foreground">
-                  {t("options.cron.search.empty")}
-                </p>
-              </div>
+              <CollectionState className="min-h-0 py-20" icon={<Search />}>
+                {t("options.cron.search.empty")}
+              </CollectionState>
             ) : (
-              <ul className="mt-3 space-y-0.5">
+              <ul className="mt-3 grid grid-cols-1 gap-x-8 gap-y-0.5 md:grid-cols-2">
                 {filteredJobs.map((job) => (
                   <JobRow
                     key={job.id}
@@ -1385,7 +1366,7 @@ export function ScheduledTasksPage() {
                 ))}
               </ul>
             )}
-          </div>
+          </PageContent>
         </ScrollArea>
 
         <JobDialog

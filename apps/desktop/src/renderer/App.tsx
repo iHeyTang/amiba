@@ -1,5 +1,9 @@
 import { getHermesStatus, SessionsProvider, useSessions } from "@amiba/core";
-import { FullScreenChatView, useChatSessionRequester } from "@amiba/ui";
+import {
+  FullScreenChatView,
+  makeManagedAppletMentionProvider,
+  useChatSessionRequester,
+} from "@amiba/ui";
 import { HomeView } from "@amiba/ui";
 import { getPlatform } from "@amiba/platform";
 import { SettingsView, type StartAgentTask } from "@amiba/ui";
@@ -24,15 +28,16 @@ import { ElectronChatEngineClient } from "./chat/electron-engine-client";
 import { desktopCapabilities } from "./chat/desktop-capabilities";
 import { makeDesktopFilesProvider } from "./chat/files-provider";
 import { StartupScreen } from "./StartupScreen";
+import {
+  MAC_TRAFFIC_LIGHT_RESERVE,
+  WINDOW_TITLE_BAR_HEIGHT,
+} from "../shared/window-chrome";
 
 type View = "chat" | "settings";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-
-const TITLE_BAR_HEIGHT = 48;
-const MAC_TRAFFIC_LIGHT_RESERVE = 96;
 
 // loading       — first status probe in flight (brief)
 // initializing  — validating the built-in Runtime and starting its services
@@ -75,6 +80,10 @@ function AppInner(): ReactElement {
     () => makeDesktopFilesProvider(() => activeIdRef.current),
     [],
   );
+  const managedAppletProvider = useMemo(
+    () => makeManagedAppletMentionProvider(window.amiba.managedApps),
+    [],
+  );
   const [view, setView] = useState<View>("chat");
   const [phase, setPhase] = useState<Phase>("loading");
   const [showReadyCurtain, setShowReadyCurtain] = useState(true);
@@ -94,17 +103,22 @@ function AppInner(): ReactElement {
     async (prompt, opts) => {
       const agent = opts?.profileId ? { profileId: opts.profileId } : undefined;
       if (prompt.trim()) {
-        await requestNewChat({
+        const sessionId = await requestNewChat({
           mode: "new",
           text: prompt,
           sourceApp: opts?.sourceApp,
           agent,
+          workspacePath: opts?.workspacePath,
         });
+        await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
+        setView("chat");
+        return sessionId;
       } else {
-        await sessions.createNew(agent);
+        const sessionId = await sessions.createNew(agent);
+        await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
+        setView("chat");
+        return sessionId;
       }
-      await getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
-      setView("chat");
     },
     [requestNewChat, sessions],
   );
@@ -172,7 +186,8 @@ function AppInner(): ReactElement {
       setPhase("loading");
       const status = await getHermesStatus();
       if (status.ok && status.gateway_running === true) {
-        if (!signal.cancelled) setPhase("ready");
+        const r = await window.amiba.hermesRuntime.ensureBackend();
+        if (!signal.cancelled) setPhase(r.ok ? "ready" : "init-error");
         return;
       }
       setPhase("initializing");
@@ -209,13 +224,13 @@ function AppInner(): ReactElement {
     phase === "ready" ? (
       view === "settings" ? (
         <SettingsView
-          capabilities={{ startAgentTask }}
+          capabilities={{ startAgentTask, managedApps: window.amiba.managedApps }}
           onGoHome={() => setView("chat")}
           sidebarHeaderLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
-          sidebarHeaderHeightPx={TITLE_BAR_HEIGHT}
+          sidebarHeaderHeightPx={WINDOW_TITLE_BAR_HEIGHT}
           sidebarHeaderClassName="app-drag-region"
           paneHeaderClassName="app-drag-region"
-          paneHeaderChromeHeightPx={TITLE_BAR_HEIGHT}
+          paneHeaderChromeHeightPx={WINDOW_TITLE_BAR_HEIGHT}
           toolActivitySource={{
             read: (days) => window.amiba.toolActivity.read(days),
             onChanged: (cb) => window.amiba.toolActivity.onChanged(cb),
@@ -225,7 +240,7 @@ function AppInner(): ReactElement {
         <FullScreenChatView
           client={client}
           capabilities={desktopCapabilities}
-          mentionProviders={[filesProvider]}
+          mentionProviders={[filesProvider, managedAppletProvider]}
           openSettings={(tab) => {
             if (tab) {
               window.location.hash = tab;
@@ -233,8 +248,12 @@ function AppInner(): ReactElement {
             setView("settings");
           }}
           openAgentDestination={openAgentDestination}
+          capabilityExtensions={{
+            startAgentTask,
+            managedApps: window.amiba.managedApps,
+          }}
           topBarLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
-          topBarHeightPx={TITLE_BAR_HEIGHT}
+          topBarHeightPx={WINDOW_TITLE_BAR_HEIGHT}
           topBarClassName="app-drag-region"
           restoreSidebarViewOnMount={false}
           slots={{

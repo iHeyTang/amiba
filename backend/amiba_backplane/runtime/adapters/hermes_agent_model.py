@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional
 from .hermes_core import hermes_home
 
 
+_UNSET = object()
+
+
 def read_config_provider_keys() -> List[str]:
     path = _config_yaml_path()
     if not path.exists():
@@ -180,7 +183,7 @@ def write_main_model(
     *,
     provider: Optional[str] = None,
     model: Optional[str] = None,
-    base_url: Optional[str] = None,
+    base_url: Any = _UNSET,
 ) -> Dict[str, Any]:
     path = _config_yaml_path()
     yaml = _load_yaml_module()
@@ -208,8 +211,15 @@ def write_main_model(
         else:
             mblock.pop("default", None)
             mblock.pop("model", None)
-    if base_url is not None:
-        bu = str(base_url).strip()
+    # ``base_url`` has three states at the HTTP boundary:
+    #   omitted  -> preserve the existing override
+    #   null/""  -> remove the existing override
+    #   string   -> replace the override
+    # A plain ``Optional[str] = None`` collapses the first two states and made
+    # canonical provider switches retain stale endpoints (for example
+    # ``provider: deepseek`` with OpenRouter's base URL).
+    if base_url is not _UNSET:
+        bu = str(base_url or "").strip()
         if bu:
             mblock["base_url"] = bu
         else:
@@ -361,4 +371,3 @@ def write_auxiliary_slot(
     text = yaml.dump(cfg, default_flow_style=False, allow_unicode=True, sort_keys=False)
     path.write_text(text, encoding="utf-8")
     return read_auxiliary_models()
-

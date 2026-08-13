@@ -135,6 +135,7 @@ interface AmibaBridgeApi {
      */
     getHttpBaseUrl(): Promise<string>;
   };
+  managedApps: import("@amiba/managed-apps/bridge").ManagedAppsBridge;
   /** Returns the absolute file:// path of the webview bridge preload bundle. */
   getWebviewPreloadPath(): Promise<string>;
   /** Returns the current { language, theme } init state for a webview. */

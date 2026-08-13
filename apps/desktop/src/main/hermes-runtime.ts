@@ -618,8 +618,24 @@ async function ensureBackend(): Promise<{ ok: boolean; error?: string }> {
 // IPC wiring
 // ---------------------------------------------------------------------------
 
-export function registerHermesRuntimeHandlers() {
-  ipcMain.handle("hermes:ensure-backend", () => ensureBackend());
+export function getManagedHermesPythonPath(): string {
+  return managedHermesPaths().python;
+}
+
+export function registerHermesRuntimeHandlers(
+  afterReady?: () => Promise<void> | void,
+) {
+  ipcMain.handle("hermes:ensure-backend", async () => {
+    const result = await ensureBackend();
+    if (result.ok && afterReady) {
+      try {
+        await afterReady();
+      } catch (error) {
+        console.warn("[hermes:runtime] post-start integration failed:", error);
+      }
+    }
+    return result;
+  });
 }
 
 /** Kill every supervised job on app shutdown. */

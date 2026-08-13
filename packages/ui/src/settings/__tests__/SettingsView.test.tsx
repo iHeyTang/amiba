@@ -5,7 +5,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@amiba/extension-host/renderer", () => ({
   ExtensionWebView: () => null,
   useExtensionSettings: () => [],
+  useExtensionRegistry: () => [],
+  desktopBridge: () => ({
+    extensions: { onExtensionsChanged: () => () => {} },
+  }),
 }));
+
+vi.mock("@amiba/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@amiba/core")>();
+  return {
+    ...actual,
+    getHermesPlugins: vi.fn().mockResolvedValue({ ok: true, plugins: [] }),
+  };
+});
 
 vi.mock("../HermesModelConfigTab", () => ({
   HermesModelConfigTab: ({
@@ -34,6 +46,7 @@ vi.mock("../AgentBehaviorEditor", () => ({
 }));
 
 import { SettingsView } from "../SettingsView";
+import { APP_SIDEBAR_DEFAULT_WIDTH } from "../../navigation/sidebar-layout";
 
 describe("SettingsView progressive settings navigation", () => {
   beforeEach(() => {
@@ -44,6 +57,10 @@ describe("SettingsView progressive settings navigation", () => {
   it("keeps default model settings ordinary and agent scopes behind Advanced", async () => {
     const user = userEvent.setup();
     render(<SettingsView />);
+
+    expect(screen.getByTestId("settings-sidebar")).toHaveStyle({
+      width: `${APP_SIDEBAR_DEFAULT_WIDTH}px`,
+    });
 
     const models = screen.getByRole("button", {
       name: "Models & services",
@@ -75,6 +92,12 @@ describe("SettingsView progressive settings navigation", () => {
     expect(collaboration).toBeVisible();
     expect(behavior).toBeVisible();
     expect(
+      screen.queryByRole("button", { name: "Capability extensions" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Applets" }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByRole("button", { name: "Connection" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Diagnostics")).not.toBeInTheDocument();
@@ -100,6 +123,9 @@ describe("SettingsView progressive settings navigation", () => {
     expect(screen.getByRole("button", { name: "Status" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Connection" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Logs" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Hermes Runtime" }),
+    ).not.toBeInTheDocument();
     await user.click(agents);
 
     expect(agents).toHaveAttribute("aria-current", "page");

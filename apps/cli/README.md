@@ -1,13 +1,10 @@
 # @amiba/cli
 
-The **amiba CLI** (command: `amiba`) — scaffolding and tooling for the amiba ecosystem. It
-started as the extension CLI and has grown beyond that; today it covers:
+The **amiba CLI** (command: `amiba`) provides developer tooling for Applets:
 
-- **Extensions** — scaffold / dev / build / pack / install desktop extensions
+- scaffold / dev / build / pack / install desktop Applets
   (the WebView model: `manifest.json` + `dist/main.cjs` + self-contained React
   UI pages served via a loopback HTTP server into an Electron `<webview>`).
-- **Mention sources** — scaffold a composer `@`-mention source
-  (`create-mention-source`).
 
 ## Installation
 
@@ -21,23 +18,11 @@ node apps/cli/dist/cli.js --help
 
 ### `amiba create [name]`
 
-Scaffold a new desktop **extension** from the built-in template.
+Scaffold a new desktop **Applet** from the built-in template.
 
 ```sh
 amiba create my-extension --id com.example.my-extension
 ```
-
-### `amiba create-mention-source [name]`
-
-Scaffold a **mention source** — a composer `@`-mention provider for an external
-system. Produces the four-piece source (`source.py` + `mention-source.yaml` +
-`skills/resolve.md` + `__init__.py`) as a ready git repo.
-
-```sh
-amiba create-mention-source notion --description "Notion pages"
-```
-
-See `backend/docs/mention-sources.md` for the author guide.
 
 The scaffold produces:
 
@@ -69,9 +54,9 @@ my-extension/
 
 ### `amiba dev`
 
-Build the extension in watch mode. Spawns two parallel Vite watch processes
+Build the Applet in watch mode. Spawns two parallel Vite watch processes
 (main + UI) and touches `manifest.json` on any output change so the running
-desktop app hot-reloads the extension automatically.
+desktop app hot-reloads the Applet automatically.
 
 ```sh
 amiba dev
@@ -80,9 +65,9 @@ amiba dev
 Recommended workflow:
 
 1. Terminal 1: `pnpm dev:desktop`
-2. Terminal 2: `cd <extension dir> && pnpm dev`
-3. In the app: **Settings → Extensions → Add local extension…** → pick the
-   extension directory. Every rebuild hot-reloads from then on.
+2. Terminal 2: `cd <applet dir> && pnpm dev`
+3. In the app: **Settings → Applets → Add local Applet…** → pick the Applet
+   directory. Every rebuild hot-reloads from then on.
 
 Options:
 
@@ -130,7 +115,7 @@ Options:
 
 ### `amiba install <repo>`
 
-Install an extension directly from a GitHub Release into
+Install an Applet directly from a GitHub Release into
 `<userData>/extensions/<id>/`.
 
 ```sh
@@ -164,7 +149,7 @@ The command:
 4. Extracts and validates `manifest.json` at the archive root.
 5. Moves the directory into `<userData>/extensions/<id>/`.
 
-If Amiba Desktop is running, it will hot-reload the newly installed extension
+If Amiba Desktop is running, it will hot-reload the newly installed Applet
 automatically via its manifest-watcher.
 
 The install path honours the `AMIBA_DEV_EXTENSIONS_PATH` environment variable
@@ -174,7 +159,7 @@ This command re-implements the GitHub-release-to-disk flow in pure Node rather
 than delegating to `@amiba/extension-host/main`, which depends on Electron
 and is therefore unavailable in a plain Node CLI process.
 
-## Extension architecture
+## Applet architecture
 
 ```
 Desktop (Electron)

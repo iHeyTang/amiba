@@ -2,7 +2,7 @@
 
 > 日期：2026-08-06
 >
-> 状态：核心产品边界已冻结，技术细节待实现验证
+> 状态：核心产品边界已冻结；Personal Managed 核心闭环已实现并通过验证
 >
 > 范围：Amiba Desktop、MCP Host、MCP Apps Host、Extension Center、Hermes 集成
 
@@ -32,6 +32,32 @@ Amiba 只保留一个面向用户的长期对象：**Extension**。
 - 只有用户明确选择“保存为我的创作 / 工具”时，Amiba 才创建长期 Extension。
 - 所有长期内容和工具都进入同一个 Extension Center；用户可以用“全部、我的创作、我的工具、已安装、市场、开发者模式”等视图筛选，但这些只是视图，不是六套对象。
 - 普通用户面对的是创建、使用、搜索、改进、撤销、分享和删除，不需要理解 Git、Bundle、Revision、Runtime 或 MCP。
+
+### 1.2.1 普通用户心智模型
+
+普通用户始终只感知“一个可以持续改进的小应用”，而不是一个需要自行维护的源码项目、安装包或版本集合。绝大多数使用过程只有一条主路径：
+
+```text
+创建小应用 → 使用 → 发现问题 → 告诉 AI → AI 修改 → 查看新效果
+```
+
+产品层必须遵守以下原则：
+
+- 用户管理小应用，系统管理版本。Git Commit、Bundle 和 Revision 都是不可见基础设施。
+- 用户不需要主动发布、固化、命名、选择或清理版本，也不需要理解草稿、构建和激活。
+- “让 AI 修改”是 Personal Managed Extension 的默认维护入口；Agent 负责定位源码、修改、测试、构建和交付新效果。
+- 当前健康版本在修改期间继续可用。候选修改不能直接破坏用户正在使用的小应用。
+- 安全修改通过验证后可以自动应用，并提供清晰的“撤销”；新增敏感权限、数据迁移、自动化行为变化和公开分享变化必须显式确认。
+- 用户用自然语言表达恢复意图，例如“改坏了”“恢复到刚才可以用的状态”，Host 将其解析为 Revision 回滚，不要求用户选择技术版本号。
+- 普通界面只展示“可用、正在改进、可以试用、已更新、更新失败但原版本不受影响”等用户状态。版本号、Commit、Bundle Hash、路径、Runtime 和原始权限 Token 只进入开发者模式或故障诊断。
+
+Amiba 自动创建稳定恢复点，不把“固化版本”作为用户任务。至少在以下时机建立或保留恢复点：
+
+- Agent 开始下一轮修改前。
+- 候选修改通过验证并成功使用后。
+- 小应用被分享、发布或导出时。
+- 小应用被自动化、Workflow 或其他稳定依赖引用时。
+- 权限、Provider、Runtime 或数据 Schema 变化前。
 
 ### 1.3 技术结论
 
@@ -777,6 +803,8 @@ stateDiagram-v2
 
 普通用户只看到自然语言修改记录、当前状态和“撤销”。
 
+Revision 历史不作为普通用户需要维护的版本列表。系统自动保留当前健康 Revision、修改前恢复点以及分享、发布、自动化引用等隐式稳定边界；清理策略由保留规则执行。只有开发者模式和故障诊断可以直接查看 Revision ID、Commit、Bundle Hash 与状态机。
+
 ---
 
 ## 9. Runtime 与依赖
@@ -1147,6 +1175,14 @@ flowchart LR
 
 ### 15.2 修改
 
+普通用户可见的交互闭环是：
+
+```text
+使用小应用 → 描述问题或想要的变化 → AI 修改 → 查看效果 → 继续使用或要求撤销
+```
+
+用户不需要先创建开发任务、选择分支、固化当前版本或在版本列表中选择发布目标。以下步骤全部由 Amiba 和 Agent 在后台完成：
+
 1. 定位 Extension Record 和当前健康 Revision。
 2. 从对应稳定 Commit 创建草稿 worktree。
 3. Agent 修改 MCP App 源码和测试。
@@ -1156,6 +1192,13 @@ flowchart LR
 7. 安全变更可自动应用；高风险变更需要确认。
 8. 原子激活并健康检查。
 9. 失败自动回滚；成功显示自然语言摘要和“撤销”。
+
+默认交付策略：
+
+- 纯 UI、内容和兼容性修复等低风险变更，在验证通过后自动激活，用户直接查看新效果。
+- 新增敏感权限、不可逆数据迁移、影响既有自动化或公开行为的变更，在激活前请求确认。
+- 修改失败、构建失败或健康检查失败时，继续运行原健康 Revision，只向用户说明“本次修改未生效”。
+- 用户继续反馈时，Agent 基于当前健康状态开启下一轮修改；用户表达不满意或要求恢复时，回滚到最近适用的自动恢复点。
 
 ### 15.3 Agent 生命周期 API
 
@@ -1215,13 +1258,21 @@ managedApps.delete
 - 添加标签、加入合集，并按类型、来源会话和更新时间筛选。
 - 通过对话创建或修改。
 - 查看自然语言修改记录。
-- 撤销、恢复和固定恢复点。
+- 撤销最近修改，或用自然语言恢复到之前可用的状态；不要求用户固定或选择技术版本。
 - 查看当前主内容和已收藏的运行输出。
 - 将一次性会话结果显式保存为新的 Extension，或保存为现有 Extension 的 Output。
 - 查看权限、数据占用和 Provider 健康状态。
 - 管理 Preset 和 Skill。
 - 导出项目或安装包。
 - 删除与恢复。
+
+普通用户入口以“打开使用”和“让 AI 修改”为主操作。安装来源、版本号、Extension ID、文件路径、Runtime、原始权限 Token、重载和 Revision 列表不应占据普通详情页；它们属于开发者模式或按需展开的诊断信息。普通详情页只需要表达：
+
+- 小应用做什么以及如何打开使用。
+- 当前是否可用，是否正在被 AI 改进。
+- 最近一次修改的自然语言摘要。
+- 修改成功后查看效果和撤销，修改失败时确认原版本仍可用。
+- 只有确实需要用户决策时，展示权限、数据或自动化影响确认。
 
 ### 16.3 Headless Extension 展示
 
@@ -1426,6 +1477,10 @@ apps/desktop/extensions/           # Extension Center UI
 25. Extension 是唯一面向用户的持久化内容与能力对象；不建立独立 Artifact Registry、Artifact Center 或 Artifact 生命周期。
 26. 跨 Session 收藏、搜索分类、内容管理和源码版本历史必须由 Extension、Output、Git 和 Revision 共同覆盖。
 27. 一次性会话结果默认不持久化；只有用户显式保存时才创建 Extension 或 Extension Output。
+28. 普通用户始终感知一个持续演进的小应用，不感知需要维护的版本集合；Revision 是系统基础设施，不是用户一级对象。
+29. Personal Managed Extension 必须把“让 AI 修改 → 查看效果 → 继续使用或撤销”作为默认维护闭环，不要求用户执行分支、构建、发布或版本固化操作。
+30. 系统必须自动创建和保留修改前、健康激活后、分享发布、自动化引用及高风险变更前的恢复点。
+31. 版本号、Commit、Bundle Hash、路径、Runtime、原始权限 Token、重载和 Revision 管理默认只在开发者模式或故障诊断中展示。
 
 ---
 
@@ -1465,3 +1520,50 @@ apps/desktop/extensions/           # Extension Center UI
 本方案只负责定义统一 Extension、长期内容、MCP Runtime 和个人托管生命周期。Hermes CLI、Desktop 和 Web 的其他能力覆盖范围、现状差距与实施优先级，见 [`2026-08-07-hermes-0.20-amiba-capability-coverage.md`](./2026-08-07-hermes-0.20-amiba-capability-coverage.md)。
 
 其中与本方案直接相关的最低要求是：Extension Center 必须覆盖 Hermes Artifacts 的会话内预览、跨 Session 找回、搜索、来源追踪和长期保存，同时提供官方 Artifacts 不具备的 Git 源码历史、交互 UI、Node/Python Runtime、MCP Tools、权限、Revision 和回滚能力。
+
+---
+
+## 25. 2026-08-13 实现落地
+
+本轮已将普通用户的主闭环落到 Desktop：
+
+```text
+创建小应用 → Agent 在隔离草稿中开发 → 自动构建/验证/激活
+     ↓
+直接使用 → 描述问题 → Agent 改进 → 查看效果 → 撤销或继续使用
+```
+
+用户层已经具备：
+
+- “能力扩展 → 小应用”统一入口，以及自然语言创建对话框；AI 创建、本地、市场和内置小应用进入同一列表，安装来源只作为按需出现的胶囊筛选条件，不形成独立分组。
+- 可用、创建中、改进中、等待确认、更新未应用、暂不可用等非技术状态。
+- main/settings MCP Apps Surface、Headless Tool 自动表单与 JSON 模式。
+- 搜索、固定、标签、合集、导出分享、最近删除和恢复。
+- 常用 Tool 参数 Preset，以及 Tool Resource Link 从属于小应用的保存结果。
+- 新增敏感权限、Provider 或数据 Schema 时先预览再确认；普通安全更新自动应用。
+- “撤销上一次修改”和自然语言恢复意图，不展示普通用户版本列表。
+- Composer 中的 Applet Resource Mention；提交时读取真实资源、锁定原 Revision，并隐藏 Agent 专用上下文负载。
+
+控制面已经具备：
+
+- Personal Managed Project、Git Commit、独立 worktree Draft、内容寻址不可变 Bundle 和 Revision Store。
+- Manifest JSON Schema、构建/测试命令、MCP discovery snapshot、动态 UI Resource 契约验证。
+- Node/Python stdio 与远程 Streamable HTTP MCP Client、已安装 Hermes MCP Provider ID 解析。
+- MCP Apps AppBridge、sandboxed iframe、CSP、最小权限、外链和 Agent 消息授权。
+- macOS 本地 Provider Runtime 文件/网络/子进程沙箱，以及无继承密钥的最小运行环境。
+- 候选 Runtime 和候选数据副本隔离；激活、失败恢复与回滚同时切换代码和数据快照。
+- Hermes 聚合 MCP Federation：当前健康 Revision 的 Tools/Resources 对 Agent 可用，app-only Tool 不暴露。
+- Tool 调用审计、结果大小/超时边界、Resource 注入 MIME/总量/不可信内容处理。
+- 应用重启后恢复 active Revision；修改、构建、discovery、UI 或激活失败时保留原健康版本。
+
+实现主要位于：
+
+```text
+packages/managed-apps/           # Project、Draft、Bundle、Revision、数据快照、Output、Preset
+packages/mcp-host/               # MCP Runtime、MCP Apps Host、Federation
+apps/desktop/src/main/managed-apps.ts
+packages/ui/src/settings/ManagedApplets.tsx
+packages/ui/src/chat/composer/providers/managed-applets.ts
+```
+
+验收已覆盖安全自动应用、失败保留健康版本、敏感变更确认、回滚、删除恢复、导出、Output/Preset、Manifest 安全、stdio MCP discovery/Tool 调用、静态 MCP App 激活、Mention 解析、创建到 Agent 会话接力、后端 Provider/Federation 路由、Desktop 生产构建和实际界面巡视。

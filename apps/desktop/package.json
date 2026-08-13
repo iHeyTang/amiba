@@ -65,6 +65,8 @@
     "@amiba/extension-api": "workspace:*",
     "@amiba/extension-host": "workspace:*",
     "@amiba/i18n": "workspace:*",
+    "@amiba/managed-apps": "workspace:*",
+    "@amiba/mcp-host": "workspace:*",
     "@amiba/platform": "workspace:*",
     "@amiba/ui": "workspace:*",
     "@amiba/utils": "workspace:*",

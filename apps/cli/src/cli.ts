@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander"
 import { createCommand } from "./commands/create.js"
-import { createMentionSourceCommand } from "./commands/create-mention-source.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
 import { packCommand } from "./commands/pack.js"
@@ -11,30 +10,20 @@ const program = new Command()
 
 program
   .name("amiba")
-  .description("The amiba CLI — extensions, mention sources, and more")
+  .description("Developer tooling for Amiba Applets")
   .version("0.1.0")
 
 program
   .command("create")
-  .description("Scaffold a new extension")
-  .argument("[name]", "extension folder name")
-  .option("--id <id>", "reverse-DNS extension id (e.g. com.example.my-ext)")
+  .description("Scaffold a new Applet")
+  .argument("[name]", "Applet folder name")
+  .option("--id <id>", "reverse-DNS Applet id (e.g. com.example.my-app)")
   .option("--no-install", "skip pnpm install after scaffold")
   .action(createCommand)
 
 program
-  .command("create-mention-source")
-  .description("Scaffold a mention source (lets the composer @-mention an external system)")
-  .argument("[name]", "source name (lowercase slug, e.g. notion)")
-  .option("--description <text>", "one-line description")
-  .option("--author <name>", "author")
-  .action(createMentionSourceCommand)
-
-program
   .command("dev")
-  .description(
-    "Build the extension in watch mode and sideload it into the desktop app",
-  )
+  .description("Build the Applet in watch mode for local development")
   .option(
     "--no-symlink",
     "copy files instead of symlinking (for testing copy-based installs)",
@@ -51,7 +40,7 @@ program
 
 program
   .command("install")
-  .description("Install a plugin from a GitHub repo into <userData>/extensions/")
+  .description("Install an Applet from a GitHub repository")
   .argument("<repo>", "GitHub repo as owner/repo[@tag]; tag defaults to latest")
   .option("--sha256 <hex>", "verify downloaded tarball against this hex digest")
   .action(installCommand)

@@ -9,7 +9,14 @@ import {
 } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 
-import { Button, Input, Label, ScrollArea, Textarea } from "../primitives";
+import {
+  Button,
+  Input,
+  Label,
+  PageContent,
+  ScrollArea,
+  Textarea,
+} from "../primitives";
 import { AgentPersonalitySection } from "./AgentPersonalitySection";
 
 function FormSection({
@@ -120,7 +127,7 @@ export function AgentBehaviorEditor({
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className="mx-auto max-w-3xl space-y-7 p-6">
+      <PageContent bodyClassName="space-y-7" size="md">
         {error ? (
           <p
             className="rounded-xl bg-destructive/8 px-3 py-2 text-xs text-destructive"
@@ -182,7 +189,7 @@ export function AgentBehaviorEditor({
         </div>
 
         <AgentPersonalitySection profileId={profileId} />
-      </div>
+      </PageContent>
     </ScrollArea>
   );
 }

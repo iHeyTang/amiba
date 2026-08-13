@@ -20,5 +20,6 @@
       "order": 200
     }
   },
+  "mentions": [],
   "permissions": ["ipc", "settings", "i18n"]
 }

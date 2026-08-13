@@ -9,7 +9,7 @@ plugin). Desktop spawns + supervises it::
 
 Lanes (see ``features/__init__.py``):
 - ``/hermes/*``     — file-backed views over ``~/.hermes/`` (hermes-agent libs)
-- ``/mention-sources/{name}/search`` + ``/hermes/mention-resources`` + admin
+- legacy ``/mention-sources/{name}/search`` + ``/hermes/mention-resources``
 - ``/v1/*``         — reverse-proxied to the gateway (chat / LLM / tools)
 """
 
@@ -27,14 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 def _load_mention_sources() -> None:
-    """Load mention sources + wire their resolver skills.
+    """Load legacy mention sources + wire their resolver skills.
 
-    The mention-sources framework is owned by the backplane (see
-    :mod:`amiba_backplane.runtime.mention_sources`). We load
+    New mention capabilities belong to Applets. We still load
     ``~/.hermes/mention-sources/`` here so ``/mention-sources/*`` +
-    ``/hermes/mention-resources`` work, and wire each source's ``skills/`` into
-    the agent config. A failure degrades to an empty registry; the rest of the
-    server is unaffected.
+    ``/hermes/mention-resources`` keep working for existing users, and wire
+    each source's resolver skill. A failure degrades to an empty registry.
     """
     try:
         from .mention_sources import load_all_and_wire

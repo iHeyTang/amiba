@@ -55,6 +55,7 @@ export {
   type ComposerPickerOverlayVariant,
   type ComposerProps,
 } from "./Composer";
+export { ComposerNotice, type ComposerNoticeProps } from "./ComposerNotice";
 export {
   ComposerModelPicker,
   type ComposerModelPickerProps,
@@ -141,6 +142,7 @@ export {
 // <ChatSurface mentionProviders={…}>, and reuse insertMentionAtTrigger inside
 // their own onSelect handlers.
 export { insertMentionAtTrigger } from "./composer/providers/skills";
+export { makeManagedAppletMentionProvider } from "./composer/providers/managed-applets";
 export type {
   TriggerProvider,
   MenuItem,

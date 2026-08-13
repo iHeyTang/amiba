@@ -329,7 +329,7 @@ export function SettingsVoice() {
   const localModel = config?.providers.local.model ?? "base"
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-8">
+    <div className="space-y-8">
       <Section>
         <SwitchRow
           id="voice-enabled"

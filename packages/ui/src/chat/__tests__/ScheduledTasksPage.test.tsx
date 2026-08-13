@@ -69,6 +69,9 @@ describe("ScheduledTasksPage", () => {
   it("shows registered jobs instead of cron-run history", async () => {
     render(<ScheduledTasksPage />);
 
+    expect(screen.getAllByRole("heading", { name: "Automation" })).toHaveLength(
+      1,
+    );
     expect(await screen.findByText("Daily digest")).toBeInTheDocument();
     expect(screen.getByText("Daily at 09:00")).toBeInTheDocument();
     expect(
@@ -82,9 +85,7 @@ describe("ScheduledTasksPage", () => {
   it("keeps task lifecycle actions available in the workspace", async () => {
     render(<ScheduledTasksPage />);
 
-    expect(
-      await screen.findByText("Daily digest"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Daily digest")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Run now" }),
     ).not.toBeInTheDocument();

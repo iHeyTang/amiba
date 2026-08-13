@@ -1,8 +1,7 @@
 import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { Button } from "../primitives";
-import { ScrollArea } from "../primitives";
+import { Button, PageContent, ScrollArea } from "../primitives";
 import {
   getHermesMemoryList,
   type HermesMemoryEntries,
@@ -189,11 +188,10 @@ export function SettingsMemory({
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div
-          className={cn(
-            "mx-auto w-full max-w-3xl space-y-4 p-6",
-            embedded && "pt-4",
-          )}
+        <PageContent
+          bodyClassName="space-y-4"
+          className={embedded ? "pt-4" : undefined}
+          size="md"
         >
           {embedded ? (
             <div className="flex items-center justify-between gap-3">
@@ -221,7 +219,7 @@ export function SettingsMemory({
           {items.map((entry) => (
             <MemoryBlock key={entry.target} entry={entry} />
           ))}
-        </div>
+        </PageContent>
       </ScrollArea>
     </div>
   );

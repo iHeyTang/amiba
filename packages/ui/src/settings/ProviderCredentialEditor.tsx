@@ -12,6 +12,7 @@ import type {
   HermesProviderConnection,
   HermesProviderConnectionMethod,
   HermesProviderCredentialField,
+  HermesProviderEndpointResolution,
 } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 
@@ -32,6 +33,7 @@ export interface ProviderCredentialEditorProps {
   authType?: string;
   connection?: HermesProviderConnection;
   error: string | null;
+  endpoint?: HermesProviderEndpointResolution;
   fields: HermesProviderCredentialField[];
   loading: boolean;
   onChange: (key: string, value: string) => void;
@@ -67,10 +69,12 @@ function MethodIcon({ method }: { method?: HermesProviderConnectionMethod }) {
 }
 
 function CredentialField({
+  defaultBaseUrl,
   field,
   onChange,
   value,
 }: {
+  defaultBaseUrl?: string;
   field: HermesProviderCredentialField;
   onChange: (key: string, value: string) => void;
   value: string;
@@ -103,6 +107,7 @@ function CredentialField({
           id={`credential-${field.key}`}
           onChange={(event) => onChange(field.key, event.target.value)}
           placeholder={
+            (field.kind === "url" ? defaultBaseUrl : "") ||
             field.placeholder ||
             (secret
               ? t("options.models.provider.credentialPlaceholder")
@@ -139,6 +144,7 @@ export function ProviderCredentialEditor({
   authHint,
   authType,
   connection,
+  endpoint,
   error,
   fields,
   loading,
@@ -255,6 +261,7 @@ export function ProviderCredentialEditor({
               {secretFields.map((field) => (
                 <TabsContent className="mt-3" key={field.key} value={field.key}>
                   <CredentialField
+                    defaultBaseUrl={endpoint?.default_base_url}
                     field={field}
                     onChange={onChange}
                     value={values[field.key] ?? ""}
@@ -264,6 +271,7 @@ export function ProviderCredentialEditor({
             </Tabs>
           ) : selectedField ? (
             <CredentialField
+              defaultBaseUrl={endpoint?.default_base_url}
               field={selectedField}
               onChange={onChange}
               value={values[selectedField.key] ?? ""}
@@ -300,6 +308,7 @@ export function ProviderCredentialEditor({
         <div className="space-y-3">
           {sharedFields.map((field) => (
             <CredentialField
+              defaultBaseUrl={endpoint?.default_base_url}
               field={field}
               key={field.key}
               onChange={onChange}

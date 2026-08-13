@@ -17,3 +17,28 @@ export function expandMentions(value: string, providers: TriggerProvider[]): str
     })
     .join("")
 }
+
+export async function expandMentionsAsync(
+  value: string,
+  providers: TriggerProvider[],
+): Promise<string> {
+  const byType = new Map<MentionType, TriggerProvider>()
+  for (const provider of providers) {
+    if (provider.ownsType && !byType.has(provider.ownsType)) {
+      byType.set(provider.ownsType, provider)
+    }
+  }
+  const chunks = await Promise.all(parseTokens(value).map(async (part) => {
+    if (part.kind === "text") return part.text
+    const provider = byType.get(part.mention.type)
+    if (provider?.resolveMention) {
+      try {
+        return await provider.resolveMention(part.mention)
+      } catch (error) {
+        return `[Resource unavailable: ${part.mention.display} — ${error instanceof Error ? error.message : String(error)}]`
+      }
+    }
+    return provider?.serialize ? provider.serialize(part.mention) : part.raw
+  }))
+  return chunks.join("")
+}

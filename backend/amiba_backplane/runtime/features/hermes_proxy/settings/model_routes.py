@@ -149,10 +149,10 @@ async def handle_model_set(request: web.Request) -> web.Response:
          "base_url": "<url>" | null | (omitted),     # scope=main only
          "task":     "<aux slot>" | "__reset__" | ""}
 
-    On ``scope="main"`` the optional ``base_url`` is additive over
-    upstream — passing ``null`` clears ``model.base_url`` (used when
-    switching from a custom endpoint back to a canonical provider);
-    omitting it leaves the current value alone. On ``scope="auxiliary"``
+    On ``scope="main"``, ``model.base_url`` belongs exclusively to the
+    explicit ``custom`` provider. Canonical providers always clear it and
+    resolve their endpoint from the provider registry plus their own
+    ``*_BASE_URL`` override. On ``scope="auxiliary"``
     with ``task=""`` the (provider, model) pair is applied to every aux
     slot. ``task="__reset__"`` resets every aux slot to ``auto`` / ``""``.
     """
@@ -178,7 +178,13 @@ async def handle_model_set(request: web.Request) -> web.Response:
         if not is_reset and (not provider or not model):
             return json_error(400, "provider and model required for main")
         write_payload: dict = {"provider": provider or "auto", "model": model}
-        if "base_url" in body:
+        if provider.lower() != "custom":
+            # A generic model-level endpoint is invisible in the canonical
+            # provider editor and takes precedence over its own URL setting in
+            # Hermes. Never let that hidden cross-provider override survive a
+            # canonical assignment.
+            write_payload["base_url"] = None
+        elif "base_url" in body:
             write_payload["base_url"] = body.get("base_url")
         try:
             merged = write_main_model_response(write_payload)

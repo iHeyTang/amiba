@@ -22,20 +22,33 @@ const __dirname = dirname(__filename)
 // dist/commands/create.js -> ../../src/template
 const TEMPLATE_ROOT = join(__dirname, "..", "..", "src", "template")
 
-export async function createCommand(name: string | undefined, opts: CreateOptions) {
+export async function createCommand(
+  name: string | undefined,
+  opts: CreateOptions,
+) {
   const promptList: prompts.PromptObject[] = []
   if (!name) {
-    promptList.push({ type: "text", name: "name", message: "Extension folder name", initial: "my-extension" })
+    promptList.push({
+      type: "text",
+      name: "name",
+      message: "Applet folder name",
+      initial: "my-applet",
+    })
   }
   if (!opts.id) {
     promptList.push({
       type: "text",
       name: "id",
-      message: "Extension id (reverse-DNS)",
-      initial: "com.example.my-extension",
+      message: "Applet id (reverse-DNS)",
+      initial: "com.example.my-applet",
     })
   }
-  promptList.push({ type: "text", name: "author", message: "Author", initial: "" })
+  promptList.push({
+    type: "text",
+    name: "author",
+    message: "Author",
+    initial: "",
+  })
 
   const replies = (await prompts(promptList)) as Record<string, string>
 
@@ -43,12 +56,12 @@ export async function createCommand(name: string | undefined, opts: CreateOption
   const finalId = opts.id ?? replies["id"]
   const author = replies["author"] || finalId
 
-  if (!finalName) throw new Error("Extension name is required")
-  if (!finalId) throw new Error("Extension id is required")
+  if (!finalName) throw new Error("Applet name is required")
+  if (!finalId) throw new Error("Applet id is required")
 
   if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(finalId)) {
     throw new Error(
-      `invalid id "${finalId}" — must be reverse-DNS like com.example.my-extension`,
+      `invalid id "${finalId}" — must be reverse-DNS like com.example.my-applet`,
     )
   }
 
@@ -83,7 +96,10 @@ export async function createCommand(name: string | undefined, opts: CreateOption
 
   walk(TEMPLATE_ROOT, target)
 
-  console.log(kleur.green("✓"), `Scaffolded ${kleur.cyan(finalName)} (${kleur.dim(finalId)})`)
+  console.log(
+    kleur.green("✓"),
+    `Scaffolded ${kleur.cyan(finalName)} (${kleur.dim(finalId)})`,
+  )
 
   if (opts.install !== false) {
     console.log("\n", kleur.bold("Installing dependencies…"))
@@ -94,6 +110,6 @@ export async function createCommand(name: string | undefined, opts: CreateOption
   console.log("  ", kleur.cyan(`cd ${finalName}`))
   console.log("  ", kleur.cyan("pnpm amiba dev"))
   console.log(
-    "    └─ Make sure Hermes desktop is running; you'll see your extension load instantly.",
+    "    └─ Add this folder in Amiba → Settings → Applets; rebuilds then hot-reload.",
   )
 }

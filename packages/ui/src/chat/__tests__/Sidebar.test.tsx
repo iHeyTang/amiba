@@ -80,6 +80,14 @@ describe("Sidebar", () => {
     expect(props.onSelectView).toHaveBeenCalledWith("scheduled");
   });
 
+  it("shows capability extensions as a first-class main destination", async () => {
+    const props = setup({ showCapabilityExtensions: true });
+    await userEvent.click(
+      screen.getByTestId("sidebar-item-capability-extensions"),
+    );
+    expect(props.onSelectView).toHaveBeenCalledWith("capability-extensions");
+  });
+
   it("selects an extension nav view by its extensionId", async () => {
     const props = setup({
       extensionItems: [
@@ -104,7 +112,9 @@ describe("Sidebar", () => {
 
   it("renders the conversation history and opens a row", async () => {
     const props = setup();
-    await userEvent.click(screen.getByText("First chat"));
+    const title = screen.getByText("First chat");
+    expect(title.closest("button")?.textContent).toBe("First chat");
+    await userEvent.click(title);
     expect(props.onOpenSession).toHaveBeenCalledWith("s1");
   });
 

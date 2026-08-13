@@ -9,7 +9,9 @@ from aiohttp import web
 from ....adapters.hermes_core import hermes_profile_scope
 from ....common import json_error, read_json_object
 from .tools_service import (
+    configure_managed_apps_federation,
     get_computer_use_status,
+    get_installed_mcp_connection,
     get_terminal_backends,
     get_toolset_detail,
     get_toolset_models,
@@ -287,6 +289,40 @@ async def handle_installed_mcps(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "items": items})
 
 
+async def handle_installed_mcp_connection(request: web.Request) -> web.Response:
+    """Resolve a Provider ID for the trusted desktop MCP host."""
+
+    slug = request.match_info.get("slug", "")
+    try:
+        payload = get_installed_mcp_connection(slug)
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except KeyError:
+        return json_error(404, "MCP provider not found or disabled")
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response({"ok": True, "connection": payload})
+
+
+async def handle_managed_apps_federation(request: web.Request) -> web.Response:
+    """PUT Amiba's loopback-only, process-owned MCP federation endpoint."""
+
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    url = body.get("url")
+    if not isinstance(url, str):
+        return json_error(400, "url must be a string")
+    try:
+        payload = configure_managed_apps_federation(url)
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload)
+
+
 def register_tools_routes(app: web.Application) -> None:
     def profiled(handler):
         @wraps(handler)
@@ -350,6 +386,14 @@ def register_tools_routes(app: web.Application) -> None:
             web.get(
                 "/hermes/tools/installed-mcps",
                 profiled(handle_installed_mcps),
+            ),
+            web.get(
+                "/hermes/tools/installed-mcps/{slug}/connection",
+                profiled(handle_installed_mcp_connection),
+            ),
+            web.put(
+                "/hermes/tools/managed-apps-federation",
+                profiled(handle_managed_apps_federation),
             ),
         ]
     )

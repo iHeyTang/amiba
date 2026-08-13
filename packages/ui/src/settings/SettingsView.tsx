@@ -1,6 +1,5 @@
 import {
   Activity,
-  AtSign,
   Bot,
   Boxes,
   BrainCircuit,
@@ -18,7 +17,6 @@ import {
   Mic,
   Palette,
   RefreshCw,
-  Sparkles,
   UserRound,
   Wallet,
   Wrench,
@@ -45,6 +43,7 @@ import {
   AmibaLogo,
   Input,
   Label,
+  PageContent,
   ScrollArea,
 } from "../primitives";
 
@@ -59,26 +58,23 @@ import { SettingsAgents } from "./SettingsAgents";
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
 import { SettingsPaneHeader, SettingsPaneProvider } from "./SettingsPaneHeader";
 import { AgentTaskProvider } from "./agent-task";
-import { MentionSourcesTab } from "./MentionSourcesTab";
-import { SettingsExtensions } from "./SettingsExtensions";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
 import { SettingsVoice } from "./SettingsVoice";
-import { SkillsPage } from "../skills";
 import { TokensPage, ToolsPage } from "../usage";
 import {
   NavigationGroupLabel,
   NavigationRow,
 } from "../navigation/NavigationRow";
+import { APP_SIDEBAR_DEFAULT_WIDTH } from "../navigation/sidebar-layout";
 
 /**
  * Settings follows the product's real concepts rather than an "advanced"
  * catch-all:
  *   General:     Appearance → Shortcuts → Voice → Usage
  *   Assistant:   Behavior & identity → Models & services
- *                → Multi-model collaboration → Skills
- *                → Tools → Memory
- *   Extensions:  Mention sources → Extensions → Userscripts → contributed panes
+ *                → Multi-model collaboration → Tools → Memory
+ *   Applets:      Userscripts → contributed panes
  *   Advanced:    Agent workspaces (including per-agent model collaboration)
  *                → Status → Connection → Logs
  */
@@ -92,27 +88,24 @@ const ALL_TABS = [
   "multi-model-collaboration",
   "connection",
   "agents",
-  "skills",
   "tokens",
   "tools",
   "memory",
   "voice",
   "logs",
-  "extensions",
-  "mention-sources",
 ] as const;
 
 /**
  * Panes that were merged away keep their old hash ids working:
  *   gateway → connection, browser → tools (rail entry),
- *   plugins → extensions (in-pane tab).
+ * Capability extensions moved to the main workspace and no longer alias to a
+ * settings pane.
  */
 const TAB_ALIASES: Record<string, (typeof ALL_TABS)[number]> = {
   gateway: "connection",
   "model-orchestration": "multi-model-collaboration",
   "virtual-capabilities": "multi-model-collaboration",
   browser: "tools",
-  plugins: "extensions",
 };
 type CoreTab = (typeof ALL_TABS)[number];
 /** MainTab is widened to string so extension tab IDs are also accepted. */
@@ -227,7 +220,7 @@ export function SettingsView({
   capabilities = {},
   onGoHome,
   sidebarHeaderLeftInset = 0,
-  sidebarHeaderHeightPx = 24,
+  sidebarHeaderHeightPx = 40,
   sidebarHeaderClassName,
   paneHeaderClassName,
   paneHeaderChromeHeightPx,
@@ -402,9 +395,16 @@ export function SettingsView({
       className={paneHeaderClassName}
       chromeHeightPx={paneHeaderChromeHeightPx}
     >
-      <AgentTaskProvider value={capabilities.startAgentTask}>
+      <AgentTaskProvider
+        value={capabilities.startAgentTask}
+        managedApps={capabilities.managedApps}
+      >
         <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
-          <aside className="flex min-h-0 w-60 shrink-0 flex-col bg-muted/30">
+          <aside
+            data-testid="settings-sidebar"
+            className="flex min-h-0 shrink-0 flex-col bg-muted/30"
+            style={{ width: APP_SIDEBAR_DEFAULT_WIDTH }}
+          >
             {onGoHome ? (
               /*
                * Desktop sidebar chrome remains a passive drag region. The
@@ -491,12 +491,6 @@ export function SettingsView({
                   onClick={() => onMainTabChange("multi-model-collaboration")}
                 />
                 <NavBtn
-                  icon={<Sparkles className="h-4 w-4 shrink-0 opacity-70" />}
-                  label={t("options.nav.skills")}
-                  active={mainTab === "skills"}
-                  onClick={() => onMainTabChange("skills")}
-                />
-                <NavBtn
                   icon={<Wrench className="h-4 w-4 shrink-0 opacity-70" />}
                   label={t("options.nav.tools")}
                   active={mainTab === "tools"}
@@ -511,43 +505,34 @@ export function SettingsView({
                   onClick={() => onMainTabChange("memory")}
                 />
 
-                {/* ── Extensions — optional inputs and app integrations ── */}
-                <NavigationGroupLabel className="mt-2">
-                  {t("options.nav.section.extensions")}
-                </NavigationGroupLabel>
-                <NavBtn
-                  icon={<AtSign className="h-4 w-4 shrink-0 opacity-70" />}
-                  label={t("options.nav.mentionSources")}
-                  active={mainTab === "mention-sources"}
-                  onClick={() => onMainTabChange("mention-sources")}
-                />
-                <NavBtn
-                  icon={<Boxes className="h-4 w-4 shrink-0 opacity-70" />}
-                  label={t("options.nav.extensions")}
-                  active={mainTab === "extensions"}
-                  onClick={() => onMainTabChange("extensions")}
-                />
-                {showScriptsTab && (
-                  <NavBtn
-                    icon={<Code2 className="h-4 w-4 shrink-0 opacity-70" />}
-                    label={t("options.nav.scripts")}
-                    active={mainTab === "scripts"}
-                    onClick={() => onMainTabChange("scripts")}
-                  />
-                )}
-                {extensionSettings.map((s) => (
-                  <NavBtn
-                    key={s.extensionId}
-                    icon={
-                      (s.icon ? resolveExtensionIcon(s.icon) : null) ?? (
-                        <Boxes className="h-4 w-4 shrink-0 opacity-70" />
-                      )
-                    }
-                    label={s.label}
-                    active={mainTab === s.extensionId}
-                    onClick={() => onMainTabChange(s.extensionId)}
-                  />
-                ))}
+                {showScriptsTab || extensionSettings.length > 0 ? (
+                  <>
+                    <NavigationGroupLabel className="mt-2">
+                      {t("options.nav.section.extensions")}
+                    </NavigationGroupLabel>
+                    {showScriptsTab ? (
+                      <NavBtn
+                        icon={<Code2 className="h-4 w-4 shrink-0 opacity-70" />}
+                        label={t("options.nav.scripts")}
+                        active={mainTab === "scripts"}
+                        onClick={() => onMainTabChange("scripts")}
+                      />
+                    ) : null}
+                    {extensionSettings.map((s) => (
+                      <NavBtn
+                        key={s.extensionId}
+                        icon={
+                          (s.icon ? resolveExtensionIcon(s.icon) : null) ?? (
+                            <Boxes className="h-4 w-4 shrink-0 opacity-70" />
+                          )
+                        }
+                        label={s.label}
+                        active={mainTab === s.extensionId}
+                        onClick={() => onMainTabChange(s.extensionId)}
+                      />
+                    ))}
+                  </>
+                ) : null}
 
                 {/* ── Advanced — hidden until a user needs scoped agents ── */}
                 <button
@@ -626,8 +611,6 @@ export function SettingsView({
               />
             ) : mainTab === "agents" ? (
               <SettingsAgents bridge={capabilities.bridge} />
-            ) : mainTab === "skills" ? (
-              <SkillsPage profileId="default" />
             ) : mainTab === "tokens" ? (
               <TokensPage />
             ) : mainTab === "tools" ? (
@@ -644,9 +627,9 @@ export function SettingsView({
                   subtitle={t("options.voice.description")}
                 />
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="p-6">
+                  <PageContent size="md">
                     <SettingsVoice />
-                  </div>
+                  </PageContent>
                 </ScrollArea>
               </div>
             ) : mainTab === "status" ? (
@@ -658,17 +641,6 @@ export function SettingsView({
                 source={logsSource}
                 onSourceChange={onLogSourceChange}
               />
-            ) : mainTab === "mention-sources" ? (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <SettingsPaneHeader title={t("options.nav.mentionSources")} />
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="p-6">
-                    <MentionSourcesTab />
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : mainTab === "extensions" ? (
-              <SettingsExtensions />
             ) : (
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {mainTab === "scripts" && userscripts ? (
@@ -678,7 +650,7 @@ export function SettingsView({
                       subtitle={t("options.scripts.subtitle")}
                     />
                     <ScrollArea className="min-h-0 flex-1">
-                      <div className="space-y-4 p-6">
+                      <PageContent bodyClassName="space-y-4" size="md">
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             onClick={() => setCreating(true)}
@@ -762,7 +734,7 @@ export function SettingsView({
                             }
                           />
                         )}
-                      </div>
+                      </PageContent>
                     </ScrollArea>
                   </>
                 ) : mainTab === "appearance" ? (

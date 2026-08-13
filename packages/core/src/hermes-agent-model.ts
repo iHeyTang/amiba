@@ -110,9 +110,9 @@ export interface HermesModelCatalogResponse {
  * One editable env var on a provider's credentials panel.
  *
  * Secret fields are editable connection methods; URL fields are shared
- * endpoint settings. Provider-specific resolution is represented separately
- * by ``HermesProviderConnection`` so clients never infer runtime precedence
- * from field order.
+ * endpoint settings. Provider-specific URL resolution is represented by
+ * ``HermesProviderEndpointResolution`` so clients never infer runtime
+ * precedence from placeholders or field order.
  */
 export interface HermesProviderCredentialField {
   /** Env var name. */
@@ -133,6 +133,19 @@ export interface HermesProviderCredentialField {
   origin?: "saved" | "environment" | "none";
   /** Whether either a saved or ambient value exists for this field. */
   configured?: boolean;
+}
+
+/** Canonical endpoint resolution reported by the runtime settings boundary. */
+export interface HermesProviderEndpointResolution {
+  /** Stock URL from Hermes's runtime provider registry. */
+  default_base_url: string;
+  /** Provider-specific env var used for an optional override. */
+  override_env_var: string;
+  /** Saved or ambient override, empty when the default is active. */
+  override_base_url: string;
+  /** URL Hermes will use after provider-specific resolution. */
+  effective_base_url: string;
+  source: "saved" | "environment" | "default" | "none";
 }
 
 export type HermesProviderConnectionStatus =
@@ -195,6 +208,8 @@ export interface HermesProviderCredentialsResponse {
   error?: string;
   provider: string;
   fields: HermesProviderCredentialField[];
+  /** Unified default/override/effective endpoint resolution for this provider. */
+  endpoint?: HermesProviderEndpointResolution;
   /** External/OAuth authentication hint, when the provider supports one. */
   auth_hint: string;
   auth_type?: string;
@@ -402,6 +417,10 @@ export async function getHermesProviderCredentials(
         data.connection && typeof data.connection === "object"
           ? data.connection
           : undefined,
+      endpoint:
+        data.endpoint && typeof data.endpoint === "object"
+          ? data.endpoint
+          : undefined,
       profile: typeof data.profile === "string" ? data.profile : profileId,
     };
   } catch (e) {
@@ -460,6 +479,10 @@ export async function saveHermesProviderCredentials(
       connection:
         data.connection && typeof data.connection === "object"
           ? data.connection
+          : undefined,
+      endpoint:
+        data.endpoint && typeof data.endpoint === "object"
+          ? data.endpoint
           : undefined,
       written: data.written ?? [],
       profile: typeof data.profile === "string" ? data.profile : profileId,

@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react"
 
 import type { StartAgentTask } from "./capabilities"
+import type { ManagedAppsBridge } from "@amiba/managed-apps/bridge"
 
 /**
  * Carries the host's {@link StartAgentTask} impl down to the settings panes
@@ -12,15 +13,22 @@ import type { StartAgentTask } from "./capabilities"
  * and consumers hide the affordance.
  */
 const AgentTaskContext = createContext<StartAgentTask | undefined>(undefined)
+const ManagedAppsContext = createContext<ManagedAppsBridge | undefined>(undefined)
 
 export function AgentTaskProvider({
   value,
+  managedApps,
   children,
 }: {
   value?: StartAgentTask
+  managedApps?: ManagedAppsBridge
   children: ReactNode
 }) {
-  return <AgentTaskContext.Provider value={value}>{children}</AgentTaskContext.Provider>
+  return (
+    <AgentTaskContext.Provider value={value}>
+      <ManagedAppsContext.Provider value={managedApps}>{children}</ManagedAppsContext.Provider>
+    </AgentTaskContext.Provider>
+  )
 }
 
 /**
@@ -30,4 +38,8 @@ export function AgentTaskProvider({
  */
 export function useStartAgentTask(): StartAgentTask | undefined {
   return useContext(AgentTaskContext)
+}
+
+export function useManagedApps(): ManagedAppsBridge | undefined {
+  return useContext(ManagedAppsContext)
 }

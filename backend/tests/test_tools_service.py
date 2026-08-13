@@ -252,3 +252,58 @@ def test_computer_use_grant_runs_only_fixed_hermes_action(monkeypatch):
     assert result == {"ok": True, "pid": 42}
     assert calls[0][0][-3:] == ["computer-use", "permissions", "grant"]
     assert calls[0][1]["start_new_session"] is True
+
+
+def test_managed_apps_federation_is_loopback_only(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(tools_service, "_load_config", lambda: {})
+    monkeypatch.setattr(
+        tools_service,
+        "_save_config",
+        lambda config: saved.update(config),
+    )
+
+    result = tools_service.configure_managed_apps_federation(
+        "http://127.0.0.1:43123/mcp"
+    )
+    assert result["ok"] is True
+    assert saved["mcp_servers"]["amiba-applets"]["enabled"] is True
+
+    for url in [
+        "https://example.com/mcp",
+        "http://192.168.1.10:43123/mcp",
+        "http://127.0.0.1:43123/other",
+    ]:
+        with pytest.raises(ValueError):
+            tools_service.configure_managed_apps_federation(url)
+
+
+def test_registered_mcp_connection_is_resolved_only_for_enabled_provider(monkeypatch):
+    monkeypatch.setattr(
+        tools_service,
+        "_load_config",
+        lambda: {
+            "mcp_servers": {
+                "docs": {
+                    "command": "/usr/local/bin/docs-mcp",
+                    "args": ["serve"],
+                    "cwd": "/tmp/docs",
+                    "env": {"DOCS_TOKEN": "secret"},
+                    "enabled": True,
+                },
+                "off": {"url": "https://example.com/mcp", "enabled": False},
+            }
+        },
+    )
+
+    assert tools_service.get_installed_mcp_connection("docs") == {
+        "providerId": "docs",
+        "command": "/usr/local/bin/docs-mcp",
+        "args": ["serve"],
+        "cwd": "/tmp/docs",
+        "env": {"DOCS_TOKEN": "secret"},
+    }
+    with pytest.raises(KeyError):
+        tools_service.get_installed_mcp_connection("off")
+    with pytest.raises(ValueError):
+        tools_service.get_installed_mcp_connection("../../bad")

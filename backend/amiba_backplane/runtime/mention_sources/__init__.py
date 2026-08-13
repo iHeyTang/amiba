@@ -1,4 +1,4 @@
-"""The mention-sources framework — owned by the backplane.
+"""Read-only compatibility loader for legacy composer mention sources.
 
 A **mention source** is a package under ``~/.hermes/mention-sources/<name>/``
 that lets the desktop composer @-mention an external system's resources. It
@@ -13,22 +13,20 @@ desktop composer's @-mention discovery (hermes has no UI). See the backend READM
 
 - :mod:`loader`  — discover + import sources, expose ``search`` +
   ``mention_resources`` (read by the ``mention_sources_gateway`` HTTP routes).
-- :mod:`manager` — lifecycle as plain git (install=clone / update=pull /
-  remove=rm), driven by ``/hermes/mention-sources*`` admin routes.
 - :mod:`skills`  — wire each source's resolver skill into the agent's
   ``skills.external_dirs``.
 
-Distribution: each source is an independent **git repo** installed into
-``~/.hermes/mention-sources/`` — the *framework* is here; the *sources* stay
-pluggable, maintained via git.
+New @-mention capabilities are declared by an Applet manifest. This package is
+kept only so existing installations continue to search and resolve their
+already-installed sources while they migrate; it exposes no lifecycle API.
 """
 
 from __future__ import annotations
 
-from . import loader, manager  # noqa: F401  (re-exported for the HTTP routes)
+from . import loader  # noqa: F401  (re-exported for the compatibility routes)
 from .skills import wire_skills_dirs
 
-__all__ = ["loader", "manager", "wire_skills_dirs", "load_all_and_wire"]
+__all__ = ["loader", "wire_skills_dirs", "load_all_and_wire"]
 
 
 def load_all_and_wire():

@@ -17,6 +17,10 @@ import { setPlatform } from "@amiba/platform"
 import { backplaneFetch, getHermesSession, listHermesSessions } from "@amiba/core"
 import { bootMainExtensionHost, registerExtHttpChannel, seedBundledExtensions } from "@amiba/extension-host/main"
 import { startExtHttpServer } from "./ext-http-server"
+import {
+  MAC_TRAFFIC_LIGHT_TOP,
+  WINDOW_TITLE_BAR_HEIGHT,
+} from "../shared/window-chrome"
 
 // Process-level safety nets. Without these, an unhandled rejection inside
 // any async path (storage I/O, cron-watcher tick, IPC handler) can leave
@@ -53,9 +57,14 @@ import {
   stopUnixSocketInbox,
 } from "./external-inbox"
 import {
+  getManagedHermesPythonPath,
   registerHermesRuntimeHandlers,
   stopAllHermesJobs,
 } from "./hermes-runtime"
+import {
+  startManagedAppsController,
+  type ManagedAppsController,
+} from "./managed-apps"
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey"
 import { registerIpcHandlers } from "./ipc"
 import { createMainPlatformAdapter } from "./platform"
@@ -271,6 +280,38 @@ let startupWindowTheme: "light" | "dark" = nativeTheme.shouldUseDarkColors
 // Extension HTTP server — started inside app.whenReady() once the
 // registryPath is known. Stopped in before-quit alongside the extension host.
 let _extHttpServer: import("./ext-http-server").ExtHttpServer | null = null
+let _managedAppsController: ManagedAppsController | null = null
+
+async function registerManagedAppsWithHermes(): Promise<void> {
+  if (!_managedAppsController) return
+  const response = await backplaneFetch("/hermes/tools/managed-apps-federation", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: _managedAppsController.federationUrl }),
+  })
+  if (!response.ok) {
+    throw new Error(`federation registration failed (${response.status}): ${await response.text()}`)
+  }
+}
+
+async function resolveRegisteredMcpProvider(providerId: string) {
+  const response = await backplaneFetch(
+    `/hermes/tools/installed-mcps/${encodeURIComponent(providerId)}/connection`,
+  )
+  if (!response.ok) return null
+  const payload = await response.json() as {
+    ok?: boolean
+    connection?: {
+      url?: string
+      command?: string
+      args?: string[]
+      env?: Record<string, string>
+      cwd?: string
+      headers?: Record<string, string>
+    }
+  }
+  return payload.ok && payload.connection ? payload.connection : null
+}
 
 /**
  * Bring the main window forward when the user hits the global shortcut.
@@ -441,21 +482,20 @@ function createWindow() {
     // can drive the traffic-light position ourselves via
     // `trafficLightPosition` — `hiddenInset` silently ignores it.
     //
-    // 48px title-bar row with traffic lights pinned at (20, 18): the
-    // ~12px dot cluster's vertical centre sits at y=24, and a header
-    // action centred in the 48px row also lands at y=24, so every
-    // custom affordance shares the lights' baseline pixel-for-pixel.
-    // Keep ``TITLE_BAR_HEIGHT`` in App.tsx in sync with the height
-    // value here and with the ``y`` here (``y = TITLE_BAR_HEIGHT/2 -
-    // dotHeight/2``).
+    // 40px title-bar row with the native traffic-light frame pinned at y=12.
+    // AppKit paints the visible dots one pixel below that frame, so this
+    // optical correction aligns them with the web title-bar content.
+    // Both values come from the shared window-chrome geometry module.
     titleBarStyle: "hidden",
-    trafficLightPosition: IS_MAC ? { x: 20, y: 18 } : undefined,
+    trafficLightPosition: IS_MAC
+      ? { x: 20, y: MAC_TRAFFIC_LIGHT_TOP }
+      : undefined,
     titleBarOverlay: IS_MAC
       ? false
       : {
           color: startupPalette.background,
           symbolColor: startupPalette.titleBarSymbol,
-          height: 48,
+          height: WINDOW_TITLE_BAR_HEIGHT,
         },
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -553,7 +593,17 @@ if (!gotSingleInstanceLock) {
     registerVoicePermissionHandler()
     registerIpcHandlers()
     registerChatHandlers()
-    registerHermesRuntimeHandlers()
+    try {
+      _managedAppsController = await startManagedAppsController({
+        root: join(app.getPath("userData"), "managed-extensions"),
+        pythonCommand: getManagedHermesPythonPath(),
+        resolveRegisteredProvider: resolveRegisteredMcpProvider,
+      })
+      console.info(`[main] managed Applets federation: ${_managedAppsController.federationUrl}`)
+    } catch (error) {
+      console.error("[main] managed Applets failed to start:", error)
+    }
+    registerHermesRuntimeHandlers(registerManagedAppsWithHermes)
     registerToolActivity()
 
     const extensionsRoot = getExtensionsRoot()
@@ -789,6 +839,10 @@ app.on("before-quit", async (event) => {
     .__amibaExtensionHost
   if (host) await host.shutdown()
   if (_extHttpServer) await _extHttpServer.stop().catch(() => { /* ignore shutdown errors */ })
+  if (_managedAppsController) {
+    await _managedAppsController.stop().catch(() => { /* ignore shutdown errors */ })
+    _managedAppsController = null
+  }
   _extensionHostShutdownDone = true
   app.quit()
 })

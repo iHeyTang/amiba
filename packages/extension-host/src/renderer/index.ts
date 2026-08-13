@@ -5,31 +5,59 @@
 // discover, use-i18n) has been removed — extensions now contribute via
 // manifest declarations and render into isolated WebViews.
 
-export { ExtensionWebView } from "./extension-webview"
+export { ExtensionWebView } from "./extension-webview";
 export {
   desktopBridge,
   maybeDesktopBridge,
   type AmibaRendererBridge,
-} from "./bridge"
+} from "./bridge";
 export {
   useExtensionMains,
   useExtensionSettings,
   type MainContribution,
   type SettingsContribution,
-} from "./use-contributes"
+} from "./use-contributes";
 
-// useExtensionRegistry is used by the SettingsExtensions tab to list installed
-// extensions and their status.
-import { useEffect, useState } from "react"
-import type { ExtensionRegistryItem } from "../preload"
-import { desktopBridge } from "./bridge"
+// useExtensionRegistry powers the Applet list-detail control surface, including
+// persisted rows whose manifest can no longer be discovered.
+import { useEffect, useState } from "react";
+import type { ExtensionRegistryItem } from "../preload";
+import { desktopBridge } from "./bridge";
+
+export interface ExtensionRegistryState {
+  items: ExtensionRegistryItem[];
+  ready: boolean;
+  refreshing: boolean;
+}
 
 export function useExtensionRegistry(refreshKey: number = 0) {
-  const [items, setItems] = useState<ExtensionRegistryItem[]>([])
+  const [state, setState] = useState<ExtensionRegistryState>({
+    items: [],
+    ready: false,
+    refreshing: true,
+  });
   useEffect(() => {
-    const { extensions } = desktopBridge()
-    void extensions.listRegistry().then(setItems)
+    let active = true;
+    const { extensions } = desktopBridge();
+    setState((current) => ({ ...current, refreshing: true }));
+    void extensions
+      .listRegistry()
+      .then((items) => {
+        if (active) setState({ items, ready: true, refreshing: false });
+      })
+      .catch(() => {
+        if (active) {
+          setState((current) => ({
+            ...current,
+            ready: true,
+            refreshing: false,
+          }));
+        }
+      });
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey])
-  return items
+  }, [refreshKey]);
+  return state;
 }

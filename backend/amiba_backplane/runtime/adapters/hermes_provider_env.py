@@ -79,17 +79,37 @@ def base_url_env_var_for_slug(slug: str) -> str:
     Plugins don't typically include this in their ``env_vars`` tuple, so
     callers that want it (credentials UI) must read it separately.
     """
+    return provider_endpoint_definition_for_slug(slug)["override_env_var"]
+
+
+def provider_endpoint_definition_for_slug(slug: str) -> Dict[str, str]:
+    """Return the runtime-owned endpoint definition for one provider.
+
+    ``hermes_cli.auth.PROVIDER_REGISTRY`` is the source Hermes itself uses
+    when resolving API-key providers at request time.  Keeping both the stock
+    endpoint and its override env var on this one adapter prevents settings UI
+    code from reading the similar-looking ``ProviderProfile.base_url`` and
+    drifting away from runtime behaviour.
+    """
     s = str(slug).strip()
+    empty = {"default_base_url": "", "override_env_var": ""}
     if not s or s in ("auto", "custom"):
-        return ""
+        return empty
     try:
         from hermes_cli.auth import PROVIDER_REGISTRY  # type: ignore
     except Exception:
-        return ""
+        return empty
     cfg = PROVIDER_REGISTRY.get(s)
     if cfg is None:
-        return ""
-    return str(getattr(cfg, "base_url_env_var", "") or "").strip()
+        return empty
+    return {
+        "default_base_url": str(
+            getattr(cfg, "inference_base_url", "") or ""
+        ).strip(),
+        "override_env_var": str(
+            getattr(cfg, "base_url_env_var", "") or ""
+        ).strip(),
+    }
 
 
 def collect_provider_env_var_map(provider_slugs: List[str]) -> Dict[str, List[str]]:

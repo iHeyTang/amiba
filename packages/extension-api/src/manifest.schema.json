@@ -58,6 +58,26 @@
         }
       }
     },
+    "mentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "provider", "label"],
+        "additionalProperties": false,
+        "anyOf": [
+          { "required": ["resourceUriTemplate"] },
+          { "required": ["searchTool"] }
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "provider": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "icon": { "type": "string", "minLength": 1 },
+          "resourceUriTemplate": { "type": "string", "minLength": 1 },
+          "searchTool": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "hermesPlugins": {
       "type": "array",
       "items": {

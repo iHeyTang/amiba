@@ -19,6 +19,8 @@
     "@amiba/core": "workspace:*",
     "@amiba/extension-host": "workspace:*",
     "@amiba/i18n": "workspace:*",
+    "@amiba/managed-apps": "workspace:*",
+    "@amiba/mcp-host": "workspace:*",
     "@amiba/platform": "workspace:*",
     "@amiba/utils": "workspace:*",
     "@codemirror/commands": "^6.10.3",

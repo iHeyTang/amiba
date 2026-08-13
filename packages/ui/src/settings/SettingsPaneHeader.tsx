@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-import { cn } from "../primitives";
+import { PageContent, cn, type PageContentSize } from "../primitives";
 /**
  * Host-driven configuration for every settings pane's title header.
  *
@@ -9,13 +9,10 @@ import { cn } from "../primitives";
  *
  *   - `className` is folded into the header so a host can mark the strip
  *     `app-drag-region` (Electron) or leave it neutral.
- *   - `chromeHeightPx`, when set, is a *minimum* row height. The header
- *     still carries pt-3/pb-3 breathing room (so the title isn't flush
- *     against the chrome line) and grows past the minimum if the content
- *     needs it. Picking ~44 (OS title-bar height) makes the title strip
- *     read as one continuous chrome line with the macOS traffic lights
- *     on the sidebar side. When unset (extension/web), the header keeps
- *     the natural pt-5/pb-3 spacing with auto height.
+ *   - `chromeHeightPx`, when set, is a *minimum* row height. A compact py-2
+ *     keeps a one-line title inside the shared 40px desktop chrome while
+ *     still allowing subtitle-bearing headers to grow naturally. When unset
+ *     (extension/web), the header keeps the natural pt-5/pb-3 spacing.
  */
 interface PaneHeaderConfig {
   className: string;
@@ -66,6 +63,8 @@ interface SettingsPaneHeaderProps {
   /** Optional width/alignment constraints for the visible header content.
    *  The outer header remains full-width so desktop window dragging works. */
   contentClassName?: string;
+  /** Matches the title strip to the page body's named width. */
+  contentSize?: PageContentSize;
 }
 
 /**
@@ -86,6 +85,7 @@ export function SettingsPaneHeader({
   subtitleTooltip,
   children,
   contentClassName,
+  contentSize = "md",
 }: SettingsPaneHeaderProps) {
   const { className, chromeHeightPx } = useContext(PaneHeaderContext);
   const hasChromeFloor = chromeHeightPx !== undefined;
@@ -103,39 +103,38 @@ export function SettingsPaneHeader({
   }
   return (
     <header
-      className={cn(
-        "shrink-0 px-6",
-        // Desktop hosts (chromeHeightPx set) use tighter padding so the
-        // title sits near the chrome line; web/extension keeps the more
-        // generous pt-5/pb-3 it shipped with.
-        hasChromeFloor ? "pt-3 pb-3" : "pt-5 pb-3",
-        className,
-      )}
+      className={cn("shrink-0", className)}
       style={hasChromeFloor ? { minHeight: chromeHeightPx } : undefined}
     >
-      <div
-        className={cn(
-          "flex w-full items-center justify-between gap-3",
-          contentClassName,
-        )}
+      <PageContent
+        className={cn("px-7", hasChromeFloor ? "py-2" : "pb-3 pt-5")}
+        padding="none"
+        size={contentSize}
       >
-        <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-          {title && (
-            <h2 className="text-base font-semibold tracking-tight text-foreground">
-              {title}
-            </h2>
+        <div
+          className={cn(
+            "flex w-full items-center justify-between gap-3",
+            contentClassName,
           )}
-          {subtitle && (
-            <p
-              className="truncate text-[11px] text-muted-foreground"
-              title={subtitleTooltip}
-            >
-              {subtitle}
-            </p>
-          )}
+        >
+          <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
+            {title && (
+              <h2 className="text-base font-medium tracking-tight text-foreground">
+                {title}
+              </h2>
+            )}
+            {subtitle && (
+              <p
+                className="truncate text-[11px] text-muted-foreground"
+                title={subtitleTooltip}
+              >
+                {subtitle}
+              </p>
+            )}
+          </div>
+          {children}
         </div>
-        {children}
-      </div>
+      </PageContent>
     </header>
   );
 }

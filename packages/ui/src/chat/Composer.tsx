@@ -39,7 +39,7 @@ import {
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types";
 import { buildProviderRegistry } from "./composer/providers/registry";
 import { loadMentionResourceProviders } from "./composer/providers/mention-resources";
-import { expandMentions } from "./composer/expandMentions";
+import { expandMentionsAsync } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
@@ -64,6 +64,7 @@ import type { AgentExecutionContext } from "@amiba/core";
  *   - `actionsLeft`   — inside the frame's bottom action row, left side
  *                       (paperclip, pin, etc).
  *   - `extrasBelow`   — below the frame (keyboard hints, status pills).
+ *   - `floatingNotice`— anchored below the frame without affecting layout.
  *   - `flatTop`       — remove the frame's top corner radius so a blocking
  *                       sibling banner rendered just above merges visually.
  *
@@ -243,6 +244,12 @@ export interface ComposerProps {
   actionsLeft?: ReactNode;
   /** Outside the frame, below it (caption / hints). */
   extrasBelow?: ReactNode;
+  /**
+   * Transient notice anchored below the frame without participating in
+   * layout. Use for recoverable composer-local failures whose diagnostics
+   * must not move the writing surface.
+   */
+  floatingNotice?: ReactNode;
 
   // Frame
   /**
@@ -350,6 +357,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       chipRow,
       actionsLeft,
       extrasBelow,
+      floatingNotice,
       frameVariant = "default",
       density = "default",
       flatTop = false,
@@ -409,11 +417,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // are performed and NOT sent; everything else expands `@[...]` mention
     // tokens to text (a no-op for plain messages) and submits. Abort / stop /
     // queue branches do NOT route through here.
-    const handleSend = useCallback(() => {
+    const resolvingMentionRef = useRef(false);
+    const handleSend = useCallback(async () => {
       if (routeSubmit(value, { send: () => {}, ctx: slashUiActions ?? {} }))
         return; // UI action handled, don't send
-      const finalText = expandMentions(value, providerRegistry.all);
-      onSubmit(finalText);
+      if (resolvingMentionRef.current) return;
+      resolvingMentionRef.current = true;
+      try {
+        const finalText = await expandMentionsAsync(value, providerRegistry.all);
+        onSubmit(finalText);
+      } finally {
+        resolvingMentionRef.current = false;
+      }
     }, [value, slashUiActions, providerRegistry, onSubmit]);
 
     useImperativeHandle(
@@ -786,6 +801,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             the wrapper so the picker click-fallback path works on
             browsers without `showOpenFilePicker`. */}
         {attachments ? <input {...attachments.fileInputProps} /> : null}
+        {floatingNotice ? (
+          <div
+            className="pointer-events-none absolute inset-x-2 top-full z-30 flex justify-center pt-2"
+            data-composer-floating-notice=""
+          >
+            {floatingNotice}
+          </div>
+        ) : null}
         {extrasBelow ? (
           <div className="px-1 pt-1 text-xs text-muted-foreground">
             {extrasBelow}

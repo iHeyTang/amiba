@@ -16,10 +16,14 @@ def read_main_model_response() -> Dict[str, Any]:
 
 
 def write_main_model_response(payload: Dict[str, Any]) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {
+        "provider": payload.get("provider"),
+        "model": payload.get("model"),
+    }
+    if "base_url" in payload:
+        kwargs["base_url"] = payload.get("base_url")
     merged = write_main_model(
-        provider=payload.get("provider"),
-        model=payload.get("model"),
-        base_url=payload.get("base_url"),
+        **kwargs,
     )
     return {"ok": True, **merged}
 
@@ -42,4 +46,3 @@ def write_auxiliary_models_response(payload: Dict[str, Any]) -> Dict[str, Any]:
         base_url=payload.get("base_url"),
     )
     return {"ok": True, **merged}
-

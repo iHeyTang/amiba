@@ -35,6 +35,8 @@ export interface TriggerProvider {
   search(query: string): Promise<MenuItem[]>
   onSelect(item: MenuItem, editor: LexicalEditor): void
   serialize?(mention: MentionData): string
+  /** Resolve a selected Resource at send time and inject its current content. */
+  resolveMention?(mention: MentionData): Promise<string>
   /**
    * This provider's search needs a non-empty query — it can't list a default
    * set. With an empty query the menu skips the search and shows `emptyHint`

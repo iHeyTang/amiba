@@ -31,6 +31,7 @@ import {
 } from "@amiba/core";
 import {
   Composer,
+  ComposerNotice,
   queueChatPrompt,
   useComposerAttachments,
   useVoiceRecorder,
@@ -333,7 +334,7 @@ function Home({
         setVoiceError(
           message === "Permission denied"
             ? t("composer.voice.permissionDenied")
-            : t("composer.voice.transcribeFailed", { error: message }),
+            : message,
         );
       });
       return;
@@ -348,9 +349,7 @@ function Home({
           // ``in`` narrows under both strict and non-strict tsconfigs
           // (the workspace ships both via different apps).
           const message = "error" in result ? result.error : "unknown";
-          setVoiceError(
-            t("composer.voice.transcribeFailed", { error: message }),
-          );
+          setVoiceError(message);
           return;
         }
         const transcript = result.text.trim();
@@ -363,11 +362,7 @@ function Home({
         });
         inputRef.current?.focus();
       } catch (e) {
-        setVoiceError(
-          t("composer.voice.transcribeFailed", {
-            error: String((e as Error)?.message || e),
-          }),
-        );
+        setVoiceError(String((e as Error)?.message || e));
       } finally {
         setVoiceTranscribing(false);
       }
@@ -526,11 +521,22 @@ function Home({
                 />
               ) : undefined
             }
-            extrasBelow={
+            floatingNotice={
               voiceError || workspaceError ? (
-                <p role="alert" className="text-[11px] text-destructive">
-                  {voiceError || workspaceError}
-                </p>
+                <ComposerNotice
+                  detail={voiceError || workspaceError || ""}
+                  onDismiss={() => {
+                    if (voiceError) setVoiceError(null);
+                    else setWorkspaceError(null);
+                  }}
+                  title={
+                    voiceError
+                      ? voiceError.includes("No STT provider available")
+                        ? t("composer.voice.noProvider")
+                        : t("composer.voice.transcribeFailedTitle")
+                      : t("workspace.errorTitle")
+                  }
+                />
               ) : undefined
             }
           />

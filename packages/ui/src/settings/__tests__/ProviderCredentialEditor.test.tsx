@@ -6,6 +6,42 @@ import { ProviderConnectionStatusBadge } from "../ProviderConnectionStatusBadge"
 import { ProviderCredentialEditor } from "../ProviderCredentialEditor";
 
 describe("ProviderCredentialEditor", () => {
+  it("renders the runtime endpoint default instead of a field-local placeholder", () => {
+    render(
+      <ProviderCredentialEditor
+        authHint=""
+        endpoint={{
+          default_base_url: "https://api.deepseek.com/v1",
+          override_env_var: "DEEPSEEK_BASE_URL",
+          override_base_url: "",
+          effective_base_url: "https://api.deepseek.com/v1",
+          source: "default",
+        }}
+        error={null}
+        fields={[
+          {
+            key: "DEEPSEEK_BASE_URL",
+            value: "",
+            placeholder: "https://stale-display-value.example/v1",
+            kind: "url",
+          },
+        ]}
+        loading={false}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        provider="deepseek"
+        saved={false}
+        saving={false}
+        values={{ DEEPSEEK_BASE_URL: "" }}
+      />,
+    );
+
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "placeholder",
+      "https://api.deepseek.com/v1",
+    );
+  });
+
   it("keeps connection status out of the credential form", () => {
     render(
       <ProviderCredentialEditor

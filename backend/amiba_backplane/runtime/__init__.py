@@ -2,6 +2,6 @@
 
 Holds the HTTP server entry point (:mod:`runtime.server`) and its
 dependencies — everything that runs in the spawned ``amiba-backplane``
-process. The mention-sources framework lives under
-:mod:`runtime.mention_sources`.
+process. ``runtime.mention_sources`` is a read-only compatibility loader for
+pre-Applet mention-source data.
 """

@@ -145,18 +145,20 @@ export type ChatSessionMode = "current" | "new";
  */
 export function useChatSessionRequester(): (
   req: ChatSessionRequest & { mode?: ChatSessionMode },
-) => Promise<void> {
+) => Promise<string | void> {
   const sessions: SessionsController = useSessions();
   return useCallback(
     async (req) => {
+      let sessionId: string | undefined;
       if (req.mode === "new") {
         // Mint + activate up-front. ChatSurface's drain effect re-runs
         // on activeId change; if that drain races ahead of the prompt
         // write, the subscribe handler will tick it again as soon as
         // the write lands.
-        await sessions.createNew(req.agent);
+        sessionId = await sessions.createNew(req.agent);
       }
       await queueChatPrompt(req);
+      return sessionId;
     },
     [sessions],
   );

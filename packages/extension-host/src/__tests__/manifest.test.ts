@@ -192,6 +192,47 @@ describe("validateManifest", () => {
   })
 
   // ---------------------------------------------------------------------------
+  // mentions (Applet-owned Composer capabilities)
+  // ---------------------------------------------------------------------------
+
+  it("accepts an Applet-owned mention contribution", () => {
+    const r = validateManifest({
+      ...base,
+      mentions: [
+        {
+          id: "documents",
+          provider: "default",
+          label: "Documents",
+          resourceUriTemplate: "doc://library/{id}",
+          searchTool: "search-documents",
+        },
+      ],
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects a mention without a resource projection or search tool", () => {
+    const r = validateManifest({
+      ...base,
+      mentions: [{ id: "documents", provider: "default", label: "Documents" }],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/resourceUriTemplate|searchTool/)
+  })
+
+  it("rejects duplicate mention ids within one Applet", () => {
+    const mention = {
+      id: "documents",
+      provider: "default",
+      label: "Documents",
+      searchTool: "search-documents",
+    }
+    const r = validateManifest({ ...base, mentions: [mention, mention] })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/duplicate/)
+  })
+
+  // ---------------------------------------------------------------------------
   // apiVersion (minimum host API level)
   // ---------------------------------------------------------------------------
 

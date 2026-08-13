@@ -7,7 +7,7 @@ import {
 } from "@amiba/core"
 import { useT } from "@amiba/i18n"
 
-import { Button, ScrollArea, Switch } from "../primitives"
+import { Button, PageContent, ScrollArea, Switch } from "../primitives"
 import { useStartAgentTask } from "./agent-task"
 import { SettingsPaneHeader } from "./SettingsPaneHeader"
 
@@ -168,9 +168,7 @@ export function SettingsBrowser({
         subtitle={t("options.feature.browser.subtitle")}
       />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-2xl p-6">
-          {content}
-        </div>
+        <PageContent size="md">{content}</PageContent>
       </ScrollArea>
     </div>
   )

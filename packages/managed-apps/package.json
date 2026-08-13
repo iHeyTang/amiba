@@ -1,0 +1,27 @@
+{
+  "name": "@amiba/managed-apps",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-managed Applet projects, immutable bundles, revisions, activation, and rollback.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bridge": "./src/bridge.ts",
+    "./schema": "./src/schema.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
+  }
+}

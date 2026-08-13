@@ -15,7 +15,11 @@ import {
   TooltipTrigger,
   cn,
 } from "../primitives";
-import { bubbleTextContent, splitWorkspaceFromBody } from "./internal/helpers";
+import {
+  bubbleTextContent,
+  splitWorkspaceFromBody,
+  stripManagedResourceContext,
+} from "./internal/helpers";
 import type { UiMessage } from "./internal/types";
 
 const RAIL_LEFT_PX = 8;
@@ -23,7 +27,9 @@ const RAIL_WIDTH_PX = 32;
 const MIN_CONTENT_GAP_PX = 16;
 
 function visibleMessageText(content: unknown): string {
-  let text = splitWorkspaceFromBody(bubbleTextContent(content)).body;
+  let text = stripManagedResourceContext(
+    splitWorkspaceFromBody(bubbleTextContent(content)).body,
+  );
   const attachmentEnd = text.toLowerCase().lastIndexOf("</file-attachment>");
   if (attachmentEnd >= 0) {
     text = text.slice(attachmentEnd + "</file-attachment>".length);
