@@ -14,6 +14,7 @@ import type { ChatMessage } from "./chat-messages";
 import type { AgentExecutionContext } from "./agent-context";
 import type {
   HermesApprovalRequest,
+  HermesClarifyRequest,
   HermesLiveAgent,
   HermesToolProgress,
   StreamedToolCall,
@@ -134,6 +135,8 @@ export interface ChatRuntimeState {
   agentFinalTitle: string | null;
   /** Approval requests the gateway emitted that haven't been answered yet. */
   pendingApprovals: HermesApprovalRequest[];
+  /** Clarify prompts whose agent thread is waiting for the user's answer. */
+  pendingClarifications: HermesClarifyRequest[];
   /**
    * `X-Hermes-Run-Id` from the in-flight or last-completed chat
    * completion request. Required to POST approval decisions back.
@@ -208,6 +211,8 @@ export type StreamEvent =
   | { kind: "run"; runId: string }
   | { kind: "approvalRequest"; request: HermesApprovalRequest }
   | { kind: "approvalResolved"; approvalId: string }
+  | { kind: "clarifyRequest"; request: HermesClarifyRequest }
+  | { kind: "clarifyResolved"; clarifyId: string }
   | {
       kind: "done";
       /**

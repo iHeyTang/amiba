@@ -19,7 +19,7 @@ export function bubbleTextContent(content: unknown): string {
   return String(content)
 }
 
-/** Hide agent-only Applet Resource payloads while retaining the visible @label. */
+/** Hide agent-only Extension Resource payloads while retaining the visible @label. */
 export function stripManagedResourceContext(text: string): string {
   return text
     .replace(/(?:[ \t]*\r?\n)?[ \t]*<amiba-resource\b[^>]*>[\s\S]*?<\/amiba-resource>/gi, "")

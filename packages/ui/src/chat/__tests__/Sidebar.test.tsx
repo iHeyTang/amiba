@@ -51,7 +51,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     scheduledLabelFor: vi.fn((source: string) => source),
     historyLayout: "timeline" as const,
     onHistoryLayoutChange: vi.fn(),
-    onOpenTaskCenter: vi.fn(),
     onOpenSettings: vi.fn(),
     ...overrides,
   };
@@ -116,6 +115,98 @@ describe("Sidebar", () => {
     expect(title.closest("button")?.textContent).toBe("First chat");
     await userEvent.click(title);
     expect(props.onOpenSession).toHaveBeenCalledWith("s1");
+  });
+
+  it("fades row actions over the title with a state-matched mask", () => {
+    setup();
+    const moreButton = screen.getByRole("button", {
+      name: "More actions",
+    });
+    const hoverActions = moreButton.parentElement;
+    expect(hoverActions).toHaveClass(
+      "pointer-events-none",
+      "bg-gradient-to-l",
+      "from-accent",
+      "to-transparent",
+      "pl-8",
+    );
+    expect(hoverActions).not.toHaveClass("group-hover:pointer-events-auto");
+    expect(moreButton).toHaveClass(
+      "pointer-events-none",
+      "group-hover:pointer-events-auto",
+    );
+  });
+
+  it("keeps rename inside the per-session overflow menu", async () => {
+    const props = setup({
+      onBranchSession: vi.fn(),
+      onPinSession: vi.fn(),
+    });
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Rename" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    const menu = screen.getByRole("menu", { name: "More actions" });
+    expect(menu).toHaveAttribute("data-side", "bottom");
+    expect(menu).toHaveAttribute("data-align", "start");
+    expect(menu).toHaveClass("w-52");
+    expect(
+      screen.getByRole("menuitem", { name: "Create branch" }),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("menuitem")
+        .slice(0, 3)
+        .map((item) => item.textContent),
+    ).toEqual(["Rename", "Pin", "Create branch"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("First chat");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Renamed chat{enter}");
+    expect(props.onRenameSession).toHaveBeenCalledWith("s1", "Renamed chat");
+  });
+
+  it("keeps only one per-session overflow menu open", async () => {
+    setup({
+      sessions: [
+        {
+          id: "s1",
+          title: "First chat",
+          createdAt: 1,
+          updatedAt: 2,
+          messageCount: 1,
+        },
+        {
+          id: "s2",
+          title: "Second chat",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 1,
+        },
+      ],
+    });
+
+    const [firstMenu, secondMenu] = screen.getAllByRole("button", {
+      name: "More actions",
+    });
+
+    await userEvent.click(firstMenu!);
+    expect(firstMenu).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(secondMenu!);
+    const [updatedFirstMenu, updatedSecondMenu] = screen.getAllByRole(
+      "button",
+      {
+        name: "More actions",
+      },
+    );
+    expect(updatedFirstMenu).toHaveAttribute("aria-expanded", "false");
+    expect(updatedSecondMenu).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByRole("menuitem", { name: "Rename" })).toHaveLength(1);
   });
 
   it("renders a quiet status dot for unread session updates", () => {
@@ -314,21 +405,103 @@ describe("Sidebar", () => {
     expect(screen.getByText("Review analytics")).toBeInTheDocument();
   });
 
-  it("switches history layout from the header controls", async () => {
+  it("switches history layout from the overflow submenu", async () => {
     const props = setup();
+    expect(
+      screen.queryByRole("button", { name: "Group chats by workspace" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Group chats by workspace" }),
+      screen.getByRole("button", { name: "More task actions" }),
+    );
+    expect(
+      screen.getByRole("menu", { name: "More task actions" }),
+    ).toHaveAttribute("data-align", "start");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Display mode" }),
+    );
+    expect(screen.getAllByRole("menu")).toHaveLength(2);
+    expect(
+      screen.getByRole("menuitem", { name: "Display mode" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: "Group chats by workspace",
+      }),
     );
     expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped");
   });
 
-  it("opens the task center without adding a fixed task nav row", async () => {
-    const props = setup();
+  it("keeps import and bulk selection inside the overflow menu", async () => {
+    const props = setup({
+      onImportSessions: vi.fn(),
+      onBulkSessions: vi.fn(),
+    });
+    const header = screen.getByTestId("sessions-header");
+    expect(header).toHaveClass("pr-1.5");
+
+    expect(
+      screen.queryByRole("button", { name: "Import tasks…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Select tasks" }),
+    ).not.toBeInTheDocument();
+
     await userEvent.click(
-      screen.getByRole("button", { name: "View all tasks" }),
+      screen.getByRole("button", { name: "More task actions" }),
     );
-    expect(props.onOpenTaskCenter).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("sidebar-item-tasks")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Import tasks…" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Select tasks" }),
+    );
+    expect(header).toHaveTextContent("0 selected");
+    expect(header).not.toHaveTextContent("Recent tasks");
+    expect(
+      screen.queryByRole("button", { name: "More task actions" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-item-tasks")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("First chat"));
+    expect(header).toHaveTextContent("1 selected");
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(props.onBulkSessions).toHaveBeenCalledWith(["s1"], "archive");
+  });
+
+  it("reuses the grouped status slot for selection without shifting titles", async () => {
+    workspaceBindings.current = {
+      supported: true,
+      ready: true,
+      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+    };
+    setup({
+      historyLayout: "grouped",
+      onBulkSessions: vi.fn(),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More task actions" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Select tasks" }),
+    );
+
+    const titleButton = screen.getByRole("button", { name: "First chat" });
+    expect(titleButton).toHaveClass("pl-8");
+    expect(titleButton).toHaveAttribute("aria-pressed", "false");
+    const selectionSlot = titleButton.previousElementSibling;
+    expect(selectionSlot).toHaveClass("absolute", "left-2", "h-4", "w-4");
+    expect(selectionSlot).toHaveAttribute("aria-hidden", "true");
+
+    await userEvent.click(titleButton);
+    expect(titleButton).toHaveAttribute("aria-pressed", "true");
+    expect(titleButton).toHaveClass("pl-8");
+  });
+
+  it("opens the task board from the primary navigation", async () => {
+    const props = setup();
+    await userEvent.click(screen.getByTestId("sidebar-item-tasks"));
+    expect(props.onSelectView).toHaveBeenCalledWith("tasks");
   });
 
   it("reveals history in batches of twenty with stable copy", async () => {

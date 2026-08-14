@@ -1,10 +1,7 @@
-import { randomUUID } from "node:crypto";
-import {
-  execFile,
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { hostname } from "node:os";
 import {
   cp,
   mkdir,
@@ -15,20 +12,14 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  extname,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { spawn as spawnPty, type IPty } from "node-pty";
 
 import { app, BrowserWindow } from "electron";
 import type {
   WorkspaceCheckpoint,
+  WorkspaceCheckpointOptions,
   WorkspaceGitFile,
   WorkspaceGitState,
   WorkspaceProject,
@@ -47,6 +38,7 @@ const MAX_TERMINAL_BUFFER = 1024 * 1024;
 const MAX_TREE_ENTRIES = 4_000;
 const MAX_CHECKPOINT_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_CHECKPOINT_TOTAL_BYTES = 100 * 1024 * 1024;
+const MAX_AUTOMATIC_CHECKPOINTS = 30;
 
 const IGNORED_NAMES = new Set([
   ".git",
@@ -65,48 +57,14 @@ const IGNORED_NAMES = new Set([
   ".venv",
   "__pycache__",
 ]);
-const OUTPUT_DIRECTORIES = new Set([
-  "dist",
-  "build",
-  "out",
-  "target",
-  "coverage",
-  "artifacts",
-  "outputs",
-  "exports",
-  "reports",
-]);
-const OUTPUT_EXTENSIONS = new Set([
-  ".pdf",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".svg",
-  ".html",
-  ".csv",
-  ".xlsx",
-  ".xls",
-  ".docx",
-  ".pptx",
-  ".zip",
-  ".tar",
-  ".gz",
-  ".mp3",
-  ".wav",
-  ".m4a",
-  ".mp4",
-  ".mov",
-  ".webm",
-  ".jsonl",
-]);
-
 interface TerminalRecord {
   sessionId: string;
+  terminalId: string;
+  title: string;
   cwd: string;
-  process: ChildProcessWithoutNullStreams;
+  process: IPty;
   output: string;
+  sequence: number;
   startedAt: number;
   exited: boolean;
   exitCode?: number;
@@ -118,9 +76,31 @@ interface CheckpointRecord extends WorkspaceCheckpoint {
   stashCommit?: string;
   stagedPaths: string[];
   untrackedPaths: string[];
+  excludedUntrackedPaths?: string[];
+  fingerprint?: string;
 }
 
-const terminals = new Map<string, TerminalRecord>();
+const terminals = new Map<string, Map<string, TerminalRecord>>();
+
+function getTerminalRecord(
+  sessionId: string,
+  terminalId: string,
+): TerminalRecord | undefined {
+  return terminals.get(sessionId)?.get(terminalId);
+}
+
+function setTerminalRecord(record: TerminalRecord): void {
+  const sessionTerminals = terminals.get(record.sessionId) ?? new Map();
+  sessionTerminals.set(record.terminalId, record);
+  terminals.set(record.sessionId, sessionTerminals);
+}
+
+function deleteTerminalRecord(sessionId: string, terminalId: string): void {
+  const sessionTerminals = terminals.get(sessionId);
+  if (!sessionTerminals) return;
+  sessionTerminals.delete(terminalId);
+  if (sessionTerminals.size === 0) terminals.delete(sessionId);
+}
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -130,9 +110,12 @@ function broadcast(channel: string, payload: unknown): void {
 
 function appendTerminal(record: TerminalRecord, chunk: string): void {
   record.output = `${record.output}${chunk}`.slice(-MAX_TERMINAL_BUFFER);
+  record.sequence += 1;
   broadcast("workspace-terminal:data", {
     sessionId: record.sessionId,
+    terminalId: record.terminalId,
     chunk,
+    sequence: record.sequence,
     snapshot: terminalSnapshot(record),
   });
 }
@@ -140,8 +123,11 @@ function appendTerminal(record: TerminalRecord, chunk: string): void {
 function terminalSnapshot(record: TerminalRecord): WorkspaceTerminalSnapshot {
   return {
     sessionId: record.sessionId,
+    terminalId: record.terminalId,
+    title: record.title,
     cwd: record.cwd,
     output: record.output,
+    sequence: record.sequence,
     running: !record.exited,
     startedAt: record.startedAt,
     exitCode: record.exitCode,
@@ -402,7 +388,6 @@ export async function searchWorkspaceTree(
 ): Promise<WorkspaceTreeEntry[]> {
   const root = await workspaceManager.resolvePathForSession(sessionId, ".");
   const needle = query.trim().toLocaleLowerCase();
-  const outputsOnly = needle === "@outputs";
   const queue = [root.path];
   const matches: WorkspaceTreeEntry[] = [];
   let visited = 0;
@@ -416,26 +401,11 @@ export async function searchWorkspaceTree(
     }
     for (const entry of entries) {
       if (visited++ >= MAX_TREE_ENTRIES) break;
-      if (
-        (IGNORED_NAMES.has(entry.name) &&
-          !(outputsOnly && OUTPUT_DIRECTORIES.has(entry.name))) ||
-        entry.name === ".DS_Store"
-      )
-        continue;
+      if (IGNORED_NAMES.has(entry.name) || entry.name === ".DS_Store") continue;
       const absolute = join(current, entry.name);
       if (entry.isDirectory() && !entry.isSymbolicLink()) queue.push(absolute);
       const rel = relative(root.path, absolute).split(sep).join("/");
-      if (outputsOnly) {
-        if (entry.isDirectory()) continue;
-        const outputDir = rel
-          .split("/")
-          .some((part) => OUTPUT_DIRECTORIES.has(part));
-        if (
-          !outputDir &&
-          !OUTPUT_EXTENSIONS.has(extname(entry.name).toLocaleLowerCase())
-        )
-          continue;
-      } else if (needle && !rel.toLocaleLowerCase().includes(needle)) continue;
+      if (needle && !rel.toLocaleLowerCase().includes(needle)) continue;
       let info: Awaited<ReturnType<typeof stat>> | null = null;
       try {
         info = await stat(absolute);
@@ -738,6 +708,29 @@ function checkpointRoot(sessionId: string): string {
   return join(app.getPath("userData"), "workspace-checkpoints", sessionId);
 }
 
+async function workspaceFingerprint(state: WorkspaceGitState): Promise<string> {
+  const diff = await run(
+    "git",
+    ["-C", state.root, "diff", "--binary", "HEAD", "--"],
+    undefined,
+    { maxBuffer: MAX_CHECKPOINT_TOTAL_BYTES + MAX_CHECKPOINT_FILE_BYTES },
+  );
+  const hash = createHash("sha256").update(diff.stdout);
+  for (const file of state.files
+    .filter((item) => item.untracked)
+    .sort((left, right) => left.path.localeCompare(right.path))) {
+    try {
+      const info = await stat(join(state.root, file.path));
+      hash.update(
+        `\0${file.path}\0${info.size}\0${Math.round(info.mtimeMs)}\0`,
+      );
+    } catch {
+      hash.update(`\0${file.path}\0missing\0`);
+    }
+  }
+  return hash.digest("hex");
+}
+
 async function readCheckpointRecord(
   sessionId: string,
   id: string,
@@ -773,6 +766,7 @@ export async function listWorkspaceCheckpoints(
 export async function createWorkspaceCheckpoint(
   sessionId: string,
   label: string,
+  options: WorkspaceCheckpointOptions = {},
 ): Promise<WorkspaceCheckpoint> {
   const state = await getWorkspaceGitState(sessionId);
   const id = randomUUID();
@@ -825,10 +819,66 @@ export async function createWorkspaceCheckpoint(
       .filter((file) => file.staged)
       .map((file) => file.path),
     untrackedPaths: captured,
+    excludedUntrackedPaths: untracked.filter(
+      (path) => !captured.includes(path),
+    ),
     changedFiles: state.files.length,
+    kind: options.kind ?? "manual",
+    turnIndex: options.turnIndex,
+    hasChanges: options.kind === "turn-start" ? false : undefined,
+    complete: captured.length === untracked.length,
+    fingerprint: await workspaceFingerprint(state),
   };
   await writeFile(
     join(directory, "checkpoint.json"),
+    `${JSON.stringify(record, null, 2)}\n`,
+    "utf8",
+  );
+  if (options.kind === "turn-start") {
+    const automatic = (await listWorkspaceCheckpoints(sessionId)).filter(
+      (checkpoint) =>
+        checkpoint.kind === "turn-start" ||
+        checkpoint.kind === "restore-safety",
+    );
+    const retained = new Set(
+      automatic
+        .filter(
+          (checkpoint) =>
+            checkpoint.id === id ||
+            checkpoint.kind === "restore-safety" ||
+            checkpoint.hasChanges,
+        )
+        .slice(0, MAX_AUTOMATIC_CHECKPOINTS)
+        .map((checkpoint) => checkpoint.id),
+    );
+    await Promise.all(
+      automatic
+        .filter((checkpoint) => !retained.has(checkpoint.id))
+        .map((checkpoint) =>
+          rm(join(checkpointRoot(sessionId), checkpoint.id), {
+            recursive: true,
+            force: true,
+          }),
+        ),
+    );
+  }
+  return record;
+}
+
+export async function markWorkspaceCheckpointChanged(
+  sessionId: string,
+  id: string,
+): Promise<WorkspaceCheckpoint> {
+  const record = await readCheckpointRecord(sessionId, id);
+  let hasChanges = true;
+  if (record.fingerprint) {
+    const current = await getWorkspaceGitState(sessionId);
+    hasChanges = (await workspaceFingerprint(current)) !== record.fingerprint;
+  }
+  if (record.hasChanges === hasChanges) return record;
+  record.hasChanges = hasChanges;
+  await writeFile(
+    join(checkpointRoot(sessionId), id, "checkpoint.json"),
     `${JSON.stringify(record, null, 2)}\n`,
     "utf8",
   );
@@ -840,9 +890,22 @@ export async function restoreWorkspaceCheckpoint(
   id: string,
 ): Promise<WorkspaceGitState> {
   const record = await readCheckpointRecord(sessionId, id);
+  if (record.complete === false) {
+    throw new Error(
+      "This recovery point is incomplete because some untracked files were too large to back up.",
+    );
+  }
   const currentRoot = await repoRootForSession(sessionId);
   if (resolve(currentRoot) !== resolve(record.repoRoot))
     throw new Error("This checkpoint belongs to a different repository.");
+  const safety = await createWorkspaceCheckpoint(sessionId, "Before restore", {
+    kind: "restore-safety",
+  });
+  if (safety.complete === false) {
+    throw new Error(
+      "Restore stopped because the current workspace contains untracked files that could not be backed up safely.",
+    );
+  }
   await run("git", ["-C", currentRoot, "reset", "--hard", record.baseHead]);
   await run("git", ["-C", currentRoot, "clean", "-fd"]);
   if (record.stashCommit) {
@@ -879,66 +942,124 @@ export async function deleteWorkspaceCheckpoint(
 
 export async function startWorkspaceTerminal(
   sessionId: string,
+  terminalId: string,
 ): Promise<WorkspaceTerminalSnapshot> {
-  const existing = terminals.get(sessionId);
+  const existing = getTerminalRecord(sessionId, terminalId);
   if (existing && !existing.exited) return terminalSnapshot(existing);
   const cwd = (await workspaceManager.resolvePathForSession(sessionId, "."))
     .path;
-  const shell = process.env.SHELL || "/bin/zsh";
-  const child = spawn(shell, ["-l"], {
+  // React development mounts can issue the same deterministic initial-tab
+  // request twice. Re-check after the async workspace lookup so that race
+  // still resolves to one PTY rather than leaking a duplicate child process.
+  const concurrentlyStarted = getTerminalRecord(sessionId, terminalId);
+  if (concurrentlyStarted && !concurrentlyStarted.exited) {
+    return terminalSnapshot(concurrentlyStarted);
+  }
+  const shell =
+    process.env.SHELL ||
+    (process.platform === "win32"
+      ? process.env.COMSPEC || "powershell.exe"
+      : "/bin/zsh");
+  // A PTY normally makes POSIX shells interactive automatically, but GUI
+  // launches can still inherit an environment where the shell does not emit
+  // its prompt. Force both login and interactive modes so the terminal always
+  // opens on a visible command line instead of a live-but-blank process.
+  const args = process.platform === "win32" ? [] : ["-l", "-i"];
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+  env.TERM = "xterm-256color";
+  env.COLORTERM = "truecolor";
+  env.TERM_PROGRAM = "amiba";
+  env.TERM_PROGRAM_VERSION = app.getVersion();
+  delete env.NO_COLOR;
+  const child = spawnPty(shell, args, {
     cwd,
-    env: { ...process.env, TERM: "dumb", NO_COLOR: "1" },
-    stdio: "pipe",
+    env,
+    name: "xterm-256color",
+    cols: 100,
+    rows: 30,
   });
   const record: TerminalRecord = {
     sessionId,
+    terminalId,
+    title: `${process.env.USER || process.env.USERNAME || "shell"}@${hostname().split(".")[0] || "local"}`,
     cwd,
     process: child,
     output: "",
+    sequence: 0,
     startedAt: Date.now(),
     exited: false,
   };
-  terminals.set(sessionId, record);
-  child.stdout.on("data", (value) => appendTerminal(record, String(value)));
-  child.stderr.on("data", (value) => appendTerminal(record, String(value)));
-  child.on("error", (error) => appendTerminal(record, `\n${error.message}\n`));
-  child.on("exit", (code) => {
+  setTerminalRecord(record);
+  child.onData((value) => appendTerminal(record, value));
+  child.onExit(({ exitCode }) => {
+    if (getTerminalRecord(sessionId, terminalId) !== record) return;
     record.exited = true;
-    record.exitCode = code ?? undefined;
-    appendTerminal(
-      record,
-      `\n[terminal exited${code == null ? "" : ` ${code}`}]\n`,
-    );
+    record.exitCode = exitCode;
+    appendTerminal(record, `\r\n[terminal exited ${exitCode}]\r\n`);
   });
-  appendTerminal(record, `${cwd}\n`);
   return terminalSnapshot(record);
 }
 
-export async function writeWorkspaceTerminal(
+export function writeWorkspaceTerminal(
   sessionId: string,
+  terminalId: string,
   input: string,
-): Promise<WorkspaceTerminalSnapshot> {
-  const record = terminals.get(sessionId);
-  if (!record || record.exited) throw new Error("The terminal is not running.");
-  record.process.stdin.write(input);
-  return terminalSnapshot(record);
+): void {
+  const record = getTerminalRecord(sessionId, terminalId);
+  if (!record || record.exited) return;
+  record.process.write(input);
+}
+
+export function resizeWorkspaceTerminal(
+  sessionId: string,
+  terminalId: string,
+  columns: number,
+  rows: number,
+): void {
+  const record = getTerminalRecord(sessionId, terminalId);
+  if (!record || record.exited) return;
+  const safeColumns = Math.max(2, Math.min(1_000, Math.floor(columns)));
+  const safeRows = Math.max(1, Math.min(500, Math.floor(rows)));
+  record.process.resize(safeColumns, safeRows);
 }
 
 export function getWorkspaceTerminal(
   sessionId: string,
+  terminalId: string,
 ): WorkspaceTerminalSnapshot | null {
-  const record = terminals.get(sessionId);
+  const record = getTerminalRecord(sessionId, terminalId);
   return record ? terminalSnapshot(record) : null;
 }
 
-export async function stopWorkspaceTerminal(sessionId: string): Promise<void> {
-  const record = terminals.get(sessionId);
+export function listWorkspaceTerminals(
+  sessionId: string,
+): WorkspaceTerminalSnapshot[] {
+  return [...(terminals.get(sessionId)?.values() ?? [])]
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map(terminalSnapshot);
+}
+
+export async function stopWorkspaceTerminal(
+  sessionId: string,
+  terminalId: string,
+): Promise<void> {
+  const record = getTerminalRecord(sessionId, terminalId);
   if (!record) return;
-  if (!record.exited) record.process.kill("SIGTERM");
-  terminals.delete(sessionId);
+  deleteTerminalRecord(sessionId, terminalId);
+  if (!record.exited) {
+    record.exited = true;
+    record.process.kill();
+  }
 }
 
 export async function disposeWorkspaceDevelopment(): Promise<void> {
-  for (const sessionId of [...terminals.keys()])
-    await stopWorkspaceTerminal(sessionId);
+  for (const [sessionId, records] of [...terminals]) {
+    for (const terminalId of [...records.keys()]) {
+      await stopWorkspaceTerminal(sessionId, terminalId);
+    }
+  }
 }

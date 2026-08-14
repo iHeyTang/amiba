@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _load_mention_sources() -> None:
     """Load legacy mention sources + wire their resolver skills.
 
-    New mention capabilities belong to Applets. We still load
+    New mention capabilities belong to Extensions. We still load
     ``~/.hermes/mention-sources/`` here so ``/mention-sources/*`` +
     ``/hermes/mention-resources`` keep working for existing users, and wire
     each source's resolver skill. A failure degrades to an empty registry.

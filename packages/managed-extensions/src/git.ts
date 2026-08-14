@@ -23,9 +23,9 @@ export async function initializeRepository(projectPath: string): Promise<string>
   await mkdir(projectPath, { recursive: true })
   await git(projectPath, ["init", "-b", "main"])
   await git(projectPath, ["config", "user.name", "Amiba Managed Apps"])
-  await git(projectPath, ["config", "user.email", "managed-apps@amiba.local"])
+  await git(projectPath, ["config", "user.email", "managed-extensions@amiba.local"])
   await git(projectPath, ["add", "-A"])
-  await git(projectPath, ["commit", "--allow-empty", "-m", "Create managed Applet"])
+  await git(projectPath, ["commit", "--allow-empty", "-m", "Create managed Extension"])
   return git(projectPath, ["rev-parse", "HEAD"])
 }
 
@@ -59,7 +59,7 @@ export async function commitDraft(opts: {
     "commit",
     "--allow-empty",
     "-m",
-    opts.summary || "Improve managed Applet",
+    opts.summary || "Improve managed Extension",
   ])
   const commit = await git(opts.workspacePath, ["rev-parse", "HEAD"])
   await git(opts.workspacePath, [

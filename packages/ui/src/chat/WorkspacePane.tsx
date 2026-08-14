@@ -33,7 +33,6 @@ import {
   type WorkspaceProject,
   type WorkspaceTerminalSnapshot,
   type WorkspaceTreeEntry,
-  type WorkspaceWorktree,
 } from "@amiba/platform";
 import {
   Atom,
@@ -44,6 +43,7 @@ import {
   CircleAlert,
   Code2,
   CodeXml,
+  Columns2,
   Copy,
   File,
   ExternalLink,
@@ -54,18 +54,20 @@ import {
   FolderTree,
   GitBranch,
   GitCommitHorizontal,
+  Globe2,
   Hash,
   History,
+  List,
   MoreHorizontal,
-  PackageOpen,
+  PanelBottom,
   PanelRight,
-  Play,
   Plus,
   RotateCw,
   Search,
   Send,
   Square,
   Terminal,
+  Trash2,
   Undo2,
   X,
   type LucideIcon,
@@ -80,11 +82,16 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type UIEvent as ReactUIEvent,
 } from "react";
 import { tags } from "@lezer/highlight";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal as XtermTerminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
 
 import {
   Button,
+  CascadeMenu,
   Input,
   Popover,
   PopoverContent,
@@ -95,21 +102,37 @@ import {
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
 import { KanbanStatusBadge } from "./KanbanStatusBadge";
+import { useDocumentTheme } from "../theme";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
+  workspaceFileTargets,
   workspaceTabLabel,
+  type WorkspaceReviewResource,
   type WorkspaceReviewEntry,
   type WorkspaceReviewFile,
   type WorkspaceReviewGap,
   type WorkspaceReviewLine,
+  type WorkspaceReviewRow,
 } from "./workspace-review";
+import { workspaceTerminalTheme } from "./workspace-terminal-theme";
+import {
+  createEmbeddedBrowserResource,
+  EmbeddedBrowserWorkspace,
+  type EmbeddedBrowserResource,
+} from "./EmbeddedBrowserPane";
+
+export { workspaceFileTargets } from "./workspace-review";
 
 const PANE_OPEN_KEY = "settings.chat.workspacePaneOpen";
 const PANE_WIDTH_KEY = "settings.chat.workspacePaneWidth";
+const TERMINAL_HEIGHT_KEY = "settings.chat.workspaceTerminalHeight";
 const DEFAULT_PANE_WIDTH = 520;
 const MIN_PANE_WIDTH = 360;
 const MAX_PANE_WIDTH = 880;
+const DEFAULT_TERMINAL_HEIGHT = 280;
+const MIN_TERMINAL_HEIGHT = 160;
+const MAX_TERMINAL_HEIGHT = 640;
 
 const WORKSPACE_CODE_HIGHLIGHT = HighlightStyle.define([
   {
@@ -155,12 +178,7 @@ type FileResource = {
   sourceToolCallId?: string;
 };
 
-type DiffResource = {
-  kind: "diff";
-  reviewId: string;
-  scope: "turn" | "tool";
-  entries: WorkspaceReviewEntry[];
-};
+type DiffResource = WorkspaceReviewResource;
 
 export type CodeExecutionResource = {
   kind: "code";
@@ -178,7 +196,8 @@ export type CodeExecutionResource = {
 export type WorkspacePaneResource =
   | FileResource
   | DiffResource
-  | CodeExecutionResource;
+  | CodeExecutionResource
+  | EmbeddedBrowserResource;
 
 interface WorkspacePaneTab {
   id: string;
@@ -198,22 +217,36 @@ interface WorkspacePaneContextValue {
   width: number;
   tabs: WorkspacePaneTab[];
   activeTab: WorkspacePaneTab | null;
+  browserRequestVersion: number;
+  collaborationRequestVersion: number;
   sessionId: string;
   files?: WorkspaceFilesAdapter;
   development?: WorkspaceDevelopmentAdapter;
   workspaces?: WorkspaceAdapter;
   liveAgents: HermesLiveAgent[];
+  checkpoints: WorkspaceCheckpoint[];
   setOpen(open: boolean): void;
   toggle(): void;
   setWidth(width: number): void;
   selectTab(id: string): void;
   closeTab(id: string): void;
+  openBrowser(): void;
+  newBrowserTab(): void;
+  updateBrowserTab(
+    browserTabId: string,
+    patch: Partial<EmbeddedBrowserResource>,
+  ): void;
   openFile(path: string, line?: number): void;
-  beginTurn(): void;
+  openReview(resource: WorkspaceReviewResource): void;
+  beginTurn(turnIndex: number): Promise<void>;
+  refreshCheckpoints(): Promise<void>;
+  restoreCheckpoint(checkpointId: string): Promise<void>;
+  restoreBeforeTurn(turnIndex: number): Promise<void>;
+  deleteCheckpoint(checkpointId: string): Promise<void>;
   canOpenToolEvent(event: HermesToolProgress): boolean;
   openToolEvent(event: HermesToolProgress): void;
-  observeToolEvent(event: HermesToolProgress): void;
-  observeLiveAgent(event: HermesLiveAgent): void;
+  observeToolEvent(event: HermesToolProgress, eventSessionId?: string): void;
+  observeLiveAgent(event: HermesLiveAgent, eventSessionId?: string): void;
   setLiveAgents(agents: HermesLiveAgent[]): void;
 }
 
@@ -223,17 +256,28 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   width: DEFAULT_PANE_WIDTH,
   tabs: [],
   activeTab: null,
+  browserRequestVersion: 0,
+  collaborationRequestVersion: 0,
   sessionId: "",
   development: undefined,
   workspaces: undefined,
   liveAgents: [],
+  checkpoints: [],
   setOpen: () => {},
   toggle: () => {},
   setWidth: () => {},
   selectTab: () => {},
   closeTab: () => {},
+  openBrowser: () => {},
+  newBrowserTab: () => {},
+  updateBrowserTab: () => {},
   openFile: () => {},
-  beginTurn: () => {},
+  openReview: () => {},
+  beginTurn: async () => {},
+  refreshCheckpoints: async () => {},
+  restoreCheckpoint: async () => {},
+  restoreBeforeTurn: async () => {},
+  deleteCheckpoint: async () => {},
   canOpenToolEvent: () => false,
   openToolEvent: () => {},
   observeToolEvent: () => {},
@@ -269,26 +313,6 @@ function firstString(
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return "";
-}
-
-export function workspaceFileTargets(event: HermesToolProgress): string[] {
-  const args = event.args ?? {};
-  const result = recordOf(decodeResult(event.result));
-  const targets: string[] = [];
-  const add = (value: unknown) => {
-    if (typeof value !== "string" || !value.trim()) return;
-    if (!targets.includes(value.trim())) targets.push(value.trim());
-  };
-
-  if (result) {
-    add(result.resolved_path);
-    if (Array.isArray(result.files_modified)) {
-      for (const path of result.files_modified) add(path);
-    }
-    add(result.path);
-  }
-  add(firstString(args, "path", "file", "filepath"));
-  return targets;
 }
 
 function stringField(
@@ -402,9 +426,20 @@ function isMutationTool(event: HermesToolProgress): boolean {
   return event.tool === "write_file" || event.tool === "patch";
 }
 
+export function canMutateWorkspaceTool(event: HermesToolProgress): boolean {
+  return (
+    isMutationTool(event) ||
+    event.tool === "terminal" ||
+    event.tool === "process" ||
+    event.tool === "shell" ||
+    event.tool === "execute_code"
+  );
+}
+
 function resourceTitle(resource: WorkspacePaneResource): string {
   if (resource.kind === "file") return workspaceTabLabel(resource.path);
   if (resource.kind === "code") return languageLabel(resource.language);
+  if (resource.kind === "browser") return resource.title || "New tab";
   return "Review";
 }
 
@@ -440,6 +475,20 @@ function WorkspaceTabIcon({
   if (resource.kind === "code") {
     return (
       <Code2
+        className={cn("text-muted-foreground/80", className)}
+        aria-hidden
+      />
+    );
+  }
+  if (resource.kind === "browser") {
+    return resource.favicon ? (
+      <img
+        src={resource.favicon}
+        alt=""
+        className={cn("rounded-sm", className)}
+      />
+    ) : (
+      <Globe2
         className={cn("text-muted-foreground/80", className)}
         aria-hidden
       />
@@ -549,6 +598,9 @@ function WorkspaceTabButton({
 function resourceKey(resource: WorkspacePaneResource): string {
   if (resource.kind === "file") return `file:${resource.path}`;
   if (resource.kind === "code") return `code:${resource.toolCallId}`;
+  if (resource.kind === "browser") {
+    return `browser:${resource.browserTabId}`;
+  }
   return `diff:${resource.reviewId}`;
 }
 
@@ -591,9 +643,25 @@ function clampPaneWidth(value: number): number {
   return Math.min(MAX_PANE_WIDTH, Math.max(MIN_PANE_WIDTH, Math.round(value)));
 }
 
+function clampTerminalHeight(value: number): number {
+  const viewportMaximum =
+    typeof window === "undefined"
+      ? MAX_TERMINAL_HEIGHT
+      : Math.max(
+          MIN_TERMINAL_HEIGHT,
+          Math.min(MAX_TERMINAL_HEIGHT, window.innerHeight - 160),
+        );
+  return Math.min(
+    viewportMaximum,
+    Math.max(MIN_TERMINAL_HEIGHT, Math.round(value)),
+  );
+}
+
 function emptySessionState(): SessionPaneState {
   return { tabs: [], activeTabId: null, liveAgents: [] };
 }
+
+const EMPTY_SESSION_KEY = "__empty_workspace__";
 
 export function WorkspacePaneProvider({
   capability,
@@ -606,20 +674,27 @@ export function WorkspacePaneProvider({
 }) {
   const [open, setOpenState] = useState(false);
   const [width, setWidthState] = useState(DEFAULT_PANE_WIDTH);
+  const [browserRequestVersion, setBrowserRequestVersion] = useState(0);
+  const [collaborationRequestVersion, setCollaborationRequestVersion] =
+    useState(0);
   const [sessionStates, setSessionStates] = useState<
     Record<string, SessionPaneState>
   >({});
-  const autoOpenedToolIds = useRef(new Set<string>());
-  const activeTurnReviewIds = useRef(new Map<string, string>());
-  const turnSequence = useRef(0);
-  const lastAutomaticCheckpointAt = useRef(new Map<string, number>());
-  const enabled = Boolean(capability && sessionId);
-  const activeState = sessionStates[sessionId] ?? emptySessionState();
+  const [checkpointStates, setCheckpointStates] = useState<
+    Record<string, WorkspaceCheckpoint[]>
+  >({});
+  const activeTurnCheckpointIds = useRef(new Map<string, string>());
+  const markedCheckpointIds = useRef(new Set<string>());
+  const browserAdapter = getPlatform().embeddedBrowser;
+  const enabled = Boolean((capability && sessionId) || browserAdapter);
+  const stateKey = sessionId || EMPTY_SESSION_KEY;
+  const activeState = sessionStates[stateKey] ?? emptySessionState();
+  const checkpoints = checkpointStates[sessionId] ?? [];
   const activeTab =
     activeState.tabs.find((tab) => tab.id === activeState.activeTabId) ?? null;
 
   useEffect(() => {
-    if (!capability) return;
+    if (!enabled) return;
     let cancelled = false;
     const storage = getPlatform().storage;
     void storage.get([PANE_OPEN_KEY, PANE_WIDTH_KEY]).then((result) => {
@@ -637,17 +712,93 @@ export function WorkspacePaneProvider({
     return () => {
       cancelled = true;
     };
-  }, [capability]);
+  }, [enabled]);
 
   const updateActiveSession = useCallback(
     (updater: (state: SessionPaneState) => SessionPaneState) => {
-      if (!sessionId) return;
       setSessionStates((current) => ({
         ...current,
-        [sessionId]: updater(current[sessionId] ?? emptySessionState()),
+        [stateKey]: updater(current[stateKey] ?? emptySessionState()),
       }));
     },
-    [sessionId],
+    [stateKey],
+  );
+
+  const updateSessionCheckpoints = useCallback(
+    (
+      targetSessionId: string,
+      updater: (checkpoints: WorkspaceCheckpoint[]) => WorkspaceCheckpoint[],
+    ) => {
+      if (!targetSessionId) return;
+      setCheckpointStates((current) => ({
+        ...current,
+        [targetSessionId]: updater(current[targetSessionId] ?? []),
+      }));
+    },
+    [],
+  );
+
+  const updateCheckpoints = useCallback(
+    (
+      updater: (checkpoints: WorkspaceCheckpoint[]) => WorkspaceCheckpoint[],
+    ) => {
+      updateSessionCheckpoints(sessionId, updater);
+    },
+    [sessionId, updateSessionCheckpoints],
+  );
+
+  const refreshCheckpoints = useCallback(async () => {
+    const development = capability?.development;
+    if (!development || !sessionId) return;
+    const next = await development.listCheckpoints(sessionId);
+    updateCheckpoints(() => next);
+  }, [capability?.development, sessionId, updateCheckpoints]);
+
+  useEffect(() => {
+    if (!capability?.development || !sessionId) return;
+    void refreshCheckpoints().catch(() => updateCheckpoints(() => []));
+  }, [
+    capability?.development,
+    refreshCheckpoints,
+    sessionId,
+    updateCheckpoints,
+  ]);
+
+  const restoreCheckpoint = useCallback(
+    async (checkpointId: string) => {
+      const development = capability?.development;
+      if (!development || !sessionId) return;
+      await development.restoreCheckpoint(sessionId, checkpointId);
+      await refreshCheckpoints();
+    },
+    [capability?.development, refreshCheckpoints, sessionId],
+  );
+
+  const restoreBeforeTurn = useCallback(
+    async (turnIndex: number) => {
+      const checkpoint = checkpoints.find(
+        (item) =>
+          item.kind === "turn-start" &&
+          item.turnIndex === turnIndex &&
+          item.hasChanges &&
+          item.complete !== false,
+      );
+      if (!checkpoint) throw new Error("Recovery point is unavailable.");
+      await restoreCheckpoint(checkpoint.id);
+    },
+    [checkpoints, restoreCheckpoint],
+  );
+
+  const deleteCheckpoint = useCallback(
+    async (checkpointId: string) => {
+      const development = capability?.development;
+      if (!development || !sessionId) return;
+      await development.deleteCheckpoint(sessionId, checkpointId);
+      updateCheckpoints((current) =>
+        current.filter((item) => item.id !== checkpointId),
+      );
+    },
+    [capability?.development, sessionId, updateCheckpoints],
   );
 
   const persistOpen = useCallback((next: boolean) => {
@@ -688,19 +839,22 @@ export function WorkspacePaneProvider({
         if (existing) {
           const existingEntries =
             existing.resource.kind === "diff" ? existing.resource.entries : [];
+          const mergedDiffEntries =
+            existing.resource.kind === "diff" && resource.kind === "diff"
+              ? [
+                  ...new Map(
+                    [...existingEntries, ...resource.entries].map((entry) => [
+                      entry.toolCallId,
+                      entry,
+                    ]),
+                  ).values(),
+                ]
+              : [];
           const nextResource =
             existing.resource.kind === "diff" && resource.kind === "diff"
               ? {
                   ...resource,
-                  entries: [
-                    ...existingEntries,
-                    ...resource.entries.filter(
-                      (entry) =>
-                        !existingEntries.some(
-                          (current) => current.toolCallId === entry.toolCallId,
-                        ),
-                    ),
-                  ],
+                  entries: mergedDiffEntries,
                 }
               : resource;
           return {
@@ -757,32 +911,153 @@ export function WorkspacePaneProvider({
     [openResource],
   );
 
-  const beginTurn = useCallback(() => {
-    if (!sessionId) return;
-    turnSequence.current += 1;
-    activeTurnReviewIds.current.set(
+  const openReview = useCallback(
+    (resource: WorkspaceReviewResource) => openResource(resource, "user"),
+    [openResource],
+  );
+
+  const activateBrowser = useCallback(
+    (forceNew: boolean) => {
+      if (!browserAdapter) return;
+      updateActiveSession((state) => {
+        const existing = [...state.tabs]
+          .reverse()
+          .find((tab) => tab.resource.kind === "browser");
+        if (existing && !forceNew) {
+          return { ...state, activeTabId: existing.id };
+        }
+        const resource = createEmbeddedBrowserResource();
+        const tab: WorkspacePaneTab = {
+          id: resourceKey(resource),
+          resource,
+          pinned: true,
+        };
+        return {
+          ...state,
+          tabs: [...state.tabs, tab].slice(-12),
+          activeTabId: tab.id,
+        };
+      });
+      setBrowserRequestVersion((current) => current + 1);
+      persistOpen(true);
+    },
+    [browserAdapter, persistOpen, updateActiveSession],
+  );
+
+  const openBrowser = useCallback(
+    () => activateBrowser(false),
+    [activateBrowser],
+  );
+  const newBrowserTab = useCallback(
+    () => activateBrowser(true),
+    [activateBrowser],
+  );
+
+  useEffect(() => {
+    if (!browserAdapter) return;
+    return browserAdapter.onCreateRequested(newBrowserTab);
+  }, [browserAdapter, newBrowserTab]);
+
+  const updateBrowserTab = useCallback(
+    (browserTabId: string, patch: Partial<EmbeddedBrowserResource>) => {
+      updateActiveSession((state) => ({
+        ...state,
+        tabs: state.tabs.map((tab) =>
+          tab.resource.kind === "browser" &&
+          tab.resource.browserTabId === browserTabId
+            ? { ...tab, resource: { ...tab.resource, ...patch } }
+            : tab,
+        ),
+      }));
+    },
+    [updateActiveSession],
+  );
+
+  useEffect(() => {
+    if (!browserAdapter) return;
+    return browserAdapter.onFocusRequested(({ tabId }) => {
+      updateActiveSession((state) => {
+        const tab = state.tabs.find(
+          (candidate) =>
+            candidate.resource.kind === "browser" &&
+            candidate.resource.browserTabId === tabId,
+        );
+        return tab ? { ...state, activeTabId: tab.id } : state;
+      });
+      setBrowserRequestVersion((current) => current + 1);
+      persistOpen(true);
+    });
+  }, [browserAdapter, persistOpen, updateActiveSession]);
+
+  const beginTurn = useCallback(
+    async (turnIndex: number) => {
+      if (!sessionId) return;
+      updateActiveSession((state) => ({
+        ...state,
+        liveAgents: state.liveAgents.filter(
+          (agent) => agent.status === "running" || agent.status === "queued",
+        ),
+      }));
+      const development = capability?.development;
+      if (development) {
+        try {
+          const checkpoint = await development.createCheckpoint(
+            sessionId,
+            `Before task ${turnIndex + 1}`,
+            { kind: "turn-start", turnIndex },
+          );
+          activeTurnCheckpointIds.current.set(sessionId, checkpoint.id);
+          updateCheckpoints((current) => [
+            checkpoint,
+            ...current.filter((item) => item.id !== checkpoint.id),
+          ]);
+        } catch {
+          activeTurnCheckpointIds.current.delete(sessionId);
+        }
+      }
+    },
+    [
+      capability?.development,
       sessionId,
-      `turn:${sessionId}:${turnSequence.current}`,
-    );
-    updateActiveSession((state) => ({
-      ...state,
-      liveAgents: state.liveAgents.filter(
-        (agent) => agent.status === "running" || agent.status === "queued",
-      ),
-    }));
-    const development = capability?.development;
-    if (development) {
+      updateActiveSession,
+      updateCheckpoints,
+    ],
+  );
+
+  const markActiveCheckpointChanged = useCallback(
+    (targetSessionId: string) => {
+      const development = capability?.development;
+      const checkpointId = activeTurnCheckpointIds.current.get(targetSessionId);
+      if (
+        !development ||
+        !checkpointId ||
+        markedCheckpointIds.current.has(checkpointId)
+      ) {
+        return;
+      }
+      markedCheckpointIds.current.add(checkpointId);
       void development
-        .createCheckpoint(sessionId, `Before turn ${turnSequence.current}`)
-        .then(() =>
-          lastAutomaticCheckpointAt.current.set(sessionId, Date.now()),
-        )
-        .catch(() => {});
-    }
-  }, [capability?.development, sessionId, updateActiveSession]);
+        .markCheckpointChanged(targetSessionId, checkpointId)
+        .then((checkpoint) => {
+          markedCheckpointIds.current.delete(checkpointId);
+          updateSessionCheckpoints(targetSessionId, (current) =>
+            current.map((item) =>
+              item.id === checkpoint.id ? checkpoint : item,
+            ),
+          );
+        })
+        .catch(() => markedCheckpointIds.current.delete(checkpointId));
+    },
+    [capability?.development, updateSessionCheckpoints],
+  );
 
   const observeLiveAgent = useCallback(
-    (event: HermesLiveAgent) => {
+    (event: HermesLiveAgent, eventSessionId = sessionId) => {
+      const targetSessionId = eventSessionId || sessionId;
+      if (event.filesWritten.length > 0) {
+        markActiveCheckpointChanged(targetSessionId);
+      }
+      if (targetSessionId !== sessionId) return;
       updateActiveSession((state) => {
         const index = state.liveAgents.findIndex(
           (agent) => agent.id === event.id,
@@ -795,7 +1070,7 @@ export function WorkspacePaneProvider({
         return { ...state, liveAgents };
       });
     },
-    [updateActiveSession],
+    [markActiveCheckpointChanged, sessionId, updateActiveSession],
   );
 
   const setLiveAgents = useCallback(
@@ -860,7 +1135,20 @@ export function WorkspacePaneProvider({
   );
 
   const observeToolEvent = useCallback(
-    (event: HermesToolProgress) => {
+    (event: HermesToolProgress, eventSessionId = sessionId) => {
+      const targetSessionId = eventSessionId || sessionId;
+      if (event.status === "completed" && canMutateWorkspaceTool(event)) {
+        markActiveCheckpointChanged(targetSessionId);
+      }
+      if (targetSessionId !== sessionId) return;
+      if (
+        event.tool === "kanban_create" &&
+        event.status === "completed" &&
+        !event.error
+      ) {
+        setCollaborationRequestVersion((version) => version + 1);
+        persistOpen(true);
+      }
       const codeExecution = workspaceCodeExecution(event);
       if (capability && codeExecution) {
         updateActiveSession((state) => ({
@@ -871,60 +1159,15 @@ export function WorkspacePaneProvider({
               : tab,
           ),
         }));
-        return;
-      }
-      if (
-        !capability ||
-        event.status !== "completed" ||
-        event.error ||
-        !isMutationTool(event) ||
-        autoOpenedToolIds.current.has(event.toolCallId)
-      ) {
-        return;
-      }
-      const paths = workspaceFileTargets(event);
-      if (paths.length === 0) return;
-      autoOpenedToolIds.current.add(event.toolCallId);
-      const development = capability?.development;
-      const lastCheckpoint =
-        lastAutomaticCheckpointAt.current.get(sessionId) ?? 0;
-      if (development && Date.now() - lastCheckpoint > 1_000) {
-        lastAutomaticCheckpointAt.current.set(sessionId, Date.now());
-        void development
-          .createCheckpoint(sessionId, "After AI change")
-          .catch(() => {});
-      }
-      if (event.inlineDiff?.trim()) {
-        const reviewId =
-          activeTurnReviewIds.current.get(sessionId) ??
-          `turn:${sessionId}:${event.toolCallId}`;
-        openResource(
-          {
-            kind: "diff",
-            reviewId,
-            scope: "turn",
-            entries: [
-              {
-                toolCallId: event.toolCallId,
-                diff: event.inlineDiff,
-                paths,
-              },
-            ],
-          },
-          "automatic",
-        );
-      } else {
-        openResource(
-          {
-            kind: "file",
-            path: paths[0]!,
-            sourceToolCallId: event.toolCallId,
-          },
-          "automatic",
-        );
       }
     },
-    [capability, openResource, sessionId, updateActiveSession],
+    [
+      capability,
+      markActiveCheckpointChanged,
+      persistOpen,
+      sessionId,
+      updateActiveSession,
+    ],
   );
 
   const value = useMemo<WorkspacePaneContextValue>(
@@ -934,11 +1177,14 @@ export function WorkspacePaneProvider({
       width,
       tabs: activeState.tabs,
       activeTab,
+      browserRequestVersion,
+      collaborationRequestVersion,
       sessionId,
       files: capability?.files,
       development: capability?.development,
       workspaces: capability?.workspaces,
       liveAgents: activeState.liveAgents,
+      checkpoints,
       setOpen: persistOpen,
       toggle: () => persistOpen(!open),
       setWidth,
@@ -958,8 +1204,16 @@ export function WorkspacePaneProvider({
           const fallback = tabs[Math.max(0, index - 1)] ?? tabs[0] ?? null;
           return { ...state, tabs, activeTabId: fallback?.id ?? null };
         }),
+      openBrowser,
+      newBrowserTab,
+      updateBrowserTab,
       openFile,
+      openReview,
       beginTurn,
+      refreshCheckpoints,
+      restoreCheckpoint,
+      restoreBeforeTurn,
+      deleteCheckpoint,
       canOpenToolEvent,
       openToolEvent,
       observeToolEvent,
@@ -970,20 +1224,31 @@ export function WorkspacePaneProvider({
       activeState.tabs,
       activeState.liveAgents,
       activeTab,
+      browserRequestVersion,
+      collaborationRequestVersion,
       beginTurn,
       canOpenToolEvent,
       capability,
+      checkpoints,
+      deleteCheckpoint,
       enabled,
       observeLiveAgent,
       observeToolEvent,
+      openBrowser,
       open,
       openFile,
+      newBrowserTab,
+      openReview,
       openToolEvent,
       persistOpen,
+      refreshCheckpoints,
+      restoreBeforeTurn,
+      restoreCheckpoint,
       sessionId,
       setLiveAgents,
       setWidth,
       updateActiveSession,
+      updateBrowserTab,
       width,
     ],
   );
@@ -999,14 +1264,27 @@ export function useWorkspacePane(): WorkspacePaneContextValue {
   return useContext(WorkspacePaneContext);
 }
 
-export function WorkspacePaneToggle({ className }: { className?: string }) {
+export function WorkspacePaneToggle({
+  className,
+  onBeforeToggle,
+  showUnavailable = false,
+}: {
+  className?: string;
+  onBeforeToggle?: () => void;
+  showUnavailable?: boolean;
+}) {
   const pane = useWorkspacePane();
   const { t } = useT();
-  if (!pane.enabled) return null;
+  if (!pane.enabled && !showUnavailable) return null;
   return (
     <button
       type="button"
-      onClick={pane.toggle}
+      disabled={!pane.enabled}
+      onClick={() => {
+        if (!pane.enabled) return;
+        onBeforeToggle?.();
+        pane.toggle();
+      }}
       title={pane.open ? t("workspacePane.collapse") : t("workspacePane.open")}
       aria-label={
         pane.open ? t("workspacePane.collapse") : t("workspacePane.open")
@@ -1016,6 +1294,7 @@ export function WorkspacePaneToggle({ className }: { className?: string }) {
       className={cn(
         "app-no-drag relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
         "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "disabled:pointer-events-none disabled:opacity-30",
         pane.open && "bg-foreground/5 text-foreground",
         className,
       )}
@@ -1324,10 +1603,12 @@ function WorkspaceFileView({
   resource,
   sessionId,
   files,
+  showHeader = true,
 }: {
   resource: FileResource;
   sessionId: string;
   files: WorkspaceFilesAdapter;
+  showHeader?: boolean;
 }) {
   const { t } = useT();
   const [document, setDocument] = useState<WorkspaceFileDocument | null>(null);
@@ -1374,40 +1655,42 @@ function WorkspaceFileView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PreviewHeader
-        icon={FileCode2}
-        title={
-          <span className="font-mono" title={targetPath}>
-            {displayPath}
-          </span>
-        }
-        status={
-          document ? (
-            <span className="font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground/70">
-              {formatBytes(document.size)}
+      {showHeader && (
+        <PreviewHeader
+          icon={FileCode2}
+          title={
+            <span className="font-mono" title={targetPath}>
+              {displayPath}
             </span>
-          ) : null
-        }
-        primaryAction={{
-          icon: Copy,
-          label: t("workspacePane.copyPath"),
-          onSelect: () => void navigator.clipboard.writeText(targetPath),
-        }}
-        moreActions={[
-          {
-            icon: FolderOpen,
-            label: t("workspacePane.revealFile"),
-            onSelect: () =>
-              void files.reveal(sessionId, targetPath).catch(() => {}),
-          },
-          {
-            icon: ExternalLink,
-            label: t("workspacePane.openExternal"),
-            onSelect: () =>
-              void files.openExternal(sessionId, targetPath).catch(() => {}),
-          },
-        ]}
-      />
+          }
+          status={
+            document ? (
+              <span className="font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground/70">
+                {formatBytes(document.size)}
+              </span>
+            ) : null
+          }
+          primaryAction={{
+            icon: Copy,
+            label: t("workspacePane.copyPath"),
+            onSelect: () => void navigator.clipboard.writeText(targetPath),
+          }}
+          moreActions={[
+            {
+              icon: FolderOpen,
+              label: t("workspacePane.revealFile"),
+              onSelect: () =>
+                void files.reveal(sessionId, targetPath).catch(() => {}),
+            },
+            {
+              icon: ExternalLink,
+              label: t("workspacePane.openExternal"),
+              onSelect: () =>
+                void files.openExternal(sessionId, targetPath).catch(() => {}),
+            },
+          ]}
+        />
+      )}
       {loading && !document ? (
         <div className="flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">
           {t("workspacePane.loadingFile")}
@@ -1578,11 +1861,20 @@ function CodeExecutionView({ resource }: { resource: CodeExecutionResource }) {
   );
 }
 
-function ReviewCodeRow({ line }: { line: WorkspaceReviewLine }) {
+type ReviewViewMode = "unified" | "split";
+
+function unifiedLineNumber(line: WorkspaceReviewLine): number | null {
+  if (line.kind === "deletion") return line.oldLine;
+  return line.newLine ?? line.oldLine;
+}
+
+function ReviewUnifiedCodeRow({ line }: { line: WorkspaceReviewLine }) {
   if (line.kind === "meta") {
     return (
-      <div className="grid min-w-max grid-cols-[40px_40px_minmax(320px,1fr)] bg-muted/18 text-muted-foreground/55">
-        <span />
+      <div
+        data-review-row="unified"
+        className="grid min-w-full grid-cols-[48px_minmax(320px,1fr)] bg-muted/18 text-muted-foreground/55"
+      >
         <span />
         <span className="px-3 py-0.5">{line.content}</span>
       </div>
@@ -1591,8 +1883,9 @@ function ReviewCodeRow({ line }: { line: WorkspaceReviewLine }) {
 
   return (
     <div
+      data-review-row="unified"
       className={cn(
-        "grid min-w-max grid-cols-[40px_40px_minmax(320px,1fr)]",
+        "grid min-w-full grid-cols-[48px_minmax(320px,1fr)]",
         line.kind === "addition" &&
           "bg-emerald-500/[0.11] text-emerald-950 dark:text-emerald-50",
         line.kind === "deletion" &&
@@ -1600,24 +1893,68 @@ function ReviewCodeRow({ line }: { line: WorkspaceReviewLine }) {
       )}
     >
       <span
+        data-review-line-number
         className={cn(
           "select-none border-r border-border/20 pr-2 text-right text-muted-foreground/42",
           line.kind === "deletion" && "border-l-2 border-l-red-500",
-        )}
-      >
-        {line.oldLine ?? ""}
-      </span>
-      <span
-        className={cn(
-          "select-none border-r border-border/20 pr-2 text-right text-muted-foreground/42",
           line.kind === "addition" && "border-l-2 border-l-emerald-500",
         )}
       >
-        {line.newLine ?? ""}
+        {unifiedLineNumber(line) ?? ""}
       </span>
       <span className="whitespace-pre px-3">{line.content || " "}</span>
     </div>
   );
+}
+
+interface ReviewSplitLineRow {
+  kind: "line";
+  oldLine: WorkspaceReviewLine | null;
+  newLine: WorkspaceReviewLine | null;
+}
+
+type ReviewSplitRow =
+  | ReviewSplitLineRow
+  | WorkspaceReviewGap
+  | WorkspaceReviewLine;
+
+function splitReviewRows(rows: WorkspaceReviewRow[]): ReviewSplitRow[] {
+  const result: ReviewSplitRow[] = [];
+  let index = 0;
+
+  while (index < rows.length) {
+    const row = rows[index]!;
+    if (row.kind === "gap" || row.kind === "meta") {
+      result.push(row);
+      index += 1;
+      continue;
+    }
+    if (row.kind === "context") {
+      result.push({ kind: "line", oldLine: row, newLine: row });
+      index += 1;
+      continue;
+    }
+
+    const deletions: WorkspaceReviewLine[] = [];
+    const additions: WorkspaceReviewLine[] = [];
+    while (index < rows.length) {
+      const change = rows[index]!;
+      if (change.kind === "deletion") deletions.push(change);
+      else if (change.kind === "addition") additions.push(change);
+      else break;
+      index += 1;
+    }
+    const lineCount = Math.max(deletions.length, additions.length);
+    for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
+      result.push({
+        kind: "line",
+        oldLine: deletions[lineIndex] ?? null,
+        newLine: additions[lineIndex] ?? null,
+      });
+    }
+  }
+
+  return result;
 }
 
 function ReviewGapRow({
@@ -1670,24 +2007,25 @@ function ReviewGapRow({
         type="button"
         onClick={() => void toggle()}
         disabled={!files || loading}
-        className="grid min-w-full grid-cols-[80px_minmax(320px,1fr)] bg-muted/45 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted/65 hover:text-foreground disabled:cursor-default"
+        className="grid min-w-full grid-cols-[48px_minmax(320px,1fr)] bg-muted/45 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted/65 hover:text-foreground disabled:cursor-default"
         title={error ? t("workspacePane.contextUnavailable") : undefined}
       >
-        <span className="flex items-center justify-center">
+        <span aria-hidden />
+        <span className="inline-flex items-center gap-1.5 px-3 py-1">
           {expanded ? (
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className="h-3 w-3 shrink-0" />
           ) : (
-            <ChevronRight className="h-3 w-3" />
+            <ChevronRight className="h-3 w-3 shrink-0" />
           )}
-        </span>
-        <span className="px-3 py-1">
-          {loading
-            ? t("common.loading")
-            : t("workspacePane.unmodifiedLines", { count: gap.count })}
+          <span>
+            {loading
+              ? t("common.loading")
+              : t("workspacePane.unmodifiedLines", { count: gap.count })}
+          </span>
         </span>
       </button>
       {expandedLines.map((line, index) => (
-        <ReviewCodeRow
+        <ReviewUnifiedCodeRow
           key={`${gap.oldStart}:${index}`}
           line={{
             kind: "context",
@@ -1698,7 +2036,7 @@ function ReviewGapRow({
         />
       ))}
       {expanded && gap.count > visibleCount && (
-        <div className="grid min-w-max grid-cols-[80px_minmax(320px,1fr)] bg-muted/30 text-[10px] text-muted-foreground">
+        <div className="grid min-w-full grid-cols-[48px_minmax(320px,1fr)] bg-muted/30 text-[10px] text-muted-foreground">
           <span />
           <span className="px-3 py-1">
             {t("workspacePane.moreUnmodifiedLines", {
@@ -1711,6 +2049,297 @@ function ReviewGapRow({
   );
 }
 
+interface ReviewSplitMoreRow {
+  kind: "more";
+  count: number;
+  key: string;
+}
+
+type ReviewSplitDisplayRow = ReviewSplitRow | ReviewSplitMoreRow;
+
+function reviewGapKey(gap: WorkspaceReviewGap): string {
+  return `${gap.oldStart}:${gap.newStart}:${gap.count}`;
+}
+
+function ReviewSplitSideRow({
+  row,
+  side,
+  filesAvailable,
+  loadingGapKey,
+  errorGapKeys,
+  expandedGapKeys,
+  onToggleGap,
+}: {
+  row: ReviewSplitDisplayRow;
+  side: "old" | "new";
+  filesAvailable: boolean;
+  loadingGapKey: string | null;
+  errorGapKeys: Set<string>;
+  expandedGapKeys: Set<string>;
+  onToggleGap(gap: WorkspaceReviewGap): void;
+}) {
+  const { t } = useT();
+
+  if (row.kind === "gap") {
+    const key = reviewGapKey(row);
+    const loading = loadingGapKey === key;
+    return (
+      <button
+        type="button"
+        onClick={() => onToggleGap(row)}
+        disabled={!filesAvailable || loading}
+        className="grid min-w-full grid-cols-[48px_minmax(240px,1fr)] bg-muted/45 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted/65 hover:text-foreground disabled:cursor-default"
+        title={
+          errorGapKeys.has(key)
+            ? t("workspacePane.contextUnavailable")
+            : undefined
+        }
+      >
+        <span aria-hidden />
+        <span className="inline-flex items-center gap-1.5 px-3 py-1">
+          {expandedGapKeys.has(key) ? (
+            <ChevronDown className="h-3 w-3 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0" />
+          )}
+          <span>
+            {loading
+              ? t("common.loading")
+              : t("workspacePane.unmodifiedLines", { count: row.count })}
+          </span>
+        </span>
+      </button>
+    );
+  }
+
+  if (row.kind === "more") {
+    return (
+      <div className="grid min-w-full grid-cols-[48px_minmax(240px,1fr)] bg-muted/30 text-[10px] text-muted-foreground">
+        <span />
+        <span className="px-3 py-1">
+          {t("workspacePane.moreUnmodifiedLines", { count: row.count })}
+        </span>
+      </div>
+    );
+  }
+
+  if (row.kind === "meta") {
+    return (
+      <div className="grid min-w-full grid-cols-[48px_minmax(240px,1fr)] bg-muted/18 text-muted-foreground/55">
+        <span />
+        <span className="px-3 py-0.5">{row.content}</span>
+      </div>
+    );
+  }
+
+  if (row.kind !== "line") return null;
+
+  const line = side === "old" ? row.oldLine : row.newLine;
+  const lineNumber = side === "old" ? line?.oldLine : line?.newLine;
+  return (
+    <div
+      data-review-row="split"
+      data-review-side={side}
+      className={cn(
+        "grid min-w-full grid-cols-[48px_minmax(240px,1fr)]",
+        line?.kind === "deletion" &&
+          "bg-red-500/[0.1] text-red-950 dark:text-red-50",
+        line?.kind === "addition" &&
+          "bg-emerald-500/[0.11] text-emerald-950 dark:text-emerald-50",
+        !line && "bg-muted/[0.08]",
+      )}
+    >
+      <span
+        data-review-line-number
+        className={cn(
+          "select-none border-r border-border/20 pr-2 text-right text-muted-foreground/42",
+          line?.kind === "deletion" && "border-l-2 border-l-red-500",
+          line?.kind === "addition" && "border-l-2 border-l-emerald-500",
+        )}
+      >
+        {lineNumber ?? ""}
+      </span>
+      <span className="whitespace-pre px-3">{line?.content || " "}</span>
+    </div>
+  );
+}
+
+function ReviewSplitFileView({
+  rows,
+  filePath,
+  sessionId,
+  files,
+}: {
+  rows: ReviewSplitRow[];
+  filePath: string;
+  sessionId: string;
+  files?: WorkspaceFilesAdapter;
+}) {
+  const { t } = useT();
+  const [expandedGapKeys, setExpandedGapKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [loadingGapKey, setLoadingGapKey] = useState<string | null>(null);
+  const [errorGapKeys, setErrorGapKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [content, setContent] = useState<string[] | null>(null);
+  const scrollElementsRef = useRef<
+    Record<"old" | "new", HTMLDivElement | null>
+  >({
+    old: null,
+    new: null,
+  });
+  const programmaticScrollLeftRef = useRef<
+    Record<"old" | "new", number | null>
+  >({
+    old: null,
+    new: null,
+  });
+
+  const toggleGap = useCallback(
+    async (gap: WorkspaceReviewGap) => {
+      const key = reviewGapKey(gap);
+      if (expandedGapKeys.has(key)) {
+        setExpandedGapKeys((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+        return;
+      }
+
+      let availableContent = content;
+      if (!availableContent && files) {
+        setLoadingGapKey(key);
+        setErrorGapKeys((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+        try {
+          const document = await files.read(sessionId, filePath);
+          if (document.binary) throw new Error("binary");
+          availableContent = document.content.split(/\r?\n/);
+          setContent(availableContent);
+        } catch {
+          setErrorGapKeys((current) => new Set(current).add(key));
+          return;
+        } finally {
+          setLoadingGapKey(null);
+        }
+      }
+      if (!availableContent) return;
+      setExpandedGapKeys((current) => new Set(current).add(key));
+    },
+    [content, expandedGapKeys, filePath, files, sessionId],
+  );
+
+  const displayRows = useMemo(() => {
+    const result: ReviewSplitDisplayRow[] = [];
+    for (const row of rows) {
+      result.push(row);
+      if (row.kind !== "gap" || !expandedGapKeys.has(reviewGapKey(row))) {
+        continue;
+      }
+      const visibleCount = Math.min(row.count, 200);
+      const expandedLines = content?.slice(
+        row.newStart - 1,
+        row.newStart - 1 + visibleCount,
+      );
+      for (let index = 0; index < (expandedLines?.length ?? 0); index += 1) {
+        const line: WorkspaceReviewLine = {
+          kind: "context",
+          content: expandedLines![index]!,
+          oldLine: row.oldStart + index,
+          newLine: row.newStart + index,
+        };
+        result.push({ kind: "line", oldLine: line, newLine: line });
+      }
+      if (row.count > visibleCount) {
+        result.push({
+          kind: "more",
+          count: row.count - visibleCount,
+          key: reviewGapKey(row),
+        });
+      }
+    }
+    return result;
+  }, [content, expandedGapKeys, rows]);
+
+  const syncHorizontalScroll = useCallback(
+    (side: "old" | "new", event: ReactUIEvent<HTMLDivElement>) => {
+      const source = event.currentTarget;
+      const expected = programmaticScrollLeftRef.current[side];
+      if (expected !== null && Math.abs(source.scrollLeft - expected) < 1) {
+        programmaticScrollLeftRef.current[side] = null;
+        return;
+      }
+      programmaticScrollLeftRef.current[side] = null;
+
+      const otherSide = side === "old" ? "new" : "old";
+      const target = scrollElementsRef.current[otherSide];
+      if (!target || Math.abs(target.scrollLeft - source.scrollLeft) < 1)
+        return;
+
+      programmaticScrollLeftRef.current[otherSide] = source.scrollLeft;
+      target.scrollLeft = source.scrollLeft;
+      // Browsers clamp scrollLeft when the peer contains a shorter longest
+      // line. Remember the actual value so its resulting scroll event cannot
+      // pull the source pane backwards.
+      programmaticScrollLeftRef.current[otherSide] = target.scrollLeft;
+    },
+    [],
+  );
+
+  return (
+    <div
+      data-review-layout="split"
+      className="grid min-w-0 grid-cols-2 overflow-hidden font-mono text-[10.5px] leading-[1.65]"
+    >
+      {(["old", "new"] as const).map((side) => (
+        <div
+          key={side}
+          data-review-split-pane={side}
+          className={cn(
+            "min-w-0 overflow-hidden",
+            side === "old" && "border-r border-border/35",
+          )}
+        >
+          <div className="border-b border-border/20 bg-muted/[0.14] py-1 pl-[60px] font-sans text-[9.5px] font-medium text-muted-foreground/70">
+            {side === "old"
+              ? t("workspacePane.beforeChange")
+              : t("workspacePane.afterChange")}
+          </div>
+          <div
+            ref={(element) => {
+              scrollElementsRef.current[side] = element;
+            }}
+            data-review-scroll={side}
+            onScroll={(event) => syncHorizontalScroll(side, event)}
+            className="min-w-0 overflow-x-auto overscroll-x-contain"
+          >
+            <div className="w-max min-w-full">
+              {displayRows.map((row, index) => (
+                <ReviewSplitSideRow
+                  key={`${side}:${row.kind}:${"key" in row ? row.key : index}`}
+                  row={row}
+                  side={side}
+                  filesAvailable={Boolean(files)}
+                  loadingGapKey={loadingGapKey}
+                  errorGapKeys={errorGapKeys}
+                  expandedGapKeys={expandedGapKeys}
+                  onToggleGap={(gap) => void toggleGap(gap)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ReviewFileSection({
   file,
   collapsed,
@@ -1718,6 +2347,7 @@ function ReviewFileSection({
   onOpenFile,
   sessionId,
   files,
+  viewMode,
 }: {
   file: WorkspaceReviewFile;
   collapsed: boolean;
@@ -1725,11 +2355,13 @@ function ReviewFileSection({
   onOpenFile(path: string): void;
   sessionId: string;
   files?: WorkspaceFilesAdapter;
+  viewMode: ReviewViewMode;
 }) {
   const { t } = useT();
+  const splitRows = useMemo(() => splitReviewRows(file.rows), [file.rows]);
 
   return (
-    <section>
+    <section className="min-w-0 overflow-hidden">
       <div className="group sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-border/25 bg-muted/[0.12] px-2.5 backdrop-blur">
         <button
           type="button"
@@ -1796,26 +2428,39 @@ function ReviewFileSection({
           ]}
         />
       </div>
-      {!collapsed && (
-        <div className="overflow-x-auto py-1 font-mono text-[10.5px] leading-[1.65]">
-          {file.rows.map((row, index) =>
-            row.kind === "gap" ? (
-              <ReviewGapRow
-                key={`gap:${row.oldStart}:${row.newStart}:${index}`}
-                gap={row}
-                filePath={file.path}
-                sessionId={sessionId}
-                files={files}
-              />
-            ) : (
-              <ReviewCodeRow
-                key={`${row.kind}:${row.oldLine}:${row.newLine}:${index}`}
-                line={row}
-              />
-            ),
-          )}
-        </div>
-      )}
+      {!collapsed &&
+        (viewMode === "unified" ? (
+          <div
+            data-review-scroll="unified"
+            className="min-w-0 overflow-x-auto overscroll-x-contain py-1 font-mono text-[10.5px] leading-[1.65]"
+          >
+            <div className="w-max min-w-full">
+              {file.rows.map((row, index) =>
+                row.kind === "gap" ? (
+                  <ReviewGapRow
+                    key={`gap:${row.oldStart}:${row.newStart}:${index}`}
+                    gap={row}
+                    filePath={file.path}
+                    sessionId={sessionId}
+                    files={files}
+                  />
+                ) : (
+                  <ReviewUnifiedCodeRow
+                    key={`${row.kind}:${row.oldLine}:${row.newLine}:${index}`}
+                    line={row}
+                  />
+                ),
+              )}
+            </div>
+          </div>
+        ) : (
+          <ReviewSplitFileView
+            rows={splitRows}
+            filePath={file.path}
+            sessionId={sessionId}
+            files={files}
+          />
+        ))}
     </section>
   );
 }
@@ -1839,6 +2484,7 @@ function DiffView({
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(
     () => new Set(),
   );
+  const [viewMode, setViewMode] = useState<ReviewViewMode>("unified");
   const allCollapsed =
     review.files.length > 0 &&
     review.files.every((file) => collapsedPaths.has(file.path));
@@ -1856,53 +2502,81 @@ function DiffView({
           count: review.files.length,
         })}
         status={
-          <span className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className="text-emerald-600 dark:text-emerald-400">
-              +{review.additions}
+          review.additions > 0 || review.deletions > 0 ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px]">
+              <span className="text-emerald-600 dark:text-emerald-400">
+                +{review.additions}
+              </span>
+              <span className="text-red-600 dark:text-red-400">
+                -{review.deletions}
+              </span>
             </span>
-            <span className="text-red-600 dark:text-red-400">
-              -{review.deletions}
-            </span>
-          </span>
-        }
-        actions={
-          review.files.length > 1 ? (
-            <button
-              type="button"
-              onClick={() =>
-                setCollapsedPaths(
-                  allCollapsed
-                    ? new Set()
-                    : new Set(review.files.map((file) => file.path)),
-                )
-              }
-              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground hover:bg-muted/55 hover:text-foreground"
-            >
-              {allCollapsed ? (
-                <ChevronDown className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-              {allCollapsed
-                ? t("workspacePane.expandAll")
-                : t("workspacePane.collapseAll")}
-            </button>
           ) : null
         }
-        moreActions={[
-          {
-            icon: Copy,
-            label: t("workspacePane.copyDiff"),
-            onSelect: () =>
-              void navigator.clipboard.writeText(
-                resource.entries.map((entry) => entry.diff).join("\n"),
-              ),
-          },
-        ]}
+        actions={
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div
+              role="group"
+              aria-label={t("workspacePane.diffViewMode")}
+              className="flex h-7 items-center rounded-md bg-muted/45 p-0.5"
+            >
+              <button
+                type="button"
+                aria-label={t("workspacePane.unifiedDiff")}
+                title={t("workspacePane.unifiedDiff")}
+                aria-pressed={viewMode === "unified"}
+                onClick={() => setViewMode("unified")}
+                className={cn(
+                  "inline-flex h-6 w-6 items-center justify-center rounded-[5px] text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+                  viewMode === "unified" &&
+                    "bg-background text-foreground shadow-sm",
+                )}
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={t("workspacePane.splitDiff")}
+                title={t("workspacePane.splitDiff")}
+                aria-pressed={viewMode === "split"}
+                onClick={() => setViewMode("split")}
+                className={cn(
+                  "inline-flex h-6 w-6 items-center justify-center rounded-[5px] text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+                  viewMode === "split" &&
+                    "bg-background text-foreground shadow-sm",
+                )}
+              >
+                <Columns2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {review.files.length > 1 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsedPaths(
+                    allCollapsed
+                      ? new Set()
+                      : new Set(review.files.map((file) => file.path)),
+                  )
+                }
+                className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground hover:bg-muted/55 hover:text-foreground"
+              >
+                {allCollapsed ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                {allCollapsed
+                  ? t("workspacePane.expandAll")
+                  : t("workspacePane.collapseAll")}
+              </button>
+            ) : null}
+          </div>
+        }
       />
       <div
         data-selection="text"
-        className="min-h-0 flex-1 overflow-auto bg-background"
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-background"
       >
         {review.files.length ? (
           review.files.map((file) => (
@@ -1921,6 +2595,7 @@ function DiffView({
               onOpenFile={onOpenFile}
               sessionId={sessionId}
               files={files}
+              viewMode={viewMode}
             />
           ))
         ) : (
@@ -2258,14 +2933,7 @@ function SessionTaskFlow({
   );
 }
 
-type WorkbenchMode =
-  | "files"
-  | "outputs"
-  | "review"
-  | "terminal"
-  | "checkpoints"
-  | "collaboration"
-  | "preview";
+type WorkbenchMode = "files" | "checkpoints" | "collaboration" | "preview";
 
 function WorkspaceProjectStrip({
   sessionId,
@@ -2279,10 +2947,8 @@ function WorkspaceProjectStrip({
   const { t } = useT();
   const [project, setProject] = useState<WorkspaceProject | null>(null);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
-  const [worktrees, setWorktrees] = useState<WorkspaceWorktree[]>([]);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [branch, setBranch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2291,19 +2957,16 @@ function WorkspaceProjectStrip({
     try {
       const ensured = await development.ensureProject(sessionId);
       setProject(ensured);
-      const [allProjects, availableWorktrees, activePath] = await Promise.all([
+      const [allProjects, activePath] = await Promise.all([
         development.listProjects(),
-        development.listWorktrees(sessionId).catch(() => []),
         workspaces?.getCurrent(sessionId) ?? Promise.resolve(null),
       ]);
       setProjects(allProjects);
-      setWorktrees(availableWorktrees);
       setCurrentPath(activePath);
       setError(null);
     } catch (cause) {
       setProject(null);
       setProjects([]);
-      setWorktrees([]);
       setCurrentPath(null);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -2368,8 +3031,14 @@ function WorkspaceProjectStrip({
       .split(/[\\/]/)
       .pop() || path;
   const isCurrent = (path: string) => currentPath === path;
+  const locations = project
+    ? [...new Set([...project.folders, ...(currentPath ? [currentPath] : [])])]
+    : [];
   return (
-    <div className="border-b border-border/35 px-3 py-2.5">
+    <div
+      data-workspace-project-strip
+      className="border-b border-border/35 px-3 py-2"
+    >
       <div className="flex items-center gap-2">
         <FolderTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <Popover open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
@@ -2425,6 +3094,45 @@ function WorkspaceProjectStrip({
                 </span>
               </button>
             ))}
+            {project ? (
+              <div className="mt-1 border-t border-border/35 pt-1">
+                <p className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("workspacePane.locations")}
+                </p>
+                {locations.map((path) => {
+                  return (
+                    <button
+                      key={path}
+                      type="button"
+                      role="menuitem"
+                      disabled={busy}
+                      title={path}
+                      onClick={() =>
+                        void mutate(async () => {
+                          await development.bindProjectLocation(
+                            sessionId,
+                            project.id,
+                            path,
+                          );
+                          setProjectMenuOpen(false);
+                        })
+                      }
+                      className={cn(
+                        "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] transition-colors hover:bg-muted/70",
+                        isCurrent(path)
+                          ? "bg-muted/55 text-foreground"
+                          : "text-foreground/75",
+                      )}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {locationLabel(path)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             {workspaces?.chooseDirectory ? (
               <button
                 type="button"
@@ -2439,102 +3147,19 @@ function WorkspaceProjectStrip({
             ) : null}
           </PopoverContent>
         </Popover>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
-          {worktrees.length
-            ? t("workspacePane.worktreeCount", { count: worktrees.length })
-            : null}
-        </span>
         {workspaces?.chooseDirectory ? (
           <button
             type="button"
+            data-workspace-project-add
             disabled={busy || !project}
             title={t("workspacePane.addFolder")}
             aria-label={t("workspacePane.addFolder")}
             onClick={() => void addFolder()}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/55 hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/55 hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
         ) : null}
-      </div>
-      {project ? (
-        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-          {project.folders.map((folder) => (
-            <button
-              key={folder}
-              type="button"
-              disabled={busy}
-              title={folder}
-              onClick={() =>
-                void mutate(() =>
-                  development.bindProjectLocation(
-                    sessionId,
-                    project.id,
-                    folder,
-                  ),
-                )
-              }
-              className={cn(
-                "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[10px] transition-colors",
-                isCurrent(folder)
-                  ? "border-foreground/15 bg-foreground text-background"
-                  : "border-border/50 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <FolderOpen className="h-3 w-3" />
-              {locationLabel(folder)}
-            </button>
-          ))}
-          {worktrees.map((worktree) => (
-            <button
-              key={worktree.path}
-              type="button"
-              disabled={busy}
-              title={worktree.path}
-              onClick={() =>
-                void mutate(() =>
-                  development.bindProjectLocation(
-                    sessionId,
-                    project.id,
-                    worktree.path,
-                  ),
-                )
-              }
-              className={cn(
-                "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[10px] transition-colors",
-                isCurrent(worktree.path)
-                  ? "border-foreground/15 bg-foreground text-background"
-                  : "border-border/50 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <GitBranch className="h-3 w-3" />
-              {worktree.branch || locationLabel(worktree.path)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div className="mt-2 flex items-center gap-1.5">
-        <Input
-          value={branch}
-          onChange={(event) => setBranch(event.target.value)}
-          placeholder={t("workspacePane.worktreeBranch")}
-          className="h-7 min-w-0 flex-1 text-[11px]"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!branch.trim() || busy}
-          className="h-7 px-2 text-[11px]"
-          onClick={() =>
-            void mutate(async () => {
-              await development.createWorktree(sessionId, branch);
-              setBranch("");
-            })
-          }
-        >
-          <GitBranch className="h-3 w-3" />
-          {t("workspacePane.createWorktree")}
-        </Button>
       </div>
       {error ? (
         <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-destructive">
@@ -2550,12 +3175,14 @@ function WorkspaceTreeRows({
   sessionId,
   files,
   openFile,
+  selectedPath,
   level = 0,
 }: {
   entries: WorkspaceTreeEntry[];
   sessionId: string;
   files: WorkspaceFilesAdapter;
   openFile(path: string): void;
+  selectedPath?: string;
   level?: number;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -2588,7 +3215,12 @@ function WorkspaceTreeRows({
                   .catch(() => {});
               }
             }}
-            className="group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[11px] hover:bg-muted/45"
+            className={cn(
+              "group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[11px] transition-colors",
+              selectedPath === entry.path
+                ? "bg-muted/65 text-foreground"
+                : "text-foreground/78 hover:bg-muted/45 hover:text-foreground",
+            )}
             style={{ paddingLeft: `${8 + level * 14}px` }}
           >
             {entry.isDirectory ? (
@@ -2613,6 +3245,7 @@ function WorkspaceTreeRows({
               sessionId={sessionId}
               files={files}
               openFile={openFile}
+              selectedPath={selectedPath}
               level={level + 1}
             />
           ) : null}
@@ -2628,12 +3261,14 @@ function WorkspaceFilesBrowser({
   development,
   workspaces,
   openFile,
+  selectedPath,
 }: {
   sessionId: string;
   files: WorkspaceFilesAdapter;
   development?: WorkspaceDevelopmentAdapter;
   workspaces?: WorkspaceAdapter;
   openFile(path: string): void;
+  selectedPath?: string;
 }) {
   const { t } = useT();
   const [query, setQuery] = useState("");
@@ -2691,6 +3326,7 @@ function WorkspaceFilesBrowser({
             sessionId={sessionId}
             files={files}
             openFile={openFile}
+            selectedPath={selectedPath}
           />
         ) : (
           <p className="px-3 py-4 text-xs text-muted-foreground">
@@ -2702,101 +3338,131 @@ function WorkspaceFilesBrowser({
   );
 }
 
-function WorkspaceOutputsView({
+function WorkspaceFileWorkspace({
+  resource,
   sessionId,
   files,
+  development,
+  workspaces,
   openFile,
+  treeOpen,
+  onTreeOpenChange,
 }: {
+  resource: FileResource | null;
   sessionId: string;
   files: WorkspaceFilesAdapter;
+  development?: WorkspaceDevelopmentAdapter;
+  workspaces?: WorkspaceAdapter;
   openFile(path: string): void;
+  treeOpen: boolean;
+  onTreeOpenChange(open: boolean): void;
 }) {
   const { t } = useT();
-  const [items, setItems] = useState<WorkspaceTreeEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const results = await files.search(sessionId, "@outputs");
-      setItems(
-        results.sort(
-          (left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0),
-        ),
-      );
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [files, sessionId]);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  useEffect(
-    () =>
-      getPlatform().workspaces?.onChange((change) => {
-        if (change.sessionId === sessionId) void load();
-      }),
-    [load, sessionId],
-  );
+  const path = resource?.path ?? "/";
+
   return (
-    <ScrollArea className="h-full">
-      <div className="p-3">
-        <div className="mb-3 flex items-center gap-2">
-          <PackageOpen className="h-4 w-4 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <h3 className="text-xs font-semibold">
-              {t("workspacePane.outputs")}
-            </h3>
-            <p className="text-[10px] text-muted-foreground">
-              {t("workspacePane.outputsHint")}
-            </p>
-          </div>
-          <Button onClick={() => void load()} size="icon" variant="ghost">
-            <RotateCw />
-          </Button>
-        </div>
-        {loading ? (
-          <p className="py-10 text-center text-xs text-muted-foreground">
-            {t("common.loading")}
-          </p>
-        ) : items.length ? (
-          <ul className="space-y-1">
-            {items.map((item) => (
-              <li key={item.path}>
-                <button
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted/40"
-                  onClick={() => openFile(item.path)}
-                  type="button"
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/55">
-                    <File className="h-4 w-4 text-muted-foreground" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">
-                      {item.name}
-                    </span>
-                    <span className="block truncate font-mono text-[9.5px] text-muted-foreground">
-                      {item.path}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-[9.5px] tabular-nums text-muted-foreground">
-                    {item.size != null ? formatBytes(item.size) : ""}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="py-16 text-center">
-            <PackageOpen className="mx-auto h-6 w-6 text-muted-foreground/40" />
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("workspacePane.noOutputs")}
-            </p>
-          </div>
-        )}
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/35 px-3">
+        <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-foreground/72"
+          title={path}
+        >
+          {resource ? compactWorkspacePath(resource.path, 7) : "/"}
+        </span>
+        {resource ? (
+          <>
+            <PreviewAction
+              icon={Copy}
+              label={t("workspacePane.copyPath")}
+              onSelect={() => void navigator.clipboard.writeText(resource.path)}
+            />
+            <PreviewMoreMenu
+              items={[
+                {
+                  icon: FolderOpen,
+                  label: t("workspacePane.revealFile"),
+                  onSelect: () =>
+                    void files.reveal(sessionId, resource.path).catch(() => {}),
+                },
+                {
+                  icon: ExternalLink,
+                  label: t("workspacePane.openExternal"),
+                  onSelect: () =>
+                    void files
+                      .openExternal(sessionId, resource.path)
+                      .catch(() => {}),
+                },
+              ]}
+            />
+          </>
+        ) : null}
+        <button
+          type="button"
+          aria-pressed={treeOpen}
+          aria-label={
+            treeOpen
+              ? t("workspacePane.hideFileTree")
+              : t("workspacePane.showFileTree")
+          }
+          title={
+            treeOpen
+              ? t("workspacePane.hideFileTree")
+              : t("workspacePane.showFileTree")
+          }
+          onClick={() => onTreeOpenChange(!treeOpen)}
+          className={cn(
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+            treeOpen && "bg-muted/55 text-foreground",
+          )}
+        >
+          <FolderTree className="h-3.5 w-3.5" />
+        </button>
       </div>
-    </ScrollArea>
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main
+          data-workspace-file-preview
+          className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        >
+          {resource ? (
+            <WorkspaceFileView
+              resource={resource}
+              sessionId={sessionId}
+              files={files}
+              showHeader={false}
+            />
+          ) : (
+            <div className="flex h-full min-h-0 flex-col items-center justify-center px-8 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/45 text-muted-foreground/65">
+                <FolderOpen className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 text-[13px] font-medium text-foreground/85">
+                {t("workspacePane.openFile")}
+              </h3>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {t("workspacePane.openFileHint")}
+              </p>
+            </div>
+          )}
+        </main>
+        {treeOpen ? (
+          <aside
+            data-workspace-file-tree
+            aria-label={t("workspacePane.files")}
+            className="min-h-0 min-w-[190px] w-[clamp(190px,36%,260px)] shrink-0 border-l border-border/45 bg-background"
+          >
+            <WorkspaceFilesBrowser
+              sessionId={sessionId}
+              files={files}
+              development={development}
+              workspaces={workspaces}
+              openFile={openFile}
+              selectedPath={resource?.path}
+            />
+          </aside>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -2804,10 +3470,12 @@ function WorkspaceGitReview({
   sessionId,
   files,
   openFile,
+  onOpenRecoveryPoints,
 }: {
   sessionId: string;
   files?: WorkspaceFilesAdapter;
   openFile(path: string): void;
+  onOpenRecoveryPoints(): void;
 }) {
   const { t } = useT();
   const development = getPlatform().workspaceDevelopment;
@@ -2876,13 +3544,40 @@ function WorkspaceGitReview({
               {state.behind ? ` ↓${state.behind}` : ""}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-muted/50"
-          >
-            <RotateCw className="h-3.5 w-3.5" />
-          </button>
+          <div className="ml-auto flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
+              title={t("common.refresh")}
+              aria-label={t("common.refresh")}
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </button>
+            <CascadeMenu
+              align="end"
+              ariaLabel={t("workspacePane.moreActions")}
+              exclusiveGroup="workspace-review-actions"
+              items={[
+                {
+                  id: "recovery-points",
+                  icon: <History />,
+                  label: t("workspacePane.recoveryPoints"),
+                  onSelect: onOpenRecoveryPoints,
+                },
+              ]}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
+                  title={t("workspacePane.moreActions")}
+                  aria-label={t("workspacePane.moreActions")}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              }
+            />
+          </div>
         </div>
         {state?.files.length ? (
           <ul className="mt-2 max-h-32 overflow-auto space-y-0.5">
@@ -3018,172 +3713,626 @@ function WorkspaceGitReview({
   );
 }
 
-function WorkspaceTerminalView({ sessionId }: { sessionId: string }) {
+type PendingTerminalChunk = {
+  sequence: number;
+  chunk: string;
+};
+
+export function WorkspaceTerminalView({
+  sessionId,
+  terminalId,
+  development,
+  onSnapshot,
+}: {
+  sessionId: string;
+  terminalId: string;
+  development: WorkspaceDevelopmentAdapter;
+  onSnapshot: (snapshot: WorkspaceTerminalSnapshot) => void;
+}) {
   const { t } = useT();
-  const development = getPlatform().workspaceDevelopment;
-  const [snapshot, setSnapshot] = useState<WorkspaceTerminalSnapshot | null>(
-    null,
-  );
-  const [command, setCommand] = useState("");
+  const documentTheme = useDocumentTheme();
+  const hostRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<XtermTerminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const initialThemeRef = useRef(documentTheme);
+  const hydratedRef = useRef(false);
+  const outputSequenceRef = useRef(0);
+  const pendingChunksRef = useRef<PendingTerminalChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const outputRef = useRef<HTMLPreElement>(null);
+
+  const hydrateTerminal = useCallback(
+    (next: WorkspaceTerminalSnapshot) => {
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      terminal.reset();
+      terminal.write(next.output);
+      outputSequenceRef.current = next.sequence;
+      hydratedRef.current = true;
+      for (const event of pendingChunksRef.current) {
+        if (event.sequence <= outputSequenceRef.current) continue;
+        terminal.write(event.chunk);
+        outputSequenceRef.current = event.sequence;
+      }
+      pendingChunksRef.current = [];
+      onSnapshot(next);
+    },
+    [onSnapshot],
+  );
+
   useEffect(() => {
-    if (!development) return;
-    void development
-      .terminalGet(sessionId)
-      .then((current) =>
-        current
-          ? setSnapshot(current)
-          : development.terminalStart(sessionId).then(setSnapshot),
-      )
-      .catch((cause) =>
-        setError(cause instanceof Error ? cause.message : String(cause)),
-      );
-    return development.onTerminalData((event) => {
-      if (event.sessionId === sessionId) setSnapshot(event.snapshot);
+    if (!development || !hostRef.current) return;
+    let disposed = false;
+    let resizeFrame: number | null = null;
+    hydratedRef.current = false;
+    outputSequenceRef.current = 0;
+    pendingChunksRef.current = [];
+
+    const terminal = new XtermTerminal({
+      cursorBlink: true,
+      cursorStyle: "block",
+      fontFamily:
+        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontSize: 12,
+      lineHeight: 1.35,
+      macOptionIsMeta: true,
+      minimumContrastRatio: 4.5,
+      scrollOnUserInput: true,
+      scrollback: 10_000,
+      theme: workspaceTerminalTheme(initialThemeRef.current),
     });
-  }, [development, sessionId]);
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(hostRef.current);
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === "keydown" &&
+        event.metaKey &&
+        event.key.toLocaleLowerCase() === "c" &&
+        terminal.hasSelection()
+      ) {
+        void navigator.clipboard.writeText(terminal.getSelection());
+        return false;
+      }
+      return true;
+    });
+
+    const inputSubscription = terminal.onData((data) => {
+      development.terminalWrite(sessionId, terminalId, data);
+    });
+    const resizeSubscription = terminal.onResize(({ cols, rows }) => {
+      development.terminalResize(sessionId, terminalId, cols, rows);
+    });
+    const unsubscribe = development.onTerminalData((event) => {
+      if (
+        event.sessionId !== sessionId ||
+        event.terminalId !== terminalId ||
+        disposed
+      )
+        return;
+      if (!hydratedRef.current) {
+        pendingChunksRef.current.push({
+          sequence: event.sequence,
+          chunk: event.chunk,
+        });
+        return;
+      }
+      if (event.sequence <= outputSequenceRef.current) return;
+      terminal.write(event.chunk);
+      outputSequenceRef.current = event.sequence;
+    });
+
+    const fit = () => {
+      if (disposed || !hostRef.current) return;
+      try {
+        fitAddon.fit();
+        development.terminalResize(
+          sessionId,
+          terminalId,
+          terminal.cols,
+          terminal.rows,
+        );
+      } catch {
+        /* The pane can collapse between ResizeObserver and animation frame. */
+      }
+    };
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(fit);
+    });
+    resizeObserver.observe(hostRef.current);
+    fit();
+
+    void development
+      .terminalGet(sessionId, terminalId)
+      .then(
+        (current) =>
+          current ?? development.terminalStart(sessionId, terminalId),
+      )
+      .then((next) => {
+        if (disposed) return;
+        hydrateTerminal(next);
+        fit();
+        terminal.focus();
+        setError(null);
+      })
+      .catch((cause) => {
+        if (!disposed)
+          setError(cause instanceof Error ? cause.message : String(cause));
+      });
+
+    return () => {
+      disposed = true;
+      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
+      resizeObserver.disconnect();
+      unsubscribe();
+      inputSubscription.dispose();
+      resizeSubscription.dispose();
+      terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, [development, hydrateTerminal, sessionId, terminalId]);
+
   useEffect(() => {
-    outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
-  }, [snapshot?.output]);
-  if (!development) return <WorkspaceEmptyState />;
-  const sendCommand = async () => {
-    if (!command.trim()) return;
-    try {
-      setSnapshot(await development.terminalWrite(sessionId, `${command}\n`));
-      setCommand("");
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.options.theme = workspaceTerminalTheme(documentTheme);
+    fitAddonRef.current?.fit();
+  }, [documentTheme]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[hsl(var(--foreground)/0.035)]">
-      <div className="flex h-9 items-center gap-2 border-b border-border/35 px-3 text-[10px] text-muted-foreground">
-        <Terminal className="h-3.5 w-3.5" />
-        <span className="min-w-0 flex-1 truncate font-mono">
-          {snapshot?.cwd}
-        </span>
-        {snapshot?.running ? (
-          <button
-            type="button"
-            onClick={() =>
-              void development
-                .terminalStop(sessionId)
-                .then(() =>
-                  setSnapshot((current) =>
-                    current ? { ...current, running: false } : current,
-                  ),
-                )
-            }
-            className="rounded-md p-1 hover:bg-muted/60"
-          >
-            <Square className="h-3 w-3" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() =>
-              void development.terminalStart(sessionId).then(setSnapshot)
-            }
-            className="rounded-md p-1 hover:bg-muted/60"
-          >
-            <Play className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-      <pre
-        ref={outputRef}
+    <div
+      data-workspace-terminal-id={terminalId}
+      className="relative h-full min-h-0 bg-background p-2"
+    >
+      <div
+        ref={hostRef}
         data-selection="text"
-        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-[1.6] text-foreground/78"
-      >
-        {snapshot?.output || t("workspacePane.startingTerminal")}
-      </pre>
-      <div className="border-t border-border/35 p-2">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendCommand();
-          }}
-          className="flex items-center gap-2"
-        >
-          <span className="font-mono text-xs text-muted-foreground">$</span>
-          <Input
-            value={command}
-            onChange={(event) => setCommand(event.target.value)}
-            disabled={!snapshot?.running}
-            autoFocus
-            className="h-8 border-0 bg-transparent px-0 font-mono text-xs shadow-none focus-visible:ring-0"
-            placeholder={t("workspacePane.terminalPlaceholder")}
-          />
-        </form>
-        {error ? (
-          <p className="mt-1 text-[10px] text-destructive">{error}</p>
-        ) : null}
-      </div>
+        className="amiba-terminal h-full min-h-0 overflow-hidden"
+        aria-label={t("workspacePane.terminal")}
+      />
+      {error ? (
+        <p className="pointer-events-none absolute inset-x-3 bottom-3 rounded-md border border-destructive/20 bg-background/95 px-2 py-1.5 text-[10px] text-destructive shadow-sm">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function WorkspaceCheckpointsView({ sessionId }: { sessionId: string }) {
+function createWorkspaceTerminalId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `terminal-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
+export function WorkspaceTerminalToggle({
+  open,
+  onToggle,
+  className,
+  showUnavailable = false,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+  showUnavailable?: boolean;
+}) {
+  const pane = useWorkspacePane();
   const { t } = useT();
-  const development = getPlatform().workspaceDevelopment;
-  const [items, setItems] = useState<WorkspaceCheckpoint[]>([]);
-  const [label, setLabel] = useState("");
-  const [busy, setBusy] = useState(false);
+  const available = pane.enabled && !!pane.sessionId && !!pane.development;
+  if (!available && !showUnavailable) return null;
+  return (
+    <button
+      type="button"
+      disabled={!available}
+      onClick={() => {
+        if (available) onToggle();
+      }}
+      title={
+        open
+          ? t("workspacePane.closeTerminal")
+          : t("workspacePane.openTerminal")
+      }
+      aria-label={
+        open
+          ? t("workspacePane.closeTerminal")
+          : t("workspacePane.openTerminal")
+      }
+      aria-pressed={open}
+      className={cn(
+        "app-no-drag relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
+        "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "disabled:pointer-events-none disabled:opacity-30",
+        open && "bg-foreground/5 text-foreground",
+        className,
+      )}
+    >
+      <PanelBottom className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+export function WorkspaceTerminalPanel({
+  visible = true,
+  open,
+  onClose,
+}: {
+  visible?: boolean;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const pane = useWorkspacePane();
+  const { t } = useT();
+  const development = pane.development;
+  const [height, setHeight] = useState(() =>
+    clampTerminalHeight(DEFAULT_TERMINAL_HEIGHT),
+  );
+  const [terminals, setTerminals] = useState<WorkspaceTerminalSnapshot[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [terminalBusy, setTerminalBusy] = useState(false);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const heightRef = useRef(height);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  heightRef.current = height;
+
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const onWindowResize = () => {
+      setHeight((current) => {
+        const next = clampTerminalHeight(current);
+        heightRef.current = next;
+        return next;
+      });
+    };
+    window.addEventListener("resize", onWindowResize);
+    return () => window.removeEventListener("resize", onWindowResize);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPlatform()
+      .storage.get(TERMINAL_HEIGHT_KEY)
+      .then((result) => {
+        if (cancelled) return;
+        const stored = result[TERMINAL_HEIGHT_KEY];
+        if (typeof stored === "number" && Number.isFinite(stored)) {
+          setHeight(clampTerminalHeight(stored));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setTerminals([]);
+    setActiveTerminalId(null);
+    setTerminalError(null);
+  }, [pane.sessionId]);
+
+  useEffect(() => {
+    if (!visible || !open || !pane.enabled || !development) return;
+    let cancelled = false;
+    const sessionId = pane.sessionId;
+    setTerminalBusy(true);
+    void development
+      .terminalList(sessionId)
+      .then(async (existing) => {
+        const next = existing.length
+          ? existing
+          : [await development.terminalStart(sessionId, "primary")];
+        if (cancelled) return;
+        setTerminals(next);
+        setActiveTerminalId((current) =>
+          current && next.some((terminal) => terminal.terminalId === current)
+            ? current
+            : (next[0]?.terminalId ?? null),
+        );
+        setTerminalError(null);
+      })
+      .catch((cause) => {
+        if (!cancelled)
+          setTerminalError(
+            cause instanceof Error ? cause.message : String(cause),
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setTerminalBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [development, open, pane.enabled, pane.sessionId, visible]);
+
+  const updateTerminalSnapshot = useCallback(
+    (snapshot: WorkspaceTerminalSnapshot) => {
+      setTerminals((current) => {
+        const index = current.findIndex(
+          (terminal) => terminal.terminalId === snapshot.terminalId,
+        );
+        if (index < 0) return [...current, snapshot];
+        const next = [...current];
+        next[index] = snapshot;
+        return next;
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!visible || !open || !development) return;
+    return development.onTerminalData((event) => {
+      if (event.sessionId === pane.sessionId) {
+        updateTerminalSnapshot(event.snapshot);
+      }
+    });
+  }, [development, open, pane.sessionId, updateTerminalSnapshot, visible]);
+
+  const addTerminal = useCallback(async () => {
+    if (!development || terminalBusy) return;
+    setTerminalBusy(true);
+    try {
+      const snapshot = await development.terminalStart(
+        pane.sessionId,
+        createWorkspaceTerminalId(),
+      );
+      setTerminals((current) => [...current, snapshot]);
+      setActiveTerminalId(snapshot.terminalId);
+      setTerminalError(null);
+    } catch (cause) {
+      setTerminalError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setTerminalBusy(false);
+    }
+  }, [development, pane.sessionId, terminalBusy]);
+
+  const closeTerminal = useCallback(
+    async (terminalId: string) => {
+      if (!development) return;
+      const closingIndex = terminals.findIndex(
+        (terminal) => terminal.terminalId === terminalId,
+      );
+      try {
+        await development.terminalStop(pane.sessionId, terminalId);
+        const remaining = terminals.filter(
+          (terminal) => terminal.terminalId !== terminalId,
+        );
+        setTerminals(remaining);
+        if (activeTerminalId === terminalId) {
+          setActiveTerminalId(
+            remaining[Math.min(Math.max(closingIndex, 0), remaining.length - 1)]
+              ?.terminalId ?? null,
+          );
+        }
+        setTerminalError(null);
+        if (remaining.length === 0) onClose();
+      } catch (cause) {
+        setTerminalError(
+          cause instanceof Error ? cause.message : String(cause),
+        );
+      }
+    },
+    [activeTerminalId, development, onClose, pane.sessionId, terminals],
+  );
+
+  const onResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      resizeCleanupRef.current?.();
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const startY = event.clientY;
+      const startHeight = heightRef.current;
+      const previousCursor = document.documentElement.style.cursor;
+      const previousUserSelect = document.documentElement.style.userSelect;
+      let nextHeight = startHeight;
+      document.documentElement.style.cursor = "row-resize";
+      document.documentElement.style.userSelect = "none";
+      let finished = false;
+
+      const onMove = (moveEvent: PointerEvent) => {
+        moveEvent.preventDefault();
+        nextHeight = clampTerminalHeight(
+          startHeight - (moveEvent.clientY - startY),
+        );
+        heightRef.current = nextHeight;
+        setHeight(nextHeight);
+      };
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", finish);
+        handle.removeEventListener("pointercancel", finish);
+        document.documentElement.style.cursor = previousCursor;
+        document.documentElement.style.userSelect = previousUserSelect;
+        if (resizeCleanupRef.current === finish) {
+          resizeCleanupRef.current = null;
+        }
+        void getPlatform().storage.set({
+          [TERMINAL_HEIGHT_KEY]: nextHeight,
+        });
+      };
+      resizeCleanupRef.current = finish;
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", finish);
+      handle.addEventListener("pointercancel", finish);
+    },
+    [],
+  );
+
+  if (!visible || !pane.enabled || !development) return null;
+  const activeTerminal = terminals.find(
+    (terminal) => terminal.terminalId === activeTerminalId,
+  );
+  return (
+    <div
+      data-workspace-terminal-panel
+      aria-hidden={!open}
+      className={cn(
+        "relative shrink-0 overflow-hidden border-t border-border/50 bg-background transition-[height] duration-200 ease-out motion-reduce:transition-none",
+        !open && "pointer-events-none border-transparent",
+      )}
+      style={{ height: open ? height : 0 }}
+    >
+      {open ? (
+        <>
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t("workspacePane.resizeTerminal")}
+            onPointerDown={onResizeStart}
+            className="group absolute inset-x-0 top-0 z-40 h-1 -translate-y-1/2 cursor-row-resize touch-none"
+          >
+            <div className="absolute inset-x-0 top-1/2 h-px bg-border/55 transition-colors group-hover:bg-foreground/15 group-active:bg-foreground/25" />
+          </div>
+          <div className="flex h-full min-h-0 flex-col">
+            <div
+              data-workspace-terminal-tabs-bar
+              className="flex h-10 shrink-0 items-center px-3"
+            >
+              <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div
+                  role="tablist"
+                  aria-label={t("workspacePane.terminalTabs")}
+                  className="flex w-max min-w-full items-center gap-1"
+                >
+                  {terminals.map((terminal, index) => {
+                    const active = terminal.terminalId === activeTerminalId;
+                    const label = terminal.title || `Terminal ${index + 1}`;
+                    return (
+                      <div
+                        key={terminal.terminalId}
+                        data-workspace-terminal-tab={terminal.terminalId}
+                        className={cn(
+                          "group flex h-7 max-w-52 shrink-0 items-center rounded-md text-xs transition-colors",
+                          active
+                            ? "bg-muted/75 text-foreground"
+                            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() =>
+                            setActiveTerminalId(terminal.terminalId)
+                          }
+                          className="flex min-w-0 items-center gap-2 py-1 pl-2 pr-1"
+                        >
+                          <Terminal className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate font-medium">{label}</span>
+                          {!terminal.running ? (
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/45"
+                              title={t("workspacePane.terminalStopped")}
+                            />
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t("workspacePane.closeTerminalTab", {
+                            title: label,
+                          })}
+                          title={t("workspacePane.closeTerminalTab", {
+                            title: label,
+                          })}
+                          onClick={() =>
+                            void closeTerminal(terminal.terminalId)
+                          }
+                          className="mr-1 rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/[0.07] hover:text-foreground"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    disabled={terminalBusy}
+                    aria-label={t("workspacePane.newTerminal")}
+                    title={t("workspacePane.newTerminal")}
+                    onClick={() => void addTerminal()}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={t("workspacePane.hideTerminalPanel")}
+                title={t("workspacePane.hideTerminalPanel")}
+                onClick={onClose}
+                className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="relative min-h-0 flex-1">
+              {activeTerminal ? (
+                <WorkspaceTerminalView
+                  key={`${pane.sessionId}:${activeTerminal.terminalId}`}
+                  sessionId={pane.sessionId}
+                  terminalId={activeTerminal.terminalId}
+                  development={development}
+                  onSnapshot={updateTerminalSnapshot}
+                />
+              ) : terminalBusy ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  {t("workspacePane.startingTerminal")}
+                </div>
+              ) : null}
+              {terminalError ? (
+                <p className="pointer-events-none absolute inset-x-3 bottom-3 rounded-md border border-destructive/20 bg-background/95 px-2 py-1.5 text-[10px] text-destructive shadow-sm">
+                  {terminalError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function WorkspaceRecoveryPointsView() {
+  const { t } = useT();
+  const pane = useWorkspacePane();
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const refresh = useCallback(
-    () =>
-      development
-        ?.listCheckpoints(sessionId)
-        .then(setItems)
-        .catch(() => setItems([])),
-    [development, sessionId],
+  const items = pane.checkpoints.filter(
+    (item) => item.kind !== "turn-start" || item.hasChanges,
   );
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
-  if (!development) return <WorkspaceEmptyState />;
+    void pane.refreshCheckpoints().catch(() => {});
+  }, [pane.refreshCheckpoints]);
+  if (!pane.development) return <WorkspaceEmptyState />;
   return (
     <ScrollArea className="h-full">
       <div className="p-3">
-        <div className="flex gap-2">
-          <Input
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-            placeholder={t("workspacePane.checkpointName")}
-            className="h-8 text-xs"
-          />
-          <Button
-            size="sm"
-            className="h-8"
-            disabled={busy}
-            onClick={() =>
-              void (async () => {
-                setBusy(true);
-                try {
-                  await development.createCheckpoint(sessionId, label);
-                  setLabel("");
-                  await refresh();
-                  setError(null);
-                } catch (cause) {
-                  setError(
-                    cause instanceof Error ? cause.message : String(cause),
-                  );
-                } finally {
-                  setBusy(false);
-                }
-              })()
-            }
-          >
-            <History className="h-3.5 w-3.5" />
-            {t("workspacePane.saveCheckpoint")}
-          </Button>
+        <div className="px-2 pb-2">
+          <h3 className="text-xs font-medium">
+            {t("workspacePane.recoveryPoints")}
+          </h3>
+          <p className="mt-1 text-[10.5px] leading-4 text-muted-foreground">
+            {t("workspacePane.recoveryPointsHint")}
+          </p>
         </div>
         {error ? (
-          <p className="mt-2 text-xs text-destructive">{error}</p>
+          <p className="mx-2 mt-2 text-xs text-destructive">{error}</p>
         ) : null}
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-1 space-y-1">
           {items.map((item) => (
             <li
               key={item.id}
@@ -3191,32 +4340,47 @@ function WorkspaceCheckpointsView({ sessionId }: { sessionId: string }) {
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-medium">
-                  {item.label}
+                  {item.kind === "turn-start" && item.turnIndex !== undefined
+                    ? t("workspacePane.recoveryTask", {
+                        count: item.turnIndex + 1,
+                      })
+                    : item.kind === "restore-safety"
+                      ? t("workspacePane.recoverySafety")
+                      : item.label}
                 </span>
                 <span className="mt-0.5 block text-[10px] text-muted-foreground">
                   {new Date(item.createdAt).toLocaleString()} ·{" "}
-                  {t("workspacePane.filesChanged", {
+                  {t("workspacePane.snapshotFiles", {
                     count: item.changedFiles,
                   })}
+                  {item.complete === false
+                    ? ` · ${t("workspacePane.recoveryIncomplete")}`
+                    : ""}
                 </span>
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={busy}
+                disabled={busyId !== null || item.complete === false}
                 className="h-7 text-[11px]"
                 onClick={() =>
                   void (async () => {
-                    setBusy(true);
+                    if (
+                      !window.confirm(
+                        t("sidepanel.message.restoreWorkspaceConfirm"),
+                      )
+                    )
+                      return;
+                    setBusyId(item.id);
                     try {
-                      await development.restoreCheckpoint(sessionId, item.id);
+                      await pane.restoreCheckpoint(item.id);
                       setError(null);
                     } catch (cause) {
                       setError(
                         cause instanceof Error ? cause.message : String(cause),
                       );
                     } finally {
-                      setBusy(false);
+                      setBusyId(null);
                     }
                   })()
                 }
@@ -3224,6 +4388,29 @@ function WorkspaceCheckpointsView({ sessionId }: { sessionId: string }) {
                 <Undo2 className="h-3 w-3" />
                 {t("workspacePane.restore")}
               </Button>
+              <button
+                type="button"
+                disabled={busyId !== null}
+                onClick={() => {
+                  if (!window.confirm(t("workspacePane.deleteRecoveryConfirm")))
+                    return;
+                  setBusyId(item.id);
+                  void pane
+                    .deleteCheckpoint(item.id)
+                    .then(() => setError(null))
+                    .catch((cause) =>
+                      setError(
+                        cause instanceof Error ? cause.message : String(cause),
+                      ),
+                    )
+                    .finally(() => setBusyId(null));
+                }}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/8 hover:text-destructive disabled:opacity-40"
+                title={t("workspacePane.deleteRecovery")}
+                aria-label={t("workspacePane.deleteRecovery")}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </li>
           ))}
         </ul>
@@ -3250,7 +4437,18 @@ export function WorkspacePane({
   const { t } = useT();
   const [sessionTasks, setSessionTasks] = useState<HermesKanbanTask[]>([]);
   const [mode, setMode] = useState<WorkbenchMode>("files");
+  const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const active = pane.activeTab;
+  const browserTabs = pane.tabs
+    .map((tab) => tab.resource)
+    .filter(
+      (resource): resource is EmbeddedBrowserResource =>
+        resource.kind === "browser",
+    );
+  const activeBrowserTabId =
+    mode === "preview" && active?.resource.kind === "browser"
+      ? active.resource.browserTabId
+      : null;
   const widthRef = useRef(pane.width);
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLElement>(null);
@@ -3294,6 +4492,14 @@ export function WorkspacePane({
   useEffect(() => {
     if (active?.id) setMode("preview");
   }, [active?.id]);
+
+  useEffect(() => {
+    if (pane.browserRequestVersion > 0) setMode("preview");
+  }, [pane.browserRequestVersion]);
+
+  useEffect(() => {
+    if (pane.collaborationRequestVersion > 0) setMode("collaboration");
+  }, [pane.collaborationRequestVersion]);
 
   const onResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -3381,7 +4587,7 @@ export function WorkspacePane({
           pane.open ? "opacity-100" : "opacity-0",
         )}
       >
-        <div className="absolute inset-y-0 left-1/2 w-px bg-border/35 transition-colors group-hover:bg-foreground/10 group-active:bg-foreground/20" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-border/60 transition-colors group-hover:bg-foreground/12 group-active:bg-foreground/20" />
       </div>
       <aside
         ref={previewRef}
@@ -3401,56 +4607,38 @@ export function WorkspacePane({
           data-workspace-tabbar
           className="flex h-11 shrink-0 items-center bg-background pl-2 pr-11"
         >
-          {pane.sessionId ? (
+          {pane.sessionId || pane.tabs.length > 0 ? (
             <div
               role="tablist"
               aria-label={t("workspacePane.tabs")}
               className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
             >
-              {[
-                {
-                  id: "files" as const,
-                  icon: FolderTree,
-                  label: t("workspacePane.files"),
-                },
-                {
-                  id: "outputs" as const,
-                  icon: PackageOpen,
-                  label: t("workspacePane.outputs"),
-                },
-                {
-                  id: "review" as const,
-                  icon: FileDiff,
-                  label: t("workspacePane.review"),
-                },
-                {
-                  id: "terminal" as const,
-                  icon: Terminal,
-                  label: t("workspacePane.terminal"),
-                },
-                {
-                  id: "checkpoints" as const,
-                  icon: History,
-                  label: t("workspacePane.checkpoints"),
-                },
-              ].map(({ id, icon: Icon, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === id}
-                  onClick={() => setMode(id)}
-                  className={cn(
-                    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[10.5px] transition-colors",
-                    mode === id
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
+              {pane.sessionId
+                ? [
+                    {
+                      id: "files" as const,
+                      icon: FolderTree,
+                      label: t("workspacePane.openFile"),
+                    },
+                  ].map(({ id, icon: Icon, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={mode === id}
+                      onClick={() => setMode(id)}
+                      className={cn(
+                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[10.5px] transition-colors",
+                        mode === id
+                          ? "bg-secondary text-foreground"
+                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  ))
+                : null}
               {sessionTasks.length > 0 && (
                 <button
                   type="button"
@@ -3472,11 +4660,17 @@ export function WorkspacePane({
                 </button>
               )}
               {pane.tabs.map((tab) => {
-                const selected = tab.id === active?.id;
+                const selected = mode === "preview" && tab.id === active?.id;
                 const labels =
                   tab.resource.kind === "diff"
                     ? { primary: t("workspacePane.review"), context: "" }
-                    : resourceTabLabels(tab.resource);
+                    : tab.resource.kind === "browser"
+                      ? {
+                          primary:
+                            tab.resource.title || t("embeddedBrowser.newTab"),
+                          context: "",
+                        }
+                      : resourceTabLabels(tab.resource);
                 return (
                   <WorkspaceTabButton
                     key={tab.id}
@@ -3497,77 +4691,90 @@ export function WorkspacePane({
               {t("workspacePane.title")}
             </div>
           )}
-          <button
-            aria-label={t("workspacePane.openWindow")}
-            className="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
-            onClick={() =>
-              window.open(window.location.href, "_blank", "noopener")
-            }
-            title={t("workspacePane.openWindow")}
-            type="button"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </button>
         </div>
 
-        <div className="min-h-0 flex-1">
-          {mode === "files" && pane.files ? (
-            <WorkspaceFilesBrowser
-              sessionId={pane.sessionId}
-              files={pane.files}
-              development={pane.development}
-              workspaces={pane.workspaces}
-              openFile={pane.openFile}
+        <div className="relative min-h-0 flex-1">
+          <div
+            className={cn("h-full min-h-0", activeBrowserTabId && "invisible")}
+          >
+            {mode === "files" && pane.files ? (
+              <WorkspaceFileWorkspace
+                resource={null}
+                sessionId={pane.sessionId}
+                files={pane.files}
+                development={pane.development}
+                workspaces={pane.workspaces}
+                openFile={pane.openFile}
+                treeOpen={fileTreeOpen}
+                onTreeOpenChange={setFileTreeOpen}
+              />
+            ) : mode === "checkpoints" ? (
+              <WorkspaceRecoveryPointsView />
+            ) : mode === "collaboration" ? (
+              <SessionTaskFlow
+                agents={pane.liveAgents}
+                tasks={sessionTasks}
+                onStop={
+                  client && pane.sessionId
+                    ? () => client.abort(pane.sessionId)
+                    : undefined
+                }
+                onOpenSession={onOpenSession}
+              />
+            ) : !active ? (
+              pane.files ? (
+                <WorkspaceFileWorkspace
+                  resource={null}
+                  sessionId={pane.sessionId}
+                  files={pane.files}
+                  development={pane.development}
+                  workspaces={pane.workspaces}
+                  openFile={pane.openFile}
+                  treeOpen={fileTreeOpen}
+                  onTreeOpenChange={setFileTreeOpen}
+                />
+              ) : (
+                <WorkspaceEmptyState />
+              )
+            ) : active.resource.kind === "file" && pane.files ? (
+              <WorkspaceFileWorkspace
+                resource={active.resource}
+                sessionId={pane.sessionId}
+                files={pane.files}
+                development={pane.development}
+                workspaces={pane.workspaces}
+                openFile={pane.openFile}
+                treeOpen={fileTreeOpen}
+                onTreeOpenChange={setFileTreeOpen}
+              />
+            ) : active.resource.kind === "code" ? (
+              <CodeExecutionView resource={active.resource} />
+            ) : active.resource.kind === "diff" ? (
+              <DiffView
+                resource={active.resource}
+                onOpenFile={pane.openFile}
+                sessionId={pane.sessionId}
+                files={pane.files}
+              />
+            ) : active.resource.kind === "browser" ? null : (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                {t("workspacePane.fileUnavailable")}
+              </div>
+            )}
+          </div>
+          {browserTabs.length > 0 ? (
+            <EmbeddedBrowserWorkspace
+              tabs={browserTabs}
+              activeTabId={activeBrowserTabId}
+              onUpdateTab={pane.updateBrowserTab}
+              onNewTab={pane.newBrowserTab}
+              className={cn(
+                activeBrowserTabId
+                  ? "visible"
+                  : "pointer-events-none invisible",
+              )}
             />
-          ) : mode === "outputs" && pane.files ? (
-            <WorkspaceOutputsView
-              sessionId={pane.sessionId}
-              files={pane.files}
-              openFile={pane.openFile}
-            />
-          ) : mode === "review" ? (
-            <WorkspaceGitReview
-              sessionId={pane.sessionId}
-              files={pane.files}
-              openFile={pane.openFile}
-            />
-          ) : mode === "terminal" ? (
-            <WorkspaceTerminalView sessionId={pane.sessionId} />
-          ) : mode === "checkpoints" ? (
-            <WorkspaceCheckpointsView sessionId={pane.sessionId} />
-          ) : mode === "collaboration" ? (
-            <SessionTaskFlow
-              agents={pane.liveAgents}
-              tasks={sessionTasks}
-              onStop={
-                client && pane.sessionId
-                  ? () => client.abort(pane.sessionId)
-                  : undefined
-              }
-              onOpenSession={onOpenSession}
-            />
-          ) : !active ? (
-            <WorkspaceEmptyState />
-          ) : active.resource.kind === "file" && pane.files ? (
-            <WorkspaceFileView
-              resource={active.resource}
-              sessionId={pane.sessionId}
-              files={pane.files}
-            />
-          ) : active.resource.kind === "code" ? (
-            <CodeExecutionView resource={active.resource} />
-          ) : active.resource.kind === "diff" ? (
-            <DiffView
-              resource={active.resource}
-              onOpenFile={pane.openFile}
-              sessionId={pane.sessionId}
-              files={pane.files}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              {t("workspacePane.fileUnavailable")}
-            </div>
-          )}
+          ) : null}
         </div>
       </aside>
     </div>

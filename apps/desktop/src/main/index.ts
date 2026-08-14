@@ -74,11 +74,13 @@ import {
   stopAllHermesJobs,
 } from "./hermes-runtime";
 import {
-  startManagedAppsController,
-  type ManagedAppsController,
-} from "./managed-apps";
+  startManagedExtensionsController,
+  type ManagedExtensionsController,
+} from "./managed-extensions";
+import { migrateLegacyManagedExtensionsRoot } from "./managed-extensions-migration";
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { registerIpcHandlers } from "./ipc";
+import { embeddedBrowserController } from "./embedded-browser";
 import { createMainPlatformAdapter } from "./platform";
 import { recordToolActivityEvent, registerToolActivity } from "./tool-activity";
 import { cleanupOldSnips } from "./screen-capture";
@@ -237,6 +239,16 @@ function installPermissionRequestHandler(): void {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
     allowed.has(permission),
   );
+
+  // Arbitrary pages loaded in the built-in browser use a separate persistent
+  // session for cookies/login state. They do not inherit Amiba renderer
+  // privileges: sites may render normally, but camera, microphone,
+  // notifications, MIDI, and other privileged requests are denied.
+  const browserSession = session.fromPartition("persist:amiba-browser");
+  browserSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  browserSession.setPermissionCheckHandler(() => false);
 }
 
 /**
@@ -295,24 +307,7 @@ let startupWindowTheme: "light" | "dark" = nativeTheme.shouldUseDarkColors
 // Extension HTTP server — started inside app.whenReady() once the
 // registryPath is known. Stopped in before-quit alongside the extension host.
 let _extHttpServer: import("./ext-http-server").ExtHttpServer | null = null;
-let _managedAppsController: ManagedAppsController | null = null;
-
-async function registerManagedAppsWithHermes(): Promise<void> {
-  if (!_managedAppsController) return;
-  const response = await backplaneFetch(
-    "/hermes/tools/managed-apps-federation",
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: _managedAppsController.federationUrl }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(
-      `federation registration failed (${response.status}): ${await response.text()}`,
-    );
-  }
-}
+let _managedExtensionsController: ManagedExtensionsController | null = null;
 
 async function resolveRegisteredMcpProvider(providerId: string) {
   const response = await backplaneFetch(
@@ -527,6 +522,18 @@ function createWindow() {
   });
 
   mainWindow = win;
+  win.webContents.on(
+    "will-attach-webview",
+    (_event, webPreferences, params) => {
+      if (params.partition !== "persist:amiba-browser") return;
+      // The page is untrusted web content. Enforce these preferences in main
+      // even if renderer attributes are accidentally changed later.
+      webPreferences.nodeIntegration = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.sandbox = true;
+      delete webPreferences.preload;
+    },
+  );
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -639,18 +646,35 @@ if (!gotSingleInstanceLock) {
     registerIpcHandlers();
     registerChatHandlers();
     try {
-      _managedAppsController = await startManagedAppsController({
-        root: join(app.getPath("userData"), "managed-extensions"),
+      const userDataRoot = app.getPath("userData");
+      const migration = await migrateLegacyManagedExtensionsRoot(userDataRoot);
+      if (migration.migratedRoot || migration.movedEntries.length) {
+        console.info("[main] migrated legacy managed Extension data:", migration);
+      }
+      if (migration.conflicts.length) {
+        console.warn(
+          "[main] preserved conflicting legacy managed Extension data:",
+          migration.conflicts,
+        );
+      }
+      _managedExtensionsController = await startManagedExtensionsController({
+        root: join(userDataRoot, "managed-extensions"),
         pythonCommand: getManagedHermesPythonPath(),
         resolveRegisteredProvider: resolveRegisteredMcpProvider,
+        hostTools: embeddedBrowserController.hostTools(),
+        openBrowser: (url) => embeddedBrowserController.openForAgent(url),
       });
+      process.env.AMIBA_EXTENSIONS_BRIDGE_URL =
+        _managedExtensionsController.extensionBridgeUrl;
+      process.env.AMIBA_EXTENSIONS_BRIDGE_TOKEN =
+        _managedExtensionsController.extensionBridgeToken;
       console.info(
-        `[main] managed Applets federation: ${_managedAppsController.federationUrl}`,
+        `[main] managed Extensions plugin bridge: ${_managedExtensionsController.extensionBridgeUrl}`,
       );
     } catch (error) {
-      console.error("[main] managed Applets failed to start:", error);
+      console.error("[main] managed Extensions failed to start:", error);
     }
-    registerHermesRuntimeHandlers(registerManagedAppsWithHermes);
+    registerHermesRuntimeHandlers();
     registerToolActivity();
 
     const extensionsRoot = getExtensionsRoot();
@@ -903,12 +927,14 @@ app.on("before-quit", async (event) => {
     await _extHttpServer.stop().catch(() => {
       /* ignore shutdown errors */
     });
-  if (_managedAppsController) {
-    await _managedAppsController.stop().catch(() => {
+  if (_managedExtensionsController) {
+    await _managedExtensionsController.stop().catch(() => {
       /* ignore shutdown errors */
     });
-    _managedAppsController = null;
+    _managedExtensionsController = null;
   }
+  delete process.env.AMIBA_EXTENSIONS_BRIDGE_URL;
+  delete process.env.AMIBA_EXTENSIONS_BRIDGE_TOKEN;
   _extensionHostShutdownDone = true;
   app.quit();
 });

@@ -34,6 +34,7 @@ interface AmibaBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>;
   };
+  embeddedBrowser: import("@amiba/platform").EmbeddedBrowserAdapter;
   toolActivity: {
     read(days: number): Promise<import("@amiba/core").ToolActivityReadResult>;
     onChanged(cb: () => void): () => void;
@@ -140,7 +141,7 @@ interface AmibaBridgeApi {
      */
     getHttpBaseUrl(): Promise<string>;
   };
-  managedApps: import("@amiba/managed-apps/bridge").ManagedAppsBridge;
+  managedExtensions: import("@amiba/managed-extensions/bridge").ManagedExtensionsBridge;
   /** Returns the absolute file:// path of the webview bridge preload bundle. */
   getWebviewPreloadPath(): Promise<string>;
   /** Returns the current { language, theme } init state for a webview. */

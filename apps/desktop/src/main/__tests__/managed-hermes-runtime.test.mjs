@@ -21,7 +21,12 @@ test("managed runtime manifest is immutable and reproducibly pinned", () => {
   assert.match(MANAGED_HERMES_RUNTIME.playwrightVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(
     MANAGED_HERMES_RUNTIME.patches.map((patch) => patch.id),
-    ["forward-moa-run-events", "forward-subagent-run-events"],
+    [
+      "forward-moa-run-events",
+      "forward-subagent-run-events",
+      "api-server-clarify",
+      "bundle-amiba-extensions-plugin",
+    ],
   );
   for (const patch of MANAGED_HERMES_RUNTIME.patches) {
     assert.match(patch.sha256, /^[0-9a-f]{64}$/);

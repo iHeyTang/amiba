@@ -95,7 +95,7 @@ describe("SettingsView progressive settings navigation", () => {
       screen.queryByRole("button", { name: "Capability extensions" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Applets" }),
+      screen.queryByRole("button", { name: "Extensions" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Connection" }),

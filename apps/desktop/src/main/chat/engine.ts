@@ -8,6 +8,7 @@ import {
   type ClientToEngineMessage,
   type EngineToClientMessage,
   type HermesApprovalRequest,
+  type HermesClarifyRequest,
   type HermesLiveAgent,
   type HermesToolProgress,
   type SnapshotFrame,
@@ -157,6 +158,7 @@ function makeInitialState(
     agentFinalUrl: null,
     agentFinalTitle: null,
     pendingApprovals: [],
+    pendingClarifications: [],
     runId: null,
     startedAt: now,
     updatedAt: now,
@@ -553,6 +555,21 @@ async function handleSubmit(payload: SubmitPayload) {
           );
           dropApprovalLocally(approvalId);
           emitEvent(sessionId, { kind: "approvalResolved", approvalId });
+        },
+        onClarifyRequest: (request: HermesClarifyRequest) => {
+          state.pendingClarifications = [
+            ...state.pendingClarifications.filter(
+              (item) => item.clarifyId !== request.clarifyId,
+            ),
+            request,
+          ];
+          emitEvent(sessionId, { kind: "clarifyRequest", request });
+        },
+        onClarifyResponded: (clarifyId: string) => {
+          state.pendingClarifications = state.pendingClarifications.filter(
+            (item) => item.clarifyId !== clarifyId,
+          );
+          emitEvent(sessionId, { kind: "clarifyResolved", clarifyId });
         },
         onRunCompleted: ({ usage }) => {
           // Fan out token usage to extension runners (parity with the old

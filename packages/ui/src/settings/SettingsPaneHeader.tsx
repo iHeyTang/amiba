@@ -57,6 +57,8 @@ interface SettingsPaneHeaderProps {
   subtitle?: ReactNode;
   /** Tooltip displayed on hover over the subtitle row. */
   subtitleTooltip?: string;
+  /** Left-aligned navigation or identity control placed before the title. */
+  leading?: ReactNode;
   /** Right-aligned actions (buttons, badges). Already opted out of the
    *  drag region via the global `.app-drag-region button` CSS rule. */
   children?: ReactNode;
@@ -65,6 +67,8 @@ interface SettingsPaneHeaderProps {
   contentClassName?: string;
   /** Matches the title strip to the page body's named width. */
   contentSize?: PageContentSize;
+  /** Optional visual treatment for this pane's header shell. */
+  headerClassName?: string;
 }
 
 /**
@@ -83,13 +87,15 @@ export function SettingsPaneHeader({
   title,
   subtitle,
   subtitleTooltip,
+  leading,
   children,
   contentClassName,
   contentSize = "md",
+  headerClassName,
 }: SettingsPaneHeaderProps) {
   const { className, chromeHeightPx } = useContext(PaneHeaderContext);
   const hasChromeFloor = chromeHeightPx !== undefined;
-  const hasContent = !!title || !!subtitle || !!children;
+  const hasContent = !!leading || !!title || !!subtitle || !!children;
   if (!hasContent) {
     // Drag-only strip. Keep the className (drag region on desktop) and
     // the chrome floor; extension/web hosts collapse to a zero-height
@@ -103,7 +109,7 @@ export function SettingsPaneHeader({
   }
   return (
     <header
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0", className, headerClassName)}
       style={hasChromeFloor ? { minHeight: chromeHeightPx } : undefined}
     >
       <PageContent
@@ -117,20 +123,23 @@ export function SettingsPaneHeader({
             contentClassName,
           )}
         >
-          <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
-            {title && (
-              <h2 className="text-base font-medium tracking-tight text-foreground">
-                {title}
-              </h2>
-            )}
-            {subtitle && (
-              <p
-                className="truncate text-[11px] text-muted-foreground"
-                title={subtitleTooltip}
-              >
-                {subtitle}
-              </p>
-            )}
+          <div className="flex min-w-0 items-center gap-2">
+            {leading}
+            <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
+              {title && (
+                <h2 className="truncate text-base font-medium tracking-tight text-foreground">
+                  {title}
+                </h2>
+              )}
+              {subtitle && (
+                <p
+                  className="truncate text-[11px] text-muted-foreground"
+                  title={subtitleTooltip}
+                >
+                  {subtitle}
+                </p>
+              )}
+            </div>
           </div>
           {children}
         </div>

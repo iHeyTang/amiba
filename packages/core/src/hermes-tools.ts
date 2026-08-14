@@ -2,9 +2,9 @@
  * Read + toggle client for `/hermes/tools/toolsets` — the agent's
  * configurable toolsets (browser, web search, image gen, …).
  *
- * Backplane wraps `hermes_cli.tools_config`, the same module the CLI
- * `hermes tools` picker uses, so toggling here lands in the same
- * `platform_toolsets.cli` slot of `config.yaml`.
+ * Backplane wraps `hermes_cli.tools_config`, while targeting the
+ * `platform_toolsets.api_server` slot used by Amiba Profile task sessions.
+ * Platform-native capabilities retain their Hermes-owned platform scope.
  */
 
 import { backplaneFetch } from "./backplane-client";
@@ -23,7 +23,7 @@ export interface HermesToolset {
   label: string;
   /** Short description of the toolset's scope. */
   description: string;
-  /** Currently enabled in ``config.yaml/platform_toolsets.cli``. */
+  /** Currently enabled for the Hermes platform that owns this capability. */
   enabled: boolean;
   /** Same as ``enabled`` today — disabled toolsets aren't registered. */
   available: boolean;
@@ -160,6 +160,52 @@ export interface HermesToolMutationResponse {
   error?: string;
 }
 
+export interface HermesContextEngine {
+  name: string;
+  label: string;
+  description: string;
+  available: boolean;
+}
+
+export interface HermesContextEnginesResponse {
+  ok: boolean;
+  engine: string;
+  engines: HermesContextEngine[];
+  error?: string;
+}
+
+export interface HermesA2APeer {
+  name: string;
+  url: string;
+  timeout: number;
+  capabilities: string[];
+  auth_type: string;
+  /** Bearer token exists, but its value is never returned. */
+  auth_configured: boolean;
+}
+
+export interface HermesA2APeersResponse {
+  ok: boolean;
+  peers: HermesA2APeer[];
+  error?: string;
+}
+
+export interface HermesA2APeerInput {
+  url: string;
+  timeout: number;
+  capabilities: string[];
+  /** Write-only; blank/omitted preserves the existing token. */
+  token?: string;
+  clear_token?: boolean;
+}
+
+export interface HermesA2APeerMutationResponse {
+  ok: boolean;
+  peer?: HermesA2APeer;
+  name?: string;
+  error?: string;
+}
+
 export interface HermesTerminalBackend {
   name: string;
   label: string;
@@ -206,6 +252,134 @@ function responseError(
     (data && typeof data.error === "string" && data.error) ||
     `${res.status} ${res.statusText}`
   );
+}
+
+export async function getHermesContextEngines(
+  profileId?: string,
+): Promise<HermesContextEnginesResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/context-engines", profileId),
+      { method: "GET" },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesContextEnginesResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return {
+        ok: false,
+        engine: "compressor",
+        engines: [],
+        error: responseError(res, data),
+      };
+    }
+    return data;
+  } catch (e) {
+    return {
+      ok: false,
+      engine: "compressor",
+      engines: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+export async function putHermesContextEngine(
+  engine: string,
+  profileId?: string,
+): Promise<HermesToolMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/context-engine", profileId),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engine }),
+      },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesToolMutationResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+export async function getHermesA2APeers(
+  profileId?: string,
+): Promise<HermesA2APeersResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/tools/a2a/peers", profileId),
+      { method: "GET" },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesA2APeersResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return { ok: false, peers: [], error: responseError(res, data) };
+    }
+    return data;
+  } catch (e) {
+    return { ok: false, peers: [], error: String((e as Error)?.message || e) };
+  }
+}
+
+export async function putHermesA2APeer(
+  name: string,
+  input: HermesA2APeerInput,
+  profileId?: string,
+): Promise<HermesA2APeerMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl(
+        `/hermes/tools/a2a/peers/${encodeURIComponent(name)}`,
+        profileId,
+      ),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesA2APeerMutationResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+export async function deleteHermesA2APeer(
+  name: string,
+  profileId?: string,
+): Promise<HermesA2APeerMutationResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl(
+        `/hermes/tools/a2a/peers/${encodeURIComponent(name)}`,
+        profileId,
+      ),
+      { method: "DELETE" },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesA2APeerMutationResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return data;
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
 }
 
 /** Read terminal execution choices and their server-computed readiness. */
@@ -690,9 +864,9 @@ export async function getHermesInstalledMcps(
 /**
  * PUT /hermes/tools/toolsets/{name} — flip the enabled flag.
  *
- * Mirrors upstream PUT /api/tools/toolsets/{name}. Persists to
- * ``platform_toolsets.cli`` via the canonical helper, so the change
- * takes effect on the next agent session.
+ * Mirrors upstream PUT /api/tools/toolsets/{name}. Persists to the selected
+ * Profile's owning configuration surface, so the change takes effect on the
+ * next agent session.
  */
 export async function putHermesToolsetToggle(
   name: string,

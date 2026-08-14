@@ -1,7 +1,16 @@
+import type { HermesToolProgress } from "@amiba/core";
+
 export interface WorkspaceReviewEntry {
   toolCallId: string;
   diff: string;
   paths: string[];
+}
+
+export interface WorkspaceReviewResource {
+  kind: "diff";
+  reviewId: string;
+  scope: "turn" | "tool";
+  entries: WorkspaceReviewEntry[];
 }
 
 export type WorkspaceReviewLineKind =
@@ -39,6 +48,118 @@ export interface WorkspaceReviewDocument {
   deletions: number;
 }
 
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function decodeResult(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function firstString(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+export function workspaceFileTargets(event: HermesToolProgress): string[] {
+  const args = event.args ?? {};
+  const result = recordOf(decodeResult(event.result));
+  const targets: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return;
+    if (!targets.includes(value.trim())) targets.push(value.trim());
+  };
+
+  if (result) {
+    add(result.resolved_path);
+    if (Array.isArray(result.files_modified)) {
+      for (const path of result.files_modified) add(path);
+    }
+    add(result.path);
+  }
+  add(firstString(args, "path", "file", "filepath"));
+  return targets;
+}
+
+export function workspaceReviewResourceFromEvents(
+  events: HermesToolProgress[],
+  reviewId: string,
+): WorkspaceReviewResource | null {
+  const latestByTool = new Map<string, HermesToolProgress>();
+  for (const event of events) latestByTool.set(event.toolCallId, event);
+
+  const entries = [...latestByTool.values()]
+    .filter(
+      (event) =>
+        (event.tool === "write_file" || event.tool === "patch") &&
+        event.status === "completed" &&
+        !event.error,
+    )
+    .map((event) => ({
+      toolCallId: event.toolCallId,
+      diff: workspaceMutationDiff(event),
+      paths: workspaceFileTargets(event),
+    }))
+    .filter((entry) => entry.diff.length > 0 || entry.paths.length > 0);
+
+  return entries.length
+    ? { kind: "diff", reviewId, scope: "turn", entries }
+    : null;
+}
+
+function diffLikeText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (
+    text.includes("*** Begin Patch") ||
+    text.includes("*** Update File:") ||
+    text.includes("*** Add File:") ||
+    text.includes("*** Delete File:") ||
+    (/^@@/m.test(text) && /^[-+]/m.test(text)) ||
+    (/^--- /m.test(text) && /^\+\+\+ /m.test(text))
+  ) {
+    return text;
+  }
+  return "";
+}
+
+function workspaceMutationDiff(event: HermesToolProgress): string {
+  const direct = diffLikeText(event.inlineDiff);
+  if (direct) return direct;
+  if (event.tool !== "patch") return "";
+
+  // The completed result is authoritative: apply-patch may normalize or
+  // partially apply the submitted patch, so its resulting diff can differ
+  // from the original argument.
+  const result = recordOf(decodeResult(event.result));
+  if (result) {
+    for (const key of ["patch", "diff", "inline_diff", "content"]) {
+      const candidate = diffLikeText(result[key]);
+      if (candidate) return candidate;
+    }
+  }
+  const args = event.args ?? {};
+  for (const key of ["patch", "diff", "input", "content"]) {
+    const candidate = diffLikeText(args[key]);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
 const ANSI_PATTERN =
   // eslint-disable-next-line no-control-regex
   /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
@@ -57,6 +178,9 @@ function cleanDiffPath(value: string): string {
 function renderedPathPair(
   line: string,
 ): { oldPath: string; newPath: string } | null {
+  // Unified-diff content lines carry a leading marker. An added comment such
+  // as `+// amount (ten-thousands → yuan)` is code, never a rename header.
+  if (/^[ +\-]/.test(line)) return null;
   const match = line.match(/^(.+?)\s+→\s+(.+)$/);
   if (!match) return null;
   const rawOldPath = match[1]!.trim();
@@ -115,7 +239,26 @@ function parseEntry(entry: WorkspaceReviewEntry): WorkspaceReviewFile[] {
 
   for (const rawLine of lines) {
     const line = rawLine.replace(/\s+$/, "");
-    if (!line || line.includes("┊ review diff")) continue;
+    if (
+      !line ||
+      line.includes("┊ review diff") ||
+      line === "*** Begin Patch" ||
+      line === "*** End Patch" ||
+      line === "*** End of File"
+    )
+      continue;
+
+    const patchFile = line.match(/^\*\*\* (?:Update|Add|Delete) File:\s*(.+)$/);
+    if (patchFile) {
+      beginFile(patchFile[1]!.trim());
+      pendingOldPath = patchFile[1]!.trim();
+      continue;
+    }
+    const movedFile = line.match(/^\*\*\* Move to:\s*(.+)$/);
+    if (movedFile) {
+      ensureFile().path = movedFile[1]!.trim();
+      continue;
+    }
 
     const gitHeader = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
     if (gitHeader) {
@@ -139,11 +282,11 @@ function parseEntry(entry: WorkspaceReviewEntry): WorkspaceReviewFile[] {
       continue;
     }
 
-    const hunk = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    const hunk = line.match(/^@@(?: -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)?)? @@?/);
     if (hunk) {
       const file = ensureFile();
-      const oldStart = Number(hunk[1]);
-      const newStart = Number(hunk[2]);
+      const oldStart = hunk[1] ? Number(hunk[1]) : file.oldCursor;
+      const newStart = hunk[2] ? Number(hunk[2]) : file.newCursor;
       const oldGap = oldStart - file.oldCursor;
       const newGap = newStart - file.newCursor;
       const gap = Math.max(0, Math.min(oldGap, newGap));
@@ -248,6 +391,22 @@ export function parseWorkspaceReview(
       } else {
         filesByPath.set(parsed.path, parsed);
       }
+    }
+  }
+
+  const equivalentPath = (left: string, right: string) => {
+    const a = left.replaceAll("\\", "/").replace(/^\.\//, "");
+    const b = right.replaceAll("\\", "/").replace(/^\.\//, "");
+    return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+  };
+  for (const entry of entries) {
+    for (const path of entry.paths) {
+      if (
+        [...filesByPath.keys()].some((current) => equivalentPath(current, path))
+      ) {
+        continue;
+      }
+      filesByPath.set(path, createFile(path));
     }
   }
 

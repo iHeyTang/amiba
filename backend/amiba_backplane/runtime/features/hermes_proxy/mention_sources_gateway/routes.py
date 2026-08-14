@@ -9,7 +9,7 @@ module exposes the front-end-relevant slices as a web API:
   capability in-process and return its items.
 - ``GET    /hermes/mention-resources``      — the flattened mention-resource
   registry (for the composer's ``@`` providers).
-New @-mention capabilities belong to Applets and are declared in their
+New @-mention capabilities belong to Extensions and are declared in their
 manifest. These routes intentionally retain search/read only so a user's
 already-installed legacy sources continue to work during migration. There is
 no standalone mention-source lifecycle surface anymore.

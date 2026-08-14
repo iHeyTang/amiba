@@ -8,26 +8,34 @@
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
 import {
+  Archive,
+  ArchiveRestore,
   BookOpen,
+  CheckSquare,
   Clock,
   Folder,
   List,
   ListTodo,
   ListTree,
   MessageSquare,
+  MoreHorizontal,
+  Pin,
   Plus,
   PlugZap,
   Settings,
+  Trash2,
+  Upload,
   Wallet,
   Workflow,
   Wrench,
+  X,
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/core";
 import { useT } from "@amiba/i18n";
 import type { MainContribution } from "@amiba/extension-host/renderer";
-import { cn } from "../primitives";
+import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
@@ -103,7 +111,6 @@ export interface SidebarProps {
   scheduledLabelFor: (source: string) => string;
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
-  onOpenTaskCenter: () => void;
   onOpenSettings: () => void;
   showCapabilityExtensions?: boolean;
   className?: string;
@@ -136,13 +143,16 @@ export function Sidebar({
   scheduledLabelFor,
   historyLayout,
   onHistoryLayoutChange,
-  onOpenTaskCenter,
   onOpenSettings,
   showCapabilityExtensions = false,
   className,
 }: SidebarProps) {
   const { t } = useT();
   const workspaceBindings = useWorkspaceBindings(sessions);
+  const [selectingSessions, setSelectingSessions] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const scheduledIds = useMemo(
     () => new Set(scheduledSessions.map((session) => session.id)),
@@ -159,6 +169,34 @@ export function Sidebar({
       ].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [sessions, scheduledSessions, scheduledLabelFor],
   );
+  const selectedSessions = useMemo(
+    () =>
+      historySessions.filter((session) => selectedSessionIds.has(session.id)),
+    [historySessions, selectedSessionIds],
+  );
+  const selectedSessionsAreArchived =
+    selectedSessions.length > 0 &&
+    selectedSessions.every((session) => session.archived);
+
+  const leaveSessionSelection = () => {
+    setSelectingSessions(false);
+    setSelectedSessionIds(new Set());
+  };
+  const toggleSelectedSession = (id: string) => {
+    setSelectedSessionIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const runBulkSessionAction = async (
+    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+  ) => {
+    if (!onBulkSessions || selectedSessionIds.size === 0) return;
+    await onBulkSessions(Array.from(selectedSessionIds), action);
+    leaveSessionSelection();
+  };
   const groupedSectionOrder = useMemo(() => {
     if (historyLayout !== "grouped") return [];
 
@@ -197,10 +235,16 @@ export function Sidebar({
   // order=0 can still sort first.
   const coreNav: NavRow[] = [
     {
+      id: "tasks",
+      icon: <ListTodo className="h-4 w-4" />,
+      label: t("tasks.title"),
+      order: 1,
+    },
+    {
       id: "scheduled",
       icon: <Workflow className="h-4 w-4" />,
       label: t("options.cron.title"),
-      order: 1,
+      order: 2,
     },
     ...(showCapabilityExtensions
       ? [
@@ -208,7 +252,7 @@ export function Sidebar({
             id: "capability-extensions",
             icon: <PlugZap className="h-4 w-4" />,
             label: t("options.extensions.library.title"),
-            order: 2,
+            order: 3,
           },
         ]
       : []),
@@ -250,39 +294,81 @@ export function Sidebar({
 
       {/* Middle (flex): chats and scheduled runs always remain visible. */}
       <div className="flex min-h-0 flex-1 flex-col px-2">
-        <div className="flex h-8 shrink-0 items-center px-2.5 pt-1">
-          <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
-            {t("sidepanel.sessions.title")}
-          </span>
-          <button
-            type="button"
-            onClick={onOpenTaskCenter}
-            aria-label={t("sidepanel.sessions.viewAll")}
-            title={t("sidepanel.sessions.viewAll")}
-            className="mr-1 rounded-full px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
-          >
-            {t("common.all")}
-          </button>
-          <div
-            role="group"
-            aria-label={t("sidepanel.sessions.layout.aria")}
-            className="flex items-center gap-0.5"
-          >
-            <HistoryLayoutButton
-              active={historyLayout === "timeline"}
-              label={t("sidepanel.sessions.layout.timeline")}
-              onClick={() => onHistoryLayoutChange("timeline")}
-            >
-              <List className="h-3.5 w-3.5" />
-            </HistoryLayoutButton>
-            <HistoryLayoutButton
-              active={historyLayout === "grouped"}
-              label={t("sidepanel.sessions.layout.grouped")}
-              onClick={() => onHistoryLayoutChange("grouped")}
-            >
-              <ListTree className="h-3.5 w-3.5" />
-            </HistoryLayoutButton>
-          </div>
+        <div
+          data-testid="sessions-header"
+          className="flex h-8 shrink-0 items-center gap-0.5 pb-0 pl-2.5 pr-1.5 pt-1"
+        >
+          {selectingSessions ? (
+            <>
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+                {t("sidepanel.sessions.selected", {
+                  count: selectedSessionIds.size,
+                })}
+              </span>
+              <SessionBulkButton
+                label={t("sidepanel.sessions.pin")}
+                icon={<Pin />}
+                disabled={!selectedSessionIds.size}
+                onClick={() => void runBulkSessionAction("pin")}
+              />
+              <SessionBulkButton
+                label={
+                  selectedSessionsAreArchived
+                    ? t("sidepanel.sessions.unarchive")
+                    : t("sidepanel.sessions.archive")
+                }
+                icon={
+                  selectedSessionsAreArchived ? <ArchiveRestore /> : <Archive />
+                }
+                disabled={!selectedSessionIds.size}
+                onClick={() =>
+                  void runBulkSessionAction(
+                    selectedSessionsAreArchived ? "unarchive" : "archive",
+                  )
+                }
+              />
+              <SessionBulkButton
+                label={t("chat.delete")}
+                icon={<Trash2 />}
+                destructive
+                disabled={!selectedSessionIds.size}
+                onClick={() => {
+                  if (
+                    confirm(
+                      t("sidepanel.sessions.bulkDeleteConfirm", {
+                        count: selectedSessionIds.size,
+                      }),
+                    )
+                  )
+                    void runBulkSessionAction("delete");
+                }}
+              />
+              <SessionBulkButton
+                label={t("common.cancel")}
+                icon={<X />}
+                onClick={leaveSessionSelection}
+              />
+            </>
+          ) : (
+            <>
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+                {t("sidepanel.sessions.title")}
+              </span>
+              <HistoryMoreMenu
+                layout={historyLayout}
+                onLayoutChange={onHistoryLayoutChange}
+                onImport={onImportSessions}
+                onStartSelection={
+                  onBulkSessions
+                    ? () => {
+                        setSelectedSessionIds(new Set());
+                        setSelectingSessions(true);
+                      }
+                    : undefined
+                }
+              />
+            </>
+          )}
         </div>
         <SessionsListView
           sessions={historySessions}
@@ -305,8 +391,9 @@ export function Sidebar({
           onArchive={onArchiveSession}
           onBranch={onBranchSession}
           onExport={onExportSession}
-          onImport={onImportSessions}
-          onBulkAction={onBulkSessions}
+          selecting={selectingSessions}
+          selectedIds={selectedSessionIds}
+          onToggleSelected={toggleSelectedSession}
           onRefresh={() => {
             void onRefreshSessions();
             void onRefreshScheduledSessions();
@@ -375,32 +462,125 @@ export function Sidebar({
   );
 }
 
-function HistoryLayoutButton({
-  active,
+function SessionBulkButton({
   label,
+  icon,
+  disabled,
+  destructive,
   onClick,
-  children,
 }: {
-  active: boolean;
   label: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  destructive?: boolean;
   onClick: () => void;
-  children: ReactNode;
 }) {
   return (
     <button
       type="button"
-      aria-pressed={active}
-      aria-label={label}
       title={label}
+      aria-label={label}
+      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
-        active
-          ? "bg-secondary text-secondary-foreground"
-          : "hover:bg-accent/70 hover:text-foreground",
+        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:h-3.5 [&_svg]:w-3.5",
+        destructive && "hover:bg-destructive/10 hover:text-destructive",
       )}
     >
-      {children}
+      {icon}
     </button>
+  );
+}
+
+function HistoryMoreMenu({
+  layout,
+  onLayoutChange,
+  onImport,
+  onStartSelection,
+}: {
+  layout: HistoryLayout;
+  onLayoutChange: (layout: HistoryLayout) => void;
+  onImport?: (file: File) => void | Promise<void>;
+  onStartSelection?: () => void;
+}) {
+  const { t } = useT();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuItems: CascadeMenuItem[] = [
+    ...(onStartSelection
+      ? [
+          {
+            id: "select",
+            label: t("sidepanel.sessions.select"),
+            icon: <CheckSquare />,
+            onSelect: onStartSelection,
+          },
+        ]
+      : []),
+    ...(onImport
+      ? [
+          {
+            id: "import",
+            label: t("sidepanel.sessions.import"),
+            icon: <Upload />,
+            onSelect: () => fileInputRef.current?.click(),
+          },
+        ]
+      : []),
+    {
+      id: "layout",
+      label: t("sidepanel.sessions.layout.menu"),
+      icon: layout === "timeline" ? <List /> : <ListTree />,
+      separatorBefore: Boolean(onStartSelection || onImport),
+      children: [
+        {
+          id: "timeline",
+          label: t("sidepanel.sessions.layout.timeline"),
+          icon: <List />,
+          checked: layout === "timeline",
+          onSelect: () => onLayoutChange("timeline"),
+        },
+        {
+          id: "grouped",
+          label: t("sidepanel.sessions.layout.grouped"),
+          icon: <ListTree />,
+          checked: layout === "grouped",
+          onSelect: () => onLayoutChange("grouped"),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <>
+      <CascadeMenu
+        align="start"
+        ariaLabel={t("sidepanel.sessions.more")}
+        items={menuItems}
+        maxDepth={5}
+        trigger={
+          <button
+            type="button"
+            aria-label={t("sidepanel.sessions.more")}
+            title={t("sidepanel.sessions.more")}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        }
+      />
+      {onImport ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (file) void onImport(file);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

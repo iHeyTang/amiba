@@ -2,7 +2,7 @@
   "name": "@{{AUTHOR}}/{{NAME}}",
   "version": "0.1.0",
   "private": true,
-  "description": "An Amiba Applet.",
+  "description": "An Amiba Extension.",
   "scripts": {
     "build": "rm -rf dist && vite build -c vite.main.config.ts && vite build -c vite.ui.config.ts",
     "dev": "amiba dev",

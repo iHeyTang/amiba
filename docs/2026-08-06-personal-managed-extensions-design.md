@@ -1203,17 +1203,17 @@ flowchart LR
 ### 15.3 Agent 生命周期 API
 
 ```text
-managedApps.create
-managedApps.createDraft
-managedApps.getDraftWorkspace
-managedApps.validate
-managedApps.build
-managedApps.preview
-managedApps.apply
-managedApps.discardDraft
-managedApps.rollback
-managedApps.export
-managedApps.delete
+managedExtensions.create
+managedExtensions.createDraft
+managedExtensions.getDraftWorkspace
+managedExtensions.validate
+managedExtensions.build
+managedExtensions.preview
+managedExtensions.apply
+managedExtensions.discardDraft
+managedExtensions.rollback
+managedExtensions.export
+managedExtensions.delete
 ```
 
 约束：
@@ -1344,7 +1344,7 @@ Personal Managed Extension 使用独立项目存储：
 ## 18. 目标模块划分
 
 ```text
-packages/managed-apps/             # Project、Draft、Git 和 Agent 生命周期
+packages/managed-extensions/             # Project、Draft、Git 和 Agent 生命周期
 packages/app-build/                # 构建、测试和契约验证
 packages/bundle-store/             # 不可变 Extension Bundles
 packages/extension-revisions/      # Revision 状态机与回滚
@@ -1542,7 +1542,7 @@ apps/desktop/extensions/           # Extension Center UI
 - 常用 Tool 参数 Preset，以及 Tool Resource Link 从属于小应用的保存结果。
 - 新增敏感权限、Provider 或数据 Schema 时先预览再确认；普通安全更新自动应用。
 - “撤销上一次修改”和自然语言恢复意图，不展示普通用户版本列表。
-- Composer 中的 Applet Resource Mention；提交时读取真实资源、锁定原 Revision，并隐藏 Agent 专用上下文负载。
+- Composer 中的 Extension Resource Mention；提交时读取真实资源、锁定原 Revision，并隐藏 Agent 专用上下文负载。
 
 控制面已经具备：
 
@@ -1559,11 +1559,11 @@ apps/desktop/extensions/           # Extension Center UI
 实现主要位于：
 
 ```text
-packages/managed-apps/           # Project、Draft、Bundle、Revision、数据快照、Output、Preset
+packages/managed-extensions/           # Project、Draft、Bundle、Revision、数据快照、Output、Preset
 packages/mcp-host/               # MCP Runtime、MCP Apps Host、Federation
-apps/desktop/src/main/managed-apps.ts
-packages/ui/src/settings/ManagedApplets.tsx
-packages/ui/src/chat/composer/providers/managed-applets.ts
+apps/desktop/src/main/managed-extensions.ts
+packages/ui/src/settings/ManagedExtensions.tsx
+packages/ui/src/chat/composer/providers/managed-extensions.ts
 ```
 
 验收已覆盖安全自动应用、失败保留健康版本、敏感变更确认、回滚、删除恢复、导出、Output/Preset、Manifest 安全、stdio MCP discovery/Tool 调用、静态 MCP App 激活、Mention 解析、创建到 Agent 会话接力、后端 Provider/Federation 路由、Desktop 生产构建和实际界面巡视。

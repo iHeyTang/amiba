@@ -58,6 +58,8 @@ export function createElectronAdapter(): PlatformAdapter {
 
     shell: { openExternal: (url) => bridge.shell.openExternal(url) },
 
+    embeddedBrowser: bridge.embeddedBrowser,
+
     workspaces: {
       chooseDirectory: (defaultPath) =>
         bridge.workspaces.chooseDirectory(defaultPath),

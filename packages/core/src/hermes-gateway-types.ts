@@ -107,6 +107,17 @@ export interface HermesApprovalRequest {
   raw: Record<string, unknown>
 }
 
+/** Interactive question emitted by the runs surface's Clarify tool. */
+export interface HermesClarifyRequest {
+  clarifyId: string
+  runId: string
+  profileId?: string
+  question: string
+  choices: string[] | null
+  multiSelect: boolean
+  raw: Record<string, unknown>
+}
+
 export type HermesApprovalDecision = "once" | "session" | "always" | "deny"
 
 /**

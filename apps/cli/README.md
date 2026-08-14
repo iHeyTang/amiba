@@ -1,8 +1,8 @@
 # @amiba/cli
 
-The **amiba CLI** (command: `amiba`) provides developer tooling for Applets:
+The **amiba CLI** (command: `amiba`) provides developer tooling for Extensions:
 
-- scaffold / dev / build / pack / install desktop Applets
+- scaffold / dev / build / pack / install desktop Extensions
   (the WebView model: `manifest.json` + `dist/main.cjs` + self-contained React
   UI pages served via a loopback HTTP server into an Electron `<webview>`).
 
@@ -18,7 +18,7 @@ node apps/cli/dist/cli.js --help
 
 ### `amiba create [name]`
 
-Scaffold a new desktop **Applet** from the built-in template.
+Scaffold a new desktop **Extension** from the built-in template.
 
 ```sh
 amiba create my-extension --id com.example.my-extension
@@ -54,9 +54,9 @@ my-extension/
 
 ### `amiba dev`
 
-Build the Applet in watch mode. Spawns two parallel Vite watch processes
+Build the Extension in watch mode. Spawns two parallel Vite watch processes
 (main + UI) and touches `manifest.json` on any output change so the running
-desktop app hot-reloads the Applet automatically.
+desktop app hot-reloads the Extension automatically.
 
 ```sh
 amiba dev
@@ -65,8 +65,8 @@ amiba dev
 Recommended workflow:
 
 1. Terminal 1: `pnpm dev:desktop`
-2. Terminal 2: `cd <applet dir> && pnpm dev`
-3. In the app: **Settings → Applets → Add local Applet…** → pick the Applet
+2. Terminal 2: `cd <extension dir> && pnpm dev`
+3. In the app: **Settings → Extensions → Add local Extension…** → pick the Extension
    directory. Every rebuild hot-reloads from then on.
 
 Options:
@@ -115,7 +115,7 @@ Options:
 
 ### `amiba install <repo>`
 
-Install an Applet directly from a GitHub Release into
+Install an Extension directly from a GitHub Release into
 `<userData>/extensions/<id>/`.
 
 ```sh
@@ -149,7 +149,7 @@ The command:
 4. Extracts and validates `manifest.json` at the archive root.
 5. Moves the directory into `<userData>/extensions/<id>/`.
 
-If Amiba Desktop is running, it will hot-reload the newly installed Applet
+If Amiba Desktop is running, it will hot-reload the newly installed Extension
 automatically via its manifest-watcher.
 
 The install path honours the `AMIBA_DEV_EXTENSIONS_PATH` environment variable
@@ -159,7 +159,7 @@ This command re-implements the GitHub-release-to-disk flow in pure Node rather
 than delegating to `@amiba/extension-host/main`, which depends on Electron
 and is therefore unavailable in a plain Node CLI process.
 
-## Applet architecture
+## Extension architecture
 
 ```
 Desktop (Electron)

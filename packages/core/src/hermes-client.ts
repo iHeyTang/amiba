@@ -16,6 +16,7 @@ import type {
   ApprovalRecord,
   HermesApprovalDecision,
   HermesApprovalRequest,
+  HermesClarifyRequest,
   HermesLiveAgent,
   HermesToolProgress,
   StreamedToolCall,
@@ -409,6 +410,46 @@ export async function postHermesApprovalDecision(opts: {
   }
 }
 
+/** Answer one pending Clarify prompt on the Hermes runs surface. */
+export async function postHermesClarifyResponse(opts: {
+  runId: string;
+  clarifyId: string;
+  response: string;
+  profileId?: string;
+}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  if (!opts.runId) return { ok: false, error: "missing run id" };
+  if (!opts.clarifyId) return { ok: false, error: "missing clarify id" };
+  if (!opts.response.trim()) return { ok: false, error: "missing response" };
+  const path = hermesAgentPath(
+    opts.profileId,
+    `/v1/runs/${encodeURIComponent(opts.runId)}/clarify`,
+  );
+  try {
+    const res = await backplaneFetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        clarify_id: opts.clarifyId,
+        response: opts.response.trim(),
+      }),
+    });
+    if (!res.ok) {
+      const text = await safeText(res);
+      return {
+        ok: false,
+        status: res.status,
+        error: text || res.statusText,
+      };
+    }
+    return { ok: true, status: res.status };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
 // ===========================================================================
 // /v1/runs streaming — the modern Hermes API surface.
 //
@@ -503,6 +544,10 @@ export interface RunHandlers {
     choice: HermesApprovalDecision;
     resolved: number;
   }) => void;
+  /** `event: "clarify.request"` — agent paused waiting for user input. */
+  onClarifyRequest?: (request: HermesClarifyRequest) => void;
+  /** `event: "clarify.responded"` — gateway accepted the answer. */
+  onClarifyResponded?: (clarifyId: string) => void;
   /** `event: "run.completed"` — final answer in `output`, plus token usage. */
   onRunCompleted?: (info: {
     output: string;
@@ -822,8 +867,7 @@ export async function runHermesAgent(
                   (item): item is string => typeof item === "string",
                 )
               : [];
-          const goal =
-            stringValue("goal") || stringValue("preview") || "Agent";
+          const goal = stringValue("goal") || stringValue("preview") || "Agent";
           const parentId = stringValue("parent_id") ?? null;
           const taskIndex = numberValue("task_index") ?? 0;
           const id =
@@ -948,6 +992,33 @@ export async function runHermesAgent(
               resolved: typeof obj.resolved === "number" ? obj.resolved : 1,
             });
           }
+          break;
+        }
+        case "clarify.request": {
+          const clarifyId =
+            typeof obj.clarify_id === "string" ? obj.clarify_id : "";
+          const question = typeof obj.question === "string" ? obj.question : "";
+          if (clarifyId && question) {
+            handlers.onClarifyRequest?.({
+              clarifyId,
+              runId,
+              profileId: opts.agent?.profileId,
+              question,
+              choices: Array.isArray(obj.choices)
+                ? obj.choices.filter(
+                    (choice): choice is string => typeof choice === "string",
+                  )
+                : null,
+              multiSelect: obj.multi_select === true,
+              raw: obj,
+            });
+          }
+          break;
+        }
+        case "clarify.responded": {
+          const clarifyId =
+            typeof obj.clarify_id === "string" ? obj.clarify_id : "";
+          if (clarifyId) handlers.onClarifyResponded?.(clarifyId);
           break;
         }
         case "run.completed": {

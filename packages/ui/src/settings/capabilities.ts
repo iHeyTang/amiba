@@ -68,7 +68,7 @@ export type StartAgentTask = (
     sourceApp?: string
     /** Run the new task inside this isolated Hermes Profile. */
     profileId?: string
-    /** Bind the new session to an isolated managed-Applet draft. */
+    /** Bind the new session to an isolated managed-Extension draft. */
     workspacePath?: string
   },
 ) => void | Promise<void | string>
@@ -80,5 +80,5 @@ export interface OptionsCapabilities {
   bridge?: BridgeCapability
   userscripts?: UserScriptCapability
   startAgentTask?: StartAgentTask
-  managedApps?: import("@amiba/managed-apps/bridge").ManagedAppsBridge
+  managedExtensions?: import("@amiba/managed-extensions/bridge").ManagedExtensionsBridge
 }

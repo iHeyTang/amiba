@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 
-import type { ManagedAppManifest } from "./types"
+import type { ManagedExtensionManifest } from "./types"
 
 const ID_RE = /^[a-z0-9]+(?:[.-][a-z0-9-]+)+$/
 const ALIAS_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
@@ -27,9 +27,9 @@ function validateCommands(value: unknown, label: string): void {
   }
 }
 
-export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
+export function validateManagedExtensionManifest(raw: unknown): ManagedExtensionManifest {
   if (!raw || typeof raw !== "object") throw new Error("manifest must be an object")
-  const manifest = raw as Partial<ManagedAppManifest>
+  const manifest = raw as Partial<ManagedExtensionManifest>
   if (manifest.schemaVersion !== 1) throw new Error("schemaVersion must be 1")
   if (typeof manifest.id !== "string" || !ID_RE.test(manifest.id)) {
     throw new Error("id must be a reverse-DNS identifier")
@@ -55,7 +55,7 @@ export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
   }
   if (manifest.runtime !== "static-mcp-app") {
     if (!manifest.mcp?.providers?.length) {
-      throw new Error("non-static Applets must declare at least one MCP provider")
+      throw new Error("non-static Extensions must declare at least one MCP provider")
     }
   }
   const aliases = new Set<string>()
@@ -72,7 +72,7 @@ export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
       throw new Error(`bundled provider ${provider.alias} requires entry or command`)
     }
     if (provider.entry && !isSafeRelativePath(provider.entry)) {
-      throw new Error(`provider ${provider.alias} entry must stay inside the Applet`)
+      throw new Error(`provider ${provider.alias} entry must stay inside the Extension`)
     }
     if (provider.args?.some((argument) => typeof argument !== "string")) {
       throw new Error(`provider ${provider.alias} args must be strings`)
@@ -95,7 +95,7 @@ export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
       throw new Error(`surfaces.${name}.entry is required for static-mcp-app`)
     }
     if (surface.entry && !isSafeRelativePath(surface.entry)) {
-      throw new Error(`surfaces.${name}.entry must stay inside the Applet`)
+      throw new Error(`surfaces.${name}.entry must stay inside the Extension`)
     }
     if (surface.provider && !aliases.has(surface.provider)) {
       throw new Error(`surfaces.${name}.provider is not declared`)
@@ -110,6 +110,28 @@ export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
     }
     if (!!mention.resourceUriTemplate === !!mention.searchTool) {
       throw new Error(`mention ${mention.id} requires exactly one resourceUriTemplate or searchTool`)
+    }
+  }
+  const pluginIds = new Set<string>()
+  for (const [index, plugin] of (manifest.hermesPlugins ?? []).entries()) {
+    if (!plugin || typeof plugin !== "object") {
+      throw new Error(`hermesPlugins[${index}] must be an object`)
+    }
+    if (typeof plugin.id !== "string" || !plugin.id.trim()) {
+      throw new Error(`hermesPlugins[${index}].id is required`)
+    }
+    if (plugin.id !== plugin.id.trim()) {
+      throw new Error(`hermesPlugins[${index}].id must be normalized`)
+    }
+    if (pluginIds.has(plugin.id)) {
+      throw new Error(`duplicate Hermes plugin id: ${plugin.id}`)
+    }
+    pluginIds.add(plugin.id)
+    if (plugin.version !== undefined && (typeof plugin.version !== "string" || !plugin.version.trim())) {
+      throw new Error(`hermesPlugins[${index}].version must be a non-empty string`)
+    }
+    if (plugin.required !== undefined && typeof plugin.required !== "boolean") {
+      throw new Error(`hermesPlugins[${index}].required must be a boolean`)
     }
   }
   const permissions = manifest.permissions ?? []
@@ -139,17 +161,17 @@ export function validateManagedAppManifest(raw: unknown): ManagedAppManifest {
   validateCommands(manifest.build?.commands, "build.commands")
   validateCommands(manifest.build?.testCommands, "build.testCommands")
   if (manifest.build?.outputDir && !isSafeRelativePath(manifest.build.outputDir)) {
-    throw new Error("build.outputDir must stay inside the Applet")
+    throw new Error("build.outputDir must stay inside the Extension")
   }
   return {
     ...manifest,
     description: manifest.description?.trim() || undefined,
     permissions: [...new Set(permissions)].sort(),
     dataSchemaVersion: manifest.dataSchemaVersion ?? 1,
-  } as ManagedAppManifest
+  } as ManagedExtensionManifest
 }
 
-export async function readManagedAppManifest(projectPath: string): Promise<ManagedAppManifest> {
+export async function readManagedExtensionManifest(projectPath: string): Promise<ManagedExtensionManifest> {
   const raw = JSON.parse(await readFile(join(projectPath, "manifest.json"), "utf8"))
-  return validateManagedAppManifest(raw)
+  return validateManagedExtensionManifest(raw)
 }

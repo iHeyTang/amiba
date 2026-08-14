@@ -23,7 +23,7 @@ entry-point 都已删除。
 > 对比:`amiba-plugin-browser-tools`(注册 `my_browser_*` tools + WS hub)**仍是
 > 真 plugin** —— 它确实给 agent 加能力。
 >
-> 新的 @ 提及能力由 Applet manifest 声明，并跟随 Applet 安装、升级和移除。本仓只
+> 新的 @ 提及能力由 Extension manifest 声明，并跟随 Extension 安装、升级和移除。本仓只
 > 对升级前已经位于 `~/.hermes/mention-sources/` 的来源保留只读兼容加载；不再提供
 > 独立的安装、更新或删除生命周期。
 
@@ -36,7 +36,7 @@ entry-point 都已删除。
 | Repo | 角色 |
 |---|---|
 | **this repo** | 本地 HTTP server：`/hermes/*`，以及升级前 mention source 的只读 search/resource 兼容路由 |
-| `~/.hermes/mention-sources/<name>/` | 旧版来源数据；只读加载，等待迁移到所属 Applet，不再由 backplane 管理生命周期 |
+| `~/.hermes/mention-sources/<name>/` | 旧版来源数据；只读加载，等待迁移到所属 Extension，不再由 backplane 管理生命周期 |
 | [amiba-plugin-browser-tools](https://github.com/amiba-desktop/amiba-plugin-browser-tools) | 给 agent 的 browser 工具（screenshot / navigate / inbox 等），通过 WS bridge 连扩展（**仍是真 plugin**） |
 | [hermes-my-browser-extension](https://github.com/iHeyTang/hermes-my-browser-extension) | Chrome 扩展前端，调本插件的 `/hermes/*` 端点 |
 
@@ -83,8 +83,8 @@ hermes gateway run
 - `GET  /mention-sources/<name>/search?type=&q=` —— 进程内调源声明的 `search`；
 - `GET  /hermes/mention-resources` —— 聚合各源的 `mention_resources`，给 composer 的 `@` 提及；
 
-没有 `/hermes/mention-sources*` 管理 API。新的提及能力使用 Applet manifest 的
-`mentions` 声明，并与 Applet 共用一套生命周期。
+没有 `/hermes/mention-sources*` 管理 API。新的提及能力使用 Extension manifest 的
+`mentions` 声明，并与 Extension 共用一套生命周期。
 
 ## 关键设计点
 
@@ -104,7 +104,7 @@ hermes gateway run
 - [`docs/api-parity.md`](docs/api-parity.md) —— 与 Hermes 官方 `/api/*` 的逐端点
   对照（共有 / 官方独有 / 我们独有 / 全局残留 / 变更日志）。**持续维护，
   每次改 backplane 或 upstream 升级要同步更新。**
-- Applet 与 Mention Contribution 的长期设计见仓库根目录的统一 Extension 设计文档。
+- Extension 与 Mention Contribution 的长期设计见仓库根目录的统一 Extension 设计文档。
 
 ## 配置
 

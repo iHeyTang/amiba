@@ -1,4 +1,5 @@
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -18,7 +19,7 @@ def test_list_toolsets_uses_each_toolsets_configuration_platform(monkeypatch):
     monkeypatch.setattr(
         tools_service,
         "_toolset_platform",
-        lambda name: "discord" if name == "discord" else "cli",
+        lambda name: "discord" if name == "discord" else "api_server",
     )
     monkeypatch.setattr(
         tools_service,
@@ -32,11 +33,207 @@ def test_list_toolsets_uses_each_toolsets_configuration_platform(monkeypatch):
     rows = tools_service.list_toolsets()
 
     assert rows[0]["label"] == "Web Search"
-    assert rows[0]["platform"] == "cli"
+    assert rows[0]["platform"] == "api_server"
     assert rows[0]["enabled"] is True
     assert rows[1]["platform"] == "discord"
     assert rows[1]["platform_label"] == "DISCORD"
     assert rows[1]["tools"] == ["discord_tool"]
+
+
+def test_configurable_toolsets_exposes_kanban_without_patching_hermes(monkeypatch):
+    hermes_cli = ModuleType("hermes_cli")
+    tools_config = ModuleType("hermes_cli.tools_config")
+    tools_config._get_effective_configurable_toolsets = lambda: [
+        ("web", "Web", "search")
+    ]
+    hermes_cli.tools_config = tools_config
+    monkeypatch.setitem(sys.modules, "hermes_cli", hermes_cli)
+    monkeypatch.setitem(sys.modules, "hermes_cli.tools_config", tools_config)
+
+    rows = tools_service._configurable_toolsets()
+
+    assert [row[0] for row in rows] == ["web", "kanban"]
+    assert tools_service._toolset_platform("kanban") == "api_server"
+
+
+def test_profile_toolsets_target_api_server_and_keep_native_platforms():
+    assert tools_service._toolset_platform("web") == "api_server"
+    assert tools_service._toolset_platform("terminal") == "api_server"
+    assert tools_service._toolset_platform("discord") == "discord"
+
+
+def test_a2a_peers_never_return_tokens_and_preserve_write_only_auth(monkeypatch):
+    config = {
+        "a2a_agents": {
+            "researcher": {
+                "url": "https://agents.example/researcher",
+                "auth": {"type": "bearer", "token": "secret-token"},
+                "timeout": 90,
+                "capabilities": ["research"],
+            }
+        }
+    }
+    saved = []
+    monkeypatch.setattr(tools_service, "_load_config", lambda: config)
+    monkeypatch.setattr(
+        tools_service,
+        "_save_config",
+        lambda next_config: saved.append(next_config.copy()),
+    )
+
+    listed = tools_service.list_a2a_peers()
+    assert listed["peers"][0]["auth_configured"] is True
+    assert "token" not in listed["peers"][0]
+
+    result = tools_service.save_a2a_peer(
+        "researcher",
+        url="https://agents.example/new",
+        timeout=120,
+        capabilities=["research", "research", "web_search"],
+    )
+    assert result["peer"]["capabilities"] == ["research", "web_search"]
+    assert config["a2a_agents"]["researcher"]["auth"]["token"] == "secret-token"
+    assert saved
+
+
+def test_a2a_peer_validation_rejects_unsafe_urls():
+    with pytest.raises(ValueError, match="http"):
+        tools_service.save_a2a_peer("researcher", url="file:///tmp/agent")
+    with pytest.raises(ValueError, match="credentials"):
+        tools_service.save_a2a_peer(
+            "researcher",
+            url="https://user:pass@agents.example",
+        )
+
+
+def test_legacy_cli_selection_migrates_once_without_overwriting_api_server(
+    monkeypatch,
+):
+    config = {"platform_toolsets": {"cli": ["web", "terminal"]}}
+    saved = []
+    monkeypatch.setattr(
+        tools_service,
+        "_enabled_toolset_keys",
+        lambda _config, platform: {"web", "terminal"} if platform == "cli" else set(),
+    )
+    monkeypatch.setattr(
+        tools_service,
+        "_save_platform_toolsets",
+        lambda next_config, platform, enabled: next_config["platform_toolsets"].__setitem__(
+            platform, sorted(enabled)
+        ),
+    )
+    monkeypatch.setattr(
+        tools_service,
+        "_save_config",
+        lambda next_config: saved.append(next_config.copy()),
+    )
+
+    assert tools_service._migrate_legacy_profile_toolsets(config) is True
+    assert config["platform_toolsets"]["api_server"] == ["terminal", "web"]
+    assert len(saved) == 1
+
+    config["platform_toolsets"]["cli"] = []
+    assert tools_service._migrate_legacy_profile_toolsets(config) is False
+    assert config["platform_toolsets"]["api_server"] == ["terminal", "web"]
+    assert len(saved) == 1
+
+
+def test_kanban_is_enabled_only_when_profile_and_api_server_are_enabled(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        tools_service,
+        "_enabled_toolset_keys",
+        lambda _config, _platform: {"kanban"},
+    )
+
+    assert tools_service._toolset_enabled(
+        "kanban",
+        {"toolsets": ["kanban"]},
+        "api_server",
+    ) is True
+    assert tools_service._toolset_enabled(
+        "kanban",
+        {},
+        "api_server",
+    ) is False
+
+
+def test_toggle_kanban_writes_only_the_selected_profiles_config(monkeypatch):
+    config = {
+        "toolsets": ["custom"],
+        "platform_toolsets": {"api_server": ["web"]},
+    }
+    saved = {}
+    monkeypatch.setattr(
+        tools_service,
+        "_configurable_toolsets",
+        lambda: [("kanban", "Task Board", "")],
+    )
+    monkeypatch.setattr(tools_service, "_load_config", lambda: config)
+    monkeypatch.setattr(
+        tools_service,
+        "_enabled_toolset_keys",
+        lambda _config, _platform: {"web"},
+    )
+    monkeypatch.setattr(
+        tools_service,
+        "_save_platform_toolsets",
+        lambda next_config, platform, enabled: saved.update(
+            config=next_config,
+            platform=platform,
+            enabled=set(enabled),
+        ),
+    )
+
+    result = tools_service.toggle_toolset("kanban", True)
+
+    assert result == {
+        "ok": True,
+        "name": "kanban",
+        "platform": "api_server",
+        "enabled": True,
+    }
+    assert saved["platform"] == "api_server"
+    assert saved["enabled"] == {"web", "kanban"}
+    assert saved["config"]["toolsets"] == ["custom", "kanban"]
+
+
+def test_toggle_kanban_off_removes_the_non_configurable_preserved_entry(
+    monkeypatch,
+):
+    config = {
+        "toolsets": ["custom", "kanban"],
+        "platform_toolsets": {"api_server": ["web", "kanban"]},
+    }
+    saved = {}
+    monkeypatch.setattr(
+        tools_service,
+        "_configurable_toolsets",
+        lambda: [("kanban", "Task Board", "")],
+    )
+    monkeypatch.setattr(tools_service, "_load_config", lambda: config)
+    monkeypatch.setattr(
+        tools_service,
+        "_enabled_toolset_keys",
+        lambda _config, _platform: {"web", "kanban"},
+    )
+    monkeypatch.setattr(
+        tools_service,
+        "_save_platform_toolsets",
+        lambda next_config, platform, enabled: saved.update(
+            config=next_config,
+            platform=platform,
+            enabled=set(enabled),
+        ),
+    )
+
+    tools_service.toggle_toolset("kanban", False)
+
+    assert saved["enabled"] == {"web"}
+    assert saved["config"]["toolsets"] == ["custom"]
+    assert saved["config"]["platform_toolsets"]["api_server"] == ["web"]
 
 
 def test_provider_readiness_requires_a_usable_provider(monkeypatch):
@@ -254,28 +451,29 @@ def test_computer_use_grant_runs_only_fixed_hermes_action(monkeypatch):
     assert calls[0][1]["start_new_session"] is True
 
 
-def test_managed_apps_federation_is_loopback_only(monkeypatch):
+def test_legacy_applets_config_is_migrated_to_extensions(monkeypatch):
     saved = {}
-    monkeypatch.setattr(tools_service, "_load_config", lambda: {})
+    config = {
+        "mcp_servers": {
+            "amiba-applets": {"url": "http://127.0.0.1:43123/mcp"},
+            "docs": {"url": "https://example.com/mcp"},
+        },
+        "platform_toolsets": {
+            "api_server": ["terminal", "applets", "amiba-applets"],
+        },
+    }
     monkeypatch.setattr(
         tools_service,
         "_save_config",
-        lambda config: saved.update(config),
+        lambda value: saved.update(value),
     )
 
-    result = tools_service.configure_managed_apps_federation(
-        "http://127.0.0.1:43123/mcp"
-    )
-    assert result["ok"] is True
-    assert saved["mcp_servers"]["amiba-applets"]["enabled"] is True
-
-    for url in [
-        "https://example.com/mcp",
-        "http://192.168.1.10:43123/mcp",
-        "http://127.0.0.1:43123/other",
-    ]:
-        with pytest.raises(ValueError):
-            tools_service.configure_managed_apps_federation(url)
+    assert tools_service._migrate_legacy_extensions_config(config) is True
+    assert config["mcp_servers"] == {
+        "docs": {"url": "https://example.com/mcp"}
+    }
+    assert config["platform_toolsets"]["api_server"] == ["terminal", "extensions"]
+    assert saved == config
 
 
 def test_registered_mcp_connection_is_resolved_only_for_enabled_provider(monkeypatch):

@@ -1,8 +1,8 @@
 {
-  "name": "@amiba/managed-apps",
+  "name": "@amiba/managed-extensions",
   "version": "0.1.0",
   "private": true,
-  "description": "Agent-managed Applet projects, immutable bundles, revisions, activation, and rollback.",
+  "description": "Agent-managed Extension projects, immutable bundles, revisions, activation, and rollback.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
@@ -17,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@amiba/extension-api": "workspace:*",
     "chokidar": "^3.6.0"
   },
   "devDependencies": {

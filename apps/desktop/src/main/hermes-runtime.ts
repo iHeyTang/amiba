@@ -41,6 +41,7 @@ import {
   type BundledHermesRuntimeMarker,
   type ManagedHermesPaths,
 } from "./managed-hermes-runtime";
+import { createLineBufferedLog } from "./line-buffered-log";
 import { getDefaultWorkspaceRoot } from "./workspace-root";
 
 const USER_HOME = os.homedir();
@@ -294,14 +295,13 @@ function startJob(kind: JobKind, cmd: string, args: string[]): Job {
 
   child.stdout?.setEncoding("utf8");
   child.stderr?.setEncoding("utf8");
-  child.stdout?.on("data", (chunk: string) => {
-    const message = chunk.trimEnd();
-    if (message) console.info(`[hermes:${kind}] ${message}`);
-  });
-  child.stderr?.on("data", (chunk: string) => {
-    const message = chunk.trimEnd();
-    if (message) console.warn(`[hermes:${kind}] ${message}`);
-  });
+  const prefix = `[hermes:${kind}]`;
+  const stdoutLog = createLineBufferedLog(prefix, (line) => console.info(line));
+  const stderrLog = createLineBufferedLog(prefix, (line) => console.warn(line));
+  child.stdout?.on("data", (chunk: string) => stdoutLog.write(chunk));
+  child.stderr?.on("data", (chunk: string) => stderrLog.write(chunk));
+  child.stdout?.on("close", () => stdoutLog.flush());
+  child.stderr?.on("close", () => stderrLog.flush());
 
   function finish(code: number | null, error?: string) {
     jobs.delete(id);

@@ -1,4 +1,4 @@
-import type { ManagedAppsBridge } from "@amiba/managed-apps/bridge"
+import type { ManagedExtensionsBridge } from "@amiba/managed-extensions/bridge"
 import type { LexicalEditor } from "lexical"
 
 import { registerMentionType } from "../serialize"
@@ -6,10 +6,10 @@ import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
 
 const TYPE = "amiba.resource"
-registerMentionType(TYPE, ["appId", "revisionId", "provider", "uri", "title"])
+registerMentionType(TYPE, ["extensionId", "revisionId", "provider", "uri", "title"])
 
-function namespacedUri(appId: string, uri: string): string {
-  return `amiba-applet://${encodeURIComponent(appId)}/${encodeURIComponent(uri)}`
+function namespacedUri(extensionId: string, uri: string): string {
+  return `amiba-extension://${encodeURIComponent(extensionId)}/${encodeURIComponent(uri)}`
 }
 
 function escapeXml(value: unknown): string {
@@ -28,12 +28,12 @@ function isContextMimeAllowed(mimeType?: string): boolean {
   return mime.startsWith("text/") || mime === "application/json" || mime === "application/xml"
 }
 
-/** Host-owned projection of active Applet MCP Resources into the composer. */
-export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): TriggerProvider {
+/** Host-owned projection of active Extension MCP Resources into the composer. */
+export function makeManagedExtensionMentionProvider(bridge: ManagedExtensionsBridge): TriggerProvider {
   return {
     trigger: "@",
-    id: "managed-applets",
-    group: "Applets",
+    id: "managed-extensions",
+    group: "Extensions",
     ownsType: TYPE,
     persistent: true,
     match: () => true,
@@ -49,7 +49,7 @@ export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): Tri
             const toolName = toolParts.length ? toolParts.join("/") : mention.searchTool
             try {
               const result = await bridge.callTool({
-                appId: app.id,
+                extensionId: app.id,
                 providerAlias: provider,
                 name: toolName,
                 arguments: { query, limit: 30 },
@@ -66,7 +66,7 @@ export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): Tri
                     type: TYPE,
                     display: title,
                     payload: {
-                      appId: app.id,
+                      extensionId: app.id,
                       revisionId: app.activeRevision.id,
                       provider,
                       uri: content.uri,
@@ -89,7 +89,7 @@ export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): Tri
                 type: TYPE,
                 display: label,
                 payload: {
-                  appId: app.id,
+                  extensionId: app.id,
                   revisionId: app.activeRevision.id,
                   provider: mention.provider,
                   uri,
@@ -106,11 +106,11 @@ export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): Tri
       if (item.insert) insertMentionAtTrigger(editor, item.insert)
     },
     serialize(mention: MentionData): string {
-      return `(Applet resource: ${mention.payload.title || mention.display} · ${namespacedUri(mention.payload.appId, mention.payload.uri)})`
+      return `(Extension resource: ${mention.payload.title || mention.display} · ${namespacedUri(mention.payload.extensionId, mention.payload.uri)})`
     },
     async resolveMention(mention: MentionData): Promise<string> {
       const result = await bridge.readResource({
-        appId: mention.payload.appId,
+        extensionId: mention.payload.extensionId,
         providerAlias: mention.payload.provider,
         uri: mention.payload.uri,
         revisionId: mention.payload.revisionId,
@@ -126,7 +126,7 @@ export function makeManagedAppletMentionProvider(bridge: ManagedAppsBridge): Tri
       }).filter(Boolean).join("\n")
       return [
         `@${mention.payload.title || mention.display}`,
-        `<amiba-resource applet="${escapeXml(mention.payload.appId)}" revision="${escapeXml(mention.payload.revisionId)}" uri="${escapeXml(mention.payload.uri)}" title="${escapeXml(mention.payload.title || mention.display)}" trust="untrusted-content">`,
+        `<amiba-resource extension="${escapeXml(mention.payload.extensionId)}" revision="${escapeXml(mention.payload.revisionId)}" uri="${escapeXml(mention.payload.uri)}" title="${escapeXml(mention.payload.title || mention.display)}" trust="untrusted-content">`,
         content,
         "</amiba-resource>",
       ].join("\n")

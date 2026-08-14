@@ -2,6 +2,10 @@ import {
   desktopBridge,
   useExtensionRegistry,
 } from "@amiba/extension-host/renderer";
+import {
+  extensionManifestContributions,
+  type ExtensionContributionKind,
+} from "@amiba/extension-api";
 import type {
   ExtensionRegistryItem,
   ExtensionsBridge,
@@ -17,6 +21,7 @@ import {
   ChevronRight,
   FolderOpen,
   PackageOpen,
+  Play,
   RefreshCw,
   Settings2,
   Trash2,
@@ -43,8 +48,12 @@ import {
   cn,
 } from "../primitives";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
-import { ManagedAppletCreateDialog, ManagedApplets } from "./ManagedApplets";
-import { useManagedApps, useStartAgentTask } from "./agent-task";
+import {
+  ManagedExtensionCreateDialog,
+  ManagedExtensions,
+  type ManagedExtensionView,
+} from "./ManagedExtensions";
+import { useManagedExtensions, useStartAgentTask } from "./agent-task";
 
 type ExtensionManifest = NonNullable<ExtensionRegistryItem["manifest"]>;
 
@@ -52,7 +61,7 @@ function getExtensions(): ExtensionsBridge {
   return desktopBridge().extensions;
 }
 
-function appletName(item: ExtensionRegistryItem): string {
+function extensionName(item: ExtensionRegistryItem): string {
   return item.manifest?.name ?? item.id;
 }
 
@@ -84,7 +93,22 @@ function statusLabel(
   return t("options.extensions.status.loaded");
 }
 
-function AppletGlyph({
+function contributionLabel(
+  kind: ExtensionContributionKind,
+  t: ReturnType<typeof useT>["t"],
+): string {
+  const keys: Record<ExtensionContributionKind, Parameters<typeof t>[0]> = {
+    main: "options.extensions.capability.main",
+    settings: "options.extensions.capability.settings",
+    mentions: "options.extensions.capability.mentions",
+    "hermes-plugin": "options.extensions.capability.plugin",
+    tools: "options.extensions.capability.tools",
+    resources: "options.extensions.capability.resources",
+  };
+  return t(keys[kind]);
+}
+
+function ExtensionGlyph({
   manifest,
   size = "normal",
 }: {
@@ -109,7 +133,7 @@ function AppletGlyph({
   );
 }
 
-function AppletState({ item }: { item: ExtensionRegistryItem }) {
+function ExtensionState({ item }: { item: ExtensionRegistryItem }) {
   const { t } = useT();
   if (item.status === "loaded") return null;
 
@@ -132,7 +156,7 @@ function AppletState({ item }: { item: ExtensionRegistryItem }) {
   );
 }
 
-function AppletRow({
+function ExtensionRow({
   item,
   onOpen,
 }: {
@@ -141,6 +165,9 @@ function AppletRow({
 }) {
   const { t } = useT();
   const version = item.manifest?.version ?? item.version;
+  const contributions = extensionManifestContributions(item.manifest).map(
+    (kind) => contributionLabel(kind, t),
+  );
 
   return (
     <li>
@@ -149,16 +176,16 @@ function AppletRow({
         onClick={onOpen}
         className="group flex min-h-[72px] w-full items-center gap-3 rounded-lg px-2 py-3 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/45"
       >
-        <AppletGlyph manifest={item.manifest} />
+        <ExtensionGlyph manifest={item.manifest} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-medium">
-              {appletName(item)}
+              {extensionName(item)}
             </span>
-            <AppletState item={item} />
+            <ExtensionState item={item} />
           </span>
           <span className="mt-1 block truncate text-xs text-muted-foreground">
-            {[sourceLabel(item, t), version ? `v${version}` : null]
+            {[sourceLabel(item, t), version ? `v${version}` : null, ...contributions]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -212,7 +239,7 @@ function CapabilityItem({
   );
 }
 
-function AppletDetail({
+function ExtensionDetail({
   item,
   busy,
   onBack,
@@ -246,7 +273,13 @@ function AppletDetail({
           label: t("options.extensions.capability.mentions"),
         }
       : null,
-    hermesPlugins.length > 0 ||
+    hermesPlugins.length > 0
+      ? {
+          id: "plugin",
+          icon: <Bot />,
+          label: t("options.extensions.capability.plugin"),
+        }
+      : null,
     permissions.some((permission) => permission.startsWith("hermes."))
       ? {
           id: "agent",
@@ -276,10 +309,10 @@ function AppletDetail({
         </button>
 
         <div className="flex min-w-0 items-center gap-3">
-          <AppletGlyph manifest={manifest} size="large" />
+          <ExtensionGlyph manifest={manifest} size="large" />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
             <h1 className="truncate text-lg font-normal tracking-[-0.01em]">
-              {appletName(item)}
+              {extensionName(item)}
             </h1>
             {item.status === "loaded" ? (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -287,7 +320,7 @@ function AppletDetail({
                 {statusLabel(item, t)}
               </span>
             ) : (
-              <AppletState item={item} />
+              <ExtensionState item={item} />
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -442,27 +475,39 @@ function AppletDetail({
   );
 }
 
-export interface SettingsAppletsHandle {
+export interface SettingsExtensionsHandle {
   add: () => Promise<void>;
   addLocal: () => Promise<void>;
   refresh: () => void;
 }
 
-export const SettingsApplets = forwardRef<
-  SettingsAppletsHandle,
+export const SettingsExtensions = forwardRef<
+  SettingsExtensionsHandle,
   {
     embedded?: boolean;
     onRefreshingChange?: (refreshing: boolean) => void;
     showPageTitle?: boolean;
+    view?: ManagedExtensionView | null;
+    onViewChange?: (view: ManagedExtensionView | null) => void;
   }
->(function SettingsApplets(
-  { embedded = false, onRefreshingChange, showPageTitle = false },
+>(function SettingsExtensions(
+  {
+    embedded = false,
+    onRefreshingChange,
+    showPageTitle = false,
+    view,
+    onViewChange,
+  },
   ref,
 ) {
   const { t } = useT();
-  const managedApps = useManagedApps();
+  const managedExtensions = useManagedExtensions();
   const startAgentTask = useStartAgentTask();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [internalManagedView, setInternalManagedView] =
+    useState<ManagedExtensionView | null>(null);
+  const managedView = view === undefined ? internalManagedView : view;
+  const setManagedView = onViewChange ?? setInternalManagedView;
   const {
     items,
     ready: registryReady,
@@ -513,7 +558,7 @@ export const SettingsApplets = forwardRef<
 
   useImperativeHandle(ref, () => ({
     add: async () => {
-      if (managedApps) setCreateOpen(true);
+      if (managedExtensions) setCreateOpen(true);
       else await handleAddLocal();
     },
     addLocal: handleAddLocal,
@@ -564,20 +609,51 @@ export const SettingsApplets = forwardRef<
   const uninstallBody = pendingUninstall
     ? pendingUninstall.source === "local"
       ? t("options.extensions.uninstall.confirm.body.local", {
-          name: appletName(pendingUninstall),
+          name: extensionName(pendingUninstall),
           path: pendingUninstall.path,
         })
       : t("options.extensions.uninstall.confirm.body", {
-          name: appletName(pendingUninstall),
+          name: extensionName(pendingUninstall),
           id: pendingUninstall.id,
         })
     : "";
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <div className="flex h-0 min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {!embedded ? (
-        <SettingsPaneHeader title={t("options.extensions.title")}>
-          {!selected ? (
+        <SettingsPaneHeader
+          title={managedView?.name ?? t("options.extensions.title")}
+          leading={managedView ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("options.extensions.title")}
+              title={t("options.extensions.title")}
+              onClick={() => setManagedView(null)}
+              className="h-8 w-8 text-muted-foreground"
+            >
+              <ChevronLeft />
+            </Button>
+          ) : undefined}
+          contentSize={managedView ? "full" : "md"}
+          headerClassName={managedView ? "border-b border-border/60" : undefined}
+        >
+          {managedView ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setManagedView({
+                ...managedView,
+                mode: managedView.mode === "use" ? "manage" : "use",
+              })}
+            >
+              {managedView.mode === "use" ? <Settings2 /> : <Play />}
+              {managedView.mode === "use"
+                ? t("options.extensions.managed.manage")
+                : t("options.extensions.managed.use")}
+            </Button>
+          ) : !selected ? (
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -607,35 +683,37 @@ export const SettingsApplets = forwardRef<
       ) : null}
 
       {selected ? (
-        <AppletDetail
+        <ExtensionDetail
           item={selected}
           busy={busy === selected.id}
           onBack={() => setSelectedId(null)}
           onReload={() => void handleReload(selected.id)}
           onUninstall={() => setPendingUninstall(selected)}
         />
+      ) : managedExtensions ? (
+        <ManagedExtensions
+          bridge={managedExtensions}
+          startAgentTask={startAgentTask}
+          refreshToken={managedRefreshKey}
+          onRefreshingChange={onRefreshingChange}
+          view={managedView}
+          onViewChange={setManagedView}
+          showPageTitle={showPageTitle}
+          installedItems={items}
+          installedReady={registryReady}
+          renderInstalledItem={(item) => (
+            <ExtensionRow
+              item={item}
+              onOpen={() => setSelectedId(item.id)}
+            />
+          )}
+        />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <PageContent
             title={showPageTitle ? t("options.extensions.title") : undefined}
           >
-            {managedApps ? (
-              <ManagedApplets
-                bridge={managedApps}
-                startAgentTask={startAgentTask}
-                refreshToken={managedRefreshKey}
-                onRefreshingChange={onRefreshingChange}
-                installedItems={items}
-                installedReady={registryReady}
-                renderInstalledItem={(item) => (
-                  <AppletRow
-                    item={item}
-                    onOpen={() => setSelectedId(item.id)}
-                  />
-                )}
-              />
-            ) : (
-              <>
+            <>
                 <div className="mb-2 flex items-center justify-between px-2 pb-1">
                   <h3 className="text-sm font-normal">
                     {t("options.extensions.tab.installed")}
@@ -676,7 +754,7 @@ export const SettingsApplets = forwardRef<
                 ) : (
                   <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">
                     {items.map((item) => (
-                      <AppletRow
+                      <ExtensionRow
                         key={item.id}
                         item={item}
                         onOpen={() => setSelectedId(item.id)}
@@ -684,8 +762,7 @@ export const SettingsApplets = forwardRef<
                     ))}
                   </ul>
                 )}
-              </>
-            )}
+            </>
           </PageContent>
         </ScrollArea>
       )}
@@ -714,11 +791,11 @@ export const SettingsApplets = forwardRef<
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {managedApps ? (
-        <ManagedAppletCreateDialog
+      {managedExtensions ? (
+        <ManagedExtensionCreateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
-          bridge={managedApps}
+          bridge={managedExtensions}
           startAgentTask={startAgentTask}
         />
       ) : null}

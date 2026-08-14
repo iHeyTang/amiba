@@ -2,9 +2,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getHermesMemoryList = vi.hoisted(() => vi.fn());
+const getHermesMemoryConfig = vi.hoisted(() => vi.fn());
+const getHermesToolsetDetail = vi.hoisted(() => vi.fn());
+const putHermesMemoryProvider = vi.hoisted(() => vi.fn());
+const putHermesToolsetToggle = vi.hoisted(() => vi.fn());
 
 vi.mock("@amiba/core", () => ({
+  getHermesMemoryConfig,
   getHermesMemoryList,
+  getHermesToolsetDetail,
+  putHermesMemoryProvider,
+  putHermesToolsetToggle,
 }));
 
 import { SettingsMemory } from "../SettingsMemory";
@@ -12,6 +20,10 @@ import { SettingsMemory } from "../SettingsMemory";
 describe("SettingsMemory profile scope", () => {
   beforeEach(() => {
     getHermesMemoryList.mockReset();
+    getHermesMemoryConfig.mockReset();
+    getHermesToolsetDetail.mockReset();
+    putHermesMemoryProvider.mockReset();
+    putHermesToolsetToggle.mockReset();
     getHermesMemoryList.mockResolvedValue({
       ok: true,
       targets: [
@@ -26,6 +38,24 @@ describe("SettingsMemory profile scope", () => {
         },
       ],
     });
+    getHermesMemoryConfig.mockResolvedValue({
+      ok: true,
+      provider: "",
+      providers: [
+        {
+          name: "",
+          label: "Built-in memory",
+          description: "Local memory",
+          available: true,
+        },
+      ],
+    });
+    getHermesToolsetDetail.mockResolvedValue({
+      ok: true,
+      toolset: { name: "memory", enabled: true },
+    });
+    putHermesMemoryProvider.mockResolvedValue({ ok: true, provider: "" });
+    putHermesToolsetToggle.mockResolvedValue({ ok: true, enabled: false });
   });
 
   it("loads the selected profile and keeps embedded chrome compact", async () => {
@@ -40,5 +70,10 @@ describe("SettingsMemory profile scope", () => {
     expect(
       screen.getByTitle("/profiles/researcher/memories/MEMORY.md"),
     ).toBeVisible();
+    expect(
+      screen.getByRole("switch", {
+        name: "Allow this assistant to use memory",
+      }),
+    ).toBeChecked();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Read-only client for the bridge `/hermes/memories` routes.
+ * Client for Profile memory configuration and curated-memory inspection.
  *
  * Surfaces the curated memory files Hermes Agent writes under
  * `$HERMES_HOME/memories/{MEMORY,USER}.md` so the options page can display
@@ -45,6 +45,20 @@ export interface HermesMemoryEntries {
 export interface HermesMemoryListResponse {
   ok: boolean;
   targets: HermesMemoryEntries[];
+  error?: string;
+}
+
+export interface HermesMemoryProvider {
+  name: string;
+  label: string;
+  description: string;
+  available: boolean;
+}
+
+export interface HermesMemoryConfigResponse {
+  ok: boolean;
+  provider: string;
+  providers: HermesMemoryProvider[];
   error?: string;
 }
 
@@ -140,6 +154,63 @@ export async function resetHermesMemory(
     if (!res.ok || data?.ok === false)
       return { ok: false, error: responseError(res, data) };
     return { ok: true, deleted: data?.deleted ?? [] };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message || e) };
+  }
+}
+
+export async function getHermesMemoryConfig(
+  profileId?: string,
+): Promise<HermesMemoryConfigResponse> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/memories/config", profileId),
+      { method: "GET" },
+    );
+    const data = (await res
+      .json()
+      .catch(() => null)) as HermesMemoryConfigResponse | null;
+    if (!res.ok || !data || data.ok === false) {
+      return {
+        ok: false,
+        provider: "",
+        providers: [],
+        error: responseError(res, data),
+      };
+    }
+    return data;
+  } catch (e) {
+    return {
+      ok: false,
+      provider: "",
+      providers: [],
+      error: String((e as Error)?.message || e),
+    };
+  }
+}
+
+export async function putHermesMemoryProvider(
+  provider: string,
+  profileId?: string,
+): Promise<{ ok: boolean; provider?: string; error?: string }> {
+  try {
+    const res = await backplaneFetch(
+      profileUrl("/hermes/memories/provider", profileId),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      provider?: string;
+      error?: string;
+    } | null;
+    if (!res.ok || !data || data.ok === false) {
+      return { ok: false, error: responseError(res, data) };
+    }
+    return { ok: true, provider: data.provider ?? provider };
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message || e) };
   }

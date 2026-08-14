@@ -1,17 +1,16 @@
 import type {
-  ManagedAppOutputRecord,
-  ManagedAppSummary,
-  ManagedAppToolPreset,
-} from "@amiba/managed-apps/types"
-import type { ManagedAppsBridge } from "@amiba/managed-apps/bridge"
+  ManagedExtensionOutputRecord,
+  ManagedExtensionSummary,
+  ManagedExtensionToolPreset,
+} from "@amiba/managed-extensions/types"
+import type { ExtensionContributionKind } from "@amiba/extension-api"
+import type { ManagedExtensionsBridge } from "@amiba/managed-extensions/bridge"
 import type { ExtensionRegistryItem } from "@amiba/extension-host/preload"
 import { McpAppsView } from "@amiba/mcp-host/react"
 import { useT } from "@amiba/i18n"
 import {
   AlertTriangle,
-  ArrowLeft,
   Check,
-  ChevronRight,
   FileText,
   Hammer,
   LoaderCircle,
@@ -37,21 +36,59 @@ import {
   DialogTitle,
   Input,
   Label,
+  PageContent,
+  ScrollArea,
   Textarea,
   cn,
 } from "../primitives"
 import { useResolvedTheme } from "../theme"
 import type { StartAgentTask } from "./capabilities"
 
-function statusTone(status: ManagedAppSummary["userStatus"]): string {
+function newOperationId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `extension-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function statusTone(status: ManagedExtensionSummary["userStatus"]): string {
   if (status === "ready") return "bg-[hsl(var(--success))]"
   if (status === "needs-confirmation" || status === "preview-ready") return "bg-amber-500"
   if (status === "update-failed" || status === "unavailable") return "bg-destructive"
   return "bg-muted-foreground/55"
 }
 
-function statusKey(status: ManagedAppSummary["userStatus"]) {
+function statusKey(status: ManagedExtensionSummary["userStatus"]) {
   return `options.extensions.managed.status.${status}` as const
+}
+
+function managedContributionKinds(
+  extension: ManagedExtensionSummary,
+): ExtensionContributionKind[] {
+  const revision = extension.candidateRevision ?? extension.activeRevision
+  if (!revision) return []
+  const kinds: ExtensionContributionKind[] = []
+  if (revision.manifest.surfaces?.main) kinds.push("main")
+  if (revision.manifest.surfaces?.settings) kinds.push("settings")
+  if (revision.manifest.mentions?.length) kinds.push("mentions")
+  if (revision.manifest.hermesPlugins?.length) kinds.push("hermes-plugin")
+  // Older persisted revisions predate capability snapshots. Treat them as
+  // unknown instead of making the unified Extensions library fail to render.
+  if (revision.capabilities?.tools?.length) kinds.push("tools")
+  if (revision.capabilities?.resources?.length) kinds.push("resources")
+  return kinds
+}
+
+function managedContributionLabels(
+  extension: ManagedExtensionSummary,
+  t: ReturnType<typeof useT>["t"],
+): string[] {
+  const keys: Record<ExtensionContributionKind, Parameters<typeof t>[0]> = {
+    main: "options.extensions.capability.main",
+    settings: "options.extensions.capability.settings",
+    mentions: "options.extensions.capability.mentions",
+    "hermes-plugin": "options.extensions.capability.plugin",
+    tools: "options.extensions.capability.tools",
+    resources: "options.extensions.capability.resources",
+  }
+  return managedContributionKinds(extension).map((kind) => t(keys[kind]))
 }
 
 function permissionLabel(permission: string, language: string): string {
@@ -63,7 +100,7 @@ function permissionLabel(permission: string, language: string): string {
     "clipboard-write": ["写入剪贴板", "Write to the clipboard"],
     "open-external": ["打开外部链接", "Open external links"],
     "agent:message": ["向 AI 发起请求", "Send requests to AI"],
-    storage: ["保存小应用数据", "Store Applet data"],
+    storage: ["保存扩展数据", "Store Extension data"],
     notifications: ["发送通知", "Send notifications"],
     subprocess: ["运行本地进程", "Run local processes"],
   }
@@ -101,16 +138,18 @@ function defaultValueForSchema(schema: Record<string, unknown>): unknown {
 }
 
 function HeadlessToolRunner({
-  app,
+  extension,
   bridge,
   candidate = false,
+  fill = false,
 }: {
-  app: ManagedAppSummary
-  bridge: ManagedAppsBridge
+  extension: ManagedExtensionSummary
+  bridge: ManagedExtensionsBridge
   candidate?: boolean
+  fill?: boolean
 }) {
   const { t } = useT()
-  const revision = candidate ? app.candidateRevision : app.activeRevision
+  const revision = candidate ? extension.candidateRevision : extension.activeRevision
   const tools = revision?.capabilities?.tools ?? []
   const [selectedName, setSelectedName] = useState(tools[0]?.name ?? "")
   const selected = tools.find((tool) => tool.name === selectedName) ?? tools[0]
@@ -122,7 +161,7 @@ function HeadlessToolRunner({
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<unknown>(null)
   const [error, setError] = useState<string | null>(null)
-  const [presets, setPresets] = useState<ManagedAppToolPreset[]>([])
+  const [presets, setPresets] = useState<ManagedExtensionToolPreset[]>([])
   const [presetName, setPresetName] = useState("")
 
   useEffect(() => {
@@ -142,8 +181,8 @@ function HeadlessToolRunner({
   }, [revision?.id, selectedName])
 
   useEffect(() => {
-    void bridge.listPresets(app.id).then(setPresets).catch(() => setPresets([]))
-  }, [app.id, bridge])
+    void bridge.listPresets(extension.id).then(setPresets).catch(() => setPresets([]))
+  }, [extension.id, bridge])
 
   if (!selected) return null
   const [providerAlias, ...toolParts] = selected.name.split("/")
@@ -163,7 +202,7 @@ function HeadlessToolRunner({
     if (!presetName.trim() || !revision) return
     try {
       const args = advanced ? JSON.parse(raw) as Record<string, unknown> : values
-      const preset = await bridge.savePreset(app.id, {
+      const preset = await bridge.savePreset(extension.id, {
         revisionId: revision.id,
         providerAlias,
         toolName,
@@ -184,7 +223,7 @@ function HeadlessToolRunner({
     try {
       const args = advanced ? JSON.parse(raw) as Record<string, unknown> : values
       setResult(await bridge.callTool({
-        appId: app.id,
+        extensionId: extension.id,
         providerAlias,
         name: toolName,
         arguments: args,
@@ -198,8 +237,8 @@ function HeadlessToolRunner({
   }
 
   return (
-    <section className="mt-6 overflow-hidden rounded-xl border border-border/70">
-      <div className="grid min-h-[390px] grid-cols-[220px_minmax(0,1fr)]">
+    <section className={cn("overflow-hidden", fill ? "h-full" : "mt-6 rounded-xl border border-border/70")}>
+      <div className={cn("grid grid-cols-[220px_minmax(0,1fr)]", fill ? "h-full" : "min-h-[390px]")}>
         <aside className="border-r border-border/60 bg-muted/20 p-2">
           <p className="px-2 py-1.5 text-xs text-muted-foreground">{t("options.extensions.managed.tools")}</p>
           {tools.map((tool) => (
@@ -251,18 +290,18 @@ function HeadlessToolRunner({
   )
 }
 
-function ManagedOutputs({ appId, bridge }: { appId: string; bridge: ManagedAppsBridge }) {
+function ManagedOutputs({ extensionId, bridge }: { extensionId: string; bridge: ManagedExtensionsBridge }) {
   const { t } = useT()
-  const [outputs, setOutputs] = useState<ManagedAppOutputRecord[]>([])
+  const [outputs, setOutputs] = useState<ManagedExtensionOutputRecord[]>([])
   useEffect(() => {
     const load = () => {
-      void bridge.listOutputs(appId).then(setOutputs).catch(() => setOutputs([]))
+      void bridge.listOutputs(extensionId).then(setOutputs).catch(() => setOutputs([]))
     }
     load()
     return bridge.onChanged((changedAppId) => {
-      if (changedAppId === null || changedAppId === appId) load()
+      if (changedAppId === null || changedAppId === extensionId) load()
     })
-  }, [appId, bridge])
+  }, [extensionId, bridge])
   if (!outputs.length) return null
   return (
     <section className="mt-6 border-t border-border/60 pt-4">
@@ -272,7 +311,7 @@ function ManagedOutputs({ appId, bridge }: { appId: string; bridge: ManagedAppsB
           <li key={output.id} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 hover:bg-muted/30">
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1"><span className="block truncate text-sm">{output.name}</span><span className="block truncate text-[11px] text-muted-foreground">{output.uri}</span></span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" title={output.pinned ? t("options.extensions.managed.unpin") : t("options.extensions.managed.pin")} onClick={() => void bridge.updateOutput(appId, output.id, { pinned: !output.pinned }).then((updated) => setOutputs((current) => current.map((item) => item.id === updated.id ? updated : item)))}><Pin className={cn("h-3.5 w-3.5", output.pinned && "fill-current")} /></Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title={output.pinned ? t("options.extensions.managed.unpin") : t("options.extensions.managed.pin")} onClick={() => void bridge.updateOutput(extensionId, output.id, { pinned: !output.pinned }).then((updated) => setOutputs((current) => current.map((item) => item.id === updated.id ? updated : item)))}><Pin className={cn("h-3.5 w-3.5", output.pinned && "fill-current")} /></Button>
           </li>
         ))}
       </ul>
@@ -280,7 +319,7 @@ function ManagedOutputs({ appId, bridge }: { appId: string; bridge: ManagedAppsB
   )
 }
 
-export function ManagedAppletCreateDialog({
+export function ManagedExtensionCreateDialog({
   open,
   onOpenChange,
   bridge,
@@ -288,12 +327,13 @@ export function ManagedAppletCreateDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  bridge: ManagedAppsBridge
+  bridge: ManagedExtensionsBridge
   startAgentTask?: StartAgentTask
 }) {
   const { t } = useT()
   const [name, setName] = useState("")
   const [request, setRequest] = useState("")
+  const [operationId, setOperationId] = useState(newOperationId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -301,20 +341,34 @@ export function ManagedAppletCreateDialog({
     if (!name.trim() || !request.trim() || !startAgentTask) return
     setBusy(true)
     setError(null)
+    let result: Awaited<ReturnType<ManagedExtensionsBridge["create"]>> | null = null
     try {
-      const result = await bridge.create({ name, request, description: request })
+      result = await bridge.create({ name, request, description: request, operationId })
       const sessionId = await startAgentTask(result.agentPrompt, {
         sourceApp: name.trim(),
         workspacePath: result.draft.workspacePath,
       })
       if (typeof sessionId === "string") {
-        await bridge.attachSession(result.app.id, result.draft.id, sessionId)
+        await bridge.attachSession(result.extension.id, result.draft.id, sessionId).catch((cause) => {
+          console.warn("[managed-extensions] failed to attach Agent session:", cause)
+        })
       }
       setName("")
       setRequest("")
+      setOperationId(newOperationId())
       onOpenChange(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      let message = cause instanceof Error ? cause.message : String(cause)
+      if (result) {
+        await bridge.abortDraft(
+          result.extension.id,
+          result.draft.id,
+          `无法启动 AI 任务：${message}`,
+        ).catch((cleanupCause) => {
+          message = `${message}；清理未完成：${cleanupCause instanceof Error ? cleanupCause.message : String(cleanupCause)}`
+        })
+      }
+      setError(message)
     } finally {
       setBusy(false)
     }
@@ -329,9 +383,9 @@ export function ManagedAppletCreateDialog({
         </DialogHeader>
         <div className="space-y-4 py-1">
           <div className="space-y-2">
-            <Label htmlFor="managed-applet-name">{t("options.extensions.managed.create.name")}</Label>
+            <Label htmlFor="managed-extension-name">{t("options.extensions.managed.create.name")}</Label>
             <Input
-              id="managed-applet-name"
+              id="managed-extension-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={t("options.extensions.managed.create.namePlaceholder")}
@@ -339,9 +393,9 @@ export function ManagedAppletCreateDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="managed-applet-request">{t("options.extensions.managed.create.request")}</Label>
+            <Label htmlFor="managed-extension-request">{t("options.extensions.managed.create.request")}</Label>
             <Textarea
-              id="managed-applet-request"
+              id="managed-extension-request"
               value={request}
               onChange={(event) => setRequest(event.target.value)}
               placeholder={t("options.extensions.managed.create.requestPlaceholder")}
@@ -362,22 +416,24 @@ export function ManagedAppletCreateDialog({
   )
 }
 
-function ManagedAppletDetail({
-  app,
+function ManagedExtensionDetail({
+  extension,
   bridge,
   startAgentTask,
+  mode,
   onBack,
   onRefresh,
 }: {
-  app: ManagedAppSummary
-  bridge: ManagedAppsBridge
+  extension: ManagedExtensionSummary
+  bridge: ManagedExtensionsBridge
   startAgentTask?: StartAgentTask
+  mode: "use" | "manage"
   onBack: () => void
   onRefresh: () => void
 }) {
   const { t, language } = useT()
   const { theme } = useResolvedTheme()
-  const [surface, setSurface] = useState<Awaited<ReturnType<ManagedAppsBridge["surface"]>>>(null)
+  const [surface, setSurface] = useState<Awaited<ReturnType<ManagedExtensionsBridge["surface"]>>>(null)
   const [loadingSurface, setLoadingSurface] = useState(false)
   const [improveOpen, setImproveOpen] = useState(false)
   const [request, setRequest] = useState("")
@@ -385,66 +441,78 @@ function ManagedAppletDetail({
   const [error, setError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [organizeOpen, setOrganizeOpen] = useState(false)
-  const [tagsInput, setTagsInput] = useState(app.tags.join(", "))
-  const [collectionInput, setCollectionInput] = useState(app.collectionId ?? "")
+  const [tagsInput, setTagsInput] = useState(extension.tags.join(", "))
+  const [collectionInput, setCollectionInput] = useState(extension.collectionId ?? "")
   const [exportedPath, setExportedPath] = useState<string | null>(null)
   const [surfaceName, setSurfaceName] = useState<"main" | "settings">("main")
-  const candidate = app.userStatus === "needs-confirmation"
-  const targetRevision = candidate ? app.candidateRevision : app.activeRevision
+  const candidate = mode === "manage" && extension.userStatus === "needs-confirmation"
+  const targetRevision = candidate ? extension.candidateRevision : extension.activeRevision
   const addedPermissions = candidate
-    ? app.candidateRevision?.permissions.filter(
-        (permission) => !app.activeRevision?.permissions.includes(permission),
+    ? extension.candidateRevision?.permissions.filter(
+        (permission) => !extension.activeRevision?.permissions.includes(permission),
       ) ?? []
     : []
 
   const loadSurface = useCallback(async () => {
-    if (!app.activeRevisionId && !app.candidateRevision) return
+    if (!extension.activeRevisionId && !extension.candidateRevision) return
     setLoadingSurface(true)
     try {
       const next = await bridge.surface(
-        app.id,
+        extension.id,
         candidate ? "candidate" : "active",
         surfaceName,
       )
       setSurface(next)
-      if (!candidate && app.activeRevisionId) await bridge.markUsed(app.id)
+      if (!candidate && extension.activeRevisionId) {
+        void bridge.markUsed(extension.id).catch((cause) => {
+          console.warn("[managed-extensions] failed to update last-used timestamp:", cause)
+        })
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setLoadingSurface(false)
     }
-  }, [app.activeRevisionId, app.candidateRevision, app.id, bridge, candidate, surfaceName])
+  }, [extension.activeRevisionId, extension.candidateRevision, extension.id, bridge, candidate, surfaceName])
 
   useEffect(() => {
     void loadSurface()
   }, [loadSurface])
 
   useEffect(() => {
-    if (!targetRevision?.manifest.surfaces?.main && targetRevision?.manifest.surfaces?.settings) {
+    const surfaces = targetRevision?.manifest.surfaces
+    if (mode === "use" && surfaces?.main) {
+      if (surfaceName !== "main") setSurfaceName("main")
+      return
+    }
+    if (surfaces?.[surfaceName]) return
+    if (surfaces?.main) {
+      setSurfaceName("main")
+    } else if (surfaces?.settings) {
       setSurfaceName("settings")
     }
-  }, [targetRevision?.id])
+  }, [mode, surfaceName, targetRevision?.id, targetRevision?.manifest.surfaces])
 
   async function improve() {
     if (!request.trim()) return
     setBusy(true)
     setError(null)
     try {
-      if (app.activeRevision?.parentRevisionId && isRollbackIntent(request)) {
-        await bridge.rollback(app.id)
+      if (extension.activeRevision?.parentRevisionId && isRollbackIntent(request)) {
+        await bridge.rollback(extension.id)
         setImproveOpen(false)
         setRequest("")
         onRefresh()
         return
       }
       if (!startAgentTask) return
-      const result = await bridge.requestChange(app.id, request)
+      const result = await bridge.requestChange(extension.id, request)
       const sessionId = await startAgentTask(result.agentPrompt, {
-        sourceApp: app.name,
+        sourceApp: extension.name,
         workspacePath: result.draft.workspacePath,
       })
       if (typeof sessionId === "string") {
-        await bridge.attachSession(app.id, result.draft.id, sessionId)
+        await bridge.attachSession(extension.id, result.draft.id, sessionId)
       }
       setImproveOpen(false)
       setRequest("")
@@ -468,135 +536,145 @@ function ManagedAppletDetail({
     }
   }
 
-  const providerAlias = String(surface?.metadata?.provider ?? app.candidateRevision?.manifest.mcp?.providers[0]?.alias ?? app.activeRevision?.manifest.mcp?.providers[0]?.alias ?? "main")
+  const providerAlias = String(surface?.metadata?.provider ?? extension.candidateRevision?.manifest.mcp?.providers[0]?.alias ?? extension.activeRevision?.manifest.mcp?.providers[0]?.alias ?? "main")
+  const surfaceView = surface?.html ? (
+    <McpAppsView
+      extensionId={extension.id}
+      providerAlias={providerAlias}
+      html={surface.html}
+      className="block h-full w-full"
+      theme={theme}
+      locale={language}
+      permissions={(candidate ? extension.candidateRevision : extension.activeRevision)?.permissions}
+      bridge={{
+        callTool: (input) => bridge.callTool({
+          ...input,
+          revisionId: candidate ? extension.candidateRevision?.id : undefined,
+        }) as never,
+        readResource: (input) => bridge.readResource({
+          ...input,
+          revisionId: candidate ? extension.candidateRevision?.id : undefined,
+        }) as never,
+        openLink: (url) => window.open(url, "_blank", "noopener,noreferrer") ? Promise.resolve() : Promise.resolve(),
+        sendMessage: async (text) => {
+          await startAgentTask?.(text, { sourceApp: extension.name })
+        },
+      }}
+    />
+  ) : (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      {loadingSurface ? t("common.loading") : t("options.extensions.managed.noSurface")}
+    </div>
+  )
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 pb-10 pt-5">
-      <button type="button" onClick={onBack} className="-ml-2 mb-4 inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground hover:bg-muted/55 hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" />
-        {t("options.extensions.title")}
-      </button>
-
-      <div className="flex items-start gap-3">
-        <ManagedGlyph busy={app.userStatus === "creating" || app.userStatus === "improving"} />
+    <div className={cn("w-full", mode === "use" ? "flex h-full min-h-0 flex-col overflow-hidden" : "pb-10")}>
+      {mode === "manage" ? <div className="flex items-start gap-3">
+        <ManagedGlyph busy={extension.userStatus === "creating" || extension.userStatus === "improving"} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h1 className="truncate text-lg font-normal tracking-[-0.01em]">{app.name}</h1>
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className={cn("h-1.5 w-1.5 rounded-full", statusTone(app.userStatus))} />
-              {t(statusKey(app.userStatus))}
-            </span>
-          </div>
-          {app.description ? <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{app.description}</p> : null}
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className={cn("h-1.5 w-1.5 rounded-full", statusTone(extension.userStatus))} />
+            {t(statusKey(extension.userStatus))}
+          </span>
+          {extension.description ? <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{extension.description}</p> : null}
         </div>
-        <Button variant="outline" size="sm" disabled={busy || !startAgentTask || app.userStatus === "creating" || app.userStatus === "improving" || candidate} onClick={() => setImproveOpen(true)}>
+        <Button variant="outline" size="sm" disabled={busy || !startAgentTask || extension.userStatus === "creating" || extension.userStatus === "improving" || candidate} onClick={() => setImproveOpen(true)}>
           <WandSparkles />
           {t("options.extensions.managed.improve")}
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={app.pinned ? t("options.extensions.managed.unpin") : t("options.extensions.managed.pin")} onClick={() => void action(() => bridge.updateMetadata(app.id, { pinned: !app.pinned }))}>
-          <Pin className={cn("h-3.5 w-3.5", app.pinned && "fill-current text-foreground")} />
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={extension.pinned ? t("options.extensions.managed.unpin") : t("options.extensions.managed.pin")} onClick={() => void action(() => bridge.updateMetadata(extension.id, { pinned: !extension.pinned }))}>
+          <Pin className={cn("h-3.5 w-3.5", extension.pinned && "fill-current text-foreground")} />
         </Button>
         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={t("options.extensions.managed.organize")} onClick={() => setOrganizeOpen(true)}><Tag className="h-3.5 w-3.5" /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={t("options.extensions.managed.export")} onClick={() => void bridge.exportProject(app.id).then(setExportedPath)}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={t("options.extensions.managed.export")} onClick={() => void bridge.exportProject(extension.id).then(setExportedPath)}>
           <Share2 className="h-3.5 w-3.5" />
         </Button>
         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" title={t("options.extensions.managed.delete")} onClick={() => setDeleteOpen(true)}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
-      </div>
+      </div> : null}
 
-      {exportedPath ? <p className="mt-3 text-xs text-muted-foreground">{t("options.extensions.managed.exported", { path: exportedPath })}</p> : null}
-      {app.tags.length || app.collectionId ? (
+      {mode === "manage" && exportedPath ? <p className="mt-3 text-xs text-muted-foreground">{t("options.extensions.managed.exported", { path: exportedPath })}</p> : null}
+      {mode === "manage" && (extension.tags.length || extension.collectionId) ? (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          {app.collectionId ? <span className="rounded-md bg-muted/55 px-2 py-1">{app.collectionId}</span> : null}
-          {app.tags.map((tag) => <span key={tag} className="rounded-md bg-muted/35 px-2 py-1">#{tag}</span>)}
+          {extension.collectionId ? <span className="rounded-md bg-muted/55 px-2 py-1">{extension.collectionId}</span> : null}
+          {extension.tags.map((tag) => <span key={tag} className="rounded-md bg-muted/35 px-2 py-1">#{tag}</span>)}
         </div>
       ) : null}
 
-      {app.latestChangeSummary ? (
+      {mode === "manage" && managedContributionKinds(extension).length ? (
+        <ul
+          aria-label={t("options.extensions.capabilities.title")}
+          className="mt-3 flex flex-wrap gap-1.5"
+        >
+          {managedContributionLabels(extension, t).map((label) => (
+            <li
+              key={label}
+              className="rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground"
+            >
+              {label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {mode === "manage" && extension.latestChangeSummary ? (
         <div className="mt-5 flex items-start gap-2.5 rounded-xl bg-muted/30 px-3.5 py-3 text-sm">
           <Check className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--success))]" />
-          <div><p className="text-xs text-muted-foreground">{t("options.extensions.managed.latestChange")}</p><p className="mt-0.5 leading-5">{app.latestChangeSummary}</p></div>
+          <div><p className="text-xs text-muted-foreground">{t("options.extensions.managed.latestChange")}</p><p className="mt-0.5 leading-5">{extension.latestChangeSummary}</p></div>
         </div>
       ) : null}
 
-      {app.lastError || error ? (
-        <div role="alert" className="mt-5 flex items-start gap-2.5 rounded-xl bg-destructive/[0.055] px-3.5 py-3 text-sm text-destructive">
+      {(mode === "manage" ? extension.lastError || error : error) ? (
+        <div role="alert" className={cn("flex items-start gap-2.5 bg-destructive/[0.055] px-3.5 py-3 text-sm text-destructive", mode === "manage" && "mt-5 rounded-xl")}>
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div><p>{app.activeRevisionId ? t("options.extensions.managed.failedSafe") : t("options.extensions.managed.failed")}</p><p className="mt-1 text-xs opacity-85">{error ?? app.lastError}</p></div>
+          <div><p>{extension.activeRevisionId ? t("options.extensions.managed.failedSafe") : t("options.extensions.managed.failed")}</p><p className="mt-1 text-xs opacity-85">{error ?? extension.lastError}</p></div>
         </div>
       ) : null}
 
       {candidate ? (
         <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl bg-amber-500/[0.08] px-4 py-3">
           <div className="min-w-0 flex-1"><p className="text-sm font-medium">{t("options.extensions.managed.confirm.title")}</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{t("options.extensions.managed.confirm.description")}</p>{addedPermissions.length ? <div className="mt-2 flex flex-wrap gap-1.5">{[...new Set(addedPermissions.map((permission) => permissionLabel(permission, language)))].map((label) => <span key={label} className="rounded-md bg-amber-500/10 px-2 py-1 text-xs text-foreground/80">{label}</span>)}</div> : null}</div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void action(() => bridge.reject(app.id, app.candidateRevision!.id))}>{t("options.extensions.managed.keepCurrent")}</Button>
-          <Button size="sm" disabled={busy} onClick={() => void action(() => bridge.confirm(app.id, app.candidateRevision!.id))}>{t("common.confirm")}</Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void action(() => bridge.reject(extension.id, extension.candidateRevision!.id))}>{t("options.extensions.managed.keepCurrent")}</Button>
+          <Button size="sm" disabled={busy} onClick={() => void action(() => bridge.confirm(extension.id, extension.candidateRevision!.id))}>{t("common.confirm")}</Button>
         </div>
       ) : null}
 
-      {loadingSurface || surface?.html || targetRevision?.manifest.surfaces?.[surfaceName] ? <section className="mt-6 overflow-hidden rounded-xl border border-border/70 bg-muted/10">
-        <div className="flex h-10 items-center border-b border-border/60 px-3.5">
+      {loadingSurface || surface?.html || targetRevision?.manifest.surfaces?.[surfaceName] ? <section className={cn("relative overflow-hidden bg-background", mode === "use" ? "h-0 min-h-0 flex-1" : "mt-6 rounded-xl border border-border/70 bg-muted/10")}>
+        {mode === "manage" ? <div className="flex h-10 items-center border-b border-border/60 px-3.5">
           <p className="text-xs text-muted-foreground">{candidate ? t("options.extensions.managed.previewCandidate") : t("options.extensions.managed.current")}</p>
           {targetRevision?.manifest.surfaces?.main && targetRevision.manifest.surfaces.settings ? <div className="ml-3 flex items-center rounded-md bg-muted/45 p-0.5"><button type="button" onClick={() => setSurfaceName("main")} className={cn("rounded px-2 py-1 text-[11px]", surfaceName === "main" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>{t("options.extensions.managed.mainSurface")}</button><button type="button" onClick={() => setSurfaceName("settings")} className={cn("inline-flex items-center gap-1 rounded px-2 py-1 text-[11px]", surfaceName === "settings" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}><Settings2 className="h-3 w-3" />{t("options.extensions.managed.settingsSurface")}</button></div> : null}
           {loadingSurface ? <LoaderCircle className="ml-auto h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
-        </div>
-        <div className="h-[430px] bg-background">
-          {surface?.html ? (
-            <McpAppsView
-              appId={app.id}
-              providerAlias={providerAlias}
-              html={surface.html}
-              theme={theme}
-              locale={language}
-              permissions={(candidate ? app.candidateRevision : app.activeRevision)?.permissions}
-              bridge={{
-                callTool: (input) => bridge.callTool({
-                  ...input,
-                  revisionId: candidate ? app.candidateRevision?.id : undefined,
-                }) as never,
-                readResource: (input) => bridge.readResource({
-                  ...input,
-                  revisionId: candidate ? app.candidateRevision?.id : undefined,
-                }) as never,
-                openLink: (url) => window.open(url, "_blank", "noopener,noreferrer") ? Promise.resolve() : Promise.resolve(),
-                sendMessage: async (text) => {
-                  await startAgentTask?.(text, { sourceApp: app.name })
-                },
-              }}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {loadingSurface ? t("common.loading") : t("options.extensions.managed.noSurface")}
-            </div>
-          )}
+        </div> : null}
+        <div className={cn("overflow-hidden bg-background", mode === "use" ? "h-full" : "h-[430px]")}>
+          {surfaceView}
         </div>
       </section> : null}
 
       {!surface?.html && surfaceName === "main" && (targetRevision?.capabilities?.tools.length ?? 0) > 0 ? (
-        <HeadlessToolRunner app={app} bridge={bridge} candidate={candidate} />
+        <HeadlessToolRunner extension={extension} bridge={bridge} candidate={candidate} fill={mode === "use"} />
       ) : null}
 
-      <ManagedOutputs appId={app.id} bridge={bridge} />
+      {mode === "manage" ? <ManagedOutputs extensionId={extension.id} bridge={bridge} /> : null}
 
-      {app.activeRevision?.parentRevisionId ? (
-        <button type="button" disabled={busy} onClick={() => void action(() => bridge.rollback(app.id))} className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+      {mode === "manage" && extension.activeRevision?.parentRevisionId ? (
+        <button type="button" disabled={busy} onClick={() => void action(() => bridge.rollback(extension.id))} className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
           <RotateCcw className="h-3.5 w-3.5" />
           {t("options.extensions.managed.undo")}
         </button>
       ) : null}
 
-      <details className="mt-8 border-t border-border/60 pt-4 text-xs text-muted-foreground">
+      {mode === "manage" ? <details className="mt-8 border-t border-border/60 pt-4 text-xs text-muted-foreground">
         <summary className="cursor-pointer select-none">{t("options.extensions.managed.developerDetails")}</summary>
         <dl className="mt-3 grid gap-3 rounded-lg bg-muted/25 p-3 font-mono">
-          <div><dt className="font-sans opacity-70">ID</dt><dd className="mt-1 break-all text-foreground">{app.id}</dd></div>
-          <div><dt className="font-sans opacity-70">Runtime</dt><dd className="mt-1 text-foreground">{app.activeRevision?.manifest.runtime ?? "—"}</dd></div>
+          <div><dt className="font-sans opacity-70">ID</dt><dd className="mt-1 break-all text-foreground">{extension.id}</dd></div>
+          <div><dt className="font-sans opacity-70">Runtime</dt><dd className="mt-1 text-foreground">{extension.activeRevision?.manifest.runtime ?? "—"}</dd></div>
         </dl>
-      </details>
+      </details> : null}
 
       <Dialog open={improveOpen} onOpenChange={setImproveOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{t("options.extensions.managed.improveTitle", { name: app.name })}</DialogTitle><DialogDescription>{t("options.extensions.managed.improveDescription")}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t("options.extensions.managed.improveTitle", { name: extension.name })}</DialogTitle><DialogDescription>{t("options.extensions.managed.improveDescription")}</DialogDescription></DialogHeader>
           <Textarea value={request} onChange={(event) => setRequest(event.target.value)} placeholder={t("options.extensions.managed.improvePlaceholder")} className="min-h-32 resize-none" autoFocus />
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <DialogFooter><Button variant="outline" onClick={() => setImproveOpen(false)}>{t("common.cancel")}</Button><Button disabled={busy || !request.trim()} onClick={() => void improve()}><Hammer />{t("options.extensions.managed.startImproving")}</Button></DialogFooter>
@@ -604,52 +682,66 @@ function ManagedAppletDetail({
       </Dialog>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{t("options.extensions.managed.deleteTitle", { name: app.name })}</DialogTitle><DialogDescription>{t("options.extensions.managed.deleteDescription")}</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="outline" onClick={() => setDeleteOpen(false)}>{t("common.cancel")}</Button><Button variant="destructive" disabled={busy} onClick={() => void (async () => { await action(() => bridge.archive(app.id)); setDeleteOpen(false); onBack() })()}>{t("options.extensions.managed.delete")}</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{t("options.extensions.managed.deleteTitle", { name: extension.name })}</DialogTitle><DialogDescription>{t("options.extensions.managed.deleteDescription")}</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setDeleteOpen(false)}>{t("common.cancel")}</Button><Button variant="destructive" disabled={busy} onClick={() => void (async () => { await action(() => bridge.archive(extension.id)); setDeleteOpen(false); onBack() })()}>{t("options.extensions.managed.delete")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={organizeOpen} onOpenChange={setOrganizeOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("options.extensions.managed.organize")}</DialogTitle><DialogDescription>{t("options.extensions.managed.organizeDescription")}</DialogDescription></DialogHeader>
           <div className="space-y-4"><div className="space-y-2"><Label htmlFor="managed-collection">{t("options.extensions.managed.collection")}</Label><Input id="managed-collection" value={collectionInput} onChange={(event) => setCollectionInput(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="managed-tags">{t("options.extensions.managed.tags")}</Label><Input id="managed-tags" value={tagsInput} onChange={(event) => setTagsInput(event.target.value)} placeholder={t("options.extensions.managed.tagsPlaceholder")} /></div></div>
-          <DialogFooter><Button variant="outline" onClick={() => setOrganizeOpen(false)}>{t("common.cancel")}</Button><Button onClick={() => void (async () => { await action(() => bridge.updateMetadata(app.id, { collectionId: collectionInput, tags: tagsInput.split(/[,，]/) })); setOrganizeOpen(false) })()}>{t("common.save")}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setOrganizeOpen(false)}>{t("common.cancel")}</Button><Button onClick={() => void (async () => { await action(() => bridge.updateMetadata(extension.id, { collectionId: collectionInput, tags: tagsInput.split(/[,，]/) })); setOrganizeOpen(false) })()}>{t("common.save")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
 
-export function ManagedApplets({
+export interface ManagedExtensionView {
+  extensionId: string
+  name: string
+  mode: "use" | "manage"
+}
+
+export function ManagedExtensions({
   bridge,
   startAgentTask,
   refreshToken = 0,
   onRefreshingChange,
   onDetailChange,
+  view,
+  onViewChange,
+  showPageTitle = false,
   installedItems = [],
   installedReady = true,
   renderInstalledItem,
 }: {
-  bridge: ManagedAppsBridge
+  bridge: ManagedExtensionsBridge
   startAgentTask?: StartAgentTask
   refreshToken?: number
   onRefreshingChange?: (refreshing: boolean) => void
   onDetailChange?: (open: boolean) => void
+  view?: ManagedExtensionView | null
+  onViewChange?: (view: ManagedExtensionView | null) => void
+  showPageTitle?: boolean
   installedItems?: ExtensionRegistryItem[]
   installedReady?: boolean
   renderInstalledItem?: (item: ExtensionRegistryItem) => ReactNode
 }) {
   const { t } = useT()
-  const [apps, setApps] = useState<ManagedAppSummary[]>([])
+  const [extensions, setExtensions] = useState<ManagedExtensionSummary[]>([])
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [internalView, setInternalView] = useState<ManagedExtensionView | null>(null)
   const [query, setQuery] = useState("")
   const [sourceFilter, setSourceFilter] = useState<"all" | "ai" | ExtensionRegistryItem["source"]>("all")
+  const activeView = view === undefined ? internalView : view
+  const setActiveView = onViewChange ?? setInternalView
 
   const refresh = useCallback(async () => {
     onRefreshingChange?.(true)
     try {
-      setApps(await bridge.list({ includeArchived: true }))
+      setExtensions(await bridge.list({ includeArchived: true }))
       setLoadError(null)
       setReady(true)
     } catch (cause) {
@@ -663,12 +755,12 @@ export function ManagedApplets({
   useEffect(() => { void refresh() }, [refresh, refreshToken])
   useEffect(() => bridge.onChanged(() => void refresh()), [bridge, refresh])
 
-  const selected = apps.find((app) => app.id === selectedId)
+  const selected = extensions.find((extension) => extension.id === activeView?.extensionId)
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const activeApps = apps.filter((app) => !app.archived)
-  const visibleApps = activeApps.filter((app) => {
+  const activeExtensions = extensions.filter((extension) => !extension.archived)
+  const visibleExtensions = activeExtensions.filter((extension) => {
     if (sourceFilter !== "all" && sourceFilter !== "ai") return false
-    return !normalizedQuery || [app.name, app.description, app.latestChangeSummary, ...app.tags]
+    return !normalizedQuery || [extension.name, extension.description, extension.latestChangeSummary, ...extension.tags]
       .filter(Boolean)
       .some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery))
   })
@@ -679,9 +771,9 @@ export function ManagedApplets({
       .filter(Boolean)
       .some((value) => String(value).toLocaleLowerCase().includes(normalizedQuery))
   })
-  const archivedApps = apps.filter((app) => app.archived)
+  const archivedExtensions = extensions.filter((extension) => extension.archived)
   const sourceCounts = {
-    ai: activeApps.length,
+    ai: activeExtensions.length,
     local: installedItems.filter((item) => item.source === "local").length,
     marketplace: installedItems.filter((item) => item.source === "marketplace").length,
     bundled: installedItems.filter((item) => item.source === "bundled").length,
@@ -694,20 +786,31 @@ export function ManagedApplets({
     ...(sourceCounts.bundled ? [{ id: "bundled" as const, label: t("options.extensions.source.bundled") }] : []),
   ]
   const unifiedEntries = [
-    ...visibleApps.map((app) => ({
-      key: `managed:${app.id}`,
-      name: app.name,
-      pinned: app.pinned,
-      content: (
-        <li>
-          <button type="button" onClick={() => setSelectedId(app.id)} className="group flex min-h-[72px] w-full items-center gap-3 rounded-lg px-2 py-3 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:bg-muted/45">
-            <ManagedGlyph busy={app.userStatus === "creating" || app.userStatus === "improving"} />
-            <span className="min-w-0 flex-1"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-medium">{app.name}</span><span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusTone(app.userStatus))} /></span><span className="mt-1 block truncate text-xs text-muted-foreground">{t(statusKey(app.userStatus))}</span></span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+    ...visibleExtensions.map((extension) => {
+      const contributions = managedContributionLabels(extension, t)
+      return {
+        key: `managed:${extension.id}`,
+        name: extension.name,
+        pinned: extension.pinned,
+        content: (
+        <li className="group flex items-center rounded-xl outline-none transition-colors hover:bg-muted/35 focus-within:bg-muted/45">
+          <button type="button" onClick={() => setActiveView({ extensionId: extension.id, name: extension.name, mode: "use" })} className="flex min-h-[72px] min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-3 text-left outline-none">
+            <ManagedGlyph busy={extension.userStatus === "creating" || extension.userStatus === "improving"} />
+            <span className="min-w-0 flex-1"><span className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-medium">{extension.name}</span><span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusTone(extension.userStatus))} /></span><span className="mt-1 block truncate text-xs text-muted-foreground">{[t(statusKey(extension.userStatus)), ...contributions].join(" · ")}</span></span>
+          </button>
+          <button
+            type="button"
+            aria-label={t("options.extensions.managed.manageExtension", { name: extension.name })}
+            title={t("options.extensions.managed.manage")}
+            onClick={() => setActiveView({ extensionId: extension.id, name: extension.name, mode: "manage" })}
+            className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-60 outline-none transition-colors hover:bg-background/80 hover:text-foreground focus-visible:bg-background focus-visible:text-foreground md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          >
+            <Settings2 className="h-4 w-4" />
           </button>
         </li>
-      ),
-    })),
+        ),
+      }
+    }),
     ...visibleInstalledItems.map((item) => ({
       key: `installed:${item.id}`,
       name: item.manifest?.name ?? item.id,
@@ -715,23 +818,33 @@ export function ManagedApplets({
       content: renderInstalledItem?.(item) ?? null,
     })),
   ].sort((left, right) => Number(right.pinned) - Number(left.pinned) || left.name.localeCompare(right.name))
-  const totalActive = activeApps.length + installedItems.length
   const libraryReady = ready && installedReady
   useEffect(() => {
     onDetailChange?.(!!selected)
     return () => onDetailChange?.(false)
   }, [onDetailChange, selected])
   if (selected) {
-    return <ManagedAppletDetail app={selected} bridge={bridge} startAgentTask={startAgentTask} onBack={() => setSelectedId(null)} onRefresh={() => void refresh()} />
+    const detail = (
+      <ManagedExtensionDetail
+        extension={selected}
+        bridge={bridge}
+        startAgentTask={startAgentTask}
+        mode={activeView?.mode ?? "use"}
+        onBack={() => setActiveView(null)}
+        onRefresh={() => void refresh()}
+      />
+    )
+    if (activeView?.mode === "manage") {
+      return <ScrollArea className="min-h-0 flex-1"><PageContent>{detail}</PageContent></ScrollArea>
+    }
+    return <div className="h-0 min-h-0 flex-1 overflow-hidden">{detail}</div>
   }
 
   return (
-    <section>
-      <div className="mb-2 flex items-center justify-between px-2 pb-1">
-        <div><h3 className="text-sm font-normal">{t("options.extensions.managed.yours")}</h3><p className="mt-1 text-xs text-muted-foreground">{t("options.extensions.managed.yoursDescription")}</p></div>
-        {totalActive ? <span className="text-sm tabular-nums text-muted-foreground">{totalActive}</span> : null}
-      </div>
-      <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("options.extensions.managed.search")} className="mb-3 h-9" />
+    <ScrollArea className="min-h-0 flex-1">
+      <PageContent title={showPageTitle ? t("options.extensions.title") : undefined}>
+        <section>
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("options.extensions.managed.search")} className="mb-3 h-9" />
       {sourceOptions.length > 2 ? (
         <div role="group" aria-label={t("options.extensions.filter.label")} className="mb-3 flex flex-wrap gap-1">
           {sourceOptions.map((option) => (
@@ -753,19 +866,21 @@ export function ManagedApplets({
           {unifiedEntries.map((entry) => <Fragment key={entry.key}>{entry.content}</Fragment>)}
         </ul>
       )}
-      {archivedApps.length ? (
+          {archivedExtensions.length ? (
         <details className="mt-6 border-t border-border/60 pt-4">
-          <summary className="cursor-pointer text-xs text-muted-foreground">{t("options.extensions.managed.recentlyDeleted", { count: archivedApps.length })}</summary>
+          <summary className="cursor-pointer text-xs text-muted-foreground">{t("options.extensions.managed.recentlyDeleted", { count: archivedExtensions.length })}</summary>
           <ul className="mt-2 space-y-1">
-            {archivedApps.map((app) => (
-              <li key={app.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{app.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => void bridge.restore(app.id).then(refresh)}>{t("options.extensions.managed.restore")}</Button>
+            {archivedExtensions.map((extension) => (
+              <li key={extension.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{extension.name}</span>
+                <Button variant="ghost" size="sm" onClick={() => void bridge.restore(extension.id).then(refresh)}>{t("options.extensions.managed.restore")}</Button>
               </li>
             ))}
           </ul>
         </details>
-      ) : null}
-    </section>
+          ) : null}
+        </section>
+      </PageContent>
+    </ScrollArea>
   )
 }

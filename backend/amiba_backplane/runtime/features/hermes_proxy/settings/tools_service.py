@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,7 +30,18 @@ from ....adapters.hermes_core import is_default_profile
 
 logger = logging.getLogger("my-browser-bridge")
 
-_DEFAULT_PLATFORM = "cli"
+_PROFILE_PLATFORM = "api_server"
+_LEGACY_PROFILE_PLATFORM = "cli"
+_KANBAN_PLATFORM = "api_server"
+_NATIVE_TOOLSET_PLATFORMS = {
+    "discord": "discord",
+    "discord_admin": "discord",
+}
+_KANBAN_TOOLSET = (
+    "kanban",
+    "Task Board",
+    "create, decompose, coordinate, and track durable background tasks",
+)
 _MODEL_CATALOG_TOOLSETS = {
     "image_gen": "image_gen",
     "video_gen": "video_gen",
@@ -141,6 +153,7 @@ _TERMINAL_BACKENDS: List[Dict[str, Any]] = [
 _TERMINAL_BACKEND_NAMES = {
     str(row["name"]) for row in _TERMINAL_BACKENDS
 }
+_A2A_PEER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def _load_config() -> Dict[str, Any]:
@@ -161,25 +174,46 @@ def _configurable_toolsets() -> List[tuple[str, str, str]]:
         _get_effective_configurable_toolsets,
     )
 
-    return list(_get_effective_configurable_toolsets())
+    toolsets = list(_get_effective_configurable_toolsets())
+    if not any(name == _KANBAN_TOOLSET[0] for name, _label, _desc in toolsets):
+        # Hermes intentionally keeps the orchestrator-only Kanban toolset out
+        # of its generic checklist. Amiba exposes that official Profile opt-in
+        # explicitly because the task board is a user-facing product surface.
+        toolsets.append(_KANBAN_TOOLSET)
+    return toolsets
 
 
 def _toolset_platform(name: str) -> str:
     """Return the platform whose toolset list owns *name*.
 
-    New Hermes releases expose platform-restricted native toolsets.  Older
-    versions configured every row under ``cli``; retain that fallback so the
-    adapter continues to work during staggered upgrades.
+    Amiba Profile tasks run through Hermes' API Server, so unrestricted
+    capabilities belong to ``platform_toolsets.api_server``. Platform-native
+    toolsets (currently Discord permissions) retain their upstream owner.
     """
+
+    if name == _KANBAN_TOOLSET[0]:
+        # Amiba conversations run through Hermes' API Server platform. The
+        # Profile-level Kanban opt-in is mirrored there when the user enables
+        # this switch so the next task session actually receives the tools.
+        return _KANBAN_PLATFORM
+
+    # Keep the upstream ownership rule available even in lightweight bridge
+    # and test processes where ``hermes_cli`` is intentionally not importable.
+    native_platform = _NATIVE_TOOLSET_PLATFORMS.get(name)
+    if native_platform:
+        return native_platform
 
     try:
         from hermes_cli.tools_config import (  # type: ignore
             _toolset_configuration_platform,
         )
 
-        return str(_toolset_configuration_platform(name) or _DEFAULT_PLATFORM)
+        return str(
+            _toolset_configuration_platform(name, default=_PROFILE_PLATFORM)
+            or _PROFILE_PLATFORM
+        )
     except Exception:
-        return _DEFAULT_PLATFORM
+        return _PROFILE_PLATFORM
 
 
 def _platform_label(platform: str) -> str:
@@ -222,6 +256,114 @@ def _enabled_toolset_keys(config: Dict[str, Any], platform: str) -> Set[str]:
     )
 
 
+def _profile_toolset_keys(config: Dict[str, Any]) -> Set[str]:
+    """Return the active Profile's explicit orchestrator toolsets."""
+
+    raw = config.get("toolsets")
+    if not isinstance(raw, list):
+        return set()
+    return {str(name) for name in raw if str(name).strip()}
+
+
+def _toolset_enabled(
+    name: str,
+    config: Dict[str, Any],
+    platform: str,
+    platform_toolsets: Optional[Set[str]] = None,
+) -> bool:
+    enabled = (
+        platform_toolsets
+        if platform_toolsets is not None
+        else _enabled_toolset_keys(config, platform)
+    )
+    if name == _KANBAN_TOOLSET[0]:
+        # Both halves are required: ``toolsets`` passes Kanban's official
+        # Profile check_fn, while ``platform_toolsets.api_server`` includes it
+        # in Amiba's gateway agent schema.
+        return name in enabled and name in _profile_toolset_keys(config)
+    return name in enabled
+
+
+def _save_platform_toolsets(
+    config: Dict[str, Any],
+    platform: str,
+    enabled: Set[str],
+) -> None:
+    from hermes_cli.tools_config import _save_platform_tools  # type: ignore
+
+    _save_platform_tools(config, platform, enabled)
+
+
+def _migrate_legacy_profile_toolsets(config: Dict[str, Any]) -> bool:
+    """Move Amiba's old CLI-scoped Profile selection to the API Server.
+
+    Earlier Amiba releases reused Hermes' platform-less configurator default,
+    so the Profile capability page wrote ``platform_toolsets.cli`` even though
+    task sessions run on ``api_server``. Migrate only when the API Server has
+    never been explicitly configured; an existing list (including ``[]``) is
+    authoritative. The CLI selection is preserved for actual CLI sessions.
+    """
+
+    platform_toolsets = config.get("platform_toolsets")
+    if not isinstance(platform_toolsets, dict):
+        return False
+    if isinstance(platform_toolsets.get(_PROFILE_PLATFORM), list):
+        return False
+    if not isinstance(platform_toolsets.get(_LEGACY_PROFILE_PLATFORM), list):
+        return False
+
+    legacy_enabled = _enabled_toolset_keys(config, _LEGACY_PROFILE_PLATFORM)
+    _save_platform_toolsets(config, _PROFILE_PLATFORM, legacy_enabled)
+    _save_config(config)
+    return True
+
+
+def _migrate_legacy_extensions_config(config: Dict[str, Any]) -> bool:
+    """Move the former Applets projection into the Extensions toolset.
+
+    The old noun is intentionally confined to this migration. Older builds
+    persisted an ephemeral MCP server and, briefly, a native toolset under that
+    name. The bundled Hermes plugin now owns the canonical ``extensions``
+    toolset because an Extension may contribute UI, mentions, tools, resources,
+    or Hermes plugins.
+    """
+
+    legacy_mcp_server = "amiba-applets"
+    legacy_toolset = "applets"
+    canonical_toolset = "extensions"
+    changed = False
+    servers = config.get("mcp_servers")
+    if isinstance(servers, dict) and legacy_mcp_server in servers:
+        servers.pop(legacy_mcp_server, None)
+        changed = True
+    platform_toolsets = config.get("platform_toolsets")
+    if isinstance(platform_toolsets, dict):
+        for platform, values in list(platform_toolsets.items()):
+            if not isinstance(values, list):
+                continue
+            migrated: List[Any] = []
+            for value in values:
+                normalized = str(value)
+                if normalized == legacy_mcp_server:
+                    continue
+                replacement = canonical_toolset if normalized == legacy_toolset else value
+                if replacement not in migrated:
+                    migrated.append(replacement)
+            if migrated != values:
+                platform_toolsets[platform] = migrated
+                changed = True
+    if changed:
+        _save_config(config)
+    return changed
+
+
+def _load_profile_tools_config() -> Dict[str, Any]:
+    config = _load_config()
+    _migrate_legacy_profile_toolsets(config)
+    _migrate_legacy_extensions_config(config)
+    return config
+
+
 def _toolset_tools(name: str) -> List[str]:
     try:
         from toolsets import resolve_toolset  # type: ignore
@@ -230,6 +372,201 @@ def _toolset_tools(name: str) -> List[str]:
     except Exception as exc:  # noqa: BLE001
         logger.debug("resolve_toolset(%s) failed: %s", name, exc)
         return []
+
+
+def get_context_engines() -> Dict[str, Any]:
+    """List Hermes' built-in and plugin-provided context engines."""
+
+    try:
+        from hermes_cli.plugins_cmd import (  # type: ignore
+            _discover_context_engines,
+            _get_current_context_engine,
+        )
+
+        current = str(_get_current_context_engine() or "compressor")
+        engines: List[Dict[str, Any]] = [
+            {
+                "name": "compressor",
+                "label": "Built-in compressor",
+                "description": "Hermes' default context compression engine",
+                "available": True,
+            }
+        ]
+        for name, description in _discover_context_engines():
+            if str(name) == "compressor":
+                continue
+            engines.append(
+                {
+                    "name": str(name),
+                    "label": str(name).replace("_", " ").title(),
+                    "description": str(description or ""),
+                    "available": True,
+                }
+            )
+        if current and not any(item["name"] == current for item in engines):
+            engines.append(
+                {
+                    "name": current,
+                    "label": current.replace("_", " ").title(),
+                    "description": "Configured engine is not currently available",
+                    "available": False,
+                }
+            )
+        return {"ok": True, "engine": current, "engines": engines}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("context engine discovery failed: %s", exc)
+        return {
+            "ok": True,
+            "engine": "compressor",
+            "engines": [
+                {
+                    "name": "compressor",
+                    "label": "Built-in compressor",
+                    "description": "Hermes' default context compression engine",
+                    "available": True,
+                }
+            ],
+        }
+
+
+def select_context_engine(name: str) -> Dict[str, Any]:
+    """Persist a validated context engine for the active Profile."""
+
+    requested = str(name or "").strip()
+    choices = get_context_engines()["engines"]
+    valid = {str(item["name"]): bool(item["available"]) for item in choices}
+    if requested not in valid:
+        raise ValueError(f"Unknown context engine: {requested}")
+    if not valid[requested]:
+        raise ValueError(f"Context engine is not available: {requested}")
+    from hermes_cli.plugins_cmd import _save_context_engine  # type: ignore
+
+    _save_context_engine(requested)
+    return {"ok": True, "engine": requested}
+
+
+def list_a2a_peers() -> Dict[str, Any]:
+    """Return outbound A2A peers without ever returning bearer tokens."""
+
+    config = _load_config()
+    raw_peers = config.get("a2a_agents")
+    raw_peers = raw_peers if isinstance(raw_peers, dict) else {}
+    peers: List[Dict[str, Any]] = []
+    for raw_name, raw_entry in sorted(raw_peers.items(), key=lambda item: str(item[0])):
+        if not isinstance(raw_entry, dict):
+            continue
+        auth = raw_entry.get("auth")
+        auth = auth if isinstance(auth, dict) else {}
+        raw_capabilities = raw_entry.get("capabilities")
+        capabilities = (
+            [str(value) for value in raw_capabilities if str(value).strip()]
+            if isinstance(raw_capabilities, list)
+            else []
+        )
+        try:
+            timeout = int(raw_entry.get("timeout") or 120)
+        except (TypeError, ValueError):
+            timeout = 120
+        peers.append(
+            {
+                "name": str(raw_name),
+                "url": str(raw_entry.get("url") or ""),
+                "timeout": timeout,
+                "capabilities": capabilities,
+                "auth_type": str(auth.get("type") or "none"),
+                "auth_configured": bool(auth.get("token")),
+            }
+        )
+    return {"ok": True, "peers": peers}
+
+
+def save_a2a_peer(
+    name: str,
+    *,
+    url: str,
+    timeout: int = 120,
+    capabilities: Optional[List[str]] = None,
+    token: Optional[str] = None,
+    clear_token: bool = False,
+) -> Dict[str, Any]:
+    """Persist one validated official ``a2a_agents`` entry.
+
+    ``token`` is write-only. Omitting it preserves an existing bearer token;
+    callers must explicitly request ``clear_token`` to remove one.
+    """
+
+    peer_name = str(name or "").strip()
+    if not _A2A_PEER_NAME_RE.fullmatch(peer_name):
+        raise ValueError(
+            "name must be 1-64 letters, numbers, dots, underscores, or hyphens"
+        )
+    peer_url = str(url or "").strip().rstrip("/")
+    parsed = urlparse(peer_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("url must be an absolute http(s) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("url must not contain embedded credentials")
+    try:
+        timeout_value = int(timeout)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timeout must be an integer") from exc
+    if timeout_value < 1 or timeout_value > 3600:
+        raise ValueError("timeout must be between 1 and 3600 seconds")
+
+    clean_capabilities: List[str] = []
+    for raw in capabilities or []:
+        value = str(raw or "").strip()
+        if value and value not in clean_capabilities:
+            clean_capabilities.append(value)
+    if len(clean_capabilities) > 50:
+        raise ValueError("capabilities cannot contain more than 50 entries")
+
+    config = _load_config()
+    raw_peers = config.get("a2a_agents")
+    peers = dict(raw_peers) if isinstance(raw_peers, dict) else {}
+    previous = peers.get(peer_name)
+    previous = previous if isinstance(previous, dict) else {}
+    previous_auth = previous.get("auth")
+    previous_auth = previous_auth if isinstance(previous_auth, dict) else {}
+    next_auth: Dict[str, Any] = {}
+    if not clear_token:
+        next_token = str(token or "").strip() or str(previous_auth.get("token") or "")
+        if next_token:
+            next_auth = {"type": "bearer", "token": next_token}
+
+    entry: Dict[str, Any] = {
+        "url": peer_url,
+        "timeout": timeout_value,
+        "capabilities": clean_capabilities,
+    }
+    if next_auth:
+        entry["auth"] = next_auth
+    peers[peer_name] = entry
+    config["a2a_agents"] = peers
+    _save_config(config)
+    return {
+        "ok": True,
+        "peer": next(
+            row for row in list_a2a_peers()["peers"] if row["name"] == peer_name
+        ),
+    }
+
+
+def remove_a2a_peer(name: str) -> Dict[str, Any]:
+    """Delete exactly one outbound A2A peer from the active Profile."""
+
+    peer_name = str(name or "").strip()
+    if not _A2A_PEER_NAME_RE.fullmatch(peer_name):
+        raise ValueError("invalid A2A peer name")
+    config = _load_config()
+    raw_peers = config.get("a2a_agents")
+    peers = dict(raw_peers) if isinstance(raw_peers, dict) else {}
+    if peer_name not in peers:
+        raise ValueError(f"Unknown A2A peer: {peer_name}")
+    del peers[peer_name]
+    config["a2a_agents"] = peers
+    _save_config(config)
+    return {"ok": True, "name": peer_name}
 
 
 def _auxiliary_model(config: Dict[str, Any], slot_name: str) -> str:
@@ -338,14 +675,19 @@ def _toolset_configured(name: str, config: Dict[str, Any]) -> bool:
 def list_toolsets() -> List[Dict[str, Any]]:
     """List configurable capabilities with their user-visible readiness."""
 
-    config = _load_config()
+    config = _load_profile_tools_config()
     enabled_by_platform: Dict[str, Set[str]] = {}
     result: List[Dict[str, Any]] = []
     for name, label, desc in _configurable_toolsets():
         platform = _toolset_platform(name)
         if platform not in enabled_by_platform:
             enabled_by_platform[platform] = _enabled_toolset_keys(config, platform)
-        is_enabled = name in enabled_by_platform[platform]
+        is_enabled = _toolset_enabled(
+            name,
+            config,
+            platform,
+            enabled_by_platform[platform],
+        )
         result.append(
             {
                 "name": name,
@@ -391,6 +733,20 @@ def _tool_details(tool_names: List[str]) -> List[Dict[str, Any]]:
 
 
 def _visible_provider_rows(name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if name == "bfl":
+        # FLUX 3 is backed exclusively by the Nous tool gateway. Upstream
+        # gates each schema on the same Nous bearer but intentionally has no
+        # TOOL_CATEGORIES row, so expose the auth requirement explicitly for
+        # the desktop setup surface.
+        return [
+            {
+                "name": "Nous Portal",
+                "badge": "required",
+                "tag": "FLUX 3 video through the Nous tool gateway",
+                "env_vars": [],
+                "requires_nous_auth": True,
+            }
+        ]
     try:
         from hermes_cli.tools_config import (  # type: ignore
             TOOL_CATEGORIES,
@@ -504,7 +860,7 @@ def _provider_matrix(
                 }
             )
 
-        is_active = _provider_is_active(provider, config)
+        is_active = name == "bfl" or _provider_is_active(provider, config)
         if is_active and active_provider is None:
             active_provider = str(provider.get("name") or "")
         item: Dict[str, Any] = {
@@ -580,9 +936,9 @@ def get_toolset_detail(name: str) -> Dict[str, Any]:
     if name not in valid:
         return {"ok": False, "error": f"Unknown toolset: {name}"}
 
-    config = _load_config()
+    config = _load_profile_tools_config()
     platform = _toolset_platform(name)
-    enabled = name in _enabled_toolset_keys(config, platform)
+    enabled = _toolset_enabled(name, config, platform)
     label, description = valid[name]
     tool_names = _toolset_tools(name)
     providers, active_provider = _provider_matrix(name, config)
@@ -613,20 +969,39 @@ def get_toolset_detail(name: str) -> Dict[str, Any]:
 def toggle_toolset(name: str, enabled: bool) -> Dict[str, Any]:
     """Enable or disable a capability in its owning platform."""
 
-    from hermes_cli.tools_config import _save_platform_tools  # type: ignore
-
     valid = {ts_key for ts_key, _, _ in _configurable_toolsets()}
     if name not in valid:
         return {"ok": False, "error": f"Unknown toolset: {name}"}
 
     platform = _toolset_platform(name)
-    config = _load_config()
+    config = _load_profile_tools_config()
     current = _enabled_toolset_keys(config, platform)
     if enabled:
         current.add(name)
     else:
         current.discard(name)
-    _save_platform_tools(config, platform, current)
+
+    if name == _KANBAN_TOOLSET[0]:
+        profile_toolsets = _profile_toolset_keys(config)
+        if enabled:
+            profile_toolsets.add(name)
+        else:
+            profile_toolsets.discard(name)
+        config["toolsets"] = sorted(profile_toolsets)
+
+        # Upstream intentionally classifies Kanban as non-configurable, so
+        # _save_platform_tools would otherwise preserve an existing entry even
+        # after the user turns this switch off. Remove only this known entry
+        # from the raw API Server list before handing control back to Hermes.
+        platform_toolsets = config.get("platform_toolsets")
+        if isinstance(platform_toolsets, dict):
+            existing = platform_toolsets.get(platform)
+            if isinstance(existing, list):
+                platform_toolsets[platform] = [
+                    item for item in existing if str(item) != name
+                ]
+
+    _save_platform_toolsets(config, platform, current)
     return {
         "ok": True,
         "name": name,
@@ -1315,7 +1690,7 @@ def get_installed_mcp_connection(slug: str) -> Dict[str, Any]:
 
     This is deliberately not part of the renderer-facing catalog response:
     stdio environment variables and HTTP headers can contain credentials.
-    The desktop main process uses it only to resolve a managed Applet's
+    The desktop main process uses it only to resolve a managed Extension's
     ``providerId`` into the same connection Hermes already owns.
     """
 
@@ -1346,33 +1721,3 @@ def get_installed_mcp_connection(slug: str) -> Dict[str, Any]:
     if "url" not in result and "command" not in result:
         raise ValueError(f"MCP provider {value} has no url or command")
     return result
-
-
-def configure_managed_apps_federation(url: str) -> Dict[str, Any]:
-    """Persist Amiba's process-owned MCP federation endpoint.
-
-    The endpoint is deliberately restricted to loopback.  This route is not a
-    general MCP installer; it only refreshes the ephemeral port of the one
-    server Amiba itself starts and supervises.
-    """
-
-    parsed = urlparse(str(url or "").strip())
-    if (
-        parsed.scheme != "http"
-        or parsed.hostname not in {"127.0.0.1", "localhost"}
-        or parsed.path != "/mcp"
-        or not parsed.port
-    ):
-        raise ValueError("url must be an http://127.0.0.1:<port>/mcp endpoint")
-    config = _load_config()
-    servers = config.setdefault("mcp_servers", {})
-    if not isinstance(servers, dict):
-        servers = {}
-        config["mcp_servers"] = servers
-    servers["amiba-applets"] = {
-        "url": url,
-        "enabled": True,
-        "description": "Tools and resources from the user's active Amiba Applets",
-    }
-    _save_config(config)
-    return {"ok": True, "url": url}

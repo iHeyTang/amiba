@@ -4,13 +4,21 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  FileDiff,
   GitBranch,
   Globe,
   Pencil,
   RotateCcw,
   Scissors,
+  Undo2,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Streamdown } from "streamdown";
 import { useT } from "@amiba/i18n";
 
@@ -31,6 +39,12 @@ import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
 import { describeToolCall, hasToolDetail } from "./tool-presentation";
+import {
+  compactWorkspacePath,
+  parseWorkspaceReview,
+  workspaceReviewResourceFromEvents,
+  type WorkspaceReviewResource,
+} from "../workspace-review";
 
 export interface BubbleProps {
   m: UiMessage;
@@ -970,6 +984,7 @@ export function UserStickyBubble({
   onRetry,
   onBranch,
   onTruncate,
+  onRestore,
 }: {
   m: UiMessage;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
@@ -977,7 +992,11 @@ export function UserStickyBubble({
   onEdit?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
   onRetry?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onTruncate?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onTruncate?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  onRestore?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
 }) {
   const { t } = useT();
   const innerRef = useRef<HTMLDivElement>(null);
@@ -1047,12 +1066,44 @@ export function UserStickyBubble({
             )}
           </button>
         )}
-        {(onEdit || onRetry || onBranch || onTruncate) && !m.streaming ? (
+        {(onEdit || onRetry || onBranch || onTruncate || onRestore) &&
+        !m.streaming ? (
           <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 rounded-lg border border-border/50 bg-background/90 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            {onEdit ? <UserActionButton label={t("sidepanel.message.edit")} icon={<Pencil />} onClick={() => void onEdit(m, userOrdinal)} /> : null}
-            {onRetry ? <UserActionButton label={t("sidepanel.message.retry")} icon={<RotateCcw />} onClick={() => void onRetry(m, userOrdinal)} /> : null}
-            {onBranch ? <UserActionButton label={t("sidepanel.message.branch")} icon={<GitBranch />} onClick={() => void onBranch(m, userOrdinal)} /> : null}
-            {onTruncate ? <UserActionButton label={t("sidepanel.message.truncate")} icon={<Scissors />} onClick={() => void onTruncate(m, userOrdinal)} /> : null}
+            {onRestore ? (
+              <UserActionButton
+                label={t("sidepanel.message.restoreWorkspace")}
+                icon={<Undo2 />}
+                onClick={() => void onRestore(m, userOrdinal)}
+              />
+            ) : null}
+            {onEdit ? (
+              <UserActionButton
+                label={t("sidepanel.message.edit")}
+                icon={<Pencil />}
+                onClick={() => void onEdit(m, userOrdinal)}
+              />
+            ) : null}
+            {onRetry ? (
+              <UserActionButton
+                label={t("sidepanel.message.retry")}
+                icon={<RotateCcw />}
+                onClick={() => void onRetry(m, userOrdinal)}
+              />
+            ) : null}
+            {onBranch ? (
+              <UserActionButton
+                label={t("sidepanel.message.branch")}
+                icon={<GitBranch />}
+                onClick={() => void onBranch(m, userOrdinal)}
+              />
+            ) : null}
+            {onTruncate ? (
+              <UserActionButton
+                label={t("sidepanel.message.truncate")}
+                icon={<Scissors />}
+                onClick={() => void onTruncate(m, userOrdinal)}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -1070,19 +1121,46 @@ export function UserStickyBubble({
 export function MessageTurns({
   messages,
   onOpenAgentDestination,
+  onReviewWorkspaceChanges,
   onEditUserMessage,
   onRetryUserMessage,
   onBranchUserMessage,
   onTruncateUserMessage,
+  onRestoreBeforeTurn,
+  restorableTurnOrdinals,
 }: {
   messages: UiMessage[];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
-  onEditUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onRetryUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onBranchUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onTruncateUserMessage?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  onReviewWorkspaceChanges?: (
+    resource: WorkspaceReviewResource,
+  ) => void | Promise<void>;
+  onEditUserMessage?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  onRetryUserMessage?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  onBranchUserMessage?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  onTruncateUserMessage?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  onRestoreBeforeTurn?: (
+    message: UiMessage,
+    userOrdinal: number,
+  ) => void | Promise<void>;
+  restorableTurnOrdinals?: ReadonlySet<number>;
 }) {
-  type Turn = { user: UiMessage | null; replies: UiMessage[]; userOrdinal: number };
+  type Turn = {
+    user: UiMessage | null;
+    replies: UiMessage[];
+    userOrdinal: number;
+  };
   const turns: Turn[] = [];
   let cur: Turn | null = null;
   let userOrdinal = 0;
@@ -1103,6 +1181,14 @@ export function MessageTurns({
     <>
       {turns.map((turn, i) => {
         const replyItems = buildTurnReplyItems(turn.replies);
+        const reviewResource = turn.replies.some((message) => message.streaming)
+          ? null
+          : workspaceReviewResourceFromEvents(
+              turn.replies.flatMap(
+                (message) => message.hermesToolProgress ?? [],
+              ),
+              `turn:${turn.user?.uiId ?? i}`,
+            );
         return (
           <div
             key={turn.user?.uiId ?? `turn-${i}`}
@@ -1118,6 +1204,11 @@ export function MessageTurns({
                 onRetry={onRetryUserMessage}
                 onBranch={onBranchUserMessage}
                 onTruncate={onTruncateUserMessage}
+                onRestore={
+                  restorableTurnOrdinals?.has(turn.userOrdinal)
+                    ? onRestoreBeforeTurn
+                    : undefined
+                }
               />
             )}
             {replyItems.map((item) => {
@@ -1143,10 +1234,112 @@ export function MessageTurns({
                 />
               );
             })}
+            {reviewResource && onReviewWorkspaceChanges ? (
+              <WorkspaceChangesCard
+                resource={reviewResource}
+                onReview={onReviewWorkspaceChanges}
+              />
+            ) : null}
           </div>
         );
       })}
     </>
+  );
+}
+
+function WorkspaceChangesCard({
+  resource,
+  onReview,
+}: {
+  resource: WorkspaceReviewResource;
+  onReview(resource: WorkspaceReviewResource): void | Promise<void>;
+}) {
+  const { t } = useT();
+  const [expanded, setExpanded] = useState(false);
+  const review = parseWorkspaceReview(resource.entries);
+  const visibleFiles = expanded ? review.files : review.files.slice(0, 3);
+  const remaining = Math.max(0, review.files.length - visibleFiles.length);
+
+  return (
+    <section
+      aria-label={t("workspacePane.filesChanged", {
+        count: review.files.length,
+      })}
+      className="overflow-hidden rounded-xl border border-border/60 bg-background shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+    >
+      <div className="flex min-h-16 items-center gap-3 px-3 py-2.5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/65 text-muted-foreground">
+          <FileDiff className="h-[18px] w-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-medium text-foreground">
+            {t("workspacePane.filesChanged", { count: review.files.length })}
+          </span>
+          {review.additions > 0 || review.deletions > 0 ? (
+            <span className="mt-0.5 flex items-center gap-2 font-mono text-[10.5px] tabular-nums">
+              <span className="text-emerald-600 dark:text-emerald-400">
+                +{review.additions}
+              </span>
+              <span className="text-red-600 dark:text-red-400">
+                -{review.deletions}
+              </span>
+            </span>
+          ) : null}
+        </span>
+        <button
+          type="button"
+          onClick={() => void onReview(resource)}
+          className="inline-flex h-8 shrink-0 items-center rounded-lg border border-border/70 bg-background px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+        >
+          {t("workspacePane.review")}
+        </button>
+      </div>
+      <ul className="border-t border-border/45 px-3 py-1.5">
+        {visibleFiles.map((file) => (
+          <li
+            key={file.path}
+            className="flex min-h-8 min-w-0 items-center gap-3 text-[11px]"
+          >
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-foreground/72"
+              title={file.path}
+            >
+              {compactWorkspacePath(file.path, 6)}
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+              {file.additions > 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{file.additions}
+                </span>
+              ) : null}
+              {file.deletions > 0 ? (
+                <span className="text-red-600 dark:text-red-400">
+                  -{file.deletions}
+                </span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+        {remaining > 0 || expanded ? (
+          <li>
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              className="inline-flex min-h-8 items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {expanded ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              {expanded
+                ? t("workspacePane.showFewerFiles")
+                : t("workspacePane.showMoreFiles", { count: remaining })}
+            </button>
+          </li>
+        ) : null}
+      </ul>
+    </section>
   );
 }
 
@@ -1160,7 +1353,13 @@ function UserActionButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" title={label} aria-label={label} onClick={onClick} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:h-3 [&_svg]:w-3">
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:h-3 [&_svg]:w-3"
+    >
       {icon}
     </button>
   );

@@ -1,10 +1,25 @@
 import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { Button, PageContent, ScrollArea } from "../primitives";
 import {
+  Button,
+  PageContent,
+  ScrollArea,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+} from "../primitives";
+import {
+  getHermesMemoryConfig,
   getHermesMemoryList,
+  getHermesToolsetDetail,
+  putHermesMemoryProvider,
+  putHermesToolsetToggle,
   resetHermesMemory,
+  type HermesMemoryConfigResponse,
   type HermesMemoryEntries,
   type HermesMemoryTarget,
 } from "@amiba/core";
@@ -12,6 +27,8 @@ import { useT, type TranslateFn } from "@amiba/i18n";
 import { cn } from "../primitives";
 import { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 import { SettingsPaneHeader } from "./SettingsPaneHeader";
+
+const BUILT_IN_MEMORY_PROVIDER = "__built_in__";
 
 function targetLabel(t: TranslateFn, target: HermesMemoryTarget): string {
   return target === "user"
@@ -132,7 +149,7 @@ function MemoryBlock({ entry }: { entry: HermesMemoryEntries }) {
   );
 }
 
-/** Read-only view of one Hermes Profile's curated memory. */
+/** Profile-scoped memory access, provider choice, and curated-memory view. */
 export function SettingsMemory({
   embedded = false,
   profileId,
@@ -142,13 +159,20 @@ export function SettingsMemory({
 } = {}) {
   const { t } = useT();
   const [items, setItems] = useState<HermesMemoryEntries[]>([]);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [config, setConfig] = useState<HermesMemoryConfigResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const r = await getHermesMemoryList(profileId);
+    const [r, capability, memoryConfig] = await Promise.all([
+      getHermesMemoryList(profileId),
+      getHermesToolsetDetail("memory", profileId),
+      getHermesMemoryConfig(profileId),
+    ]);
     setLoading(false);
     if (!r.ok) {
       setError(r.error || t("options.memory.failedToLoad"));
@@ -156,7 +180,48 @@ export function SettingsMemory({
       return;
     }
     setItems(r.targets);
+    if (capability.ok && capability.toolset) {
+      setEnabled(capability.toolset.enabled);
+    }
+    if (memoryConfig.ok) setConfig(memoryConfig);
   }, [profileId, t]);
+
+  const toggleMemory = useCallback(
+    async (next: boolean) => {
+      if (saving) return;
+      setSaving(true);
+      setError(null);
+      const result = await putHermesToolsetToggle("memory", next, profileId);
+      setSaving(false);
+      if (!result.ok) {
+        setError(result.error || t("options.memory.config.saveFailed"));
+        return;
+      }
+      setEnabled(next);
+    },
+    [profileId, saving, t],
+  );
+
+  const changeProvider = useCallback(
+    async (value: string) => {
+      if (saving) return;
+      const provider = value === BUILT_IN_MEMORY_PROVIDER ? "" : value;
+      setSaving(true);
+      setError(null);
+      const result = await putHermesMemoryProvider(provider, profileId);
+      setSaving(false);
+      if (!result.ok) {
+        setError(result.error || t("options.memory.config.saveFailed"));
+        return;
+      }
+      setConfig((current) =>
+        current
+          ? { ...current, provider: result.provider ?? provider }
+          : current,
+      );
+    },
+    [profileId, saving, t],
+  );
 
   const reset = useCallback(async () => {
     if (
@@ -258,6 +323,56 @@ export function SettingsMemory({
             </div>
           ) : null}
           {error && <p className="text-xs text-destructive">{error}</p>}
+          <section className="rounded-md border border-border/60 bg-muted/10">
+            <div className="flex items-center gap-4 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-medium">
+                  {t("options.memory.config.title")}
+                </h3>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  {t("options.memory.config.description")}
+                </p>
+              </div>
+              <Switch
+                aria-label={t("options.memory.config.toggle")}
+                checked={enabled === true}
+                disabled={loading || saving || enabled === null}
+                onCheckedChange={(next) => void toggleMemory(next)}
+              />
+            </div>
+            {config && config.providers.length > 0 ? (
+              <div className="grid items-center gap-2 border-t border-border/50 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_240px]">
+                <div>
+                  <p className="text-xs font-medium">
+                    {t("options.memory.config.provider")}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {t("options.memory.config.providerDescription")}
+                  </p>
+                </div>
+                <Select
+                  disabled={saving || enabled !== true}
+                  onValueChange={(value) => void changeProvider(value)}
+                  value={config.provider || BUILT_IN_MEMORY_PROVIDER}
+                >
+                  <SelectTrigger className="h-8 shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {config.providers.map((provider) => (
+                      <SelectItem
+                        disabled={!provider.available}
+                        key={provider.name || BUILT_IN_MEMORY_PROVIDER}
+                        value={provider.name || BUILT_IN_MEMORY_PROVIDER}
+                      >
+                        {provider.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </section>
           {items.map((entry) => (
             <MemoryBlock key={entry.target} entry={entry} />
           ))}

@@ -23,10 +23,12 @@ const mocks = vi.hoisted(() => ({
     | null,
   sidebarRunningSessionIds: [] as string[],
   sidebarFailedSessionIds: [] as string[],
+  embeddedBrowser: null as null | Record<string, ReturnType<typeof vi.fn>>,
 }));
 
 vi.mock("@amiba/core", () => ({
   useSessions: mocks.useSessions,
+  getHermesKanbanTasks: vi.fn().mockResolvedValue({ ok: true, tasks: [] }),
 }));
 
 vi.mock("@amiba/i18n", () => ({
@@ -40,11 +42,47 @@ vi.mock("@amiba/platform", () => ({
       set: mocks.storageSet,
       watch: mocks.storageWatch,
     },
+    embeddedBrowser: mocks.embeddedBrowser,
+    shell: { openExternal: vi.fn() },
   }),
+}));
+
+vi.mock("@xterm/xterm", () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    options: Record<string, unknown> = {};
+    loadAddon() {}
+    open() {}
+    attachCustomKeyEventHandler() {}
+    onData() {
+      return { dispose() {} };
+    }
+    onResize() {
+      return { dispose() {} };
+    }
+    hasSelection() {
+      return false;
+    }
+    getSelection() {
+      return "";
+    }
+    reset() {}
+    write() {}
+    focus() {}
+    dispose() {}
+  },
+}));
+
+vi.mock("@xterm/addon-fit", () => ({
+  FitAddon: class {
+    fit() {}
+  },
 }));
 
 vi.mock("../../theme", () => ({
   useResolvedTheme: () => ({ theme: "light" }),
+  useDocumentTheme: () => "light",
 }));
 
 vi.mock("../Sidebar", () => ({
@@ -219,6 +257,7 @@ describe("FullScreenChatView new-chat home", () => {
     mocks.snapshotListener = null;
     mocks.sidebarRunningSessionIds = [];
     mocks.sidebarFailedSessionIds = [];
+    mocks.embeddedBrowser = null;
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") {
         return { [key]: "scheduled" };
@@ -253,6 +292,16 @@ describe("FullScreenChatView new-chat home", () => {
     sessions.openTabIds = [];
     sessions.openTabs = [];
     mocks.useSessions.mockReturnValue(sessions);
+    mocks.embeddedBrowser = {
+      registerTab: vi.fn().mockResolvedValue({}),
+      unregisterTab: vi.fn().mockResolvedValue(undefined),
+      setActiveTab: vi.fn().mockResolvedValue({}),
+      command: vi.fn().mockResolvedValue({}),
+      detectDevServers: vi.fn().mockResolvedValue([]),
+      onCreateRequested: vi.fn(() => () => {}),
+      onFocusRequested: vi.fn(() => () => {}),
+      onAgentActivity: vi.fn(() => () => {}),
+    };
 
     const { container } = render(
       <FullScreenChatView
@@ -267,6 +316,9 @@ describe("FullScreenChatView new-chat home", () => {
       container.querySelector("[data-content-header-title]"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Amiba")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "embeddedBrowser.open" }),
+    ).toBeInTheDocument();
   });
 
   it("edits the active conversation title directly in the content header", async () => {
@@ -413,7 +465,7 @@ describe("FullScreenChatView new-chat home", () => {
     expect(mocks.paletteSetOpen).toHaveBeenCalledWith(true);
   });
 
-  it("mounts the workbench as a sibling column of the chat column", async () => {
+  it("mounts the workbench beside chat in the main content row", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
 
     render(
@@ -429,18 +481,252 @@ describe("FullScreenChatView new-chat home", () => {
     const chat = screen.getByText("chat-surface");
     const pane = await screen.findByLabelText("workspacePane.title");
     const paneColumn = pane.parentElement;
-    const rightContent = paneColumn?.parentElement;
+    const mainRow = paneColumn?.parentElement;
+    const rightContent = mainRow?.parentElement;
     const edgeToggle = screen.getByRole("button", {
       name: "workspacePane.open",
     });
     const edgeToggleLayer = edgeToggle.parentElement;
 
-    expect(rightContent).toHaveClass("relative", "flex");
-    expect(rightContent?.children).toHaveLength(3);
-    expect(rightContent?.children[0]).toContainElement(chat);
-    expect(rightContent?.children[1]).toBe(paneColumn);
-    expect(rightContent?.children[2]).toBe(edgeToggleLayer);
+    expect(mainRow).toHaveAttribute("data-workspace-main-row");
+    expect(mainRow).toHaveClass("relative", "flex", "overflow-hidden");
+    expect(mainRow?.children[0]).toContainElement(chat);
+    expect(mainRow?.children[1]).toBe(paneColumn);
+    expect(rightContent).toHaveClass("relative", "flex", "flex-col");
+    expect(rightContent?.children[0]).toBe(mainRow);
+    expect(rightContent?.children[1]).toBe(edgeToggleLayer);
     expect(edgeToggleLayer).toHaveClass("absolute", "right-3", "top-0");
+  });
+
+  it("opens browser pages as workbench tabs and keeps every workspace control visible", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+    let requestBrowserTab: (() => void) | null = null;
+    mocks.embeddedBrowser = {
+      registerTab: vi.fn().mockResolvedValue({}),
+      unregisterTab: vi.fn().mockResolvedValue(undefined),
+      setActiveTab: vi.fn().mockResolvedValue({}),
+      command: vi.fn().mockResolvedValue({}),
+      detectDevServers: vi.fn().mockResolvedValue([]),
+      onCreateRequested: vi.fn((listener: () => void) => {
+        requestBrowserTab = listener;
+        return () => {};
+      }),
+      onFocusRequested: vi.fn(() => () => {}),
+      onAgentActivity: vi.fn(() => () => {}),
+    };
+    const development = {
+      listCheckpoints: vi.fn().mockResolvedValue([]),
+      terminalList: vi.fn().mockResolvedValue([]),
+      onTerminalData: vi.fn(() => () => {}),
+    };
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        capabilities={
+          {
+            workspaceInspector: { files: {}, development },
+          } as never
+        }
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+
+    const browserToggle = screen.getByRole("button", {
+      name: "embeddedBrowser.open",
+    });
+    const terminalToggle = screen.getByRole("button", {
+      name: "workspacePane.openTerminal",
+    });
+    const workbenchToggle = screen.getByRole("button", {
+      name: "workspacePane.open",
+    });
+    const controls = browserToggle.parentElement;
+    expect(controls?.children[0]).toBe(browserToggle);
+    expect(controls?.children[1]).toBe(terminalToggle);
+    expect(controls?.children[2]).toBe(workbenchToggle);
+
+    act(() => requestBrowserTab?.());
+    expect(
+      screen.queryByRole("button", { name: "workspacePane.openTerminal" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "workspacePane.collapse" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector("[data-embedded-browser-pane]"),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector("[data-embedded-browser-workspace]"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "embeddedBrowser.newTab" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "embeddedBrowser.expand" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("embeddedBrowser.emptyTitle")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "embeddedBrowser.close" }),
+    );
+    const restoredWorkbenchToggle = screen.getByRole("button", {
+      name: "workspacePane.open",
+    });
+    expect(
+      screen.getByRole("button", { name: "embeddedBrowser.open" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(restoredWorkbenchToggle).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "embeddedBrowser.open" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "workspacePane.collapse" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getAllByRole("tab", { name: "embeddedBrowser.newTab" }),
+    ).toHaveLength(1);
+  });
+
+  it("opens a bottom terminal drawer with independent tabs", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+    let terminalSnapshots: Array<{
+      sessionId: string;
+      terminalId: string;
+      title: string;
+      cwd: string;
+      output: string;
+      sequence: number;
+      running: boolean;
+      startedAt: number;
+    }> = [];
+    const development = {
+      listCheckpoints: vi.fn().mockResolvedValue([]),
+      terminalList: vi.fn(async () => [...terminalSnapshots]),
+      terminalStart: vi.fn(async (sessionId: string, terminalId: string) => {
+        const existing = terminalSnapshots.find(
+          (terminal) => terminal.terminalId === terminalId,
+        );
+        if (existing) return existing;
+        const snapshot = {
+          sessionId,
+          terminalId,
+          title: "zhangdehui@MacBook",
+          cwd: "/workspace",
+          output: "",
+          sequence: 0,
+          running: true,
+          startedAt: terminalSnapshots.length + 1,
+        };
+        terminalSnapshots = [...terminalSnapshots, snapshot];
+        return snapshot;
+      }),
+      terminalGet: vi.fn(
+        async (_sessionId: string, terminalId: string) =>
+          terminalSnapshots.find(
+            (terminal) => terminal.terminalId === terminalId,
+          ) ?? null,
+      ),
+      terminalWrite: vi.fn(),
+      terminalResize: vi.fn(),
+      terminalStop: vi.fn(async (_sessionId: string, terminalId: string) => {
+        terminalSnapshots = terminalSnapshots.filter(
+          (terminal) => terminal.terminalId !== terminalId,
+        );
+      }),
+      onTerminalData: vi.fn(() => () => {}),
+    };
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        capabilities={
+          {
+            workspaceInspector: { files: {}, development },
+          } as never
+        }
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+
+    const workbenchToggle = screen.getByRole("button", {
+      name: "workspacePane.open",
+    });
+    const terminalToggle = screen.getByRole("button", {
+      name: "workspacePane.openTerminal",
+    });
+    const toggleLayer = workbenchToggle.parentElement;
+    const panel = document.querySelector("[data-workspace-terminal-panel]");
+
+    expect(toggleLayer?.children[0]).toBe(terminalToggle);
+    expect(toggleLayer?.children[1]).toBe(workbenchToggle);
+    expect(terminalToggle.querySelector(".lucide-panel-bottom")).not.toBeNull();
+    expect(panel).toHaveStyle({ height: "0px" });
+
+    await userEvent.click(terminalToggle);
+
+    expect(
+      screen.getByRole("button", { name: "workspacePane.closeTerminal" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(panel).toHaveStyle({ height: "280px" });
+    expect(panel?.parentElement?.children[0]).toHaveAttribute(
+      "data-workspace-main-row",
+    );
+    const initialTab = await screen.findByRole("tab", {
+      name: "zhangdehui@MacBook",
+    });
+    const tabsBar = document.querySelector(
+      "[data-workspace-terminal-tabs-bar]",
+    );
+    expect(tabsBar).not.toHaveClass("border-b", "bg-muted");
+    expect(tabsBar).toHaveClass("px-3");
+    expect(tabsBar?.className).not.toContain("bg-[");
+    expect(initialTab).toHaveAttribute("aria-selected", "true");
+    expect(development.terminalStart).toHaveBeenCalledWith(
+      "session-1",
+      "primary",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.newTerminal" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("tab", { name: "zhangdehui@MacBook" }),
+      ).toHaveLength(2),
+    );
+    const tabs = screen.getAllByRole("tab", {
+      name: "zhangdehui@MacBook",
+    });
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(tabs[0]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.click(
+      screen.getAllByRole("button", {
+        name: "workspacePane.closeTerminalTab",
+      })[0],
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("tab", { name: "zhangdehui@MacBook" }),
+      ).toHaveLength(1),
+    );
+    expect(development.terminalStop).toHaveBeenCalledWith(
+      "session-1",
+      "primary",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.hideTerminalPanel" }),
+    );
+    expect(panel).toHaveStyle({ height: "0px" });
+    expect(development.terminalStop).toHaveBeenCalledTimes(1);
   });
 
   it("collapses and restores the sidebar from the pane headers", async () => {

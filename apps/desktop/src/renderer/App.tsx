@@ -1,7 +1,7 @@
 import { getHermesStatus, SessionsProvider, useSessions } from "@amiba/core";
 import {
   FullScreenChatView,
-  makeManagedAppletMentionProvider,
+  makeManagedExtensionMentionProvider,
   useChatSessionRequester,
 } from "@amiba/ui";
 import { HomeView } from "@amiba/ui";
@@ -80,8 +80,8 @@ function AppInner(): ReactElement {
     () => makeDesktopFilesProvider(() => activeIdRef.current),
     [],
   );
-  const managedAppletProvider = useMemo(
-    () => makeManagedAppletMentionProvider(window.amiba.managedApps),
+  const managedExtensionProvider = useMemo(
+    () => makeManagedExtensionMentionProvider(window.amiba.managedExtensions),
     [],
   );
   const [view, setView] = useState<View>("chat");
@@ -224,7 +224,7 @@ function AppInner(): ReactElement {
     phase === "ready" ? (
       view === "settings" ? (
         <SettingsView
-          capabilities={{ startAgentTask, managedApps: window.amiba.managedApps }}
+          capabilities={{ startAgentTask, managedExtensions: window.amiba.managedExtensions }}
           onGoHome={() => setView("chat")}
           sidebarHeaderLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
           sidebarHeaderHeightPx={WINDOW_TITLE_BAR_HEIGHT}
@@ -240,7 +240,7 @@ function AppInner(): ReactElement {
         <FullScreenChatView
           client={client}
           capabilities={desktopCapabilities}
-          mentionProviders={[filesProvider, managedAppletProvider]}
+          mentionProviders={[filesProvider, managedExtensionProvider]}
           openSettings={(tab) => {
             if (tab) {
               window.location.hash = tab;
@@ -250,7 +250,7 @@ function AppInner(): ReactElement {
           openAgentDestination={openAgentDestination}
           capabilityExtensions={{
             startAgentTask,
-            managedApps: window.amiba.managedApps,
+            managedExtensions: window.amiba.managedExtensions,
           }}
           topBarLeftInset={IS_MAC ? MAC_TRAFFIC_LIGHT_RESERVE : 0}
           topBarHeightPx={WINDOW_TITLE_BAR_HEIGHT}

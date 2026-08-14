@@ -6,7 +6,7 @@ skills, attachment uploads) that the gateway doesn't expose itself, mounted at
 ``/hermes/*``, plus the ``mention_sources_gateway`` adapter that serves
 ``/mention-sources/<name>/search`` + ``/hermes/mention-resources`` by reading
 the legacy mention-source registry in-process. New mention capabilities belong
-to Applets; this lane only preserves read compatibility during migration.
+to Extensions; this lane only preserves read compatibility during migration.
 """
 
 from __future__ import annotations

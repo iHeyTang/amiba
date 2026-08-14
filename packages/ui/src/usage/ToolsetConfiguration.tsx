@@ -9,10 +9,12 @@ import {
   Info,
   KeyRound,
   Loader2,
+  Plus,
   RefreshCw,
   Settings2,
   ShieldCheck,
   Terminal,
+  Trash2,
 } from "lucide-react";
 import {
   useCallback,
@@ -23,19 +25,26 @@ import {
 } from "react";
 
 import {
+  deleteHermesA2APeer,
+  getHermesA2APeers,
   getHermesComputerUseStatus,
+  getHermesContextEngines,
   getHermesTerminalBackends,
   getHermesToolsetModels,
   hermesModelGateway,
   postHermesComputerUseGrant,
   postHermesToolsetSetup,
+  putHermesA2APeer,
+  putHermesContextEngine,
   putHermesTerminalBackend,
   putHermesTerminalEnv,
   putHermesToolsetEnv,
   putHermesToolsetModel,
   putHermesToolsetProvider,
   type AuxiliaryTask,
+  type HermesA2APeer,
   type HermesComputerUseStatus,
+  type HermesContextEngine,
   type HermesAgentMainModelResponse,
   type HermesModelCatalogResponse,
   type HermesTerminalBackend,
@@ -117,6 +126,14 @@ export function ToolsetConfiguration({
     );
   }
 
+  if (detail.name === "context_engine") {
+    return <ContextEngineConfiguration profileId={profileId} />;
+  }
+
+  if (detail.name === "a2a") {
+    return <A2APeerConfiguration onChanged={onChanged} profileId={profileId} />;
+  }
+
   if (detail.providers.length > 0) {
     return (
       <ProviderConfigurationPanel
@@ -129,6 +146,361 @@ export function ToolsetConfiguration({
 
   return (
     <NoConfiguration enabled={detail.enabled} configured={detail.configured} />
+  );
+}
+
+function A2APeerConfiguration({
+  onChanged,
+  profileId,
+}: {
+  onChanged: () => Promise<void> | void;
+  profileId?: string;
+}) {
+  const { t } = useT();
+  const [peers, setPeers] = useState<HermesA2APeer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<HermesA2APeer | null>(null);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [timeout, setTimeoutValue] = useState("120");
+  const [capabilities, setCapabilities] = useState("");
+  const [token, setToken] = useState("");
+  const [clearToken, setClearToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await getHermesA2APeers(profileId);
+    setLoading(false);
+    if (!result.ok) {
+      setError(result.error || t("tools.detail.a2a.loadFailed"));
+      return;
+    }
+    setPeers(result.peers);
+  }, [profileId, t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function startEdit(peer?: HermesA2APeer) {
+    const current = peer ?? null;
+    setEditing(current);
+    setName(current?.name ?? "");
+    setUrl(current?.url ?? "");
+    setTimeoutValue(String(current?.timeout ?? 120));
+    setCapabilities(current?.capabilities.join(", ") ?? "");
+    setToken("");
+    setClearToken(false);
+    setError(null);
+    setOpen(true);
+  }
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    const result = await putHermesA2APeer(
+      name.trim(),
+      {
+        url: url.trim(),
+        timeout: Number.parseInt(timeout, 10),
+        capabilities: capabilities
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        ...(token.trim() ? { token: token.trim() } : {}),
+        ...(clearToken ? { clear_token: true } : {}),
+      },
+      profileId,
+    );
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error || t("tools.detail.a2a.saveFailed"));
+      return;
+    }
+    setOpen(false);
+    await load();
+    await onChanged();
+  }
+
+  async function remove(peer: HermesA2APeer) {
+    setError(null);
+    const result = await deleteHermesA2APeer(peer.name, profileId);
+    if (!result.ok) {
+      setError(result.error || t("tools.detail.a2a.deleteFailed"));
+      return;
+    }
+    await load();
+    await onChanged();
+  }
+
+  return (
+    <section>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">{t("tools.detail.a2a.title")}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            {t("tools.detail.a2a.description")}
+          </p>
+        </div>
+        <Button
+          className="h-8 shrink-0 gap-1.5 px-2.5"
+          onClick={() => startEdit()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("tools.detail.a2a.add")}
+        </Button>
+      </div>
+
+      {loading ? (
+        <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {t("common.loading")}
+        </p>
+      ) : peers.length === 0 ? (
+        <div className="mt-4 rounded-md border border-dashed border-border/70 px-3 py-5 text-center text-xs text-muted-foreground">
+          {t("tools.detail.a2a.empty")}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {peers.map((peer) => (
+            <div
+              className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/10 p-3"
+              key={peer.name}
+            >
+              <button
+                className="min-w-0 flex-1 text-left"
+                onClick={() => startEdit(peer)}
+                type="button"
+              >
+                <span className="block truncate text-sm font-medium">
+                  {peer.name}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {peer.url}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {peer.auth_configured
+                    ? t("tools.detail.a2a.authConfigured")
+                    : t("tools.detail.a2a.noAuth")}
+                  {peer.capabilities.length > 0
+                    ? ` · ${peer.capabilities.join(", ")}`
+                    : ""}
+                </span>
+              </button>
+              <Button
+                aria-label={t("tools.detail.a2a.delete")}
+                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => void remove(peer)}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && !open && <InlineError>{error}</InlineError>}
+
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t(editing ? "tools.detail.a2a.edit" : "tools.detail.a2a.add")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("tools.detail.a2a.dialogDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <A2AField label={t("tools.detail.a2a.name")}>
+              <Input
+                autoComplete="off"
+                disabled={Boolean(editing)}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="researcher"
+                value={name}
+              />
+            </A2AField>
+            <A2AField label={t("tools.detail.a2a.url")}>
+              <Input
+                autoComplete="url"
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://agent.example.com"
+                value={url}
+              />
+            </A2AField>
+            <div className="grid grid-cols-[7rem_1fr] gap-3">
+              <A2AField label={t("tools.detail.a2a.timeout")}>
+                <Input
+                  inputMode="numeric"
+                  min={1}
+                  onChange={(event) => setTimeoutValue(event.target.value)}
+                  type="number"
+                  value={timeout}
+                />
+              </A2AField>
+              <A2AField label={t("tools.detail.a2a.capabilities")}>
+                <Input
+                  onChange={(event) => setCapabilities(event.target.value)}
+                  placeholder="research, web_search"
+                  value={capabilities}
+                />
+              </A2AField>
+            </div>
+            <A2AField label={t("tools.detail.a2a.token")}>
+              <Input
+                autoComplete="new-password"
+                disabled={clearToken}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder={
+                  editing?.auth_configured
+                    ? t("tools.detail.a2a.tokenPreserved")
+                    : t("tools.detail.a2a.tokenOptional")
+                }
+                type="password"
+                value={token}
+              />
+            </A2AField>
+            {editing?.auth_configured ? (
+              <Button
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setClearToken((value) => !value);
+                  setToken("");
+                }}
+                type="button"
+                variant={clearToken ? "secondary" : "ghost"}
+              >
+                {clearToken
+                  ? t("tools.detail.a2a.keepToken")
+                  : t("tools.detail.a2a.clearToken")}
+              </Button>
+            ) : null}
+          </div>
+          {error && <InlineError>{error}</InlineError>}
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => setOpen(false)}
+              type="button"
+              variant="ghost"
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={saving || !name.trim() || !url.trim()}
+              onClick={() => void save()}
+              type="button"
+            >
+              {saving ? t("common.saving") : t("common.save")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+function A2AField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function ContextEngineConfiguration({ profileId }: { profileId?: string }) {
+  const { t } = useT();
+  const [engines, setEngines] = useState<HermesContextEngine[]>([]);
+  const [selected, setSelected] = useState("compressor");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getHermesContextEngines(profileId).then((result) => {
+      if (!active) return;
+      setLoading(false);
+      if (!result.ok) {
+        setError(result.error || t("tools.detail.contextEngine.loadFailed"));
+        return;
+      }
+      setEngines(result.engines);
+      setSelected(result.engine || "compressor");
+    });
+    return () => {
+      active = false;
+    };
+  }, [profileId, t]);
+
+  async function save(engine: string) {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    const result = await putHermesContextEngine(engine, profileId);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error || t("tools.detail.contextEngine.saveFailed"));
+      return;
+    }
+    setSelected(engine);
+  }
+
+  if (loading) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {t("common.loading")}
+      </p>
+    );
+  }
+
+  const activeEngine = engines.find((engine) => engine.name === selected);
+  return (
+    <section>
+      <h3 className="text-sm font-medium">
+        {t("tools.detail.contextEngine.title")}
+      </h3>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        {t("tools.detail.contextEngine.description")}
+      </p>
+      <Select
+        disabled={saving}
+        onValueChange={(value) => void save(value)}
+        value={selected}
+      >
+        <SelectTrigger className="mt-3 h-9 shadow-none">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {engines.map((engine) => (
+            <SelectItem
+              disabled={!engine.available}
+              key={engine.name}
+              value={engine.name}
+            >
+              {engine.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {activeEngine?.description ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {activeEngine.description}
+        </p>
+      ) : null}
+      {error && <InlineError>{error}</InlineError>}
+    </section>
   );
 }
 

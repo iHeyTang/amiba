@@ -9,20 +9,24 @@ from aiohttp import web
 from ....adapters.hermes_core import hermes_profile_scope
 from ....common import json_error, read_json_object
 from .tools_service import (
-    configure_managed_apps_federation,
     get_computer_use_status,
+    get_context_engines,
     get_installed_mcp_connection,
     get_terminal_backends,
     get_toolset_detail,
     get_toolset_models,
     grant_computer_use_permissions,
+    list_a2a_peers,
     list_installed_mcps,
     list_toolsets,
+    remove_a2a_peer,
     remove_mcp_server,
     run_toolset_post_setup,
-    save_terminal_env,
+    save_a2a_peer,
     save_mcp_server,
+    save_terminal_env,
     save_toolset_env,
+    select_context_engine,
     select_terminal_backend,
     select_toolset_model,
     select_toolset_provider,
@@ -207,6 +211,82 @@ async def handle_tools_toggle(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
+async def handle_context_engines(_request: web.Request) -> web.Response:
+    try:
+        return web.json_response(await asyncio.to_thread(get_context_engines))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+
+
+async def handle_context_engine(request: web.Request) -> web.Response:
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    engine = body.get("engine")
+    if not isinstance(engine, str) or not engine.strip():
+        return json_error(400, "engine must be a non-empty string")
+    try:
+        return web.json_response(select_context_engine(engine.strip()))
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+
+
+async def handle_a2a_peers(_request: web.Request) -> web.Response:
+    try:
+        return web.json_response(await asyncio.to_thread(list_a2a_peers))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+
+
+async def handle_a2a_peer_put(request: web.Request) -> web.Response:
+    name = request.match_info.get("name", "")
+    try:
+        body = await read_json_object(request)
+    except web.HTTPBadRequest as exc:
+        return exc
+    url = body.get("url")
+    capabilities = body.get("capabilities", [])
+    token = body.get("token")
+    clear_token = body.get("clear_token", False)
+    if not isinstance(url, str):
+        return json_error(400, "url must be a string")
+    if not isinstance(capabilities, list) or not all(
+        isinstance(item, str) for item in capabilities
+    ):
+        return json_error(400, "capabilities must be a string array")
+    if token is not None and not isinstance(token, str):
+        return json_error(400, "token must be a string")
+    if not isinstance(clear_token, bool):
+        return json_error(400, "clear_token must be a boolean")
+    try:
+        payload = save_a2a_peer(
+            name,
+            url=url,
+            timeout=body.get("timeout", 120),
+            capabilities=capabilities,
+            token=token,
+            clear_token=clear_token,
+        )
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload)
+
+
+async def handle_a2a_peer_delete(request: web.Request) -> web.Response:
+    try:
+        payload = remove_a2a_peer(request.match_info.get("name", ""))
+    except ValueError as exc:
+        return json_error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return json_error(500, str(exc))
+    return web.json_response(payload)
+
+
 async def handle_terminal_backends(_request: web.Request) -> web.Response:
     """GET terminal choices and their current readiness."""
 
@@ -347,25 +427,6 @@ async def handle_test_mcp(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
-async def handle_managed_apps_federation(request: web.Request) -> web.Response:
-    """PUT Amiba's loopback-only, process-owned MCP federation endpoint."""
-
-    try:
-        body = await read_json_object(request)
-    except web.HTTPBadRequest as exc:
-        return exc
-    url = body.get("url")
-    if not isinstance(url, str):
-        return json_error(400, "url must be a string")
-    try:
-        payload = configure_managed_apps_federation(url)
-    except ValueError as exc:
-        return json_error(400, str(exc))
-    except Exception as exc:  # noqa: BLE001
-        return json_error(500, str(exc))
-    return web.json_response(payload)
-
-
 def register_tools_routes(app: web.Application) -> None:
     def profiled(handler):
         @wraps(handler)
@@ -385,6 +446,26 @@ def register_tools_routes(app: web.Application) -> None:
             web.put(
                 "/hermes/tools/toolsets/{name}",
                 profiled(handle_tools_toggle),
+            ),
+            web.get(
+                "/hermes/tools/context-engines",
+                profiled(handle_context_engines),
+            ),
+            web.put(
+                "/hermes/tools/context-engine",
+                profiled(handle_context_engine),
+            ),
+            web.get(
+                "/hermes/tools/a2a/peers",
+                profiled(handle_a2a_peers),
+            ),
+            web.put(
+                "/hermes/tools/a2a/peers/{name}",
+                profiled(handle_a2a_peer_put),
+            ),
+            web.delete(
+                "/hermes/tools/a2a/peers/{name}",
+                profiled(handle_a2a_peer_delete),
             ),
             web.put(
                 "/hermes/tools/toolsets/{name}/provider",
@@ -445,10 +526,6 @@ def register_tools_routes(app: web.Application) -> None:
             web.post(
                 "/hermes/tools/installed-mcps/{slug}/test",
                 profiled(handle_test_mcp),
-            ),
-            web.put(
-                "/hermes/tools/managed-apps-federation",
-                profiled(handle_managed_apps_federation),
             ),
         ]
     )

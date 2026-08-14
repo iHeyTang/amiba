@@ -6,7 +6,14 @@ vi.mock("../backplane-client", () => ({
   backplaneFetch,
 }));
 
-import { createHermesKanbanTask, getHermesKanbanTasks } from "../hermes-kanban";
+import {
+  addHermesKanbanComment,
+  createHermesKanbanTask,
+  getHermesKanbanTask,
+  getHermesKanbanTasks,
+  runHermesKanbanTaskAction,
+  updateHermesKanbanTask,
+} from "../hermes-kanban";
 
 describe("Hermes Kanban client", () => {
   beforeEach(() => {
@@ -37,6 +44,107 @@ describe("Hermes Kanban client", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ title: "Research" }),
+      }),
+    );
+  });
+
+  it("loads the task inspector from the task resource", async () => {
+    backplaneFetch.mockResolvedValue(
+      Response.json({
+        ok: true,
+        board: "product",
+        task: { id: "task-1" },
+        comments: [],
+        attachments: [],
+        runs: [],
+        events: [],
+      }),
+    );
+
+    const result = await getHermesKanbanTask("task-1", "product");
+
+    expect(result.ok).toBe(true);
+    expect(backplaneFetch).toHaveBeenCalledWith(
+      "/hermes/kanban/tasks/task-1?board=product",
+    );
+  });
+
+  it("patches editable fields and supports unassigning a task", async () => {
+    backplaneFetch.mockResolvedValue(
+      Response.json({
+        ok: true,
+        board: "product",
+        task: { id: "task-1" },
+        comments: [],
+        attachments: [],
+        runs: [],
+        events: [],
+      }),
+    );
+
+    await updateHermesKanbanTask(
+      "task-1",
+      { title: "Updated", assignee: null },
+      "product",
+    );
+
+    expect(backplaneFetch).toHaveBeenCalledWith(
+      "/hermes/kanban/tasks/task-1?board=product",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "Updated", assignee: null }),
+      }),
+    );
+  });
+
+  it("posts lifecycle actions to the child action route", async () => {
+    backplaneFetch.mockResolvedValue(
+      Response.json({
+        ok: true,
+        board: "product",
+        task: { id: "task-1" },
+        comments: [],
+        attachments: [],
+        runs: [],
+        events: [],
+      }),
+    );
+
+    await runHermesKanbanTaskAction(
+      "task-1",
+      { action: "block", reason: "Needs input" },
+      "product",
+    );
+
+    expect(backplaneFetch).toHaveBeenCalledWith(
+      "/hermes/kanban/tasks/task-1/actions?board=product",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ action: "block", reason: "Needs input" }),
+      }),
+    );
+  });
+
+  it("posts comments to the task conversation", async () => {
+    backplaneFetch.mockResolvedValue(
+      Response.json({
+        ok: true,
+        board: "product",
+        task: { id: "task-1" },
+        comments: [],
+        attachments: [],
+        runs: [],
+        events: [],
+      }),
+    );
+
+    await addHermesKanbanComment("task-1", "Please verify", "product");
+
+    expect(backplaneFetch).toHaveBeenCalledWith(
+      "/hermes/kanban/tasks/task-1/comments?board=product",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ body: "Please verify", author: "amiba" }),
       }),
     );
   });

@@ -16,7 +16,7 @@ desktop composer's @-mention discovery (hermes has no UI). See the backend READM
 - :mod:`skills`  — wire each source's resolver skill into the agent's
   ``skills.external_dirs``.
 
-New @-mention capabilities are declared by an Applet manifest. This package is
+New @-mention capabilities are declared by an Extension manifest. This package is
 kept only so existing installations continue to search and resolve their
 already-installed sources while they migrate; it exposes no lifecycle API.
 """

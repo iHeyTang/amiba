@@ -16,6 +16,7 @@ import {
   HermesHttpError,
   runHermesAgent,
   type HermesApprovalRequest,
+  type HermesClarifyRequest,
   type HermesToolProgress,
 } from "~lib/chat/hermes-client";
 import { shortId } from "@amiba/utils";
@@ -129,6 +130,7 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
     agentFinalUrl: null,
     agentFinalTitle: null,
     pendingApprovals: [],
+    pendingClarifications: [],
     runId: null,
     startedAt: Date.now(),
     updatedAt: Date.now(),
@@ -412,6 +414,25 @@ export async function startStream(payload: SubmitPayload): Promise<void> {
           for (const approvalId of cleared) {
             emit(sessionId, { kind: "approvalResolved", approvalId });
           }
+        },
+        onClarifyRequest: (request: HermesClarifyRequest) => {
+          mutateState(sessionId, (cur) => ({
+            pendingClarifications: [
+              ...(cur.pendingClarifications ?? []).filter(
+                (item) => item.clarifyId !== request.clarifyId,
+              ),
+              request,
+            ],
+          }));
+          emit(sessionId, { kind: "clarifyRequest", request });
+        },
+        onClarifyResponded: (clarifyId: string) => {
+          mutateState(sessionId, (cur) => ({
+            pendingClarifications: (cur.pendingClarifications ?? []).filter(
+              (item) => item.clarifyId !== clarifyId,
+            ),
+          }));
+          emit(sessionId, { kind: "clarifyResolved", clarifyId });
         },
         onRunCompleted: ({ output }) => {
           // The gateway delivers the full final text in `output`. We've

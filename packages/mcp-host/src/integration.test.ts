@@ -2,24 +2,24 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { createManagedAppService } from "@amiba/managed-apps"
-import type { ManagedAppRevision } from "@amiba/managed-apps/types"
+import { createManagedExtensionService } from "@amiba/managed-extensions"
+import type { ManagedExtensionRevision } from "@amiba/managed-extensions/types"
 import { describe, expect, it } from "vitest"
 
 import { createManagedMcpRuntime } from "./runtime"
 
-describe("managed Applet integration", () => {
+describe("managed Extension integration", () => {
   it("builds, activates, renders, and recoverably removes a static MCP App", async () => {
     const root = await mkdtemp(join(tmpdir(), "amiba-managed-integration-"))
     const runtime = createManagedMcpRuntime()
-    const service = createManagedAppService({
+    const service = createManagedExtensionService({
       root,
       hooks: {
         discover: (input) => runtime.discover(input),
         validateCandidate: (input) => runtime.prepare(input).then(() => undefined),
         activate: (input) => runtime.activate(input),
-        deactivate: (appId) => runtime.deactivate(appId),
-        discardCandidate: (appId, revisionId) => runtime.discardPrepared(appId, revisionId),
+        deactivate: (extensionId) => runtime.deactivate(extensionId),
+        discardCandidate: (extensionId, revisionId) => runtime.discardPrepared(extensionId, revisionId),
       },
     })
 
@@ -34,17 +34,17 @@ describe("managed Applet integration", () => {
         JSON.stringify({ status: "ready", summary: "Report is ready" }),
       )
 
-      const app = await service.buildDraft(created.app.id, created.draft.id)
-      expect(app.userStatus).toBe("ready")
+      const extension = await service.buildDraft(created.extension.id, created.draft.id)
+      expect(extension.userStatus).toBe("ready")
       expect(runtime.listActive()).toHaveLength(1)
-      await expect(service.surface(created.app.id)).resolves.toMatchObject({
-        appId: created.app.id,
+      await expect(service.surface(created.extension.id)).resolves.toMatchObject({
+        extensionId: created.extension.id,
         mimeType: "text/html;profile=mcp-app",
       })
 
-      await service.archive(created.app.id)
+      await service.archive(created.extension.id)
       expect(runtime.listActive()).toHaveLength(0)
-      await service.restore(created.app.id)
+      await service.restore(created.extension.id)
       expect(runtime.listActive()).toHaveLength(1)
     } finally {
       await service.close()
@@ -78,8 +78,8 @@ describe("managed Applet integration", () => {
       });
     `)
     const runtime = createManagedMcpRuntime({
-      resolveDataPath: (appId, revisionId, mode) =>
-        join(projectPath, "data", appId, mode, revisionId),
+      resolveDataPath: (extensionId, revisionId, mode) =>
+        join(projectPath, "data", extensionId, mode, revisionId),
     })
     const manifest = {
       schemaVersion: 1 as const,
@@ -92,12 +92,12 @@ describe("managed Applet integration", () => {
     }
     try {
       const capabilities = await runtime.discover({
-        appId: manifest.id,
+        extensionId: manifest.id,
         projectPath,
         manifest,
       })
       expect(capabilities.tools.map((tool) => tool.name)).toEqual(["main/echo"])
-      const revision: ManagedAppRevision = {
+      const revision: ManagedExtensionRevision = {
         id: "rev-fixture",
         extensionId: manifest.id,
         sourceCommit: "fixture",
@@ -112,7 +112,7 @@ describe("managed Applet integration", () => {
         status: "healthy",
         createdAt: new Date().toISOString(),
       }
-      await runtime.activate({ appId: manifest.id, revision, bundlePath: projectPath })
+      await runtime.activate({ extensionId: manifest.id, revision, bundlePath: projectPath })
       await expect(runtime.callTool(manifest.id, "main", "echo", { text: "hello" }))
         .resolves.toMatchObject({ content: [{ type: "text", text: "hello" }] })
     } finally {

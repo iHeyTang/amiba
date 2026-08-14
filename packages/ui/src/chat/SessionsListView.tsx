@@ -20,14 +20,10 @@ import {
   Pin,
   PinOff,
   Trash2,
-  Upload,
-  X,
 } from "lucide-react";
 import {
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -35,14 +31,7 @@ import {
 
 import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/core";
 import { useT, type MessageKey } from "@amiba/i18n";
-import {
-  Input,
-  Popover,
-  PopoverClose,
-  PopoverContent,
-  PopoverTrigger,
-  cn,
-} from "../primitives";
+import { CascadeMenu, Input, type CascadeMenuItem, cn } from "../primitives";
 import { TopSection } from "./SessionGroups";
 
 const HISTORY_PAGE_SIZE = 20;
@@ -61,11 +50,9 @@ export interface SessionsListViewProps {
   onArchive?: (id: string, archived: boolean) => void | Promise<void>;
   onBranch?: (id: string) => void | Promise<void>;
   onExport?: (id: string) => void | Promise<void>;
-  onImport?: (file: File) => void | Promise<void>;
-  onBulkAction?: (
-    ids: string[],
-    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
-  ) => void | Promise<void>;
+  selecting?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelected?: (id: string) => void;
   /**
    * Fired once on mount so the host can re-fetch the underlying index —
    * multi-channel rows authored elsewhere (gateway / CLI / cron) appear
@@ -124,8 +111,9 @@ export function SessionsListView({
   onArchive,
   onBranch,
   onExport,
-  onImport,
-  onBulkAction,
+  selecting = false,
+  selectedIds,
+  onToggleSelected,
   onRefresh,
   emptyLabel,
   noMatchesLabel,
@@ -143,32 +131,6 @@ export function SessionsListView({
 }: SessionsListViewProps) {
   const { t } = useT();
   const [showArchived, setShowArchived] = useState(false);
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const toggleSelected = useCallback((id: string) => {
-    setSelected((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const leaveSelection = useCallback(() => {
-    setSelecting(false);
-    setSelected(new Set());
-  }, []);
-
-  const runBulk = useCallback(
-    async (action: "archive" | "unarchive" | "pin" | "unpin" | "delete") => {
-      if (!onBulkAction || selected.size === 0) return;
-      await onBulkAction(Array.from(selected), action);
-      leaveSelection();
-    },
-    [leaveSelection, onBulkAction, selected],
-  );
 
   useEffect(() => {
     if (onRefresh) void onRefresh();
@@ -266,7 +228,15 @@ export function SessionsListView({
       }
     }
     return sections;
-  }, [sessions, query, t, sectionLabelFor, groupKeyFor, sectionOrder, showArchived]);
+  }, [
+    sessions,
+    query,
+    t,
+    sectionLabelFor,
+    groupKeyFor,
+    sectionOrder,
+    showArchived,
+  ]);
 
   const totalMatching = useMemo(
     () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
@@ -302,38 +272,31 @@ export function SessionsListView({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-      {(sessions.some((session) => session.archived) || onBulkAction || onImport) ? (
+      {sessions.some((session) => session.archived) ? (
         <div className="sticky top-0 z-10 flex min-h-8 items-center gap-1 bg-background/95 px-1 py-1 backdrop-blur">
-          {selecting ? (
-            <>
-              <span className="min-w-0 flex-1 truncate px-1 text-[10px] text-muted-foreground">
-                {t("sidepanel.sessions.selected", { count: selected.size })}
-              </span>
-              <BulkButton label={t("sidepanel.sessions.pin")} icon={<Pin />} disabled={!selected.size} onClick={() => void runBulk("pin")} />
-              <BulkButton label={showArchived ? t("sidepanel.sessions.unarchive") : t("sidepanel.sessions.archive")} icon={showArchived ? <ArchiveRestore /> : <Archive />} disabled={!selected.size} onClick={() => void runBulk(showArchived ? "unarchive" : "archive")} />
-              <BulkButton label={t("chat.delete")} icon={<Trash2 />} destructive disabled={!selected.size} onClick={() => {
-                if (confirm(t("sidepanel.sessions.bulkDeleteConfirm", { count: selected.size }))) void runBulk("delete");
-              }} />
-              <BulkButton label={t("common.cancel")} icon={<X />} onClick={leaveSelection} />
-            </>
-          ) : (
-            <>
-              {sessions.some((session) => session.archived) ? (
-                <div className="flex rounded-full bg-muted/70 p-0.5 text-[10px]">
-                  <button type="button" className={cn("rounded-full px-2 py-0.5", !showArchived && "bg-background text-foreground shadow-sm")} onClick={() => setShowArchived(false)}>{t("sidepanel.sessions.active")}</button>
-                  <button type="button" className={cn("rounded-full px-2 py-0.5", showArchived && "bg-background text-foreground shadow-sm")} onClick={() => setShowArchived(true)}>{t("sidepanel.sessions.archived")}</button>
-                </div>
-              ) : <span className="flex-1" />}
-              <span className="flex-1" />
-              {onImport ? <BulkButton label={t("sidepanel.sessions.import")} icon={<Upload />} onClick={() => fileInputRef.current?.click()} /> : null}
-              {onBulkAction ? <BulkButton label={t("sidepanel.sessions.select")} icon={<CheckSquare />} onClick={() => setSelecting(true)} /> : null}
-              <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                event.currentTarget.value = "";
-                if (file && onImport) void onImport(file);
-              }} />
-            </>
-          )}
+          <div className="flex rounded-full bg-muted/70 p-0.5 text-[10px]">
+            <button
+              type="button"
+              className={cn(
+                "rounded-full px-2 py-0.5",
+                !showArchived && "bg-background text-foreground shadow-sm",
+              )}
+              onClick={() => setShowArchived(false)}
+            >
+              {t("sidepanel.sessions.active")}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded-full px-2 py-0.5",
+                showArchived && "bg-background text-foreground shadow-sm",
+              )}
+              onClick={() => setShowArchived(true)}
+            >
+              {t("sidepanel.sessions.archived")}
+            </button>
+          </div>
+          <span className="flex-1" />
         </div>
       ) : null}
       {totalMatching === 0 ? (
@@ -385,12 +348,16 @@ export function SessionsListView({
                     onRename={(title) => onRename(s.id, title)}
                     onDelete={() => onDelete(s.id)}
                     onPin={onPin ? (pinned) => onPin(s.id, pinned) : undefined}
-                    onArchive={onArchive ? (archived) => onArchive(s.id, archived) : undefined}
+                    onArchive={
+                      onArchive
+                        ? (archived) => onArchive(s.id, archived)
+                        : undefined
+                    }
                     onBranch={onBranch ? () => onBranch(s.id) : undefined}
                     onExport={onExport ? () => onExport(s.id) : undefined}
                     selecting={selecting}
-                    selected={selected.has(s.id)}
-                    onToggleSelected={() => toggleSelected(s.id)}
+                    selected={selectedIds?.has(s.id) ?? false}
+                    onToggleSelected={() => onToggleSelected?.(s.id)}
                     icon={rowIconFor?.(s)}
                     nested={indentRows}
                     allowActions={allowActionsFor?.(s) ?? true}
@@ -517,6 +484,74 @@ function SessionRow({
       )}
     />
   ) : null;
+  const menuItems: CascadeMenuItem[] = [
+    {
+      id: "rename",
+      icon: <Pencil />,
+      label: t("chat.rename"),
+      onSelect: () => setEditing(true),
+    },
+    ...(onPin
+      ? [
+          {
+            id: "pin",
+            icon: session.pinned ? <PinOff /> : <Pin />,
+            label: session.pinned
+              ? t("sidepanel.sessions.unpin")
+              : t("sidepanel.sessions.pin"),
+            onSelect: () => void onPin(!session.pinned),
+          },
+        ]
+      : []),
+    ...(onBranch
+      ? [
+          {
+            id: "branch",
+            icon: <GitBranch />,
+            label: t("sidepanel.sessions.branch"),
+            onSelect: () => void onBranch(),
+          },
+        ]
+      : []),
+    ...(onArchive
+      ? [
+          {
+            id: "archive",
+            icon: session.archived ? <ArchiveRestore /> : <Archive />,
+            label: session.archived
+              ? t("sidepanel.sessions.unarchive")
+              : t("sidepanel.sessions.archive"),
+            onSelect: () => void onArchive(!session.archived),
+          },
+        ]
+      : []),
+    ...(onExport
+      ? [
+          {
+            id: "export",
+            icon: <Download />,
+            label: t("sidepanel.sessions.export"),
+            onSelect: () => void onExport(),
+          },
+        ]
+      : []),
+    {
+      id: "delete",
+      destructive: true,
+      icon: <Trash2 />,
+      label: t("chat.delete"),
+      onSelect: () => {
+        if (
+          confirm(
+            t("sidepanel.sessions.deleteConfirm", {
+              title: session.title?.trim() || t("chat.untitled"),
+            }),
+          )
+        )
+          onDelete();
+      },
+    },
+  ];
 
   if (editing) {
     return (
@@ -548,29 +583,30 @@ function SessionRow({
           : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
       )}
     >
-      {nested && statusLabel ? (
+      {nested && (selecting || statusLabel) ? (
         <span
-          aria-label={statusLabel}
-          title={statusLabel}
+          aria-hidden={selecting || undefined}
+          aria-label={selecting ? undefined : (statusLabel ?? undefined)}
+          title={selecting ? undefined : (statusLabel ?? undefined)}
           className="pointer-events-none absolute left-2 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
         >
-          {statusGlyph}
+          {selecting ? <SelectionIndicator selected={selected} /> : statusGlyph}
         </span>
       ) : null}
       <button
         type="button"
+        aria-pressed={selecting ? selected : undefined}
         onClick={selecting ? onToggleSelected : onOpen}
         className={cn(
           "flex h-full min-w-0 flex-1 items-center gap-2 pr-2 text-left focus-visible:outline-none",
           nested ? "pl-8" : "pl-2",
         )}
       >
-        {selecting ? (
-          <span className={cn("inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-border", selected && "border-foreground bg-foreground text-background")}>
-            {selected ? <CheckSquare className="h-3 w-3" /> : null}
+        {!nested && selecting ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+            <SelectionIndicator selected={selected} />
           </span>
-        ) : null}
-        {!nested && statusLabel ? (
+        ) : !nested && statusLabel ? (
           <span
             aria-label={statusLabel}
             title={statusLabel}
@@ -586,77 +622,53 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
-        {session.pinned && !selecting ? <Pin className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
+        {session.pinned && !selecting ? (
+          <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
+        ) : null}
       </button>
       {allowActions && !selecting ? (
-        <span className="absolute right-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditing(true);
-            }}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
-            title={t("chat.rename")}
-            aria-label={t("chat.rename")}
-          >
-            <Pencil className="h-3 w-3" />
-          </button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" onClick={(event) => event.stopPropagation()} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground" title={t("workspacePane.moreActions")} aria-label={t("workspacePane.moreActions")}><MoreHorizontal className="h-3.5 w-3.5" /></button>
-            </PopoverTrigger>
-            <PopoverContent align="end" size="narrow" padding="sm" className="space-y-0.5">
-              {onPin ? <PopoverClose asChild><SessionMenuButton icon={session.pinned ? <PinOff /> : <Pin />} label={session.pinned ? t("sidepanel.sessions.unpin") : t("sidepanel.sessions.pin")} onClick={() => void onPin(!session.pinned)} /></PopoverClose> : null}
-              {onArchive ? <PopoverClose asChild><SessionMenuButton icon={session.archived ? <ArchiveRestore /> : <Archive />} label={session.archived ? t("sidepanel.sessions.unarchive") : t("sidepanel.sessions.archive")} onClick={() => void onArchive(!session.archived)} /></PopoverClose> : null}
-              {onBranch ? <PopoverClose asChild><SessionMenuButton icon={<GitBranch />} label={t("sidepanel.sessions.branch")} onClick={() => void onBranch()} /></PopoverClose> : null}
-              {onExport ? <PopoverClose asChild><SessionMenuButton icon={<Download />} label={t("sidepanel.sessions.export")} onClick={() => void onExport()} /></PopoverClose> : null}
-              <PopoverClose asChild><SessionMenuButton destructive icon={<Trash2 />} label={t("chat.delete")} onClick={() => {
-                if (confirm(t("sidepanel.sessions.deleteConfirm", { title: session.title?.trim() || t("chat.untitled") }))) onDelete();
-              }} /></PopoverClose>
-            </PopoverContent>
-          </Popover>
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 bg-gradient-to-l from-45% via-70% to-transparent pl-8 opacity-0 transition-opacity",
+            "group-hover:opacity-100 group-focus-within:opacity-100",
+            active
+              ? "from-secondary via-secondary/95"
+              : "from-accent via-accent/95",
+          )}
+        >
+          <CascadeMenu
+            align="start"
+            size="menu"
+            exclusiveGroup="session-actions"
+            ariaLabel={t("workspacePane.moreActions")}
+            items={menuItems}
+            trigger={
+              <button
+                type="button"
+                onClick={(event) => event.stopPropagation()}
+                className="pointer-events-none inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground group-hover:pointer-events-auto group-focus-within:pointer-events-auto"
+                title={t("workspacePane.moreActions")}
+                aria-label={t("workspacePane.moreActions")}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
         </span>
       ) : null}
     </div>
   );
 }
 
-function BulkButton({
-  label,
-  icon,
-  disabled,
-  destructive,
-  onClick,
-}: {
-  label: string;
-  icon: ReactNode;
-  disabled?: boolean;
-  destructive?: boolean;
-  onClick: () => void;
-}) {
+function SelectionIndicator({ selected }: { selected: boolean }) {
   return (
-    <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={cn("inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:h-3.5 [&_svg]:w-3.5", destructive && "hover:bg-destructive/10 hover:text-destructive")}>
-      {icon}
-    </button>
-  );
-}
-
-function SessionMenuButton({
-  icon,
-  label,
-  destructive,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  destructive?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" onClick={(event) => { event.stopPropagation(); onClick(); }} className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-foreground/80 hover:bg-accent", destructive && "text-destructive hover:bg-destructive/10")}>
-      <span className="[&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>
-      <span>{label}</span>
-    </button>
+    <span
+      className={cn(
+        "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-border",
+        selected && "border-foreground bg-foreground text-background",
+      )}
+    >
+      {selected ? <CheckSquare className="h-3 w-3" /> : null}
+    </span>
   );
 }

@@ -264,4 +264,48 @@ describe("runHermesAgent workspace cwd", () => {
       }),
     );
   });
+
+  it("forwards clarify requests and their resolution", async () => {
+    backplaneFetch.mockImplementation(async (path: string) => {
+      if (path === "/p/researcher/v1/runs") {
+        return Response.json(
+          { run_id: "run_clarify", status: "started" },
+          { status: 202 },
+        );
+      }
+      return new Response(
+        [
+          'data: {"event":"clarify.request","clarify_id":"clarify-1","question":"Which environment?","choices":["staging","production"],"multi_select":false}',
+          "",
+          'data: {"event":"clarify.responded","clarify_id":"clarify-1"}',
+          "",
+          'data: {"event":"run.completed","output":"done"}',
+          "",
+        ].join("\n"),
+        { status: 200 },
+      );
+    });
+    const onClarifyRequest = vi.fn();
+    const onClarifyResponded = vi.fn();
+
+    await runHermesAgent(
+      [{ role: "user", content: "Deploy this" }],
+      {
+        sessionId: "session-clarify",
+        agent: { profileId: "researcher" },
+      },
+      { onClarifyRequest, onClarifyResponded },
+    );
+
+    expect(onClarifyRequest).toHaveBeenCalledWith({
+      clarifyId: "clarify-1",
+      runId: "run_clarify",
+      profileId: "researcher",
+      question: "Which environment?",
+      choices: ["staging", "production"],
+      multiSelect: false,
+      raw: expect.any(Object),
+    });
+    expect(onClarifyResponded).toHaveBeenCalledWith("clarify-1");
+  });
 });

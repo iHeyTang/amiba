@@ -187,9 +187,9 @@ importers:
       '@amiba/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
-      '@amiba/managed-apps':
+      '@amiba/managed-extensions':
         specifier: workspace:*
-        version: link:../../packages/managed-apps
+        version: link:../../packages/managed-extensions
       '@amiba/mcp-host':
         specifier: workspace:*
         version: link:../../packages/mcp-host
@@ -247,6 +247,9 @@ importers:
       lucide-react:
         specifier: ^0.460.0
         version: 0.460.0(react@18.3.1)
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -394,8 +397,11 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
-  packages/managed-apps:
+  packages/managed-extensions:
     dependencies:
+      '@amiba/extension-api':
+        specifier: workspace:*
+        version: link:../extension-api
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0
@@ -412,9 +418,9 @@ importers:
 
   packages/mcp-host:
     dependencies:
-      '@amiba/managed-apps':
+      '@amiba/managed-extensions':
         specifier: workspace:*
-        version: link:../managed-apps
+        version: link:../managed-extensions
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@3.25.76)
@@ -458,15 +464,18 @@ importers:
       '@amiba/core':
         specifier: workspace:*
         version: link:../core
+      '@amiba/extension-api':
+        specifier: workspace:*
+        version: link:../extension-api
       '@amiba/extension-host':
         specifier: workspace:*
         version: link:../extension-host
       '@amiba/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@amiba/managed-apps':
+      '@amiba/managed-extensions':
         specifier: workspace:*
-        version: link:../managed-apps
+        version: link:../managed-extensions
       '@amiba/mcp-host':
         specifier: workspace:*
         version: link:../mcp-host
@@ -560,6 +569,12 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.1.4
         version: 1.2.8(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@xterm/addon-fit':
+        specifier: ^0.10.0
+        version: 0.10.0(@xterm/xterm@5.5.0)
+      '@xterm/xterm':
+        specifier: ^5.5.0
+        version: 5.5.0
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -3635,6 +3650,14 @@ packages:
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
 
+  '@xterm/addon-fit@0.10.0':
+    resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
+    peerDependencies:
+      '@xterm/xterm': ^5.0.0
+
+  '@xterm/xterm@5.5.0':
+    resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
+
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
 
@@ -6044,6 +6067,9 @@ packages:
   node-object-hash@3.1.1:
     resolution: {integrity: sha512-A32kRGjXtwQ+uSa3GrXiCl8HVFY0Jy6IiKFO7UjagAKSaOOrruxB2Qf/w7TP5QtNfB3uOiHTu3cjhp8k/C0PCg==}
     engines: {node: '>=16', pnpm: '>=8'}
+
+  node-pty@1.1.0:
+    resolution: {integrity: sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==}
 
   node-releases@2.0.46:
     resolution: {integrity: sha512-GYVXHE2KnrzAfsAjl4uP++evGFCrAU1jta4ubEjIG7YWt/64Gqv66a30yKwWczVjA6j3bM4nBwH7Pk1JmDHaxQ==}
@@ -10844,6 +10870,12 @@ snapshots:
 
   '@xmldom/xmldom@0.9.10': {}
 
+  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
+    dependencies:
+      '@xterm/xterm': 5.5.0
+
+  '@xterm/xterm@5.5.0': {}
+
   abbrev@1.1.1: {}
 
   abortcontroller-polyfill@1.7.8: {}
@@ -13710,6 +13742,10 @@ snapshots:
       - supports-color
 
   node-object-hash@3.1.1: {}
+
+  node-pty@1.1.0:
+    dependencies:
+      node-addon-api: 7.1.1
 
   node-releases@2.0.46: {}
 

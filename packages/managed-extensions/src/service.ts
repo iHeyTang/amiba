@@ -25,10 +25,10 @@ import {
   initializeRepository,
   removeDraftWorktree,
 } from "./git"
-import { readManagedAppManifest } from "./manifest"
-import { MANAGED_APP_MANIFEST_SCHEMA } from "./schema"
+import { readManagedExtensionManifest } from "./manifest"
+import { MANAGED_EXTENSION_MANIFEST_SCHEMA } from "./schema"
 import {
-  appRoot,
+  extensionRoot,
   bundlePath,
   draftPath,
   listDirectories,
@@ -41,101 +41,117 @@ import {
   writeJsonAtomic,
 } from "./storage"
 import type {
-  ManagedAppAgentResultFile,
-  ManagedAppCapabilitySnapshot,
-  ManagedAppChangeListener,
-  ManagedAppChangeResult,
-  ManagedAppCreateRequest,
-  ManagedAppCreateResult,
-  ManagedAppDraft,
-  ManagedAppManifest,
-  ManagedAppMetadataPatch,
-  ManagedAppOutputInput,
-  ManagedAppOutputRecord,
-  ManagedAppRevision,
-  ManagedAppState,
-  ManagedAppSummary,
-  ManagedAppSurfaceDocument,
-  ManagedAppToolPreset,
+  ManagedExtensionAgentResultFile,
+  ManagedExtensionCapabilitySnapshot,
+  ManagedExtensionChangeListener,
+  ManagedExtensionChangeResult,
+  ManagedExtensionCreateRequest,
+  ManagedExtensionCreateResult,
+  ManagedExtensionDraft,
+  ManagedExtensionManifest,
+  ManagedExtensionMetadataPatch,
+  ManagedExtensionOutputInput,
+  ManagedExtensionOutputRecord,
+  ManagedExtensionRevision,
+  ManagedExtensionState,
+  ManagedExtensionSummary,
+  ManagedExtensionSurfaceDocument,
+  ManagedExtensionToolPreset,
 } from "./types"
 
 const execFileAsync = promisify(execFile)
 const AGENT_RESULT_PATH = join(".amiba", "result.json")
 const MAX_COMMAND_MS = 5 * 60_000
 
-export interface ManagedAppServiceHooks {
+export interface ManagedExtensionServiceHooks {
   /** Validate live MCP discovery and return the snapshot written into the Bundle. */
   discover?: (opts: {
-    appId: string
+    extensionId: string
     projectPath: string
-    manifest: ManagedAppManifest
-  }) => Promise<ManagedAppCapabilitySnapshot>
+    manifest: ManagedExtensionManifest
+  }) => Promise<ManagedExtensionCapabilitySnapshot>
   /** Start candidate providers and validate UI resources before activation. */
   validateCandidate?: (opts: {
-    appId: string
-    revision: ManagedAppRevision
+    extensionId: string
+    revision: ManagedExtensionRevision
     bundlePath: string
   }) => Promise<void>
   /** Atomically switch runtime/catalog/surfaces to this revision. */
   activate?: (opts: {
-    appId: string
-    revision: ManagedAppRevision
-    previous?: ManagedAppRevision
+    extensionId: string
+    revision: ManagedExtensionRevision
+    previous?: ManagedExtensionRevision
     bundlePath: string
   }) => Promise<void>
-  deactivate?: (appId: string) => Promise<void>
-  discardCandidate?: (appId: string, revisionId: string) => Promise<void>
+  deactivate?: (extensionId: string) => Promise<void>
+  discardCandidate?: (extensionId: string, revisionId: string) => Promise<void>
 }
 
-export interface ManagedAppServiceOptions {
+export interface ManagedExtensionServiceOptions {
   root: string
-  hooks?: ManagedAppServiceHooks
+  hooks?: ManagedExtensionServiceHooks
 }
 
-export interface ManagedAppService {
+export interface ManagedExtensionDraftPreview {
+  extensionId: string
+  draftId: string
+  workspacePath: string
+  surfaceName: "main" | "settings"
+  entry?: string
+  manifest: ManagedExtensionManifest
+  capabilities: ManagedExtensionCapabilitySnapshot
+}
+
+export interface ManagedExtensionService {
   init(): Promise<void>
   close(): Promise<void>
-  list(options?: { includeArchived?: boolean }): Promise<ManagedAppSummary[]>
-  get(appId: string): Promise<ManagedAppSummary | null>
-  create(request: ManagedAppCreateRequest): Promise<ManagedAppCreateResult>
-  requestChange(appId: string, request: string): Promise<ManagedAppChangeResult>
-  attachSession(appId: string, draftId: string, sessionId: string): Promise<void>
-  updateMetadata(appId: string, patch: ManagedAppMetadataPatch): Promise<ManagedAppSummary>
-  archive(appId: string): Promise<ManagedAppSummary>
-  restore(appId: string): Promise<ManagedAppSummary>
-  exportProject(appId: string, destinationRoot: string): Promise<string>
-  listOutputs(appId: string): Promise<ManagedAppOutputRecord[]>
-  recordOutputs(appId: string, outputs: ManagedAppOutputInput[]): Promise<void>
+  list(options?: { includeArchived?: boolean }): Promise<ManagedExtensionSummary[]>
+  get(extensionId: string): Promise<ManagedExtensionSummary | null>
+  create(request: ManagedExtensionCreateRequest): Promise<ManagedExtensionCreateResult>
+  requestChange(extensionId: string, request: string): Promise<ManagedExtensionChangeResult>
+  abortDraft(extensionId: string, draftId: string, reason?: string): Promise<ManagedExtensionSummary | null>
+  attachSession(extensionId: string, draftId: string, sessionId: string): Promise<void>
+  updateMetadata(extensionId: string, patch: ManagedExtensionMetadataPatch): Promise<ManagedExtensionSummary>
+  archive(extensionId: string): Promise<ManagedExtensionSummary>
+  restore(extensionId: string): Promise<ManagedExtensionSummary>
+  exportProject(extensionId: string, destinationRoot: string): Promise<string>
+  listOutputs(extensionId: string): Promise<ManagedExtensionOutputRecord[]>
+  recordOutputs(extensionId: string, outputs: ManagedExtensionOutputInput[]): Promise<void>
   updateOutput(
-    appId: string,
+    extensionId: string,
     outputId: string,
     patch: { pinned?: boolean; tags?: string[] },
-  ): Promise<ManagedAppOutputRecord>
-  listPresets(appId: string): Promise<ManagedAppToolPreset[]>
-  savePreset(appId: string, input: {
+  ): Promise<ManagedExtensionOutputRecord>
+  listPresets(extensionId: string): Promise<ManagedExtensionToolPreset[]>
+  savePreset(extensionId: string, input: {
     revisionId: string
     providerAlias: string
     toolName: string
     name: string
     arguments: Record<string, unknown>
-  }): Promise<ManagedAppToolPreset>
-  deletePreset(appId: string, presetId: string): Promise<void>
-  buildDraft(appId: string, draftId: string): Promise<ManagedAppSummary>
-  confirm(appId: string, revisionId: string): Promise<ManagedAppSummary>
-  reject(appId: string, revisionId: string): Promise<ManagedAppSummary>
-  rollback(appId: string): Promise<ManagedAppSummary>
-  markUsed(appId: string): Promise<void>
+  }): Promise<ManagedExtensionToolPreset>
+  deletePreset(extensionId: string, presetId: string): Promise<void>
+  prepareDraftPreview(
+    extensionId: string,
+    draftId: string,
+    options?: { surfaceName?: "main" | "settings"; runTests?: boolean },
+  ): Promise<ManagedExtensionDraftPreview>
+  buildDraft(extensionId: string, draftId: string): Promise<ManagedExtensionSummary>
+  confirm(extensionId: string, revisionId: string): Promise<ManagedExtensionSummary>
+  reject(extensionId: string, revisionId: string): Promise<ManagedExtensionSummary>
+  rollback(extensionId: string): Promise<ManagedExtensionSummary>
+  markUsed(extensionId: string): Promise<void>
   surface(
-    appId: string,
+    extensionId: string,
     target?: "active" | "candidate",
     surfaceName?: "main" | "settings",
-  ): Promise<ManagedAppSurfaceDocument | null>
-  resolveAsset(appId: string, revisionId: string, relativePath: string): Promise<string | null>
-  revisionDeployment(appId: string, revisionId: string): Promise<{
-    revision: ManagedAppRevision
+  ): Promise<ManagedExtensionSurfaceDocument | null>
+  resolveAsset(extensionId: string, revisionId: string, relativePath: string): Promise<string | null>
+  revisionDeployment(extensionId: string, revisionId: string): Promise<{
+    revision: ManagedExtensionRevision
     bundlePath: string
   } | null>
-  onChanged(listener: ManagedAppChangeListener): () => void
+  onChanged(listener: ManagedExtensionChangeListener): () => void
 }
 
 function now(): string {
@@ -148,7 +164,7 @@ function safeSlug(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-  return slug.slice(0, 36) || "applet"
+  return slug.slice(0, 36) || "extension"
 }
 
 function createAppId(name: string): string {
@@ -276,8 +292,8 @@ async function copyBundle(source: string, destination: string): Promise<void> {
 }
 
 function hasSensitiveChange(
-  previous: ManagedAppRevision | null,
-  manifest: ManagedAppManifest,
+  previous: ManagedExtensionRevision | null,
+  manifest: ManagedExtensionManifest,
 ): boolean {
   if (!previous) {
     return (manifest.permissions?.length ?? 0) > 0 ||
@@ -302,7 +318,7 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? "null"
 }
 
-function declaredToolPermissions(snapshot: ManagedAppCapabilitySnapshot): string[] {
+function declaredToolPermissions(snapshot: ManagedExtensionCapabilitySnapshot): string[] {
   return [...new Set(snapshot.tools.flatMap((tool) => {
     const value = tool._meta?.["com.amiba/permissions"]
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
@@ -310,8 +326,8 @@ function declaredToolPermissions(snapshot: ManagedAppCapabilitySnapshot): string
 }
 
 function validateMentionTools(
-  manifest: ManagedAppManifest,
-  snapshot: ManagedAppCapabilitySnapshot,
+  manifest: ManagedExtensionManifest,
+  snapshot: ManagedExtensionCapabilitySnapshot,
 ): void {
   for (const mention of manifest.mentions ?? []) {
     if (!mention.searchTool) continue
@@ -319,7 +335,7 @@ function validateMentionTools(
       ? mention.searchTool
       : `${mention.provider}/${mention.searchTool}`
     const tool = snapshot.tools.find((candidate) => candidate.name === name) as
-      | (ManagedAppCapabilitySnapshot["tools"][number] & {
+      | (ManagedExtensionCapabilitySnapshot["tools"][number] & {
           annotations?: { readOnlyHint?: boolean }
         })
       | undefined
@@ -330,7 +346,7 @@ function validateMentionTools(
   }
 }
 
-function scaffoldManifest(id: string, request: ManagedAppCreateRequest): ManagedAppManifest {
+function scaffoldManifest(id: string, request: ManagedExtensionCreateRequest): ManagedExtensionManifest {
   return {
     $schema: "./manifest.schema.json",
     schemaVersion: 1,
@@ -372,30 +388,36 @@ function scaffoldHtml(name: string): string {
     p { margin: 0; color: color-mix(in srgb, CanvasText 62%, transparent); line-height: 1.6; }
   </style>
 </head>
-<body><main><h1>${escaped}</h1><p>AI 正在完成这个小应用。完成后这里会显示可使用的界面。</p></main></body>
+<body><main><h1>${escaped}</h1><p>AI 正在完成这个扩展。完成后这里会显示可使用的界面。</p></main></body>
 </html>
 `
 }
 
 function agentInstructions(opts: {
-  appId: string
-  appName: string
+  extensionId: string
+  extensionName: string
+  draftId: string
+  workspacePath: string
   request: string
   existing: boolean
 }): string {
   return [
-    `你正在${opts.existing ? "改进" : "创建"} Amiba 小应用「${opts.appName}」。`,
+    `你正在${opts.existing ? "改进" : "创建"} Amiba 扩展「${opts.extensionName}」。`,
     `用户需求：${opts.request}`,
     "",
-    "当前工作区是该小应用的隔离草稿。直接检查并修改其中的源码、测试与 manifest.json。",
+    `当前工作区 ${opts.workspacePath} 是该扩展的隔离草稿。直接检查并修改其中的源码、测试与 manifest.json。`,
     "必须遵守：",
-    `1. manifest.json 的 id 保持为 ${opts.appId}，schemaVersion 保持为 1。`,
-    "2. 默认使用 React + TypeScript 构建界面，并使用官方 MCP Apps SDK；静态界面在 surfaces.main.entry 指定入口。不要依赖 window.amiba 私有业务 API。",
-    "3. Agent 或无界面使用需要复用的业务操作，应实现成标准 MCP Tool；纯界面局部状态可以留在 View。Tool Schema 只在 MCP Server 中定义。",
+    `1. manifest.json 的 id 保持为 ${opts.extensionId}，schemaVersion 保持为 1。`,
+    "2. 根据用户需求选择贡献能力：需要可视交互时使用 React + TypeScript 与官方 MCP Apps SDK，并在 surfaces 中声明界面；仅需 @提及、MCP Tool、Resource 或 Hermes Plugin 时可以无界面。不要依赖 window.amiba 私有业务 API。",
+    "3. Agent 或无界面使用需要复用的业务操作，应实现成标准 MCP Tool；纯界面局部状态可以留在 View。Tool Schema 只在 MCP Server 中定义。需要 Hermes Plugin 时在 hermesPlugins 中声明依赖。",
     "4. 运行 Bundle 必须自包含，不得在运行时安装依赖。把测试和构建命令以参数数组写入 manifest.build，并提交依赖锁文件。",
     "5. 需要网络、文件、设备、外链或主动向 AI 发消息时，在 manifest.permissions 中最小化声明；不要把密钥写入源码、Manifest、日志或 Bundle。",
     "6. 不要改写 .git，不要删除 .amiba 目录，不要直接操作 Amiba 注册表或版本状态。",
     "7. 完成前运行项目中声明的测试或合理的本地验证。",
+    "8. 在提交结果前，必须调用 amiba_preview_extension_draft 构建草稿并用 Amiba 内建浏览器打开预览。调用参数固定为：",
+    `   {"extension_id":"${opts.extensionId}","draft_id":"${opts.draftId}","surface":"main","run_tests":true}`,
+    "9. 预览打开后，使用 amiba_browser_snapshot、amiba_browser_screenshot 和 amiba_browser_console 检查真实页面；再使用 amiba_browser_click、amiba_browser_type、amiba_browser_press、amiba_browser_scroll 验证关键交互。发现问题就修改源码并重复第 8-9 步。",
+    "10. 只有在页面符合需求、关键交互可用且控制台没有未处理错误后，才能写入结果文件。若扩展没有可视 surface，预览工具会返回能力发现结果，此时以测试和 MCP 能力验证为准。",
     "",
     "完成时必须写入 .amiba/result.json：",
     '{"status":"ready","summary":"面向用户的一句话修改摘要"}',
@@ -405,48 +427,49 @@ function agentInstructions(opts: {
   ].join("\n")
 }
 
-export function createManagedAppService(options: ManagedAppServiceOptions): ManagedAppService {
+export function createManagedExtensionService(options: ManagedExtensionServiceOptions): ManagedExtensionService {
   const root = resolve(options.root)
-  const listeners = new Set<ManagedAppChangeListener>()
+  const listeners = new Set<ManagedExtensionChangeListener>()
   const processing = new Set<string>()
+  const createOperations = new Map<string, Promise<ManagedExtensionCreateResult>>()
   let watcher: FSWatcher | null = null
 
-  function emit(appId: string | null): void {
-    for (const listener of listeners) listener(appId)
+  function emit(extensionId: string | null): void {
+    for (const listener of listeners) listener(extensionId)
   }
 
-  async function loadState(appId: string): Promise<ManagedAppState> {
-    assertId(appId, "app id")
-    const state = await readJson<ManagedAppState>(statePath(root, appId))
-    if (!state) throw new Error(`managed Applet not found: ${appId}`)
+  async function loadState(extensionId: string): Promise<ManagedExtensionState> {
+    assertId(extensionId, "extension id")
+    const state = await readJson<ManagedExtensionState>(statePath(root, extensionId))
+    if (!state) throw new Error(`managed Extension not found: ${extensionId}`)
     return state
   }
 
-  async function saveState(state: ManagedAppState): Promise<void> {
+  async function saveState(state: ManagedExtensionState): Promise<void> {
     state.updatedAt = now()
     await writeJsonAtomic(statePath(root, state.id), state)
     emit(state.id)
   }
 
-  async function loadDraft(appId: string, id: string): Promise<ManagedAppDraft> {
+  async function loadDraft(extensionId: string, id: string): Promise<ManagedExtensionDraft> {
     assertId(id, "draft id")
-    const draft = await readJson<ManagedAppDraft>(draftPath(root, appId, id))
+    const draft = await readJson<ManagedExtensionDraft>(draftPath(root, extensionId, id))
     if (!draft) throw new Error(`draft not found: ${id}`)
     return draft
   }
 
-  async function saveDraft(draft: ManagedAppDraft): Promise<void> {
+  async function saveDraft(draft: ManagedExtensionDraft): Promise<void> {
     draft.updatedAt = now()
     await writeJsonAtomic(draftPath(root, draft.extensionId, draft.id), draft)
   }
 
-  async function loadRevision(appId: string, id?: string): Promise<ManagedAppRevision | null> {
+  async function loadRevision(extensionId: string, id?: string): Promise<ManagedExtensionRevision | null> {
     if (!id) return null
     assertId(id, "revision id")
-    return readJson<ManagedAppRevision>(revisionPath(root, appId, id))
+    return readJson<ManagedExtensionRevision>(revisionPath(root, extensionId, id))
   }
 
-  async function summarize(state: ManagedAppState): Promise<ManagedAppSummary> {
+  async function summarize(state: ManagedExtensionState): Promise<ManagedExtensionSummary> {
     const pendingDraft = state.pendingDraftId
       ? await loadDraft(state.id, state.pendingDraftId).catch(() => null)
       : null
@@ -481,11 +504,15 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
     }
   }
 
-  async function createDraft(state: ManagedAppState, request: string): Promise<ManagedAppDraft> {
+  async function createDraft(
+    state: ManagedExtensionState,
+    request: string,
+    operationId?: string,
+  ): Promise<ManagedExtensionDraft> {
     if (state.pendingDraftId) {
       const existing = await loadDraft(state.id, state.pendingDraftId).catch(() => null)
       if (existing && existing.status !== "failed" && existing.status !== "discarded") {
-        throw new Error("这个小应用已经在改进中")
+        throw new Error("这个扩展已经在改进中")
       }
       if (existing) {
         await removeDraftWorktree({
@@ -498,7 +525,7 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       }
     }
     const id = draftId()
-    const workspacePath = join(appRoot(root, state.id), "worktrees", id)
+    const workspacePath = join(extensionRoot(root, state.id), "worktrees", id)
     const baseRevision = await loadRevision(state.id, state.activeRevisionId)
     const baseCommit = baseRevision?.sourceCommit ?? (await currentCommit(state.projectPath))
     const { branch } = await createDraftWorktree({
@@ -508,13 +535,14 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       baseCommit,
     })
     await mkdir(join(workspacePath, ".amiba"), { recursive: true })
-    const draft: ManagedAppDraft = {
+    const draft: ManagedExtensionDraft = {
       id,
       extensionId: state.id,
       baseRevisionId: state.activeRevisionId,
       workspacePath,
       branch,
       userRequest: request.trim(),
+      operationId,
       status: "editing",
       createdAt: now(),
       updatedAt: now(),
@@ -527,9 +555,213 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
     return draft
   }
 
+  async function cleanupBrokenDraft(state: ManagedExtensionState, id: string): Promise<void> {
+    await removeDraftWorktree({
+      projectPath: state.projectPath,
+      workspacePath: join(extensionRoot(root, state.id), "worktrees", id),
+      branch: `amiba/drafts/${id}`,
+    })
+  }
+
+  async function abortDraft(
+    extensionId: string,
+    id: string,
+    reason = "本次 AI 任务已取消",
+  ): Promise<ManagedExtensionSummary | null> {
+    const state = await loadState(extensionId)
+    if (state.pendingDraftId !== id) throw new Error("这个草稿已不再是当前操作")
+    const draft = await loadDraft(extensionId, id).catch(() => null)
+    if (draft?.candidateRevisionId) {
+      await options.hooks?.discardCandidate?.(extensionId, draft.candidateRevisionId).catch(() => {})
+    }
+    if (draft) {
+      await removeDraftWorktree({
+        projectPath: state.projectPath,
+        workspacePath: draft.workspacePath,
+        branch: draft.branch,
+      })
+      draft.status = "discarded"
+      draft.error = reason
+      await saveDraft(draft)
+    } else {
+      await cleanupBrokenDraft(state, id)
+    }
+    if (!state.activeRevisionId) {
+      await options.hooks?.deactivate?.(extensionId).catch(() => {})
+      await rm(extensionRoot(root, extensionId), { recursive: true, force: true })
+      emit(extensionId)
+      return null
+    }
+    state.pendingDraftId = undefined
+    state.userStatus = "ready"
+    state.lastError = undefined
+    await saveState(state)
+    return summarize(state)
+  }
+
+  async function reconcileInterruptedState(state: ManagedExtensionState): Promise<void> {
+    const id = state.pendingDraftId
+    if (!id) {
+      if (state.userStatus === "creating") {
+        state.userStatus = "unavailable"
+        state.lastError = "上次创建未能生成完整草稿，可重试或删除这个扩展"
+        await saveState(state)
+      } else if (state.userStatus === "improving" && state.activeRevisionId) {
+        state.userStatus = "ready"
+        state.lastError = "上次改进未能生成完整草稿，当前可用版本未受影响"
+        await saveState(state)
+      }
+      return
+    }
+    const draft = await loadDraft(state.id, id).catch(() => null)
+    if (!draft) {
+      await cleanupBrokenDraft(state, id)
+      state.pendingDraftId = undefined
+      state.userStatus = state.activeRevisionId ? "ready" : "unavailable"
+      state.lastError = "上次 AI 操作的数据不完整，Amiba 已清理残留草稿"
+      await saveState(state)
+      return
+    }
+    if (draft.status === "applied" || draft.status === "discarded") {
+      state.pendingDraftId = undefined
+      state.userStatus = state.activeRevisionId ? "ready" : "unavailable"
+      await saveState(state)
+      return
+    }
+    if (draft.status === "failed" || draft.status === "preview-ready") return
+    const resultPath = join(draft.workspacePath, AGENT_RESULT_PATH)
+    if (existsSync(resultPath)) {
+      await buildDraft(state.id, id)
+      return
+    }
+    const message = "上次 AI 操作因 Amiba 退出而中断，可重试或删除这个扩展"
+    draft.status = "failed"
+    draft.error = message
+    await saveDraft(draft)
+    state.userStatus = state.activeRevisionId ? "update-failed" : "unavailable"
+    state.lastError = message
+    await saveState(state)
+  }
+
+  function normalizedOperationId(value?: string): string | undefined {
+    const operationId = value?.trim()
+    if (!operationId) return undefined
+    if (operationId.length > 200) throw new Error("operationId 不能超过 200 个字符")
+    return operationId
+  }
+
+  async function findCreationByOperationId(
+    operationId: string,
+  ): Promise<{ state: ManagedExtensionState; draft: ManagedExtensionDraft } | null> {
+    for (const extensionId of await listDirectories(root)) {
+      const state = await loadState(extensionId).catch(() => null)
+      if (!state || state.creationOperationId !== operationId) continue
+      const initialDraftId = state.initialDraftId ?? state.pendingDraftId
+      const draft = initialDraftId
+        ? await loadDraft(state.id, initialDraftId).catch(() => null)
+        : null
+      if (!draft && !state.activeRevisionId) {
+        await rm(extensionRoot(root, state.id), { recursive: true, force: true })
+        emit(state.id)
+        return null
+      }
+      if (!draft) throw new Error("相同 operationId 的历史创建记录不完整")
+      return { state, draft }
+    }
+    return null
+  }
+
+  function createResult(
+    state: ManagedExtensionState,
+    draft: ManagedExtensionDraft,
+  ): Promise<ManagedExtensionCreateResult> {
+    return summarize(state).then((extension) => ({
+      extension,
+      draft,
+      agentPrompt: agentInstructions({
+        extensionId: state.id,
+        extensionName: state.name,
+        draftId: draft.id,
+        workspacePath: draft.workspacePath,
+        request: draft.userRequest,
+        existing: false,
+      }),
+    }))
+  }
+
+  async function performCreate(request: ManagedExtensionCreateRequest): Promise<ManagedExtensionCreateResult> {
+    const name = request.name.trim()
+    const userRequest = request.request.trim()
+    const operationId = normalizedOperationId(request.operationId)
+    if (!name) throw new Error("扩展名称不能为空")
+    if (!userRequest) throw new Error("请描述这个扩展需要做什么")
+    if (operationId) {
+      const previous = await findCreationByOperationId(operationId)
+      if (previous) {
+        if (previous.state.name !== name || previous.draft.userRequest !== userRequest) {
+          throw new Error("operationId 已用于另一个扩展创建请求")
+        }
+        return createResult(previous.state, previous.draft)
+      }
+    }
+
+    const id = createAppId(name)
+    const rootPath = extensionRoot(root, id)
+    const projectPath = join(rootPath, "project")
+    try {
+      await mkdir(join(projectPath, "ui"), { recursive: true })
+      await writeFile(
+        join(projectPath, "manifest.json"),
+        `${JSON.stringify(scaffoldManifest(id, request), null, 2)}\n`,
+        "utf8",
+      )
+      await writeFile(
+        join(projectPath, "manifest.schema.json"),
+        `${JSON.stringify(MANAGED_EXTENSION_MANIFEST_SCHEMA, null, 2)}\n`,
+        "utf8",
+      )
+      await writeFile(join(projectPath, "ui", "index.html"), scaffoldHtml(name), "utf8")
+      await writeFile(
+        join(projectPath, ".gitignore"),
+        ".amiba/\nnode_modules/\ndist/\n.env\n.env.*\n",
+        "utf8",
+      )
+      await initializeRepository(projectPath)
+      const createdAt = now()
+      const state: ManagedExtensionState = {
+        schemaVersion: 1,
+        id,
+        name,
+        description: request.description?.trim() || userRequest,
+        kind: "interactive-ui",
+        source: "personal-managed",
+        tags: [],
+        sourceSessionIds: [],
+        pinned: false,
+        archived: false,
+        projectPath,
+        creationOperationId: operationId,
+        revisionIds: [],
+        userStatus: "creating",
+        createdAt,
+        updatedAt: createdAt,
+      }
+      const draft = await createDraft(state, userRequest, operationId)
+      state.initialDraftId = draft.id
+      await saveState(state)
+      return createResult(state, draft)
+    } catch (error) {
+      await rm(rootPath, { recursive: true, force: true }).catch((cleanupError) => {
+        console.error(`[managed-extensions] failed to roll back ${id}:`, cleanupError)
+      })
+      emit(id)
+      throw error
+    }
+  }
+
   async function validateSurfaceEntries(
     workspacePath: string,
-    manifest: ManagedAppManifest,
+    manifest: ManagedExtensionManifest,
   ): Promise<void> {
     for (const [name, surface] of Object.entries(manifest.surfaces ?? {})) {
       if (!surface?.entry) continue
@@ -542,13 +774,13 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
   }
 
   async function resolveRevisionAsset(
-    appId: string,
+    extensionId: string,
     id: string,
     relativePath: string,
   ): Promise<string | null> {
-    const revision = await loadRevision(appId, id)
+    const revision = await loadRevision(extensionId, id)
     if (!revision) return null
-    const rootPath = resolve(bundlePath(root, appId, revision.bundleHash))
+    const rootPath = resolve(bundlePath(root, extensionId, revision.bundleHash))
     const candidate = resolve(rootPath, relativePath)
     const safeRoot = rootPath.endsWith(sep) ? rootPath : `${rootPath}${sep}`
     if (!candidate.startsWith(safeRoot)) return null
@@ -560,16 +792,16 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
   }
 
   async function applyRevision(
-    state: ManagedAppState,
-    draft: ManagedAppDraft,
-    revision: ManagedAppRevision,
-  ): Promise<ManagedAppSummary> {
+    state: ManagedExtensionState,
+    draft: ManagedExtensionDraft,
+    revision: ManagedExtensionRevision,
+  ): Promise<ManagedExtensionSummary> {
     const previous = await loadRevision(state.id, state.activeRevisionId)
     revision.status = "activating"
     await writeJsonAtomic(revisionPath(root, state.id, revision.id), revision)
     try {
       await options.hooks?.activate?.({
-        appId: state.id,
+        extensionId: state.id,
         revision,
         previous: previous ?? undefined,
         bundlePath: bundlePath(root, state.id, revision.bundleHash),
@@ -599,7 +831,7 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       try {
         if (previous) {
           await options.hooks?.activate?.({
-            appId: state.id,
+            extensionId: state.id,
             revision: previous,
             bundlePath: bundlePath(root, state.id, previous.bundleHash),
           })
@@ -607,7 +839,7 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
           await options.hooks?.deactivate?.(state.id)
         }
       } catch (rollbackError) {
-        console.error("[managed-apps] failed to restore runtime after activation error:", rollbackError)
+        console.error("[managed-extensions] failed to restore runtime after activation error:", rollbackError)
       }
       revision.status = "failed"
       revision.error = error instanceof Error ? error.message : String(error)
@@ -622,15 +854,75 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
     }
   }
 
-  async function buildDraft(appId: string, id: string): Promise<ManagedAppSummary> {
-    const key = `${appId}:${id}`
-    if (processing.has(key)) return summarize(await loadState(appId))
+  async function prepareDraftPreview(
+    extensionId: string,
+    id: string,
+    previewOptions: { surfaceName?: "main" | "settings"; runTests?: boolean } = {},
+  ): Promise<ManagedExtensionDraftPreview> {
+    const state = await loadState(extensionId)
+    if (state.pendingDraftId !== id) throw new Error("这个草稿已不再是当前操作")
+    const draft = await loadDraft(extensionId, id)
+    if (draft.status === "applied" || draft.status === "discarded") {
+      throw new Error("这个草稿已经结束，无法预览")
+    }
+
+    let manifest = await readManagedExtensionManifest(draft.workspacePath)
+    if (manifest.id !== state.id) throw new Error("manifest id cannot change")
+    if (previewOptions.runTests !== false) {
+      await runCommands(
+        manifest.build?.testCommands ?? [],
+        draft.workspacePath,
+        manifest.permissions ?? [],
+      )
+    }
+    await runCommands(
+      manifest.build?.commands ?? [],
+      draft.workspacePath,
+      manifest.permissions ?? [],
+    )
+    manifest = await readManagedExtensionManifest(draft.workspacePath)
+    if (manifest.id !== state.id) throw new Error("manifest id cannot change")
+    await validateSurfaceEntries(draft.workspacePath, manifest)
+
+    const capabilities = options.hooks?.discover
+      ? await options.hooks.discover({
+          extensionId,
+          projectPath: draft.workspacePath,
+          manifest,
+        })
+      : { tools: [], resources: [], resourceTemplates: [], prompts: [] }
+    validateMentionTools(manifest, capabilities)
+    const manifestPermissions = new Set(manifest.permissions ?? [])
+    const missingPermissions = declaredToolPermissions(capabilities).filter(
+      (permission) => !manifestPermissions.has(permission),
+    )
+    if (missingPermissions.length) {
+      throw new Error(
+        `MCP Tools require undeclared permissions: ${missingPermissions.join(", ")}`,
+      )
+    }
+
+    const surfaceName = previewOptions.surfaceName ?? "main"
+    return {
+      extensionId,
+      draftId: id,
+      workspacePath: draft.workspacePath,
+      surfaceName,
+      entry: manifest.surfaces?.[surfaceName]?.entry,
+      manifest,
+      capabilities,
+    }
+  }
+
+  async function buildDraft(extensionId: string, id: string): Promise<ManagedExtensionSummary> {
+    const key = `${extensionId}:${id}`
+    if (processing.has(key)) return summarize(await loadState(extensionId))
     processing.add(key)
     try {
-      const state = await loadState(appId)
-      const draft = await loadDraft(appId, id)
+      const state = await loadState(extensionId)
+      const draft = await loadDraft(extensionId, id)
       if (draft.status === "applied" || draft.status === "discarded") return summarize(state)
-      const result = await readJson<ManagedAppAgentResultFile>(
+      const result = await readJson<ManagedExtensionAgentResultFile>(
         join(draft.workspacePath, AGENT_RESULT_PATH),
       )
       if (!result) throw new Error("AI 尚未提交修改结果")
@@ -652,7 +944,7 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
 
       let attemptedRevisionId: string | undefined
       try {
-        let manifest = await readManagedAppManifest(draft.workspacePath)
+        let manifest = await readManagedExtensionManifest(draft.workspacePath)
         if (manifest.id !== state.id) throw new Error("manifest id cannot change")
         await runCommands(
           manifest.build?.testCommands ?? [],
@@ -664,12 +956,12 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
           draft.workspacePath,
           manifest.permissions ?? [],
         )
-        manifest = await readManagedAppManifest(draft.workspacePath)
+        manifest = await readManagedExtensionManifest(draft.workspacePath)
         await validateSurfaceEntries(draft.workspacePath, manifest)
 
         const capabilitySnapshot = options.hooks?.discover
           ? await options.hooks.discover({
-              appId,
+              extensionId,
               projectPath: draft.workspacePath,
               manifest,
             })
@@ -694,14 +986,14 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
           summary: result.summary?.trim() || draft.userRequest,
         })
         const hash = await hashTree(draft.workspacePath)
-        const destination = bundlePath(root, appId, hash)
+        const destination = bundlePath(root, extensionId, hash)
         await copyBundle(draft.workspacePath, destination)
 
-        const previous = await loadRevision(appId, state.activeRevisionId)
+        const previous = await loadRevision(extensionId, state.activeRevisionId)
         const sensitive = hasSensitiveChange(previous, manifest)
-        const revision: ManagedAppRevision = {
+        const revision: ManagedExtensionRevision = {
           id,
-          extensionId: appId,
+          extensionId: extensionId,
           parentRevisionId: state.activeRevisionId,
           sourceCommit: commit,
           bundleHash: hash,
@@ -717,7 +1009,7 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
           createdAt: now(),
         }
         await options.hooks?.validateCandidate?.({
-          appId,
+          extensionId,
           revision,
           bundlePath: destination,
         })
@@ -727,17 +1019,17 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
         if (!state.revisionIds.includes(revision.id)) state.revisionIds.push(revision.id)
         if (sensitive) {
           revision.status = "awaiting-confirmation"
-          await writeJsonAtomic(revisionPath(root, appId, revision.id), revision)
+          await writeJsonAtomic(revisionPath(root, extensionId, revision.id), revision)
           state.userStatus = "needs-confirmation"
           await saveState(state)
           return summarize(state)
         }
-        await writeJsonAtomic(revisionPath(root, appId, revision.id), revision)
+        await writeJsonAtomic(revisionPath(root, extensionId, revision.id), revision)
         return applyRevision(state, draft, revision)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         if (attemptedRevisionId) {
-          await options.hooks?.discardCandidate?.(appId, attemptedRevisionId).catch(() => {})
+          await options.hooks?.discardCandidate?.(extensionId, attemptedRevisionId).catch(() => {})
         }
         draft.status = "failed"
         draft.error = message
@@ -758,12 +1050,12 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
     const markerIndex = normalized.lastIndexOf(marker)
     if (markerIndex < 0 || basename(normalized) !== "result.json") return
     const appPath = normalized.slice(0, markerIndex)
-    const appId = basename(appPath)
+    const extensionId = basename(appPath)
     const rest = normalized.slice(markerIndex + marker.length).split(sep)
     const id = rest[0]
     if (!id || rest.slice(1).join(sep) !== AGENT_RESULT_PATH) return
-    await buildDraft(appId, id).catch((error) => {
-      console.error(`[managed-apps] failed to process ${appId}/${id}:`, error)
+    await buildDraft(extensionId, id).catch((error) => {
+      console.error(`[managed-extensions] failed to process ${extensionId}/${id}:`, error)
     })
   }
 
@@ -774,12 +1066,16 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
         (await listDirectories(root)).map((id) => loadState(id).catch(() => null)),
       )
       for (const state of states) {
-        if (!state?.activeRevisionId || state.archived) continue
+        if (!state || state.archived) continue
+        await reconcileInterruptedState(state).catch((error) => {
+          console.error(`[managed-extensions] failed to reconcile ${state.id}:`, error)
+        })
+        if (!state.activeRevisionId) continue
         const revision = await loadRevision(state.id, state.activeRevisionId)
         if (!revision) continue
         try {
           await options.hooks?.activate?.({
-            appId: state.id,
+            extensionId: state.id,
             revision,
             bundlePath: bundlePath(root, state.id, revision.bundleHash),
           })
@@ -815,107 +1111,69 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
         }),
       )
       return summaries
-        .filter((summary): summary is ManagedAppSummary => summary !== null)
+        .filter((summary): summary is ManagedExtensionSummary => summary !== null)
         .filter((summary) => listOptions.includeArchived || !summary.archived)
         .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt))
     },
 
-    async get(appId) {
+    async get(extensionId) {
       try {
-        return await summarize(await loadState(appId))
+        return await summarize(await loadState(extensionId))
       } catch {
         return null
       }
     },
 
     async create(request) {
-      const name = request.name.trim()
-      const userRequest = request.request.trim()
-      if (!name) throw new Error("小应用名称不能为空")
-      if (!userRequest) throw new Error("请描述这个小应用需要做什么")
-      const id = createAppId(name)
-      const rootPath = appRoot(root, id)
-      const projectPath = join(rootPath, "project")
-      await mkdir(join(projectPath, "ui"), { recursive: true })
-      await writeFile(
-        join(projectPath, "manifest.json"),
-        `${JSON.stringify(scaffoldManifest(id, request), null, 2)}\n`,
-        "utf8",
-      )
-      await writeFile(
-        join(projectPath, "manifest.schema.json"),
-        `${JSON.stringify(MANAGED_APP_MANIFEST_SCHEMA, null, 2)}\n`,
-        "utf8",
-      )
-      await writeFile(join(projectPath, "ui", "index.html"), scaffoldHtml(name), "utf8")
-      await writeFile(
-        join(projectPath, ".gitignore"),
-        ".amiba/\nnode_modules/\ndist/\n.env\n.env.*\n",
-        "utf8",
-      )
-      await initializeRepository(projectPath)
-      const createdAt = now()
-      const state: ManagedAppState = {
-        schemaVersion: 1,
-        id,
-        name,
-        description: request.description?.trim() || userRequest,
-        kind: "interactive-ui",
-        source: "personal-managed",
-        tags: [],
-        sourceSessionIds: [],
-        pinned: false,
-        archived: false,
-        projectPath,
-        revisionIds: [],
-        userStatus: "creating",
-        createdAt,
-        updatedAt: createdAt,
-      }
-      await saveState(state)
-      const draft = await createDraft(state, userRequest)
-      return {
-        app: await summarize(state),
-        draft,
-        agentPrompt: agentInstructions({
-          appId: id,
-          appName: name,
-          request: userRequest,
-          existing: false,
-        }),
+      const operationId = normalizedOperationId(request.operationId)
+      if (!operationId) return performCreate(request)
+      const current = createOperations.get(operationId)
+      if (current) return current
+      const operation = performCreate({ ...request, operationId })
+      createOperations.set(operationId, operation)
+      try {
+        return await operation
+      } finally {
+        if (createOperations.get(operationId) === operation) createOperations.delete(operationId)
       }
     },
 
-    async requestChange(appId, request) {
+    async requestChange(extensionId, request) {
       const userRequest = request.trim()
       if (!userRequest) throw new Error("请描述需要修改的地方")
-      const state = await loadState(appId)
-      if (state.archived) throw new Error("这个小应用已被删除，请先恢复")
+      const state = await loadState(extensionId)
+      if (state.archived) throw new Error("这个扩展已被删除，请先恢复")
       const draft = await createDraft(state, userRequest)
       return {
         draft,
         agentPrompt: agentInstructions({
-          appId,
-          appName: state.name,
+          extensionId,
+          extensionName: state.name,
+          draftId: draft.id,
+          workspacePath: draft.workspacePath,
           request: userRequest,
           existing: true,
         }),
       }
     },
 
-    async attachSession(appId, id, sessionId) {
+    prepareDraftPreview,
+
+    abortDraft,
+
+    async attachSession(extensionId, id, sessionId) {
       const value = sessionId.trim()
       if (!value) return
-      const draft = await loadDraft(appId, id)
+      const draft = await loadDraft(extensionId, id)
       draft.sourceSessionId = value
       await saveDraft(draft)
-      const state = await loadState(appId)
+      const state = await loadState(extensionId)
       state.sourceSessionIds = [...new Set([...(state.sourceSessionIds ?? []), value])]
       await saveState(state)
     },
 
-    async updateMetadata(appId, patch: ManagedAppMetadataPatch) {
-      const state = await loadState(appId)
+    async updateMetadata(extensionId, patch: ManagedExtensionMetadataPatch) {
+      const state = await loadState(extensionId)
       if (patch.tags) {
         state.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 20)
       }
@@ -927,13 +1185,13 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       return summarize(state)
     },
 
-    async archive(appId) {
-      const state = await loadState(appId)
+    async archive(extensionId) {
+      const state = await loadState(extensionId)
       if (state.pendingDraftId) {
-        const draft = await loadDraft(appId, state.pendingDraftId).catch(() => null)
+        const draft = await loadDraft(extensionId, state.pendingDraftId).catch(() => null)
         if (draft) {
           if (draft.candidateRevisionId) {
-            await options.hooks?.discardCandidate?.(appId, draft.candidateRevisionId)
+            await options.hooks?.discardCandidate?.(extensionId, draft.candidateRevisionId)
           }
           draft.status = "discarded"
           await saveDraft(draft)
@@ -942,24 +1200,26 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
             workspacePath: draft.workspacePath,
             branch: draft.branch,
           })
+        } else {
+          await cleanupBrokenDraft(state, state.pendingDraftId)
         }
         state.pendingDraftId = undefined
       }
-      await options.hooks?.deactivate?.(appId)
+      await options.hooks?.deactivate?.(extensionId)
       state.archived = true
       state.deletedAt = now()
       await saveState(state)
       return summarize(state)
     },
 
-    async restore(appId) {
-      const state = await loadState(appId)
-      const revision = await loadRevision(appId, state.activeRevisionId)
+    async restore(extensionId) {
+      const state = await loadState(extensionId)
+      const revision = await loadRevision(extensionId, state.activeRevisionId)
       if (revision) {
         await options.hooks?.activate?.({
-          appId,
+          extensionId,
           revision,
-          bundlePath: bundlePath(root, appId, revision.bundleHash),
+          bundlePath: bundlePath(root, extensionId, revision.bundleHash),
         })
       }
       state.archived = false
@@ -969,8 +1229,8 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       return summarize(state)
     },
 
-    async exportProject(appId, destinationRoot) {
-      const state = await loadState(appId)
+    async exportProject(extensionId, destinationRoot) {
+      const state = await loadState(extensionId)
       const folder = `${safeSlug(state.name)}-${new Date().toISOString().slice(0, 10)}`
       let destination = resolve(destinationRoot, folder)
       let suffix = 2
@@ -990,30 +1250,30 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       return destination
     },
 
-    async listOutputs(appId) {
-      await loadState(appId)
-      const directory = join(appRoot(root, appId), "outputs")
+    async listOutputs(extensionId) {
+      await loadState(extensionId)
+      const directory = join(extensionRoot(root, extensionId), "outputs")
       const records = await Promise.all(
         (await listJsonFiles(directory)).map((name) =>
-          readJson<ManagedAppOutputRecord>(join(directory, name)),
+          readJson<ManagedExtensionOutputRecord>(join(directory, name)),
         ),
       )
       return records
-        .filter((record): record is ManagedAppOutputRecord => !!record)
+        .filter((record): record is ManagedExtensionOutputRecord => !!record)
         .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.createdAt.localeCompare(left.createdAt))
     },
 
-    async recordOutputs(appId, inputs) {
+    async recordOutputs(extensionId, inputs) {
       if (!inputs.length) return
-      const state = await loadState(appId)
-      const directory = join(appRoot(root, appId), "outputs")
+      const state = await loadState(extensionId)
+      const directory = join(extensionRoot(root, extensionId), "outputs")
       const existing = new Set(
         (await Promise.all(
           (await listJsonFiles(directory)).map((name) =>
-            readJson<ManagedAppOutputRecord>(join(directory, name)),
+            readJson<ManagedExtensionOutputRecord>(join(directory, name)),
           ),
         ))
-          .filter((record): record is ManagedAppOutputRecord => !!record)
+          .filter((record): record is ManagedExtensionOutputRecord => !!record)
           .map((record) => `${record.revisionId}\0${record.toolName ?? ""}\0${record.uri}`),
       )
       for (const input of inputs.slice(0, 100)) {
@@ -1021,9 +1281,9 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
         const key = `${input.revisionId}\0${input.toolName ?? ""}\0${input.uri}`
         if (existing.has(key)) continue
         const id = recordId("output")
-        const record: ManagedAppOutputRecord = {
+        const record: ManagedExtensionOutputRecord = {
           id,
-          extensionId: appId,
+          extensionId: extensionId,
           revisionId: input.revisionId,
           kind: input.kind ?? "resource",
           uri: input.uri,
@@ -1034,49 +1294,49 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
           pinned: false,
           createdAt: now(),
         }
-        await writeJsonAtomic(outputPath(root, appId, id), record)
+        await writeJsonAtomic(outputPath(root, extensionId, id), record)
         existing.add(key)
       }
-      emit(appId)
+      emit(extensionId)
     },
 
-    async updateOutput(appId, outputId, patch) {
-      await loadState(appId)
+    async updateOutput(extensionId, outputId, patch) {
+      await loadState(extensionId)
       assertId(outputId, "output id")
-      const path = outputPath(root, appId, outputId)
-      const record = await readJson<ManagedAppOutputRecord>(path)
+      const path = outputPath(root, extensionId, outputId)
+      const record = await readJson<ManagedExtensionOutputRecord>(path)
       if (!record) throw new Error("output not found")
       if (patch.pinned !== undefined) record.pinned = patch.pinned
       if (patch.tags) {
         record.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))].slice(0, 20)
       }
       await writeJsonAtomic(path, record)
-      emit(appId)
+      emit(extensionId)
       return record
     },
 
-    async listPresets(appId) {
-      await loadState(appId)
-      const directory = join(appRoot(root, appId), "presets")
+    async listPresets(extensionId) {
+      await loadState(extensionId)
+      const directory = join(extensionRoot(root, extensionId), "presets")
       const records = await Promise.all(
         (await listJsonFiles(directory)).map((name) =>
-          readJson<ManagedAppToolPreset>(join(directory, name)),
+          readJson<ManagedExtensionToolPreset>(join(directory, name)),
         ),
       )
       return records
-        .filter((record): record is ManagedAppToolPreset => !!record)
+        .filter((record): record is ManagedExtensionToolPreset => !!record)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     },
 
-    async savePreset(appId, input) {
-      const state = await loadState(appId)
+    async savePreset(extensionId, input) {
+      const state = await loadState(extensionId)
       if (!state.revisionIds.includes(input.revisionId)) throw new Error("preset revision is unavailable")
       if (!input.name.trim()) throw new Error("preset name is required")
       const id = recordId("preset")
       const timestamp = now()
-      const preset: ManagedAppToolPreset = {
+      const preset: ManagedExtensionToolPreset = {
         id,
-        extensionId: appId,
+        extensionId: extensionId,
         revisionId: input.revisionId,
         providerAlias: input.providerAlias,
         toolName: input.toolName,
@@ -1085,41 +1345,41 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
         createdAt: timestamp,
         updatedAt: timestamp,
       }
-      await writeJsonAtomic(presetPath(root, appId, id), preset)
-      emit(appId)
+      await writeJsonAtomic(presetPath(root, extensionId, id), preset)
+      emit(extensionId)
       return preset
     },
 
-    async deletePreset(appId, presetId) {
-      await loadState(appId)
+    async deletePreset(extensionId, presetId) {
+      await loadState(extensionId)
       assertId(presetId, "preset id")
-      await rm(presetPath(root, appId, presetId), { force: true })
-      emit(appId)
+      await rm(presetPath(root, extensionId, presetId), { force: true })
+      emit(extensionId)
     },
 
     buildDraft,
 
-    async confirm(appId, id) {
-      const state = await loadState(appId)
+    async confirm(extensionId, id) {
+      const state = await loadState(extensionId)
       if (!state.pendingDraftId) throw new Error("没有待确认的修改")
-      const draft = await loadDraft(appId, state.pendingDraftId)
+      const draft = await loadDraft(extensionId, state.pendingDraftId)
       if (draft.candidateRevisionId !== id) throw new Error("待确认版本已经变化")
-      const revision = await loadRevision(appId, id)
+      const revision = await loadRevision(extensionId, id)
       if (!revision || revision.status !== "awaiting-confirmation") {
         throw new Error("这个修改不再等待确认")
       }
       return applyRevision(state, draft, revision)
     },
 
-    async reject(appId, id) {
-      const state = await loadState(appId)
+    async reject(extensionId, id) {
+      const state = await loadState(extensionId)
       if (!state.pendingDraftId) throw new Error("没有待处理的修改")
-      const draft = await loadDraft(appId, state.pendingDraftId)
-      const revision = await loadRevision(appId, id)
+      const draft = await loadDraft(extensionId, state.pendingDraftId)
+      const revision = await loadRevision(extensionId, id)
       if (revision) {
-        await options.hooks?.discardCandidate?.(appId, revision.id)
+        await options.hooks?.discardCandidate?.(extensionId, revision.id)
         revision.status = "rolled-back"
-        await writeJsonAtomic(revisionPath(root, appId, revision.id), revision)
+        await writeJsonAtomic(revisionPath(root, extensionId, revision.id), revision)
       }
       draft.status = "discarded"
       await saveDraft(draft)
@@ -1134,22 +1394,22 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       return summarize(state)
     },
 
-    async rollback(appId) {
-      const state = await loadState(appId)
-      const current = await loadRevision(appId, state.activeRevisionId)
-      const target = await loadRevision(appId, current?.parentRevisionId)
+    async rollback(extensionId) {
+      const state = await loadState(extensionId)
+      const current = await loadRevision(extensionId, state.activeRevisionId)
+      const target = await loadRevision(extensionId, current?.parentRevisionId)
       if (!current || !target) throw new Error("没有可以撤销的上一次修改")
       await options.hooks?.activate?.({
-        appId,
+        extensionId,
         revision: target,
         previous: current,
-        bundlePath: bundlePath(root, appId, target.bundleHash),
+        bundlePath: bundlePath(root, extensionId, target.bundleHash),
       })
       current.status = "rolled-back"
-      await writeJsonAtomic(revisionPath(root, appId, current.id), current)
+      await writeJsonAtomic(revisionPath(root, extensionId, current.id), current)
       target.status = "healthy"
       target.activatedAt = now()
-      await writeJsonAtomic(revisionPath(root, appId, target.id), target)
+      await writeJsonAtomic(revisionPath(root, extensionId, target.id), target)
       state.activeRevisionId = target.id
       state.name = target.manifest.name
       state.description = target.manifest.description
@@ -1161,36 +1421,36 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       return summarize(state)
     },
 
-    async markUsed(appId) {
-      const state = await loadState(appId)
+    async markUsed(extensionId) {
+      const state = await loadState(extensionId)
       if (state.archived) return
       state.lastUsedAt = now()
       await saveState(state)
     },
 
-    async surface(appId, target = "active", surfaceName = "main") {
-      const state = await loadState(appId)
+    async surface(extensionId, target = "active", surfaceName = "main") {
+      const state = await loadState(extensionId)
       if (state.archived) return null
-      let revision = await loadRevision(appId, state.activeRevisionId)
+      let revision = await loadRevision(extensionId, state.activeRevisionId)
       if (target === "candidate" && state.pendingDraftId) {
-        const draft = await loadDraft(appId, state.pendingDraftId)
-        revision = await loadRevision(appId, draft.candidateRevisionId)
+        const draft = await loadDraft(extensionId, state.pendingDraftId)
+        revision = await loadRevision(extensionId, draft.candidateRevisionId)
       }
       const surface = revision?.manifest.surfaces?.[surfaceName]
       if (!revision || !surface) return null
       if (!surface.entry) {
         return {
-          appId,
+          extensionId,
           revisionId: revision.id,
           resourceUri: surface.resourceUri,
           mimeType: "text/html;profile=mcp-app",
           metadata: { provider: surface.provider, surfaceName },
         }
       }
-      const path = await resolveRevisionAsset(appId, revision.id, surface.entry)
+      const path = await resolveRevisionAsset(extensionId, revision.id, surface.entry)
       if (!path) return null
       return {
-        appId,
+        extensionId,
         revisionId: revision.id,
         resourceUri: surface.resourceUri,
         mimeType: "text/html;profile=mcp-app",
@@ -1199,16 +1459,16 @@ export function createManagedAppService(options: ManagedAppServiceOptions): Mana
       }
     },
 
-    async resolveAsset(appId, id, relativePath) {
-      return resolveRevisionAsset(appId, id, relativePath)
+    async resolveAsset(extensionId, id, relativePath) {
+      return resolveRevisionAsset(extensionId, id, relativePath)
     },
 
-    async revisionDeployment(appId, id) {
-      const state = await loadState(appId)
+    async revisionDeployment(extensionId, id) {
+      const state = await loadState(extensionId)
       if (state.archived || !state.revisionIds.includes(id)) return null
-      const revision = await loadRevision(appId, id)
+      const revision = await loadRevision(extensionId, id)
       return revision
-        ? { revision, bundlePath: bundlePath(root, appId, revision.bundleHash) }
+        ? { revision, bundlePath: bundlePath(root, extensionId, revision.bundleHash) }
         : null
     },
 

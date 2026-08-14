@@ -159,5 +159,31 @@ export function validateManifest(raw: unknown): ValidationResult {
     }
   }
 
+  if (m.hermesPlugins !== undefined) {
+    if (!Array.isArray(m.hermesPlugins)) {
+      return { ok: false, error: "hermesPlugins must be an array" }
+    }
+    const seenPluginIds = new Set<string>()
+    for (const [index, rawPlugin] of m.hermesPlugins.entries()) {
+      if (!rawPlugin || typeof rawPlugin !== "object") {
+        return { ok: false, error: `hermesPlugins[${index}] must be an object` }
+      }
+      const plugin = rawPlugin as Record<string, unknown>
+      if (typeof plugin.id !== "string" || plugin.id.length === 0) {
+        return { ok: false, error: `hermesPlugins[${index}].id must be a non-empty string` }
+      }
+      if (seenPluginIds.has(plugin.id)) {
+        return { ok: false, error: `hermesPlugins contains duplicate id: ${plugin.id}` }
+      }
+      seenPluginIds.add(plugin.id)
+      if (plugin.version !== undefined && (typeof plugin.version !== "string" || plugin.version.length === 0)) {
+        return { ok: false, error: `hermesPlugins[${index}].version must be a non-empty string` }
+      }
+      if (plugin.required !== undefined && typeof plugin.required !== "boolean") {
+        return { ok: false, error: `hermesPlugins[${index}].required must be a boolean` }
+      }
+    }
+  }
+
   return { ok: true, manifest: raw as ExtensionManifest }
 }

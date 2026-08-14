@@ -10,20 +10,20 @@ const program = new Command()
 
 program
   .name("amiba")
-  .description("Developer tooling for Amiba Applets")
+  .description("Developer tooling for Amiba Extensions")
   .version("0.1.0")
 
 program
   .command("create")
-  .description("Scaffold a new Applet")
-  .argument("[name]", "Applet folder name")
-  .option("--id <id>", "reverse-DNS Applet id (e.g. com.example.my-app)")
+  .description("Scaffold a new Extension")
+  .argument("[name]", "Extension folder name")
+  .option("--id <id>", "reverse-DNS Extension id (e.g. com.example.my-app)")
   .option("--no-install", "skip pnpm install after scaffold")
   .action(createCommand)
 
 program
   .command("dev")
-  .description("Build the Applet in watch mode for local development")
+  .description("Build the Extension in watch mode for local development")
   .option(
     "--no-symlink",
     "copy files instead of symlinking (for testing copy-based installs)",
@@ -40,7 +40,7 @@ program
 
 program
   .command("install")
-  .description("Install an Applet from a GitHub repository")
+  .description("Install an Extension from a GitHub repository")
   .argument("<repo>", "GitHub repo as owner/repo[@tag]; tag defaults to latest")
   .option("--sha256 <hex>", "verify downloaded tarball against this hex digest")
   .action(installCommand)

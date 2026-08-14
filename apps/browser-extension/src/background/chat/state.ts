@@ -122,6 +122,9 @@ export async function hydrateFromStorage(): Promise<void> {
       const s = value as ChatRuntimeState | undefined;
       if (!s || typeof s.sessionId !== "string" || !s.sessionId) continue;
       s.liveAgents = Array.isArray(s.liveAgents) ? s.liveAgents : [];
+      s.pendingClarifications = Array.isArray(s.pendingClarifications)
+        ? s.pendingClarifications
+        : [];
       if (s.streaming) {
         s.streaming = false;
         s.error = s.error ?? {

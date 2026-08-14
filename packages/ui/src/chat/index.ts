@@ -142,7 +142,7 @@ export {
 // <ChatSurface mentionProviders={…}>, and reuse insertMentionAtTrigger inside
 // their own onSelect handlers.
 export { insertMentionAtTrigger } from "./composer/providers/skills";
-export { makeManagedAppletMentionProvider } from "./composer/providers/managed-applets";
+export { makeManagedExtensionMentionProvider } from "./composer/providers/managed-extensions";
 export type {
   TriggerProvider,
   MenuItem,

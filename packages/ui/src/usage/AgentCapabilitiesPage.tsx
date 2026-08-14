@@ -1,20 +1,30 @@
 import {
   ArrowLeft,
   AudioLines,
+  Blocks,
+  BrainCircuit,
   ChevronRight,
   CircleAlert,
+  Clapperboard,
+  Clock3,
+  Code2,
   Eye,
+  Files,
   Globe2,
   History,
   HousePlug,
   Image,
   Laptop,
+  ListTodo,
   Loader2,
   MessageCircle,
+  MessageCircleQuestion,
   MonitorUp,
   Music2,
+  Network,
   Search,
   Terminal,
+  Users,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -43,7 +53,13 @@ import { SettingsPaneHeader } from "../settings/SettingsPaneHeader";
 import { ToolsetConfiguration } from "./ToolsetConfiguration";
 import { ToolsActivityTab } from "./ToolsActivityTab";
 
-type CapabilityGroupId = "understand" | "web" | "create" | "device" | "connect";
+type CapabilityGroupId =
+  | "understand"
+  | "web"
+  | "create"
+  | "coordinate"
+  | "device"
+  | "connect";
 
 interface CapabilityDefinition {
   name: string;
@@ -76,6 +92,11 @@ const CAPABILITY_GROUPS: CapabilityGroupDefinition[] = [
     descriptionKey: "agentCapabilities.group.create.description",
   },
   {
+    id: "coordinate",
+    titleKey: "agentCapabilities.group.coordinate.title",
+    descriptionKey: "agentCapabilities.group.coordinate.description",
+  },
+  {
     id: "device",
     titleKey: "agentCapabilities.group.device.title",
     descriptionKey: "agentCapabilities.group.device.description",
@@ -90,9 +111,9 @@ const CAPABILITY_GROUPS: CapabilityGroupDefinition[] = [
 /**
  * Deliberately curated product vocabulary.
  *
- * Hermes may expose many more toolsets (clarify, context_engine, todo, …).
- * Those are implementation mechanisms, not user-managed assets, so they stay
- * invisible unless Amiba gives them an explicit user-facing capability here.
+ * Internal mechanisms such as todo stay out of this list. Everything here is
+ * a durable permission, provider, or supported interaction choice a person
+ * can reasonably configure for one Profile.
  */
 const CAPABILITY_CATALOG: CapabilityDefinition[] = [
   {
@@ -131,6 +152,13 @@ const CAPABILITY_CATALOG: CapabilityDefinition[] = [
     descriptionKey: "agentCapabilities.item.xSearch.description",
   },
   {
+    name: "extensions",
+    group: "create",
+    icon: Blocks,
+    titleKey: "agentCapabilities.item.extensions.title",
+    descriptionKey: "agentCapabilities.item.extensions.description",
+  },
+  {
     name: "image_gen",
     group: "create",
     icon: Image,
@@ -145,6 +173,13 @@ const CAPABILITY_CATALOG: CapabilityDefinition[] = [
     descriptionKey: "agentCapabilities.item.videoGen.description",
   },
   {
+    name: "bfl",
+    group: "create",
+    icon: Clapperboard,
+    titleKey: "agentCapabilities.item.bfl.title",
+    descriptionKey: "agentCapabilities.item.bfl.description",
+  },
+  {
     name: "tts",
     group: "create",
     icon: AudioLines,
@@ -152,11 +187,67 @@ const CAPABILITY_CATALOG: CapabilityDefinition[] = [
     descriptionKey: "agentCapabilities.item.tts.description",
   },
   {
+    name: "kanban",
+    group: "coordinate",
+    icon: ListTodo,
+    titleKey: "agentCapabilities.item.kanban.title",
+    descriptionKey: "agentCapabilities.item.kanban.description",
+  },
+  {
+    name: "delegation",
+    group: "coordinate",
+    icon: Users,
+    titleKey: "agentCapabilities.item.delegation.title",
+    descriptionKey: "agentCapabilities.item.delegation.description",
+  },
+  {
+    name: "clarify",
+    group: "coordinate",
+    icon: MessageCircleQuestion,
+    titleKey: "agentCapabilities.item.clarify.title",
+    descriptionKey: "agentCapabilities.item.clarify.description",
+  },
+  {
+    name: "session_search",
+    group: "coordinate",
+    icon: Search,
+    titleKey: "agentCapabilities.item.sessionSearch.title",
+    descriptionKey: "agentCapabilities.item.sessionSearch.description",
+  },
+  {
+    name: "cronjob",
+    group: "coordinate",
+    icon: Clock3,
+    titleKey: "agentCapabilities.item.cronjob.title",
+    descriptionKey: "agentCapabilities.item.cronjob.description",
+  },
+  {
+    name: "context_engine",
+    group: "coordinate",
+    icon: BrainCircuit,
+    titleKey: "agentCapabilities.item.contextEngine.title",
+    descriptionKey: "agentCapabilities.item.contextEngine.description",
+  },
+  {
     name: "terminal",
     group: "device",
     icon: Terminal,
     titleKey: "agentCapabilities.item.terminal.title",
     descriptionKey: "agentCapabilities.item.terminal.description",
+  },
+  {
+    name: "file",
+    group: "device",
+    icon: Files,
+    titleKey: "agentCapabilities.item.file.title",
+    descriptionKey: "agentCapabilities.item.file.description",
+  },
+  {
+    name: "code_execution",
+    group: "device",
+    icon: Code2,
+    titleKey: "agentCapabilities.item.codeExecution.title",
+    descriptionKey: "agentCapabilities.item.codeExecution.description",
   },
   {
     name: "computer_use",
@@ -178,6 +269,34 @@ const CAPABILITY_CATALOG: CapabilityDefinition[] = [
     icon: Music2,
     titleKey: "agentCapabilities.item.spotify.title",
     descriptionKey: "agentCapabilities.item.spotify.description",
+  },
+  {
+    name: "discord",
+    group: "connect",
+    icon: MessageCircle,
+    titleKey: "agentCapabilities.item.discord.title",
+    descriptionKey: "agentCapabilities.item.discord.description",
+  },
+  {
+    name: "discord_admin",
+    group: "connect",
+    icon: Users,
+    titleKey: "agentCapabilities.item.discordAdmin.title",
+    descriptionKey: "agentCapabilities.item.discordAdmin.description",
+  },
+  {
+    name: "yuanbao",
+    group: "connect",
+    icon: MessageCircle,
+    titleKey: "agentCapabilities.item.yuanbao.title",
+    descriptionKey: "agentCapabilities.item.yuanbao.description",
+  },
+  {
+    name: "a2a",
+    group: "connect",
+    icon: Network,
+    titleKey: "agentCapabilities.item.a2a.title",
+    descriptionKey: "agentCapabilities.item.a2a.description",
   },
 ];
 

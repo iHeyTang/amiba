@@ -35,7 +35,11 @@
   content: "";
   position: absolute;
   z-index: 0;
-  inset: -5rem -4rem -0.75rem;
+  inset-block: -5rem -0.75rem;
+  /* The composer caps at 48rem. Spend at most the chat column's remaining
+   * side gutter on the fade, so opening the workbench can never leave the
+   * fixed 4rem expansion painting across the pane boundary. */
+  inset-inline: clamp(-4rem, calc((48rem - 100cqw) / 2), 0rem);
   pointer-events: none;
   background: hsl(var(--background) / 0.96);
   -webkit-mask-image: linear-gradient(
@@ -621,4 +625,31 @@
   [data-streamdown="table-row"]:not(:last-child)
   [data-streamdown="table-cell"] {
   border-bottom-color: hsl(var(--border) / 0.4);
+}
+
+/* The workspace terminal is a native pane surface, not an embedded black
+ * console card. xterm still owns cursor/input/rendering; these rules only
+ * align its viewport and scrollbar with Amiba's surrounding workbench. */
+.amiba-terminal .xterm {
+  height: 100%;
+}
+
+.amiba-terminal .xterm-viewport {
+  scrollbar-color: hsl(var(--foreground) / 0.2) transparent;
+  scrollbar-width: thin;
+}
+
+.amiba-terminal .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.amiba-terminal .xterm-viewport::-webkit-scrollbar-thumb {
+  background: hsl(var(--foreground) / 0.16);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.amiba-terminal .xterm-helper-textarea:focus {
+  outline: none;
 }

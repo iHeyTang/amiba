@@ -192,10 +192,10 @@ describe("validateManifest", () => {
   })
 
   // ---------------------------------------------------------------------------
-  // mentions (Applet-owned Composer capabilities)
+  // mentions (Extension-owned Composer capabilities)
   // ---------------------------------------------------------------------------
 
-  it("accepts an Applet-owned mention contribution", () => {
+  it("accepts an Extension-owned mention contribution", () => {
     const r = validateManifest({
       ...base,
       mentions: [
@@ -220,7 +220,7 @@ describe("validateManifest", () => {
     expect(r.ok ? "" : r.error).toMatch(/resourceUriTemplate|searchTool/)
   })
 
-  it("rejects duplicate mention ids within one Applet", () => {
+  it("rejects duplicate mention ids within one Extension", () => {
     const mention = {
       id: "documents",
       provider: "default",
@@ -228,6 +228,23 @@ describe("validateManifest", () => {
       searchTool: "search-documents",
     }
     const r = validateManifest({ ...base, mentions: [mention, mention] })
+    expect(r.ok).toBe(false)
+    expect(r.ok ? "" : r.error).toMatch(/duplicate/)
+  })
+
+  it("accepts Hermes Plugin dependencies contributed by an Extension", () => {
+    const r = validateManifest({
+      ...base,
+      hermesPlugins: [{ id: "web_search", version: ">=1.2.0", required: true }],
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects duplicate Hermes Plugin dependencies", () => {
+    const r = validateManifest({
+      ...base,
+      hermesPlugins: [{ id: "web_search" }, { id: "web_search" }],
+    })
     expect(r.ok).toBe(false)
     expect(r.ok ? "" : r.error).toMatch(/duplicate/)
   })

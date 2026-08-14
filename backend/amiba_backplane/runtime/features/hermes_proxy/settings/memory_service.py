@@ -1,4 +1,4 @@
-"""Read-only access to the Hermes curated memory files.
+"""Profile memory configuration and curated-memory inspection.
 
 Hermes stores curated memory as two markdown files under
 ``$HERMES_HOME/memories``: ``MEMORY.md`` (agent self-notes) and ``USER.md``
@@ -42,6 +42,19 @@ _FILE_NAMES: Dict[str, str] = {
     "memory": "MEMORY.md",
     "user": "USER.md",
 }
+
+
+def _load_config() -> Dict[str, Any]:
+    from hermes_cli.config import load_config  # type: ignore
+
+    config = load_config()
+    return config if isinstance(config, dict) else {}
+
+
+def _save_config(config: Dict[str, Any]) -> None:
+    from hermes_cli.config import save_config  # type: ignore
+
+    save_config(config)
 
 
 def _entry_delimiter() -> str:
@@ -157,3 +170,65 @@ def reset_memory(target: str) -> Dict[str, Any]:
         except OSError as exc:
             raise OSError(f"failed to reset {path}: {exc}") from exc
     return {"ok": True, "deleted": deleted}
+
+
+def memory_configuration() -> Dict[str, Any]:
+    """Return the active provider choices using Hermes' own discovery path."""
+
+    config = _load_config()
+    memory_cfg = config.get("memory")
+    memory_cfg = memory_cfg if isinstance(memory_cfg, dict) else {}
+    current = str(memory_cfg.get("provider") or "")
+    providers: List[Dict[str, Any]] = [
+        {
+            "name": "",
+            "label": "Built-in memory",
+            "description": "Hermes' local curated memory files",
+            "available": True,
+        }
+    ]
+    try:
+        from plugins.memory import discover_memory_providers  # type: ignore
+
+        for name, description, available in discover_memory_providers():
+            providers.append(
+                {
+                    "name": str(name),
+                    "label": str(name).replace("_", " ").title(),
+                    "description": str(description or ""),
+                    "available": bool(available),
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("memory provider discovery failed: %s", exc)
+
+    if current and not any(item["name"] == current for item in providers):
+        providers.append(
+            {
+                "name": current,
+                "label": current.replace("_", " ").title(),
+                "description": "Configured provider is not currently available",
+                "available": False,
+            }
+        )
+    return {"ok": True, "provider": current, "providers": providers}
+
+
+def select_memory_provider(name: str) -> Dict[str, Any]:
+    """Persist one discovered memory provider for the active Profile."""
+
+    requested = str(name or "").strip()
+    options = memory_configuration()["providers"]
+    valid = {str(item["name"]): bool(item["available"]) for item in options}
+    if requested not in valid:
+        raise ValueError(f"Unknown memory provider: {requested}")
+    if not valid[requested]:
+        raise ValueError(f"Memory provider is not available: {requested}")
+
+    config = _load_config()
+    memory_cfg = config.get("memory")
+    memory_cfg = memory_cfg if isinstance(memory_cfg, dict) else {}
+    memory_cfg["provider"] = requested
+    config["memory"] = memory_cfg
+    _save_config(config)
+    return {"ok": True, "provider": requested}

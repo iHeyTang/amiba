@@ -1,8 +1,8 @@
 import type {
-  ManagedAppCapabilitySnapshot,
-  ManagedAppManifest,
-  ManagedAppRevision,
-} from "@amiba/managed-apps/types"
+  ManagedExtensionCapabilitySnapshot,
+  ManagedExtensionManifest,
+  ManagedExtensionRevision,
+} from "@amiba/managed-extensions/types"
 
 export type McpContentBlock =
   | { type: "text"; text: string; [key: string]: unknown }
@@ -29,45 +29,45 @@ export interface McpResourceResult {
   _meta?: Record<string, unknown>
 }
 
-export interface PreparedManagedApp {
-  appId: string
-  revision: ManagedAppRevision
-  manifest: ManagedAppManifest
+export interface PreparedManagedExtension {
+  extensionId: string
+  revision: ManagedExtensionRevision
+  manifest: ManagedExtensionManifest
   bundlePath: string
-  capabilities: ManagedAppCapabilitySnapshot
+  capabilities: ManagedExtensionCapabilitySnapshot
 }
 
 export interface ManagedMcpRuntime {
   discover(opts: {
-    appId: string
+    extensionId: string
     projectPath: string
-    manifest: ManagedAppManifest
-  }): Promise<ManagedAppCapabilitySnapshot>
+    manifest: ManagedExtensionManifest
+  }): Promise<ManagedExtensionCapabilitySnapshot>
   prepare(opts: {
-    appId: string
-    revision: ManagedAppRevision
+    extensionId: string
+    revision: ManagedExtensionRevision
     bundlePath: string
-  }): Promise<PreparedManagedApp>
+  }): Promise<PreparedManagedExtension>
   activate(opts: {
-    appId: string
-    revision: ManagedAppRevision
-    previous?: ManagedAppRevision
+    extensionId: string
+    revision: ManagedExtensionRevision
+    previous?: ManagedExtensionRevision
     bundlePath: string
   }): Promise<void>
-  deactivate(appId: string): Promise<void>
-  discardPrepared(appId: string, revisionId: string): Promise<void>
-  listActive(): PreparedManagedApp[]
-  callTool(appId: string, providerAlias: string, name: string, args?: Record<string, unknown>): Promise<McpToolResult>
+  deactivate(extensionId: string): Promise<void>
+  discardPrepared(extensionId: string, revisionId: string): Promise<void>
+  listActive(): PreparedManagedExtension[]
+  callTool(extensionId: string, providerAlias: string, name: string, args?: Record<string, unknown>): Promise<McpToolResult>
   callPreparedTool(
-    appId: string,
+    extensionId: string,
     revisionId: string,
     providerAlias: string,
     name: string,
     args?: Record<string, unknown>,
   ): Promise<McpToolResult>
-  readResource(appId: string, providerAlias: string, uri: string): Promise<McpResourceResult>
+  readResource(extensionId: string, providerAlias: string, uri: string): Promise<McpResourceResult>
   readPreparedResource(
-    appId: string,
+    extensionId: string,
     revisionId: string,
     providerAlias: string,
     uri: string,
@@ -78,13 +78,13 @@ export interface ManagedMcpRuntime {
 
 export interface McpAppsViewBridge {
   callTool(input: {
-    appId: string
+    extensionId: string
     providerAlias: string
     name: string
     arguments?: Record<string, unknown>
   }): Promise<McpToolResult>
   readResource(input: {
-    appId: string
+    extensionId: string
     providerAlias: string
     uri: string
   }): Promise<McpResourceResult>

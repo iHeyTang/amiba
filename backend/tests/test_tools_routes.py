@@ -62,32 +62,6 @@ async def test_tools_routes_scope_reads_to_requested_profile(client, monkeypatch
     assert scoped == ["researcher"]
 
 
-async def test_managed_apps_federation_accepts_only_loopback(client, monkeypatch):
-    captured = {}
-
-    def fake_configure(url):
-        captured["url"] = url
-        return {"ok": True, "url": url}
-
-    monkeypatch.setattr(
-        tools_routes,
-        "configure_managed_apps_federation",
-        fake_configure,
-    )
-    response = await client.put(
-        "/hermes/tools/managed-apps-federation",
-        json={"url": "http://127.0.0.1:43123/mcp"},
-    )
-    assert response.status == 200
-    assert captured == {"url": "http://127.0.0.1:43123/mcp"}
-
-    invalid = await client.put(
-        "/hermes/tools/managed-apps-federation",
-        json={"url": 42},
-    )
-    assert invalid.status == 400
-
-
 async def test_installed_mcp_connection_route_resolves_provider_id(client, monkeypatch):
     monkeypatch.setattr(
         tools_routes,

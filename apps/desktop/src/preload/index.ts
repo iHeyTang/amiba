@@ -80,6 +80,45 @@ const api = {
       ipcRenderer.invoke("shell:open-external", url),
   },
 
+  embeddedBrowser: {
+    registerTab: (input: {
+      tabId: string;
+      webContentsId: number;
+      active?: boolean;
+    }) => ipcRenderer.invoke("embedded-browser:register-tab", input),
+    unregisterTab: (tabId: string) =>
+      ipcRenderer.invoke("embedded-browser:unregister-tab", tabId),
+    setActiveTab: (tabId: string) =>
+      ipcRenderer.invoke("embedded-browser:set-active-tab", tabId),
+    command: (
+      tabId: string,
+      command: import("@amiba/platform").EmbeddedBrowserCommand,
+    ) => ipcRenderer.invoke("embedded-browser:command", tabId, command),
+    detectDevServers: () =>
+      ipcRenderer.invoke("embedded-browser:detect-dev-servers"),
+    onCreateRequested: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on("embedded-browser:create-tab", handler);
+      return () => ipcRenderer.off("embedded-browser:create-tab", handler);
+    },
+    onFocusRequested: (cb: (event: { tabId: string }) => void) => {
+      const handler = (_event: unknown, payload: { tabId: string }) =>
+        cb(payload);
+      ipcRenderer.on("embedded-browser:focus", handler);
+      return () => ipcRenderer.off("embedded-browser:focus", handler);
+    },
+    onAgentActivity: (
+      cb: (event: { tabId: string; action: string; running: boolean }) => void,
+    ) => {
+      const handler = (
+        _event: unknown,
+        payload: { tabId: string; action: string; running: boolean },
+      ) => cb(payload);
+      ipcRenderer.on("embedded-browser:agent-activity", handler);
+      return () => ipcRenderer.off("embedded-browser:agent-activity", handler);
+    },
+  },
+
   /**
    * Tool-activity ledger bridge for the Tools page. Capture + storage
    * live in main (`tool-activity.ts`); `read` is a read-only window over
@@ -224,8 +263,21 @@ const api = {
       ipcRenderer.invoke("workspace:git:ship", { sessionId, remote }),
     listCheckpoints: (sessionId: string) =>
       ipcRenderer.invoke("workspace:checkpoints:list", sessionId),
-    createCheckpoint: (sessionId: string, label: string) =>
-      ipcRenderer.invoke("workspace:checkpoints:create", { sessionId, label }),
+    createCheckpoint: (
+      sessionId: string,
+      label: string,
+      options?: import("@amiba/platform").WorkspaceCheckpointOptions,
+    ) =>
+      ipcRenderer.invoke("workspace:checkpoints:create", {
+        sessionId,
+        label,
+        options,
+      }),
+    markCheckpointChanged: (sessionId: string, checkpointId: string) =>
+      ipcRenderer.invoke("workspace:checkpoints:mark-changed", {
+        sessionId,
+        checkpointId,
+      }),
     restoreCheckpoint: (sessionId: string, checkpointId: string) =>
       ipcRenderer.invoke("workspace:checkpoints:restore", {
         sessionId,
@@ -236,14 +288,34 @@ const api = {
         sessionId,
         checkpointId,
       }),
-    terminalStart: (sessionId: string) =>
-      ipcRenderer.invoke("workspace:terminal:start", sessionId),
-    terminalGet: (sessionId: string) =>
-      ipcRenderer.invoke("workspace:terminal:get", sessionId),
-    terminalWrite: (sessionId: string, text: string) =>
-      ipcRenderer.invoke("workspace:terminal:write", { sessionId, text }),
-    terminalStop: (sessionId: string) =>
-      ipcRenderer.invoke("workspace:terminal:stop", sessionId),
+    terminalStart: (sessionId: string, terminalId: string) =>
+      ipcRenderer.invoke("workspace:terminal:start", { sessionId, terminalId }),
+    terminalList: (sessionId: string) =>
+      ipcRenderer.invoke("workspace:terminal:list", sessionId),
+    terminalGet: (sessionId: string, terminalId: string) =>
+      ipcRenderer.invoke("workspace:terminal:get", { sessionId, terminalId }),
+    terminalWrite: (sessionId: string, terminalId: string, text: string) => {
+      ipcRenderer.send("workspace:terminal:write", {
+        sessionId,
+        terminalId,
+        text,
+      });
+    },
+    terminalResize: (
+      sessionId: string,
+      terminalId: string,
+      columns: number,
+      rows: number,
+    ) => {
+      ipcRenderer.send("workspace:terminal:resize", {
+        sessionId,
+        terminalId,
+        columns,
+        rows,
+      });
+    },
+    terminalStop: (sessionId: string, terminalId: string) =>
+      ipcRenderer.invoke("workspace:terminal:stop", { sessionId, terminalId }),
     onTerminalData: (cb: (event: unknown) => void) => {
       const handler = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("workspace-terminal:data", handler);
@@ -321,43 +393,45 @@ const api = {
 
   extensions: createExtensionsBridge(),
 
-  managedApps: {
+  managedExtensions: {
     list: (options?: { includeArchived?: boolean }) =>
-      ipcRenderer.invoke("managed-apps:list", options),
-    get: (appId: string) => ipcRenderer.invoke("managed-apps:get", appId),
-    create: (request: import("@amiba/managed-apps").ManagedAppCreateRequest) =>
-      ipcRenderer.invoke("managed-apps:create", request),
-    requestChange: (appId: string, request: string) =>
-      ipcRenderer.invoke("managed-apps:request-change", appId, request),
-    attachSession: (appId: string, draftId: string, sessionId: string) =>
+      ipcRenderer.invoke("managed-extensions:list", options),
+    get: (extensionId: string) => ipcRenderer.invoke("managed-extensions:get", extensionId),
+    create: (request: import("@amiba/managed-extensions").ManagedExtensionCreateRequest) =>
+      ipcRenderer.invoke("managed-extensions:create", request),
+    requestChange: (extensionId: string, request: string) =>
+      ipcRenderer.invoke("managed-extensions:request-change", extensionId, request),
+    abortDraft: (extensionId: string, draftId: string, reason?: string) =>
+      ipcRenderer.invoke("managed-extensions:abort-draft", extensionId, draftId, reason),
+    attachSession: (extensionId: string, draftId: string, sessionId: string) =>
       ipcRenderer.invoke(
-        "managed-apps:attach-session",
-        appId,
+        "managed-extensions:attach-session",
+        extensionId,
         draftId,
         sessionId,
       ),
     updateMetadata: (
-      appId: string,
-      patch: import("@amiba/managed-apps").ManagedAppMetadataPatch,
-    ) => ipcRenderer.invoke("managed-apps:update-metadata", appId, patch),
-    archive: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:archive", appId),
-    restore: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:restore", appId),
-    exportProject: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:export", appId),
-    listOutputs: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:list-outputs", appId),
+      extensionId: string,
+      patch: import("@amiba/managed-extensions").ManagedExtensionMetadataPatch,
+    ) => ipcRenderer.invoke("managed-extensions:update-metadata", extensionId, patch),
+    archive: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:archive", extensionId),
+    restore: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:restore", extensionId),
+    exportProject: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:export", extensionId),
+    listOutputs: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:list-outputs", extensionId),
     updateOutput: (
-      appId: string,
+      extensionId: string,
       outputId: string,
       patch: { pinned?: boolean; tags?: string[] },
     ) =>
-      ipcRenderer.invoke("managed-apps:update-output", appId, outputId, patch),
-    listPresets: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:list-presets", appId),
+      ipcRenderer.invoke("managed-extensions:update-output", extensionId, outputId, patch),
+    listPresets: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:list-presets", extensionId),
     savePreset: (
-      appId: string,
+      extensionId: string,
       input: {
         revisionId: string;
         providerAlias: string;
@@ -365,39 +439,39 @@ const api = {
         name: string;
         arguments: Record<string, unknown>;
       },
-    ) => ipcRenderer.invoke("managed-apps:save-preset", appId, input),
-    deletePreset: (appId: string, presetId: string) =>
-      ipcRenderer.invoke("managed-apps:delete-preset", appId, presetId),
-    confirm: (appId: string, revisionId: string) =>
-      ipcRenderer.invoke("managed-apps:confirm", appId, revisionId),
-    reject: (appId: string, revisionId: string) =>
-      ipcRenderer.invoke("managed-apps:reject", appId, revisionId),
-    rollback: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:rollback", appId),
-    markUsed: (appId: string) =>
-      ipcRenderer.invoke("managed-apps:mark-used", appId),
+    ) => ipcRenderer.invoke("managed-extensions:save-preset", extensionId, input),
+    deletePreset: (extensionId: string, presetId: string) =>
+      ipcRenderer.invoke("managed-extensions:delete-preset", extensionId, presetId),
+    confirm: (extensionId: string, revisionId: string) =>
+      ipcRenderer.invoke("managed-extensions:confirm", extensionId, revisionId),
+    reject: (extensionId: string, revisionId: string) =>
+      ipcRenderer.invoke("managed-extensions:reject", extensionId, revisionId),
+    rollback: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:rollback", extensionId),
+    markUsed: (extensionId: string) =>
+      ipcRenderer.invoke("managed-extensions:mark-used", extensionId),
     surface: (
-      appId: string,
+      extensionId: string,
       target?: "active" | "candidate",
       surfaceName?: "main" | "settings",
-    ) => ipcRenderer.invoke("managed-apps:surface", appId, target, surfaceName),
+    ) => ipcRenderer.invoke("managed-extensions:surface", extensionId, target, surfaceName),
     callTool: (input: {
-      appId: string;
+      extensionId: string;
       providerAlias: string;
       name: string;
       arguments?: Record<string, unknown>;
       revisionId?: string;
-    }) => ipcRenderer.invoke("managed-apps:call-tool", input),
+    }) => ipcRenderer.invoke("managed-extensions:call-tool", input),
     readResource: (input: {
-      appId: string;
+      extensionId: string;
       providerAlias: string;
       uri: string;
       revisionId?: string;
-    }) => ipcRenderer.invoke("managed-apps:read-resource", input),
-    onChanged: (cb: (appId: string | null) => void) => {
-      const handler = (_event: unknown, appId: string | null) => cb(appId);
-      ipcRenderer.on("managed-apps:changed", handler);
-      return () => ipcRenderer.off("managed-apps:changed", handler);
+    }) => ipcRenderer.invoke("managed-extensions:read-resource", input),
+    onChanged: (cb: (extensionId: string | null) => void) => {
+      const handler = (_event: unknown, extensionId: string | null) => cb(extensionId);
+      ipcRenderer.on("managed-extensions:changed", handler);
+      return () => ipcRenderer.off("managed-extensions:changed", handler);
     },
   },
 

@@ -1,12 +1,12 @@
 /**
- * JSON Schema copied into every managed Applet project. Keeping the schema
+ * JSON Schema copied into every managed Extension project. Keeping the schema
  * next to the project gives coding agents editor feedback without coupling a
  * user's source tree to the Amiba installation path.
  */
-export const MANAGED_APP_MANIFEST_SCHEMA = {
+export const MANAGED_EXTENSION_MANIFEST_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://amiba.local/schemas/managed-applet-manifest-v1.json",
-  title: "Amiba managed Applet manifest",
+  $id: "https://amiba.local/schemas/managed-extension-manifest-v1.json",
+  title: "Amiba managed Extension manifest",
   type: "object",
   additionalProperties: false,
   required: ["schemaVersion", "id", "name", "kind", "runtime"],
@@ -76,6 +76,19 @@ export const MANAGED_APP_MANIFEST_SCHEMA = {
         ],
       },
     },
+    hermesPlugins: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id"],
+        properties: {
+          id: { type: "string", minLength: 1 },
+          version: { type: "string", minLength: 1 },
+          required: { type: "boolean" },
+        },
+      },
+    },
     permissions: { type: "array", uniqueItems: true, items: { type: "string" } },
     dataSchemaVersion: { type: "integer", minimum: 1 },
     build: {
@@ -105,4 +118,3 @@ export const MANAGED_APP_MANIFEST_SCHEMA = {
     },
   },
 } as const
-

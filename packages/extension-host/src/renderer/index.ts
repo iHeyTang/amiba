@@ -18,7 +18,7 @@ export {
   type SettingsContribution,
 } from "./use-contributes";
 
-// useExtensionRegistry powers the Applet list-detail control surface, including
+// useExtensionRegistry powers the Extension list-detail control surface, including
 // persisted rows whose manifest can no longer be discovered.
 import { useEffect, useState } from "react";
 import type { ExtensionRegistryItem } from "../preload";

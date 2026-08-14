@@ -17,6 +17,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -41,6 +42,7 @@ import {
   isLocalChannel,
   normalizeAgentContext,
   postHermesApprovalDecision,
+  postHermesClarifyResponse,
   readBlobAsAttachment,
   resolveChannel,
   transcribeAudio,
@@ -61,6 +63,7 @@ import {
   type ChatRuntimeState,
   type HermesApprovalDecision,
   type HermesApprovalRequest,
+  type HermesClarifyRequest,
   type HermesToolProgress,
   type SnapshotFrame,
   type StreamEvent,
@@ -70,6 +73,7 @@ import {
 
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
+import { ClarifyBanner } from "./bubble/clarify";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
 import { useWorkspacePane } from "./WorkspacePane";
@@ -367,6 +371,21 @@ export function measureComposerDockTargetHeight(dock: HTMLElement): number {
   return Math.ceil(dockHeight - currentEditorHeight + targetHeight);
 }
 
+/**
+ * Reserve enough scroll space for both sides of an editor height transition.
+ * The intrinsic auto-grow target can be shorter than the editor's CSS
+ * min-height, so the projected dock height alone is not a safe occlusion
+ * boundary. Keeping the larger of the painted and projected heights makes the
+ * final conversation row reachable above the floating composer at every
+ * frame, including the empty-editor state.
+ */
+export function measureComposerDockClearance(dock: HTMLElement): number {
+  return Math.max(
+    Math.ceil(dock.getBoundingClientRect().height),
+    measureComposerDockTargetHeight(dock),
+  );
+}
+
 export default function ChatSurface({
   variant = "sidebar",
   messagesMaxWidth = "comfortable",
@@ -658,6 +677,38 @@ export default function ChatSurface({
     onApprovalResolvedEvent,
     reset: resetApprovals,
   } = approvals;
+  const [pendingClarifications, setPendingClarifications] = useState<
+    HermesClarifyRequest[]
+  >([]);
+  const [clarifyInFlight, setClarifyInFlight] = useState(false);
+  const [clarifyError, setClarifyError] = useState<string | null>(null);
+
+  function resetClarifications() {
+    setPendingClarifications([]);
+    setClarifyInFlight(false);
+    setClarifyError(null);
+  }
+
+  async function respondToClarify(response: string) {
+    const request = pendingClarifications[0];
+    if (!request || clarifyInFlight) return;
+    setClarifyInFlight(true);
+    setClarifyError(null);
+    const result = await postHermesClarifyResponse({
+      runId: request.runId,
+      clarifyId: request.clarifyId,
+      response,
+      profileId: request.profileId,
+    });
+    setClarifyInFlight(false);
+    if (!result.ok) {
+      setClarifyError(result.error || t("sidepanel.clarify.sendFailed"));
+      return;
+    }
+    setPendingClarifications((current) =>
+      current.filter((item) => item.clarifyId !== request.clarifyId),
+    );
+  }
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
@@ -686,15 +737,16 @@ export default function ChatSurface({
     if (!dock) return;
 
     const updateDockHeight = () => {
-      const nextHeight = measureComposerDockTargetHeight(dock);
-      onComposerHeightChange?.(nextHeight);
+      const targetHeight = measureComposerDockTargetHeight(dock);
+      const nextClearance = measureComposerDockClearance(dock);
+      onComposerHeightChange?.(targetHeight);
 
       if (!hasActive) {
         composerDockHeightRef.current = 0;
         setComposerDockHeight(0);
         return;
       }
-      if (nextHeight === composerDockHeightRef.current) return;
+      if (nextClearance === composerDockHeightRef.current) return;
 
       const viewport = conversationViewportRef.current;
       if (viewport) {
@@ -704,8 +756,8 @@ export default function ChatSurface({
           distanceFromBottom <= 24;
       }
 
-      composerDockHeightRef.current = nextHeight;
-      setComposerDockHeight(nextHeight);
+      composerDockHeightRef.current = nextClearance;
+      setComposerDockHeight(nextClearance);
     };
 
     updateDockHeight();
@@ -901,6 +953,7 @@ export default function ChatSurface({
       if (pendingTurnRef.current?.sessionId === sessionId) return;
       setBusy(false);
       resetApprovals();
+      resetClarifications();
       return;
     }
 
@@ -935,6 +988,7 @@ export default function ChatSurface({
     stream.hydrateFromSnapshot(state);
     setBusy(state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
+    setPendingClarifications(state.pendingClarifications ?? []);
     setActiveRunId(state.runId ?? null);
     workspacePane.setLiveAgents(state.liveAgents ?? []);
 
@@ -1201,6 +1255,7 @@ export default function ChatSurface({
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
     setQueuePaused(false);
     resetApprovals();
+    resetClarifications();
     setError({
       message: event.message,
       status: event.status,
@@ -1218,6 +1273,12 @@ export default function ChatSurface({
   }
 
   function handleStreamEvent(sessionId: string, event: StreamEvent): void {
+    if (event.kind === "hermesToolProgress") {
+      workspacePane.observeToolEvent(event.event, sessionId);
+    }
+    if (event.kind === "liveAgent") {
+      workspacePane.observeLiveAgent(event.event, sessionId);
+    }
     if (sessionId !== sessions.activeId) {
       // Terminal events for non-active sessions still need to settle the
       // local awaiter (if any) — otherwise `runChatTurn` for a backgrounded
@@ -1231,7 +1292,6 @@ export default function ChatSurface({
     switch (event.kind) {
       case "begin":
         setBusy(true);
-        workspacePane.beginTurn();
         stream.onBegin(event.assistantUiId);
         break;
       case "chunk":
@@ -1245,10 +1305,8 @@ export default function ChatSurface({
         break;
       case "hermesToolProgress":
         stream.onHermesToolProgress(event.event);
-        workspacePane.observeToolEvent(event.event);
         break;
       case "liveAgent":
-        workspacePane.observeLiveAgent(event.event);
         break;
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
@@ -1267,6 +1325,22 @@ export default function ChatSurface({
         break;
       case "approvalResolved":
         onApprovalResolvedEvent(event.approvalId);
+        break;
+      case "clarifyRequest":
+        setPendingClarifications((current) => [
+          ...current.filter(
+            (item) => item.clarifyId !== event.request.clarifyId,
+          ),
+          event.request,
+        ]);
+        setClarifyError(null);
+        break;
+      case "clarifyResolved":
+        setPendingClarifications((current) =>
+          current.filter((item) => item.clarifyId !== event.clarifyId),
+        );
+        setClarifyInFlight(false);
+        setClarifyError(null);
         break;
       case "done":
         handleStreamDone(sessionId, event.agentFinalUrl, event.agentFinalTitle);
@@ -1438,6 +1512,7 @@ export default function ChatSurface({
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
         resetApprovals();
+        resetClarifications();
         // The top-level recovery card belongs to the outgoing session.
         // The incoming snapshot will restore its own error, if any.
         setError(null);
@@ -1560,6 +1635,9 @@ export default function ChatSurface({
         ? Promise.all(attachmentsForSend.map(attachmentToBadge))
         : Promise.resolve(undefined);
 
+    const turnIndex = (sessions.activeMessages as UiMessage[]).filter(
+      (message) => message.role === "user",
+    ).length;
     const userMsg: UiMessage = {
       uiId: shortId("u"),
       role: "user",
@@ -1637,6 +1715,11 @@ export default function ChatSurface({
         content: wireUserContent,
       },
     ];
+
+    // The recovery point must exist before Hermes can dispatch a mutating
+    // tool. Await it here instead of reacting to the later `begin` event,
+    // which can race the first write-file callback.
+    await workspacePane.beginTurn(turnIndex);
 
     // Prime the panel-local accumulators BEFORE submitting so the port
     // event listener (which fires asynchronously once the SW broadcasts
@@ -1733,12 +1816,21 @@ export default function ChatSurface({
       if (!sessions.activeId || busy) return;
       try {
         const messageId = await resolveUserMessageId(message, userOrdinal);
-        const result = await sessions.rewindSession(sessions.activeId, messageId);
-        setLastRewind({ sessionId: sessions.activeId, sinceMessageId: messageId });
+        const result = await sessions.rewindSession(
+          sessions.activeId,
+          messageId,
+        );
+        setLastRewind({
+          sessionId: sessions.activeId,
+          sinceMessageId: messageId,
+        });
         setInput(result.content);
         requestAnimationFrame(() => composerRef.current?.focus());
       } catch (cause) {
-        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+        setError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          source: "run",
+        });
       }
     },
     [busy, resolveUserMessageId, sessions],
@@ -1749,11 +1841,17 @@ export default function ChatSurface({
       if (!sessions.activeId || busy) return;
       try {
         const messageId = await resolveUserMessageId(message, userOrdinal);
-        const result = await sessions.rewindSession(sessions.activeId, messageId);
+        const result = await sessions.rewindSession(
+          sessions.activeId,
+          messageId,
+        );
         setLastRewind(null);
         await send(result.content);
       } catch (cause) {
-        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+        setError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          source: "run",
+        });
       }
     },
     [busy, resolveUserMessageId, send, sessions],
@@ -1765,13 +1863,20 @@ export default function ChatSurface({
       try {
         const sourceSessionId = sessions.activeId;
         const messageId = await resolveUserMessageId(message, userOrdinal);
-        const sourceWorkspace = await getPlatform().workspaces?.getCurrent(sourceSessionId);
-        const branchId = await sessions.branchSession(sourceSessionId, messageId);
+        const sourceWorkspace =
+          await getPlatform().workspaces?.getCurrent(sourceSessionId);
+        const branchId = await sessions.branchSession(
+          sourceSessionId,
+          messageId,
+        );
         if (sourceWorkspace) {
           await getPlatform().workspaces?.bind(branchId, sourceWorkspace);
         }
       } catch (cause) {
-        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+        setError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          source: "run",
+        });
       }
     },
     [busy, resolveUserMessageId, sessions],
@@ -1784,9 +1889,15 @@ export default function ChatSurface({
       try {
         const messageId = await resolveUserMessageId(message, userOrdinal);
         await sessions.rewindSession(sessions.activeId, messageId);
-        setLastRewind({ sessionId: sessions.activeId, sinceMessageId: messageId });
+        setLastRewind({
+          sessionId: sessions.activeId,
+          sinceMessageId: messageId,
+        });
       } catch (cause) {
-        setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+        setError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          source: "run",
+        });
       }
     },
     [busy, resolveUserMessageId, sessions, t],
@@ -1795,10 +1906,16 @@ export default function ChatSurface({
   const restoreLastRewind = useCallback(async () => {
     if (!lastRewind || lastRewind.sessionId !== sessions.activeId) return;
     try {
-      await sessions.restoreSession(lastRewind.sessionId, lastRewind.sinceMessageId);
+      await sessions.restoreSession(
+        lastRewind.sessionId,
+        lastRewind.sinceMessageId,
+      );
       setLastRewind(null);
     } catch (cause) {
-      setError({ message: cause instanceof Error ? cause.message : String(cause), source: "run" });
+      setError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        source: "run",
+      });
     }
   }, [lastRewind, sessions]);
 
@@ -1858,6 +1975,7 @@ export default function ChatSurface({
     setEditingQueueId(null);
     setQueuePaused(false);
     resetApprovals();
+    resetClarifications();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
     for (const a of attachments) void deleteAttachmentFile(a);
@@ -1892,6 +2010,37 @@ export default function ChatSurface({
   // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
+  const restorableTurnOrdinals = useMemo(
+    () =>
+      new Set(
+        workspacePane.checkpoints
+          .filter(
+            (checkpoint) =>
+              checkpoint.kind === "turn-start" &&
+              checkpoint.hasChanges &&
+              checkpoint.complete !== false &&
+              typeof checkpoint.turnIndex === "number",
+          )
+          .map((checkpoint) => checkpoint.turnIndex as number),
+      ),
+    [workspacePane.checkpoints],
+  );
+  const restoreWorkspaceBeforeTurn = useCallback(
+    async (_message: UiMessage, userOrdinal: number) => {
+      if (!window.confirm(t("sidepanel.message.restoreWorkspaceConfirm"))) {
+        return;
+      }
+      try {
+        setWorkspaceError(null);
+        await workspacePane.restoreBeforeTurn(userOrdinal);
+      } catch (cause) {
+        setWorkspaceError(
+          cause instanceof Error ? cause.message : String(cause),
+        );
+      }
+    },
+    [setWorkspaceError, t, workspacePane],
+  );
   const showTurnRail =
     variant === "fullscreen" &&
     messages.some((message) => message.role === "user");
@@ -2093,7 +2242,11 @@ export default function ChatSurface({
           <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
             <History className="h-2.5 w-2.5" />
             <span>{t("sidepanel.message.historyTrimmed")}</span>
-            <button type="button" onClick={() => void restoreLastRewind()} className="rounded px-1 py-0.5 font-medium text-foreground transition-colors hover:bg-muted">
+            <button
+              type="button"
+              onClick={() => void restoreLastRewind()}
+              className="rounded px-1 py-0.5 font-medium text-foreground transition-colors hover:bg-muted"
+            >
               {t("sidepanel.message.undo")}
             </button>
           </div>
@@ -2312,6 +2465,11 @@ export default function ChatSurface({
               >
                 <MessageTurns
                   messages={messages}
+                  onReviewWorkspaceChanges={
+                    workspacePane.enabled ? workspacePane.openReview : undefined
+                  }
+                  restorableTurnOrdinals={restorableTurnOrdinals}
+                  onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
                   onOpenAgentDestination={openAgentDestination}
                   onEditUserMessage={editUserMessage}
                   onRetryUserMessage={retryUserMessage}
@@ -2366,8 +2524,7 @@ export default function ChatSurface({
           `bridgeBar` slot. Desktop omits and the row is hidden.
         */}
           {hasActive ? slots?.bridgeBar : null}
-          {hasActive &&
-            (pageError || attachmentError || workspaceError) && (
+          {hasActive && (pageError || attachmentError || workspaceError) && (
             <div className="mb-1 flex flex-col gap-1">
               {pageError && (
                 <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
@@ -2466,6 +2623,14 @@ export default function ChatSurface({
                 error={approvalError}
                 onRespond={respondToApproval}
                 onDismissError={() => setApprovalError(null)}
+              />
+            )}
+            {hasActive && pendingClarifications.length > 0 && (
+              <ClarifyBanner
+                error={clarifyError}
+                inFlight={clarifyInFlight}
+                onRespond={(response) => void respondToClarify(response)}
+                request={pendingClarifications[0]}
               />
             )}
             {readOnlyNoticeNode ?? composerNode}

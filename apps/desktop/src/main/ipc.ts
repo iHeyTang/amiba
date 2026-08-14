@@ -8,9 +8,13 @@ import {
   shell,
   type OpenDialogOptions,
 } from "electron";
-import type { WorkspaceChange } from "@amiba/platform";
+import type {
+  WorkspaceChange,
+  WorkspaceCheckpointOptions,
+} from "@amiba/platform";
 
 import { mainStore, type StorageChangeMap } from "./storage";
+import { embeddedBrowserController } from "./embedded-browser";
 import { workspaceManager } from "./workspace";
 import {
   addWorkspaceProjectFolder,
@@ -23,11 +27,14 @@ import {
   getWorkspaceGitDiff,
   getWorkspaceGitState,
   getWorkspaceTerminal,
+  listWorkspaceTerminals,
   listWorkspaceCheckpoints,
+  markWorkspaceCheckpointChanged,
   listWorkspaceProjects,
   listWorkspaceTree,
   listWorkspaceWorktrees,
   mutateWorkspaceGit,
+  resizeWorkspaceTerminal,
   restoreWorkspaceCheckpoint,
   searchWorkspaceTree,
   startWorkspaceTerminal,
@@ -104,6 +111,8 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  embeddedBrowserController.registerIpc();
+
   // Storage handlers route to the shared `mainStore`, the same instance the
   // main-process PlatformAdapter uses. Renderer writes and main-side reads
   // therefore see the same state.
@@ -223,8 +232,19 @@ export function registerIpcHandlers() {
   );
   ipcMain.handle(
     "workspace:checkpoints:create",
-    (_e, input: { sessionId: string; label: string }) =>
-      createWorkspaceCheckpoint(input.sessionId, input.label),
+    (
+      _e,
+      input: {
+        sessionId: string;
+        label: string;
+        options?: WorkspaceCheckpointOptions;
+      },
+    ) => createWorkspaceCheckpoint(input.sessionId, input.label, input.options),
+  );
+  ipcMain.handle(
+    "workspace:checkpoints:mark-changed",
+    (_e, input: { sessionId: string; checkpointId: string }) =>
+      markWorkspaceCheckpointChanged(input.sessionId, input.checkpointId),
   );
   ipcMain.handle(
     "workspace:checkpoints:restore",
@@ -236,19 +256,48 @@ export function registerIpcHandlers() {
     (_e, input: { sessionId: string; checkpointId: string }) =>
       deleteWorkspaceCheckpoint(input.sessionId, input.checkpointId),
   );
-  ipcMain.handle("workspace:terminal:start", (_e, sessionId: string) =>
-    startWorkspaceTerminal(sessionId),
+  ipcMain.handle(
+    "workspace:terminal:start",
+    (_e, input: { sessionId: string; terminalId: string }) =>
+      startWorkspaceTerminal(input.sessionId, input.terminalId),
   );
-  ipcMain.handle("workspace:terminal:get", (_e, sessionId: string) =>
-    getWorkspaceTerminal(sessionId),
+  ipcMain.handle("workspace:terminal:list", (_e, sessionId: string) =>
+    listWorkspaceTerminals(sessionId),
   );
   ipcMain.handle(
-    "workspace:terminal:write",
-    (_e, input: { sessionId: string; text: string }) =>
-      writeWorkspaceTerminal(input.sessionId, input.text),
+    "workspace:terminal:get",
+    (_e, input: { sessionId: string; terminalId: string }) =>
+      getWorkspaceTerminal(input.sessionId, input.terminalId),
   );
-  ipcMain.handle("workspace:terminal:stop", (_e, sessionId: string) =>
-    stopWorkspaceTerminal(sessionId),
+  ipcMain.on(
+    "workspace:terminal:write",
+    (_e, input: { sessionId: string; terminalId: string; text: string }) => {
+      writeWorkspaceTerminal(input.sessionId, input.terminalId, input.text);
+    },
+  );
+  ipcMain.on(
+    "workspace:terminal:resize",
+    (
+      _e,
+      input: {
+        sessionId: string;
+        terminalId: string;
+        columns: number;
+        rows: number;
+      },
+    ) => {
+      resizeWorkspaceTerminal(
+        input.sessionId,
+        input.terminalId,
+        input.columns,
+        input.rows,
+      );
+    },
+  );
+  ipcMain.handle(
+    "workspace:terminal:stop",
+    (_e, input: { sessionId: string; terminalId: string }) =>
+      stopWorkspaceTerminal(input.sessionId, input.terminalId),
   );
 
   // @file mention source for the desktop chat. It uses the same bounded,

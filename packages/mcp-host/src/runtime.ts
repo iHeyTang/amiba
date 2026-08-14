@@ -9,16 +9,16 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 
 import type {
-  ManagedAppCapabilitySnapshot,
-  ManagedAppManifest,
-  ManagedAppProviderManifest,
-  ManagedAppRevision,
-} from "@amiba/managed-apps/types"
+  ManagedExtensionCapabilitySnapshot,
+  ManagedExtensionManifest,
+  ManagedExtensionProviderManifest,
+  ManagedExtensionRevision,
+} from "@amiba/managed-extensions/types"
 import type {
   ManagedMcpRuntime,
   McpResourceResult,
   McpToolResult,
-  PreparedManagedApp,
+  PreparedManagedExtension,
 } from "./types"
 
 interface ProviderConnection {
@@ -27,7 +27,7 @@ interface ProviderConnection {
   transport: Transport
 }
 
-interface RuntimeEntry extends PreparedManagedApp {
+interface RuntimeEntry extends PreparedManagedExtension {
   providers: Map<string, ProviderConnection>
 }
 
@@ -58,12 +58,12 @@ export interface ManagedMcpRuntimeOptions {
     headers?: Record<string, string>
   } | null>
   resolveDataPath?: (
-    appId: string,
+    extensionId: string,
     revisionId: string,
     mode: "candidate" | "active",
   ) => string
   onToolCall?: (event: {
-    appId: string
+    extensionId: string
     revisionId: string
     providerAlias: string
     toolName: string
@@ -72,7 +72,7 @@ export interface ManagedMcpRuntimeOptions {
     error?: string
   }) => void
   onToolResult?: (event: {
-    appId: string
+    extensionId: string
     revisionId: string
     providerAlias: string
     toolName: string
@@ -80,7 +80,7 @@ export interface ManagedMcpRuntimeOptions {
   }) => void
 }
 
-const EMPTY_CAPABILITIES: ManagedAppCapabilitySnapshot = {
+const EMPTY_CAPABILITIES: ManagedExtensionCapabilitySnapshot = {
   tools: [],
   resources: [],
   resourceTemplates: [],
@@ -127,7 +127,7 @@ async function allPages<T extends { nextCursor?: string }>(
 }
 
 function providerCommand(
-  provider: ManagedAppProviderManifest & { env?: Record<string, string>; cwd?: string },
+  provider: ManagedExtensionProviderManifest & { env?: Record<string, string>; cwd?: string },
   root: string,
   options: ManagedMcpRuntimeOptions,
 ): { command: string; args: string[]; env?: Record<string, string>; cwd?: string } {
@@ -145,7 +145,7 @@ function providerCommand(
   const entry = resolve(root, provider.entry)
   const normalizedRoot = resolve(root)
   if (entry !== normalizedRoot && !entry.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`provider entry escapes the Applet bundle: ${provider.entry}`)
+    throw new Error(`provider entry escapes the Extension bundle: ${provider.entry}`)
   }
   if (!existsSync(entry)) throw new Error(`provider entry does not exist: ${provider.entry}`)
   const configured = options.resolveCommand?.(provider.runtime, root)
@@ -215,15 +215,15 @@ function assertProviderUrl(url: string, permissions: string[]): void {
 }
 
 async function connectProvider(
-  appId: string,
+  extensionId: string,
   revisionId: string,
   dataMode: "candidate" | "active",
-  provider: ManagedAppProviderManifest,
+  provider: ManagedExtensionProviderManifest,
   root: string,
   options: ManagedMcpRuntimeOptions,
   permissions: string[],
 ): Promise<ProviderConnection> {
-  let resolvedProvider: ManagedAppProviderManifest & {
+  let resolvedProvider: ManagedExtensionProviderManifest & {
     env?: Record<string, string>
     cwd?: string
     headers?: Record<string, string>
@@ -245,8 +245,8 @@ async function connectProvider(
     })
   } else {
     const dataPath = resolve(
-      options.resolveDataPath?.(appId, revisionId, dataMode) ??
-        resolve(tmpdir(), "amiba-mcp-host", appId, dataMode, revisionId),
+      options.resolveDataPath?.(extensionId, revisionId, dataMode) ??
+        resolve(tmpdir(), "amiba-mcp-host", extensionId, dataMode, revisionId),
     )
     await mkdir(dataPath, { recursive: true })
     const command = macRuntimeSandbox(
@@ -281,10 +281,10 @@ async function connectProvider(
 }
 
 async function discoverConnections(
-  manifest: ManagedAppManifest,
+  manifest: ManagedExtensionManifest,
   connections: Map<string, ProviderConnection>,
-): Promise<ManagedAppCapabilitySnapshot> {
-  const snapshot: ManagedAppCapabilitySnapshot = {
+): Promise<ManagedExtensionCapabilitySnapshot> {
+  const snapshot: ManagedExtensionCapabilitySnapshot = {
     tools: [],
     resources: [],
     resourceTemplates: [],
@@ -371,7 +371,7 @@ async function discoverConnections(
 }
 
 async function validateDynamicSurfaces(
-  manifest: ManagedAppManifest,
+  manifest: ManagedExtensionManifest,
   connections: Map<string, ProviderConnection>,
 ): Promise<void> {
   for (const [name, surface] of Object.entries(manifest.surfaces ?? {})) {
@@ -421,12 +421,12 @@ export function createManagedMcpRuntime(
   const prepared = new Map<string, RuntimeEntry>()
   const listeners = new Set<() => void>()
 
-  const key = (appId: string, revisionId: string) => `${appId}:${revisionId}`
+  const key = (extensionId: string, revisionId: string) => `${extensionId}:${revisionId}`
 
-  function preparedOrMatchingActive(appId: string, revisionId: string): RuntimeEntry | undefined {
-    const candidate = prepared.get(key(appId, revisionId))
+  function preparedOrMatchingActive(extensionId: string, revisionId: string): RuntimeEntry | undefined {
+    const candidate = prepared.get(key(extensionId, revisionId))
     if (candidate) return candidate
-    const current = active.get(appId)
+    const current = active.get(extensionId)
     return current?.revision.id === revisionId ? current : undefined
   }
 
@@ -435,11 +435,11 @@ export function createManagedMcpRuntime(
   }
 
   async function prepareEntry(opts: {
-    appId: string
-    revision: ManagedAppRevision
+    extensionId: string
+    revision: ManagedExtensionRevision
     bundlePath: string
   }, mode: "candidate" | "active"): Promise<RuntimeEntry> {
-    const cacheKey = key(opts.appId, opts.revision.id)
+    const cacheKey = key(opts.extensionId, opts.revision.id)
     const cached = mode === "candidate" ? prepared.get(cacheKey) : undefined
     if (cached) return cached
     const providers = new Map<string, ProviderConnection>()
@@ -448,7 +448,7 @@ export function createManagedMcpRuntime(
         providers.set(
           provider.alias,
           await connectProvider(
-            opts.appId,
+            opts.extensionId,
             opts.revision.id,
             mode,
             provider,
@@ -461,7 +461,7 @@ export function createManagedMcpRuntime(
       const capabilities = await discoverConnections(opts.revision.manifest, providers)
       await validateDynamicSurfaces(opts.revision.manifest, providers)
       const entry: RuntimeEntry = {
-        appId: opts.appId,
+        extensionId: opts.extensionId,
         revision: opts.revision,
         manifest: opts.revision.manifest,
         bundlePath: opts.bundlePath,
@@ -472,7 +472,7 @@ export function createManagedMcpRuntime(
       return entry
     } catch (error) {
       await closeEntry({
-        appId: opts.appId,
+        extensionId: opts.extensionId,
         revision: opts.revision,
         manifest: opts.revision.manifest,
         bundlePath: opts.bundlePath,
@@ -484,11 +484,11 @@ export function createManagedMcpRuntime(
   }
 
   return {
-    async discover({ appId, projectPath, manifest }) {
+    async discover({ extensionId, projectPath, manifest }) {
       const providers = new Map<string, ProviderConnection>()
-      const fakeRevision: ManagedAppRevision = {
+      const fakeRevision: ManagedExtensionRevision = {
         id: "discovery",
-        extensionId: appId,
+        extensionId: extensionId,
         sourceCommit: "",
         bundleHash: "",
         manifest,
@@ -506,7 +506,7 @@ export function createManagedMcpRuntime(
           providers.set(
             provider.alias,
             await connectProvider(
-              appId,
+              extensionId,
               "discovery",
               "candidate",
               provider,
@@ -519,7 +519,7 @@ export function createManagedMcpRuntime(
         return await discoverConnections(manifest, providers)
       } finally {
         await closeEntry({
-          appId,
+          extensionId,
           revision: fakeRevision,
           manifest,
           bundlePath: projectPath,
@@ -535,26 +535,26 @@ export function createManagedMcpRuntime(
     },
 
     async activate(opts) {
-      const candidateKey = key(opts.appId, opts.revision.id)
+      const candidateKey = key(opts.extensionId, opts.revision.id)
       const candidate = prepared.get(candidateKey)
       prepared.delete(candidateKey)
       await closeEntry(candidate)
       const next = await prepareEntry(opts, "active")
-      const previous = active.get(opts.appId)
-      active.set(opts.appId, next)
+      const previous = active.get(opts.extensionId)
+      active.set(opts.extensionId, next)
       if (previous && previous !== next) await closeEntry(previous)
       emit()
     },
 
-    async deactivate(appId) {
-      const entry = active.get(appId)
-      active.delete(appId)
+    async deactivate(extensionId) {
+      const entry = active.get(extensionId)
+      active.delete(extensionId)
       await closeEntry(entry)
       emit()
     },
 
-    async discardPrepared(appId, revisionId) {
-      const cacheKey = key(appId, revisionId)
+    async discardPrepared(extensionId, revisionId) {
+      const cacheKey = key(extensionId, revisionId)
       const entry = prepared.get(cacheKey)
       prepared.delete(cacheKey)
       await closeEntry(entry)
@@ -564,11 +564,11 @@ export function createManagedMcpRuntime(
       return [...active.values()]
     },
 
-    async callTool(appId, providerAlias, name, args = {}) {
-      const entry = active.get(appId)
-      if (!entry) throw new Error(`MCP Applet is not active: ${appId}`)
+    async callTool(extensionId, providerAlias, name, args = {}) {
+      const entry = active.get(extensionId)
+      if (!entry) throw new Error(`MCP Extension is not active: ${extensionId}`)
       const provider = entry.providers.get(providerAlias)
-      if (!provider) throw new Error(`MCP provider is not active: ${appId}/${providerAlias}`)
+      if (!provider) throw new Error(`MCP provider is not active: ${extensionId}/${providerAlias}`)
       assertToolPermissions(entry, providerAlias, name)
       const startedAt = Date.now()
       try {
@@ -580,21 +580,21 @@ export function createManagedMcpRuntime(
           )) as McpToolResult,
           "MCP Tool result",
         )
-        options.onToolResult?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, result })
-        options.onToolCall?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, success: !result.isError, durationMs: Date.now() - startedAt })
+        options.onToolResult?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, result })
+        options.onToolCall?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, success: !result.isError, durationMs: Date.now() - startedAt })
         return result
       } catch (error) {
-        options.onToolCall?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, success: false, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) })
+        options.onToolCall?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, success: false, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) })
         throw error
       }
     },
 
-    async callPreparedTool(appId, revisionId, providerAlias, name, args = {}) {
-      const entry = preparedOrMatchingActive(appId, revisionId)
-      if (!entry) throw new Error(`MCP Applet is not prepared: ${appId}`)
+    async callPreparedTool(extensionId, revisionId, providerAlias, name, args = {}) {
+      const entry = preparedOrMatchingActive(extensionId, revisionId)
+      if (!entry) throw new Error(`MCP Extension is not prepared: ${extensionId}`)
       const provider = entry.providers.get(providerAlias)
       if (!provider) {
-        throw new Error(`MCP provider is not prepared: ${appId}/${providerAlias}`)
+        throw new Error(`MCP provider is not prepared: ${extensionId}/${providerAlias}`)
       }
       assertToolPermissions(entry, providerAlias, name)
       const startedAt = Date.now()
@@ -607,30 +607,30 @@ export function createManagedMcpRuntime(
           )) as McpToolResult,
           "MCP Tool result",
         )
-        options.onToolResult?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, result })
-        options.onToolCall?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, success: !result.isError, durationMs: Date.now() - startedAt })
+        options.onToolResult?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, result })
+        options.onToolCall?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, success: !result.isError, durationMs: Date.now() - startedAt })
         return result
       } catch (error) {
-        options.onToolCall?.({ appId, revisionId: entry.revision.id, providerAlias, toolName: name, success: false, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) })
+        options.onToolCall?.({ extensionId, revisionId: entry.revision.id, providerAlias, toolName: name, success: false, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) })
         throw error
       }
     },
 
-    async readResource(appId, providerAlias, uri) {
-      const entry = active.get(appId)
+    async readResource(extensionId, providerAlias, uri) {
+      const entry = active.get(extensionId)
       const provider = entry?.providers.get(providerAlias)
-      if (!provider) throw new Error(`MCP provider is not active: ${appId}/${providerAlias}`)
+      if (!provider) throw new Error(`MCP provider is not active: ${extensionId}/${providerAlias}`)
       return assertBoundedResult(
         (await provider.client.readResource({ uri }, { timeout: 60_000, maxTotalTimeout: 60_000 })) as McpResourceResult,
         "MCP Resource",
       )
     },
 
-    async readPreparedResource(appId, revisionId, providerAlias, uri) {
-      const entry = preparedOrMatchingActive(appId, revisionId)
+    async readPreparedResource(extensionId, revisionId, providerAlias, uri) {
+      const entry = preparedOrMatchingActive(extensionId, revisionId)
       const provider = entry?.providers.get(providerAlias)
       if (!provider) {
-        throw new Error(`MCP provider is not prepared: ${appId}/${providerAlias}`)
+        throw new Error(`MCP provider is not prepared: ${extensionId}/${providerAlias}`)
       }
       return assertBoundedResult(
         (await provider.client.readResource({ uri }, { timeout: 60_000, maxTotalTimeout: 60_000 })) as McpResourceResult,

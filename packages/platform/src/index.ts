@@ -96,6 +96,53 @@ export interface ShellAdapter {
   openExternal(url: string): Promise<void>;
 }
 
+export type EmbeddedBrowserCommand =
+  | { action: "navigate"; url: string }
+  | { action: "back" }
+  | { action: "forward" }
+  | { action: "reload" }
+  | { action: "stop" };
+
+export interface EmbeddedBrowserPageState {
+  tab_id: string;
+  url: string;
+  title: string;
+  can_go_back: boolean;
+  can_go_forward: boolean;
+  loading: boolean;
+}
+
+/**
+ * Desktop-owned bridge for the visible browser workbench.
+ *
+ * The renderer owns browser chrome and tabs; Electron main owns privileged
+ * WebContents lookup and is also the endpoint used by Agent MCP tools. A tab
+ * is registered only after its isolated `<webview>` has attached.
+ */
+export interface EmbeddedBrowserAdapter {
+  registerTab(input: {
+    tabId: string;
+    webContentsId: number;
+    active?: boolean;
+  }): Promise<EmbeddedBrowserPageState>;
+  unregisterTab(tabId: string): Promise<void>;
+  setActiveTab(tabId: string): Promise<EmbeddedBrowserPageState>;
+  command(
+    tabId: string,
+    command: EmbeddedBrowserCommand,
+  ): Promise<EmbeddedBrowserPageState>;
+  detectDevServers(): Promise<Array<{ url: string; port: number }>>;
+  onCreateRequested(listener: () => void): () => void;
+  onFocusRequested(listener: (event: { tabId: string }) => void): () => void;
+  onAgentActivity(
+    listener: (event: {
+      tabId: string;
+      action: string;
+      running: boolean;
+    }) => void,
+  ): () => void;
+}
+
 /**
  * A workspace change event. Always carries the `sessionId` the binding
  * belongs to so a single renderer subscriber can route events across
@@ -187,6 +234,18 @@ export interface WorkspaceCheckpoint {
   label: string;
   createdAt: number;
   changedFiles: number;
+  kind?: "turn-start" | "restore-safety" | "manual";
+  /** Zero-based user-turn index used to place recovery beside the task. */
+  turnIndex?: number;
+  /** Set after the Agent executes a tool that may mutate the workspace. */
+  hasChanges?: boolean;
+  /** False when one or more untracked files exceeded the safety limits. */
+  complete?: boolean;
+}
+
+export interface WorkspaceCheckpointOptions {
+  kind?: WorkspaceCheckpoint["kind"];
+  turnIndex?: number;
 }
 
 export interface WorkspaceProject {
@@ -208,8 +267,12 @@ export interface WorkspaceWorktree {
 
 export interface WorkspaceTerminalSnapshot {
   sessionId: string;
+  terminalId: string;
+  title: string;
   cwd: string;
   output: string;
+  /** Monotonic PTY output sequence used to resume without duplicating bytes. */
+  sequence: number;
   running: boolean;
   startedAt: number;
   exitCode?: number;
@@ -267,23 +330,40 @@ export interface WorkspaceDevelopmentAdapter {
   createCheckpoint(
     sessionId: string,
     label: string,
+    options?: WorkspaceCheckpointOptions,
+  ): Promise<WorkspaceCheckpoint>;
+  markCheckpointChanged(
+    sessionId: string,
+    checkpointId: string,
   ): Promise<WorkspaceCheckpoint>;
   restoreCheckpoint(
     sessionId: string,
     checkpointId: string,
   ): Promise<WorkspaceGitState>;
   deleteCheckpoint(sessionId: string, checkpointId: string): Promise<void>;
-  terminalStart(sessionId: string): Promise<WorkspaceTerminalSnapshot>;
-  terminalGet(sessionId: string): Promise<WorkspaceTerminalSnapshot | null>;
-  terminalWrite(
+  terminalStart(
     sessionId: string,
-    input: string,
+    terminalId: string,
   ): Promise<WorkspaceTerminalSnapshot>;
-  terminalStop(sessionId: string): Promise<void>;
+  terminalList(sessionId: string): Promise<WorkspaceTerminalSnapshot[]>;
+  terminalGet(
+    sessionId: string,
+    terminalId: string,
+  ): Promise<WorkspaceTerminalSnapshot | null>;
+  terminalWrite(sessionId: string, terminalId: string, input: string): void;
+  terminalResize(
+    sessionId: string,
+    terminalId: string,
+    columns: number,
+    rows: number,
+  ): void;
+  terminalStop(sessionId: string, terminalId: string): Promise<void>;
   onTerminalData(
     listener: (event: {
       sessionId: string;
+      terminalId: string;
       chunk: string;
+      sequence: number;
       snapshot: WorkspaceTerminalSnapshot;
     }) => void,
   ): () => void;
@@ -300,6 +380,8 @@ export interface PlatformAdapter {
   windows: WindowsAdapter;
   notifications: NotificationsAdapter;
   shell: ShellAdapter;
+  /** Desktop-only visible browser and Agent-control bridge. */
+  embeddedBrowser?: EmbeddedBrowserAdapter;
   /** Desktop-only. The extension leaves this undefined. */
   workspaces?: WorkspaceAdapter;
   /** Desktop-only, read-only file surface for the workspace workbench. */

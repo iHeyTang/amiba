@@ -1,0 +1,31 @@
+diff --git a/plugins/amiba_extensions/__init__.py b/plugins/amiba_extensions/__init__.py
+new file mode 100644
+--- /dev/null
++++ b/plugins/amiba_extensions/__init__.py
+@@ -0,0 +1,7 @@
++"""Amiba's built-in Extension toolset.
++
++The implementation ships with Amiba Backplane so the desktop and Hermes
++adapter share one versioned application bundle.
++"""
++
++from amiba_backplane.bundled_plugins.extensions import register
+diff --git a/plugins/amiba_extensions/plugin.yaml b/plugins/amiba_extensions/plugin.yaml
+new file mode 100644
+--- /dev/null
++++ b/plugins/amiba_extensions/plugin.yaml
+@@ -0,0 +1,14 @@
++name: amiba_extensions
++version: 1.0.0
++description: "Create, improve, inspect, and use Amiba Extensions through Amiba's built-in Extension manager."
++author: Amiba
++kind: backend
++provides_tools:
++  - amiba_create_extension
++  - amiba_update_extension
++  - amiba_preview_extension_draft
++  - amiba_get_extension_status
++  - amiba_list_extensions
++  - amiba_cancel_extension_operation
++  - amiba_list_extension_resources
++  - amiba_read_extension_resource

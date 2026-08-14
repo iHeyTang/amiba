@@ -76,6 +76,29 @@ const webDetail = {
   ],
 };
 
+const kanbanToolset = {
+  name: "kanban",
+  label: "Task Board",
+  description: "create, decompose, coordinate, and track background tasks",
+  enabled: false,
+  available: false,
+  configured: true,
+  tools: ["kanban_create", "kanban_list", "kanban_complete"],
+};
+
+const kanbanDetail = {
+  ...kanbanToolset,
+  items: [
+    {
+      name: "kanban_create",
+      description: "Create a durable background task.",
+      emoji: "",
+    },
+  ],
+  providers: [],
+  has_category: false,
+};
+
 describe("AgentCapabilitiesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,6 +106,7 @@ describe("AgentCapabilitiesPage", () => {
       ok: true,
       toolsets: [
         webToolset,
+        kanbanToolset,
         {
           name: "browser",
           label: "Browser Automation",
@@ -120,6 +144,33 @@ describe("AgentCapabilitiesPage", () => {
           tools: ["read_file", "write_file"],
         },
         {
+          name: "code_execution",
+          label: "Code Execution",
+          description: "execute_code",
+          enabled: true,
+          available: true,
+          configured: true,
+          tools: ["execute_code"],
+        },
+        {
+          name: "delegation",
+          label: "Task Delegation",
+          description: "delegate_task",
+          enabled: true,
+          available: true,
+          configured: true,
+          tools: ["delegate_task"],
+        },
+        {
+          name: "clarify",
+          label: "Clarifying Questions",
+          description: "clarify",
+          enabled: true,
+          available: true,
+          configured: true,
+          tools: ["clarify"],
+        },
+        {
           name: "terminal",
           label: "Terminal & Processes",
           description: "terminal, process",
@@ -142,6 +193,11 @@ describe("AgentCapabilitiesPage", () => {
     core.getHermesToolsetDetail.mockResolvedValue({
       ok: true,
       toolset: webDetail,
+    });
+    core.putHermesToolsetToggle.mockResolvedValue({
+      ok: true,
+      name: "kanban",
+      enabled: true,
     });
     core.getHermesInstalledMcps.mockResolvedValue({
       ok: true,
@@ -236,7 +292,7 @@ describe("AgentCapabilitiesPage", () => {
     });
   });
 
-  it("shows curated abilities while hiding the internal tool registry", async () => {
+  it("shows user-managed abilities while hiding the internal tool registry", async () => {
     const user = userEvent.setup();
     const { container } = render(<AgentCapabilitiesPage />);
 
@@ -247,15 +303,19 @@ describe("AgentCapabilitiesPage", () => {
     expect(
       container.querySelectorAll("[data-tool-settings-surface]"),
     ).toHaveLength(1);
-    expect(container.querySelectorAll("[data-tool-group]")).toHaveLength(3);
+    expect(container.querySelectorAll("[data-tool-group]")).toHaveLength(4);
     expect(screen.getByText("Understand content")).toBeInTheDocument();
     expect(screen.getByText("Find and use information")).toBeInTheDocument();
+    expect(screen.getByText("Coordinate work")).toBeInTheDocument();
     expect(screen.getByText("Work on this device")).toBeInTheDocument();
     expect(screen.getByText("Understand images")).toBeInTheDocument();
     expect(screen.getByText("Search and read the web")).toBeInTheDocument();
     expect(screen.getByText("Run code and commands")).toBeInTheDocument();
-    expect(screen.queryByText("Work with files")).not.toBeInTheDocument();
-    expect(screen.queryByText("Execute code")).not.toBeInTheDocument();
+    expect(screen.getByText("Task board")).toBeInTheDocument();
+    expect(screen.getByText("Work with files")).toBeInTheDocument();
+    expect(screen.getByText("Execute code")).toBeInTheDocument();
+    expect(screen.getByText("Delegate subtasks")).toBeInTheDocument();
+    expect(screen.getByText("Ask me for decisions")).toBeInTheDocument();
 
     expect(screen.getByText("External tools")).toBeInTheDocument();
     expect(await screen.findByText("Filesystem")).toBeInTheDocument();
@@ -281,6 +341,30 @@ describe("AgentCapabilitiesPage", () => {
     ).toBeChecked();
     expect(screen.getByLabelText("Firecrawl API key")).toBeInTheDocument();
     expect(screen.queryByText("FIRECRAWL_API_KEY")).not.toBeInTheDocument();
+  });
+
+  it("lets the user enable the task board for one selected profile", async () => {
+    const user = userEvent.setup();
+    core.getHermesToolsetDetail.mockImplementation(async (name: string) => ({
+      ok: true,
+      toolset: name === "kanban" ? kanbanDetail : webDetail,
+    }));
+
+    render(<AgentCapabilitiesPage embedded profileId="researcher" />);
+
+    await user.click(await screen.findByRole("button", { name: /Task board/ }));
+    const toggle = await screen.findByRole("switch", {
+      name: "Allow this assistant to use this tool",
+    });
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+
+    expect(core.putHermesToolsetToggle).toHaveBeenCalledWith(
+      "kanban",
+      true,
+      "researcher",
+    );
   });
 
   it("provides model-source configuration for image and video understanding", async () => {

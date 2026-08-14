@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactEle
 import type { McpAppsViewBridge, McpToolResult } from "./types"
 
 export interface McpAppsViewProps {
-  appId: string
+  extensionId: string
   providerAlias?: string
   html: string
   bridge: McpAppsViewBridge
@@ -41,7 +41,7 @@ function sandboxPermissions(permissions: string[]): string | undefined {
  * receives host services exclusively through MCP Apps JSON-RPC messages.
  */
 export function McpAppsView({
-  appId,
+  extensionId,
   providerAlias = "main",
   html,
   bridge: host,
@@ -103,13 +103,13 @@ export function McpAppsView({
     )
     next.oncalltool = async ({ name, arguments: args }) =>
       host.callTool({
-        appId,
+        extensionId,
         providerAlias,
         name,
         arguments: (args ?? {}) as Record<string, unknown>,
       }) as never
     next.onreadresource = async ({ uri }) =>
-      host.readResource({ appId, providerAlias, uri }) as never
+      host.readResource({ extensionId, providerAlias, uri }) as never
     next.onopenlink = async ({ url }) => {
       const parsed = new URL(url)
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return { isError: true }
@@ -153,14 +153,14 @@ export function McpAppsView({
 
   return (
     <iframe
-      key={`${appId}:${providerAlias}:${permissionKey}`}
+      key={`${extensionId}:${providerAlias}:${permissionKey}`}
       ref={iframeRef}
-      title="Applet"
+      title="Extension"
       srcDoc={html}
       sandbox="allow-scripts allow-forms allow-downloads"
       allow={allow}
       className={className}
-      style={{ border: 0, width: "100%", height: "100%", ...style }}
+      style={{ border: 0, display: "block", width: "100%", height: "100%", ...style }}
       onLoad={() => void connect()}
     />
   )

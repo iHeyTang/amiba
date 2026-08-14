@@ -82,7 +82,7 @@ def build_http_app() -> web.Application:
     register_gateway_proxy(app)
     # Legacy ``/mention-sources/<name>/search`` +
     # ``/hermes/mention-resources`` are served read-only by the hermes_proxy
-    # compatibility adapter. New mention capabilities belong to Applets.
+    # compatibility adapter. New mention capabilities belong to Extensions.
     app.router.add_route(
         "OPTIONS", "/{path_info:.*}", lambda _req: web.Response(status=204)
     )

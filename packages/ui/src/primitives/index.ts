@@ -6,6 +6,7 @@ export * from "./AmibaLogo";
 export * from "./badge";
 export * from "./button";
 export * from "./card";
+export * from "./cascade-menu";
 export * from "./checkbox";
 export * from "./collection-state";
 export * from "./dialog";

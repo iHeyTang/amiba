@@ -31,16 +31,16 @@ export async function createCommand(
     promptList.push({
       type: "text",
       name: "name",
-      message: "Applet folder name",
-      initial: "my-applet",
+      message: "Extension folder name",
+      initial: "my-extension",
     })
   }
   if (!opts.id) {
     promptList.push({
       type: "text",
       name: "id",
-      message: "Applet id (reverse-DNS)",
-      initial: "com.example.my-applet",
+      message: "Extension id (reverse-DNS)",
+      initial: "com.example.my-extension",
     })
   }
   promptList.push({
@@ -56,12 +56,12 @@ export async function createCommand(
   const finalId = opts.id ?? replies["id"]
   const author = replies["author"] || finalId
 
-  if (!finalName) throw new Error("Applet name is required")
-  if (!finalId) throw new Error("Applet id is required")
+  if (!finalName) throw new Error("Extension name is required")
+  if (!finalId) throw new Error("Extension id is required")
 
   if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(finalId)) {
     throw new Error(
-      `invalid id "${finalId}" — must be reverse-DNS like com.example.my-applet`,
+      `invalid id "${finalId}" — must be reverse-DNS like com.example.my-extension`,
     )
   }
 
@@ -110,6 +110,6 @@ export async function createCommand(
   console.log("  ", kleur.cyan(`cd ${finalName}`))
   console.log("  ", kleur.cyan("pnpm amiba dev"))
   console.log(
-    "    └─ Add this folder in Amiba → Settings → Applets; rebuilds then hot-reload.",
+    "    └─ Add this folder in Amiba → Settings → Extensions; rebuilds then hot-reload.",
   )
 }

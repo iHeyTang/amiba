@@ -1,7 +1,7 @@
 {
   "name": "@amiba/cli",
   "version": "0.1.0",
-  "description": "Developer tooling for Amiba Applets.",
+  "description": "Developer tooling for Amiba Extensions.",
   "type": "module",
   "bin": {
     "amiba": "dist/cli.js"

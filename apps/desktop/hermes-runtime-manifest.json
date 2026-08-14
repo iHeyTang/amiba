@@ -22,6 +22,20 @@
       "sha256": "19f37768fc50d74c3b03fee0e079a9697517511cedaf114b7d43d9dfd13a6b36",
       "verifier": "hermes-patches/tests/verify_subagent_run_events.py",
       "verifierSha256": "4d50a40450565a575093c9963a51dafb15713e783b157a2c70d4ce640d37774c"
+    },
+    {
+      "id": "api-server-clarify",
+      "file": "hermes-patches/0003-api-server-clarify.patch",
+      "sha256": "2e5275e5f94cd9ff471e9e2fc1a7f3f1723e8c62424c11e3192508d4e00f6057",
+      "verifier": "hermes-patches/tests/verify_api_server_clarify.py",
+      "verifierSha256": "cbaf134d07b1cb7e1294844e2fefc4939c084df827889e5d4edac00e8c2ee48a"
+    },
+    {
+      "id": "bundle-amiba-extensions-plugin",
+      "file": "hermes-patches/0004-bundle-amiba-extensions-plugin.patch",
+      "sha256": "9cb3ff3c8644562e1621a5b2d70143fd199eff0ca45132cc439782a1da3da5c5",
+      "verifier": "hermes-patches/tests/verify_amiba_extensions_plugin.py",
+      "verifierSha256": "05a517683a26612e4df291efeb36b531bb423c25667e48cf94c48421d2abe625"
     }
   ],
   "backplanePort": 19394,

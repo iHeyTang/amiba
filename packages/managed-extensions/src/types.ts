@@ -1,12 +1,17 @@
-export type ManagedAppKind =
+import type {
+  ExtensionIdentity,
+  ExtensionSource,
+} from "@amiba/extension-api"
+
+export type ManagedExtensionKind =
   | "static-content"
   | "interactive-ui"
   | "tool-app"
   | "registered-mcp"
 
-export type ManagedAppRuntime = "static-mcp-app" | "node" | "python" | "registered"
+export type ManagedExtensionRuntime = "static-mcp-app" | "node" | "python" | "registered"
 
-export type ManagedAppUserStatus =
+export type ManagedExtensionUserStatus =
   | "creating"
   | "ready"
   | "improving"
@@ -15,7 +20,7 @@ export type ManagedAppUserStatus =
   | "update-failed"
   | "unavailable"
 
-export type ManagedAppRevisionStatus =
+export type ManagedExtensionRevisionStatus =
   | "candidate"
   | "previewing"
   | "awaiting-confirmation"
@@ -24,7 +29,7 @@ export type ManagedAppRevisionStatus =
   | "failed"
   | "rolled-back"
 
-export interface ManagedAppProviderManifest {
+export interface ManagedExtensionProviderManifest {
   alias: string
   kind: "bundled" | "registered"
   runtime?: "node" | "python"
@@ -37,28 +42,24 @@ export interface ManagedAppProviderManifest {
   version?: string
 }
 
-export interface ManagedAppSurfaceManifest {
+export interface ManagedExtensionSurfaceManifest {
   provider?: string
   resourceUri: string
   /** Static MCP Apps fallback. Relative to the project root. */
   entry?: string
 }
 
-export interface ManagedAppManifest {
+export interface ManagedExtensionManifest extends ExtensionIdentity {
   $schema?: string
   schemaVersion: 1
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  kind: ManagedAppKind
-  runtime: ManagedAppRuntime
+  kind: ManagedExtensionKind
+  runtime: ManagedExtensionRuntime
   mcp?: {
-    providers: ManagedAppProviderManifest[]
+    providers: ManagedExtensionProviderManifest[]
   }
   surfaces?: {
-    main?: ManagedAppSurfaceManifest
-    settings?: ManagedAppSurfaceManifest
+    main?: ManagedExtensionSurfaceManifest
+    settings?: ManagedExtensionSurfaceManifest
   }
   mentions?: Array<{
     id: string
@@ -67,6 +68,12 @@ export interface ManagedAppManifest {
     icon?: string
     resourceUriTemplate?: string
     searchTool?: string
+  }>
+  /** Hermes plugins required by this Extension's Agent-facing capabilities. */
+  hermesPlugins?: Array<{
+    id: string
+    version?: string
+    required?: boolean
   }>
   permissions?: string[]
   dataSchemaVersion?: number
@@ -77,27 +84,27 @@ export interface ManagedAppManifest {
   }
 }
 
-export interface ManagedAppRevision {
+export interface ManagedExtensionRevision {
   id: string
   extensionId: string
   parentRevisionId?: string
   sourceCommit: string
   bundleHash: string
-  manifest: ManagedAppManifest
-  capabilities: ManagedAppCapabilitySnapshot
+  manifest: ManagedExtensionManifest
+  capabilities: ManagedExtensionCapabilitySnapshot
   permissions: string[]
   dataSchemaVersion: number
   userRequest: string
   changeSummary: string
   sourceSessionId?: string
   risk: "safe" | "sensitive"
-  status: ManagedAppRevisionStatus
+  status: ManagedExtensionRevisionStatus
   createdAt: string
   activatedAt?: string
   error?: string
 }
 
-export interface ManagedAppDraft {
+export interface ManagedExtensionDraft {
   id: string
   extensionId: string
   baseRevisionId?: string
@@ -105,6 +112,8 @@ export interface ManagedAppDraft {
   branch: string
   userRequest: string
   sourceSessionId?: string
+  /** Stable caller-supplied key used to make retries idempotent. */
+  operationId?: string
   status: "editing" | "building" | "preview-ready" | "failed" | "applied" | "discarded"
   createdAt: string
   updatedAt: string
@@ -112,14 +121,10 @@ export interface ManagedAppDraft {
   candidateRevisionId?: string
 }
 
-export interface ManagedAppState {
+export interface ManagedExtensionState extends ExtensionIdentity {
   schemaVersion: 1
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  kind: ManagedAppKind
-  source: "personal-managed"
+  kind: ManagedExtensionKind
+  source: Extract<ExtensionSource, "personal-managed">
   tags: string[]
   collectionId?: string
   sourceSessionIds: string[]
@@ -127,34 +132,34 @@ export interface ManagedAppState {
   archived: boolean
   deletedAt?: string
   projectPath: string
+  /** Stable key for the user intent that created this Extension. */
+  creationOperationId?: string
+  /** Lets a retry return the original draft even after it has been applied. */
+  initialDraftId?: string
   activeRevisionId?: string
   pendingDraftId?: string
   revisionIds: string[]
-  userStatus: ManagedAppUserStatus
+  userStatus: ManagedExtensionUserStatus
   lastError?: string
   createdAt: string
   updatedAt: string
   lastUsedAt?: string
 }
 
-export interface ManagedAppSummary {
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  kind: ManagedAppKind
-  source: "personal-managed"
+export interface ManagedExtensionSummary extends ExtensionIdentity {
+  kind: ManagedExtensionKind
+  source: Extract<ExtensionSource, "personal-managed">
   tags: string[]
   collectionId?: string
   sourceSessionIds: string[]
   pinned: boolean
   archived: boolean
   deletedAt?: string
-  userStatus: ManagedAppUserStatus
+  userStatus: ManagedExtensionUserStatus
   activeRevisionId?: string
-  pendingDraft?: ManagedAppDraft
-  activeRevision?: ManagedAppRevision
-  candidateRevision?: ManagedAppRevision
+  pendingDraft?: ManagedExtensionDraft
+  activeRevision?: ManagedExtensionRevision
+  candidateRevision?: ManagedExtensionRevision
   latestChangeSummary?: string
   lastError?: string
   createdAt: string
@@ -162,36 +167,38 @@ export interface ManagedAppSummary {
   lastUsedAt?: string
 }
 
-export interface ManagedAppCreateRequest {
+export interface ManagedExtensionCreateRequest {
   name: string
   description?: string
   request: string
+  /** Reuse this value when retrying the same user request. */
+  operationId?: string
 }
 
-export interface ManagedAppCreateResult {
-  app: ManagedAppSummary
-  draft: ManagedAppDraft
+export interface ManagedExtensionCreateResult {
+  extension: ManagedExtensionSummary
+  draft: ManagedExtensionDraft
   agentPrompt: string
 }
 
-export interface ManagedAppChangeResult {
-  draft: ManagedAppDraft
+export interface ManagedExtensionChangeResult {
+  draft: ManagedExtensionDraft
   agentPrompt: string
 }
 
-export interface ManagedAppMetadataPatch {
+export interface ManagedExtensionMetadataPatch {
   tags?: string[]
   collectionId?: string | null
   pinned?: boolean
 }
 
-export interface ManagedAppAgentResultFile {
+export interface ManagedExtensionAgentResultFile {
   status: "ready" | "failed"
   summary?: string
   error?: string
 }
 
-export interface ManagedAppCapabilitySnapshot {
+export interface ManagedExtensionCapabilitySnapshot {
   tools: Array<{
     name: string
     description?: string
@@ -215,8 +222,8 @@ export interface ManagedAppCapabilitySnapshot {
   prompts: Array<{ name: string; description?: string }>
 }
 
-export interface ManagedAppSurfaceDocument {
-  appId: string
+export interface ManagedExtensionSurfaceDocument {
+  extensionId: string
   revisionId: string
   resourceUri: string
   mimeType: string
@@ -225,7 +232,7 @@ export interface ManagedAppSurfaceDocument {
   metadata?: Record<string, unknown>
 }
 
-export interface ManagedAppOutputRecord {
+export interface ManagedExtensionOutputRecord {
   id: string
   extensionId: string
   revisionId: string
@@ -239,7 +246,7 @@ export interface ManagedAppOutputRecord {
   createdAt: string
 }
 
-export interface ManagedAppToolPreset {
+export interface ManagedExtensionToolPreset {
   id: string
   extensionId: string
   revisionId: string
@@ -251,13 +258,13 @@ export interface ManagedAppToolPreset {
   updatedAt: string
 }
 
-export interface ManagedAppOutputInput {
+export interface ManagedExtensionOutputInput {
   revisionId: string
-  kind?: ManagedAppOutputRecord["kind"]
+  kind?: ManagedExtensionOutputRecord["kind"]
   uri: string
   name: string
   mimeType?: string
   toolName?: string
 }
 
-export type ManagedAppChangeListener = (appId: string | null) => void
+export type ManagedExtensionChangeListener = (extensionId: string | null) => void

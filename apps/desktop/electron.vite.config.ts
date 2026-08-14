@@ -14,7 +14,7 @@ const WORKSPACE_PKGS = [
   "@amiba/extension-api",
   "@amiba/extension-host",
   "@amiba/i18n",
-  "@amiba/managed-apps",
+  "@amiba/managed-extensions",
   "@amiba/mcp-host",
   "@amiba/platform",
   "@amiba/tailwind-preset",

@@ -11,6 +11,125 @@ import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
 
 describe("chat message chrome", () => {
+  it("shows completed file changes as a turn-level review entry", async () => {
+    const onReview = vi.fn();
+    render(
+      <MessageTurns
+        messages={
+          [
+            { uiId: "user-1", role: "user", content: "Change the app" },
+            {
+              uiId: "assistant-1",
+              role: "assistant",
+              content: "Done",
+              hermesToolProgress: [
+                {
+                  tool: "patch",
+                  toolCallId: "patch-1",
+                  status: "completed",
+                  args: { path: "src/App.tsx" },
+                  result: {
+                    files_modified: ["src/App.tsx"],
+                    diff: "--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1 +1 @@\n-old\n+new",
+                  },
+                },
+                {
+                  tool: "write_file",
+                  toolCallId: "write-1",
+                  status: "completed",
+                  result: { files_modified: ["src/theme.css"] },
+                  inlineDiff:
+                    "--- a/src/theme.css\n+++ b/src/theme.css\n@@ -1 +1 @@\n-red\n+blue",
+                },
+              ],
+            },
+          ] as UiMessage[]
+        }
+        onReviewWorkspaceChanges={onReview}
+      />,
+    );
+
+    expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("src/theme.css")).toBeInTheDocument();
+    expect(screen.getByText("+2")).toBeInTheDocument();
+    expect(screen.getByText("-2")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.review" }),
+    );
+    expect(onReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "diff",
+        scope: "turn",
+        entries: expect.arrayContaining([
+          expect.objectContaining({ toolCallId: "patch-1" }),
+          expect.objectContaining({ toolCallId: "write-1" }),
+        ]),
+      }),
+    );
+  });
+
+  it("does not show the file review entry while the turn is streaming", () => {
+    render(
+      <MessageTurns
+        messages={
+          [
+            { uiId: "user-1", role: "user", content: "Change the app" },
+            {
+              uiId: "assistant-1",
+              role: "assistant",
+              content: "Working",
+              streaming: true,
+              hermesToolProgress: [
+                {
+                  tool: "patch",
+                  toolCallId: "patch-1",
+                  status: "completed",
+                  args: { path: "src/App.tsx" },
+                  inlineDiff: "@@ -1 +1 @@\n-old\n+new",
+                },
+              ],
+            },
+          ] as UiMessage[]
+        }
+        onReviewWorkspaceChanges={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "workspacePane.review" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("places workspace recovery on the task that owns the recovery point", async () => {
+    const onRestore = vi.fn();
+    render(
+      <MessageTurns
+        messages={
+          [
+            { uiId: "user-1", role: "user", content: "Change the app" },
+            { uiId: "assistant-1", role: "assistant", content: "Done" },
+            { uiId: "user-2", role: "user", content: "Explain it" },
+            { uiId: "assistant-2", role: "assistant", content: "Sure" },
+          ] as UiMessage[]
+        }
+        restorableTurnOrdinals={new Set([0])}
+        onRestoreBeforeTurn={onRestore}
+      />,
+    );
+
+    const restore = screen.getByRole("button", {
+      name: "sidepanel.message.restoreWorkspace",
+    });
+    await userEvent.click(restore);
+
+    expect(onRestore).toHaveBeenCalledOnce();
+    expect(onRestore).toHaveBeenCalledWith(
+      expect.objectContaining({ uiId: "user-1" }),
+      0,
+    );
+  });
+
   it("renders an interrupted-only reply as a quiet run boundary", () => {
     const { container } = render(
       <MessageTurns

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canInspectWorkspaceTool,
+  canMutateWorkspaceTool,
   workspaceCodeExecution,
   workspaceFileTargets,
 } from "../WorkspacePane";
@@ -66,6 +67,14 @@ describe("workspace pane tool resources", () => {
 
     expect(canInspectWorkspaceTool(toolEvent)).toBe(false);
     expect(workspaceFileTargets(toolEvent)).toEqual([]);
+  });
+
+  it("treats write and command tools as potentially workspace-mutating", () => {
+    expect(canMutateWorkspaceTool(event({ tool: "write_file" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "patch" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "terminal" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "execute_code" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "read_file" }))).toBe(false);
   });
 
   it("turns execute_code into a semantic workbench resource", () => {

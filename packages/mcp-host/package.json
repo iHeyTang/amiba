@@ -2,13 +2,13 @@
   "name": "@amiba/mcp-host",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP client runtime, capability discovery, and MCP Apps host bridge for managed Applets.",
+  "description": "MCP client runtime, capability discovery, and MCP Apps host bridge for managed Extensions.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
-    "./federation": "./src/federation.ts",
+    "./extension-bridge": "./src/extension-bridge.ts",
     "./react": "./src/react.tsx",
     "./types": "./src/types.ts"
   },
@@ -18,7 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@amiba/managed-apps": "workspace:*",
+    "@amiba/managed-extensions": "workspace:*",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.30.0",
     "zod": "^3.25.0"

@@ -17,7 +17,7 @@ Sub-modules:
   (``runtime/mention_sources``) — ``/mention-sources/<name>/search`` (calls the
   source's in-process ``search`` capability), ``/hermes/mention-resources``
   (flattened registry for the composer). This is a read-only compatibility
-  adapter for sources installed before mentions became Applet capabilities.
+  adapter for sources installed before mentions became Extension capabilities.
 - ``turn_metadata``: ``/hermes/turn-metadata`` — small in-memory TTL
   store for per-turn snapshots (browser tab freeze, etc.) that the
   agent's tool handlers fetch over loopback. Keeps out-of-band turn

@@ -76,7 +76,7 @@ import { APP_SIDEBAR_DEFAULT_WIDTH } from "../navigation/sidebar-layout";
  *   General:     Appearance → Shortcuts → Voice → Usage
  *   Assistant:   Behavior & identity → Models & services
  *                → Multi-model collaboration → Tools → Memory
- *   Applets:      Userscripts → contributed panes
+ *   Extensions:      Userscripts → contributed panes
  *   Advanced:    Agent workspaces (including per-agent model collaboration)
  *                → Status → Connection → Logs
  */
@@ -400,7 +400,7 @@ export function SettingsView({
     >
       <AgentTaskProvider
         value={capabilities.startAgentTask}
-        managedApps={capabilities.managedApps}
+        managedExtensions={capabilities.managedExtensions}
       >
         <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
           <aside
