@@ -9,18 +9,28 @@ export interface HermesMessagingField {
   key: string;
   required: boolean;
   configured: boolean;
+  /** Current value for non-secret fields only. Secret values never leave the backend. */
+  value?: string;
   label?: string;
   description?: string;
+  help?: string;
+  url?: string;
   secret?: boolean;
+  advanced?: boolean;
 }
 
 export interface HermesMessagingPlatform {
   id: string;
   name: string;
+  description?: string;
+  docs_url?: string;
   enabled: boolean;
   configured: boolean;
+  gateway_running?: boolean;
   state: string;
   error?: string;
+  error_code?: string;
+  updated_at?: string | number | null;
   fields: HermesMessagingField[];
 }
 
@@ -60,11 +70,12 @@ async function request<T>(
 }
 
 export function getHermesMessagingPlatforms(profileId?: string) {
-  return request<{ platforms: HermesMessagingPlatform[] }>(
-    "/hermes/messaging/platforms",
-    undefined,
-    profileId,
-  );
+  return request<{
+    env_path?: string;
+    gateway_running?: boolean;
+    gateway_state?: string | null;
+    platforms: HermesMessagingPlatform[];
+  }>("/hermes/messaging/platforms", undefined, profileId);
 }
 
 export function saveHermesMessagingPlatform(

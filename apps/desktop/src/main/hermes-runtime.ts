@@ -42,6 +42,9 @@ import {
   type ManagedHermesPaths,
 } from "./managed-hermes-runtime";
 import { createLineBufferedLog } from "./line-buffered-log";
+import { migrateLegacyCronJobs } from "./managed-hermes-cron-migration";
+import { migrateLegacyMessagingEnvironment } from "./managed-hermes-home-migration";
+import { migrateLegacyPairingApprovals } from "./managed-hermes-pairing-migration";
 import { getDefaultWorkspaceRoot } from "./workspace-root";
 
 const USER_HOME = os.homedir();
@@ -234,6 +237,33 @@ async function seedManagedHermesHome(paths: ManagedHermesPaths): Promise<void> {
     path.join(source, "cli-config.yaml.example"),
     path.join(paths.hermesHome, "config.yaml"),
   );
+  const migration = await migrateLegacyMessagingEnvironment(
+    path.join(USER_HOME, ".hermes"),
+    paths.hermesHome,
+  );
+  if (migration.migratedKeys.length) {
+    console.info(
+      `[hermes:runtime] migrated ${migration.migratedKeys.length} legacy messaging setting(s)`,
+    );
+  }
+  const cronMigration = await migrateLegacyCronJobs(
+    path.join(USER_HOME, ".hermes"),
+    paths.hermesHome,
+  );
+  if (cronMigration.migratedJobIds.length) {
+    console.info(
+      `[hermes:runtime] migrated ${cronMigration.migratedJobIds.length} legacy cron job(s)`,
+    );
+  }
+  const pairingMigration = await migrateLegacyPairingApprovals(
+    path.join(USER_HOME, ".hermes"),
+    paths.hermesHome,
+  );
+  if (pairingMigration.migratedUsers) {
+    console.info(
+      `[hermes:runtime] migrated ${pairingMigration.migratedUsers} legacy pairing approval(s)`,
+    );
+  }
   if (!IS_WIN)
     await fs.chmod(path.join(paths.hermesHome, ".env"), 0o600).catch(() => {});
 

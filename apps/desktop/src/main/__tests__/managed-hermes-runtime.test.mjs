@@ -19,6 +19,7 @@ test("managed runtime manifest is immutable and reproducibly pinned", () => {
   assert.match(MANAGED_HERMES_RUNTIME.pythonVersion, /^3\.11\.\d+$/);
   assert.match(MANAGED_HERMES_RUNTIME.nodeVersion, /^22\.\d+\.\d+$/);
   assert.match(MANAGED_HERMES_RUNTIME.playwrightVersion, /^\d+\.\d+\.\d+$/);
+  assert.equal(MANAGED_HERMES_RUNTIME.bundleSchemaVersion, 4);
   assert.deepEqual(
     MANAGED_HERMES_RUNTIME.patches.map((patch) => patch.id),
     [

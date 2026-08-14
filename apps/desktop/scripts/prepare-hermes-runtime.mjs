@@ -597,7 +597,10 @@ async function installPortablePython(runtimeDir, scratchDir) {
       // explicit entrypoint/PYTHONPATH, so the build-directory .pth is ignored
       // after relocation while all resolved dependencies remain installed.
       "--editable",
-      `${hermesSource}[all]`,
+      // Feishu is a first-class Desktop channel. Its adapter must be usable
+      // from the immutable app bundle; a signed/packaged Runtime cannot rely
+      // on a mid-startup pip install into its own resources directory.
+      `${hermesSource}[all,feishu]`,
       backendSource,
     ],
     { env: uvEnv },

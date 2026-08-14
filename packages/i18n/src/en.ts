@@ -216,7 +216,7 @@ export const en = {
   "options.nav.agents": "Agent presets",
   "options.nav.skills": "Skills",
   "options.nav.memory": "Memory",
-  "options.nav.messaging": "Channels",
+  "options.nav.messaging": "Message channels",
   "options.nav.cron": "Automation",
   "options.nav.status": "Status",
   "options.nav.logs": "Logs",
@@ -229,6 +229,87 @@ export const en = {
   "options.nav.section.models": "Models",
   "options.nav.section.diagnostics": "Diagnostics",
   "options.nav.section.extensions": "Extensions",
+
+  // Messaging channels
+  "options.messaging.title": "Message channels",
+  "options.messaging.description":
+    "Connect the apps where you want to talk with Amiba and receive notifications.",
+  "options.messaging.tab.channels": "Channels",
+  "options.messaging.tab.access": "Access",
+  "options.messaging.tab.webhooks": "Webhooks",
+  "options.messaging.summary.connected":
+    "{connected} of {total} channels connected",
+  "options.messaging.summary.none": "No channels connected yet",
+  "options.messaging.summary.gatewayRunning": "Messaging service is running",
+  "options.messaging.summary.gatewayStopped": "Messaging service is stopped",
+  "options.messaging.search": "Search channels",
+  "options.messaging.group.configured": "Configured",
+  "options.messaging.group.configuredDescription":
+    "These channels have saved connection details and can be managed or enabled.",
+  "options.messaging.group.available": "Other channels",
+  "options.messaging.group.availableDescription":
+    "Choose an app and follow the guided setup for its first connection.",
+  "options.messaging.empty": "No matching channels",
+  "options.messaging.loadError":
+    "Could not load your channel settings: {error}",
+  "options.messaging.configure": "Set up",
+  "options.messaging.manage": "Manage",
+  "options.messaging.guide": "Open setup guide",
+  "options.messaging.required": "Required",
+  "options.messaging.optional": "Optional",
+  "options.messaging.savedValue": "Saved. Leave blank to keep it unchanged.",
+  "options.messaging.enterValue": "Enter {field}",
+  "options.messaging.advanced": "More options",
+  "options.messaging.noFields":
+    "This channel does not need credentials here. Follow its setup guide, then connect it.",
+  "options.messaging.step.account": "Prepare the channel",
+  "options.messaging.step.accountDescription":
+    "Create the bot or app and collect the requested credentials.",
+  "options.messaging.step.credentials": "Add connection details",
+  "options.messaging.step.credentialsDescription":
+    "Values are saved only in your local Hermes configuration.",
+  "options.messaging.step.verify": "Connect and verify",
+  "options.messaging.step.verifyDescription":
+    "Amiba restarts the messaging service and checks its live status.",
+  "options.messaging.saveConnect": "Save and connect",
+  "options.messaging.saveChanges": "Save changes",
+  "options.messaging.disable": "Turn off channel",
+  "options.messaging.test": "Test connection",
+  "options.messaging.saving": "Saving channel settings…",
+  "options.messaging.restarting": "Restarting the messaging service…",
+  "options.messaging.saved":
+    "{channel} was saved. Connection status will update automatically.",
+  "options.messaging.disabled": "{channel} was turned off.",
+  "options.messaging.testSuccess": "{channel} is connected and ready.",
+  "options.messaging.missingRequired":
+    "Complete all required fields before connecting this channel.",
+  "options.messaging.restartFailed":
+    "Settings were saved, but the messaging service could not restart: {error}",
+  "options.messaging.status.connected": "Connected",
+  "options.messaging.status.disabled": "Off",
+  "options.messaging.status.notConfigured": "Needs setup",
+  "options.messaging.status.pendingRestart": "Waiting to connect",
+  "options.messaging.status.gatewayStopped": "Service stopped",
+  "options.messaging.status.startupFailed": "Could not start",
+  "options.messaging.status.connecting": "Connecting",
+  "options.messaging.status.error": "Connection issue",
+  "options.messaging.platform.telegram": "Chat through a Telegram bot.",
+  "options.messaging.platform.discord":
+    "Use Amiba in Discord servers and direct messages.",
+  "options.messaging.platform.slack": "Connect a Slack workspace.",
+  "options.messaging.platform.whatsapp": "Chat from a linked WhatsApp account.",
+  "options.messaging.platform.signal": "Connect through a Signal bridge.",
+  "options.messaging.platform.matrix": "Use Amiba in Matrix rooms.",
+  "options.messaging.platform.email":
+    "Send and receive messages through an email account.",
+  "options.messaging.platform.dingtalk": "Use Amiba in DingTalk groups.",
+  "options.messaging.platform.feishu": "Use Amiba inside Feishu or Lark.",
+  "options.messaging.platform.wecom": "Send messages to a WeCom group.",
+  "options.messaging.platform.weixin":
+    "Chat and receive notifications through a connected WeChat account.",
+  "options.messaging.platform.qqbot": "Connect a QQ bot.",
+  "options.messaging.platform.webhook":
+    "Receive events from GitHub, GitLab, and other services.",
 
   // Agent profiles
   "options.agents.title": "Agent presets",

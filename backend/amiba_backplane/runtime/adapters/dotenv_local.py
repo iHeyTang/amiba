@@ -166,15 +166,29 @@ def merge_dotenv_file_and_apply(
 
 
 def get_dotenv_values_for_keys(keys: List[str], *, base: Path | None = None) -> Dict[str, str]:
-    """Values for UI: prefer on-disk ``.env``, else ``os.environ``."""
+    """Values for UI, isolated to the request's Hermes Profile.
+
+    The backplane process loads the default Profile into ``os.environ`` at
+    startup. Falling back to that process-wide mapping while serving a named
+    Profile makes default credentials appear as if they were saved in every
+    Profile. Only the default Profile may use the compatibility fallback.
+    """
     path = plugin_dotenv_path(base)
     file_vals = read_dotenv_as_dict(path)
+    if base is not None:
+        allow_process_fallback = True
+    else:
+        from .hermes_core import is_default_profile
+
+        allow_process_fallback = is_default_profile()
     out: Dict[str, str] = {}
     for k in keys:
         if k in file_vals:
             out[k] = file_vals[k]
-        else:
+        elif allow_process_fallback:
             out[k] = os.environ.get(k, "") or ""
+        else:
+            out[k] = ""
     return out
 
 

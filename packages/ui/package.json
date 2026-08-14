@@ -35,6 +35,9 @@
     "@codemirror/state": "^6.4.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.34.1",
+    "@iconify-icons/logos": "^1.2.36",
+    "@iconify-icons/ri": "^1.2.10",
+    "@iconify/react": "^6.0.2",
     "@lexical/react": "^0.21.0",
     "@lexical/selection": "^0.21.0",
     "@lexical/text": "^0.21.0",
@@ -60,6 +63,7 @@
     "lexical": "^0.21.0",
     "lucide-react": "^0.460.0",
     "prismjs": "^1.30.0",
+    "simple-icons": "^13.21.0",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^2.5.4"
   },

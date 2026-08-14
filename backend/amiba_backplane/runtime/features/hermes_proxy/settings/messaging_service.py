@@ -31,7 +31,7 @@ FALLBACK_PLATFORMS: Dict[str, Dict[str, Any]] = {
     },
     "whatsapp": {
         "name": "WhatsApp",
-        "required": ["WHATSAPP_ENABLED"],
+        "required": [],
         "fields": ["WHATSAPP_ENABLED", "WHATSAPP_MODE", "WHATSAPP_ALLOWED_USERS"],
     },
     "signal": {
@@ -46,7 +46,12 @@ FALLBACK_PLATFORMS: Dict[str, Dict[str, Any]] = {
     },
     "email": {
         "name": "Email",
-        "required": ["EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_SMTP_HOST"],
+        "required": [
+            "EMAIL_ADDRESS",
+            "EMAIL_PASSWORD",
+            "EMAIL_IMAP_HOST",
+            "EMAIL_SMTP_HOST",
+        ],
         "fields": ["EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_IMAP_HOST", "EMAIL_SMTP_HOST"],
     },
     "sms": {
@@ -58,6 +63,101 @@ FALLBACK_PLATFORMS: Dict[str, Dict[str, Any]] = {
         "name": "Webhook",
         "required": [],
         "fields": ["WEBHOOK_ENABLED", "WEBHOOK_PORT", "WEBHOOK_SECRET"],
+    },
+    "mattermost": {
+        "name": "Mattermost",
+        "required": ["MATTERMOST_URL", "MATTERMOST_TOKEN"],
+        "fields": ["MATTERMOST_URL", "MATTERMOST_TOKEN", "MATTERMOST_ALLOWED_USERS"],
+    },
+    "homeassistant": {
+        "name": "Home Assistant",
+        "required": ["HASS_URL", "HASS_TOKEN"],
+        "fields": ["HASS_URL", "HASS_TOKEN"],
+    },
+    "dingtalk": {
+        "name": "DingTalk",
+        "required": ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"],
+        "fields": ["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"],
+    },
+    "feishu": {
+        "name": "Feishu / Lark",
+        "required": ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
+        "fields": [
+            "FEISHU_APP_ID",
+            "FEISHU_APP_SECRET",
+            "FEISHU_ENCRYPT_KEY",
+            "FEISHU_VERIFICATION_TOKEN",
+        ],
+    },
+    "wecom": {
+        "name": "WeCom (group bot)",
+        "required": ["WECOM_BOT_ID"],
+        "fields": ["WECOM_BOT_ID", "WECOM_SECRET"],
+    },
+    "weixin": {
+        "name": "Weixin / WeChat (Personal)",
+        "required": ["WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN"],
+        "fields": ["WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN", "WEIXIN_BASE_URL"],
+    },
+    "qqbot": {
+        "name": "QQ Bot",
+        "required": ["QQ_APP_ID", "QQ_CLIENT_SECRET"],
+        "fields": ["QQ_APP_ID", "QQ_CLIENT_SECRET", "QQ_ALLOWED_USERS"],
+    },
+}
+
+# Human-facing context that is not part of the gateway adapter contract. The
+# catalog and connection state still come from the bundled Hermes runtime; this
+# mapping only gives the settings UI a stable explanation and a setup guide for
+# the channels most people encounter first.
+PLATFORM_DETAILS: Dict[str, Dict[str, str]] = {
+    "telegram": {
+        "description": "Chat with Hermes through a Telegram bot.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/telegram",
+    },
+    "discord": {
+        "description": "Use Hermes in Discord servers and direct messages.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/discord",
+    },
+    "slack": {
+        "description": "Connect Hermes to a Slack workspace.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/slack",
+    },
+    "whatsapp": {
+        "description": "Chat with Hermes from a linked WhatsApp account.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/whatsapp",
+    },
+    "signal": {
+        "description": "Connect through a self-hosted Signal bridge.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/signal",
+    },
+    "matrix": {
+        "description": "Use Hermes in Matrix rooms and direct messages.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/matrix",
+    },
+    "email": {
+        "description": "Send and receive messages through an email account.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/email",
+    },
+    "dingtalk": {
+        "description": "Use Hermes in DingTalk groups.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/dingtalk",
+    },
+    "feishu": {
+        "description": "Use Hermes inside Feishu or Lark.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/feishu",
+    },
+    "wecom": {
+        "description": "Send Hermes messages to a WeCom group bot.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/wecom",
+    },
+    "qqbot": {
+        "description": "Connect Hermes to a bot from the QQ Open Platform.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/qqbot",
+    },
+    "webhook": {
+        "description": "Receive events from GitHub, GitLab, and other services.",
+        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks",
     },
 }
 
@@ -77,6 +177,19 @@ PLATFORM_ORDER = (
     "teams",
     "webhook",
 )
+
+# These are gateway plumbing, not apps a person can choose as a notification
+# destination. Webhooks have their own tab on this screen; exposing them again
+# as a channel also made Amiba's generated API server key look like a channel
+# the user had configured.
+INTERNAL_PLATFORM_IDS = {
+    "a2a",
+    "api_server",
+    "local",
+    "msgraph_webhook",
+    "relay",
+    "webhook",
+}
 
 PLATFORM_PREFIXES = {
     "email": ("EMAIL_",),
@@ -125,6 +238,8 @@ def _platform_catalog() -> Dict[str, Dict[str, Any]]:
 
         catalog: Dict[str, Dict[str, Any]] = {}
         for platform_id in platform_ids:
+            if platform_id in INTERNAL_PLATFORM_IDS:
+                continue
             plugin = plugin_entries.get(platform_id)
             fallback = FALLBACK_PLATFORMS.get(platform_id, {})
             required = [
@@ -155,6 +270,13 @@ def _platform_catalog() -> Dict[str, Dict[str, Any]]:
                 "field_meta": {
                     key: OPTIONAL_ENV_VARS.get(key, {}) for key in fields
                 },
+                "description": PLATFORM_DETAILS.get(platform_id, {}).get(
+                    "description",
+                    str(getattr(plugin, "install_hint", "") or ""),
+                ),
+                "docs_url": PLATFORM_DETAILS.get(platform_id, {}).get(
+                    "docs_url", ""
+                ),
             }
         order = {name: index for index, name in enumerate(PLATFORM_ORDER)}
         return dict(
@@ -167,7 +289,14 @@ def _platform_catalog() -> Dict[str, Dict[str, Any]]:
             )
         )
     except Exception:
-        return FALLBACK_PLATFORMS
+        return {
+            platform_id: {
+                **meta,
+                **PLATFORM_DETAILS.get(platform_id, {}),
+            }
+            for platform_id, meta in FALLBACK_PLATFORMS.items()
+            if platform_id not in INTERNAL_PLATFORM_IDS
+        }
 
 
 def _config() -> Dict[str, Any]:
@@ -177,43 +306,150 @@ def _config() -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def list_platforms(runtime_platforms: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
+def _has_field_value(key: str, value: Any) -> bool:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return False
+    if key.upper().endswith("_ENABLED"):
+        return normalized.lower() in {"1", "true", "yes", "on"}
+    return True
+
+
+def _platform_configuration(
+    platform_id: str,
+    required: List[str],
+    saved: Dict[str, str],
+    runtime: Dict[str, Any] | None = None,
+) -> tuple[bool, bool]:
+    """Read enablement and whether the user has actually configured a channel.
+
+    Credentials in ``.env`` implicitly enable most Hermes adapters. An
+    explicit ``platforms.<id>.enabled`` overrides that default. Runtime state
+    is accepted as the strongest signal because it came from the live Gateway.
+
+    Do not call ``load_gateway_config`` here: this function runs once per row,
+    and loading the Gateway config performs plugin dependency checks. Besides
+    being needlessly expensive, a read-only settings page could otherwise
+    trigger optional package installation dozens of times.
+    """
     cfg = _config()
-    catalog = _platform_catalog()
     configured_platforms = cfg.get("platforms")
     if not isinstance(configured_platforms, dict):
         configured_platforms = {}
+    raw_platform = configured_platforms.get(platform_id)
+    if not isinstance(raw_platform, dict):
+        raw_platform = {}
+    explicit_enabled = raw_platform.get("enabled")
+
+    required_complete = bool(required) and all(
+        _has_field_value(key, saved.get(key)) for key in required
+    )
+    has_saved_settings = any(
+        not key.upper().endswith("_ENABLED")
+        and _has_field_value(key, value)
+        for key, value in saved.items()
+    )
+    has_platform_settings = any(
+        key != "enabled" and value not in (None, "", False, [], {})
+        for key, value in raw_platform.items()
+    )
+    configured = bool(
+        required_complete
+        or (
+            not required
+            and (has_saved_settings or has_platform_settings)
+        )
+    )
+    if isinstance(explicit_enabled, bool):
+        enabled = explicit_enabled
+    elif isinstance(explicit_enabled, str):
+        enabled = explicit_enabled.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        enabled = configured
+
+    runtime = runtime if isinstance(runtime, dict) else {}
+    runtime_state = str(runtime.get("state") or "").strip().lower()
+    if runtime_state in {"connected", "connecting", "starting"}:
+        enabled = True
+        configured = True
+    return enabled, configured
+
+
+def _is_secret_field(key: str, field_meta: Dict[str, Any]) -> bool:
+    if bool(field_meta.get("password", False)):
+        return True
+    upper = key.upper()
+    return any(
+        marker in upper
+        for marker in ("TOKEN", "PASSWORD", "SECRET", "API_KEY", "AES_KEY")
+    )
+
+
+def list_platforms(
+    runtime_platforms: Dict[str, Any] | None = None,
+    *,
+    gateway_running: bool = False,
+    gateway_state: str | None = None,
+    gateway_error: str | None = None,
+) -> List[Dict[str, Any]]:
+    catalog = _platform_catalog()
     runtime_platforms = runtime_platforms if isinstance(runtime_platforms, dict) else {}
     result: List[Dict[str, Any]] = []
     for platform_id, meta in catalog.items():
         saved = get_dotenv_values_for_keys(meta["fields"])
-        platform_config = configured_platforms.get(platform_id)
-        if not isinstance(platform_config, dict):
-            platform_config = {}
         required = list(meta["required"])
-        configured = all(str(saved.get(key) or "").strip() for key in required)
-        enabled = bool(platform_config.get("enabled", False))
         runtime = runtime_platforms.get(platform_id)
         runtime = runtime if isinstance(runtime, dict) else {}
-        state = str(runtime.get("state") or ("disabled" if not enabled else "not_configured" if not configured else "pending_restart"))
+        enabled, configured = _platform_configuration(
+            platform_id, required, saved, runtime
+        )
+        runtime_state = str(runtime.get("state") or "").strip()
+        if not enabled:
+            state = "disabled"
+        elif not configured:
+            state = "not_configured"
+        elif runtime_state:
+            state = runtime_state
+        elif gateway_running:
+            state = "pending_restart"
+        elif gateway_state == "startup_failed":
+            state = "startup_failed"
+        else:
+            state = "gateway_stopped"
+        error_message = str(runtime.get("error_message") or "")
+        if state == "startup_failed" and not error_message:
+            error_message = str(gateway_error or "")
+        fields = []
+        for key in meta["fields"]:
+            field_meta = meta.get("field_meta", {}).get(key, {})
+            secret = _is_secret_field(key, field_meta)
+            field = {
+                "key": key,
+                "required": key in required,
+                "configured": _has_field_value(key, saved.get(key)),
+                "label": str(field_meta.get("prompt") or key),
+                "description": str(field_meta.get("description") or ""),
+                "help": str(field_meta.get("help") or ""),
+                "url": str(field_meta.get("url") or ""),
+                "secret": secret,
+                "advanced": bool(field_meta.get("advanced", False)),
+            }
+            if not secret:
+                field["value"] = str(saved.get(key) or "")
+            fields.append(field)
         result.append({
             "id": platform_id,
             "name": meta["name"],
+            "description": str(meta.get("description") or ""),
+            "docs_url": str(meta.get("docs_url") or ""),
             "enabled": enabled,
             "configured": configured,
+            "gateway_running": gateway_running,
             "state": state,
-            "error": str(runtime.get("error_message") or ""),
-            "fields": [
-                {
-                    "key": key,
-                    "required": key in required,
-                    "configured": bool(str(saved.get(key) or "").strip()),
-                    "label": str(meta.get("field_meta", {}).get(key, {}).get("prompt") or key),
-                    "description": str(meta.get("field_meta", {}).get(key, {}).get("description") or ""),
-                    "secret": bool(meta.get("field_meta", {}).get(key, {}).get("password", False)),
-                }
-                for key in meta["fields"]
-            ],
+            "error": error_message,
+            "error_code": str(runtime.get("error_code") or ""),
+            "updated_at": runtime.get("updated_at"),
+            "fields": fields,
         })
     return result
 
@@ -233,7 +469,12 @@ def save_platform(platform_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(f"{key} must be a string")
         updates[key] = value.strip()
     if updates:
-        merge_dotenv_file_and_apply(updates)
+        from ....adapters.hermes_core import is_default_profile
+
+        merge_dotenv_file_and_apply(
+            updates,
+            apply_process=is_default_profile(),
+        )
     if isinstance(payload.get("enabled"), bool):
         from hermes_cli.config import write_platform_config_field  # type: ignore
 

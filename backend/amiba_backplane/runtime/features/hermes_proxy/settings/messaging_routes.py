@@ -5,6 +5,7 @@ from functools import wraps
 
 from aiohttp import web
 
+from ....adapters.dotenv_local import plugin_dotenv_path
 from ....adapters.hermes_core import hermes_profile_scope
 from ....common import json_error, read_json_object
 from ..lifecycle.service import status_response
@@ -22,7 +23,22 @@ from .messaging_service import (
 
 async def handle_platforms(_request: web.Request) -> web.Response:
     status = await status_response()
-    return web.json_response({"ok": True, "platforms": list_platforms(status.get("gateway_platforms"))})
+    return web.json_response(
+        {
+            "ok": True,
+            "env_path": str(plugin_dotenv_path()),
+            "gateway_running": status.get("gateway_running") is True,
+            "gateway_state": status.get("gateway_state"),
+            "platforms": list_platforms(
+                status.get("gateway_platforms"),
+                gateway_running=status.get("gateway_running") is True,
+                gateway_state=str(status.get("gateway_state") or "") or None,
+                gateway_error=(
+                    str(status.get("gateway_exit_reason") or "") or None
+                ),
+            ),
+        }
+    )
 
 
 async def handle_save_platform(request: web.Request) -> web.Response:
@@ -43,12 +59,39 @@ async def handle_save_platform(request: web.Request) -> web.Response:
 async def handle_test_platform(request: web.Request) -> web.Response:
     platform_id = request.match_info.get("platform", "")
     status = await status_response()
-    rows = list_platforms(status.get("gateway_platforms"))
+    rows = list_platforms(
+        status.get("gateway_platforms"),
+        gateway_running=status.get("gateway_running") is True,
+        gateway_state=str(status.get("gateway_state") or "") or None,
+        gateway_error=str(status.get("gateway_exit_reason") or "") or None,
+    )
     row = next((item for item in rows if item["id"] == platform_id), None)
     if row is None:
         return json_error(404, "unknown messaging platform")
     ok = bool(row["enabled"] and row["configured"] and row["state"] == "connected")
-    return web.json_response({"ok": ok, "state": row["state"], "message": "Connected" if ok else row.get("error") or "Configuration saved; restart the gateway and try again"}, status=200 if ok else 400)
+    if ok:
+        message = f"{row['name']} is connected."
+    elif not row["enabled"]:
+        message = f"{row['name']} is disabled. Enable it and try again."
+    elif not row["configured"]:
+        missing = [
+            field["label"]
+            for field in row["fields"]
+            if field["required"] and not field["configured"]
+        ]
+        message = (
+            f"Missing required setup: {', '.join(missing)}"
+            if missing
+            else "Channel setup is incomplete."
+        )
+    elif not row["gateway_running"]:
+        message = "Gateway is not running. Restart it and try again."
+    else:
+        message = row.get("error") or "The gateway has not reported a connection yet."
+    return web.json_response(
+        {"ok": ok, "state": row["state"], "message": message},
+        status=200 if ok else 400,
+    )
 
 
 async def handle_pairings(_request: web.Request) -> web.Response:

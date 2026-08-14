@@ -43,3 +43,21 @@ def test_merge_dotenv_does_not_publish_env_when_atomic_replace_fails(
 
     assert path.read_text(encoding="utf-8") == "AMIBA_TEST_ATOMIC=old\n"
     assert os.environ["AMIBA_TEST_ATOMIC"] == "old"
+
+
+def test_named_profile_does_not_fall_back_to_default_process_env(
+    tmp_path, monkeypatch
+):
+    from amiba_backplane.runtime.adapters import hermes_core
+
+    monkeypatch.setenv("CHAT_TOKEN", "default-profile-token")
+    monkeypatch.setattr(
+        dotenv_local,
+        "plugin_dotenv_path",
+        lambda _base=None: tmp_path / ".env",
+    )
+    monkeypatch.setattr(hermes_core, "is_default_profile", lambda: False)
+
+    assert dotenv_local.get_dotenv_values_for_keys(["CHAT_TOKEN"]) == {
+        "CHAT_TOKEN": ""
+    }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "bundleSchemaVersion": 3,
+  "bundleSchemaVersion": 4,
   "repository": "NousResearch/hermes-agent",
   "branch": "main",
   "commit": "863e31318553cda8ad61df681d08175364d4164b",
