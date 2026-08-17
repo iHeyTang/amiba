@@ -19,6 +19,7 @@ export {
   NavigationRow,
 } from "./navigation/NavigationRow";
 export {
+  SettingsPageActionButton,
   SettingsPageActions,
   SettingsPageDescription,
 } from "./settings/page-chrome";

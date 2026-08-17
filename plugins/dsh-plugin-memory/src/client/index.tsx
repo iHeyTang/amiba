@@ -2,16 +2,16 @@ import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import {
-  Button,
   cn,
   PageContent,
   ScrollArea,
+  SettingsPageActionButton,
   SettingsPageActions,
   SettingsPageDescription,
   usePluginT,
   type PluginLanguage,
 } from "@amiba/ui/plugin";
-import { Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import type {
@@ -42,8 +42,6 @@ const ZH = {
   preset: "记忆作用域",
   presetDescription: "每个 DSH Agent Preset 拥有独立的长期记忆集合。",
   refresh: "刷新",
-  reset: "清空",
-  resetConfirm: "清空这个 DSH Preset 的全部长期记忆？此操作无法撤销。",
   subtitle: "由原生 DSH 插件提供、按 Preset 隔离的长期记忆",
   subtitleTooltip: "DSH 会话历史与压缩属于会话记忆，和跨会话长期记忆相互独立。",
   title: "记忆",
@@ -69,9 +67,6 @@ const EN: typeof ZH = {
   presetDescription:
     "Each DSH agent preset keeps an independent long-term memory collection.",
   refresh: "Refresh",
-  reset: "Reset",
-  resetConfirm:
-    "Clear all long-term memory for this DSH preset? This cannot be undone.",
   subtitle: "Preset-scoped long-term memory supplied by a native DSH plugin",
   subtitleTooltip:
     "DSH session history and compaction remain separate from cross-session memory.",
@@ -187,13 +182,11 @@ function MemoryBlock({
 type MemoryRemote = ClientContext["remote"]["amibaMemory"];
 type MemorySectionProps = PropsRuntime<"amiba.settings.section"> & {
   listMemory: MemoryRemote["list"];
-  resetMemory: MemoryRemote["reset"];
 };
 
 function MemorySettings({
   headerActionsHost,
   listMemory,
-  resetMemory,
 }: MemorySectionProps): ReactNode {
   const { language } = usePluginT();
   const copy = labels(language);
@@ -216,62 +209,26 @@ function MemorySettings({
     }
   }, [listMemory]);
 
-  const reset = useCallback(async () => {
-    if (!confirm(copy.resetConfirm)) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await resetMemory(PRESET, "all");
-      if (!result.ok) throw new Error(result.error.message);
-      await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      setLoading(false);
-    }
-  }, [copy.resetConfirm, refresh, resetMemory]);
-
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const items = snapshot?.targets ?? [];
-  const actions = (
-    <>
-      <Button
-        aria-label={copy.reset}
-        className="h-8 shrink-0 gap-1.5 text-xs text-destructive hover:text-destructive"
-        disabled={loading || items.every((item) => item.entries.length === 0)}
-        onClick={() => void reset()}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-        {copy.reset}
-      </Button>
-      <Button
-        aria-label={copy.refresh}
-        className="h-8 shrink-0 gap-1.5 text-xs"
-        disabled={loading}
-        onClick={() => void refresh()}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {loading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <RefreshCw className="h-3.5 w-3.5" />
-        )}
-        {copy.refresh}
-      </Button>
-    </>
-  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <SettingsPageActions host={headerActionsHost}>
-        <div className="flex items-center gap-1">{actions}</div>
+        <SettingsPageActionButton
+          aria-label={copy.refresh}
+          disabled={loading}
+          icon
+          onClick={() => void refresh()}
+          title={copy.refresh}
+          type="button"
+          variant="ghost"
+        >
+          {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+        </SettingsPageActionButton>
       </SettingsPageActions>
       <ScrollArea className="min-h-0 flex-1">
         <PageContent bodyClassName="space-y-4" size="md">
@@ -322,8 +279,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     (injectedCtx) => {
       const remote = injectedCtx.remote.amibaMemory;
       const listMemory: MemoryRemote["list"] = (preset) => remote.list(preset);
-      const resetMemory: MemoryRemote["reset"] = (preset, target) =>
-        remote.reset(preset, target);
       return injectedCtx.slots.inject("amiba.settings.section", () =>
         injectedCtx.slots.register(
           {
@@ -331,7 +286,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             id: SECTION_ID,
             order: 300,
             label: () => labels().nav,
-            inject: () => ({ listMemory, resetMemory }),
+            inject: () => ({ listMemory }),
           },
           MemorySettings,
         ),
