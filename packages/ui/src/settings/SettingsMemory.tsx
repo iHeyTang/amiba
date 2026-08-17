@@ -198,29 +198,19 @@ export function SettingsMemory({
       </Button>
     </>
   ) : (
-    <>
-      <SettingsPageActionButton
-        aria-label={t("options.memory.dsh.reset")}
-        className="text-destructive hover:text-destructive"
-        disabled={resetDisabled}
-        onClick={() => void reset()}
-        type="button"
-        variant="ghost"
-      >
-        <Trash2 />
-        {t("options.memory.dsh.reset")}
-      </SettingsPageActionButton>
-      <SettingsPageActionButton
-        aria-label={t("options.memory.refresh")}
-        disabled={loading}
-        onClick={() => void refresh()}
-        type="button"
-        variant="outline"
-      >
-        {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-        {t("options.memory.refresh")}
-      </SettingsPageActionButton>
-    </>
+    /* Section-hosted head keeps a single refresh icon (matches the plugin
+     * inventory page); reset stays available in the embedded workspace. */
+    <SettingsPageActionButton
+      aria-label={t("options.memory.refresh")}
+      disabled={loading}
+      icon
+      onClick={() => void refresh()}
+      title={t("options.memory.refresh")}
+      type="button"
+      variant="ghost"
+    >
+      {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+    </SettingsPageActionButton>
   );
 
   return (
