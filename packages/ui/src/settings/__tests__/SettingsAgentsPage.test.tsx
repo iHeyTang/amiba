@@ -226,6 +226,35 @@ describe("SettingsAgentsPage", () => {
     });
   });
 
+  it("surfaces a failed preset action inline on the detail page without navigating away", async () => {
+    mocks.getProfiles.mockResolvedValue({
+      ok: true,
+      profiles: [
+        profile("default", "Root assistant", false, "system"),
+        profile("researcher"),
+      ],
+      active: "default",
+      current: "default",
+    });
+    mocks.setActiveProfile.mockResolvedValue({
+      ok: false,
+      error: "Could not reach the DSH settings service.",
+    });
+    const onOpenDetail = vi.fn();
+    renderPage({ detail: "researcher", onOpenDetail });
+
+    const activate = await screen.findByRole("button", {
+      name: "Make default task preset",
+    });
+    await userEvent.click(activate);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not reach the DSH settings service.",
+    );
+    expect(screen.getByRole("heading", { name: "researcher" })).toBeVisible();
+    expect(onOpenDetail).not.toHaveBeenCalled();
+  });
+
   it("renames the preset from the detail page and requests navigation to the new id", async () => {
     const onOpenDetail = vi.fn();
     renderPage({ detail: "researcher", onOpenDetail });

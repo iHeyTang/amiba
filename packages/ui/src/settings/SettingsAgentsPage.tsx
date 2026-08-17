@@ -181,6 +181,7 @@ function AgentPresetList({
 }
 
 function AgentPresetDetail({
+  error,
   isActive,
   onActivate,
   onBack,
@@ -190,6 +191,7 @@ function AgentPresetDetail({
   profile,
   saving,
 }: {
+  error: string | null;
   isActive: boolean;
   onActivate: () => void;
   onBack: () => void;
@@ -263,6 +265,14 @@ function AgentPresetDetail({
       </SettingsPageActions>
 
       <div className="mx-auto w-full max-w-3xl shrink-0 px-7">
+        {error ? (
+          <p
+            className="mb-3 rounded-xl bg-destructive/8 px-3 py-2 text-xs text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
         <div className="flex h-11 shrink-0 items-center">
           {editingName ? (
             <Input
@@ -398,6 +408,7 @@ export function SettingsAgentsPage({ detail, onOpenDetail }: SettingsPageProps) 
   async function activateProfile() {
     if (!selected) return;
     setSaving(true);
+    setError(null);
     const result = await setDefaultAgentPreset(selected.name);
     setSaving(false);
     if (!result.ok) {
@@ -451,6 +462,7 @@ export function SettingsAgentsPage({ detail, onOpenDetail }: SettingsPageProps) 
       return;
     }
     setSaving(true);
+    setError(null);
     const result = await deleteAgentPreset(selected.name);
     setSaving(false);
     if (!result.ok) {
@@ -464,6 +476,7 @@ export function SettingsAgentsPage({ detail, onOpenDetail }: SettingsPageProps) 
   if (detail && selected) {
     return (
       <AgentPresetDetail
+        error={error}
         isActive={selected.name === active}
         onActivate={() => void activateProfile()}
         onBack={() => onOpenDetail(null)}
