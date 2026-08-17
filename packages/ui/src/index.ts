@@ -8,7 +8,7 @@
  *   - ``models/``     — model identity helpers and provider-aware icon rendering
  *   - ``chat/``       — chat surface (Composer, MessageList, ChatSurface, …)
  *   - ``home/``       — Home page (composer hand-off, recents, shortcuts)
- *   - ``settings/``   — settings panes (gateway, voice, skills, memory, …)
+ *   - ``settings/``   — settings panes (DSH models, skills, memory, …)
  *
  * Internally each folder owns a barrel (``./<folder>/index.ts``); this
  * root re-exports the lot so consumers always say
@@ -24,3 +24,4 @@ export * from "./settings"
 export * from "./skills"
 export * from "./usage"
 export * from "./viz"
+export { PaneHeaderBar, type PaneHeaderBarProps } from "./navigation/PaneHeaderBar";
