@@ -13,6 +13,7 @@ export const en = {
   // Generic
   "common.add": "Add",
   "common.cancel": "Cancel",
+  "common.back": "Back",
   "common.save": "Save",
   "common.delete": "Delete",
   "common.edit": "Edit",
@@ -61,8 +62,6 @@ export const en = {
   "sidepanel.runError.modelService.action": "Review model settings",
   "sidepanel.runError.connection.title": "Couldn't reach the model service",
   "sidepanel.runError.connection.action": "Check connection",
-  "sidepanel.runError.voice.title": "Voice input is unavailable",
-  "sidepanel.runError.voice.action": "Check voice settings",
   "sidepanel.runError.runtime.title": "The run couldn't continue",
   "sidepanel.runError.runtime.action": "View error logs",
 
@@ -205,13 +204,12 @@ export const en = {
   "app.subtitle": "Extension console",
   "app.initializing": "Waking your local agent",
   "app.initError":
-    "Couldn't initialize Amiba's built-in Hermes Runtime or start the local service. Try again, or check the application log.",
+    "Couldn't initialize Amiba's managed DSH runtime. Try again, or check the application log.",
   "app.initRetry": "Retry",
 
   // Options nav
   "options.nav.appearance": "Appearance",
   "options.nav.shortcuts": "Shortcuts",
-  "options.nav.scripts": "Userscripts",
   "options.nav.models": "Models",
   "options.nav.agents": "Agent presets",
   "options.nav.skills": "Skills",
@@ -220,9 +218,7 @@ export const en = {
   "options.nav.cron": "Automation",
   "options.nav.status": "Status",
   "options.nav.logs": "Logs",
-  "options.nav.voice": "Voice",
   "options.nav.extensions": "Extensions",
-  "options.nav.plugins": "Plugins",
   "options.nav.section.general": "General",
   "options.nav.section.agent": "Assistant",
   "options.nav.section.advanced": "Advanced",
@@ -232,85 +228,58 @@ export const en = {
 
   // Messaging channels
   "options.messaging.title": "Message channels",
-  "options.messaging.description":
-    "Connect the apps where you want to talk with Amiba and receive notifications.",
-  "options.messaging.tab.channels": "Channels",
-  "options.messaging.tab.access": "Access",
-  "options.messaging.tab.webhooks": "Webhooks",
-  "options.messaging.summary.connected":
-    "{connected} of {total} channels connected",
-  "options.messaging.summary.none": "No channels connected yet",
-  "options.messaging.summary.gatewayRunning": "Messaging service is running",
-  "options.messaging.summary.gatewayStopped": "Messaging service is stopped",
-  "options.messaging.search": "Search channels",
-  "options.messaging.group.configured": "Configured",
-  "options.messaging.group.configuredDescription":
-    "These channels have saved connection details and can be managed or enabled.",
-  "options.messaging.group.available": "Other channels",
-  "options.messaging.group.availableDescription":
-    "Choose an app and follow the guided setup for its first connection.",
-  "options.messaging.empty": "No matching channels",
-  "options.messaging.loadError":
-    "Could not load your channel settings: {error}",
-  "options.messaging.configure": "Set up",
-  "options.messaging.manage": "Manage",
-  "options.messaging.guide": "Open setup guide",
-  "options.messaging.required": "Required",
-  "options.messaging.optional": "Optional",
-  "options.messaging.savedValue": "Saved. Leave blank to keep it unchanged.",
-  "options.messaging.enterValue": "Enter {field}",
-  "options.messaging.advanced": "More options",
-  "options.messaging.noFields":
-    "This channel does not need credentials here. Follow its setup guide, then connect it.",
-  "options.messaging.step.account": "Prepare the channel",
-  "options.messaging.step.accountDescription":
-    "Create the bot or app and collect the requested credentials.",
-  "options.messaging.step.credentials": "Add connection details",
-  "options.messaging.step.credentialsDescription":
-    "Values are saved only in your local Hermes configuration.",
-  "options.messaging.step.verify": "Connect and verify",
-  "options.messaging.step.verifyDescription":
-    "Amiba restarts the messaging service and checks its live status.",
-  "options.messaging.saveConnect": "Save and connect",
-  "options.messaging.saveChanges": "Save changes",
-  "options.messaging.disable": "Turn off channel",
-  "options.messaging.test": "Test connection",
-  "options.messaging.saving": "Saving channel settings…",
-  "options.messaging.restarting": "Restarting the messaging service…",
-  "options.messaging.saved":
-    "{channel} was saved. Connection status will update automatically.",
-  "options.messaging.disabled": "{channel} was turned off.",
-  "options.messaging.testSuccess": "{channel} is connected and ready.",
-  "options.messaging.missingRequired":
-    "Complete all required fields before connecting this channel.",
-  "options.messaging.restartFailed":
-    "Settings were saved, but the messaging service could not restart: {error}",
+  "options.messaging.dsh.description":
+    "Route authenticated external messages into DSH sessions through channel-provider plugins.",
+  "options.messaging.dsh.add": "Add channel",
+  "options.messaging.dsh.pluginTitle": "DSH messaging-core plugin",
+  "options.messaging.dsh.pluginDescription":
+    "The core owns authentication, deduplication, session routing, retries, and reply correlation. Transport plugins only implement their channel protocol.",
+  "options.messaging.dsh.channels": "Configured channels",
+  "options.messaging.dsh.channelsDescription":
+    "Each channel targets one durable DSH session.",
+  "options.messaging.dsh.group.configured": "Configured",
+  "options.messaging.dsh.group.configuredDescription":
+    "Routes already connected to a DSH conversation.",
+  "options.messaging.dsh.group.available": "Available channels",
+  "options.messaging.dsh.group.availableDescription":
+    "Set up another route from an installed transport provider.",
+  "options.messaging.dsh.summary.connected":
+    "{connected} of {total} channels active",
+  "options.messaging.dsh.summary.none": "No message channels are active",
+  "options.messaging.dsh.providerCount": "{count} transport providers",
+  "options.messaging.dsh.search": "Search channels",
+  "options.messaging.dsh.searchEmpty": "No channels match this search.",
+  "options.messaging.dsh.manage": "Manage",
+  "options.messaging.dsh.setup": "Set up",
+  "options.messaging.dsh.needsSetup": "Needs setup",
+  "options.messaging.dsh.configure": "Set up {name}",
+  "options.messaging.dsh.disable": "Turn off",
+  "options.messaging.dsh.enable": "Turn on",
+  "options.messaging.dsh.saveChanges": "Save changes",
+  "options.messaging.dsh.empty": "No DSH channels yet",
+  "options.messaging.dsh.emptyDescription":
+    "Create a webhook channel now; additional transports can register as independent DSH plugins.",
+  "options.messaging.dsh.inboundEndpoint": "Inbound endpoint",
+  "options.messaging.dsh.loopbackHint":
+    "This endpoint is loopback-only. Put an authenticated reverse proxy or tunnel in front of it when an external service must reach this device.",
+  "options.messaging.dsh.rotate": "Rotate secret",
+  "options.messaging.dsh.createDescription":
+    "Bind a transport provider to one existing DSH session.",
+  "options.messaging.dsh.provider": "Provider",
+  "options.messaging.dsh.name": "Channel name",
+  "options.messaging.dsh.session": "Target session",
+  "options.messaging.dsh.selectSession": "Select a session",
+  "options.messaging.dsh.outboundUrl": "Reply callback URL (optional)",
+  "options.messaging.dsh.allowedSenders":
+    "Allowed sender IDs (optional, comma-separated)",
+  "options.messaging.dsh.secretTitle": "Channel secret",
+  "options.messaging.dsh.secretDescription":
+    "This bearer secret is shown only once. Store it now; rotating it immediately invalidates the previous value.",
+  "options.messaging.dsh.pending": "{count} awaiting DSH",
+  "options.messaging.dsh.queued": "{count} replies queued",
+  "options.messaging.dsh.failed": "{count} replies need attention",
   "options.messaging.status.connected": "Connected",
   "options.messaging.status.disabled": "Off",
-  "options.messaging.status.notConfigured": "Needs setup",
-  "options.messaging.status.pendingRestart": "Waiting to connect",
-  "options.messaging.status.gatewayStopped": "Service stopped",
-  "options.messaging.status.startupFailed": "Could not start",
-  "options.messaging.status.connecting": "Connecting",
-  "options.messaging.status.error": "Connection issue",
-  "options.messaging.platform.telegram": "Chat through a Telegram bot.",
-  "options.messaging.platform.discord":
-    "Use Amiba in Discord servers and direct messages.",
-  "options.messaging.platform.slack": "Connect a Slack workspace.",
-  "options.messaging.platform.whatsapp": "Chat from a linked WhatsApp account.",
-  "options.messaging.platform.signal": "Connect through a Signal bridge.",
-  "options.messaging.platform.matrix": "Use Amiba in Matrix rooms.",
-  "options.messaging.platform.email":
-    "Send and receive messages through an email account.",
-  "options.messaging.platform.dingtalk": "Use Amiba in DingTalk groups.",
-  "options.messaging.platform.feishu": "Use Amiba inside Feishu or Lark.",
-  "options.messaging.platform.wecom": "Send messages to a WeCom group.",
-  "options.messaging.platform.weixin":
-    "Chat and receive notifications through a connected WeChat account.",
-  "options.messaging.platform.qqbot": "Connect a QQ bot.",
-  "options.messaging.platform.webhook":
-    "Receive events from GitHub, GitLab, and other services.",
-
   // Agent profiles
   "options.agents.title": "Agent presets",
   "options.agents.profiles": "Agent presets",
@@ -321,15 +290,16 @@ export const en = {
   "options.agents.rename": "Rename agent preset",
   "options.agents.name": "Preset name",
   "options.agents.startFrom": "Start from",
-  "options.agents.fresh": "Blank preset",
+  "options.agents.fresh": "Current default preset",
+  "options.agents.displayName": "Display name",
+  "options.agents.displayNamePlaceholder": "For example: Researcher",
   "options.agents.noDescription": "No description",
   "options.agents.customEmptyTitle": "No independent agent presets",
   "options.agents.customEmptyDescription":
-    "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, models, or skills.",
+    "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, skills, tools, or memory.",
   "options.agents.cloneDefault": "Amiba",
   "options.agents.empty": "No agent presets",
   "options.agents.section.behavior": "Behavior & identity",
-  "options.agents.section.models": "Models & services",
   "options.agents.role.title": "Description",
   "options.agents.role.description":
     "A short description shown when choosing who should run a task.",
@@ -337,43 +307,9 @@ export const en = {
     "For example: investigates sources and verifies claims.",
   "options.agents.soul.title": "Behavior and principles",
   "options.agents.soul.description":
-    "Durable identity and working principles; the default response mode shapes everyday expression and tasks can still override it.",
+    "Durable identity, working principles, and expression owned by this DSH Agent Preset.",
   "options.agents.soul.placeholder":
     "Describe how this agent should think, work, and communicate…",
-  "options.agents.personality.title": "Response modes",
-  "options.agents.personality.description":
-    "Manage this agent's default work and expression mode; individual tasks can still switch temporarily.",
-  "options.agents.personality.defaultLabel": "Default response mode",
-  "options.agents.personality.defaultDescription":
-    "Used by new tasks; a composer selection overrides only the current task.",
-  "options.agents.personality.defaultNone": "No response mode",
-  "options.agents.personality.defaultBadge": "Default",
-  "options.agents.personality.create": "New response mode",
-  "options.agents.personality.edit": "Edit response mode",
-  "options.agents.personality.name": "Mode name",
-  "options.agents.personality.namePlaceholder": "For example: Fact checker",
-  "options.agents.personality.nameExists": "That name already exists.",
-  "options.agents.personality.summary": "Purpose",
-  "options.agents.personality.summaryPlaceholder":
-    "For example: verify key claims and cite sources.",
-  "options.agents.personality.instruction": "Behavior instruction",
-  "options.agents.personality.instructionPlaceholder":
-    "Describe how this mode should think, work, and respond…",
-  "options.agents.personality.tone": "Tone",
-  "options.agents.personality.tonePlaceholder": "For example: calm, direct",
-  "options.agents.personality.style": "Response style",
-  "options.agents.personality.stylePlaceholder":
-    "For example: conclusion before evidence",
-  "options.agents.personality.reset": "Restore built-in",
-  "options.agents.personality.duplicate": "Duplicate",
-  "options.agents.personality.deleteConfirm":
-    "Are you sure you want to {action} “{name}”?",
-  "options.agents.personality.loadFailed": "Couldn't load response modes",
-  "options.agents.personality.saveFailed": "Couldn't save the response mode",
-  "options.agents.personality.selectFailed":
-    "Couldn't set the default response mode",
-  "options.agents.personality.deleteFailed":
-    "Couldn't remove the response mode",
   "options.agents.deleteConfirm": "Delete “{name}” and its preset data?",
   "options.agents.loadFailed": "Couldn't load agent presets",
   "options.agents.soulLoadFailed": "Couldn't load SOUL.md",
@@ -382,7 +318,6 @@ export const en = {
   "options.agents.createFailed": "Couldn't create the preset",
   "options.agents.renameFailed": "Couldn't rename the preset",
   "options.agents.deleteFailed": "Couldn't delete the preset",
-  "options.agents.modelSaveFailed": "Couldn't save the preset model",
 
   // Skills
   "options.skills.all": "All",
@@ -421,6 +356,49 @@ export const en = {
   "options.skills.selectFile": "Select a file on the left to view its contents",
   "options.skills.binaryFile": "Binary file · {size}",
   "options.skills.fileTooLarge": "File is too large to preview ({size})",
+  "options.skills.dsh.title": "Composed DSH skills",
+  "options.skills.dsh.description":
+    "Skills are resolved automatically from the active conversation, project, user roots, and agent preset.",
+  "options.skills.dsh.summary": "{count} skills available",
+  "options.skills.dsh.session": "Conversation skill scope",
+  "options.skills.dsh.noSession": "No conversation (user skills only)",
+  "options.skills.dsh.create": "Create skill",
+  "options.skills.dsh.edit": "Edit skill",
+  "options.skills.dsh.name": "Skill name",
+  "options.skills.dsh.editorHint":
+    "DSH requires YAML frontmatter with matching name and description fields. Invocation policy is controlled by user-invocable and disable-model-invocation.",
+  "options.skills.dsh.user": "User",
+  "options.skills.dsh.composed": "Composed read-only",
+  "options.skills.dsh.userOnly": "User only",
+  "options.skills.dsh.modelOnly": "Model only",
+  "options.skills.dsh.notInvocable": "Not invocable",
+  "options.skills.dsh.sources": "Sources",
+  "options.skills.dsh.source.project": "Project",
+  "options.skills.dsh.source.project.description":
+    "Skills discovered from this workspace's DSH and shared-agent directories.",
+  "options.skills.dsh.source.user": "User",
+  "options.skills.dsh.source.user.description":
+    "Personal skills from the DSH and shared-agent user directories.",
+  "options.skills.dsh.source.runtime": "Runtime",
+  "options.skills.dsh.source.runtime.description":
+    "Skills registered dynamically by the active DSH composition.",
+  "options.skills.dsh.source.bundled": "Bundled",
+  "options.skills.dsh.source.bundled.description":
+    "Read-only skills distributed with the runtime or a plugin.",
+  "options.skills.dsh.source.custom": "Custom provider",
+  "options.skills.dsh.source.custom.description":
+    "Skills contributed by an explicitly configured provider.",
+  "options.skills.dsh.source.other": "Other providers",
+  "options.skills.dsh.source.other.description":
+    "Skills whose provider exposes a non-standard source.",
+  "options.skills.dsh.invocation": "Invocation",
+  "options.skills.dsh.modelInvocable": "Model callable",
+  "options.skills.dsh.userInvocable": "User callable",
+  "options.skills.dsh.sessionSummary":
+    "{count} skills in the current conversation composition",
+  "options.skills.dsh.userSummary": "{count} skills in the user catalog",
+  "options.skills.dsh.search": "Search name, description, source, or provider…",
+  "options.skills.dsh.deleteConfirm": "Delete DSH skill “{name}”?",
 
   // Task agent picker
   "sidepanel.agentPicker.label": "Choose agent",
@@ -432,17 +410,11 @@ export const en = {
   "sidepanel.agentPicker.profileLocked": "Fixed for this task",
   "sidepanel.agentPicker.executionIdentity": "Execution identity",
   "sidepanel.agentPicker.executionIdentityDescription":
-    "Choose an agent and response mode for this task.",
+    "Choose the DSH Agent Preset for this task.",
   "sidepanel.agentPicker.defaultProfile": "Amiba",
   "sidepanel.agentPicker.agent": "Agent",
-  "sidepanel.agentPicker.personality": "Response mode",
-  "sidepanel.agentPicker.personalityDescription":
-    "Changes the expression style for this task only.",
-  "sidepanel.agentPicker.personalityDefault": "Follow agent",
-  "sidepanel.agentPicker.personalityDefaultDescription":
-    "Use this agent's configured default response mode and working principles.",
 
-  // Hermes approval mode
+  // DSH permission presets
   "sidepanel.approvalMode.label": "Risk handling",
   "sidepanel.approvalMode.question": "When a risky operation is detected:",
   "sidepanel.approvalMode.manual": "Ask me every time",
@@ -458,6 +430,54 @@ export const en = {
     "Couldn't load approval mode. Click to retry.",
   "sidepanel.approvalMode.saveFailed":
     "Couldn't change approval mode. Try again.",
+  "sidepanel.permissionPreset.question": "File and command access:",
+  "sidepanel.permissionPreset.readOnly": "Read only",
+  "sidepanel.permissionPreset.readOnlyDescription":
+    "Inspect the workspace without changing files.",
+  "sidepanel.permissionPreset.workspaceWrite": "Workspace access",
+  "sidepanel.permissionPreset.workspaceWriteDescription":
+    "Write inside the workspace and ask before operations that need approval.",
+  "sidepanel.permissionPreset.fullAccess": "Full access",
+  "sidepanel.permissionPreset.fullAccessDescription":
+    "Run without sandbox confinement or approval prompts.",
+  "sidepanel.permissionPreset.customDescription":
+    "A permission preset supplied by the active DSH composition.",
+  "sidepanel.permissionPreset.fullAccessAcknowledge":
+    "I understand this lets the agent modify files and run commands without asking.",
+  "sidepanel.permissionPreset.enableFullAccess": "Enable full access",
+
+  // Harness-independent model plane
+  "options.dshModels.description":
+    "Providers and models are managed once in Amiba, then projected into the active harness and other AI-native capabilities.",
+  "options.dshModels.providers": "Providers",
+  "options.dshModels.models": "models",
+  "options.dshModels.addProvider": "Add provider",
+  "options.dshModels.openConfiguration": "Open configuration",
+  "options.dshModels.unavailable":
+    "The active surface does not expose the Amiba model plane.",
+  "options.dshModels.empty": "No configurable provider is available.",
+  "options.dshModels.failures": "Harness projection diagnostics",
+  "options.dshModels.auth.native": "Provider auth",
+  "options.dshModels.auth.configured": "Key configured",
+  "options.dshModels.auth.missing": "Key required",
+  "options.dshModels.apiKey": "API key",
+  "options.dshModels.apiKeyPlaceholder": "Enter a write-only API key",
+  "options.dshModels.keepCredential": "Leave blank to keep the stored key",
+  "options.dshModels.baseURL": "Base URL",
+  "options.dshModels.modelCatalog": "Model catalog",
+  "options.dshModels.fetchModels": "Fetch available models",
+  "options.dshModels.deleteConfirm":
+    "Remove this custom provider? Its runtime projections will be disabled.",
+  "options.dshModels.providerId": "Provider ID",
+  "options.dshModels.displayName": "Display name",
+  "options.dshModels.protocol": "API protocol",
+  "options.dshModels.initialModel": "Initial model",
+  "options.dshModels.invalidProviderId":
+    "Provider ID must start with a lowercase letter and contain only letters, numbers, _ or -.",
+  "options.dshModels.requiredProviderFields":
+    "Base URL and an initial model are required.",
+  "options.dshModels.customUnavailable":
+    "No compatible execution adapter is available for this provider.",
 
   // Extensions settings page
   "options.extensions.library.title": "Capability extensions",
@@ -576,7 +596,6 @@ export const en = {
   "options.extensions.capability.main": "Small-app UI",
   "options.extensions.capability.mentions": "@ Mentions",
   "options.extensions.capability.agent": "Agent",
-  "options.extensions.capability.plugin": "Hermes Plugin",
   "options.extensions.capability.tools": "Tools",
   "options.extensions.capability.resources": "Resources",
   "options.extensions.capability.settings": "Settings",
@@ -586,9 +605,6 @@ export const en = {
   "options.extensions.details.path": "Path",
   "options.extensions.permissions.title": "Permissions",
   "options.extensions.mentions.title": "Mention projections",
-  "options.extensions.runtime.title": "Hermes dependencies",
-  "options.extensions.runtime.required": "Required",
-  "options.extensions.runtime.optional": "Optional",
   "options.extensions.tab.installed": "Installed",
   "options.extensions.tab.browse": "Browse",
   "options.extensions.browse.loading": "Loading marketplace…",
@@ -599,120 +615,14 @@ export const en = {
   "options.extensions.browse.installing": "Installing…",
   "options.extensions.browse.installFailed": "Install failed: {error}",
   "options.extensions.browse.indexUrl": "Index: {url}",
-  "options.plugins.heading": "Plugins",
-  "options.plugins.loading": "Loading plugins…",
-  "options.plugins.error": "Couldn't load plugins: {error}",
-  "options.plugins.empty.title": "No plugins installed",
-  "options.plugins.group.yours": "Your plugins",
-  "options.plugins.group.bundled": "Bundled ({count})",
-  "options.plugins.restartHint":
-    "Restart the local service to apply plugin changes.",
-  "options.plugins.toggleError": "Couldn't change plugin: {error}",
-
-  "options.plugins.uninstallAction": "Uninstall",
-  "options.plugins.uninstallConfirm":
-    'Uninstall "{name}"? It fully unloads after the local service restarts. This can\'t be undone.',
-  "options.plugins.uninstallError": "Couldn't uninstall: {error}",
-
-  // Featured features — plugins promoted to a first-class Settings surface
-  "options.feature.enableLabel": "Enable",
-  "options.feature.stateOn": "Enabled — applies after restarting Amiba.",
-  "options.feature.stateOff": "Disabled.",
-  "options.feature.notInstalled":
-    "The browser component for connecting the current tab isn't installed yet.",
-  "options.feature.installAction": "Install connection",
-  "options.feature.restartHint": "Restart Amiba to apply this change.",
-  "options.feature.installPrompt":
-    'Please install the Hermes plugin that powers the "{name}" feature for me by running `hermes plugins install {ref}`. When it\'s done, tell me whether Hermes needs a restart to start using it.',
-  "options.feature.agentSourceApp": "Settings",
-  "options.feature.backplaneError": "Couldn't read this feature's status.",
-  "options.feature.browser.title": "Browser",
-  "options.feature.browser.subtitle":
-    "Let Amiba see and control your browser through the companion Chrome extension.",
-  "options.feature.browser.how.title": "How it works",
-  "options.feature.browser.how.body":
-    "Once connected, the agent can read and operate tabs you already have open, and only uses this access when a task needs it.",
-
-  // Composer voice input
-  "composer.voice.startRecording": "Record voice message",
-  "composer.voice.stopRecording": "Stop recording",
-  "composer.voice.transcribing": "Transcribing…",
-  "composer.voice.transcribeFailedTitle": "Voice transcription failed",
-  "composer.voice.noProvider": "Voice transcription isn't configured",
-  "composer.voice.permissionDenied":
-    "Microphone access was denied. Allow it in your OS settings to use voice input.",
-  "composer.voice.unsupported":
-    "Voice input is not supported in this environment.",
-  "composer.voice.transcribeFailed": "Voice transcription failed: {error}",
   "composer.notice.showDetails": "Details",
   "composer.notice.hideDetails": "Hide",
   "composer.mention.typeToSearch": "Type a keyword to search",
   "composer.mention.noResults": "No results",
 
-  // Voice settings page
-  "options.voice.title": "Voice input",
-  "options.voice.description":
-    "Configure the composer microphone button and the speech-to-text engine.",
-  "options.voice.enable.label": "Enable voice input",
-  "options.voice.enable.help":
-    "Show the microphone button in the chat composer.",
-  "options.voice.autoSend.label": "Auto-send after transcribe",
-  "options.voice.autoSend.help":
-    "If off, the transcript lands in the composer and waits for you to hit send.",
-  "options.voice.device.label": "Microphone device",
-  "options.voice.device.system": "System default",
-  "options.voice.device.refresh": "Refresh devices",
-  "options.voice.test.label": "Test microphone",
-  "options.voice.test.start": "Record 2-second test",
-  "options.voice.test.recording": "Listening…",
-  "options.voice.test.transcribing": "Transcribing test clip…",
-  "options.voice.test.loadingModel":
-    "First run — downloading the local model (~150 MB), please hang on…",
-  "options.voice.test.timeout":
-    "Request timed out. The model may still be downloading or loading — try again in a moment.",
-  "options.voice.test.success": "Recognised: {text}",
-  "options.voice.test.empty":
-    "Recording captured, but no speech was recognised.",
-  "options.voice.test.failed": "Test failed: {error}",
-
-  // Provider picker
-  "options.voice.provider.label": "Provider",
-  "options.voice.provider.local": "Local (faster-whisper, free)",
-  "options.voice.provider.groq": "Groq",
-  "options.voice.provider.openai": "OpenAI",
-  "options.voice.provider.mistral": "Mistral Voxtral",
-  "options.voice.provider.elevenlabs": "ElevenLabs Scribe",
   "newtab.dropOverlay": "Drop files to attach",
-  "options.voice.localModel.label": "Local model size",
-  "options.voice.localModel.notDownloaded":
-    "{model} model isn't downloaded yet (~{size})",
-  "options.voice.localModel.ready": "{model} model is ready",
-  "options.voice.localModel.download": "Download",
-  "options.voice.localModel.downloading": "Downloading {model} model…",
-  "options.voice.localModel.downloadFailed": "Download failed: {error}",
-  "options.voice.localModel.retry": "Retry",
-  "options.voice.localModel.help":
-    "Larger models are more accurate but slower. Recommended: base.",
-
-  // API-key editor
-  "options.voice.apiKey.label": "API key",
-  "options.voice.apiKey.placeholder": "Paste your provider API key",
-  "options.voice.apiKey.placeholderReplace":
-    "Enter a new key to replace the saved one",
-  "options.voice.apiKey.set": "Key is set",
-  "options.voice.apiKey.unset": "Not set",
-  "options.voice.apiKey.clear": "Clear",
-  "options.voice.apiKey.confirmClear": "Confirm clear",
-  "options.voice.apiKey.help":
-    "Stored in $HERMES_HOME/.env inside Amiba's managed runtime. Empty input is ignored; use Clear to remove a saved key.",
-
-  // Status (loading / error)
-  "options.voice.status.loading": "Reading STT config…",
-  "options.voice.status.error": "Couldn't reach the backplane: {error}",
-  "options.voice.status.retry": "Retry",
-
   // Preference page
-  "options.preference.subtitle": "Extension UI and behavior",
+  "options.preference.subtitle": "Desktop UI and behavior",
   "options.preference.hotkey.label": "Summon hotkey",
   "options.preference.hotkey.desc":
     "Bring Amiba to the front from any app when this binding fires.",
@@ -748,68 +658,10 @@ export const en = {
   "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
 
-  // Userscripts
-  "options.scripts.title": "Userscripts",
-  "options.scripts.subtitle": "Create, install, and manage userscripts",
-  "options.scripts.new": "New script",
-  "options.scripts.installFromUrl": "Install from URL",
-  "options.scripts.installDialog.title": "Install userscript from URL",
-  "options.scripts.installDialog.label": "Script URL",
-  "options.scripts.installDialog.install": "Install",
-  "options.scripts.empty":
-    "No userscripts installed yet. Use the buttons above to create or import one.",
-  "options.scripts.removeConfirm":
-    "Remove this userscript? This action can't be undone.",
-  "options.scripts.editor.newTitle": "New userscript",
-  "options.scripts.editor.editTitle": "Edit: {name}",
-  "options.scripts.runAt": "Run at: {runAt}",
-  "options.scripts.match": "Match: {match}",
-  "options.scripts.version": "v{version}",
-  "options.scripts.updatedAt": "Updated {time}",
-  "options.scripts.lastError": "Last error",
-  "options.scripts.errorBadge": "error",
-  "options.scripts.noMatch": "(no @match)",
-  "options.scripts.action.edit": "Edit",
-  "options.scripts.action.remove": "Remove",
-  "options.scripts.editor.save": "Save",
-  "options.scripts.editor.cancel": "Cancel",
-  "options.scripts.editor.placeholder":
-    "// ==UserScript==\n// @name        My script\n// @match       https://example.com/*\n// @run-at      document-end\n// ==/UserScript==\n",
-
-  // Gateway settings
-  "options.gateway.baseUrl": "Gateway base URL",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:18642/v1",
-  "options.gateway.baseUrl.desc":
-    "The gateway listens on this URL. Override it if you ran `hermes chat` on a different port or host.",
-  "options.gateway.test": "Test connection",
-  "options.gateway.testing": "Testing…",
-  "options.gateway.test.ok": "Connected. Bridge is reachable.",
-  "options.gateway.test.fail": "Could not reach the bridge: {error}",
-  "options.gateway.startHint":
-    "Gateway not running? Start it with `hermes chat` from the Hermes CLI.",
-  "options.gateway.section.chat": "Side panel chat",
-  "options.gateway.model.label": "Chat model id",
-  "options.gateway.model.fromGateway": "From gateway",
-  "options.gateway.model.fromGateway.tooltip":
-    "List models the gateway currently exposes",
-  "options.gateway.model.noModels": "Gateway returned no models.",
-  "options.gateway.save": "Save",
-  "options.gateway.saved": "Saved.",
-  "options.gateway.backplaneKey.title": "Backplane access",
-  "options.gateway.backplaneKey.label": "Access key (optional)",
-  "options.gateway.backplaneKey.placeholder":
-    "leave empty unless you've set AMIBA_BACKPLANE_KEY",
-  "options.gateway.backplaneKey.help":
-    "Usually leave empty. If you want to require auth, set AMIBA_BACKPLANE_KEY in $HERMES_HOME/.env, restart the local service, then paste the same value here.",
-  "options.gateway.bridge.title": "Bridge",
-  "options.gateway.bridge.url.label": "Bridge URL",
-  "options.gateway.bridge.url.help":
-    "Leave as default. Only change this if you've moved the local bridge to a different port.",
-
   // Memory settings
   "options.memory.title": "Memory",
   "options.memory.subtitle": "The assistant's persistent memory (read-only)",
-  "options.memory.subtitle.tooltip": "$HERMES_HOME/memories/{MEMORY,USER}.md",
+  "options.memory.subtitle.tooltip": "DSH home/amiba-memory/memory.json",
   "options.memory.empty": "(No memory entries yet)",
   "options.memory.refresh": "Refresh",
   "options.memory.failedToLoad": "Failed to load",
@@ -832,8 +684,25 @@ export const en = {
     "User preferences and collaboration habits noted by the assistant.",
   "options.memory.flagTooltip":
     "Safety-scan flag: {flag}\nThe same rules block entries before MEMORY.md is injected into the system prompt",
+  "options.memory.dsh.subtitle":
+    "Preset-scoped long-term memory supplied by a native DSH plugin",
+  "options.memory.dsh.subtitleTooltip":
+    "DSH session history and compaction remain separate from cross-session memory.",
+  "options.memory.dsh.pluginTitle": "DSH long-term memory plugin",
+  "options.memory.dsh.pluginDescription":
+    "Memory tools, safety scanning, persistence, and model context all run inside the DSH Cordis composition.",
+  "options.memory.dsh.active": "Active",
+  "options.memory.dsh.preset": "Memory scope",
+  "options.memory.dsh.presetDescription":
+    "Each DSH agent preset keeps an independent long-term memory collection.",
+  "options.memory.dsh.target.memory": "Assistant memory",
+  "options.memory.dsh.target.user": "User profile",
+  "options.memory.dsh.reset": "Reset",
+  "options.memory.dsh.resetConfirm":
+    "Clear all long-term memory for this DSH preset? This cannot be undone.",
+  "options.memory.dsh.resetFailed": "Failed to reset DSH memory.",
 
-  // Models / Hermes model config
+  // Models / DSH model config
   "options.models.title": "Models",
   "options.models.subtitle":
     "Which providers and models Amiba uses for chat, embedding, and tool calls.",
@@ -844,7 +713,6 @@ export const en = {
   "options.models.refreshCatalog": "Refresh catalog",
   "options.models.loadingSettings": "Loading settings…",
   "options.models.config.navTitle": "Models & services",
-  "options.models.connection.navTitle": "Connection",
   "options.models.display.navTitle": "Shown in chat",
   "options.models.display.navDescription": "Choose models for the input bar",
   "options.models.display.title": "Service providers",
@@ -919,8 +787,6 @@ export const en = {
   "options.models.config.useMainModelDescription":
     "Do not assign a separate model; always follow the current main model.",
   "options.models.config.configuredCount": "{count} of {total} configured",
-  "options.models.config.auxiliaryUnavailable":
-    "Auxiliary model configuration is unavailable because the bridge is not connected.",
   "options.models.config.saved": "Saved",
   "options.models.config.clear": "Clear",
   "options.models.config.select": "Choose",
@@ -1032,7 +898,6 @@ export const en = {
   "options.models.provider.method.githubToken": "GitHub Token",
   "options.models.provider.method.claudeCode": "Claude Code login",
   "options.models.provider.method.githubCli": "GitHub CLI login",
-  "options.models.provider.method.hermesOauth": "Device authorization",
   "options.models.provider.authHint.oauthDevice":
     "You can also sign in through the device authorization flow.",
   "options.models.provider.authHint.oauthExternal":
@@ -1072,94 +937,6 @@ export const en = {
   "options.models.meta.modality": "Modality",
   "options.models.meta.parameters": "Parameters",
   "options.models.meta.capabilities": "Capabilities",
-  "options.models.virtual.navTitle": "Multi-model collaboration",
-  "options.models.virtual.moaTitle": "Multi-model collaboration",
-  "options.models.virtual.virtualBadge": "Multi-model collaboration",
-  "options.models.virtual.description":
-    "Multi-model collaboration runs reference models in parallel, then asks an aggregator model to produce the answer.",
-  "options.models.virtual.loading": "Loading multi-model collaboration…",
-  "options.models.virtual.unavailable":
-    "Multi-model collaboration configuration is unavailable.",
-  "options.models.virtual.save": "Save preset",
-  "options.models.virtual.saved": "Saved",
-  "options.models.virtual.unsaved": "Unsaved",
-  "options.models.virtual.saveFailed":
-    "Could not save the multi-model collaboration configuration.",
-  "options.models.virtual.status.ready": "Ready",
-  "options.models.virtual.status.degraded": "Partially ready",
-  "options.models.virtual.status.unavailable": "Unavailable",
-  "options.models.virtual.status.disabled": "Disabled",
-  "options.models.virtual.unavailableHint":
-    "The aggregator model is not currently usable. Connect its service provider or choose another model before running this preset.",
-  "options.models.virtual.degradedHint":
-    "One or more reference models are unavailable. The aggregator is ready, but this preset cannot use its full reference set.",
-  "options.models.virtual.preset": "Collaboration presets",
-  "options.models.virtual.defaultPreset": "Default",
-  "options.models.virtual.setDefault": "Set as default",
-  "options.models.virtual.newPreset": "Preset name",
-  "options.models.virtual.addPreset": "New preset",
-  "options.models.virtual.renamePreset": "Rename preset",
-  "options.models.virtual.renamePresetNamed": "Rename preset “{name}”",
-  "options.models.virtual.copyPreset": "Duplicate preset",
-  "options.models.virtual.copyName": "{name} copy",
-  "options.models.virtual.copyNameIndexed": "{name} copy {number}",
-  "options.models.virtual.presetActions": "Preset actions",
-  "options.models.virtual.presetActionsNamed": "Manage preset “{name}”",
-  "options.models.virtual.presetNameRequired": "Preset name cannot be empty.",
-  "options.models.virtual.presetNameExists":
-    "A preset with this name already exists.",
-  "options.models.virtual.deletePreset": "Delete preset",
-  "options.models.virtual.enabled": "Enabled",
-  "options.models.virtual.enabledHint":
-    "Enabled presets appear in the input-bar picker under Multi-model collaboration once the aggregator is usable.",
-  "options.models.virtual.pipelineTitle": "Model pipeline",
-  "options.models.virtual.pipelineDescription":
-    "References analyze the request in parallel. The aggregator receives their output and acts as the final model.",
-  "options.models.virtual.reference": "Reference {number}",
-  "options.models.virtual.aggregator": "Aggregator",
-  "options.models.virtual.parallel": "Parallel analysis, then aggregate",
-  "options.models.virtual.addReference": "Add reference model",
-  "options.models.virtual.removeReference": "Remove reference model",
-  "options.models.virtual.referenceEnabledNamed": "Enable {name}",
-  "options.models.virtual.slotSettingsNamed": "Execution settings for {name}",
-  "options.models.virtual.reasoningEffort": "Reasoning effort",
-  "options.models.virtual.reasoning.provider_default": "Use model default",
-  "options.models.virtual.reasoning.none": "No reasoning",
-  "options.models.virtual.reasoning.minimal": "Minimal",
-  "options.models.virtual.reasoning.low": "Low",
-  "options.models.virtual.reasoning.medium": "Medium",
-  "options.models.virtual.reasoning.high": "High",
-  "options.models.virtual.reasoning.xhigh": "Extra high",
-  "options.models.virtual.reasoning.max": "Maximum",
-  "options.models.virtual.reasoning.ultra": "Ultra",
-  "options.models.virtual.referenceOutputLimit": "Per-model output cap",
-  "options.models.virtual.inheritPresetOutputLimit": "Use preset cap",
-  "options.models.virtual.advancedTitle": "Advanced",
-  "options.models.virtual.fanout.label": "Advisor refresh",
-  "options.models.virtual.fanout.userTurn": "Once per task",
-  "options.models.virtual.fanout.perIteration": "Every execution step",
-  "options.models.virtual.fanout.everyN": "Every {count} execution steps",
-  "options.models.virtual.fanout.interval": "Refresh interval",
-  "options.models.virtual.referenceMaxTokens": "Advisor output cap",
-  "options.models.virtual.referenceMaxTokensValue": "Advisor output {count}",
-  "options.models.virtual.referenceTimeout": "Advisor timeout (seconds)",
-  "options.models.virtual.unlimited": "Unlimited",
-  "options.models.virtual.inheritHermes": "Use assistant default",
-  "options.models.virtual.degradedPolicy": "When an advisor fails",
-  "options.models.virtual.degraded.loud": "Show degraded state",
-  "options.models.virtual.degraded.silent": "Continue silently",
-  "options.models.virtual.privacyFilter": "Advisor redaction",
-  "options.models.virtual.privacy.off": "Off",
-  "options.models.virtual.privacy.display": "UI and diagnostic records",
-  "options.models.virtual.privacy.full": "UI, records, and aggregator input",
-  "options.models.virtual.providerDefault": "Provider default",
-  "options.models.virtual.referenceTemperature": "Reference temperature",
-  "options.models.virtual.referenceTemperatureHint":
-    "Leave empty to use each model provider's default.",
-  "options.models.virtual.aggregatorTemperature": "Aggregator temperature",
-  "options.models.virtual.aggregatorTemperatureHint":
-    "Leave empty to use the aggregator provider's default.",
-
   // Automation
   "options.cron.title": "Automation",
   "options.cron.pageTitle": "Automation",
@@ -1207,8 +984,7 @@ export const en = {
   "options.cron.form.directScript.hint":
     "Skip the model and run the script as the automation.",
   "options.cron.form.script": "Script",
-  "options.cron.form.script.placeholder":
-    "A script under $HERMES_HOME/scripts or an absolute path",
+  "options.cron.form.script.placeholder": "An absolute executable path",
   "options.cron.form.repeat": "Run limit",
   "options.cron.form.repeat.placeholder": "Blank means unlimited",
   "options.cron.state.scheduled": "Enabled",
@@ -1238,116 +1014,66 @@ export const en = {
   "options.cron.action.copyFailed": "Couldn't copy the task ID",
   "options.cron.action.deleteConfirm":
     "Delete “{name}”? Its saved outputs will also be removed.",
+  "options.cron.dsh.new": "New reminder",
+  "options.cron.dsh.session": "Owning conversation",
+  "options.cron.dsh.noSession":
+    "Create a conversation before adding a reminder",
+  "options.cron.dsh.explanation":
+    "Reminders belong to one DSH conversation and re-enter that same conversation when due. Cron expressions, direct scripts, separate model settings, and external delivery are intentionally not part of this runtime.",
+  "options.cron.dsh.prompt": "Reminder content",
+  "options.cron.dsh.prompt.placeholder":
+    "What should this conversation handle when the reminder becomes due?",
+  "options.cron.dsh.rule": "Timing",
+  "options.cron.dsh.rule.after": "After a delay",
+  "options.cron.dsh.rule.at": "At a date and time",
+  "options.cron.dsh.rule.every": "Fixed interval",
+  "options.cron.dsh.at": "Date and time",
+  "options.cron.dsh.minutes": "Minutes",
+  "options.cron.dsh.sessionHint":
+    "The reminder is persisted in the selected DSH session. Recurring intervals must be at least five minutes.",
+  "options.cron.dsh.oneShot": "One-time",
+  "options.cron.dsh.recurring": "Recurring",
+  "options.cron.dsh.overdue": "Overdue",
+  "options.cron.dsh.filter.scheduled": "Scheduled",
+  "options.cron.dsh.filter.overdue": "Overdue",
+  "options.cron.dsh.deleteConfirm": "Delete reminder “{name}”?",
+  "options.cron.dsh.error.prompt": "Reminder content is required.",
+  "options.cron.dsh.error.future": "Choose a time in the future.",
+  "options.cron.dsh.error.interval":
+    "Recurring intervals must be a whole number of at least five minutes.",
+  "options.cron.dsh.error.delay":
+    "The delay must be a positive whole number of minutes.",
 
   // Status + logs
   "options.status.title": "Status",
-  "options.status.subtitle": "Health, versions, paths, and maintenance actions",
-  "options.status.refresh": "Refresh",
-  "options.status.lastChecked": "Checked {time}",
-  "options.status.health.healthy.title": "All systems operational",
-  "options.status.health.healthy.subtitle":
-    "Hermes and the local gateway are responding normally.",
-  "options.status.health.offline.title": "Gateway is offline",
-  "options.status.health.offline.subtitle":
-    "Hermes was detected, but its local gateway is not currently running.",
-  "options.status.health.mismatch.title": "Components need attention",
-  "options.status.health.mismatch.subtitle":
-    "The desktop app and backplane protocol versions do not match.",
-  "options.status.health.mismatch.hermesVersion":
-    "The installed Hermes version is below Amiba's supported minimum.",
-  "options.status.metric.gateway": "Gateway",
-  "options.status.metric.online": "Online",
-  "options.status.metric.offline": "Offline",
-  "options.status.metric.sessions": "Active sessions",
-  "options.status.metric.update": "Hermes update",
-  "options.status.metric.updateAvailable": "Update available",
-  "options.status.runtime.title": "Hermes runtime",
-  "options.status.runtime.subtitle":
-    "Installed version and local configuration",
-  "options.status.runtime.release": "Release",
-  "options.status.runtime.configVersion": "Config version",
-  "options.status.runtime.latest": "latest {version}",
-  "options.status.runtime.activeSessions": "Active sessions",
-  "options.status.runtime.paths": "Paths and configuration",
-  "options.status.runtime.hermesHome": "Hermes home",
-  "options.status.runtime.configPath": "Config path",
-  "options.status.runtime.envPath": "Environment path",
-  "options.status.gateway.title": "Local gateway",
-  "options.status.gateway.subtitle": "Process and connected platform state",
-  "options.status.gateway.state": "State",
-  "options.status.gateway.pid": "Process ID",
-  "options.status.gateway.updatedAt": "Last state change",
-  "options.status.gateway.platforms": "Platforms",
-  "options.status.gateway.noPlatforms": "None connected",
-  "options.status.gateway.lastExit": "Last exit",
-  "options.status.actions.title": "Maintenance",
-  "options.status.actions.subtitle":
-    "Restart local services or update Hermes without leaving the app.",
-  "options.status.actions.restart.title": "Restart gateway",
-  "options.status.actions.restart.description":
-    "Restart the local gateway process. Active conversations remain saved.",
-  "options.status.actions.restart.button": "Restart gateway",
-  "options.status.actions.update.title": "Update Hermes",
-  "options.status.actions.update.description":
-    "Install the latest Hermes release and refresh its runtime files.",
-  "options.status.actions.update.button": "Update Hermes",
-  "options.status.actions.update.latest": "Already on the latest version",
-  "options.status.actions.update.available": "A newer version is available",
-  "options.status.actions.update.behind": "{count} commits behind upstream",
-  "options.status.actions.update.unknown": "Update status unavailable",
-  "options.status.actions.update.managed": "Managed by Amiba",
-  "options.status.actions.running": "Running",
-  "options.status.actions.success": "Completed",
-  "options.status.actions.failed": "Failed",
-  "options.status.actions.restartOutput": "Gateway restart output",
-  "options.status.protocol.title": "Protocol version mismatch",
-  "options.status.protocol.backplane":
-    "Backplane protocol v{current} is older than the required v{expected}. Update the backplane plugin.",
-  "options.status.protocol.client":
-    "Backplane protocol v{current} is newer than the supported v{expected}. Update the desktop app.",
-  "options.status.hermesVersion.title": "Hermes update required",
-  "options.status.hermesVersion.unsupported":
-    "Hermes {current} is installed. This version of Amiba requires Hermes {required} or newer; other Hermes operations are disabled until you update.",
-  "options.status.hermesVersion.unverifiable":
-    "Amiba could not verify the installed Hermes version. Install Hermes {required} or newer before continuing.",
-  "options.status.recovery.title": "Local service is unavailable",
-  "options.status.recovery.description":
-    "Amiba's managed Hermes runtime or local services are not ready. Retry recovery below.",
-  "options.status.recovery.retry": "Check again",
-  "options.status.recovery.step.runtime":
-    "Amiba verifies its pinned private Hermes runtime.",
-  "options.status.recovery.step.backplane":
-    "Amiba verifies the bundled backplane version.",
-  "options.status.recovery.step.services":
-    "Amiba restarts its private gateway and backplane services.",
-  "options.status.recovery.manual": "Recovery notes",
-  "options.status.recovery.copy": "Copy",
-  "options.status.recovery.copied": "Copied",
-  "options.status.recovery.error": "Technical details",
-  "options.status.viewUpdateLogs": "View update logs",
-  "options.logs.title": "Logs",
-  "options.logs.subtitle": "Tail Hermes Agent and Hermes update logs",
-  "options.logs.refresh": "Refresh",
+  "options.status.dsh.title": "DeepSeek Harness status",
+  "options.status.dsh.subtitle":
+    "Health and identity of Amiba's immutable managed DSH runtime.",
+  "options.status.dsh.healthy": "DeepSeek Harness is ready",
+  "options.status.dsh.unhealthy": "DeepSeek Harness needs attention",
+  "options.status.dsh.managed":
+    "Bundled and supervised by Amiba; updates ship with the application.",
+  "options.status.dsh.restart": "Restart DSH",
+  "options.status.dsh.restartConfirm":
+    "Restart DeepSeek Harness? Running tasks will be interrupted, but their durable sessions are preserved.",
+  "options.status.dsh.runtime": "Managed runtime",
+  "options.status.dsh.version": "DSH version",
+  "options.status.dsh.commit": "Upstream commit",
+  "options.status.dsh.node": "Bundled Node.js",
+  "options.status.dsh.process": "Process",
+  "options.status.dsh.sessions": "Live / durable sessions",
+  "options.status.dsh.paths": "Isolated storage",
+  "options.status.dsh.bundle": "Runtime bundle",
+  "options.status.dsh.lastChecked": "Checked {time}",
+  "options.logs.dsh.title": "DeepSeek Harness logs",
+  "options.logs.dsh.subtitle":
+    "Bounded stdout, stderr and lifecycle output from the managed DSH process.",
+  "options.logs.dsh.stream": "Stream",
   "options.logs.autoRefresh": "Auto",
   "options.logs.live": "live",
   "options.logs.empty": "No matching log lines.",
-  "options.logs.failedToLoad": "Failed to load logs",
   "options.logs.lineCount": "{count} lines",
-  "options.logs.file.label": "Source",
-  "options.logs.file.agent": "agent",
-  "options.logs.file.errors": "errors",
-  "options.logs.file.gateway": "gateway",
-  "options.logs.file.hermesUpdate": "Hermes update",
-  "options.logs.action.running": "updating",
-  "options.logs.action.empty": "No Hermes update output yet.",
   "options.logs.level.label": "Level",
-  "options.logs.component.label": "Component",
-  "options.logs.component.all": "all",
-  "options.logs.component.gateway": "gateway",
-  "options.logs.component.agent": "agent",
-  "options.logs.component.tools": "tools",
-  "options.logs.component.cli": "cli",
-  "options.logs.component.cron": "cron",
   "options.logs.lines.label": "Lines",
   "options.logs.search.label": "Search",
   "options.logs.search.placeholder": "Substring filter (case-insensitive)",
@@ -1379,7 +1105,7 @@ export const en = {
   "sidepanel.modelPicker.loading": "Loading available models…",
   "sidepanel.modelPicker.loadFailed": "Couldn’t load models. Reopen to retry.",
   "sidepanel.modelPicker.switchFailed": "Couldn’t switch models. Try again.",
-  "sidepanel.modelPicker.virtualCapabilities": "Multi-model collaboration",
+  "sidepanel.modelPicker.reasoningEffort": "Reasoning effort",
   "sidepanel.queue.tooltip": "Queue: send after the current turn finishes",
   "sidepanel.stop": "Stop generation",
   "sidepanel.regenerate": "Regenerate",
@@ -1528,24 +1254,19 @@ export const en = {
   "sidepanel.permission.denied.tooltip": "User denied this command",
   "sidepanel.permission.expired": "Expired",
   "sidepanel.permission.expired.tooltip":
-    "No response before gateway_timeout; the server auto-denied and unblocked",
+    "The approval deadline elapsed; DSH denied the request so execution could continue safely",
   "sidepanel.permission.submitFailed": "Submit failed",
   "sidepanel.permission.submitFailed.tooltip":
-    "POST /v1/runs/{runId}/approval request failed",
+    "DSH did not accept the approval decision for run {runId}",
   "sidepanel.permission.waiting": "Waiting",
   "sidepanel.permission.chip.tool": "Tool: {tool}",
   "sidepanel.permission.chip.command": "Command: {command}",
   "sidepanel.permission.chip.reason": "Reason: {reason}",
   "sidepanel.permission.chip.requested": "Requested: {time}",
   "sidepanel.permission.chip.decided": "Decided: {time}",
-  "sidepanel.permission.failedRecordStart": "Failed to start recording",
-  "sidepanel.permission.failedRecordStop": "Failed to stop recording",
   "sidepanel.permission.dismissError": "Dismiss error",
   "sidepanel.attachment.uploading": "Uploading",
   "sidepanel.attachment.removeAria": "Remove {name}",
-  "sidepanel.attachment.removePage": "Remove attached page",
-  "sidepanel.attachment.autoFrom": "Auto-attached from {source}",
-  "sidepanel.attachment.autoFrom.fallback": "current tab",
   "sidepanel.attachment.openInBrowser": "Open {name} in your browser",
   "sidepanel.attachment.remove": "Remove",
   "sidepanel.attachment.previewTooltip": "Click to preview",
@@ -1557,56 +1278,6 @@ export const en = {
   "sidepanel.empty.newChat": "New task",
   "sidepanel.empty.openHistory": "Open from History",
   "sidepanel.empty.settings": "Settings",
-  // Empty-state connect prompt — shown in place of the composer when
-  // the bridge isn't reachable. Submitting a prompt would just error.
-  "sidepanel.empty.notConnected.title": "Not connected to Amiba",
-  "sidepanel.empty.notConnected.description":
-    "Connect to the local service first to start chatting.",
-  "sidepanel.empty.notConnected.button": "Connect",
-  "sidepanel.empty.notConnected.connecting": "Connecting…",
-
-  // Bridge status bar
-  "sidepanel.status.connecting": "Connecting…",
-  "sidepanel.status.online": "Online",
-  "sidepanel.status.offline": "Offline",
-  "sidepanel.status.bridgeUrl": "Bridge: {url}",
-  "sidepanel.status.tooltip.online":
-    "The local service is reachable. Click to open Gateway settings.",
-  "sidepanel.status.tooltip.offline":
-    "The local gateway is not reachable. Start `hermes chat` and check the Gateway URL.",
-  "sidepanel.status.tooltip.connecting": "Connecting to the local service…",
-  "sidepanel.status.tooltipBase": "Amiba Browser Extension · {state}",
-  "sidepanel.status.tooltip.agentRunning":
-    "Agent window: #{windowId} · tab {tabId}",
-  "sidepanel.status.tooltip.agentDown": "Agent window: not running",
-  "sidepanel.status.tooltip.clickConnect": "Click to connect",
-  "sidepanel.status.tooltip.clickDisconnect": "Click to disconnect",
-  "sidepanel.status.aria.bar": "Amiba Browser Extension {label}. {action}.",
-  "sidepanel.status.showAgentWindow": "Show agent window",
-  "sidepanel.status.showAgentWindow.disabled":
-    "Agent window not running — connect first",
-  "sidepanel.status.dismiss": "Dismiss",
-
-  // Navigate open policy toggle
-  "sidepanel.navPolicy.label": "Open links",
-  "sidepanel.navPolicy.background": "In background tab",
-  "sidepanel.navPolicy.foreground": "In foreground tab",
-  "sidepanel.navPolicy.sameTab": "Replace current tab",
-  "sidepanel.navPolicy.tooltip": "Where to open links the agent navigates to.",
-  "sidepanel.navPolicy.listAria": "Navigate opens",
-  "sidepanel.navPolicy.auto.label": "Auto",
-  "sidepanel.navPolicy.auto.desc":
-    "Model picks via open_in on each navigate; other tools follow the active run surface (updated by navigate + this menu when not Auto).",
-  "sidepanel.navPolicy.agent.label": "Agent",
-  "sidepanel.navPolicy.agent.desc":
-    "Dedicated agent window — all browser tools and in-place navigations.",
-  "sidepanel.navPolicy.userNewTab.label": "New tab",
-  "sidepanel.navPolicy.userNewTab.desc":
-    "Your Chrome window — each navigate opens a new tab; other tools follow that tab.",
-  "sidepanel.navPolicy.userSameTab.label": "Same tab",
-  "sidepanel.navPolicy.userSameTab.desc":
-    "Your Chrome window — navigations and tools use the current tab.",
-
   // Session drawer
   "sidepanel.sessions.title": "Recent tasks",
   "sidepanel.sessions.empty": "No sessions yet. Send a message to start one.",
@@ -1614,12 +1285,12 @@ export const en = {
   "sidepanel.sessions.close": "Close",
   "sidepanel.sessions.openAsTab": "Open as tab",
   "sidepanel.sessions.rename": "Rename",
-  "sidepanel.sessions.deletePermanently": "Delete permanently",
+  "sidepanel.sessions.deletePermanently": "Remove from Amiba",
   "sidepanel.sessions.save": "Save",
   "sidepanel.sessions.cancel": "Cancel",
   "sidepanel.sessions.newChatTitle": "New task",
   "sidepanel.sessions.deleteConfirm":
-    'Permanently delete "{title}"? This drops the session and its messages from History — closing the tab from the top bar would have just hidden it.',
+    'Remove "{title}" from Amiba? DSH keeps the canonical session event log; this only hides the task from Amiba history.',
   "sidepanel.sessions.selected": "{count} selected",
   "sidepanel.sessions.select": "Select tasks",
   "sidepanel.sessions.pin": "Pin",
@@ -1630,12 +1301,9 @@ export const en = {
   "sidepanel.sessions.archived": "Archived",
   "sidepanel.sessions.branch": "Create branch",
   "sidepanel.sessions.export": "Export",
-  "sidepanel.sessions.import": "Import tasks…",
   "sidepanel.sessions.more": "More task actions",
-  "sidepanel.sessions.importInvalid":
-    "This file does not contain an Amiba session export.",
   "sidepanel.sessions.bulkDeleteConfirm":
-    "Permanently delete {count} selected tasks?",
+    "Remove {count} selected tasks from Amiba? DSH keeps their canonical event logs.",
   "sidepanel.sessions.group.pinned": "Pinned",
   "sidepanel.sessions.group.today": "Today",
   "sidepanel.sessions.group.yesterday": "Yesterday",
@@ -1651,109 +1319,7 @@ export const en = {
   "sidepanel.sessions.group.channelChats": "{name} chats",
   "sidepanel.sessions.group.scheduled": "Automation runs",
 
-  // Task center / Kanban
-  "tasks.title": "Task board",
-  "tasks.board.description":
-    "Background execution, handoffs, and tasks that need your attention",
-  "tasks.search": "Search tasks…",
-  "tasks.loadFailed": "Couldn't load tasks",
-  "tasks.createFailed": "Couldn't create the task",
-  "tasks.orchestration.progress":
-    "Orchestration progress: {completed}/{total} child tasks complete.",
-  "tasks.card.childCount": "{count} child tasks",
-  "tasks.column.planning": "Planned",
-  "tasks.column.ready": "Ready",
-  "tasks.column.running": "In progress",
-  "tasks.column.attention": "Needs attention",
-  "tasks.column.done": "Done",
-  "tasks.column.empty": "No tasks",
-  "tasks.status.triage": "Triage",
-  "tasks.status.todo": "To do",
-  "tasks.status.scheduled": "Scheduled",
-  "tasks.status.ready": "Ready",
-  "tasks.status.running": "Running",
-  "tasks.status.blocked": "Blocked",
-  "tasks.status.review": "Review",
-  "tasks.status.done": "Done",
-  "tasks.status.archived": "Archived",
-  "tasks.field.title": "Title",
-  "tasks.field.body": "Instructions",
-  "tasks.field.assignee": "Responsible agent",
-  "tasks.field.reviewer": "Reviewer",
-  "tasks.field.status": "Status",
-  "tasks.field.priority": "Priority",
-  "tasks.field.reason": "Reason",
-  "tasks.field.handoff": "Handoff summary",
-  "tasks.field.workdir": "Working directory",
-  "tasks.field.chooseWorkdir": "Choose working directory",
-  "tasks.assignee.unassigned": "Unassigned — won't run automatically",
-  "tasks.assignee.shortUnassigned": "Unassigned",
-  "tasks.priority.normal": "Normal",
-  "tasks.latestSummary": "Latest handoff",
-  "tasks.detail.loadFailed": "Couldn't load task details",
-  "tasks.detail.noInstructions": "No instructions provided.",
-  "tasks.actionFailed": "The task couldn't be updated",
-  "tasks.edit": "Edit task",
-  "tasks.form.description": "Configure this task's execution details.",
-  "tasks.edit.runningWarning":
-    "Changing the agent stops the active run before reassigning it.",
-  "tasks.action.block": "Block",
-  "tasks.action.unblock": "Unblock",
-  "tasks.action.retry": "Retry",
-  "tasks.action.stopRetry": "Stop & retry",
-  "tasks.action.complete": "Complete",
-  "tasks.action.requestReview": "Request review",
-  "tasks.action.approve": "Approve",
-  "tasks.action.requestChanges": "Request changes",
-  "tasks.action.archive": "Archive",
-  "tasks.tab.details": "Details",
-  "tasks.tab.activity": "Activity",
-  "tasks.next.human": "Waiting for human input before work can continue.",
-  "tasks.next.reviewer": "Next handler: reviewer {name}",
-  "tasks.next.running": "Running now with {name}",
-  "tasks.next.done": "Execution finished. Review the handoff and artifacts.",
-  "tasks.next.agent": "Next handler: agent {name}",
-  "tasks.next.unassigned": "Assign an agent to make this task executable.",
-  "tasks.dependencies": "Dependencies & subtasks",
-  "tasks.dependencies.parents": "Blocked by",
-  "tasks.dependencies.children": "Subtasks / downstream",
-  "tasks.dependencies.add": "Add dependency",
-  "tasks.dependencies.addPlaceholder": "Choose a prerequisite…",
-  "tasks.dependencies.remove": "Remove dependency",
-  "tasks.subtask.create": "Add subtask",
-  "tasks.comments": "Comments",
-  "tasks.comments.placeholder": "Add guidance or context…",
-  "tasks.comments.send": "Send comment",
-  "tasks.attachments": "Attachments",
-  "tasks.attachments.add": "Add file",
-  "tasks.attachments.download": "Download attachment",
-  "tasks.attachments.downloadFailed": "Couldn't download the attachment",
-  "tasks.attachments.empty": "No attachments yet.",
-  "tasks.runs": "Run history",
-  "tasks.runs.empty": "This task hasn't run yet.",
-  "tasks.events": "Audit trail",
-  "tasks.events.empty": "No activity recorded.",
-  "tasks.deleteConfirm": "Permanently delete “{title}” and its history?",
-  "tasks.deleteFailed": "Couldn't delete the task",
-  "tasks.block.kind": "Block type",
-  "tasks.block.needs_input": "Needs human input",
-  "tasks.block.capability": "Missing capability",
-  "tasks.block.transient": "Temporary failure",
-  "tasks.block.dependency": "Waiting on dependency",
-  "tasks.dialog.block.title": "Block task",
-  "tasks.dialog.block.placeholder": "What prevents this task from continuing?",
-  "tasks.dialog.block.submit": "Block task",
-  "tasks.dialog.complete.title": "Complete and hand off",
-  "tasks.dialog.complete.placeholder":
-    "Summarize the outcome, changed artifacts, and verification…",
-  "tasks.dialog.complete.submit": "Complete",
-  "tasks.dialog.review.title": "Send to review",
-  "tasks.dialog.review.placeholder": "Tell the reviewer what to verify…",
-  "tasks.dialog.review.submit": "Request review",
-  "tasks.dialog.changes.title": "Request changes",
-  "tasks.dialog.changes.placeholder":
-    "Describe what must change before approval…",
-  "tasks.dialog.changes.submit": "Return to agent",
+  // Session history and DSH scheduled runs
   "modelSelection.inherit": "Use the default model",
   "modelSelection.inherit.description":
     "Follow the active agent profile's default model.",
@@ -1772,7 +1338,7 @@ export const en = {
   "sidepanel.sessions.scheduled.empty":
     "No scheduled tasks yet. Create one from a chat to get started.",
   "sidepanel.sessions.scheduled.error":
-    "Couldn't load scheduled tasks. Check that the backplane is running.",
+    "Couldn't load scheduled tasks. Check that DSH is running.",
   "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
   "sidepanel.sessions.scheduled.selectRun": "Select a run to view its output.",
   "sidepanel.sessions.scheduled.trigger": "Trigger now",
@@ -1783,16 +1349,16 @@ export const en = {
   // New tab
   "newtab.greeting": "What can I help with?",
   "newtab.subtitle":
-    "Look something up, read a page, handle Feishu, run a script — just tell me what you need.",
+    "Search the web, read a page, work with project files, run commands, or schedule work — just tell me what you need.",
   // Typewriter cycle in the new-tab composer — keep each line short
   // enough to fit on one line at the default composer width (~640px)
   // and concrete enough to suggest a real capability rather than just
   // "ask me anything".
-  "newtab.placeholder.example.1": "What's on my calendar today?",
+  "newtab.placeholder.example.1": "Summarise the changes in this project",
   "newtab.placeholder.example.2": "Translate this paragraph to Chinese…",
   "newtab.placeholder.example.3": "Summarise this web page",
   "newtab.placeholder.example.4": "Latest AI news from the Valley",
-  "newtab.placeholder.example.5": "Implement quicksort in Python",
+  "newtab.placeholder.example.5": "Run the tests and fix what fails",
   "newtab.send": "Send",
   "newtab.send.tooltip": "Send (Enter)",
   "workspace.openFolder": "Open folder",
@@ -1814,7 +1380,7 @@ export const en = {
   "newtab.content.empty": "No cron run output yet.",
   "newtab.content.empty.row": "No output recorded for this run.",
   "newtab.content.truncated":
-    "Output file exceeded the bridge's in-memory cap — only the head of the run is shown above.",
+    "Output exceeded the managed runtime's preview cap — only the beginning is shown above.",
   "newtab.continueInChat": "Continue in chat",
   "newtab.continueInChat.prompt":
     'Below is the output from cron job "{name}" at {time}. Help me read it: what\'s worth handling right away, what can wait, and is there anything I need to follow up on?\n\n---\n\n{content}',
@@ -1832,33 +1398,6 @@ export const en = {
   "newtab.relative.dAgo": "{n}d ago",
 
   // Home shortcuts strip
-  "newtab.shortcuts.title": "Shortcuts",
-  "newtab.shortcuts.add": "Add",
-  "newtab.shortcuts.add.tooltip": "Add a shortcut",
-  "newtab.shortcuts.remove": "Remove",
-  "newtab.shortcuts.rename": "Rename",
-  "newtab.shortcuts.manage": "Manage",
-  "newtab.shortcuts.manage.tooltip": "Manage shortcuts",
-  "newtab.shortcuts.manage.title": "Manage shortcuts",
-  "newtab.shortcuts.manage.close": "Close",
-  "newtab.shortcuts.manage.moveUp": "Move up",
-  "newtab.shortcuts.manage.moveDown": "Move down",
-  "newtab.shortcuts.manage.listEmpty":
-    "No shortcuts yet. Add your first one above.",
-  "newtab.shortcuts.add.dialog.title": "Add a shortcut",
-  "newtab.shortcuts.add.dialog.urlLabel": "URL",
-  "newtab.shortcuts.add.dialog.urlPlaceholder": "https://example.com",
-  "newtab.shortcuts.add.dialog.titleLabel": "Name",
-  "newtab.shortcuts.add.dialog.titlePlaceholder":
-    "Leave empty to use the page title",
-  "newtab.shortcuts.add.dialog.useCurrentTab": "Use current active tab",
-  "newtab.shortcuts.add.dialog.confirm": "Add",
-  "newtab.shortcuts.add.dialog.cancel": "Cancel",
-  "newtab.shortcuts.add.invalidUrl":
-    "Enter a valid URL including http:// or https://.",
-  "newtab.shortcuts.empty":
-    "No shortcuts yet — click ⚙ Manage on the right to add your first one.",
-
   // Wallpaper
   "newtab.wallpaper.cycle": "Next wallpaper",
 
@@ -1877,7 +1416,7 @@ export const en = {
   "chat.resizeSidebar": "Resize sidebar",
   "chat.untitled": "Untitled chat",
   "chat.rename": "Rename",
-  "chat.delete": "Delete",
+  "chat.delete": "Remove",
   "chat.width.label": "Message column width",
   "chat.width.narrow": "Narrow",
   "chat.width.narrow.tooltip": "Narrow message column (same as input)",
@@ -1899,39 +1438,10 @@ export const en = {
 
   // ── Channels (multi-platform sessions) ──
   // ``channels.local`` is the label for every "this machine" session
-  // — extension, desktop main window, Quick-Ask. The backplane
-  // migrates legacy ``source="browser-extension"`` / ``"desktop"``
-  // rows to the unified ``"local"`` value on boot, so the renderer
-  // only ever sees one local source.
-  "channels.cli": "CLI",
-  "channels.tui": "TUI",
-  "channels.cron": "Scheduled",
-  "channels.feishu": "Feishu",
-  "channels.telegram": "Telegram",
-  "channels.slack": "Slack",
-  "channels.discord": "Discord",
-  "channels.wecom": "WeCom",
-  "channels.weixin": "WeChat",
-  "channels.dingtalk": "DingTalk",
-  "channels.whatsapp": "WhatsApp",
-  "channels.signal": "Signal",
-  "channels.matrix": "Matrix",
-  "channels.email": "Email",
-  "channels.sms": "SMS",
-  "channels.webhook": "Webhook",
-  "channels.homeassistant": "Home Assistant",
-  "channels.bluebubbles": "iMessage",
-  "channels.qqbot": "QQ",
-  "channels.yuanbao": "Yuanbao",
-  "channels.gateway": "Gateway",
-  "channels.api": "API",
+  // — desktop main window and Quick-Ask. Plugin-owned transports are
+  // represented generically; transport identity remains in DSH.
   "channels.local": "Local",
   "channels.unknown": "Other",
-  "channels.remoteTitle": "From {name}",
-  "sidepanel.sessions.readOnlyBadge": "Read-only",
-  "sidepanel.sessions.readOnlyNotice":
-    "This conversation lives on {name}. Continue there to send a new message.",
-
   // Tokens + Tools pages
   "options.nav.tokens": "Tokens",
   "options.nav.tools": "Tools",
@@ -1958,7 +1468,7 @@ export const en = {
   "usage.tokens.label.tokens": "{in} in / {out} out",
   "usage.tokens.label.placeholder": "Unknown",
   "usage.tokens.label.placeholderHint":
-    "No specific model was recorded for this session. The gateway used its default routing — the real model that ran isn't stored per-session.",
+    "The DSH event history for this session did not record a specific model.",
   "usage.tokens.footer.source":
     "Data from the local runtime · auto-refreshes every 30 s",
   "usage.tools.hero.calls": "Calls",
@@ -1974,124 +1484,74 @@ export const en = {
   "usage.tools.label.completed": "{ms}ms",
   "usage.tools.footer.source": "Local capture · auto-refreshes every 30 s",
 
-  // Profile-scoped tools, with internal implementation details curated away.
+  // Runtime tool catalog, with internal implementation details curated away.
   "agentCapabilities.title": "Tools",
   "agentCapabilities.subtitle":
     "Manage the built-in and external tools available to this assistant.",
-  "agentCapabilities.loadFailed": "Could not load built-in tools.",
-  "agentCapabilities.empty": "No configurable built-in tools are available.",
   "agentCapabilities.back": "Back to tools",
-  "agentCapabilities.builtin.title": "Built-in tools",
-  "agentCapabilities.builtin.description":
-    "Provided by the local runtime and organized by purpose for easier setup.",
-  "agentCapabilities.enabledForAssistant":
-    "Allow this assistant to use this tool",
   "agentCapabilities.activity.title": "Tool usage",
   "agentCapabilities.activity.description":
     "A diagnostic record of recent tool calls.",
   "agentCapabilities.activity.action": "Usage",
-  "agentCapabilities.scope.device": "Shared on this device",
-  "agentCapabilities.status.ready": "Ready",
-  "agentCapabilities.status.attention": "Needs setup",
-  "agentCapabilities.status.off": "Off",
-  "agentCapabilities.group.understand.title": "Understand content",
-  "agentCapabilities.group.understand.description":
-    "Help Amiba interpret visual information you share.",
-  "agentCapabilities.group.web.title": "Find and use information",
-  "agentCapabilities.group.web.description":
-    "Search, read and interact with information on the web.",
-  "agentCapabilities.group.create.title": "Create content",
-  "agentCapabilities.group.create.description":
-    "Turn instructions into images, video and spoken audio.",
-  "agentCapabilities.group.coordinate.title": "Coordinate work",
-  "agentCapabilities.group.coordinate.description":
-    "Plan and track work that continues beyond the current turn.",
-  "agentCapabilities.group.device.title": "Work on this device",
-  "agentCapabilities.group.device.description":
-    "Control how Amiba works with files, code and desktop applications.",
-  "agentCapabilities.group.connect.title": "Connected services",
-  "agentCapabilities.group.connect.description":
-    "Let Amiba act in services and devices you already use.",
-  "agentCapabilities.item.vision.title": "Understand images",
-  "agentCapabilities.item.vision.description":
-    "Read screenshots, photos, diagrams and other visual material.",
-  "agentCapabilities.item.video.title": "Understand video",
-  "agentCapabilities.item.video.description":
-    "Review video content with a video-capable model.",
-  "agentCapabilities.item.web.title": "Search and read the web",
-  "agentCapabilities.item.web.description":
-    "Choose services for search results and page extraction.",
-  "agentCapabilities.item.browser.title": "Operate web pages",
-  "agentCapabilities.item.browser.description":
-    "Choose how Amiba navigates, clicks and types in a browser.",
-  "agentCapabilities.item.xSearch.title": "Search X",
-  "agentCapabilities.item.xSearch.description":
-    "Find public posts and conversations on X.",
-  "agentCapabilities.item.extensions.title": "Create and use Extensions",
-  "agentCapabilities.item.extensions.description":
-    "Allow this assistant to create, improve and use your persistent Amiba Extensions.",
-  "agentCapabilities.item.imageGen.title": "Generate images",
-  "agentCapabilities.item.imageGen.description":
-    "Choose an image service and its default model.",
-  "agentCapabilities.item.videoGen.title": "Generate video",
-  "agentCapabilities.item.videoGen.description":
-    "Create or edit video from text and reference material.",
-  "agentCapabilities.item.bfl.title": "Generate FLUX 3 video",
-  "agentCapabilities.item.bfl.description":
-    "Use Black Forest Labs FLUX 3 for text, image, keyframe and continuation video workflows.",
-  "agentCapabilities.item.tts.title": "Read text aloud",
-  "agentCapabilities.item.tts.description":
-    "Choose the voice service used to create spoken audio.",
-  "agentCapabilities.item.kanban.title": "Task board",
-  "agentCapabilities.item.kanban.description":
-    "Allow this assistant to create, decompose and track durable background tasks.",
-  "agentCapabilities.item.delegation.title": "Delegate subtasks",
-  "agentCapabilities.item.delegation.description":
-    "Allow this assistant to split complex work across isolated subagents and combine their results.",
-  "agentCapabilities.item.clarify.title": "Ask me for decisions",
-  "agentCapabilities.item.clarify.description":
-    "Let the agent pause a task and present choices or an open question when it needs your input.",
-  "agentCapabilities.item.sessionSearch.title": "Search past tasks",
-  "agentCapabilities.item.sessionSearch.description":
-    "Recall useful context and outcomes from this assistant's previous tasks.",
-  "agentCapabilities.item.cronjob.title": "Manage automations",
-  "agentCapabilities.item.cronjob.description":
-    "Allow this assistant to create, update, pause and run scheduled work.",
-  "agentCapabilities.item.contextEngine.title":
-    "Use an extended context engine",
-  "agentCapabilities.item.contextEngine.description":
-    "Allow tools supplied by the context engine selected for this assistant.",
-  "agentCapabilities.item.terminal.title": "Run code and commands",
-  "agentCapabilities.item.terminal.description":
-    "Choose one environment for both code and command execution.",
-  "agentCapabilities.item.codeExecution.title": "Execute code",
-  "agentCapabilities.item.codeExecution.description":
-    "Allow Amiba to run code needed to complete a task.",
-  "agentCapabilities.item.file.title": "Work with files",
-  "agentCapabilities.item.file.description":
-    "Read, create and update files you place in scope.",
-  "agentCapabilities.item.computerUse.title": "Control desktop apps",
-  "agentCapabilities.item.computerUse.description":
-    "Set up the driver and operating-system permissions for desktop control.",
-  "agentCapabilities.item.homeAssistant.title": "Control your smart home",
-  "agentCapabilities.item.homeAssistant.description":
-    "Connect Home Assistant devices and services.",
-  "agentCapabilities.item.spotify.title": "Use Spotify",
-  "agentCapabilities.item.spotify.description":
-    "Search music and control playback, playlists and your library.",
-  "agentCapabilities.item.discord.title": "Participate in Discord",
-  "agentCapabilities.item.discord.description":
-    "Read messages, find members and take part in conversations.",
-  "agentCapabilities.item.discordAdmin.title": "Manage a Discord server",
-  "agentCapabilities.item.discordAdmin.description":
-    "Work with channels, roles, pins and server administration.",
-  "agentCapabilities.item.yuanbao.title": "Use Yuanbao groups",
-  "agentCapabilities.item.yuanbao.description":
-    "Query groups and members, send messages and use stickers.",
-  "agentCapabilities.item.a2a.title": "Work with other agents",
-  "agentCapabilities.item.a2a.description":
-    "Discover and call trusted Agent2Agent peers, recall exchanges and coordinate compatible agents.",
-
+  "agentCapabilities.dsh.title": "Tool catalog",
+  "agentCapabilities.dsh.description":
+    "Every tool registered in the DSH runtime, with its actual source.",
+  "agentCapabilities.dsh.empty": "No tools are registered in this runtime.",
+  "agentCapabilities.dsh.noDescription": "No tool description provided.",
+  "agentCapabilities.dsh.ready": "Registered",
+  "agentCapabilities.dsh.schema": "Input schema",
+  "agentCapabilities.dsh.schema.description":
+    "The JSON Schema DSH sends to the selected model for this tool.",
+  "agentCapabilities.dsh.source.filter": "Filter by tool source",
+  "agentCapabilities.dsh.source.all": "All",
+  "agentCapabilities.dsh.source.empty": "This source has no available tools.",
+  "agentCapabilities.dsh.source.dshCore": "Official DSH capabilities",
+  "agentCapabilities.dsh.source.dshCore.description":
+    "Registered by official plugins across the installed DSH presets.",
+  "agentCapabilities.dsh.source.dshPlugin": "Amiba DSH Plugins",
+  "agentCapabilities.dsh.source.dshPlugin.description":
+    "Registered by independent dsh-plugin-* projects assembled by the Amiba bundle.",
+  "agentCapabilities.dsh.source.mcpServer": "MCP Server",
+  "agentCapabilities.dsh.source.mcpServer.description":
+    "Provided by external services connected through the DSH MCP Client plugin.",
+  "agentCapabilities.dsh.source.detail": "Tool source",
+  "agentCapabilities.dsh.source.detail.description":
+    "The actual registration path that contributes this tool to the DSH runtime.",
+  "agentCapabilities.dsh.source.category": "Source type",
+  "agentCapabilities.dsh.source.owner": "Owning plugin",
+  "agentCapabilities.dsh.source.provider": "Capability provider",
+  "agentCapabilities.dsh.source.package": "Implementation package",
+  "agentCapabilities.dsh.source.identifier": "Source identifier",
+  "agentCapabilities.dsh.source.loadMode": "Load mode",
+  "agentCapabilities.dsh.source.executionTarget": "Execution target",
+  "agentCapabilities.dsh.source.dynamic": "Dynamic mount",
+  "agentCapabilities.dsh.source.bundled": "Loaded with runtime",
+  "agentCapabilities.dsh.loadMode.core": "DSH Profile / Bundle",
+  "agentCapabilities.dsh.loadMode.plugin": "Cordis Plugin",
+  "agentCapabilities.dsh.loadMode.mcp": "MCP Client",
+  "agentCapabilities.dsh.executionTarget.dshRuntime": "DSH Runtime",
+  "agentCapabilities.dsh.executionTarget.desktopService":
+    "Desktop platform service",
+  "agentCapabilities.dsh.executionTarget.externalProcess":
+    "External isolated process",
+  "agentCapabilities.dsh.group.workspace": "Workspace and device",
+  "agentCapabilities.dsh.group.workspace.description":
+    "Files, commands, terminals and project operations.",
+  "agentCapabilities.dsh.group.web": "Web and browser",
+  "agentCapabilities.dsh.group.web.description":
+    "Search, fetch and browser interaction tools.",
+  "agentCapabilities.dsh.group.coordinate": "Planning and coordination",
+  "agentCapabilities.dsh.group.coordinate.description":
+    "Questions, goals, todos, schedules and delegation.",
+  "agentCapabilities.dsh.group.memory": "Long-term memory",
+  "agentCapabilities.dsh.group.memory.description":
+    "Preset-scoped memory contributed by the Amiba DSH plugin.",
+  "agentCapabilities.dsh.group.connected": "Plugins and connected services",
+  "agentCapabilities.dsh.group.connected.description":
+    "Skills, MCP servers, Extensions and product integrations.",
+  "agentCapabilities.dsh.group.other": "Other runtime tools",
+  "agentCapabilities.dsh.group.other.description":
+    "Additional tools contributed by the active DSH composition.",
   // User-added extensions and tools.
   "externalTools.tab.extensions": "App extensions",
   "externalTools.tab.plugins": "Agent plugins",
@@ -2115,263 +1575,27 @@ export const en = {
   "externalTools.mcp.emptyTitle": "No MCP services added",
   "externalTools.mcp.emptyDescription":
     "Add one when you want Amiba to connect to an external tool or data source.",
+  "externalTools.mcp.dsh.subtitle":
+    "Load external tools as native DSH Cordis plugins. DSH currently bridges MCP tools, not resources or prompts.",
+  "externalTools.mcp.dsh.emptyDescription":
+    "Add a stdio or Streamable HTTP server to register its tools in DSH.",
+  "externalTools.mcp.dsh.serverName": "Server namespace",
+  "externalTools.mcp.dsh.args": "One argument per line",
+  "externalTools.mcp.dsh.cwd": "Working directory (optional)",
+  "externalTools.mcp.dsh.env": "Environment JSON (optional)",
+  "externalTools.mcp.dsh.headers": "Headers JSON (optional)",
+  "externalTools.mcp.dsh.preserveSecrets":
+    "Leave blank to preserve configured secrets: {keys}",
+  "externalTools.mcp.dsh.hotReload":
+    "Saving rewrites the private DSH Cordis patch. Enabled servers hot-reload into the native tool registry.",
+  "externalTools.mcp.dsh.saved": "DSH MCP configuration saved",
+  "externalTools.mcp.dsh.deleteConfirm": "Remove MCP server “{name}”?",
 
-  // Agent capability configuration
-  "tools.toggleFailed": "Toggle failed, please try again.",
-  "tools.detail.loadFailed": "Failed to load detail.",
-  "tools.detail.journey.done": "Done",
-  "tools.detail.journey.todo": "Next",
-  "tools.detail.noSetup.title": "No additional setup needed",
-  "tools.detail.noSetup.description":
-    "Enable this capability and Amiba can use it in a new conversation.",
-  "tools.detail.noSetup.unavailableTitle": "This capability is not ready yet",
-  "tools.detail.noSetup.unavailableDescription":
-    "The current runtime did not provide an actionable setup method. Update it and check again.",
-  "tools.detail.contextEngine.title": "Context engine",
-  "tools.detail.contextEngine.description":
-    "Choose the engine responsible for compressing and extending this assistant's working context.",
-  "tools.detail.contextEngine.loadFailed": "Unable to load context engines.",
-  "tools.detail.contextEngine.saveFailed": "Unable to save the context engine.",
-  "tools.detail.a2a.title": "Remote agents",
-  "tools.detail.a2a.description":
-    "Configure named A2A-compatible agents that this Profile can call or orchestrate. Direct URLs still work without saving a peer.",
-  "tools.detail.a2a.add": "Add agent",
-  "tools.detail.a2a.edit": "Edit agent",
-  "tools.detail.a2a.delete": "Delete agent",
-  "tools.detail.a2a.empty": "No remote agents configured yet.",
-  "tools.detail.a2a.loadFailed": "Unable to load remote agents.",
-  "tools.detail.a2a.saveFailed": "Unable to save the remote agent.",
-  "tools.detail.a2a.deleteFailed": "Unable to delete the remote agent.",
-  "tools.detail.a2a.dialogDescription":
-    "The bearer token is write-only. Leaving it blank keeps the saved token.",
-  "tools.detail.a2a.name": "Agent name",
-  "tools.detail.a2a.url": "Base URL",
-  "tools.detail.a2a.timeout": "Timeout (s)",
-  "tools.detail.a2a.capabilities": "Capabilities (comma-separated)",
-  "tools.detail.a2a.token": "Bearer token",
-  "tools.detail.a2a.tokenPreserved": "Saved token will be preserved",
-  "tools.detail.a2a.tokenOptional": "Optional",
-  "tools.detail.a2a.authConfigured": "Bearer token configured",
-  "tools.detail.a2a.noAuth": "No authentication",
-  "tools.detail.a2a.clearToken": "Remove saved token",
-  "tools.detail.a2a.keepToken": "Keep saved token",
   "sidepanel.clarify.label": "The agent needs your input",
   "sidepanel.clarify.confirmSelection": "Confirm selection",
   "sidepanel.clarify.customAnswer": "Type another answer",
   "sidepanel.clarify.send": "Send",
   "sidepanel.clarify.sendFailed": "Unable to send your answer.",
-  "tools.detail.understanding.loadFailed": "Could not load available models.",
-  "tools.detail.understanding.saveFailed":
-    "Could not save the understanding model.",
-  "tools.detail.understanding.routeTitle": "Current model source",
-  "tools.detail.understanding.imageDescription":
-    "Image understanding follows the main model by default. Choose a dedicated vision model when the main model cannot accept images.",
-  "tools.detail.understanding.videoDescription":
-    "Image and video understanding share one vision model. This is the model source both capabilities currently use.",
-  "tools.detail.understanding.routeDedicated":
-    "Using a dedicated understanding model",
-  "tools.detail.understanding.routeVision":
-    "Using the shared image-and-video model",
-  "tools.detail.understanding.routeMain": "Following the main model",
-  "tools.detail.understanding.noRoute": "No usable model selected",
-  "tools.detail.understanding.mainSupportsImage":
-    "The main model supports image input.",
-  "tools.detail.understanding.mainLacksImage":
-    "The main model does not support image input. Choose a dedicated model below.",
-  "tools.detail.understanding.mainImageUnknown":
-    "Amiba cannot confirm image support for the main model. You can select a known vision model below.",
-  "tools.detail.understanding.chooseTitle": "Change the understanding model",
-  "tools.detail.understanding.imageHint":
-    "Only models available through Amiba model services are shown. Choose one that explicitly supports image input.",
-  "tools.detail.understanding.videoHint":
-    "Choose a model that explicitly supports video input. Image understanding will use the same model after you save.",
-  "tools.detail.understanding.manageModels": "Manage model services",
-  "tools.detail.understanding.noModels":
-    "No models are available yet. Connect a model service from Models first.",
-  "tools.detail.understanding.provider": "Model service",
-  "tools.detail.understanding.model": "Model",
-  "tools.detail.understanding.useDedicated": "Use dedicated model",
-  "tools.detail.understanding.useShared": "Use for images and video",
-  "tools.detail.understanding.followMain": "Follow main model",
-  "tools.detail.understanding.saved": "Model source updated",
-  "tools.detail.browser.backgroundTitle": "Background browser",
-  "tools.detail.browser.backgroundDescription":
-    "Opens pages and runs automation separately without taking over the tab you are using.",
-  "tools.detail.browser.currentTabTitle": "Current browser tab",
-  "tools.detail.browser.currentTabDescription":
-    "Connect the Amiba browser extension to let the Agent work in a tab you already have open.",
-  "tools.detail.provider.title": "Choose how it works",
-  "tools.detail.provider.subtitle":
-    "Pick the service that best matches your budget and privacy preference.",
-  "tools.detail.provider.active": "In use",
-  "tools.detail.provider.choose": "Choose",
-  "tools.detail.provider.selecting": "Saving…",
-  "tools.detail.provider.search": "Search provider",
-  "tools.detail.provider.extract": "Page extraction provider",
-  "tools.detail.provider.status.ready": "Ready",
-  "tools.detail.provider.status.needsKey": "Key required",
-  "tools.detail.provider.status.needsAuth": "Sign-in required",
-  "tools.detail.provider.status.needsSetup": "Setup required",
-  "tools.detail.provider.status.inactive": "Not selected",
-  "tools.detail.provider.badge.recommended": "Recommended",
-  "tools.detail.provider.badge.subscription": "Subscription",
-  "tools.detail.credentials.title": "Connect your account",
-  "tools.detail.credentials.description":
-    "Secrets are stored securely on this device and are never shown again.",
-  "tools.detail.credentials.savedPlaceholder":
-    "Already saved — leave blank to keep it",
-  "tools.detail.credentials.openProvider": "Get this value",
-  "tools.detail.credentials.save": "Save connection",
-  "tools.detail.credentials.saving": "Saving…",
-  "tools.detail.credentials.saved": "Connection saved",
-  "tools.detail.credentials.show": "Show entered value",
-  "tools.detail.credentials.hide": "Hide entered value",
-  "tools.detail.setup.title": "Install required component",
-  "tools.detail.setup.description":
-    "Amiba can automatically install and configure the components this service needs.",
-  "tools.detail.setup.run": "Install and configure",
-  "tools.detail.setup.running": "Installing…",
-  "tools.detail.setup.connect": "Continue to connect",
-  "tools.detail.setup.connecting": "Connecting…",
-  "tools.detail.setup.configure": "Finish setup",
-  "tools.detail.setup.configuring": "Configuring…",
-  "tools.detail.setup.done": "Completed",
-  "tools.detail.setup.info.open": "View setup details for {name}",
-  "tools.detail.setup.info.changes": "What this will do",
-  "tools.detail.setup.info.agentBrowser.title": "Local browser components",
-  "tools.detail.setup.info.agentBrowser.description":
-    "Prepares an isolated headless browser environment for Amiba on this device.",
-  "tools.detail.setup.info.agentBrowser.detail.cli":
-    "Installs the required Node.js dependencies, including the agent-browser controller.",
-  "tools.detail.setup.info.agentBrowser.detail.chromium":
-    "Downloads a matching Playwright Chromium/headless-shell build, usually about 170 MB; an existing compatible Chrome can be reused.",
-  "tools.detail.setup.info.agentBrowser.detail.session":
-    "Tasks run in isolated headless sessions and do not read your everyday Chrome accounts, cookies, or extensions by default.",
-  "tools.detail.setup.info.agentBrowser.note":
-    "Browser files normally live in Playwright's cache. Removing Amiba may not remove that cache automatically.",
-  "tools.detail.setup.info.cloudBrowser.title": "Cloud browser controller",
-  "tools.detail.setup.info.cloudBrowser.description":
-    "The provider runs the browser in the cloud; Amiba installs a local controller to send it actions.",
-  "tools.detail.setup.info.cloudBrowser.detail.cli":
-    "Installs the agent-browser CLI and its required Node.js dependencies.",
-  "tools.detail.setup.info.cloudBrowser.detail.hosted":
-    "Does not download local Chromium. Pages run in the cloud browser hosted by Browserbase, Browser Use, or Firecrawl.",
-  "tools.detail.setup.info.camofox.title": "Camofox browser service",
-  "tools.detail.setup.info.camofox.description":
-    "Installs a local anti-detection Firefox/Camoufox browser service.",
-  "tools.detail.setup.info.camofox.detail.package":
-    "Installs the @askjo/camofox-browser Node.js package in the local runtime.",
-  "tools.detail.setup.info.camofox.detail.engine":
-    "The first service start downloads the Camoufox browser engine, approximately 300 MB.",
-  "tools.detail.setup.info.camofox.detail.service":
-    "After installation, the local Camofox service still needs to be started, or you can use its Docker service.",
-  "tools.detail.setup.info.cuaDriver.title": "Computer control driver",
-  "tools.detail.setup.info.cuaDriver.description":
-    "Installs cua-driver so Amiba can read the screen and perform mouse and keyboard actions in the background.",
-  "tools.detail.setup.info.cuaDriver.detail.installer":
-    "Downloads the official installer from the trycua/cua repository and installs the driver for this operating system.",
-  "tools.detail.setup.info.cuaDriver.detail.process":
-    "The driver runs as a local background process and does not use a Nous cloud computer.",
-  "tools.detail.setup.info.cuaDriver.detail.permissions":
-    "On macOS, Accessibility and Screen Recording permissions are still required after installation; the installer cannot grant them automatically.",
-  "tools.detail.setup.info.fasterWhisper.title": "Local speech recognition",
-  "tools.detail.setup.info.fasterWhisper.description":
-    "Installs faster-whisper to transcribe speech on this device.",
-  "tools.detail.setup.info.fasterWhisper.detail.package":
-    "Installs the faster-whisper Python package into the local runtime.",
-  "tools.detail.setup.info.fasterWhisper.detail.model":
-    "The recognition model downloads on first use; the default is usually about 150 MB and other sizes are available.",
-  "tools.detail.setup.info.fasterWhisper.detail.local":
-    "Audio and transcription stay on this device and require no additional speech API key.",
-  "tools.detail.setup.info.kittenTts.title": "KittenTTS local voice",
-  "tools.detail.setup.info.kittenTts.description":
-    "Installs a lightweight CPU-oriented local text-to-speech engine.",
-  "tools.detail.setup.info.kittenTts.detail.package":
-    "Installs KittenTTS and soundfile into the local Python environment.",
-  "tools.detail.setup.info.kittenTts.detail.model":
-    "Downloads a voice model of approximately 25–80 MB, depending on the selected model.",
-  "tools.detail.setup.info.kittenTts.detail.local":
-    "Speech is generated locally and needs no account or remote API key.",
-  "tools.detail.setup.info.piper.title": "Piper local voice",
-  "tools.detail.setup.info.piper.description":
-    "Installs Piper to generate speech locally on this device.",
-  "tools.detail.setup.info.piper.detail.package":
-    "Installs the roughly 14 MB piper-tts runtime into the local Python environment.",
-  "tools.detail.setup.info.piper.detail.voice":
-    "The selected voice downloads separately on the first speech request.",
-  "tools.detail.setup.info.piper.detail.local":
-    "Speech is generated locally and needs no account or remote API key.",
-  "tools.detail.setup.info.ddgs.title": "DuckDuckGo search component",
-  "tools.detail.setup.info.ddgs.description":
-    "Installs a DuckDuckGo search client that requires no API key.",
-  "tools.detail.setup.info.ddgs.detail.package":
-    "Installs the ddgs package into the local Python environment.",
-  "tools.detail.setup.info.ddgs.detail.scope":
-    "It provides web search only, not page extraction; choose a separate extraction provider if you also need to read pages.",
-  "tools.detail.setup.info.ddgs.detail.limits":
-    "No account is required, but requests are still subject to DuckDuckGo's server-side rate limits.",
-  "tools.detail.setup.info.spotify.title": "Connect Spotify",
-  "tools.detail.setup.info.spotify.description":
-    "Uses Spotify OAuth to let Amiba access playback and library features.",
-  "tools.detail.setup.info.spotify.detail.browser":
-    "Opens your system browser to complete Spotify sign-in and authorization.",
-  "tools.detail.setup.info.spotify.detail.client":
-    "If no Spotify app is configured yet, it first asks for a Client ID.",
-  "tools.detail.setup.info.spotify.detail.storage":
-    "Authorization data is stored in the local configuration; no extra browser or media player is installed.",
-  "tools.detail.setup.info.langfuse.title": "Langfuse observability component",
-  "tools.detail.setup.info.langfuse.description":
-    "Installs and enables the Langfuse integration for recording Agent traces.",
-  "tools.detail.setup.info.langfuse.detail.sdk":
-    "Installs the Langfuse SDK into the local Python environment.",
-  "tools.detail.setup.info.langfuse.detail.plugin":
-    "Enables the bundled observability/langfuse plugin in the local configuration.",
-  "tools.detail.setup.info.langfuse.detail.restart":
-    "The local service must be restarted before the tracing configuration takes effect.",
-  "tools.detail.setup.info.xaiGrok.title": "Connect xAI",
-  "tools.detail.setup.info.xaiGrok.description":
-    "Chooses an available authentication method for tools that use xAI.",
-  "tools.detail.setup.info.xaiGrok.detail.oauth":
-    "You can open a browser and sign in with xAI Grok OAuth, using a compatible subscription allowance.",
-  "tools.detail.setup.info.xaiGrok.detail.key":
-    "Alternatively, save an XAI_API_KEY and use the billing of that xAI API account.",
-  "tools.detail.setup.info.xaiGrok.detail.install":
-    "This step installs no local executable or browser engine.",
-  "tools.detail.setup.info.unknown.title": "Additional setup",
-  "tools.detail.setup.info.unknown.description":
-    "The local runtime reports that this service needs an additional setup step.",
-  "tools.detail.setup.info.unknown.detail":
-    "The current runtime did not provide structured setup details; its result will be shown when it runs.",
-  "tools.detail.auth.title": "Sign in required",
-  "tools.detail.auth.description":
-    "This option uses your Nous account. Sign in from the Models page, then come back and refresh.",
-  "tools.detail.model.title": "Choose a model",
-  "tools.detail.model.description":
-    "Models differ in speed, quality and price. The recommended default is preselected.",
-  "tools.detail.model.save": "Use this model",
-  "tools.detail.terminal.title": "Choose where commands run",
-  "tools.detail.terminal.description":
-    "This computer is best for beginners. Use an isolated container for unfamiliar code.",
-  "tools.detail.terminal.ready": "Ready",
-  "tools.detail.terminal.needsSetup": "Needs setup",
-  "tools.detail.terminal.unavailable": "Unavailable",
-  "tools.detail.terminal.connectionTitle": "Backend settings",
-  "tools.detail.terminal.connectionDescription":
-    "Only values required by the selected backend are shown. Existing secrets stay hidden.",
-  "tools.detail.computer.title": "System control permissions",
-  "tools.detail.computer.description":
-    "Computer control needs a driver and operating-system approval. Amiba only uses it when a task requires it.",
-  "tools.detail.computer.driver": "Computer control driver",
-  "tools.detail.computer.accessibility": "Accessibility permission",
-  "tools.detail.computer.screen": "Screen Recording permission",
-  "tools.detail.computer.ready": "The driver and system permissions are ready",
-  "tools.detail.computer.grant": "Request system permissions",
-  "tools.detail.computer.requested":
-    "Approve CuaDriver in the macOS system prompt, then choose Check again.",
-  "tools.detail.computer.installFirst":
-    "Install the computer control driver above, then grant system permissions.",
-  "tools.detail.refresh": "Check again",
-  "tools.detail.mutationFailed": "Could not save: {error}",
 } as const;
 
 export type MessageKey = keyof typeof en;

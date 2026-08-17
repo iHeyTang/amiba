@@ -8,6 +8,7 @@ export const zhCN: Messages = {
   // Generic
   "common.add": "添加",
   "common.cancel": "取消",
+  "common.back": "返回",
   "common.save": "保存",
   "common.delete": "删除",
   "common.edit": "编辑",
@@ -56,8 +57,6 @@ export const zhCN: Messages = {
   "sidepanel.runError.modelService.action": "检查模型设置",
   "sidepanel.runError.connection.title": "无法连接模型服务",
   "sidepanel.runError.connection.action": "检查连接",
-  "sidepanel.runError.voice.title": "语音输入暂不可用",
-  "sidepanel.runError.voice.action": "检查语音设置",
   "sidepanel.runError.runtime.title": "本次运行未能继续",
   "sidepanel.runError.runtime.action": "查看错误日志",
 
@@ -196,14 +195,12 @@ export const zhCN: Messages = {
   "app.title": "Amiba",
   "app.subtitle": "扩展控制台",
   "app.initializing": "正在唤醒本地智能体",
-  "app.initError":
-    "Amiba 内置 Hermes Runtime 初始化失败，或本地服务未能启动。请重试或查看应用日志。",
+  "app.initError": "Amiba 受管 DSH Runtime 初始化失败。请重试或查看应用日志。",
   "app.initRetry": "重试",
 
   // Options nav
   "options.nav.appearance": "外观",
   "options.nav.shortcuts": "快捷键",
-  "options.nav.scripts": "用户脚本",
   "options.nav.models": "模型",
   "options.nav.agents": "智能体预设",
   "options.nav.skills": "技能",
@@ -212,9 +209,7 @@ export const zhCN: Messages = {
   "options.nav.cron": "自动化",
   "options.nav.status": "运行状态",
   "options.nav.logs": "日志",
-  "options.nav.voice": "语音",
   "options.nav.extensions": "扩展",
-  "options.nav.plugins": "插件",
   "options.nav.section.general": "通用",
   "options.nav.section.agent": "助手",
   "options.nav.section.advanced": "高级",
@@ -224,77 +219,57 @@ export const zhCN: Messages = {
 
   // Messaging channels
   "options.messaging.title": "消息通知渠道",
-  "options.messaging.description":
-    "连接你常用的应用，在这些应用里与 Amiba 对话并接收通知。",
-  "options.messaging.tab.channels": "消息渠道",
-  "options.messaging.tab.access": "访问授权",
-  "options.messaging.tab.webhooks": "Webhook",
-  "options.messaging.summary.connected": "已连接 {connected}/{total} 个渠道",
-  "options.messaging.summary.none": "还没有连接消息渠道",
-  "options.messaging.summary.gatewayRunning": "消息服务正在运行",
-  "options.messaging.summary.gatewayStopped": "消息服务尚未运行",
-  "options.messaging.search": "搜索渠道",
-  "options.messaging.group.configured": "已配置",
-  "options.messaging.group.configuredDescription":
-    "这些渠道保存过真实连接信息，可以直接管理、启用或检查状态。",
-  "options.messaging.group.available": "其他渠道",
-  "options.messaging.group.availableDescription":
-    "选择要使用的应用，跟随引导完成首次连接。",
-  "options.messaging.empty": "没有找到匹配的渠道",
-  "options.messaging.loadError": "无法读取渠道配置：{error}",
-  "options.messaging.configure": "开始配置",
-  "options.messaging.manage": "管理",
-  "options.messaging.guide": "打开配置指南",
-  "options.messaging.required": "必填",
-  "options.messaging.optional": "选填",
-  "options.messaging.savedValue": "已保存；留空不会修改原值",
-  "options.messaging.enterValue": "请输入{field}",
-  "options.messaging.advanced": "更多选项",
-  "options.messaging.noFields":
-    "这个渠道无需在此填写凭据。请先查看配置指南，然后连接渠道。",
-  "options.messaging.step.account": "准备渠道账号",
-  "options.messaging.step.accountDescription":
-    "创建机器人或应用，并取得下面需要的凭据。",
-  "options.messaging.step.credentials": "填写连接信息",
-  "options.messaging.step.credentialsDescription":
-    "这些信息只会保存在本机的 Hermes 配置中。",
-  "options.messaging.step.verify": "连接并验证",
-  "options.messaging.step.verifyDescription":
-    "Amiba 会重启消息服务，并读取真实连接状态。",
-  "options.messaging.saveConnect": "保存并连接",
-  "options.messaging.saveChanges": "保存更改",
-  "options.messaging.disable": "停用这个渠道",
-  "options.messaging.test": "测试连接",
-  "options.messaging.saving": "正在保存渠道配置…",
-  "options.messaging.restarting": "正在重启消息服务…",
-  "options.messaging.saved": "{channel} 已保存，连接状态会自动更新。",
-  "options.messaging.disabled": "已停用 {channel}。",
-  "options.messaging.testSuccess": "{channel} 已连接，可以正常使用。",
-  "options.messaging.missingRequired": "请先填写所有必填信息，再连接渠道。",
-  "options.messaging.restartFailed": "配置已保存，但消息服务重启失败：{error}",
+  "options.messaging.dsh.description":
+    "通过渠道 Provider 插件，将已认证的外部消息路由到 DSH 会话。",
+  "options.messaging.dsh.add": "添加渠道",
+  "options.messaging.dsh.pluginTitle": "DSH 消息中心插件",
+  "options.messaging.dsh.pluginDescription":
+    "核心统一负责认证、去重、会话路由、重试与回复关联；每个传输插件只实现自己的渠道协议。",
+  "options.messaging.dsh.channels": "已配置渠道",
+  "options.messaging.dsh.channelsDescription":
+    "每个渠道绑定一个持久化 DSH 会话。",
+  "options.messaging.dsh.group.configured": "已配置",
+  "options.messaging.dsh.group.configuredDescription":
+    "已经连接到 DSH 会话的渠道路由。",
+  "options.messaging.dsh.group.available": "其他渠道",
+  "options.messaging.dsh.group.availableDescription":
+    "从已安装的传输 Provider 新建一条渠道路由。",
+  "options.messaging.dsh.summary.connected":
+    "已启用 {connected} / {total} 个渠道",
+  "options.messaging.dsh.summary.none": "当前没有启用消息渠道",
+  "options.messaging.dsh.providerCount": "{count} 个传输 Provider",
+  "options.messaging.dsh.search": "搜索渠道",
+  "options.messaging.dsh.searchEmpty": "没有匹配的渠道。",
+  "options.messaging.dsh.manage": "管理",
+  "options.messaging.dsh.setup": "设置",
+  "options.messaging.dsh.needsSetup": "需要设置",
+  "options.messaging.dsh.configure": "设置 {name}",
+  "options.messaging.dsh.disable": "停用",
+  "options.messaging.dsh.enable": "启用",
+  "options.messaging.dsh.saveChanges": "保存更改",
+  "options.messaging.dsh.empty": "尚未配置 DSH 渠道",
+  "options.messaging.dsh.emptyDescription":
+    "现在可以创建 Webhook 渠道；其他传输方式可作为独立 DSH 插件注册。",
+  "options.messaging.dsh.inboundEndpoint": "入站地址",
+  "options.messaging.dsh.loopbackHint":
+    "该地址仅监听本机。外部服务需要访问时，请在前面部署带认证的反向代理或安全隧道。",
+  "options.messaging.dsh.rotate": "轮换密钥",
+  "options.messaging.dsh.createDescription":
+    "把一个传输 Provider 绑定到现有 DSH 会话。",
+  "options.messaging.dsh.provider": "Provider",
+  "options.messaging.dsh.name": "渠道名称",
+  "options.messaging.dsh.session": "目标会话",
+  "options.messaging.dsh.selectSession": "选择会话",
+  "options.messaging.dsh.outboundUrl": "回复回调地址（选填）",
+  "options.messaging.dsh.allowedSenders": "允许的发送方 ID（选填，逗号分隔）",
+  "options.messaging.dsh.secretTitle": "渠道密钥",
+  "options.messaging.dsh.secretDescription":
+    "Bearer 密钥只显示一次，请现在妥善保存；轮换后旧密钥会立即失效。",
+  "options.messaging.dsh.pending": "{count} 条等待 DSH 处理",
+  "options.messaging.dsh.queued": "{count} 条回复待发送",
+  "options.messaging.dsh.failed": "{count} 条回复需要处理",
   "options.messaging.status.connected": "已连接",
   "options.messaging.status.disabled": "未启用",
-  "options.messaging.status.notConfigured": "待配置",
-  "options.messaging.status.pendingRestart": "等待连接",
-  "options.messaging.status.gatewayStopped": "服务未启动",
-  "options.messaging.status.startupFailed": "启动失败",
-  "options.messaging.status.connecting": "正在连接",
-  "options.messaging.status.error": "连接异常",
-  "options.messaging.platform.telegram": "通过 Telegram 机器人对话和接收通知。",
-  "options.messaging.platform.discord": "在 Discord 服务器或私信中使用 Amiba。",
-  "options.messaging.platform.slack": "连接一个 Slack 工作区。",
-  "options.messaging.platform.whatsapp": "通过已关联的 WhatsApp 账号对话。",
-  "options.messaging.platform.signal": "通过 Signal Bridge 连接。",
-  "options.messaging.platform.matrix": "在 Matrix 房间中使用 Amiba。",
-  "options.messaging.platform.email": "通过邮箱收发消息。",
-  "options.messaging.platform.dingtalk": "在钉钉群中使用 Amiba。",
-  "options.messaging.platform.feishu": "在飞书或 Lark 中使用 Amiba。",
-  "options.messaging.platform.wecom": "把消息发送到企业微信群。",
-  "options.messaging.platform.weixin":
-    "使用已连接的微信账号与 Amiba 对话并接收通知。",
-  "options.messaging.platform.qqbot": "连接 QQ 开放平台机器人。",
-  "options.messaging.platform.webhook": "接收 GitHub、GitLab 等服务的事件。",
-
   // Agent profiles
   "options.agents.title": "智能体预设",
   "options.agents.profiles": "智能体预设",
@@ -305,53 +280,24 @@ export const zhCN: Messages = {
   "options.agents.rename": "重命名智能体预设",
   "options.agents.name": "预设名称",
   "options.agents.startFrom": "创建方式",
-  "options.agents.fresh": "空白预设",
+  "options.agents.fresh": "当前默认预设",
+  "options.agents.displayName": "显示名称",
+  "options.agents.displayNamePlaceholder": "例如：资料研究员",
   "options.agents.noDescription": "未添加描述",
   "options.agents.customEmptyTitle": "还没有独立智能体预设",
   "options.agents.customEmptyDescription":
-    "助手一级入口管理默认配置；在这里新建需要独立行为、模型或技能组合的智能体。",
+    "助手一级入口管理默认配置；在这里新建需要独立行为、技能、工具或记忆的智能体。",
   "options.agents.cloneDefault": "Amiba",
   "options.agents.empty": "暂无智能体预设",
   "options.agents.section.behavior": "行为与人设",
-  "options.agents.section.models": "模型与服务",
   "options.agents.role.title": "描述",
   "options.agents.role.description":
     "用一句话说明它擅长什么；选择任务执行者时会展示。",
   "options.agents.role.placeholder": "例如：负责资料检索与事实核验。",
   "options.agents.soul.title": "行为与准则",
   "options.agents.soul.description":
-    "长期生效的身份、原则和工作方式；默认响应模式负责日常表达，任务中仍可临时覆盖。",
+    "由这个 DSH 智能体预设统一拥有的长期身份、原则、工作方式与表达风格。",
   "options.agents.soul.placeholder": "描述这个智能体应该如何思考、工作与沟通…",
-  "options.agents.personality.title": "响应模式",
-  "options.agents.personality.description":
-    "管理这个智能体的默认工作与表达方式；任务中仍可临时切换。",
-  "options.agents.personality.defaultLabel": "默认响应模式",
-  "options.agents.personality.defaultDescription":
-    "新任务默认使用；在输入栏选择的模式只覆盖当前任务。",
-  "options.agents.personality.defaultNone": "不使用响应模式",
-  "options.agents.personality.defaultBadge": "默认",
-  "options.agents.personality.create": "新建响应模式",
-  "options.agents.personality.edit": "编辑响应模式",
-  "options.agents.personality.name": "模式名称",
-  "options.agents.personality.namePlaceholder": "例如：事实核验",
-  "options.agents.personality.nameExists": "这个名称已经存在。",
-  "options.agents.personality.summary": "用途说明",
-  "options.agents.personality.summaryPlaceholder":
-    "例如：核验关键事实并标出来源。",
-  "options.agents.personality.instruction": "行为指令",
-  "options.agents.personality.instructionPlaceholder":
-    "描述启用这个模式后应该如何思考、工作和回答…",
-  "options.agents.personality.tone": "语气",
-  "options.agents.personality.tonePlaceholder": "例如：冷静、直接",
-  "options.agents.personality.style": "表达方式",
-  "options.agents.personality.stylePlaceholder": "例如：先结论后依据",
-  "options.agents.personality.reset": "恢复内置",
-  "options.agents.personality.duplicate": "复制",
-  "options.agents.personality.deleteConfirm": "确定要{action}「{name}」吗？",
-  "options.agents.personality.loadFailed": "无法加载响应模式",
-  "options.agents.personality.saveFailed": "无法保存响应模式",
-  "options.agents.personality.selectFailed": "无法设置默认响应模式",
-  "options.agents.personality.deleteFailed": "无法移除响应模式",
   "options.agents.deleteConfirm": "删除「{name}」及其预设数据？",
   "options.agents.loadFailed": "无法加载智能体预设",
   "options.agents.soulLoadFailed": "无法加载 SOUL.md",
@@ -360,7 +306,6 @@ export const zhCN: Messages = {
   "options.agents.createFailed": "无法新建预设",
   "options.agents.renameFailed": "无法重命名预设",
   "options.agents.deleteFailed": "无法删除预设",
-  "options.agents.modelSaveFailed": "无法保存预设模型",
 
   // Skills
   "options.skills.all": "全部",
@@ -398,6 +343,48 @@ export const zhCN: Messages = {
   "options.skills.selectFile": "从左侧选择文件以查看内容",
   "options.skills.binaryFile": "二进制文件 · {size}",
   "options.skills.fileTooLarge": "文件过大（{size}），无法预览",
+  "options.skills.dsh.title": "DSH 组合技能",
+  "options.skills.dsh.description":
+    "技能会根据当前会话、项目目录、用户目录和智能体预设自动组合。",
+  "options.skills.dsh.summary": "共 {count} 个技能",
+  "options.skills.dsh.session": "会话技能作用域",
+  "options.skills.dsh.noSession": "暂无会话（仅显示用户技能）",
+  "options.skills.dsh.create": "新建技能",
+  "options.skills.dsh.edit": "编辑技能",
+  "options.skills.dsh.name": "技能名称",
+  "options.skills.dsh.editorHint":
+    "DSH 要求 YAML frontmatter 中包含一致的 name 与 description；调用策略由 user-invocable 和 disable-model-invocation 控制。",
+  "options.skills.dsh.user": "用户技能",
+  "options.skills.dsh.composed": "组合只读",
+  "options.skills.dsh.userOnly": "仅用户调用",
+  "options.skills.dsh.modelOnly": "仅模型调用",
+  "options.skills.dsh.notInvocable": "不可调用",
+  "options.skills.dsh.sources": "来源",
+  "options.skills.dsh.source.project": "当前项目",
+  "options.skills.dsh.source.project.description":
+    "从当前工作区的 DSH 与共享 Agent 目录发现。",
+  "options.skills.dsh.source.user": "用户目录",
+  "options.skills.dsh.source.user.description":
+    "来自 DSH 与共享 Agent 用户目录的个人技能。",
+  "options.skills.dsh.source.runtime": "运行时",
+  "options.skills.dsh.source.runtime.description":
+    "由当前 DSH 组合在运行时动态注册。",
+  "options.skills.dsh.source.bundled": "内置",
+  "options.skills.dsh.source.bundled.description":
+    "随运行时或插件一起分发的只读技能。",
+  "options.skills.dsh.source.custom": "自定义 Provider",
+  "options.skills.dsh.source.custom.description":
+    "由显式配置的 Skill Provider 提供。",
+  "options.skills.dsh.source.other": "其他 Provider",
+  "options.skills.dsh.source.other.description":
+    "来源类型未归入标准目录的技能。",
+  "options.skills.dsh.invocation": "调用方式",
+  "options.skills.dsh.modelInvocable": "模型可调用",
+  "options.skills.dsh.userInvocable": "用户可调用",
+  "options.skills.dsh.sessionSummary": "当前会话组合中共 {count} 个技能",
+  "options.skills.dsh.userSummary": "用户目录中共 {count} 个技能",
+  "options.skills.dsh.search": "搜索名称、说明、来源或 Provider…",
+  "options.skills.dsh.deleteConfirm": "确定删除 DSH 技能“{name}”吗？",
 
   // Task agent picker
   "sidepanel.agentPicker.label": "选择智能体",
@@ -408,16 +395,11 @@ export const zhCN: Messages = {
   "sidepanel.agentPicker.profileLocked": "当前任务已固定",
   "sidepanel.agentPicker.executionIdentity": "执行身份",
   "sidepanel.agentPicker.executionIdentityDescription":
-    "为当前任务选择智能体和响应模式。",
+    "为当前任务选择 DSH 智能体预设。",
   "sidepanel.agentPicker.defaultProfile": "Amiba",
   "sidepanel.agentPicker.agent": "智能体",
-  "sidepanel.agentPicker.personality": "响应模式",
-  "sidepanel.agentPicker.personalityDescription": "只影响当前任务的表达方式。",
-  "sidepanel.agentPicker.personalityDefault": "跟随智能体",
-  "sidepanel.agentPicker.personalityDefaultDescription":
-    "使用这个智能体在设置中选择的默认响应模式与行为准则。",
 
-  // Hermes approval mode
+  // DSH 权限预设
   "sidepanel.approvalMode.label": "风险操作处理方式",
   "sidepanel.approvalMode.question": "发现风险操作时：",
   "sidepanel.approvalMode.manual": "请求批准",
@@ -429,6 +411,52 @@ export const zhCN: Messages = {
     "不再询问；安全限制和系统权限仍有效。",
   "sidepanel.approvalMode.loadFailed": "无法读取审批方式，点击重试。",
   "sidepanel.approvalMode.saveFailed": "无法更改审批方式，请重试。",
+  "sidepanel.permissionPreset.question": "文件与命令访问权限：",
+  "sidepanel.permissionPreset.readOnly": "只读",
+  "sidepanel.permissionPreset.readOnlyDescription":
+    "可以检查工作区，但不能修改文件。",
+  "sidepanel.permissionPreset.workspaceWrite": "工作区访问",
+  "sidepanel.permissionPreset.workspaceWriteDescription":
+    "可在工作区内写入；需要批准的操作会先询问。",
+  "sidepanel.permissionPreset.fullAccess": "完全访问",
+  "sidepanel.permissionPreset.fullAccessDescription":
+    "不受沙箱限制地运行，也不再请求操作批准。",
+  "sidepanel.permissionPreset.customDescription":
+    "由当前 DSH 组合提供的权限预设。",
+  "sidepanel.permissionPreset.fullAccessAcknowledge":
+    "我理解这会允许智能体在不询问的情况下修改文件并运行命令。",
+  "sidepanel.permissionPreset.enableFullAccess": "启用完全访问",
+
+  // 独立于 Harness 的模型平面
+  "options.dshModels.description":
+    "模型提供方与模型由 Amiba 统一管理，再投影给当前 Harness 和其他 AI 原生能力使用。",
+  "options.dshModels.providers": "模型提供方",
+  "options.dshModels.models": "个模型",
+  "options.dshModels.addProvider": "添加提供方",
+  "options.dshModels.openConfiguration": "打开配置文件",
+  "options.dshModels.unavailable": "当前界面没有暴露 Amiba 模型平面。",
+  "options.dshModels.empty": "当前没有可配置的模型提供方。",
+  "options.dshModels.failures": "Harness 投影诊断",
+  "options.dshModels.auth.native": "提供方原生认证",
+  "options.dshModels.auth.configured": "密钥已配置",
+  "options.dshModels.auth.missing": "需要密钥",
+  "options.dshModels.apiKey": "API 密钥",
+  "options.dshModels.apiKeyPlaceholder": "输入只写 API 密钥",
+  "options.dshModels.keepCredential": "留空可保留已存储的密钥",
+  "options.dshModels.baseURL": "接口地址",
+  "options.dshModels.modelCatalog": "模型列表",
+  "options.dshModels.fetchModels": "获取可用模型",
+  "options.dshModels.deleteConfirm":
+    "移除这个自定义提供方吗？对应的运行时投影将被停用。",
+  "options.dshModels.providerId": "提供方 ID",
+  "options.dshModels.displayName": "显示名称",
+  "options.dshModels.protocol": "接口协议",
+  "options.dshModels.initialModel": "初始模型",
+  "options.dshModels.invalidProviderId":
+    "提供方 ID 必须以小写字母开头，且只能包含字母、数字、_ 或 -。",
+  "options.dshModels.requiredProviderFields": "接口地址和初始模型不能为空。",
+  "options.dshModels.customUnavailable":
+    "当前没有可兼容这个提供方的执行适配器。",
 
   // 扩展设置页
   "options.extensions.library.title": "能力扩展",
@@ -539,7 +567,6 @@ export const zhCN: Messages = {
   "options.extensions.capability.main": "小应用界面",
   "options.extensions.capability.mentions": "@ 提及",
   "options.extensions.capability.agent": "Agent",
-  "options.extensions.capability.plugin": "Hermes Plugin",
   "options.extensions.capability.tools": "工具",
   "options.extensions.capability.resources": "资源",
   "options.extensions.capability.settings": "设置",
@@ -549,9 +576,6 @@ export const zhCN: Messages = {
   "options.extensions.details.path": "路径",
   "options.extensions.permissions.title": "权限",
   "options.extensions.mentions.title": "提及投影",
-  "options.extensions.runtime.title": "Hermes 依赖",
-  "options.extensions.runtime.required": "必需",
-  "options.extensions.runtime.optional": "可选",
   "options.extensions.tab.installed": "已安装",
   "options.extensions.tab.browse": "浏览",
   "options.extensions.browse.loading": "正在加载市场…",
@@ -562,111 +586,14 @@ export const zhCN: Messages = {
   "options.extensions.browse.installing": "安装中…",
   "options.extensions.browse.installFailed": "安装失败：{error}",
   "options.extensions.browse.indexUrl": "索引：{url}",
-  "options.plugins.heading": "插件",
-  "options.plugins.loading": "加载插件中…",
-  "options.plugins.error": "加载插件失败：{error}",
-  "options.plugins.empty.title": "还没有安装插件",
-  "options.plugins.group.yours": "你的插件",
-  "options.plugins.group.bundled": "内置（{count}）",
-  "options.plugins.restartHint": "重启本地服务使插件改动生效。",
-  "options.plugins.toggleError": "切换插件失败：{error}",
-
-  "options.plugins.uninstallAction": "卸载",
-  "options.plugins.uninstallConfirm":
-    "确定卸载「{name}」？删除后需重启本地服务才完全生效，此操作不可撤销。",
-  "options.plugins.uninstallError": "卸载失败：{error}",
-
-  // Featured features —— 被提升为一级设置入口的插件
-  "options.feature.enableLabel": "启用",
-  "options.feature.stateOn": "已启用 —— 重启 Amiba 后生效。",
-  "options.feature.stateOff": "已停用。",
-  "options.feature.notInstalled": "尚未安装用于连接当前标签页的浏览器组件。",
-  "options.feature.installAction": "安装连接组件",
-  "options.feature.restartHint": "重启 Amiba 使改动生效。",
-  "options.feature.installPrompt":
-    "请帮我安装支撑「{name}」功能的 Hermes 插件，运行 `hermes plugins install {ref}`。完成后告诉我是否需要重启 Hermes 才能使用。",
-  "options.feature.agentSourceApp": "设置",
-  "options.feature.backplaneError": "暂时无法读取此功能的状态。",
-  "options.feature.browser.title": "浏览器",
-  "options.feature.browser.subtitle":
-    "通过配套的 Chrome 扩展，让 Amiba 查看并操作你的浏览器。",
-  "options.feature.browser.how.title": "工作方式",
-  "options.feature.browser.how.body":
-    "连接后，Agent 可以读取并操作你已经打开的标签页；只会在任务需要时使用。",
-
-  // Composer voice input
-  "composer.voice.startRecording": "录制语音消息",
-  "composer.voice.stopRecording": "停止录音",
-  "composer.voice.transcribing": "转写中…",
-  "composer.voice.transcribeFailedTitle": "语音转写失败",
-  "composer.voice.noProvider": "尚未配置语音转写",
-  "composer.voice.permissionDenied":
-    "麦克风权限被拒绝。请在系统设置中允许后再使用语音输入。",
-  "composer.voice.unsupported": "当前环境不支持语音输入。",
-  "composer.voice.transcribeFailed": "语音转写失败：{error}",
   "composer.notice.showDetails": "详情",
   "composer.notice.hideDetails": "收起",
   "composer.mention.typeToSearch": "输入关键词搜索",
   "composer.mention.noResults": "无匹配结果",
 
-  // Voice settings page
-  "options.voice.title": "语音输入",
-  "options.voice.description": "配置输入框的麦克风按钮与语音转写引擎。",
-  "options.voice.enable.label": "启用语音输入",
-  "options.voice.enable.help": "在对话输入框中显示麦克风按钮。",
-  "options.voice.autoSend.label": "转写完自动发送",
-  "options.voice.autoSend.help":
-    "关闭时转写结果会先填到输入框，等你确认再发送。",
-  "options.voice.device.label": "麦克风设备",
-  "options.voice.device.system": "系统默认",
-  "options.voice.device.refresh": "刷新设备列表",
-  "options.voice.test.label": "测试麦克风",
-  "options.voice.test.start": "录制 2 秒测试",
-  "options.voice.test.recording": "听取中…",
-  "options.voice.test.transcribing": "正在转写测试片段…",
-  "options.voice.test.loadingModel":
-    "首次使用本地模型，正在下载 ~150 MB，请耐心等待…",
-  "options.voice.test.timeout":
-    "请求超时，模型可能仍在下载或加载，请稍后重试。",
-  "options.voice.test.success": "识别结果：{text}",
-  "options.voice.test.empty": "录音成功，但没有识别到语音内容。",
-  "options.voice.test.failed": "测试失败：{error}",
-
-  // Provider picker
-  "options.voice.provider.label": "Provider",
-  "options.voice.provider.local": "本地（faster-whisper，免费）",
-  "options.voice.provider.groq": "Groq",
-  "options.voice.provider.openai": "OpenAI",
-  "options.voice.provider.mistral": "Mistral Voxtral",
-  "options.voice.provider.elevenlabs": "ElevenLabs Scribe",
   "newtab.dropOverlay": "拖入文件以附加",
-  "options.voice.localModel.label": "本地模型大小",
-  "options.voice.localModel.help": "模型越大越准但越慢，推荐 base。",
-  "options.voice.localModel.notDownloaded": "{model} 模型尚未下载（约 {size}）",
-  "options.voice.localModel.ready": "{model} 模型已就绪",
-  "options.voice.localModel.download": "下载",
-  "options.voice.localModel.downloading": "正在下载 {model} 模型…",
-  "options.voice.localModel.downloadFailed": "下载失败：{error}",
-  "options.voice.localModel.retry": "重试",
-
-  // API-key editor
-  "options.voice.apiKey.label": "API Key",
-  "options.voice.apiKey.placeholder": "粘贴所选 provider 的 API key",
-  "options.voice.apiKey.placeholderReplace": "输入新 key 以替换已保存的",
-  "options.voice.apiKey.set": "已配置",
-  "options.voice.apiKey.unset": "未配置",
-  "options.voice.apiKey.clear": "清除",
-  "options.voice.apiKey.confirmClear": "确认清除",
-  "options.voice.apiKey.help":
-    "保存到 Amiba 托管运行时的 $HERMES_HOME/.env。空输入会被忽略；如需删除已存的 key 请点击「清除」。",
-
-  // Status (loading / error)
-  "options.voice.status.loading": "读取 STT 配置中…",
-  "options.voice.status.error": "无法连接 backplane：{error}",
-  "options.voice.status.retry": "重试",
-
   // Preference page
-  "options.preference.subtitle": "扩展界面与行为",
+  "options.preference.subtitle": "桌面界面与行为",
   "options.preference.hotkey.label": "唤起快捷键",
   "options.preference.hotkey.desc": "在任意 App 中触发后把 Amiba 切换到前台。",
   "options.preference.hotkey.mode.disabled": "关闭",
@@ -701,65 +628,10 @@ export const zhCN: Messages = {
   "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "每日壁纸",
 
-  // Userscripts
-  "options.scripts.title": "用户脚本",
-  "options.scripts.subtitle": "创建、安装与管理用户脚本",
-  "options.scripts.new": "新建脚本",
-  "options.scripts.installFromUrl": "从 URL 安装",
-  "options.scripts.installDialog.title": "从 URL 安装用户脚本",
-  "options.scripts.installDialog.label": "脚本 URL",
-  "options.scripts.installDialog.install": "安装",
-  "options.scripts.empty": "尚未安装任何用户脚本。使用上方按钮创建或导入一个。",
-  "options.scripts.removeConfirm": "确定要删除此用户脚本吗？此操作无法撤销。",
-  "options.scripts.editor.newTitle": "新建用户脚本",
-  "options.scripts.editor.editTitle": "编辑：{name}",
-  "options.scripts.runAt": "运行时机：{runAt}",
-  "options.scripts.match": "匹配：{match}",
-  "options.scripts.version": "v{version}",
-  "options.scripts.updatedAt": "更新于 {time}",
-  "options.scripts.lastError": "最近错误",
-  "options.scripts.errorBadge": "错误",
-  "options.scripts.noMatch": "（无 @match）",
-  "options.scripts.action.edit": "编辑",
-  "options.scripts.action.remove": "删除",
-  "options.scripts.editor.save": "保存",
-  "options.scripts.editor.cancel": "取消",
-  "options.scripts.editor.placeholder":
-    "// ==UserScript==\n// @name        我的脚本\n// @match       https://example.com/*\n// @run-at      document-end\n// ==/UserScript==\n",
-
-  // Gateway settings
-  "options.gateway.baseUrl": "网关地址",
-  "options.gateway.baseUrl.placeholder": "http://127.0.0.1:18642/v1",
-  "options.gateway.baseUrl.desc":
-    "网关监听此地址。如果 `hermes chat` 运行在其他端口或主机上，请在此覆盖。",
-  "options.gateway.test": "测试连接",
-  "options.gateway.testing": "测试中…",
-  "options.gateway.test.ok": "已连接，桥接服务可达。",
-  "options.gateway.test.fail": "无法连接到桥接服务：{error}",
-  "options.gateway.startHint":
-    "网关未运行？请通过 Hermes CLI 运行 `hermes chat` 启动。",
-  "options.gateway.section.chat": "侧边栏聊天",
-  "options.gateway.model.label": "聊天模型 ID",
-  "options.gateway.model.fromGateway": "从网关获取",
-  "options.gateway.model.fromGateway.tooltip": "列出网关当前可用的模型",
-  "options.gateway.model.noModels": "网关未返回任何模型。",
-  "options.gateway.save": "保存",
-  "options.gateway.saved": "已保存。",
-  "options.gateway.backplaneKey.title": "Backplane 访问",
-  "options.gateway.backplaneKey.label": "访问密钥（可选）",
-  "options.gateway.backplaneKey.placeholder":
-    "未设置 AMIBA_BACKPLANE_KEY 时留空",
-  "options.gateway.backplaneKey.help":
-    "通常留空即可。如想加鉴权，把 AMIBA_BACKPLANE_KEY 写到 $HERMES_HOME/.env，重启本地服务后把同一个值贴到这里。",
-  "options.gateway.bridge.title": "桥接服务",
-  "options.gateway.bridge.url.label": "桥接地址",
-  "options.gateway.bridge.url.help":
-    "默认即可。只有你自己换过本地桥接端口才需要在这里改。",
-
   // Memory settings
   "options.memory.title": "记忆",
   "options.memory.subtitle": "助手的持久化记忆（只读）",
-  "options.memory.subtitle.tooltip": "$HERMES_HOME/memories/{MEMORY,USER}.md",
+  "options.memory.subtitle.tooltip": "DSH home/amiba-memory/memory.json",
   "options.memory.empty": "（暂无记忆条目）",
   "options.memory.refresh": "刷新",
   "options.memory.failedToLoad": "加载失败",
@@ -780,8 +652,25 @@ export const zhCN: Messages = {
   "options.memory.desc.user": "助手记录的用户偏好与协作习惯。",
   "options.memory.flagTooltip":
     "安全扫描标记：{flag}\n相同的规则会在 MEMORY.md 注入系统提示词之前拦截条目",
+  "options.memory.dsh.subtitle":
+    "由原生 DSH 插件提供、按 Preset 隔离的长期记忆",
+  "options.memory.dsh.subtitleTooltip":
+    "DSH 会话历史与压缩属于会话记忆，和跨会话长期记忆相互独立。",
+  "options.memory.dsh.pluginTitle": "DSH 长期记忆插件",
+  "options.memory.dsh.pluginDescription":
+    "记忆工具、安全扫描、持久化与模型上下文注入全部运行在 DSH Cordis 组合内。",
+  "options.memory.dsh.active": "已启用",
+  "options.memory.dsh.preset": "记忆作用域",
+  "options.memory.dsh.presetDescription":
+    "每个 DSH Agent Preset 拥有独立的长期记忆集合。",
+  "options.memory.dsh.target.memory": "助手记忆",
+  "options.memory.dsh.target.user": "用户画像",
+  "options.memory.dsh.reset": "清空",
+  "options.memory.dsh.resetConfirm":
+    "清空这个 DSH Preset 的全部长期记忆？此操作无法撤销。",
+  "options.memory.dsh.resetFailed": "清空 DSH 记忆失败。",
 
-  // Models / Hermes model config
+  // Models / DSH model config
   "options.models.title": "模型",
   "options.models.subtitle":
     "Amiba 在对话、嵌入和工具调用中使用的供应商与模型。",
@@ -792,7 +681,6 @@ export const zhCN: Messages = {
   "options.models.refreshCatalog": "刷新目录",
   "options.models.loadingSettings": "加载设置中…",
   "options.models.config.navTitle": "模型与服务",
-  "options.models.connection.navTitle": "连接设置",
   "options.models.display.navTitle": "输入栏显示",
   "options.models.display.navDescription": "选择输入栏可用的模型",
   "options.models.display.title": "服务提供商",
@@ -861,8 +749,6 @@ export const zhCN: Messages = {
   "options.models.config.useMainModelDescription":
     "不单独指定模型，始终跟随当前主模型。",
   "options.models.config.configuredCount": "已配置 {count} / {total}",
-  "options.models.config.auxiliaryUnavailable":
-    "桥接服务尚未连接，当前无法配置辅助模型。",
   "options.models.config.saved": "已保存",
   "options.models.config.clear": "清除",
   "options.models.config.select": "选择",
@@ -967,7 +853,6 @@ export const zhCN: Messages = {
   "options.models.provider.method.githubToken": "GitHub Token",
   "options.models.provider.method.claudeCode": "Claude Code 登录",
   "options.models.provider.method.githubCli": "GitHub CLI 登录",
-  "options.models.provider.method.hermesOauth": "设备授权",
   "options.models.provider.authHint.oauthDevice":
     "也可以通过设备授权流程登录此服务。",
   "options.models.provider.authHint.oauthExternal":
@@ -1006,91 +891,6 @@ export const zhCN: Messages = {
   "options.models.meta.modality": "模态",
   "options.models.meta.parameters": "参数",
   "options.models.meta.capabilities": "能力",
-  "options.models.virtual.navTitle": "多模型协作",
-  "options.models.virtual.moaTitle": "多模型协作",
-  "options.models.virtual.virtualBadge": "多模型协作",
-  "options.models.virtual.description":
-    "多模型协作会并行调用参考模型，再由聚合模型生成最终回答。",
-  "options.models.virtual.loading": "正在加载多模型协作…",
-  "options.models.virtual.unavailable": "多模型协作配置当前不可用。",
-  "options.models.virtual.save": "保存预设",
-  "options.models.virtual.saved": "已保存",
-  "options.models.virtual.unsaved": "未保存",
-  "options.models.virtual.saveFailed": "无法保存多模型协作配置。",
-  "options.models.virtual.status.ready": "可用",
-  "options.models.virtual.status.degraded": "部分可用",
-  "options.models.virtual.status.unavailable": "不可用",
-  "options.models.virtual.status.disabled": "已停用",
-  "options.models.virtual.unavailableHint":
-    "聚合模型当前不可用。请连接对应的服务提供商，或先选择另一个模型。",
-  "options.models.virtual.degradedHint":
-    "一个或多个参考模型当前不可用；聚合模型可用，但这个预设无法使用完整的参考集合。",
-  "options.models.virtual.preset": "协作预设",
-  "options.models.virtual.defaultPreset": "默认",
-  "options.models.virtual.setDefault": "设为默认",
-  "options.models.virtual.newPreset": "预设名称",
-  "options.models.virtual.addPreset": "新建预设",
-  "options.models.virtual.renamePreset": "重命名预设",
-  "options.models.virtual.renamePresetNamed": "重命名预设「{name}」",
-  "options.models.virtual.copyPreset": "复制预设",
-  "options.models.virtual.copyName": "{name} 副本",
-  "options.models.virtual.copyNameIndexed": "{name} 副本 {number}",
-  "options.models.virtual.presetActions": "预设操作",
-  "options.models.virtual.presetActionsNamed": "管理预设「{name}」",
-  "options.models.virtual.presetNameRequired": "预设名称不能为空。",
-  "options.models.virtual.presetNameExists": "已经存在同名预设。",
-  "options.models.virtual.deletePreset": "删除预设",
-  "options.models.virtual.enabled": "启用",
-  "options.models.virtual.enabledHint":
-    "启用且聚合模型可用后，它会出现在输入栏选择器的「多模型协作」分组中。",
-  "options.models.virtual.pipelineTitle": "模型处理链",
-  "options.models.virtual.pipelineDescription":
-    "参考模型并行分析请求；聚合模型读取它们的输出，并作为最终执行模型。",
-  "options.models.virtual.reference": "参考模型 {number}",
-  "options.models.virtual.aggregator": "聚合模型",
-  "options.models.virtual.parallel": "并行分析，然后聚合",
-  "options.models.virtual.addReference": "添加参考模型",
-  "options.models.virtual.removeReference": "移除参考模型",
-  "options.models.virtual.referenceEnabledNamed": "启用{name}",
-  "options.models.virtual.slotSettingsNamed": "{name}的执行参数",
-  "options.models.virtual.reasoningEffort": "推理强度",
-  "options.models.virtual.reasoning.provider_default": "使用模型默认值",
-  "options.models.virtual.reasoning.none": "关闭推理",
-  "options.models.virtual.reasoning.minimal": "最简",
-  "options.models.virtual.reasoning.low": "低",
-  "options.models.virtual.reasoning.medium": "中",
-  "options.models.virtual.reasoning.high": "高",
-  "options.models.virtual.reasoning.xhigh": "很高",
-  "options.models.virtual.reasoning.max": "最大",
-  "options.models.virtual.reasoning.ultra": "极致",
-  "options.models.virtual.referenceOutputLimit": "单模型输出上限",
-  "options.models.virtual.inheritPresetOutputLimit": "使用预设上限",
-  "options.models.virtual.advancedTitle": "高级配置",
-  "options.models.virtual.fanout.label": "参考模型更新频率",
-  "options.models.virtual.fanout.userTurn": "每个任务一次",
-  "options.models.virtual.fanout.perIteration": "每个执行步骤",
-  "options.models.virtual.fanout.everyN": "每 {count} 个执行步骤",
-  "options.models.virtual.fanout.interval": "更新间隔",
-  "options.models.virtual.referenceMaxTokens": "参考输出上限",
-  "options.models.virtual.referenceMaxTokensValue": "参考输出 {count}",
-  "options.models.virtual.referenceTimeout": "参考等待时间（秒）",
-  "options.models.virtual.unlimited": "不限",
-  "options.models.virtual.inheritHermes": "使用助手默认值",
-  "options.models.virtual.degradedPolicy": "参考模型失败时",
-  "options.models.virtual.degraded.loud": "提示已降级",
-  "options.models.virtual.degraded.silent": "静默继续",
-  "options.models.virtual.privacyFilter": "参考内容脱敏",
-  "options.models.virtual.privacy.off": "关闭",
-  "options.models.virtual.privacy.display": "仅展示和诊断记录",
-  "options.models.virtual.privacy.full": "展示、记录和聚合输入",
-  "options.models.virtual.providerDefault": "服务商默认值",
-  "options.models.virtual.referenceTemperature": "参考模型温度",
-  "options.models.virtual.referenceTemperatureHint":
-    "留空时使用各模型的服务商默认值。",
-  "options.models.virtual.aggregatorTemperature": "聚合模型温度",
-  "options.models.virtual.aggregatorTemperatureHint":
-    "留空时使用聚合模型的服务商默认值。",
-
   // Automation
   "options.cron.title": "自动化",
   "options.cron.pageTitle": "自动化",
@@ -1136,8 +936,7 @@ export const zhCN: Messages = {
   "options.cron.form.directScript.hint":
     "跳过模型，把脚本本身作为自动化任务执行。",
   "options.cron.form.script": "脚本",
-  "options.cron.form.script.placeholder":
-    "$HERMES_HOME/scripts 下的脚本或绝对路径",
+  "options.cron.form.script.placeholder": "绝对可执行文件路径",
   "options.cron.form.repeat": "执行次数上限",
   "options.cron.form.repeat.placeholder": "留空表示不限",
   "options.cron.state.scheduled": "已启用",
@@ -1167,115 +966,63 @@ export const zhCN: Messages = {
   "options.cron.action.copyFailed": "无法复制任务 ID",
   "options.cron.action.deleteConfirm":
     "确定删除“{name}”吗？已保存的运行输出也会被移除。",
+  "options.cron.dsh.new": "新建提醒",
+  "options.cron.dsh.session": "所属会话",
+  "options.cron.dsh.noSession": "请先创建一个会话，再添加提醒",
+  "options.cron.dsh.explanation":
+    "提醒属于一个 DSH 会话，到期后会重新进入同一个会话。任意 Cron 表达式、直接脚本、独立模型配置和外部投递不属于这个运行时，已明确移除。",
+  "options.cron.dsh.prompt": "提醒内容",
+  "options.cron.dsh.prompt.placeholder":
+    "提醒到期时，希望这个会话继续处理什么？",
+  "options.cron.dsh.rule": "时间规则",
+  "options.cron.dsh.rule.after": "延迟后执行",
+  "options.cron.dsh.rule.at": "指定日期时间",
+  "options.cron.dsh.rule.every": "固定间隔",
+  "options.cron.dsh.at": "日期和时间",
+  "options.cron.dsh.minutes": "分钟",
+  "options.cron.dsh.sessionHint":
+    "提醒会持久化在所选 DSH 会话中；循环间隔最短为 5 分钟。",
+  "options.cron.dsh.oneShot": "单次",
+  "options.cron.dsh.recurring": "循环",
+  "options.cron.dsh.overdue": "已到期",
+  "options.cron.dsh.filter.scheduled": "待执行",
+  "options.cron.dsh.filter.overdue": "已到期",
+  "options.cron.dsh.deleteConfirm": "确定删除提醒“{name}”吗？",
+  "options.cron.dsh.error.prompt": "请输入提醒内容。",
+  "options.cron.dsh.error.future": "请选择未来的时间。",
+  "options.cron.dsh.error.interval": "循环间隔必须是至少 5 分钟的整数。",
+  "options.cron.dsh.error.delay": "延迟时间必须是大于 0 的整数分钟。",
 
   // 运行状态与日志
   "options.status.title": "运行状态",
-  "options.status.subtitle": "查看健康状态、版本、路径与维护操作",
-  "options.status.refresh": "刷新",
-  "options.status.lastChecked": "检查于 {time}",
-  "options.status.health.healthy.title": "所有服务运行正常",
-  "options.status.health.healthy.subtitle":
-    "Hermes 与本地网关均已连接，可以正常工作。",
-  "options.status.health.offline.title": "网关当前离线",
-  "options.status.health.offline.subtitle":
-    "已检测到 Hermes，但本地网关进程当前没有运行。",
-  "options.status.health.mismatch.title": "组件需要处理",
-  "options.status.health.mismatch.subtitle":
-    "桌面应用与 Backplane 的协议版本不一致。",
-  "options.status.health.mismatch.hermesVersion":
-    "当前安装的 Hermes 低于 Amiba 支持的最低版本。",
-  "options.status.metric.gateway": "本地网关",
-  "options.status.metric.online": "在线",
-  "options.status.metric.offline": "离线",
-  "options.status.metric.sessions": "活跃会话",
-  "options.status.metric.update": "Hermes 更新",
-  "options.status.metric.updateAvailable": "有可用更新",
-  "options.status.runtime.title": "Hermes 运行时",
-  "options.status.runtime.subtitle": "已安装版本与本地配置",
-  "options.status.runtime.release": "当前版本",
-  "options.status.runtime.configVersion": "配置版本",
-  "options.status.runtime.latest": "最新 {version}",
-  "options.status.runtime.activeSessions": "活跃会话",
-  "options.status.runtime.paths": "路径与配置",
-  "options.status.runtime.hermesHome": "Hermes 目录",
-  "options.status.runtime.configPath": "配置文件",
-  "options.status.runtime.envPath": "环境文件",
-  "options.status.gateway.title": "本地网关",
-  "options.status.gateway.subtitle": "进程与平台连接状态",
-  "options.status.gateway.state": "运行状态",
-  "options.status.gateway.pid": "进程 ID",
-  "options.status.gateway.updatedAt": "状态更新时间",
-  "options.status.gateway.platforms": "已连接平台",
-  "options.status.gateway.noPlatforms": "暂无连接",
-  "options.status.gateway.lastExit": "最近退出原因",
-  "options.status.actions.title": "维护操作",
-  "options.status.actions.subtitle":
-    "无需离开应用即可重启本地服务或更新 Hermes。",
-  "options.status.actions.restart.title": "重启网关",
-  "options.status.actions.restart.description":
-    "重新启动本地网关进程，已有对话数据不会丢失。",
-  "options.status.actions.restart.button": "重启网关",
-  "options.status.actions.update.title": "更新 Hermes",
-  "options.status.actions.update.description":
-    "安装最新 Hermes 版本并刷新运行时文件。",
-  "options.status.actions.update.button": "更新 Hermes",
-  "options.status.actions.update.latest": "当前已是最新版本",
-  "options.status.actions.update.available": "发现新版本",
-  "options.status.actions.update.behind": "落后上游 {count} 个提交",
-  "options.status.actions.update.unknown": "暂时无法获取更新状态",
-  "options.status.actions.update.managed": "由 Amiba 管理",
-  "options.status.actions.running": "执行中",
-  "options.status.actions.success": "已完成",
-  "options.status.actions.failed": "执行失败",
-  "options.status.actions.restartOutput": "网关重启输出",
-  "options.status.protocol.title": "协议版本不一致",
-  "options.status.protocol.backplane":
-    "Backplane 协议版本 v{current} 低于所需的 v{expected}，请更新 Backplane 插件。",
-  "options.status.protocol.client":
-    "Backplane 协议版本 v{current} 高于当前支持的 v{expected}，请更新桌面应用。",
-  "options.status.hermesVersion.title": "需要更新 Hermes",
-  "options.status.hermesVersion.unsupported":
-    "当前安装的是 Hermes {current}。此版本 Amiba 要求 Hermes {required} 或更高版本；完成更新前，其他 Hermes 操作将被停用。",
-  "options.status.hermesVersion.unverifiable":
-    "Amiba 无法确认当前 Hermes 版本。请先安装 Hermes {required} 或更高版本。",
-  "options.status.recovery.title": "本地服务暂时不可用",
-  "options.status.recovery.description":
-    "Amiba 托管的 Hermes 运行时或本地服务还没有准备好，请在下方重试恢复。",
-  "options.status.recovery.retry": "重新检测",
-  "options.status.recovery.step.runtime":
-    "Amiba 检查固定版本的私有 Hermes 运行时。",
-  "options.status.recovery.step.backplane":
-    "Amiba 检查随应用发布的 Backplane 版本。",
-  "options.status.recovery.step.services":
-    "Amiba 重启私有 Gateway 和 Backplane 服务。",
-  "options.status.recovery.manual": "恢复说明",
-  "options.status.recovery.copy": "复制",
-  "options.status.recovery.copied": "已复制",
-  "options.status.recovery.error": "技术详情",
-  "options.status.viewUpdateLogs": "查看更新日志",
-  "options.logs.title": "日志",
-  "options.logs.subtitle": "查看 Hermes Agent 及 Hermes 更新日志",
-  "options.logs.refresh": "刷新",
+  "options.status.dsh.title": "DeepSeek Harness 状态",
+  "options.status.dsh.subtitle":
+    "查看由 Amiba 管理的固定版本 DSH 运行时健康状态和身份。",
+  "options.status.dsh.healthy": "DeepSeek Harness 已就绪",
+  "options.status.dsh.unhealthy": "DeepSeek Harness 需要处理",
+  "options.status.dsh.managed":
+    "由 Amiba 内置并托管，运行时更新随应用版本发布。",
+  "options.status.dsh.restart": "重启 DSH",
+  "options.status.dsh.restartConfirm":
+    "确定重启 DeepSeek Harness 吗？运行中的任务会被中断，但持久化会话会保留。",
+  "options.status.dsh.runtime": "受管运行时",
+  "options.status.dsh.version": "DSH 版本",
+  "options.status.dsh.commit": "上游 Commit",
+  "options.status.dsh.node": "内置 Node.js",
+  "options.status.dsh.process": "进程",
+  "options.status.dsh.sessions": "活动 / 持久化会话",
+  "options.status.dsh.paths": "隔离存储",
+  "options.status.dsh.bundle": "运行时包",
+  "options.status.dsh.lastChecked": "检查于 {time}",
+  "options.logs.dsh.title": "DeepSeek Harness 日志",
+  "options.logs.dsh.subtitle":
+    "由受管 DSH 进程产生的有界 stdout、stderr 和生命周期日志。",
+  "options.logs.dsh.stream": "输出流",
   "options.logs.autoRefresh": "自动刷新",
   "options.logs.live": "实时",
   "options.logs.empty": "暂无匹配的日志行。",
-  "options.logs.failedToLoad": "加载日志失败",
   "options.logs.lineCount": "{count} 行",
-  "options.logs.file.label": "来源",
-  "options.logs.file.agent": "agent",
-  "options.logs.file.errors": "errors",
-  "options.logs.file.gateway": "gateway",
-  "options.logs.file.hermesUpdate": "Hermes 更新",
-  "options.logs.action.running": "更新中",
-  "options.logs.action.empty": "暂无 Hermes 更新输出。",
   "options.logs.level.label": "级别",
-  "options.logs.component.label": "组件",
-  "options.logs.component.all": "全部",
-  "options.logs.component.gateway": "gateway",
-  "options.logs.component.agent": "agent",
-  "options.logs.component.tools": "tools",
-  "options.logs.component.cli": "cli",
-  "options.logs.component.cron": "cron",
   "options.logs.lines.label": "行数",
   "options.logs.search.label": "搜索",
   "options.logs.search.placeholder": "子串过滤（忽略大小写）",
@@ -1306,7 +1053,7 @@ export const zhCN: Messages = {
   "sidepanel.modelPicker.loading": "正在加载可用模型…",
   "sidepanel.modelPicker.loadFailed": "模型加载失败，重新打开即可重试。",
   "sidepanel.modelPicker.switchFailed": "模型切换失败，请重试。",
-  "sidepanel.modelPicker.virtualCapabilities": "多模型协作",
+  "sidepanel.modelPicker.reasoningEffort": "推理强度",
   "sidepanel.queue.tooltip": "排队：在当前轮次结束后发送",
   "sidepanel.stop": "停止生成",
   "sidepanel.regenerate": "重新生成",
@@ -1447,24 +1194,19 @@ export const zhCN: Messages = {
   "sidepanel.permission.denied.tooltip": "用户拒绝了此命令",
   "sidepanel.permission.expired": "已过期",
   "sidepanel.permission.expired.tooltip":
-    "在 gateway_timeout 前未响应；服务端已自动拒绝并解锁",
+    "审批等待已超时；DSH 已安全拒绝该请求并继续执行",
   "sidepanel.permission.submitFailed": "提交失败",
   "sidepanel.permission.submitFailed.tooltip":
-    "POST /v1/runs/{runId}/approval 请求失败",
+    "DSH 未接受运行 {runId} 的审批决定",
   "sidepanel.permission.waiting": "等待中",
   "sidepanel.permission.chip.tool": "工具：{tool}",
   "sidepanel.permission.chip.command": "命令：{command}",
   "sidepanel.permission.chip.reason": "原因：{reason}",
   "sidepanel.permission.chip.requested": "请求时间：{time}",
   "sidepanel.permission.chip.decided": "决定时间：{time}",
-  "sidepanel.permission.failedRecordStart": "启动录制失败",
-  "sidepanel.permission.failedRecordStop": "停止录制失败",
   "sidepanel.permission.dismissError": "关闭错误提示",
   "sidepanel.attachment.uploading": "上传中",
   "sidepanel.attachment.removeAria": "移除 {name}",
-  "sidepanel.attachment.removePage": "移除附加的页面",
-  "sidepanel.attachment.autoFrom": "自动附加自 {source}",
-  "sidepanel.attachment.autoFrom.fallback": "当前标签页",
   "sidepanel.attachment.openInBrowser": "在浏览器中打开 {name}",
   "sidepanel.attachment.remove": "移除",
   "sidepanel.attachment.previewTooltip": "点击放大预览",
@@ -1475,53 +1217,6 @@ export const zhCN: Messages = {
   "sidepanel.empty.newChat": "新建任务",
   "sidepanel.empty.openHistory": "从历史打开",
   "sidepanel.empty.settings": "设置",
-  // Empty-state connect prompt — shown in place of the composer when
-  // the bridge isn't reachable. Submitting a prompt would just error.
-  "sidepanel.empty.notConnected.title": "未连接到 Amiba",
-  "sidepanel.empty.notConnected.description":
-    "需要先连接本地服务才能开始对话。",
-  "sidepanel.empty.notConnected.button": "连接",
-  "sidepanel.empty.notConnected.connecting": "连接中…",
-
-  // Bridge status bar
-  "sidepanel.status.connecting": "连接中…",
-  "sidepanel.status.online": "在线",
-  "sidepanel.status.offline": "离线",
-  "sidepanel.status.bridgeUrl": "桥接：{url}",
-  "sidepanel.status.tooltip.online": "本地服务可达。点击打开网关设置。",
-  "sidepanel.status.tooltip.offline":
-    "无法连接到本地网关。请启动 `hermes chat` 并检查网关地址。",
-  "sidepanel.status.tooltip.connecting": "正在连接本地服务…",
-  "sidepanel.status.tooltipBase": "Amiba 浏览器扩展 · {state}",
-  "sidepanel.status.tooltip.agentRunning":
-    "代理窗口：#{windowId} · 标签页 {tabId}",
-  "sidepanel.status.tooltip.agentDown": "代理窗口：未运行",
-  "sidepanel.status.tooltip.clickConnect": "点击连接",
-  "sidepanel.status.tooltip.clickDisconnect": "点击断开",
-  "sidepanel.status.aria.bar": "Amiba 浏览器扩展 {label}。{action}。",
-  "sidepanel.status.showAgentWindow": "显示代理窗口",
-  "sidepanel.status.showAgentWindow.disabled": "代理窗口未运行 — 请先连接",
-  "sidepanel.status.dismiss": "关闭",
-
-  // Navigate open policy toggle
-  "sidepanel.navPolicy.label": "打开链接",
-  "sidepanel.navPolicy.background": "后台标签页",
-  "sidepanel.navPolicy.foreground": "前台标签页",
-  "sidepanel.navPolicy.sameTab": "替换当前标签页",
-  "sidepanel.navPolicy.tooltip": "代理打开链接时使用的方式。",
-  "sidepanel.navPolicy.listAria": "导航打开方式",
-  "sidepanel.navPolicy.auto.label": "自动",
-  "sidepanel.navPolicy.auto.desc":
-    "由模型在每次 navigate 时通过 open_in 决定；其他工具沿用当前运行所在的页面（当非自动时由 navigate 和此菜单更新）。",
-  "sidepanel.navPolicy.agent.label": "代理窗口",
-  "sidepanel.navPolicy.agent.desc": "专用代理窗口 — 所有浏览器工具与原地导航。",
-  "sidepanel.navPolicy.userNewTab.label": "新标签页",
-  "sidepanel.navPolicy.userNewTab.desc":
-    "你的 Chrome 窗口 — 每次 navigate 打开新标签页，其他工具沿用该标签页。",
-  "sidepanel.navPolicy.userSameTab.label": "当前标签页",
-  "sidepanel.navPolicy.userSameTab.desc":
-    "你的 Chrome 窗口 — 导航和工具都使用当前标签页。",
-
   // Session drawer
   "sidepanel.sessions.title": "最近任务",
   "sidepanel.sessions.empty": "暂无会话。发送一条消息以开始。",
@@ -1529,12 +1224,12 @@ export const zhCN: Messages = {
   "sidepanel.sessions.close": "关闭",
   "sidepanel.sessions.openAsTab": "在标签页中打开",
   "sidepanel.sessions.rename": "重命名",
-  "sidepanel.sessions.deletePermanently": "永久删除",
+  "sidepanel.sessions.deletePermanently": "从 Amiba 移除",
   "sidepanel.sessions.save": "保存",
   "sidepanel.sessions.cancel": "取消",
   "sidepanel.sessions.newChatTitle": "新建任务",
   "sidepanel.sessions.deleteConfirm":
-    "确定要永久删除「{title}」吗？这会从历史中移除该会话及其消息 — 从顶部栏关闭标签页只是隐藏。",
+    "确定要从 Amiba 移除「{title}」吗？DSH 会保留原始会话事件；此操作只会从 Amiba 历史中隐藏该任务。",
   "sidepanel.sessions.selected": "已选择 {count} 项",
   "sidepanel.sessions.select": "批量选择",
   "sidepanel.sessions.pin": "置顶",
@@ -1545,11 +1240,9 @@ export const zhCN: Messages = {
   "sidepanel.sessions.archived": "已归档",
   "sidepanel.sessions.branch": "创建分支",
   "sidepanel.sessions.export": "导出",
-  "sidepanel.sessions.import": "导入任务…",
   "sidepanel.sessions.more": "更多任务操作",
-  "sidepanel.sessions.importInvalid": "这个文件不是有效的 Amiba 会话导出。",
   "sidepanel.sessions.bulkDeleteConfirm":
-    "确定永久删除选中的 {count} 个任务吗？",
+    "确定从 Amiba 移除选中的 {count} 个任务吗？DSH 会保留其原始事件日志。",
   "sidepanel.sessions.group.pinned": "已置顶",
   "sidepanel.sessions.group.today": "今天",
   "sidepanel.sessions.group.yesterday": "昨天",
@@ -1561,105 +1254,7 @@ export const zhCN: Messages = {
   "sidepanel.sessions.group.channelChats": "{name}对话",
   "sidepanel.sessions.group.scheduled": "自动化运行",
 
-  // Task center / Kanban
-  "tasks.title": "任务看板",
-  "tasks.board.description": "后台执行、任务交接，以及需要你处理的事项",
-  "tasks.search": "搜索任务…",
-  "tasks.loadFailed": "无法加载任务",
-  "tasks.createFailed": "无法创建任务",
-  "tasks.orchestration.progress":
-    "编排进度：{completed}/{total} 个子任务已完成。",
-  "tasks.card.childCount": "{count} 个子任务",
-  "tasks.column.planning": "规划中",
-  "tasks.column.ready": "待执行",
-  "tasks.column.running": "执行中",
-  "tasks.column.attention": "待处理",
-  "tasks.column.done": "已完成",
-  "tasks.column.empty": "暂无任务",
-  "tasks.status.triage": "待梳理",
-  "tasks.status.todo": "待办",
-  "tasks.status.scheduled": "已安排",
-  "tasks.status.ready": "待执行",
-  "tasks.status.running": "执行中",
-  "tasks.status.blocked": "受阻",
-  "tasks.status.review": "待审核",
-  "tasks.status.done": "已完成",
-  "tasks.status.archived": "已归档",
-  "tasks.field.title": "标题",
-  "tasks.field.body": "任务说明",
-  "tasks.field.assignee": "负责 Agent",
-  "tasks.field.reviewer": "审核智能体",
-  "tasks.field.status": "状态",
-  "tasks.field.priority": "优先级",
-  "tasks.field.reason": "原因",
-  "tasks.field.handoff": "交接摘要",
-  "tasks.field.workdir": "工作目录",
-  "tasks.field.chooseWorkdir": "选择工作目录",
-  "tasks.assignee.unassigned": "未指定（不会自动执行）",
-  "tasks.assignee.shortUnassigned": "未指定",
-  "tasks.priority.normal": "普通",
-  "tasks.latestSummary": "最近交接",
-  "tasks.detail.loadFailed": "无法加载任务详情",
-  "tasks.detail.noInstructions": "尚未填写任务说明。",
-  "tasks.actionFailed": "任务更新失败",
-  "tasks.edit": "编辑任务",
-  "tasks.form.description": "配置这个任务的执行信息。",
-  "tasks.edit.runningWarning": "更换智能体会先停止当前运行，再完成重新指派。",
-  "tasks.action.block": "设为受阻",
-  "tasks.action.unblock": "解除阻塞",
-  "tasks.action.retry": "重新执行",
-  "tasks.action.stopRetry": "停止并重试",
-  "tasks.action.complete": "完成并交接",
-  "tasks.action.requestReview": "提交审核",
-  "tasks.action.approve": "审核通过",
-  "tasks.action.requestChanges": "要求修改",
-  "tasks.action.archive": "归档",
-  "tasks.tab.details": "详情",
-  "tasks.tab.activity": "活动",
-  "tasks.next.human": "正在等待人工输入，处理后才能继续执行。",
-  "tasks.next.reviewer": "下一处理人：审核智能体 {name}",
-  "tasks.next.running": "当前由 {name} 执行",
-  "tasks.next.done": "执行已结束，请检查交接结果和产物。",
-  "tasks.next.agent": "下一处理人：智能体 {name}",
-  "tasks.next.unassigned": "请先指定智能体，否则任务不会自动执行。",
-  "tasks.dependencies": "依赖与子任务",
-  "tasks.dependencies.parents": "前置依赖",
-  "tasks.dependencies.children": "子任务 / 下游任务",
-  "tasks.dependencies.add": "添加依赖",
-  "tasks.dependencies.addPlaceholder": "选择前置任务…",
-  "tasks.dependencies.remove": "移除依赖",
-  "tasks.subtask.create": "添加子任务",
-  "tasks.comments": "评论",
-  "tasks.comments.placeholder": "补充要求、上下文或处理意见…",
-  "tasks.comments.send": "发送评论",
-  "tasks.attachments": "附件",
-  "tasks.attachments.add": "添加文件",
-  "tasks.attachments.download": "下载附件",
-  "tasks.attachments.downloadFailed": "无法下载附件",
-  "tasks.attachments.empty": "暂无附件。",
-  "tasks.runs": "运行记录",
-  "tasks.runs.empty": "该任务尚未运行。",
-  "tasks.events": "操作记录",
-  "tasks.events.empty": "暂无活动记录。",
-  "tasks.deleteConfirm": "确定永久删除「{title}」及其全部记录吗？",
-  "tasks.deleteFailed": "无法删除任务",
-  "tasks.block.kind": "阻塞类型",
-  "tasks.block.needs_input": "需要人工输入",
-  "tasks.block.capability": "缺少所需能力",
-  "tasks.block.transient": "临时故障",
-  "tasks.block.dependency": "等待前置依赖",
-  "tasks.dialog.block.title": "将任务设为受阻",
-  "tasks.dialog.block.placeholder": "是什么原因让任务无法继续？",
-  "tasks.dialog.block.submit": "确认受阻",
-  "tasks.dialog.complete.title": "完成并交接",
-  "tasks.dialog.complete.placeholder": "说明结果、变更产物和验证情况…",
-  "tasks.dialog.complete.submit": "完成任务",
-  "tasks.dialog.review.title": "提交审核",
-  "tasks.dialog.review.placeholder": "告诉审核者需要重点检查什么…",
-  "tasks.dialog.review.submit": "提交审核",
-  "tasks.dialog.changes.title": "要求修改",
-  "tasks.dialog.changes.placeholder": "说明通过审核前必须修改的内容…",
-  "tasks.dialog.changes.submit": "退回修改",
+  // 会话历史与 DSH 定时运行
   "modelSelection.inherit": "使用默认模型",
   "modelSelection.inherit.description": "跟随当前智能体档案的默认模型。",
   "sidepanel.sessions.history.empty": "暂无对话或定时任务运行记录。",
@@ -1686,16 +1281,16 @@ export const zhCN: Messages = {
   // New tab
   "newtab.greeting": "我可以帮你做什么？",
   "newtab.subtitle":
-    "查资料、读页面、处理飞书、跑脚本 — 把你想做的事告诉我就行。",
+    "搜索网页、阅读页面、处理项目文件、执行命令或安排定时工作 — 把你想做的事告诉我就行。",
   // Typewriter cycle in the new-tab composer — keep each line short
   // enough to fit on one line at the default composer width (~640px)
   // and concrete enough to suggest a real capability rather than just
   // "ask me anything".
-  "newtab.placeholder.example.1": "今天我有哪些会议?",
+  "newtab.placeholder.example.1": "总结一下这个项目最近的改动",
   "newtab.placeholder.example.2": "帮我把这段英文翻译成中文…",
   "newtab.placeholder.example.3": "总结一下这个网页",
   "newtab.placeholder.example.4": "搜一下硅谷最近的 AI 新闻",
-  "newtab.placeholder.example.5": "用 Python 实现一个快速排序",
+  "newtab.placeholder.example.5": "运行测试并修复失败项",
   "newtab.send": "发送",
   "newtab.send.tooltip": "发送（Enter）",
   "workspace.openFolder": "打开文件夹",
@@ -1716,8 +1311,7 @@ export const zhCN: Messages = {
   "newtab.row.msgs": "{count} 条消息",
   "newtab.content.empty": "暂无定时任务运行输出。",
   "newtab.content.empty.row": "此次运行没有记录输出。",
-  "newtab.content.truncated":
-    "输出文件超过了桥接服务的内存上限 — 上方仅展示该次运行的开头部分。",
+  "newtab.content.truncated": "输出超过托管运行时的预览上限，仅展示开头内容。",
   "newtab.continueInChat": "在聊天中继续",
   "newtab.continueInChat.prompt":
     "下面是定时任务「{name}」在 {time} 的输出。帮我读一下：哪些值得立即处理，哪些可以等等，是否有需要跟进的事项？\n\n---\n\n{content}",
@@ -1735,31 +1329,6 @@ export const zhCN: Messages = {
   "newtab.relative.dAgo": "{n} 天前",
 
   // Home shortcuts strip
-  "newtab.shortcuts.title": "快捷收藏",
-  "newtab.shortcuts.add": "添加",
-  "newtab.shortcuts.add.tooltip": "添加快捷收藏",
-  "newtab.shortcuts.remove": "移除",
-  "newtab.shortcuts.rename": "重命名",
-  "newtab.shortcuts.manage": "管理",
-  "newtab.shortcuts.manage.tooltip": "管理快捷收藏",
-  "newtab.shortcuts.manage.title": "管理快捷收藏",
-  "newtab.shortcuts.manage.close": "关闭",
-  "newtab.shortcuts.manage.moveUp": "上移",
-  "newtab.shortcuts.manage.moveDown": "下移",
-  "newtab.shortcuts.manage.listEmpty": "还没有快捷收藏。在上方添加第一个吧。",
-  "newtab.shortcuts.add.dialog.title": "添加快捷收藏",
-  "newtab.shortcuts.add.dialog.urlLabel": "链接",
-  "newtab.shortcuts.add.dialog.urlPlaceholder": "https://example.com",
-  "newtab.shortcuts.add.dialog.titleLabel": "名称",
-  "newtab.shortcuts.add.dialog.titlePlaceholder": "可留空,自动用页面标题",
-  "newtab.shortcuts.add.dialog.useCurrentTab": "使用当前活动标签页",
-  "newtab.shortcuts.add.dialog.confirm": "添加",
-  "newtab.shortcuts.add.dialog.cancel": "取消",
-  "newtab.shortcuts.add.invalidUrl":
-    "请输入有效的 URL(包括 http:// 或 https://)。",
-  "newtab.shortcuts.empty":
-    "还没有快捷收藏 — 点击右侧 ⚙ 管理 添加你最常打开的站点。",
-
   // Wallpaper
   "newtab.wallpaper.cycle": "换一张壁纸",
 
@@ -1777,7 +1346,7 @@ export const zhCN: Messages = {
   "chat.resizeSidebar": "调整侧边栏宽度",
   "chat.untitled": "未命名对话",
   "chat.rename": "重命名",
-  "chat.delete": "删除",
+  "chat.delete": "移除",
   "chat.width.label": "消息栏宽度",
   "chat.width.narrow": "窄",
   "chat.width.narrow.tooltip": "窄列（与输入框同宽）",
@@ -1798,35 +1367,8 @@ export const zhCN: Messages = {
   "commandPalette.cmd.newChat": "新建任务",
 
   // ── 渠道（多平台会话） ──
-  "channels.cli": "CLI",
-  "channels.tui": "TUI",
-  "channels.cron": "定时任务",
-  "channels.feishu": "飞书",
-  "channels.telegram": "Telegram",
-  "channels.slack": "Slack",
-  "channels.discord": "Discord",
-  "channels.wecom": "企业微信",
-  "channels.weixin": "微信",
-  "channels.dingtalk": "钉钉",
-  "channels.whatsapp": "WhatsApp",
-  "channels.signal": "Signal",
-  "channels.matrix": "Matrix",
-  "channels.email": "邮件",
-  "channels.sms": "短信",
-  "channels.webhook": "Webhook",
-  "channels.homeassistant": "Home Assistant",
-  "channels.bluebubbles": "iMessage",
-  "channels.qqbot": "QQ",
-  "channels.yuanbao": "元宝",
-  "channels.gateway": "网关",
-  "channels.api": "API",
   "channels.local": "本地",
   "channels.unknown": "其他",
-  "channels.remoteTitle": "来自 {name}",
-  "sidepanel.sessions.readOnlyBadge": "只读",
-  "sidepanel.sessions.readOnlyNotice":
-    "此会话来自 {name}，请在 {name} 继续对话。",
-
   // Tokens + Tools pages
   "options.nav.tokens": "用量",
   "options.nav.tools": "工具",
@@ -1853,7 +1395,7 @@ export const zhCN: Messages = {
   "usage.tokens.label.tokens": "{in} 入 / {out} 出",
   "usage.tokens.label.placeholder": "未知",
   "usage.tokens.label.placeholderHint":
-    "这个 session 没记录具体模型。当时走的是 gateway 的默认路由——真实模型未按 session 存档。",
+    "这个会话的 DSH 事件历史没有记录具体模型。",
   "usage.tokens.footer.source": "数据来自本地运行环境 · 每 30 秒自动刷新",
   "usage.tools.hero.calls": "调用次数",
   "usage.tools.hero.tools": "工具种类",
@@ -1868,116 +1410,69 @@ export const zhCN: Messages = {
   "usage.tools.label.completed": "{ms}ms",
   "usage.tools.footer.source": "本地采集 · 每 30 秒自动刷新",
 
-  // Profile-scoped tools, with internal implementation details curated away.
+  // Runtime tool catalog, with internal implementation details curated away.
   "agentCapabilities.title": "工具",
   "agentCapabilities.subtitle": "管理当前助手可以使用的内置工具和外部工具。",
-  "agentCapabilities.loadFailed": "无法加载内置工具。",
-  "agentCapabilities.empty": "当前没有可以设置的内置工具。",
   "agentCapabilities.back": "返回工具",
-  "agentCapabilities.builtin.title": "内置工具",
-  "agentCapabilities.builtin.description":
-    "由本地运行环境提供，并按用途整理为易于理解的设置。",
-  "agentCapabilities.enabledForAssistant": "允许当前助手使用此工具",
   "agentCapabilities.activity.title": "工具使用记录",
   "agentCapabilities.activity.description": "用于排查问题的近期工具调用记录。",
   "agentCapabilities.activity.action": "使用记录",
-  "agentCapabilities.scope.device": "此设备共享",
-  "agentCapabilities.status.ready": "已就绪",
-  "agentCapabilities.status.attention": "需要设置",
-  "agentCapabilities.status.off": "未启用",
-  "agentCapabilities.group.understand.title": "理解内容",
-  "agentCapabilities.group.understand.description":
-    "让 Amiba 理解你提供的图片和视频信息。",
-  "agentCapabilities.group.web.title": "查找与使用信息",
-  "agentCapabilities.group.web.description": "搜索、读取并操作互联网上的信息。",
-  "agentCapabilities.group.create.title": "创作内容",
-  "agentCapabilities.group.create.description":
-    "把你的要求转化成图片、视频和语音。",
-  "agentCapabilities.group.coordinate.title": "协调任务",
-  "agentCapabilities.group.coordinate.description":
-    "规划并跟踪需要跨越当前回合持续执行的工作。",
-  "agentCapabilities.group.device.title": "在这台设备上工作",
-  "agentCapabilities.group.device.description":
-    "控制 Amiba 如何处理文件、代码和桌面应用。",
-  "agentCapabilities.group.connect.title": "连接已有服务",
-  "agentCapabilities.group.connect.description":
-    "让 Amiba 在你已经使用的服务和设备中完成任务。",
-  "agentCapabilities.item.vision.title": "理解图片",
-  "agentCapabilities.item.vision.description":
-    "读取截图、照片、图表和其他视觉内容。",
-  "agentCapabilities.item.video.title": "理解视频",
-  "agentCapabilities.item.video.description":
-    "使用支持视频的模型分析视频内容。",
-  "agentCapabilities.item.web.title": "搜索和读取网页",
-  "agentCapabilities.item.web.description":
-    "选择网页搜索和正文提取所使用的服务。",
-  "agentCapabilities.item.browser.title": "操作网页",
-  "agentCapabilities.item.browser.description":
-    "选择 Amiba 如何在浏览器中导航、点击和输入。",
-  "agentCapabilities.item.xSearch.title": "搜索 X",
-  "agentCapabilities.item.xSearch.description": "查找 X 上的公开内容和讨论。",
-  "agentCapabilities.item.extensions.title": "创建和使用扩展",
-  "agentCapabilities.item.extensions.description":
-    "允许这个助手创建、改进并使用你长期保留的 Amiba 扩展。",
-  "agentCapabilities.item.imageGen.title": "生成图片",
-  "agentCapabilities.item.imageGen.description": "选择图片生成服务和默认模型。",
-  "agentCapabilities.item.videoGen.title": "生成视频",
-  "agentCapabilities.item.videoGen.description":
-    "根据文字或参考素材创建、编辑视频。",
-  "agentCapabilities.item.bfl.title": "生成 FLUX 3 视频",
-  "agentCapabilities.item.bfl.description":
-    "使用 Black Forest Labs FLUX 3 完成文生视频、图生视频、关键帧和续写视频。",
-  "agentCapabilities.item.tts.title": "朗读文本",
-  "agentCapabilities.item.tts.description": "选择生成语音时使用的服务。",
-  "agentCapabilities.item.kanban.title": "任务看板",
-  "agentCapabilities.item.kanban.description":
-    "允许这个助手创建、拆分并跟踪可持续执行的后台任务。",
-  "agentCapabilities.item.delegation.title": "委派子任务",
-  "agentCapabilities.item.delegation.description":
-    "允许这个助手把复杂工作拆给隔离运行的子 Agent，并整合它们的结果。",
-  "agentCapabilities.item.clarify.title": "向我提问确认",
-  "agentCapabilities.item.clarify.description":
-    "允许 Agent 在需要你决策时暂停任务，并展示选项或开放问题。",
-  "agentCapabilities.item.sessionSearch.title": "搜索历史任务",
-  "agentCapabilities.item.sessionSearch.description":
-    "从这个助手过去的任务中找回有用的上下文和结论。",
-  "agentCapabilities.item.cronjob.title": "管理自动化",
-  "agentCapabilities.item.cronjob.description":
-    "允许这个助手创建、修改、暂停和运行定时任务。",
-  "agentCapabilities.item.contextEngine.title": "使用扩展上下文引擎",
-  "agentCapabilities.item.contextEngine.description":
-    "允许使用为这个助手选择的上下文引擎所提供的工具。",
-  "agentCapabilities.item.terminal.title": "运行代码和命令",
-  "agentCapabilities.item.terminal.description":
-    "统一选择代码和命令在本机、远程环境还是隔离环境中运行。",
-  "agentCapabilities.item.codeExecution.title": "执行代码",
-  "agentCapabilities.item.codeExecution.description":
-    "允许 Amiba 运行完成任务所需的代码。",
-  "agentCapabilities.item.file.title": "处理文件",
-  "agentCapabilities.item.file.description":
-    "读取、创建和修改你放入任务范围的文件。",
-  "agentCapabilities.item.computerUse.title": "操作桌面应用",
-  "agentCapabilities.item.computerUse.description":
-    "配置桌面控制所需的驱动和系统权限。",
-  "agentCapabilities.item.homeAssistant.title": "控制智能家居",
-  "agentCapabilities.item.homeAssistant.description":
-    "连接 Home Assistant 中的设备和服务。",
-  "agentCapabilities.item.spotify.title": "使用 Spotify",
-  "agentCapabilities.item.spotify.description":
-    "搜索音乐并控制播放、歌单和资料库。",
-  "agentCapabilities.item.discord.title": "参与 Discord",
-  "agentCapabilities.item.discord.description":
-    "读取消息、查找成员并参与讨论。",
-  "agentCapabilities.item.discordAdmin.title": "管理 Discord 服务器",
-  "agentCapabilities.item.discordAdmin.description":
-    "管理频道、角色、置顶内容和服务器设置。",
-  "agentCapabilities.item.yuanbao.title": "使用元宝群聊",
-  "agentCapabilities.item.yuanbao.description":
-    "查询群和成员、发送消息和表情。",
-  "agentCapabilities.item.a2a.title": "与其他 Agent 协作",
-  "agentCapabilities.item.a2a.description":
-    "发现并调用可信的 Agent2Agent 节点，查询历史交互并协调兼容的 Agent。",
-
+  "agentCapabilities.dsh.title": "工具目录",
+  "agentCapabilities.dsh.description":
+    "展示 DSH Runtime 中已注册的全部工具，并标明真实来源。",
+  "agentCapabilities.dsh.empty": "当前运行时没有注册任何工具。",
+  "agentCapabilities.dsh.noDescription": "这个工具没有提供说明。",
+  "agentCapabilities.dsh.ready": "已注册",
+  "agentCapabilities.dsh.schema": "输入 Schema",
+  "agentCapabilities.dsh.schema.description":
+    "DSH 针对此工具发送给所选模型的 JSON Schema。",
+  "agentCapabilities.dsh.source.filter": "按工具来源筛选",
+  "agentCapabilities.dsh.source.all": "全部",
+  "agentCapabilities.dsh.source.empty": "这个来源当前没有可用工具。",
+  "agentCapabilities.dsh.source.dshCore": "DSH 官方能力",
+  "agentCapabilities.dsh.source.dshCore.description":
+    "由已安装 DSH presets 中的官方插件注册。",
+  "agentCapabilities.dsh.source.dshPlugin": "Amiba DSH Plugins",
+  "agentCapabilities.dsh.source.dshPlugin.description":
+    "由独立的 dsh-plugin-* 项目注册，并通过 Amiba bundle 组装。",
+  "agentCapabilities.dsh.source.mcpServer": "MCP Server",
+  "agentCapabilities.dsh.source.mcpServer.description":
+    "由 DSH MCP Client 插件连接的外部服务提供。",
+  "agentCapabilities.dsh.source.detail": "工具来源",
+  "agentCapabilities.dsh.source.detail.description":
+    "此工具进入 DSH Runtime 的真实注册路径。",
+  "agentCapabilities.dsh.source.category": "来源类别",
+  "agentCapabilities.dsh.source.owner": "所属插件",
+  "agentCapabilities.dsh.source.provider": "能力提供者",
+  "agentCapabilities.dsh.source.package": "实现包",
+  "agentCapabilities.dsh.source.identifier": "来源标识",
+  "agentCapabilities.dsh.source.loadMode": "加载方式",
+  "agentCapabilities.dsh.source.executionTarget": "执行位置",
+  "agentCapabilities.dsh.source.dynamic": "动态挂载",
+  "agentCapabilities.dsh.source.bundled": "随运行时加载",
+  "agentCapabilities.dsh.loadMode.core": "DSH Profile / Bundle",
+  "agentCapabilities.dsh.loadMode.plugin": "Cordis Plugin",
+  "agentCapabilities.dsh.loadMode.mcp": "MCP Client",
+  "agentCapabilities.dsh.executionTarget.dshRuntime": "DSH Runtime",
+  "agentCapabilities.dsh.executionTarget.desktopService": "桌面平台服务",
+  "agentCapabilities.dsh.executionTarget.externalProcess": "外部隔离进程",
+  "agentCapabilities.dsh.group.workspace": "工作区与设备",
+  "agentCapabilities.dsh.group.workspace.description":
+    "文件、命令、终端和项目操作。",
+  "agentCapabilities.dsh.group.web": "网页与浏览器",
+  "agentCapabilities.dsh.group.web.description": "搜索、抓取和浏览器交互工具。",
+  "agentCapabilities.dsh.group.coordinate": "规划与协调",
+  "agentCapabilities.dsh.group.coordinate.description":
+    "提问、目标、待办、计划任务和委派。",
+  "agentCapabilities.dsh.group.memory": "长期记忆",
+  "agentCapabilities.dsh.group.memory.description":
+    "由 Amiba DSH 插件提供、按 Preset 隔离的记忆。",
+  "agentCapabilities.dsh.group.connected": "插件与已连接服务",
+  "agentCapabilities.dsh.group.connected.description":
+    "Skills、MCP 服务、扩展和产品集成。",
+  "agentCapabilities.dsh.group.other": "其他运行时工具",
+  "agentCapabilities.dsh.group.other.description":
+    "由当前 DSH 组合提供的其他工具。",
   // User-added extensions and tools.
   "externalTools.tab.extensions": "应用扩展",
   "externalTools.tab.plugins": "Agent 插件",
@@ -2000,256 +1495,24 @@ export const zhCN: Messages = {
   "externalTools.mcp.emptyTitle": "尚未添加 MCP",
   "externalTools.mcp.emptyDescription":
     "当你希望 Amiba 连接外部工具或数据源时，可以在这里添加。",
+  "externalTools.mcp.dsh.subtitle":
+    "把外部工具作为 DSH 原生 Cordis plugin 加载。DSH 当前只桥接 MCP Tools，不桥接 Resources 或 Prompts。",
+  "externalTools.mcp.dsh.emptyDescription":
+    "添加 stdio 或 Streamable HTTP 服务，把它的工具注册到 DSH。",
+  "externalTools.mcp.dsh.serverName": "服务命名空间",
+  "externalTools.mcp.dsh.args": "每行一个参数",
+  "externalTools.mcp.dsh.cwd": "工作目录（可选）",
+  "externalTools.mcp.dsh.env": "环境变量 JSON（可选）",
+  "externalTools.mcp.dsh.headers": "请求头 JSON（可选）",
+  "externalTools.mcp.dsh.preserveSecrets": "留空以保留已配置的秘密字段：{keys}",
+  "externalTools.mcp.dsh.hotReload":
+    "保存后会重写私有 DSH Cordis patch；已启用服务会热重载到原生工具注册表。",
+  "externalTools.mcp.dsh.saved": "已保存 DSH MCP 配置",
+  "externalTools.mcp.dsh.deleteConfirm": "确定移除 MCP 服务“{name}”吗？",
 
-  // Agent capability configuration
-  "tools.toggleFailed": "切换失败，请重试。",
-  "tools.detail.loadFailed": "加载详情失败。",
-  "tools.detail.journey.done": "已完成",
-  "tools.detail.journey.todo": "下一步",
-  "tools.detail.noSetup.title": "不需要额外配置",
-  "tools.detail.noSetup.description":
-    "启用后，Amiba 就可以在新的会话中使用这项能力。",
-  "tools.detail.noSetup.unavailableTitle": "这项能力还没有准备好",
-  "tools.detail.noSetup.unavailableDescription":
-    "当前运行环境没有返回可操作的配置方式，请更新后重新检查。",
-  "tools.detail.contextEngine.title": "上下文引擎",
-  "tools.detail.contextEngine.description":
-    "选择负责压缩和扩展这个助手工作上下文的引擎。",
-  "tools.detail.contextEngine.loadFailed": "无法加载上下文引擎。",
-  "tools.detail.contextEngine.saveFailed": "无法保存上下文引擎。",
-  "tools.detail.a2a.title": "远端 Agent",
-  "tools.detail.a2a.description":
-    "配置当前 Profile 可调用或协同编排的 A2A Agent。即使不保存，也仍可直接使用 URL。",
-  "tools.detail.a2a.add": "添加 Agent",
-  "tools.detail.a2a.edit": "编辑 Agent",
-  "tools.detail.a2a.delete": "删除 Agent",
-  "tools.detail.a2a.empty": "还没有配置远端 Agent。",
-  "tools.detail.a2a.loadFailed": "无法加载远端 Agent。",
-  "tools.detail.a2a.saveFailed": "无法保存远端 Agent。",
-  "tools.detail.a2a.deleteFailed": "无法删除远端 Agent。",
-  "tools.detail.a2a.dialogDescription":
-    "Bearer Token 只写不回显；留空会保留已经保存的 Token。",
-  "tools.detail.a2a.name": "Agent 名称",
-  "tools.detail.a2a.url": "基础 URL",
-  "tools.detail.a2a.timeout": "超时（秒）",
-  "tools.detail.a2a.capabilities": "能力标签（逗号分隔）",
-  "tools.detail.a2a.token": "Bearer Token",
-  "tools.detail.a2a.tokenPreserved": "将保留已保存的 Token",
-  "tools.detail.a2a.tokenOptional": "可选",
-  "tools.detail.a2a.authConfigured": "已配置 Bearer Token",
-  "tools.detail.a2a.noAuth": "未配置认证",
-  "tools.detail.a2a.clearToken": "移除已保存的 Token",
-  "tools.detail.a2a.keepToken": "保留已保存的 Token",
   "sidepanel.clarify.label": "Agent 需要你确认",
   "sidepanel.clarify.confirmSelection": "确认选择",
   "sidepanel.clarify.customAnswer": "输入其他回答",
   "sidepanel.clarify.send": "发送",
   "sidepanel.clarify.sendFailed": "无法发送你的回答。",
-  "tools.detail.understanding.loadFailed": "无法加载可用模型。",
-  "tools.detail.understanding.saveFailed": "无法保存理解模型。",
-  "tools.detail.understanding.routeTitle": "当前模型来源",
-  "tools.detail.understanding.imageDescription":
-    "默认使用主模型理解图片；主模型不支持图片时，可以单独指定一个视觉模型。",
-  "tools.detail.understanding.videoDescription":
-    "视频与图片理解共用同一个视觉模型；这里显示的是它们共同使用的模型来源。",
-  "tools.detail.understanding.routeDedicated": "使用专用理解模型",
-  "tools.detail.understanding.routeVision": "使用图片与视频共用的理解模型",
-  "tools.detail.understanding.routeMain": "跟随主模型",
-  "tools.detail.understanding.noRoute": "尚未选择可用模型",
-  "tools.detail.understanding.mainSupportsImage": "主模型支持图片输入。",
-  "tools.detail.understanding.mainLacksImage":
-    "主模型不支持图片输入，请在下方选择专用模型。",
-  "tools.detail.understanding.mainImageUnknown":
-    "暂时无法确认主模型是否支持图片；你可以指定一个已知可用的视觉模型。",
-  "tools.detail.understanding.chooseTitle": "更改理解模型",
-  "tools.detail.understanding.imageHint":
-    "只显示 Amiba 模型服务中已经可选的模型。请选择明确支持图片输入的模型。",
-  "tools.detail.understanding.videoHint":
-    "请选择明确支持视频输入的模型。保存后，图片理解也会使用这个模型。",
-  "tools.detail.understanding.manageModels": "管理模型服务",
-  "tools.detail.understanding.noModels":
-    "还没有可选模型，请先在“模型”中连接一个模型服务。",
-  "tools.detail.understanding.provider": "模型服务",
-  "tools.detail.understanding.model": "模型",
-  "tools.detail.understanding.useDedicated": "使用专用模型",
-  "tools.detail.understanding.useShared": "用于图片和视频理解",
-  "tools.detail.understanding.followMain": "跟随主模型",
-  "tools.detail.understanding.saved": "模型来源已更新",
-  "tools.detail.browser.backgroundTitle": "后台浏览器",
-  "tools.detail.browser.backgroundDescription":
-    "用于独立打开网页和执行自动化，不会占用你正在浏览的标签页。",
-  "tools.detail.browser.currentTabTitle": "当前浏览器标签页",
-  "tools.detail.browser.currentTabDescription":
-    "连接 Amiba 浏览器扩展后，Agent 可以在你已经打开的标签页中工作。",
-  "tools.detail.provider.title": "选择实现方式",
-  "tools.detail.provider.subtitle":
-    "根据预算、隐私需求和使用习惯选择合适的服务。",
-  "tools.detail.provider.active": "正在使用",
-  "tools.detail.provider.choose": "选择",
-  "tools.detail.provider.selecting": "正在保存…",
-  "tools.detail.provider.search": "搜索服务",
-  "tools.detail.provider.extract": "网页提取服务",
-  "tools.detail.provider.status.ready": "已就绪",
-  "tools.detail.provider.status.needsKey": "需要密钥",
-  "tools.detail.provider.status.needsAuth": "需要登录",
-  "tools.detail.provider.status.needsSetup": "需要安装",
-  "tools.detail.provider.status.inactive": "尚未选择",
-  "tools.detail.provider.badge.recommended": "推荐",
-  "tools.detail.provider.badge.subscription": "订阅",
-  "tools.detail.credentials.title": "连接你的账户",
-  "tools.detail.credentials.description":
-    "密钥只会安全保存在本机，保存后不会再次显示。",
-  "tools.detail.credentials.savedPlaceholder": "已经保存，留空即可保持不变",
-  "tools.detail.credentials.openProvider": "获取这个值",
-  "tools.detail.credentials.save": "保存连接",
-  "tools.detail.credentials.saving": "正在保存…",
-  "tools.detail.credentials.saved": "连接信息已保存",
-  "tools.detail.credentials.show": "显示输入内容",
-  "tools.detail.credentials.hide": "隐藏输入内容",
-  "tools.detail.setup.title": "安装必要组件",
-  "tools.detail.setup.description":
-    "Amiba 可以自动安装并配置这项服务所需的组件。",
-  "tools.detail.setup.run": "安装并配置",
-  "tools.detail.setup.running": "正在安装…",
-  "tools.detail.setup.connect": "继续连接",
-  "tools.detail.setup.connecting": "正在连接…",
-  "tools.detail.setup.configure": "完成配置",
-  "tools.detail.setup.configuring": "正在配置…",
-  "tools.detail.setup.done": "已完成",
-  "tools.detail.setup.info.open": "查看{name}的配置说明",
-  "tools.detail.setup.info.changes": "将进行这些操作",
-  "tools.detail.setup.info.agentBrowser.title": "本地浏览器组件",
-  "tools.detail.setup.info.agentBrowser.description":
-    "在本机为 Amiba 准备一套独立的无头浏览器环境。",
-  "tools.detail.setup.info.agentBrowser.detail.cli":
-    "安装所需的 Node.js 依赖，其中包括 agent-browser 控制程序。",
-  "tools.detail.setup.info.agentBrowser.detail.chromium":
-    "下载与控制程序匹配的 Playwright Chromium/headless-shell，通常约 170 MB；已有可用 Chrome 时会复用。",
-  "tools.detail.setup.info.agentBrowser.detail.session":
-    "任务通过独立的无头会话运行，不会默认读取日常 Chrome 的账号、Cookie 或扩展。",
-  "tools.detail.setup.info.agentBrowser.note":
-    "浏览器文件通常位于 Playwright 缓存目录；卸载 Amiba 不一定会自动删除这些缓存。",
-  "tools.detail.setup.info.cloudBrowser.title": "云浏览器控制组件",
-  "tools.detail.setup.info.cloudBrowser.description":
-    "云端负责运行浏览器，Amiba 在本机安装控制程序来发送操作。",
-  "tools.detail.setup.info.cloudBrowser.detail.cli":
-    "安装 agent-browser CLI 及其所需的 Node.js 依赖。",
-  "tools.detail.setup.info.cloudBrowser.detail.hosted":
-    "不会下载本地 Chromium；页面运行在 Browserbase、Browser Use 或 Firecrawl 提供的云端浏览器中。",
-  "tools.detail.setup.info.camofox.title": "Camofox 浏览器服务",
-  "tools.detail.setup.info.camofox.description":
-    "安装一个本地的反检测 Firefox/Camoufox 浏览器服务。",
-  "tools.detail.setup.info.camofox.detail.package":
-    "在本地运行环境安装 @askjo/camofox-browser Node.js 包。",
-  "tools.detail.setup.info.camofox.detail.engine":
-    "第一次启动服务时会额外下载约 300 MB 的 Camoufox 浏览器引擎。",
-  "tools.detail.setup.info.camofox.detail.service":
-    "安装完成后仍需启动本地 Camofox 服务，或者改用它的 Docker 服务。",
-  "tools.detail.setup.info.cuaDriver.title": "电脑控制驱动",
-  "tools.detail.setup.info.cuaDriver.description":
-    "安装 cua-driver，让 Amiba 能在后台读取屏幕并执行鼠标和键盘操作。",
-  "tools.detail.setup.info.cuaDriver.detail.installer":
-    "从 trycua/cua 官方仓库下载安装脚本，并安装适用于当前系统的驱动程序。",
-  "tools.detail.setup.info.cuaDriver.detail.process":
-    "驱动会作为本地后台进程运行，不会使用 Nous 云端电脑。",
-  "tools.detail.setup.info.cuaDriver.detail.permissions":
-    "macOS 安装后还需要授予辅助功能和屏幕录制权限；系统授权不会由安装程序自动完成。",
-  "tools.detail.setup.info.fasterWhisper.title": "本地语音识别",
-  "tools.detail.setup.info.fasterWhisper.description":
-    "安装 faster-whisper，在本机把语音转换为文本。",
-  "tools.detail.setup.info.fasterWhisper.detail.package":
-    "把 faster-whisper Python 包安装到本地运行环境。",
-  "tools.detail.setup.info.fasterWhisper.detail.model":
-    "识别模型在第一次使用时下载；默认模型通常约 150 MB，也可以选择其他大小。",
-  "tools.detail.setup.info.fasterWhisper.detail.local":
-    "音频和识别过程保留在本机，不需要额外的语音 API 密钥。",
-  "tools.detail.setup.info.kittenTts.title": "KittenTTS 本地语音",
-  "tools.detail.setup.info.kittenTts.description":
-    "安装一个面向 CPU 的轻量本地文字转语音引擎。",
-  "tools.detail.setup.info.kittenTts.detail.package":
-    "向本地 Python 环境安装 KittenTTS 和 soundfile 依赖。",
-  "tools.detail.setup.info.kittenTts.detail.model":
-    "根据所选模型下载约 25–80 MB 的语音模型。",
-  "tools.detail.setup.info.kittenTts.detail.local":
-    "语音在本机生成，不需要账户或远程 API 密钥。",
-  "tools.detail.setup.info.piper.title": "Piper 本地语音",
-  "tools.detail.setup.info.piper.description":
-    "安装 Piper，在本机把文字转换为语音。",
-  "tools.detail.setup.info.piper.detail.package":
-    "向本地 Python 环境安装约 14 MB 的 piper-tts 运行包。",
-  "tools.detail.setup.info.piper.detail.voice":
-    "所选声音会在第一次生成语音时另行下载。",
-  "tools.detail.setup.info.piper.detail.local":
-    "语音在本机生成，不需要账户或远程 API 密钥。",
-  "tools.detail.setup.info.ddgs.title": "DuckDuckGo 搜索组件",
-  "tools.detail.setup.info.ddgs.description":
-    "安装无需 API 密钥的 DuckDuckGo 搜索客户端。",
-  "tools.detail.setup.info.ddgs.detail.package":
-    "向本地 Python 环境安装 ddgs 包。",
-  "tools.detail.setup.info.ddgs.detail.scope":
-    "它只提供网页搜索，不提供网页正文提取；如需读取页面，还要选择一个提取服务。",
-  "tools.detail.setup.info.ddgs.detail.limits":
-    "无需账户，但请求仍受 DuckDuckGo 服务端限流约束。",
-  "tools.detail.setup.info.spotify.title": "连接 Spotify",
-  "tools.detail.setup.info.spotify.description":
-    "通过 Spotify OAuth 授权 Amiba 访问你的播放和资料库功能。",
-  "tools.detail.setup.info.spotify.detail.browser":
-    "打开系统浏览器完成 Spotify 登录和授权。",
-  "tools.detail.setup.info.spotify.detail.client":
-    "如果尚未配置 Spotify 应用，会先引导你提供 Client ID。",
-  "tools.detail.setup.info.spotify.detail.storage":
-    "授权信息保存在本地；不会安装额外浏览器或媒体播放器。",
-  "tools.detail.setup.info.langfuse.title": "Langfuse 观测组件",
-  "tools.detail.setup.info.langfuse.description":
-    "安装并启用 Langfuse 集成，用于记录 Agent 的运行轨迹。",
-  "tools.detail.setup.info.langfuse.detail.sdk":
-    "向本地 Python 环境安装 Langfuse SDK。",
-  "tools.detail.setup.info.langfuse.detail.plugin":
-    "在本地配置中启用内置的 observability/langfuse 插件。",
-  "tools.detail.setup.info.langfuse.detail.restart":
-    "配置完成后需要重新启动本地服务，新的追踪设置才会生效。",
-  "tools.detail.setup.info.xaiGrok.title": "连接 xAI",
-  "tools.detail.setup.info.xaiGrok.description":
-    "为需要 xAI 的工具选择一种可用的身份验证方式。",
-  "tools.detail.setup.info.xaiGrok.detail.oauth":
-    "可以打开浏览器登录 xAI Grok OAuth，使用兼容的订阅额度。",
-  "tools.detail.setup.info.xaiGrok.detail.key":
-    "也可以改为保存 XAI_API_KEY，费用由对应的 xAI API 账户承担。",
-  "tools.detail.setup.info.xaiGrok.detail.install":
-    "这个步骤不会安装本地可执行程序或浏览器引擎。",
-  "tools.detail.setup.info.unknown.title": "额外配置",
-  "tools.detail.setup.info.unknown.description":
-    "本地运行环境提示这个服务需要执行额外的配置步骤。",
-  "tools.detail.setup.info.unknown.detail":
-    "当前运行环境没有提供这项配置的结构化说明；执行时会显示具体结果。",
-  "tools.detail.auth.title": "需要登录账户",
-  "tools.detail.auth.description":
-    "这个选项需要 Nous 账户。请先在“模型”页面登录，然后回来重新检查。",
-  "tools.detail.model.title": "选择模型",
-  "tools.detail.model.description":
-    "不同模型在速度、质量和价格上有所区别，默认会选中推荐项。",
-  "tools.detail.model.save": "使用这个模型",
-  "tools.detail.terminal.title": "选择命令在哪里运行",
-  "tools.detail.terminal.description":
-    "新手建议使用“这台电脑”；处理不熟悉的代码时，可以选择隔离容器。",
-  "tools.detail.terminal.ready": "已就绪",
-  "tools.detail.terminal.needsSetup": "需要配置",
-  "tools.detail.terminal.unavailable": "暂不可用",
-  "tools.detail.terminal.connectionTitle": "后端配置",
-  "tools.detail.terminal.connectionDescription":
-    "这里只显示当前后端需要的字段；已经保存的密钥不会再次显示。",
-  "tools.detail.computer.title": "系统控制权限",
-  "tools.detail.computer.description":
-    "电脑控制需要驱动和操作系统授权。Amiba 只会在任务需要时使用它。",
-  "tools.detail.computer.driver": "电脑控制驱动",
-  "tools.detail.computer.accessibility": "辅助功能权限",
-  "tools.detail.computer.screen": "屏幕录制权限",
-  "tools.detail.computer.ready": "驱动和系统权限都已就绪",
-  "tools.detail.computer.grant": "请求系统权限",
-  "tools.detail.computer.requested":
-    "请在出现的 macOS 系统窗口中允许 CuaDriver，然后点击“重新检查”。",
-  "tools.detail.computer.installFirst":
-    "请先在上方安装电脑控制驱动，安装后再完成系统授权。",
-  "tools.detail.refresh": "重新检查",
-  "tools.detail.mutationFailed": "保存失败：{error}",
 };
