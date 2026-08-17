@@ -20,7 +20,11 @@ import {
   ScrollArea,
   cn,
 } from "../primitives";
-import { SettingsPageActions, SettingsPageDescription } from "./page-chrome";
+import {
+  SettingsPageActionButton,
+  SettingsPageActions,
+  SettingsPageDescription,
+} from "./page-chrome";
 
 export type DshPluginFiberPhase =
   | "pending"
@@ -288,17 +292,16 @@ export function DshPluginInventoryView({
     <ScrollArea className="min-h-0 flex-1">
       <PageContent size="lg">
         <SettingsPageActions host={headerActionsHost}>
-          <Button
+          <SettingsPageActionButton
             aria-label={labels.refresh}
-            className="h-8 w-8 shrink-0"
             disabled={loading}
+            icon
             onClick={() => void refresh()}
-            size="icon"
             title={labels.refresh}
             variant="ghost"
           >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </Button>
+            <RefreshCw className={cn(loading && "animate-spin")} />
+          </SettingsPageActionButton>
         </SettingsPageActions>
         <SettingsPageDescription className="mb-5 max-w-2xl">
           {labels.description}

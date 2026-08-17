@@ -9,7 +9,11 @@ import {
 } from "@amiba/app-runtime/platform";
 
 import { Button, PageContent, ScrollArea, cn } from "../primitives";
-import { SettingsPageActions, SettingsPageDescription } from "./page-chrome";
+import {
+  SettingsPageActionButton,
+  SettingsPageActions,
+  SettingsPageDescription,
+} from "./page-chrome";
 
 function usageRatio(entry: AgentMemoryTargetView): number {
   return entry.charLimit ? Math.min(1, entry.charCount / entry.charLimit) : 0;
@@ -162,38 +166,60 @@ export function SettingsMemory({
     void refresh();
   }, [refresh]);
 
-  const actions = (
+  const resetDisabled =
+    loading || items.every((item) => item.entries.length === 0);
+  const actions = embedded ? (
     <>
       <Button
         aria-label={t("options.memory.dsh.reset")}
         className="h-8 shrink-0 gap-1.5 text-xs text-destructive hover:text-destructive"
-        disabled={loading || items.every((item) => item.entries.length === 0)}
+        disabled={resetDisabled}
         onClick={() => void reset()}
-        size={embedded ? "icon" : "sm"}
+        size="icon"
         type="button"
         variant="ghost"
       >
         <Trash2 className="h-3.5 w-3.5" />
-        {!embedded ? t("options.memory.dsh.reset") : null}
       </Button>
       <Button
         aria-label={t("options.memory.refresh")}
-        className={
-          embedded ? "h-7 w-7 rounded-full" : "h-8 shrink-0 gap-1.5 text-xs"
-        }
+        className="h-7 w-7 rounded-full"
         disabled={loading}
         onClick={() => void refresh()}
-        size={embedded ? "icon" : "sm"}
+        size="icon"
         type="button"
-        variant={embedded ? "ghost" : "outline"}
+        variant="ghost"
       >
         {loading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <RefreshCw className="h-3.5 w-3.5" />
         )}
-        {!embedded ? t("options.memory.refresh") : null}
       </Button>
+    </>
+  ) : (
+    <>
+      <SettingsPageActionButton
+        aria-label={t("options.memory.dsh.reset")}
+        className="text-destructive hover:text-destructive"
+        disabled={resetDisabled}
+        onClick={() => void reset()}
+        type="button"
+        variant="ghost"
+      >
+        <Trash2 />
+        {t("options.memory.dsh.reset")}
+      </SettingsPageActionButton>
+      <SettingsPageActionButton
+        aria-label={t("options.memory.refresh")}
+        disabled={loading}
+        onClick={() => void refresh()}
+        type="button"
+        variant="outline"
+      >
+        {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+        {t("options.memory.refresh")}
+      </SettingsPageActionButton>
     </>
   );
 

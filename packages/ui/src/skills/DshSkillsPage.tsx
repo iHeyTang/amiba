@@ -49,7 +49,11 @@ import {
 import {
   MODEL_SETTINGS_SURFACE_CLASS,
 } from "../settings/ModelSettingsSectionChrome";
-import { SettingsPageActions, SettingsPageDescription } from "../settings/page-chrome";
+import {
+  SettingsPageActionButton,
+  SettingsPageActions,
+  SettingsPageDescription,
+} from "../settings/page-chrome";
 
 type SourceBucket =
   | "all"
@@ -663,10 +667,10 @@ export function DshSkillsPage({
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {!embedded ? (
         <SettingsPageActions host={headerActionsHost}>
-          <Button size="sm" type="button" onClick={() => setEditing({})}>
+          <SettingsPageActionButton type="button" onClick={() => setEditing({})}>
             <Plus />
             {t("options.skills.dsh.create")}
-          </Button>
+          </SettingsPageActionButton>
         </SettingsPageActions>
       ) : null}
       <ScrollArea className="min-h-0 min-w-0 flex-1">

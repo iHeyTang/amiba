@@ -43,7 +43,11 @@ import { SkillsPage } from "../skills";
 import { ToolsPage } from "../usage";
 import { AgentBehaviorEditor } from "./AgentBehaviorEditor";
 import { SettingsMemory } from "./SettingsMemory";
-import { SettingsPageActions, useSettingsPageHeader } from "./page-chrome";
+import {
+  SettingsPageActionButton,
+  SettingsPageActions,
+  useSettingsPageHeader,
+} from "./page-chrome";
 import type { SettingsPageProps } from "./settings-pages";
 
 type AgentWorkspaceSection = "behavior" | "skills" | "capabilities" | "memory";
@@ -111,22 +115,19 @@ function AgentPresetList({
   return (
     <>
       <SettingsPageActions>
-        <Button
+        <SettingsPageActionButton
           aria-label={t("common.refresh")}
-          className="h-7 w-7 rounded-full"
+          icon
           onClick={onRefresh}
-          size="sm"
           type="button"
           variant="ghost"
         >
-          <RefreshCw
-            className={cn("h-3.5 w-3.5", loading && "animate-spin")}
-          />
-        </Button>
-        <Button onClick={onCreate} size="sm" type="button">
-          <Plus className="h-3.5 w-3.5" />
+          <RefreshCw className={cn(loading && "animate-spin")} />
+        </SettingsPageActionButton>
+        <SettingsPageActionButton onClick={onCreate} type="button">
+          <Plus />
           {t("options.agents.create")}
-        </Button>
+        </SettingsPageActionButton>
       </SettingsPageActions>
       <ScrollArea className="min-h-0 flex-1">
         <PageContent bodyClassName="space-y-1" size="md">
@@ -238,29 +239,28 @@ function AgentPresetDetail({
             {t("options.agents.defaultShort")}
           </Badge>
         ) : (
-          <Button
+          <SettingsPageActionButton
             disabled={saving}
             onClick={onActivate}
-            size="sm"
             type="button"
             variant="outline"
           >
-            <Check className="h-3.5 w-3.5" />
+            <Check />
             {t("options.agents.setActive")}
-          </Button>
+          </SettingsPageActionButton>
         )}
         {profile.trust !== "system" && !isActive ? (
-          <Button
+          <SettingsPageActionButton
             aria-label={t("common.delete")}
-            className="h-8 w-8 rounded-full text-muted-foreground hover:bg-destructive/8 hover:text-destructive"
+            className="text-muted-foreground hover:bg-destructive/8 hover:text-destructive"
             disabled={saving}
+            icon
             onClick={onDelete}
-            size="icon"
             type="button"
             variant="ghost"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+            <Trash2 />
+          </SettingsPageActionButton>
         ) : null}
       </SettingsPageActions>
 

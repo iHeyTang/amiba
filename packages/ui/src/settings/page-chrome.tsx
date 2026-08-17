@@ -4,11 +4,12 @@ import {
   useContext,
   useEffect,
   useState,
+  type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
-import { cn } from "../primitives";
+import { Button, cn } from "../primitives";
 
 export interface SettingsHeaderOverride {
   title: ReactNode;
@@ -110,5 +111,35 @@ export function SettingsPageDescription({
     <p className={cn("text-[13px] leading-relaxed text-muted-foreground", className)}>
       {children}
     </p>
+  );
+}
+
+export interface SettingsPageActionButtonProps
+  extends Omit<ComponentPropsWithoutRef<typeof Button>, "size"> {
+  /** Square icon-only mode (h-7 w-7); default is the compact text button. */
+  icon?: boolean;
+}
+
+/**
+ * The one action-button spec for the settings head. Every control mounted
+ * through SettingsPageActions uses this instead of picking its own size, so
+ * the head's density matches the chat-surface headers (h-7 rows) everywhere.
+ */
+export function SettingsPageActionButton({
+  icon = false,
+  className,
+  ...props
+}: SettingsPageActionButtonProps) {
+  return (
+    <Button
+      size={icon ? "icon" : "sm"}
+      className={cn(
+        icon
+          ? "h-7 w-7 rounded-lg [&_svg]:size-3.5"
+          : "h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none [&_svg]:size-3.5",
+        className,
+      )}
+      {...props}
+    />
   );
 }

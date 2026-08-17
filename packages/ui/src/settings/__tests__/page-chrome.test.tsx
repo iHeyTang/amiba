@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import {
+  SettingsPageActionButton,
   SettingsPageActions,
   SettingsPageChromeProvider,
   SettingsPageDescription,
@@ -91,5 +92,38 @@ describe("settings page chrome", () => {
   it("styles SettingsPageDescription as muted copy", () => {
     render(<SettingsPageDescription>About</SettingsPageDescription>);
     expect(screen.getByText("About")).toHaveClass("text-muted-foreground");
+  });
+
+  it("normalizes head action buttons to the compact h-7 spec", () => {
+    render(
+      <SettingsPageActionButton type="button">Refresh</SettingsPageActionButton>,
+    );
+    const button = screen.getByRole("button", { name: "Refresh" });
+    expect(button).toHaveClass("h-7");
+    expect(button).not.toHaveClass("h-8");
+  });
+
+  it("renders icon-mode action buttons as h-7 squares", () => {
+    render(
+      <SettingsPageActionButton aria-label="Refresh" icon type="button" />,
+    );
+    const button = screen.getByRole("button", { name: "Refresh" });
+    expect(button).toHaveClass("h-7");
+    expect(button).toHaveClass("w-7");
+  });
+
+  it("keeps variant and className passthrough on action buttons", () => {
+    render(
+      <SettingsPageActionButton
+        className="text-destructive"
+        type="button"
+        variant="outline"
+      >
+        Reset
+      </SettingsPageActionButton>,
+    );
+    const button = screen.getByRole("button", { name: "Reset" });
+    expect(button).toHaveClass("text-destructive");
+    expect(button).toHaveClass("border");
   });
 });

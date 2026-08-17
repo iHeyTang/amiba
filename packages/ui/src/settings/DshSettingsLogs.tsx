@@ -10,7 +10,6 @@ import {
 
 import {
   Badge,
-  Button,
   Input,
   Label,
   Select,
@@ -21,7 +20,11 @@ import {
   Switch,
   cn,
 } from "../primitives";
-import { SettingsPageActions, SettingsPageDescription } from "./page-chrome";
+import {
+  SettingsPageActionButton,
+  SettingsPageActions,
+  SettingsPageDescription,
+} from "./page-chrome";
 
 const LEVELS: Array<AgentRuntimeLogLevel | "all"> = [
   "all",
@@ -120,21 +123,15 @@ export function DshSettingsLogs() {
               </Badge>
             ) : null}
           </div>
-          <Button
-            className="h-8 gap-1.5 text-xs"
+          <SettingsPageActionButton
             disabled={loading}
             onClick={() => void refresh()}
-            size="sm"
             type="button"
             variant="outline"
           >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
+            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             {t("common.refresh")}
-          </Button>
+          </SettingsPageActionButton>
         </div>
       </SettingsPageActions>
 
