@@ -2,12 +2,14 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  getHermesProfiles,
-  getHermesProfileSoul,
-  updateHermesProfileDescription,
-  updateHermesProfileSoul,
-} from "@amiba/core";
+  getAgentPresets,
+  openAgentPresetDocument,
+  readAgentPresetComposition,
+  updateAgentPresetDescription,
+  updateAgentPresetComposition,
+} from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
+import { getPlatform } from "@amiba/app-runtime/platform";
 
 import {
   Button,
@@ -17,7 +19,6 @@ import {
   ScrollArea,
   Textarea,
 } from "../primitives";
-import { AgentPersonalitySection } from "./AgentPersonalitySection";
 
 function FormSection({
   children,
@@ -45,14 +46,27 @@ function FormSection({
 
 export function AgentBehaviorEditor({
   description,
+  embedded = true,
   onDescriptionSaved,
   profileId,
+  sourceEditable = true,
 }: {
   description: string;
+  /**
+   * `true` (default) when hosted inside the Agents detail page, which owns
+   * its own scroll region (`scroll: "self"`) and expects this editor to
+   * bring its own `ScrollArea` + `PageContent`. `SettingsAssistantBehavior`
+   * — the standalone settings tab — is hosted by `SettingsPageScaffold`,
+   * which already provides scroll + width, so it passes `embedded={false}`
+   * to render plain content instead.
+   */
+  embedded?: boolean;
   onDescriptionSaved?: (description: string) => void;
   profileId: string;
+  sourceEditable?: boolean;
 }) {
   const { t } = useT();
+  const dshNative = Boolean(getPlatform().agentPresets);
   const [descriptionDraft, setDescriptionDraft] = useState(description);
   const [savedDescription, setSavedDescription] = useState(description);
   const [soul, setSoul] = useState("");
@@ -72,7 +86,7 @@ export function AgentBehaviorEditor({
     setSavedSoul("");
     setLoading(true);
     setError(null);
-    void getHermesProfileSoul(profileId).then((result) => {
+    void readAgentPresetComposition(profileId).then((result) => {
       if (cancelled) return;
       setLoading(false);
       if (!result.ok) {
@@ -90,7 +104,7 @@ export function AgentBehaviorEditor({
   const normalizedDescription = descriptionDraft.trim();
   const descriptionDirty = normalizedDescription !== savedDescription;
   const soulDirty = soul !== savedSoul;
-  const dirty = descriptionDirty || soulDirty;
+  const dirty = !dshNative && (descriptionDirty || soulDirty);
 
   async function save() {
     if (!dirty || saving) return;
@@ -98,7 +112,7 @@ export function AgentBehaviorEditor({
     setError(null);
 
     if (descriptionDirty) {
-      const result = await updateHermesProfileDescription(
+      const result = await updateAgentPresetDescription(
         profileId,
         normalizedDescription,
       );
@@ -113,7 +127,7 @@ export function AgentBehaviorEditor({
     }
 
     if (soulDirty) {
-      const result = await updateHermesProfileSoul(profileId, soul);
+      const result = await updateAgentPresetComposition(profileId, soul);
       if (!result.ok) {
         setSaving(false);
         setError(result.error || t("options.agents.saveFailed"));
@@ -125,85 +139,114 @@ export function AgentBehaviorEditor({
     setSaving(false);
   }
 
-  return (
-    <ScrollArea className="min-h-0 flex-1">
-      <PageContent bodyClassName="space-y-7" size="md">
-        {error ? (
-          <p
-            className="rounded-xl bg-destructive/8 px-3 py-2 text-xs text-destructive"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
+  async function editSource() {
+    setSaving(true);
+    setError(null);
+    const result = await openAgentPresetDocument(profileId);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error || t("options.agents.saveFailed"));
+    } else if (result.path) {
+      setError(result.path);
+    }
+  }
 
-        <FormSection
-          description={t("options.agents.role.description")}
-          title={t("options.agents.role.title")}
+  const content = (
+    <>
+      {error ? (
+        <p
+          className="rounded-xl bg-destructive/8 px-3 py-2 text-xs text-destructive"
+          role="alert"
         >
-          <div className="space-y-1.5">
-            <Label
-              className="sr-only"
-              htmlFor={`agent-description-${profileId}`}
-            >
-              {t("options.agents.role.title")}
-            </Label>
-            <Input
-              className="h-9 rounded-xl"
-              id={`agent-description-${profileId}`}
-              onChange={(event) => setDescriptionDraft(event.target.value)}
-              placeholder={t("options.agents.role.placeholder")}
-              value={descriptionDraft}
-            />
-          </div>
-        </FormSection>
+          {error}
+        </p>
+      ) : null}
 
-        <FormSection
-          description={t("options.agents.soul.description")}
-          title={t("options.agents.soul.title")}
-        >
-          {loading ? (
-            <div className="flex h-56 items-center justify-center rounded-2xl bg-muted/25">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <Textarea
-              className="min-h-56 resize-y rounded-xl font-mono text-xs leading-relaxed"
-              onChange={(event) => setSoul(event.target.value)}
-              placeholder={t("options.agents.soul.placeholder")}
-              value={soul}
-            />
-          )}
-        </FormSection>
-
-        <div className="flex justify-start">
-          <Button
-            disabled={loading || saving || !dirty}
-            onClick={() => void save()}
-            size="sm"
-            type="button"
+      <FormSection
+        description={t("options.agents.role.description")}
+        title={t("options.agents.role.title")}
+      >
+        <div className="space-y-1.5">
+          <Label
+            className="sr-only"
+            htmlFor={`agent-description-${profileId}`}
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {saving ? t("common.saving") : t("common.save")}
-          </Button>
+            {t("options.agents.role.title")}
+          </Label>
+          <Input
+            className="h-9 rounded-xl"
+            id={`agent-description-${profileId}`}
+            onChange={(event) => setDescriptionDraft(event.target.value)}
+            placeholder={t("options.agents.role.placeholder")}
+            readOnly={dshNative}
+            value={descriptionDraft}
+          />
         </div>
+      </FormSection>
 
-        <AgentPersonalitySection profileId={profileId} />
-      </PageContent>
-    </ScrollArea>
+      <FormSection
+        description={t("options.agents.soul.description")}
+        title={t("options.agents.soul.title")}
+      >
+        {loading ? (
+          <div className="flex h-56 items-center justify-center rounded-2xl bg-muted/25">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <Textarea
+            className="min-h-56 resize-y rounded-xl font-mono text-xs leading-relaxed"
+            onChange={(event) => setSoul(event.target.value)}
+            placeholder={t("options.agents.soul.placeholder")}
+            readOnly={dshNative}
+            value={soul}
+          />
+        )}
+      </FormSection>
+
+      {(!dshNative || sourceEditable) ? (
+      <div className="flex justify-start">
+        <Button
+          disabled={loading || saving || (!dshNative && !dirty)}
+          onClick={() => void (dshNative ? editSource() : save())}
+          size="sm"
+          type="button"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {saving
+            ? t("common.saving")
+            : dshNative
+              ? t("common.edit")
+              : t("common.save")}
+        </Button>
+      </div>
+      ) : null}
+    </>
   );
+
+  if (embedded) {
+    return (
+      <ScrollArea className="min-h-0 flex-1">
+        <PageContent bodyClassName="space-y-7" size="md">
+          {content}
+        </PageContent>
+      </ScrollArea>
+    );
+  }
+
+  return <div className="space-y-7">{content}</div>;
 }
 
 export function SettingsAssistantBehavior() {
   const { t } = useT();
   const [description, setDescription] = useState("");
+  const [profileId, setProfileId] = useState("default");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const result = await getHermesProfiles();
+    const result = await getAgentPresets();
     setLoading(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.loadFailed"));
@@ -212,6 +255,7 @@ export function SettingsAssistantBehavior() {
     const root = result.profiles.find(
       (profile) => profile.is_default || profile.name === "default",
     );
+    setProfileId(root?.name || "default");
     setDescription(root?.description || "");
   }, [t]);
 
@@ -238,8 +282,10 @@ export function SettingsAssistantBehavior() {
   return (
     <AgentBehaviorEditor
       description={description}
+      embedded={false}
       onDescriptionSaved={setDescription}
-      profileId="default"
+      profileId={profileId}
+      sourceEditable={false}
     />
   );
 }

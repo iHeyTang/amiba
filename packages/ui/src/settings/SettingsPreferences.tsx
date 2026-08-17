@@ -3,14 +3,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Label } from "../primitives";
 import { Switch } from "../primitives";
 import { Input } from "../primitives";
-import { Button, PageContent, ScrollArea } from "../primitives";
+import { Button } from "../primitives";
 import {
   type LanguagePreference,
   useStoredLanguagePreference,
   useT,
 } from "@amiba/i18n";
 import type { MessageKey, TranslateFn } from "@amiba/i18n";
-import { getPlatform } from "@amiba/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
 import {
   ACCENTS,
   type AccentPreference,
@@ -20,7 +20,7 @@ import {
 } from "../theme";
 import { cn } from "../primitives";
 import type { MessagesMaxWidth } from "../chat/internal/types";
-import { SettingsPaneHeader } from "./SettingsPaneHeader";
+import { SettingsPageDescription } from "./page-chrome";
 
 const ACCENT_LABEL_I18N: Record<AccentPreference, MessageKey> = {
   violet: "options.preference.accent.violet",
@@ -130,48 +130,43 @@ export function SettingsAppearance() {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPaneHeader
-        title={t("options.nav.appearance")}
-        subtitle={t("options.preference.subtitle")}
+    <div className="space-y-8">
+      <SettingsPageDescription>
+        {t("options.preference.subtitle")}
+      </SettingsPageDescription>
+      <AppearanceSection
+        t={t}
+        langPref={langPref}
+        themePref={themePref}
+        accentPref={accentPref}
+        languageOptions={languageOptions}
+        themeOptions={themeOptions}
+        onLangChange={(v) => void setLangPref(v)}
+        onThemeChange={(v) => void setThemePref(v)}
+        onAccentChange={(v) => void setAccentPref(v)}
+        // Wallpaper backdrop is rendered by the extension's new-tab
+        // surface; the desktop home doesn't surface it, so we hide
+        // the toggle there to avoid a no-op control.
+        showWallpaper={!isDesktop}
+        wallpaperEnabled={wallpaperEnabled}
+        onWallpaperChange={(next) => {
+          setWallpaperEnabled(next);
+          void getPlatform().storage.set({
+            [NEWTAB_WALLPAPER_KEY]: next,
+          });
+        }}
       />
-      <ScrollArea className="min-h-0 flex-1">
-        <PageContent bodyClassName="space-y-8" size="md">
-          <AppearanceSection
-            t={t}
-            langPref={langPref}
-            themePref={themePref}
-            accentPref={accentPref}
-            languageOptions={languageOptions}
-            themeOptions={themeOptions}
-            onLangChange={(v) => void setLangPref(v)}
-            onThemeChange={(v) => void setThemePref(v)}
-            onAccentChange={(v) => void setAccentPref(v)}
-            // Wallpaper backdrop is rendered by the extension's new-tab
-            // surface; the desktop home doesn't surface it, so we hide
-            // the toggle there to avoid a no-op control.
-            showWallpaper={!isDesktop}
-            wallpaperEnabled={wallpaperEnabled}
-            onWallpaperChange={(next) => {
-              setWallpaperEnabled(next);
-              void getPlatform().storage.set({
-                [NEWTAB_WALLPAPER_KEY]: next,
-              });
-            }}
-          />
-          <ChatSection
-            t={t}
-            messagesWidth={messagesWidth}
-            widthOptions={widthOptions}
-            onWidthChange={(v) => {
-              setMessagesWidth(v);
-              void getPlatform().storage.set({
-                [MESSAGES_WIDTH_KEY]: v,
-              });
-            }}
-          />
-        </PageContent>
-      </ScrollArea>
+      <ChatSection
+        t={t}
+        messagesWidth={messagesWidth}
+        widthOptions={widthOptions}
+        onWidthChange={(v) => {
+          setMessagesWidth(v);
+          void getPlatform().storage.set({
+            [MESSAGES_WIDTH_KEY]: v,
+          });
+        }}
+      />
     </div>
   );
 }
@@ -206,24 +201,19 @@ export function SettingsShortcuts() {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPaneHeader
-        title={t("options.nav.shortcuts")}
-        subtitle={t("options.preference.hotkey.desc")}
+    <div className="space-y-8">
+      <SettingsPageDescription>
+        {t("options.preference.hotkey.desc")}
+      </SettingsPageDescription>
+      <HotkeySection
+        summonHotkey={summonHotkey}
+        onSummonHotkeyChange={(next) => {
+          setSummonHotkey(next);
+          void getPlatform().storage.set({
+            [SUMMON_HOTKEY_KEY]: next,
+          });
+        }}
       />
-      <ScrollArea className="min-h-0 flex-1">
-        <PageContent size="md">
-          <HotkeySection
-            summonHotkey={summonHotkey}
-            onSummonHotkeyChange={(next) => {
-              setSummonHotkey(next);
-              void getPlatform().storage.set({
-                [SUMMON_HOTKEY_KEY]: next,
-              });
-            }}
-          />
-        </PageContent>
-      </ScrollArea>
     </div>
   );
 }

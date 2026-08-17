@@ -12,9 +12,10 @@
  * dollar number we'd display would be wrong for someone. Tokens are
  * the exact, plan-independent measurement.
  *
- * The page-level header lives in the TokensPage shell. Freshness is
- * app-guaranteed: load on mount, refetch on window focus, and a 30 s
- * poll while mounted (the session list is remote — no push channel).
+ * Pure scaffold content — the page-level head (title, scroll, width) is
+ * provided by SettingsPageScaffold. Freshness is app-guaranteed: load on
+ * mount, refetch on window focus, and a 30 s poll while mounted (the
+ * session list is remote — no push channel).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -22,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useT } from "@amiba/i18n"
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus"
-import { cn, PageContent, ScrollArea } from "../primitives"
+import { cn } from "../primitives"
 import { ChipSwitcher, Heatmap } from "../viz"
 
 import { readUsagePref, writeUsagePref } from "./prefs"
@@ -76,14 +77,12 @@ function formatMonthDay(day: string): string {
 }
 
 /**
- * True for values hermes-agent records when the client never pinned a
- * specific model — empty/whitespace, the routing placeholder
- * "hermes-agent", and the runner-side "(unknown)" grouping sentinel.
+ * True for values recorded before the runtime could identify a model.
  */
 function isPlaceholderModel(name: string | undefined | null): boolean {
   if (!name) return true
   const norm = name.trim().toLowerCase()
-  return norm === "" || norm === "hermes-agent" || norm === "(unknown)"
+  return norm === "" || norm === "(unknown)"
 }
 
 // ---------------------------------------------------------------------------
@@ -190,128 +189,124 @@ export function TokensTab() {
   }, [trendBuckets])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <ScrollArea className="min-h-0 flex-1">
-        <PageContent bodyClassName="space-y-6" size="md">
-          {error && (
-            <p className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-              {error}
-            </p>
-          )}
+    <div className="space-y-6">
+      {error && (
+        <p className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          {error}
+        </p>
+      )}
 
-          {/* Hero stat trio — today only */}
-          <HeroStats summary={summary} t={t} />
+      {/* Hero stat trio — today only */}
+      <HeroStats summary={summary} t={t} />
 
-          {/* Activity heatmap */}
-          <Section title={t("usage.tokens.section.activity")}>
-            {heatmap.length > 0 ? (
-              <TokenHeatmap cells={heatmap} t={t} language={language} />
-            ) : (
-              <Empty>{t("usage.label.noData")}</Empty>
-            )}
-          </Section>
+      {/* Activity heatmap */}
+      <Section title={t("usage.tokens.section.activity")}>
+        {heatmap.length > 0 ? (
+          <TokenHeatmap cells={heatmap} t={t} language={language} />
+        ) : (
+          <Empty>{t("usage.label.noData")}</Empty>
+        )}
+      </Section>
 
-          {/* Recent activity (today / 3d / 7d) */}
-          <Section
-            title={t("usage.tokens.section.trend")}
-            trailing={
-              <ChipSwitcher
-                options={DAY_RANGES}
-                value={trendDays}
-                onChange={(d) => void changeTrendRange(d)}
-                formatLabel={(d) => dayRangeLabel(d, t)}
+      {/* Recent activity (today / 3d / 7d) */}
+      <Section
+        title={t("usage.tokens.section.trend")}
+        trailing={
+          <ChipSwitcher
+            options={DAY_RANGES}
+            value={trendDays}
+            onChange={(d) => void changeTrendRange(d)}
+            formatLabel={(d) => dayRangeLabel(d, t)}
+          />
+        }
+      >
+        {trendBuckets.some((d) => d.totalTokens > 0) ? (
+          <ul className="space-y-1">
+            {trendBuckets.map((day) => (
+              <li
+                key={day.day}
+                className="grid grid-cols-[52px,80px,1fr,80px] items-center gap-3 text-sm"
+              >
+                <span className="whitespace-nowrap font-mono tabular-nums text-muted-foreground/80">
+                  {formatMonthDay(day.day)}
+                </span>
+                <span className="whitespace-nowrap text-muted-foreground tabular-nums">
+                  {t("usage.tokens.label.turns", { count: String(day.turns) })}
+                </span>
+                <SparkBar value={day.totalTokens} max={sparkMax} />
+                <span className="text-right tabular-nums">
+                  {day.totalTokens === 0 ? "—" : formatTokens(day.totalTokens)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty>{t("usage.label.noData")}</Empty>
+        )}
+      </Section>
+
+      {/* By model (today / 3d / 7d) */}
+      <Section
+        title={t("usage.tokens.section.byModel")}
+        trailing={
+          <ChipSwitcher
+            options={DAY_RANGES}
+            value={byModelDays}
+            onChange={(d) => void changeByModelRange(d)}
+            formatLabel={(d) => dayRangeLabel(d, t)}
+          />
+        }
+      >
+        {byModelView.length > 0 ? (
+          <ul className="space-y-1.5">
+            {byModelView.map((m) => (
+              <ModelRow
+                key={m.model}
+                model={m}
+                totalTokens={byModelTotal}
+                t={t}
               />
-            }
-          >
-            {trendBuckets.some((d) => d.totalTokens > 0) ? (
-              <ul className="space-y-1">
-                {trendBuckets.map((day) => (
-                  <li
-                    key={day.day}
-                    className="grid grid-cols-[52px,80px,1fr,80px] items-center gap-3 text-sm"
-                  >
-                    <span className="whitespace-nowrap font-mono tabular-nums text-muted-foreground/80">
-                      {formatMonthDay(day.day)}
-                    </span>
-                    <span className="whitespace-nowrap text-muted-foreground tabular-nums">
-                      {t("usage.tokens.label.turns", { count: String(day.turns) })}
-                    </span>
-                    <SparkBar value={day.totalTokens} max={sparkMax} />
-                    <span className="text-right tabular-nums">
-                      {day.totalTokens === 0 ? "—" : formatTokens(day.totalTokens)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty>{t("usage.label.noData")}</Empty>
-            )}
-          </Section>
+            ))}
+          </ul>
+        ) : (
+          <Empty>{t("usage.label.noData")}</Empty>
+        )}
+      </Section>
 
-          {/* By model (today / 3d / 7d) */}
-          <Section
-            title={t("usage.tokens.section.byModel")}
-            trailing={
-              <ChipSwitcher
-                options={DAY_RANGES}
-                value={byModelDays}
-                onChange={(d) => void changeByModelRange(d)}
-                formatLabel={(d) => dayRangeLabel(d, t)}
-              />
-            }
-          >
-            {byModelView.length > 0 ? (
-              <ul className="space-y-1.5">
-                {byModelView.map((m) => (
-                  <ModelRow
-                    key={m.model}
-                    model={m}
-                    totalTokens={byModelTotal}
-                    t={t}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <Empty>{t("usage.label.noData")}</Empty>
-            )}
-          </Section>
+      {/* Recent sessions */}
+      <Section title={t("usage.tokens.section.recent")}>
+        {recent.length > 0 ? (
+          <ul className="divide-y divide-border/40 rounded-md border border-border/40">
+            {recent.map((turn) => (
+              <li
+                key={`${turn.ts}-${turn.sessionId ?? "n"}-${turn.turn ?? "t"}-${turn.step ?? "s"}`}
+                className="grid grid-cols-[44px,72px,1fr,72px] items-center gap-2 px-2 py-1 text-sm"
+              >
+                <span className="font-mono text-muted-foreground">
+                  {formatClock(turn.ts)}
+                </span>
+                <span className="font-mono text-muted-foreground/70">
+                  {formatShortSession(turn.sessionId)}
+                </span>
+                <ModelLabel
+                  name={turn.model}
+                  t={t}
+                  className="truncate text-foreground/90"
+                />
+                <span className="text-right tabular-nums">
+                  {formatTokens(turn.totalTokens)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty>{t("usage.label.noData")}</Empty>
+        )}
+      </Section>
 
-          {/* Recent sessions */}
-          <Section title={t("usage.tokens.section.recent")}>
-            {recent.length > 0 ? (
-              <ul className="divide-y divide-border/40 rounded-md border border-border/40">
-                {recent.map((turn) => (
-                  <li
-                    key={`${turn.ts}-${turn.sessionId ?? "n"}`}
-                    className="grid grid-cols-[44px,72px,1fr,72px] items-center gap-2 px-2 py-1 text-sm"
-                  >
-                    <span className="font-mono text-muted-foreground">
-                      {formatClock(turn.ts)}
-                    </span>
-                    <span className="font-mono text-muted-foreground/70">
-                      {formatShortSession(turn.sessionId)}
-                    </span>
-                    <ModelLabel
-                      name={turn.model}
-                      t={t}
-                      className="truncate text-foreground/90"
-                    />
-                    <span className="text-right tabular-nums">
-                      {formatTokens(turn.totalTokens)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty>{t("usage.label.noData")}</Empty>
-            )}
-          </Section>
-
-          <p className="pt-2 text-center text-xs text-muted-foreground/60">
-            {t("usage.tokens.footer.source")}
-          </p>
-        </PageContent>
-      </ScrollArea>
+      <p className="pt-2 text-center text-xs text-muted-foreground/60">
+        {t("usage.tokens.footer.source")}
+      </p>
     </div>
   )
 }
