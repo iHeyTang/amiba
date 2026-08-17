@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -63,7 +63,7 @@ describe("settings page chrome", () => {
     external.remove();
   });
 
-  it("registers and clears the header override with the hook", () => {
+  it("registers and clears the header override with the hook", async () => {
     function DrillIn() {
       const [on, setOn] = useState(true);
       useSettingsPageHeader(on ? { title: "Detail" } : null);
@@ -82,7 +82,10 @@ describe("settings page chrome", () => {
       </Harness>,
     );
     expect(screen.getByTestId("override").textContent).toBe("on");
-    screen.getByRole("button", { name: "leave" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "leave" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("override").textContent).toBe("off");
+    });
   });
 
   it("styles SettingsPageDescription as muted copy", () => {
