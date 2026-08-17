@@ -13,6 +13,12 @@ vi.mock("../AgentModelConfigTab", () => ({
 vi.mock("../AgentBehaviorEditor", () => ({
   SettingsAssistantBehavior: () => <div>Default behavior</div>,
 }));
+vi.mock("../SettingsAgentsPage", () => ({
+  SettingsAgentsPage: (props: {
+    detail?: string;
+    onOpenDetail: (id: string | null) => void;
+  }) => <div data-testid="agents-page">{props.detail ?? ""}</div>,
+}));
 
 import { SettingsView } from "../SettingsView";
 
@@ -158,6 +164,7 @@ describe("SettingsView DSH navigation", () => {
     expect(
       screen.getByRole("button", { name: "Agent presets" }),
     ).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("agents-page")).toHaveTextContent("my-preset");
   });
 
   it("titles DSH sections from the ledger", () => {

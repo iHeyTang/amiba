@@ -15,8 +15,7 @@ import type { MessageKey } from "@amiba/i18n";
 import { TokensPage } from "../usage";
 import { AgentModelConfigTab } from "./AgentModelConfigTab";
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
-// Task 8 replaces this adapter with: import { SettingsAgentsPage } from "./SettingsAgentsPage";
-import { SettingsAgents } from "./SettingsAgents";
+import { SettingsAgentsPage } from "./SettingsAgentsPage";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
@@ -47,11 +46,6 @@ function page(Component: ComponentType): ComponentType<SettingsPageProps> {
   return function RegistryPage(_props: SettingsPageProps) {
     return <Component />;
   };
-}
-
-// Task 8 replaces this adapter with a real SettingsAgentsPage component.
-function SettingsAgentsPage(_props: SettingsPageProps) {
-  return <SettingsAgents />;
 }
 
 /**
