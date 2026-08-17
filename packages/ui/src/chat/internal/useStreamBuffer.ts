@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
-import { shortId } from "@amiba/utils";
+import { shortId } from "@amiba/app-runtime/utils";
 import {
   useSessions,
   type ChatRuntimeState,
-  type HermesToolProgress,
-  type StreamedToolCall,
-} from "@amiba/core";
+  type ToolProgress,
+  type ToolCall,
+} from "@amiba/app-runtime/core";
 
 import type { AssistantTimelineItem, UiMessage } from "./types";
 
@@ -23,7 +23,7 @@ import type { AssistantTimelineItem, UiMessage } from "./types";
  *   - **verboseStateRef** — the timeline (text/tool/approval items),
  *     reasoning string, and tool-call list. Flushed into the message's
  *     `assistantTimeline`, `reasoning`, `streamVerbose`,
- *     `hermesToolProgress` by `applyVerboseToAssistant`.
+ *     `toolProgress` by `applyVerboseToAssistant`.
  *   - Two RAF handles so back-to-back schedules coalesce.
  *
  * It does NOT own the wire subscription (`client.onStreamEvent` /
@@ -43,9 +43,9 @@ interface ChunkSlot {
 interface VerboseSlot {
   assistantUiId: string;
   reasoning: string;
-  tools: StreamedToolCall[];
-  hermesOrder: string[];
-  hermesById: Map<string, HermesToolProgress>;
+  tools: ToolCall[];
+  toolOrder: string[];
+  toolsById: Map<string, ToolProgress>;
   timeline: AssistantTimelineItem[];
 }
 
@@ -57,7 +57,7 @@ export interface UseStreamBufferResult {
 
   // --- Lifecycle -----------------------------------------------------
   /** Set up both refs for a new turn. Call from runChatTurn just before
-   * `client.submit` so events coming back from the SW find populated
+   * `client.submit` so immediate DSH events find populated
    * accumulators to mutate. */
   prime: (assistantUiId: string) => void;
   /** "Begin" event helper: only initializes refs if they're not set yet
@@ -69,18 +69,18 @@ export interface UseStreamBufferResult {
   reset: () => void;
   /** Rebuild both refs from a runtime-state snapshot. Used when the
    * panel mounts onto a session that was already streaming in another
-   * tab — the SW's accumulated state seeds our local view. */
+   * view — the engine snapshot seeds our local view. */
   hydrateFromSnapshot: (state: ChatRuntimeState) => void;
 
   // --- Stream-event handlers -----------------------------------------
   /** Append a `delta.content` chunk. Schedules a flush. */
   onChunk: (text: string) => void;
-  /** Replace the latest ephemeral progress note. Schedules a verbose flush. */
+  /** Append a reasoning delta chunk. Schedules a verbose flush. */
   onReasoning: (text: string) => void;
   /** Overwrite the running tool-call list. Schedules a verbose flush. */
-  onToolCalls: (calls: StreamedToolCall[]) => void;
-  /** Record a Hermes tool-progress event in stable order. */
-  onHermesToolProgress: (ev: HermesToolProgress) => void;
+  onToolCalls: (calls: ToolCall[]) => void;
+  /** Record a runtime tool-progress event in stable order. */
+  onToolProgress: (ev: ToolProgress) => void;
   /** Push an approval marker into the verbose timeline so the chip
    * renders inline. Idempotent on `approvalId`. */
   onApprovalToTimeline: (approvalId: string) => void;
@@ -210,9 +210,9 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       parts.push(blocks.join("\n\n"));
     }
     const md = parts.join("\n\n");
-    const progress = v.hermesOrder
-      .map((id) => v.hermesById.get(id))
-      .filter((ev): ev is HermesToolProgress => Boolean(ev));
+    const progress = v.toolOrder
+      .map((id) => v.toolsById.get(id))
+      .filter((ev): ev is ToolProgress => Boolean(ev));
     const progressWithDetails = progress.map((event) => {
       if (event.label && event.label.trim() !== event.tool) return event;
       const call =
@@ -235,7 +235,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
               ...m,
               streamVerbose: md,
               reasoning: rs || undefined,
-              hermesToolProgress: progressWithDetails,
+              toolProgress: progressWithDetails,
               assistantTimeline: timelineSnapshot,
             }
           : m,
@@ -262,8 +262,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       assistantUiId,
       reasoning: "",
       tools: [],
-      hermesOrder: [],
-      hermesById: new Map(),
+      toolOrder: [],
+      toolsById: new Map(),
       timeline: [],
     };
   }, [cancelStreamChunkFlush, cancelVerboseFlush]);
@@ -280,8 +280,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
         assistantUiId,
         reasoning: "",
         tools: [],
-        hermesOrder: [],
-        hermesById: new Map(),
+        toolOrder: [],
+        toolsById: new Map(),
         timeline: [],
       };
     }
@@ -300,10 +300,10 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       assistantUiId: state.assistantUiId,
       reasoning: state.reasoning,
       tools: state.toolCalls.slice(),
-      hermesOrder: state.hermesOrder.slice(),
-      hermesById: new Map(
-        state.hermesToolProgress.map(
-          (e: HermesToolProgress) => [e.toolCallId, e] as const,
+      toolOrder: state.toolOrder.slice(),
+      toolsById: new Map(
+        state.toolProgress.map(
+          (e: ToolProgress) => [e.toolCallId, e] as const,
         ),
       ),
       // Copy text items so the in-place `last.text += delta` mutations
@@ -338,14 +338,18 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   const onReasoning = useCallback(
     (text: string): void => {
       const v = verboseStateRef.current;
-      if (v) v.reasoning = text;
+      // DSH sends reasoning as true deltas (the chat engine and the history
+      // projection both accumulate with `+=`); append here too or the live
+      // view shows only the latest fragment and the folded post-turn block
+      // collapses to the final (often whitespace-only) delta.
+      if (v) v.reasoning += text;
       scheduleVerboseFlush();
     },
     [scheduleVerboseFlush],
   );
 
   const onToolCalls = useCallback(
-    (calls: StreamedToolCall[]): void => {
+    (calls: ToolCall[]): void => {
       const v = verboseStateRef.current;
       if (v) v.tools = calls.slice();
       scheduleVerboseFlush();
@@ -353,15 +357,15 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     [scheduleVerboseFlush],
   );
 
-  const onHermesToolProgress = useCallback(
-    (ev: HermesToolProgress): void => {
+  const onToolProgress = useCallback(
+    (ev: ToolProgress): void => {
       const v = verboseStateRef.current;
       if (v) {
-        if (!v.hermesById.has(ev.toolCallId)) {
-          v.hermesOrder.push(ev.toolCallId);
+        if (!v.toolsById.has(ev.toolCallId)) {
+          v.toolOrder.push(ev.toolCallId);
           appendToolToVerboseTimeline(ev.toolCallId);
         }
-        v.hermesById.set(ev.toolCallId, ev);
+        v.toolsById.set(ev.toolCallId, ev);
       }
       scheduleVerboseFlush();
     },
@@ -384,7 +388,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     onChunk,
     onReasoning,
     onToolCalls,
-    onHermesToolProgress,
+    onToolProgress,
     onApprovalToTimeline: appendApprovalToVerboseTimeline,
     cancelStreamChunkFlush,
     cancelVerboseFlush,
