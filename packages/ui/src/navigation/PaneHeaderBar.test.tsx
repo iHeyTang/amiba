@@ -33,4 +33,12 @@ describe("PaneHeaderBar", () => {
     render(<PaneHeaderBar trailing={<span>T</span>} />);
     expect(screen.getByText("T").parentElement).toHaveClass("app-no-drag");
   });
+
+  it("adds border-b when bordered={true} and omits it by default", () => {
+    const { rerender } = render(<PaneHeaderBar data-testid="bar" />);
+    expect(screen.getByTestId("bar")).not.toHaveClass("border-b");
+
+    rerender(<PaneHeaderBar data-testid="bar" bordered={true} />);
+    expect(screen.getByTestId("bar")).toHaveClass("border-b");
+  });
 });
