@@ -4,20 +4,15 @@
  * instead of placing an unrelated status strip across the whole app.
  *
  * The sidebar (`<Sidebar>`) is one column with three regions: a fixed top
- * (new-chat / search / built-in + extension nav rows), unified conversation
+ * (new-chat / search / DSH plugin nav rows), unified conversation
  * history, and a settings row pinned at the bottom. It replaces the old icon
  * `ActivityBar` rail + the `w-72` session-list aside.
  *
- * The main pane renders by `sidebarView`: the chat surface ("chats"), the
- * first-class task board ("tasks"), registered scheduled-tasks page
- * ("scheduled"), capability library, or an extension webview for
- * extension-contributed main panels.
- *
- * Extension uses this as the standalone ``tabs/chat.html`` page; desktop uses
- * it as the chat view inside the main BrowserWindow.
+ * The main pane renders by `sidebarView`: the chat surface ("chats") or one
+ * active DSH workspace contribution. Desktop uses it inside the main window.
  */
 
-import { BookOpen, Folder, Home, PanelLeftClose, Search } from "lucide-react";
+import { Folder, Home, PanelLeftClose, Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -30,20 +25,19 @@ import {
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 
-import { useSessions, type ChatEngineClient } from "@amiba/core";
+import { useSessions, type ChatEngineClient } from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import { useT } from "@amiba/i18n";
-import { getPlatform, type StorageChangeMap } from "@amiba/platform";
+import { getPlatform, type StorageChangeMap } from "@amiba/app-runtime/platform";
 import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
+import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
 import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth } from "./internal/types";
 import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
-import { ScheduledTasksPage } from "./ScheduledTasksPage";
-import { TaskCenterPage } from "./TaskCenterPage";
 import { useScheduledRuns } from "./internal/useScheduledRuns";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
@@ -56,13 +50,6 @@ import {
   useWorkspacePane,
 } from "./WorkspacePane";
 import { EmbeddedBrowserToggle } from "./EmbeddedBrowserPane";
-import {
-  ExtensionWebView,
-  useExtensionMains,
-} from "@amiba/extension-host/renderer";
-import { SettingsCapabilities } from "../settings/SettingsCapabilities";
-import { AgentTaskProvider } from "../settings/agent-task";
-import type { StartAgentTask } from "../settings/capabilities";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
   clampAppSidebarWidth,
@@ -129,25 +116,38 @@ function isMessagesMaxWidth(v: unknown): v is MessagesMaxWidth {
 }
 
 export interface FullScreenChatViewProps {
-  /** ChatEngineClient — extension wraps chrome.runtime.connect, desktop wraps IPC. */
+  /** ChatEngineClient — desktop IPC backed by the managed DSH process. */
   client: ChatEngineClient;
-  /** Optional extension-only capabilities (page-context, learn, etc.). */
+  /** Optional desktop hand-off and workspace capabilities. */
   capabilities?: ChatSurfaceCapabilities;
-  /** Slots forwarded to ChatSurface (BridgeStatusBar / NavigateOpenPolicyToggle / empty-state). */
+  /** Slots forwarded to ChatSurface. */
   slots?: {
-    bridgeBar?: ReactNode;
-    navigateOpenPolicyToggle?: (ctx: {
-      policy: import("./internal/capabilities").NavigateOpenPolicy;
-      onChange: (
-        next: import("./internal/capabilities").NavigateOpenPolicy,
-      ) => void;
-    }) => ReactNode;
     /**
      * Rendered in the main pane when no session is active. Desktop hands
      * in ``<HomeView panelMode />`` so the home composer doubles as the
      * empty state instead of a separate route.
      */
     emptyState?: ReactNode;
+    /** Additive DSH entries before built-in navigation rows. */
+    navigationBefore?: ReactNode;
+    /** DSH workspace plugin entries, rendered inside the existing sidebar. */
+    workspaceNavigation?: (activeView: string) => ReactNode;
+    /** Additive DSH entries after built-in navigation rows. */
+    navigationAfter?: ReactNode;
+    /** Active DSH workspace plugin body, keyed by the selected destination. */
+    workspaceView?: (
+      viewId: string,
+      owner: {
+        chromeHeightPx?: number;
+        topBarLeftInset?: number;
+        sidebarCollapsed: boolean;
+        showSidebarExpandControl: boolean;
+      },
+    ) => ReactNode;
+    /** Additive controls in the active chat header action cluster. */
+    headerAfter?: ReactNode;
+    /** Frame-wide overlay for chat modules; entries opt into pointer events. */
+    contentOverlay?: ReactNode;
   };
   /**
    * TabBar gear / settings row → open Settings. The optional ``tab``
@@ -192,11 +192,6 @@ export interface FullScreenChatViewProps {
    * the existing persisted-navigation behaviour by default.
    */
   restoreSidebarViewOnMount?: boolean;
-  /** Desktop-only first-class capability library shown in the main sidebar. */
-  capabilityExtensions?: {
-    startAgentTask?: StartAgentTask;
-    managedExtensions?: import("@amiba/managed-extensions/bridge").ManagedExtensionsBridge;
-  };
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -228,7 +223,6 @@ function FullScreenChatViewInner({
   topBarClassName,
   mentionProviders,
   restoreSidebarViewOnMount = true,
-  capabilityExtensions,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -367,15 +361,11 @@ function FullScreenChatViewInner({
     };
   }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
 
-  // Chats data: drop archived rows AND any cron-emitted session. We also
-  // filter by id prefix even though core's loadIndex already passes
-  // ``excludeSources: ["cron"]``: rows with an empty/missing ``source`` field
-  // but the canonical ``cron_{jobId}_{stamp}`` id can still slip through
-  // (legacy data, gateway misroutes, partial flushes). Cron runs are always
-  // reachable via the Scheduled page.
+  // DSH schedules wake their owning session instead of minting a parallel
+  // cron-run transcript. The chat list therefore needs only the archive
+  // filter; no local id convention may hide a valid DSH session.
   const chatSessions = useMemo(
-    () =>
-      sessions.sessions.filter((s) => !s.archived && !s.id.startsWith("cron_")),
+    () => sessions.sessions.filter((s) => !s.archived),
     [sessions.sessions],
   );
 
@@ -462,14 +452,18 @@ function FullScreenChatViewInner({
       void storage.get(SIDEBAR_VIEW_KEY).then((r) => {
         if (cancelled) return;
         const v = r[SIDEBAR_VIEW_KEY];
-        if (isSidebarView(v)) setSidebarView(v);
+        if (isSidebarView(v)) {
+          setSidebarView(v === "tasks" ? "chats" : v);
+        }
       });
     }
     const unsub = storage.watch(
       [SIDEBAR_VIEW_KEY],
       (changes: StorageChangeMap) => {
         const ch = changes[SIDEBAR_VIEW_KEY];
-        if (ch && isSidebarView(ch.newValue)) setSidebarView(ch.newValue);
+        if (ch && isSidebarView(ch.newValue)) {
+          setSidebarView(ch.newValue === "tasks" ? "chats" : ch.newValue);
+        }
       },
     );
     return () => {
@@ -548,10 +542,10 @@ function FullScreenChatViewInner({
     [],
   );
 
-  const extensionMains = useExtensionMains();
   const workspacePane = useWorkspacePane();
 
   const onSidebarViewChange = useCallback((next: ActivityViewId) => {
+    if (next === "tasks") next = "chats";
     setSidebarView(next);
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }, []);
@@ -593,16 +587,6 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  const onOpenAgentSession = useCallback(
-    async (id: string) => {
-      if (!sessions.ready) return;
-      await sessions.refresh();
-      await sessions.openTab(id);
-      onSidebarViewChange("chats");
-    },
-    [sessions, onSidebarViewChange],
-  );
-
   // Scheduled runs live in History, not in the registered-task workspace.
   // Opening one behaves like opening any other conversation output.
   const onOpenRun = useCallback(
@@ -618,12 +602,8 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  const activeMain = extensionMains.find((m) => m.extensionId === sidebarView);
-  const primaryWorkspaceActive =
-    sidebarView === "chats" ||
-    sidebarView === "tasks" ||
-    sidebarView === "scheduled" ||
-    (sidebarView === "capability-extensions" && !!capabilityExtensions);
+  const primaryWorkspaceActive = sidebarView === "chats";
+  const pluginWorkspaceActive = !primaryWorkspaceActive;
   const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
   const showSidebarCollapseControl =
     !sidebarCollapsed && sidebarMotion === "idle";
@@ -675,10 +655,10 @@ function FullScreenChatViewInner({
             className={topBarClassName}
           />
           <Sidebar
-            activeView={sidebarView}
-            onSelectView={onSidebarViewChange}
+            navigationBefore={slots?.navigationBefore}
+            workspaceNavigation={slots?.workspaceNavigation?.(sidebarView)}
+            navigationAfter={slots?.navigationAfter}
             onNewChat={() => void onNewChatAndShow()}
-            extensionItems={extensionMains}
             sessions={chatSessions}
             runningSessionIds={runningSessionIds}
             failedSessionIds={failedSessionIds}
@@ -717,45 +697,6 @@ function FullScreenChatViewInner({
                 );
               }
             }}
-            onImportSessions={async (file) => {
-              try {
-                const parsed = JSON.parse(await file.text()) as Record<
-                  string,
-                  unknown
-                >;
-                const rawSession = parsed.session;
-                let imports: Array<Record<string, unknown>>;
-                if (Array.isArray(parsed.sessions)) {
-                  imports = parsed.sessions.filter(
-                    (item): item is Record<string, unknown> =>
-                      Boolean(item) &&
-                      typeof item === "object" &&
-                      !Array.isArray(item),
-                  );
-                } else if (
-                  rawSession &&
-                  typeof rawSession === "object" &&
-                  !Array.isArray(rawSession)
-                ) {
-                  const session = rawSession as Record<string, unknown>;
-                  imports = Array.isArray(session.segments)
-                    ? session.segments.filter(
-                        (item): item is Record<string, unknown> =>
-                          Boolean(item) &&
-                          typeof item === "object" &&
-                          !Array.isArray(item),
-                      )
-                    : [session];
-                } else {
-                  throw new Error(t("sidepanel.sessions.importInvalid"));
-                }
-                await sessions.importSessions(imports);
-              } catch (error) {
-                window.alert(
-                  error instanceof Error ? error.message : String(error),
-                );
-              }
-            }}
             onBulkSessions={(ids, action) => sessions.bulkUpdate(ids, action)}
             onRefreshSessions={() => void sessions.refresh()}
             scheduledSessions={scheduled.runs}
@@ -766,7 +707,6 @@ function FullScreenChatViewInner({
             historyLayout={historyLayout}
             onHistoryLayoutChange={onHistoryLayoutChange}
             onOpenSettings={() => openSettings()}
-            showCapabilityExtensions={!!capabilityExtensions}
             className="min-w-0 flex-1"
           />
         </div>
@@ -818,7 +758,6 @@ function FullScreenChatViewInner({
               />
               <main className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <ChatSurface
-                  variant="fullscreen"
                   messagesMaxWidth={messagesWidth}
                   client={client}
                   capabilities={capabilities}
@@ -829,83 +768,19 @@ function FullScreenChatViewInner({
                 />
               </main>
             </PrimaryWorkspaceView>
-            {capabilityExtensions ? (
-              <PrimaryWorkspaceView
-                active={sidebarView === "capability-extensions"}
-                testId="capability-extensions-view"
-              >
-                <AgentTaskProvider
-                  value={capabilityExtensions.startAgentTask}
-                  managedExtensions={capabilityExtensions.managedExtensions}
-                >
-                  <SettingsCapabilities
-                    topBarHeightPx={topBarHeightPx}
-                    topBarClassName={topBarClassName}
-                    topBarLeftInset={topBarLeftInset}
-                    sidebarCollapsed={sidebarCollapsed}
-                    showSidebarExpandControl={showSidebarExpandControl}
-                    onExpandSidebar={() => onSidebarCollapsedChange(false)}
-                  />
-                </AgentTaskProvider>
-              </PrimaryWorkspaceView>
-            ) : null}
             <PrimaryWorkspaceView
-              active={sidebarView === "tasks"}
-              testId="tasks-view"
+              active={pluginWorkspaceActive}
+              testId="plugin-workspace-view"
             >
-              {sidebarView === "tasks" ? (
-                <TaskCenterPage
-                  topBarHeightPx={topBarHeightPx}
-                  topBarClassName={topBarClassName}
-                  topBarLeftInset={topBarLeftInset}
-                  sidebarCollapsed={sidebarCollapsed}
-                  showSidebarExpandControl={showSidebarExpandControl}
-                  onExpandSidebar={() => onSidebarCollapsedChange(false)}
-                />
-              ) : null}
+              {slots?.workspaceView?.(sidebarView, {
+                chromeHeightPx: topBarHeightPx,
+                topBarLeftInset,
+                sidebarCollapsed,
+                showSidebarExpandControl,
+              })}
             </PrimaryWorkspaceView>
-            <PrimaryWorkspaceView
-              active={sidebarView === "scheduled"}
-              testId="scheduled-view"
-            >
-              <ScheduledTasksPage
-                topBarHeightPx={topBarHeightPx}
-                topBarClassName={topBarClassName}
-                topBarLeftInset={topBarLeftInset}
-                sidebarCollapsed={sidebarCollapsed}
-                showSidebarExpandControl={showSidebarExpandControl}
-                onExpandSidebar={() => onSidebarCollapsedChange(false)}
-              />
-            </PrimaryWorkspaceView>
-            {!primaryWorkspaceActive ? (
-              <>
-                <ContentHeader
-                  title={activeMain?.label || chatTopBarPlaceholder}
-                  icon={<BookOpen className="h-4 w-4" />}
-                  sidebarCollapsed={sidebarCollapsed}
-                  showExpandControl={showSidebarExpandControl}
-                  iconBoxVisible={headerIconBoxesVisible}
-                  onExpandSidebar={() => onSidebarCollapsedChange(false)}
-                  leftInset={topBarLeftInset}
-                  heightPx={topBarHeightPx}
-                  className={topBarClassName}
-                />
-                <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  {activeMain ? (
-                    <ExtensionWebView
-                      src={activeMain.viewUrl}
-                      className="h-full w-full"
-                    />
-                  ) : null}
-                </main>
-              </>
-            ) : null}
           </div>
-          <WorkspacePane
-            visible={sidebarView === "chats"}
-            client={client}
-            onOpenSession={(id) => void onOpenAgentSession(id)}
-          />
+          <WorkspacePane visible={sidebarView === "chats"} />
         </div>
         <WorkspaceTerminalPanel
           visible={sidebarView === "chats"}
@@ -918,6 +793,7 @@ function FullScreenChatViewInner({
             className="app-no-drag absolute right-3 top-0 z-50 flex items-center gap-0.5"
             style={{ height: topBarHeightPx ?? 40 }}
           >
+            {slots?.headerAfter}
             <EmbeddedBrowserToggle
               open={
                 workspacePane.open &&
@@ -942,6 +818,14 @@ function FullScreenChatViewInner({
             <WorkspacePaneToggle showUnavailable />
           </div>
         )}
+        {slots?.contentOverlay ? (
+          <div
+            data-amiba-slot="amiba.chat.content.overlay"
+            className="pointer-events-none absolute inset-0 z-[60]"
+          >
+            {slots.contentOverlay}
+          </div>
+        ) : null}
       </section>
       <CommandPalette
         open={palette.open}
@@ -1099,13 +983,11 @@ function ContentHeader({
   const [titleEditing, setTitleEditing] = useState(false);
 
   return (
-    <header
-      className={cn(
-        "flex shrink-0 items-center bg-background px-3",
-        !seamless && "border-b border-border/45",
-        titleEditing && "app-no-drag",
-        className,
-      )}
+    <PaneHeaderBar
+      heightPx={heightPx}
+      leftInset={sidebarCollapsed ? leftInset : 0}
+      bordered={!seamless}
+      className={cn(titleEditing && "app-no-drag", className)}
       onPointerDown={(event) => {
         if (!titleEditing) return;
         if (
@@ -1118,48 +1000,42 @@ function ContentHeader({
           document.activeElement.blur();
         }
       }}
-      style={{
-        height: heightPx,
-        paddingLeft: sidebarCollapsed ? Math.max(leftInset, 12) : 12,
-      }}
-    >
-      <div
-        data-content-header-leading
-        className="flex min-w-0 items-center gap-2.5"
-        style={{
-          height: heightPx,
-          left: sidebarCollapsed ? Math.max(leftInset, 12) : 12,
-        }}
-      >
-        <HeaderIconBox
-          visible={iconBoxVisible}
-          testId="content-header-icon-box"
+      leading={
+        <div
+          data-content-header-leading
+          className="flex min-w-0 items-center gap-2.5"
+          style={{ height: heightPx }}
         >
-          <SidebarExpandControl
-            collapsed={sidebarCollapsed}
-            onExpand={onExpandSidebar}
-            visible={showExpandControl}
-          />
-          {title ? (
-            <span
-              className={cn(
-                "pointer-events-none shrink-0 text-muted-foreground",
-                sidebarCollapsed && "ml-2",
-              )}
-            >
-              {icon}
-            </span>
-          ) : null}
-        </HeaderIconBox>
-        {title && (
-          <EditableContentHeaderTitle
-            title={title}
-            onRename={onRenameTitle}
-            onEditingChange={setTitleEditing}
-          />
-        )}
-      </div>
-    </header>
+          <HeaderIconBox
+            visible={iconBoxVisible}
+            testId="content-header-icon-box"
+          >
+            <SidebarExpandControl
+              collapsed={sidebarCollapsed}
+              onExpand={onExpandSidebar}
+              visible={showExpandControl}
+            />
+            {title ? (
+              <span
+                className={cn(
+                  "pointer-events-none shrink-0 text-muted-foreground",
+                  sidebarCollapsed && "ml-2",
+                )}
+              >
+                {icon}
+              </span>
+            ) : null}
+          </HeaderIconBox>
+          {title && (
+            <EditableContentHeaderTitle
+              title={title}
+              onRename={onRenameTitle}
+              onEditingChange={setTitleEditing}
+            />
+          )}
+        </div>
+      }
+    />
   );
 }
 
