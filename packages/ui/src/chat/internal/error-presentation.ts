@@ -4,14 +4,11 @@ export type ChatErrorKind =
   | "credentials"
   | "model-service"
   | "connection"
-  | "voice"
   | "runtime"
 
 export type ChatErrorSettingsTarget =
   | "models"
-  | "connection"
-  | "voice"
-  | "logs?source=errors"
+  | "logs"
 
 export interface ChatErrorPresentation {
   kind: ChatErrorKind
@@ -19,13 +16,11 @@ export interface ChatErrorPresentation {
     | "sidepanel.runError.credentials.title"
     | "sidepanel.runError.modelService.title"
     | "sidepanel.runError.connection.title"
-    | "sidepanel.runError.voice.title"
     | "sidepanel.runError.runtime.title"
   actionKey:
     | "sidepanel.runError.credentials.action"
     | "sidepanel.runError.modelService.action"
     | "sidepanel.runError.connection.action"
-    | "sidepanel.runError.voice.action"
     | "sidepanel.runError.runtime.action"
   settingsTarget: ChatErrorSettingsTarget
   status?: number
@@ -59,17 +54,6 @@ export function resolveChatErrorPresentation(
   const status = statusOf(error)
   const normalized = `${error.message}\n${error.hint ?? ""}`.toLowerCase()
   const detail = detailOf(error)
-
-  if (error.source === "voice") {
-    return {
-      kind: "voice",
-      titleKey: "sidepanel.runError.voice.title",
-      actionKey: "sidepanel.runError.voice.action",
-      settingsTarget: "voice",
-      status,
-      detail,
-    }
-  }
 
   if (
     status === 401 ||
@@ -117,7 +101,7 @@ export function resolveChatErrorPresentation(
       kind: "connection",
       titleKey: "sidepanel.runError.connection.title",
       actionKey: "sidepanel.runError.connection.action",
-      settingsTarget: "connection",
+      settingsTarget: "models",
       status,
       detail,
     }
@@ -127,7 +111,7 @@ export function resolveChatErrorPresentation(
     kind: "runtime",
     titleKey: "sidepanel.runError.runtime.title",
     actionKey: "sidepanel.runError.runtime.action",
-    settingsTarget: "logs?source=errors",
+    settingsTarget: "logs",
     status,
     detail,
   }

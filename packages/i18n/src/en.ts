@@ -1046,7 +1046,6 @@ export const en = {
 
   // Status + logs
   "options.status.title": "Status",
-  "options.status.dsh.title": "DeepSeek Harness status",
   "options.status.dsh.subtitle":
     "Health and identity of Amiba's immutable managed DSH runtime.",
   "options.status.dsh.healthy": "DeepSeek Harness is ready",
@@ -1065,7 +1064,6 @@ export const en = {
   "options.status.dsh.paths": "Isolated storage",
   "options.status.dsh.bundle": "Runtime bundle",
   "options.status.dsh.lastChecked": "Checked {time}",
-  "options.logs.dsh.title": "DeepSeek Harness logs",
   "options.logs.dsh.subtitle":
     "Bounded stdout, stderr and lifecycle output from the managed DSH process.",
   "options.logs.dsh.stream": "Stream",

@@ -5,9 +5,23 @@ export {
 } from "./AgentBehaviorEditor";
 export { SettingsLogs } from "./SettingsLogs";
 export { SettingsMemory } from "./SettingsMemory";
-export { SettingsMessaging } from "./SettingsMessaging";
 export { SettingsAgentsPage } from "./SettingsAgentsPage";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";
-export { OPTIONS_SHELL_HEADER_ROW } from "./optionsPageChrome";
 export { SettingsView, type SettingsViewProps } from "./SettingsView";
+export {
+  SettingsPageScaffold,
+  type SettingsPageScaffoldProps,
+} from "./SettingsPageScaffold";
+export {
+  SettingsPageActions,
+  SettingsPageDescription,
+  useSettingsPageHeader,
+  type SettingsHeaderOverride,
+} from "./page-chrome";
+export {
+  SETTINGS_PAGES,
+  settingsPageById,
+  type SettingsPageDescriptor,
+  type SettingsPageProps,
+} from "./settings-pages";

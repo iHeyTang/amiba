@@ -52,7 +52,7 @@ describe("chat error recovery", () => {
       kind: "connection",
       status: 503,
       detail: "gateway unavailable",
-      settingsTarget: "connection",
+      settingsTarget: "models",
     })
   })
 
@@ -64,7 +64,7 @@ describe("chat error recovery", () => {
       }),
     ).toMatchObject({
       kind: "runtime",
-      settingsTarget: "logs?source=errors",
+      settingsTarget: "logs",
     })
   })
 

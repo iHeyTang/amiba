@@ -111,6 +111,27 @@ describe("SettingsView DSH navigation", () => {
     );
   });
 
+  it("gates a desktopOnly route off-desktop: #shortcuts falls back to Appearance and Shortcuts is absent from nav", () => {
+    setPlatform({
+      kind: "web",
+      storage: {
+        get: vi.fn().mockResolvedValue({}),
+        set: vi.fn(),
+        remove: vi.fn(),
+        watch: vi.fn(() => () => {}),
+      },
+    } as unknown as PlatformAdapter);
+    window.history.replaceState(null, "", "/#shortcuts");
+    render(<SettingsView />);
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Shortcuts" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps built-in and DSH slot navigation on one selected tab", async () => {
     const user = userEvent.setup();
     window.history.replaceState(null, "", "/#dsh:tools");

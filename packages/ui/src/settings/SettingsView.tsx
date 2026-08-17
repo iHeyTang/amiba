@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronRight, Home } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getPlatform } from "@amiba/app-runtime/platform";
-import type { ToolActivitySource } from "@amiba/app-runtime/core";
 
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
@@ -43,7 +42,9 @@ function routeFromLocation(): SettingsRoute {
   const [tab = "", ...rest] = raw.split("/");
   const detail = rest.join("/") || undefined;
   if (tab.startsWith("dsh:") && tab.length > 4) return { tab };
-  if (settingsPageById(tab)) return { tab, detail };
+  const page = settingsPageById(tab);
+  const isDesktop = getPlatform().kind === "desktop";
+  if (page && (isDesktop || !page.desktopOnly)) return { tab, detail };
   return { tab: "appearance" };
 }
 
@@ -108,12 +109,6 @@ export interface SettingsViewProps {
    * header then keeps the natural pt-5/pb-3 spacing.
    */
   paneHeaderChromeHeightPx?: number;
-  /**
-   * Desktop-injected source for the local tool-activity ledger (backs
-   * the Tools pane's Activity view). Hosts without a main-process
-   * recorder omit it and the view shows its empty state.
-   */
-  toolActivitySource?: ToolActivitySource;
   /**
    * Labels for DSH plugin-owned settings sections (title source for the
    * scaffold head when a `dsh:` route is active). Supplied by the product
@@ -218,7 +213,7 @@ export function SettingsView({
           <nav className="flex flex-col gap-0.5 p-2">
             {slots?.navigationBefore}
             {onGoHome ? (
-              <NavBtn
+              <NavigationRow
                 icon={<Home className="h-4 w-4 shrink-0 opacity-70" />}
                 label={t("chat.goHome")}
                 active={false}
@@ -231,7 +226,7 @@ export function SettingsView({
               {t("options.nav.section.general")}
             </NavigationGroupLabel>
             {generalPages.map((page) => (
-              <NavBtn
+              <NavigationRow
                 key={page.id}
                 icon={<page.icon className="h-4 w-4 shrink-0 opacity-70" />}
                 label={t(page.titleKey)}
@@ -245,7 +240,7 @@ export function SettingsView({
               {t("options.nav.section.agent")}
             </NavigationGroupLabel>
             {assistantPages.map((page) => (
-              <NavBtn
+              <NavigationRow
                 key={page.id}
                 icon={<page.icon className="h-4 w-4 shrink-0 opacity-70" />}
                 label={t(page.titleKey)}
@@ -272,7 +267,7 @@ export function SettingsView({
             {advancedOpen ? (
               <div className="pl-2">
                 {advancedPages.map((page) => (
-                  <NavBtn
+                  <NavigationRow
                     key={page.id}
                     icon={
                       <page.icon className="h-4 w-4 shrink-0 opacity-70" />
@@ -336,26 +331,5 @@ export function SettingsView({
         ) : null}
       </main>
     </div>
-  );
-}
-
-function NavBtn({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <NavigationRow
-      onClick={onClick}
-      icon={icon}
-      label={label}
-      active={active}
-    />
   );
 }

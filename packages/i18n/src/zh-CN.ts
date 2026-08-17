@@ -995,7 +995,6 @@ export const zhCN: Messages = {
 
   // 运行状态与日志
   "options.status.title": "运行状态",
-  "options.status.dsh.title": "DeepSeek Harness 状态",
   "options.status.dsh.subtitle":
     "查看由 Amiba 管理的固定版本 DSH 运行时健康状态和身份。",
   "options.status.dsh.healthy": "DeepSeek Harness 已就绪",
@@ -1014,7 +1013,6 @@ export const zhCN: Messages = {
   "options.status.dsh.paths": "隔离存储",
   "options.status.dsh.bundle": "运行时包",
   "options.status.dsh.lastChecked": "检查于 {time}",
-  "options.logs.dsh.title": "DeepSeek Harness 日志",
   "options.logs.dsh.subtitle":
     "由受管 DSH 进程产生的有界 stdout、stderr 和生命周期日志。",
   "options.logs.dsh.stream": "输出流",

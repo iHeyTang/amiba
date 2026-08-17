@@ -25,13 +25,13 @@ import {
 } from "@amiba/app-runtime/platform";
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
+import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
 import { Button, PageContent, ScrollArea } from "../primitives";
 import {
   MODEL_SETTINGS_SECTION_CLASS,
   MODEL_SETTINGS_SURFACE_CLASS,
   ModelSettingsSectionHeader,
 } from "../settings/ModelSettingsSectionChrome";
-import { SettingsPaneHeader } from "../settings/SettingsPaneHeader";
 import { SettingsPageDescription } from "../settings/page-chrome";
 
 type SourceFilter = "all" | AgentToolSourceKind;
@@ -152,22 +152,29 @@ export function DshAgentCapabilitiesPage({
   if (selectedTool) {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-background">
-        <SettingsPaneHeader
-          chromeHeightPx={chromeHeightPx}
-          hostClassName={chromeHeightPx ? "app-drag-region" : undefined}
+        <PaneHeaderBar
+          className={chromeHeightPx ? "app-drag-region" : undefined}
+          heightPx={chromeHeightPx ?? 40}
           leading={
-            <button
-              aria-label={t("agentCapabilities.back")}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              onClick={() => setSelectedTool(null)}
-              type="button"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-          }
-          title={selectedTool.name}
-          subtitle={
-            selectedTool.description || t("agentCapabilities.dsh.noDescription")
+            <>
+              <button
+                aria-label={t("agentCapabilities.back")}
+                className="app-no-drag inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+                onClick={() => setSelectedTool(null)}
+                type="button"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
+                <h2 className="truncate text-base font-medium tracking-tight text-foreground">
+                  {selectedTool.name}
+                </h2>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {selectedTool.description ||
+                    t("agentCapabilities.dsh.noDescription")}
+                </p>
+              </div>
+            </>
           }
         />
         <ScrollArea className="min-h-0 flex-1">
