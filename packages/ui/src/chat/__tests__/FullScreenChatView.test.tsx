@@ -13,7 +13,16 @@ const mocks = vi.hoisted(() => ({
   useSessions: vi.fn(),
   storageGet: vi.fn(),
   storageSet: vi.fn(),
-  storageWatch: vi.fn(() => () => {}),
+  storageWatch: vi.fn(
+    (
+      _keys: readonly string[],
+      _listener: (changes: Record<string, { newValue?: unknown }>) => void,
+    ) => () => {},
+  ),
+  storageListeners: [] as Array<{
+    keys: readonly string[];
+    listener: (changes: Record<string, { newValue?: unknown }>) => void;
+  }>,
   paletteSetOpen: vi.fn(),
   streamListener: null as
     | ((sessionId: string, event: { kind: string }) => void)
@@ -26,16 +35,15 @@ const mocks = vi.hoisted(() => ({
   embeddedBrowser: null as null | Record<string, ReturnType<typeof vi.fn>>,
 }));
 
-vi.mock("@amiba/core", () => ({
+vi.mock("@amiba/app-runtime/core", () => ({
   useSessions: mocks.useSessions,
-  getHermesKanbanTasks: vi.fn().mockResolvedValue({ ok: true, tasks: [] }),
 }));
 
 vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@amiba/platform", () => ({
+vi.mock("@amiba/app-runtime/platform", () => ({
   getPlatform: () => ({
     storage: {
       get: mocks.storageGet,
@@ -88,14 +96,10 @@ vi.mock("../../theme", () => ({
 vi.mock("../Sidebar", () => ({
   Sidebar: ({
     onNewChat,
-    onSelectView,
-    showCapabilityExtensions,
     runningSessionIds,
     failedSessionIds,
   }: {
     onNewChat: () => void;
-    onSelectView: (view: string) => void;
-    showCapabilityExtensions?: boolean;
     runningSessionIds?: ReadonlySet<string>;
     failedSessionIds?: ReadonlySet<string>;
   }) => {
@@ -106,17 +110,6 @@ vi.mock("../Sidebar", () => ({
         <button type="button" onClick={onNewChat}>
           new-chat
         </button>
-        <button type="button" onClick={() => onSelectView("scheduled")}>
-          scheduled
-        </button>
-        {showCapabilityExtensions ? (
-          <button
-            type="button"
-            onClick={() => onSelectView("capability-extensions")}
-          >
-            capability-extensions
-          </button>
-        ) : null}
       </>
     );
   },
@@ -128,25 +121,6 @@ vi.mock("../CommandPalette", () => ({
 
 vi.mock("../useCommandPalette", () => ({
   useCommandPalette: () => ({ open: false, setOpen: mocks.paletteSetOpen }),
-}));
-
-vi.mock("../ScheduledTasksPage", () => ({
-  ScheduledTasksPage: ({
-    sidebarCollapsed,
-    onExpandSidebar,
-  }: {
-    sidebarCollapsed?: boolean;
-    onExpandSidebar?: () => void;
-  }) => (
-    <div>
-      {sidebarCollapsed ? (
-        <button type="button" onClick={onExpandSidebar}>
-          chat.expandSidebar
-        </button>
-      ) : null}
-      scheduled-page
-    </div>
-  ),
 }));
 
 vi.mock("../internal/useScheduledRuns", () => ({
@@ -179,15 +153,6 @@ vi.mock("../ChatSurface", () => ({
       </div>
     );
   },
-}));
-
-vi.mock("@amiba/extension-host/renderer", () => ({
-  ExtensionWebView: () => null,
-  useExtensionMains: () => [],
-}));
-
-vi.mock("../../settings/SettingsCapabilities", () => ({
-  SettingsCapabilities: () => <div>capability-extensions-page</div>,
 }));
 
 import FullScreenChatView from "../FullScreenChatView";
@@ -257,6 +222,7 @@ describe("FullScreenChatView new-chat home", () => {
     mocks.snapshotListener = null;
     mocks.sidebarRunningSessionIds = [];
     mocks.sidebarFailedSessionIds = [];
+    mocks.storageListeners = [];
     mocks.embeddedBrowser = null;
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") {
@@ -265,6 +231,20 @@ describe("FullScreenChatView new-chat home", () => {
       return {};
     });
     mocks.storageSet.mockResolvedValue(undefined);
+    mocks.storageWatch.mockImplementation(
+      (
+        keys: readonly string[],
+        listener: (changes: Record<string, { newValue?: unknown }>) => void,
+      ) => {
+        const item = { keys, listener };
+        mocks.storageListeners.push(item);
+        return () => {
+          mocks.storageListeners = mocks.storageListeners.filter(
+            (candidate) => candidate !== item,
+          );
+        };
+      },
+    );
   });
 
   it("returns to the id-less home instead of creating a conversation", async () => {
@@ -398,52 +378,46 @@ describe("FullScreenChatView new-chat home", () => {
       expect(screen.getByText("chat-surface")).toBeInTheDocument();
     });
     expect(screen.getByTestId("chats-view")).toHaveClass("flex");
-    expect(screen.getByTestId("scheduled-view")).toHaveClass("hidden");
+    expect(screen.getByTestId("plugin-workspace-view")).toHaveClass("hidden");
   });
 
-  it("keeps first-class pages mounted and switches them without a transient layout", async () => {
+  it("keeps chat mounted while a DSH workspace contribution becomes active", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
 
     render(
       <FullScreenChatView
         client={makeClient() as never}
-        capabilityExtensions={{}}
+        slots={{ workspaceView: () => <div>scheduled-page</div> }}
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
       />,
     );
 
-    const capabilityPage = screen.getByText("capability-extensions-page");
     const scheduledPage = screen.getByText("scheduled-page");
     const chatSurface = screen.getByText("chat-surface");
     const chatsView = screen.getByTestId("chats-view");
-    const capabilityView = screen.getByTestId("capability-extensions-view");
-    const scheduledView = screen.getByTestId("scheduled-view");
+    const scheduledView = screen.getByTestId("plugin-workspace-view");
     expect(chatsView).toHaveClass("flex");
-    expect(capabilityView).toHaveClass("hidden");
     expect(scheduledView).toHaveClass("hidden");
     await userEvent.type(screen.getByLabelText("chat-draft"), "keep me");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "capability-extensions" }),
-    );
-    expect(capabilityView).toHaveClass("flex");
-    expect(capabilityView).not.toHaveClass("hidden");
-    expect(chatsView).toHaveClass("hidden");
-    expect(scheduledView).toHaveClass("hidden");
-    expect(screen.getByText("chat-surface")).toBe(chatSurface);
-
-    await userEvent.click(screen.getByRole("button", { name: "scheduled" }));
+    act(() => {
+      for (const item of mocks.storageListeners) {
+        if (item.keys.includes("settings.chat.sidebarView")) {
+          item.listener({
+            "settings.chat.sidebarView": { newValue: "scheduled" },
+          });
+        }
+      }
+    });
     expect(scheduledView).toHaveClass("flex");
     expect(scheduledView).not.toHaveClass("hidden");
     expect(chatsView).toHaveClass("hidden");
-    expect(capabilityView).toHaveClass("hidden");
-    expect(screen.getByText("capability-extensions-page")).toBe(capabilityPage);
+    expect(screen.getByText("scheduled-page")).toBe(scheduledPage);
 
     await userEvent.click(screen.getByRole("button", { name: "new-chat" }));
     await waitFor(() => expect(chatsView).toHaveClass("flex"));
-    expect(capabilityView).toHaveClass("hidden");
     expect(scheduledView).toHaveClass("hidden");
     expect(screen.getByText("chat-surface")).toBe(chatSurface);
     expect(screen.getByLabelText("chat-draft")).toHaveValue("keep me");
@@ -750,7 +724,7 @@ describe("FullScreenChatView new-chat home", () => {
     const contentHeaderLeading = document.querySelector(
       "[data-content-header-leading]",
     );
-    const contentHeader = contentHeaderLeading?.parentElement;
+    const contentHeader = contentHeaderLeading?.closest("header");
     expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
     expect(sidebar).toHaveClass(
       "transition-[width]",
@@ -776,7 +750,6 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sidebar).toHaveAttribute("aria-hidden", "true");
     expect(sidebar).toHaveStyle({ width: "0px" });
     expect(contentHeader).toHaveStyle({ paddingLeft: "96px" });
-    expect(contentHeaderLeading).toHaveStyle({ left: "96px" });
     expect(sidebar).toHaveClass("transition-[width]", "duration-200");
     expect(sidebarContent).not.toHaveClass("invisible");
     expect(sidebarContent).not.toHaveClass("transition-opacity");
@@ -869,7 +842,9 @@ describe("FullScreenChatView new-chat home", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("scheduled-view")).not.toHaveClass("hidden");
+      expect(screen.getByTestId("plugin-workspace-view")).not.toHaveClass(
+        "hidden",
+      );
     });
     mocks.streamListener?.("session-1", { kind: "done" });
     expect(sessions.markUnread).toHaveBeenCalledWith("session-1");
