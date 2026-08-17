@@ -26,7 +26,7 @@ import type {
   WorkspaceTerminalSnapshot,
   WorkspaceTreeEntry,
   WorkspaceWorktree,
-} from "@amiba/platform";
+} from "@amiba/app-runtime/platform";
 
 import { mainStore } from "./storage";
 import { workspaceManager } from "./workspace";
@@ -166,16 +166,30 @@ async function run(
 }
 
 async function repoRootForSession(sessionId: string): Promise<string> {
-  const resolved = await workspaceManager.resolvePathForSession(sessionId, ".");
-  const result = await run("git", [
-    "-C",
-    resolved.path,
-    "rev-parse",
-    "--show-toplevel",
-  ]);
-  const root = result.stdout.trim();
+  const root = await repoRootForSessionOrNull(sessionId);
   if (!root) throw new Error("The current workspace is not a Git repository.");
   return root;
+}
+
+/**
+ * Like {@link repoRootForSession} but "not a repo" is an expected outcome:
+ * auto-checkpointing fires for every session, including ones whose cwd is a
+ * plain directory. Returning null lets those paths no-op instead of
+ * rejecting the IPC invoke (Electron logs every handler rejection).
+ */
+async function repoRootForSessionOrNull(
+  sessionId: string,
+): Promise<string | null> {
+  const resolved = await workspaceManager.resolvePathForSession(sessionId, ".");
+  const result = await run(
+    "git",
+    ["-C", resolved.path, "rev-parse", "--show-toplevel"],
+    undefined,
+    { allowFailure: true },
+  );
+  if (result.code !== 0) return null;
+  const root = result.stdout.trim();
+  return root || null;
 }
 
 function safeRepoPath(root: string, candidate: string): string {
@@ -767,7 +781,11 @@ export async function createWorkspaceCheckpoint(
   sessionId: string,
   label: string,
   options: WorkspaceCheckpointOptions = {},
-): Promise<WorkspaceCheckpoint> {
+): Promise<WorkspaceCheckpoint | null> {
+  // Auto-checkpoints fire on every turn; sessions living outside a Git
+  // repository simply have no checkpoint story — report "unavailable"
+  // instead of rejecting the invoke.
+  if ((await repoRootForSessionOrNull(sessionId)) === null) return null;
   const state = await getWorkspaceGitState(sessionId);
   const id = randomUUID();
   const directory = join(checkpointRoot(sessionId), id);
@@ -901,6 +919,9 @@ export async function restoreWorkspaceCheckpoint(
   const safety = await createWorkspaceCheckpoint(sessionId, "Before restore", {
     kind: "restore-safety",
   });
+  if (!safety) {
+    throw new Error("The current workspace is not a Git repository.");
+  }
   if (safety.complete === false) {
     throw new Error(
       "Restore stopped because the current workspace contains untracked files that could not be backed up safely.",

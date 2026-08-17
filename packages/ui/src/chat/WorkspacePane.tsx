@@ -14,13 +14,7 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import {
-  getHermesKanbanTasks,
-  type ChatEngineClient,
-  type HermesKanbanTask,
-  type HermesLiveAgent,
-  type HermesToolProgress,
-} from "@amiba/core";
+import { type ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import {
   getPlatform,
@@ -33,7 +27,7 @@ import {
   type WorkspaceProject,
   type WorkspaceTerminalSnapshot,
   type WorkspaceTreeEntry,
-} from "@amiba/platform";
+} from "@amiba/app-runtime/platform";
 import {
   Atom,
   Braces,
@@ -65,7 +59,6 @@ import {
   RotateCw,
   Search,
   Send,
-  Square,
   Terminal,
   Trash2,
   Undo2,
@@ -87,7 +80,6 @@ import {
 import { tags } from "@lezer/highlight";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XtermTerminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
 
 import {
   Button,
@@ -101,7 +93,6 @@ import {
 } from "../primitives";
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
-import { KanbanStatusBadge } from "./KanbanStatusBadge";
 import { useDocumentTheme } from "../theme";
 import {
   compactWorkspacePath,
@@ -189,7 +180,7 @@ export type CodeExecutionResource = {
   workdir: string;
   exitCode: number | null;
   failed: boolean;
-  status: HermesToolProgress["status"];
+  status: ToolProgress["status"];
   durationMs?: number;
 };
 
@@ -208,7 +199,6 @@ interface WorkspacePaneTab {
 interface SessionPaneState {
   tabs: WorkspacePaneTab[];
   activeTabId: string | null;
-  liveAgents: HermesLiveAgent[];
 }
 
 interface WorkspacePaneContextValue {
@@ -218,12 +208,10 @@ interface WorkspacePaneContextValue {
   tabs: WorkspacePaneTab[];
   activeTab: WorkspacePaneTab | null;
   browserRequestVersion: number;
-  collaborationRequestVersion: number;
   sessionId: string;
   files?: WorkspaceFilesAdapter;
   development?: WorkspaceDevelopmentAdapter;
   workspaces?: WorkspaceAdapter;
-  liveAgents: HermesLiveAgent[];
   checkpoints: WorkspaceCheckpoint[];
   setOpen(open: boolean): void;
   toggle(): void;
@@ -243,11 +231,9 @@ interface WorkspacePaneContextValue {
   restoreCheckpoint(checkpointId: string): Promise<void>;
   restoreBeforeTurn(turnIndex: number): Promise<void>;
   deleteCheckpoint(checkpointId: string): Promise<void>;
-  canOpenToolEvent(event: HermesToolProgress): boolean;
-  openToolEvent(event: HermesToolProgress): void;
-  observeToolEvent(event: HermesToolProgress, eventSessionId?: string): void;
-  observeLiveAgent(event: HermesLiveAgent, eventSessionId?: string): void;
-  setLiveAgents(agents: HermesLiveAgent[]): void;
+  canOpenToolEvent(event: ToolProgress): boolean;
+  openToolEvent(event: ToolProgress): void;
+  observeToolEvent(event: ToolProgress, eventSessionId?: string): void;
 }
 
 const EMPTY_CONTEXT: WorkspacePaneContextValue = {
@@ -257,11 +243,9 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   tabs: [],
   activeTab: null,
   browserRequestVersion: 0,
-  collaborationRequestVersion: 0,
   sessionId: "",
   development: undefined,
   workspaces: undefined,
-  liveAgents: [],
   checkpoints: [],
   setOpen: () => {},
   toggle: () => {},
@@ -281,8 +265,6 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   canOpenToolEvent: () => false,
   openToolEvent: () => {},
   observeToolEvent: () => {},
-  observeLiveAgent: () => {},
-  setLiveAgents: () => {},
 };
 
 const WorkspacePaneContext =
@@ -373,7 +355,7 @@ function codeResultOutput(value: unknown): {
 }
 
 export function workspaceCodeExecution(
-  event: HermesToolProgress,
+  event: ToolProgress,
 ): CodeExecutionResource | null {
   if (event.tool !== "execute_code") return null;
   const code = stringField(event.args ?? {}, "code");
@@ -397,7 +379,7 @@ export function workspaceCodeExecution(
   return {
     kind: "code",
     toolCallId: event.toolCallId,
-    // Hermes execute_code runs Python and does not include a language field.
+    // DSH execute_code may omit a language field when it runs Python.
     // Keep explicit adapter languages, but load the Python parser by default.
     language:
       (languageAliases[suppliedLanguage] ?? suppliedLanguage) || "python",
@@ -413,7 +395,7 @@ export function workspaceCodeExecution(
   };
 }
 
-export function canInspectWorkspaceTool(event: HermesToolProgress): boolean {
+export function canInspectWorkspaceTool(event: ToolProgress): boolean {
   return (
     event.tool === "read_file" ||
     event.tool === "write_file" ||
@@ -422,11 +404,11 @@ export function canInspectWorkspaceTool(event: HermesToolProgress): boolean {
   );
 }
 
-function isMutationTool(event: HermesToolProgress): boolean {
+function isMutationTool(event: ToolProgress): boolean {
   return event.tool === "write_file" || event.tool === "patch";
 }
 
-export function canMutateWorkspaceTool(event: HermesToolProgress): boolean {
+export function canMutateWorkspaceTool(event: ToolProgress): boolean {
   return (
     isMutationTool(event) ||
     event.tool === "terminal" ||
@@ -658,7 +640,7 @@ function clampTerminalHeight(value: number): number {
 }
 
 function emptySessionState(): SessionPaneState {
-  return { tabs: [], activeTabId: null, liveAgents: [] };
+  return { tabs: [], activeTabId: null };
 }
 
 const EMPTY_SESSION_KEY = "__empty_workspace__";
@@ -675,8 +657,6 @@ export function WorkspacePaneProvider({
   const [open, setOpenState] = useState(false);
   const [width, setWidthState] = useState(DEFAULT_PANE_WIDTH);
   const [browserRequestVersion, setBrowserRequestVersion] = useState(0);
-  const [collaborationRequestVersion, setCollaborationRequestVersion] =
-    useState(0);
   const [sessionStates, setSessionStates] = useState<
     Record<string, SessionPaneState>
   >({});
@@ -992,12 +972,6 @@ export function WorkspacePaneProvider({
   const beginTurn = useCallback(
     async (turnIndex: number) => {
       if (!sessionId) return;
-      updateActiveSession((state) => ({
-        ...state,
-        liveAgents: state.liveAgents.filter(
-          (agent) => agent.status === "running" || agent.status === "queued",
-        ),
-      }));
       const development = capability?.development;
       if (development) {
         try {
@@ -1006,6 +980,12 @@ export function WorkspacePaneProvider({
             `Before task ${turnIndex + 1}`,
             { kind: "turn-start", turnIndex },
           );
+          if (!checkpoint) {
+            // Workspace isn't a Git repository — checkpoints simply don't
+            // apply to this session.
+            activeTurnCheckpointIds.current.delete(sessionId);
+            return;
+          }
           activeTurnCheckpointIds.current.set(sessionId, checkpoint.id);
           updateCheckpoints((current) => [
             checkpoint,
@@ -1019,7 +999,6 @@ export function WorkspacePaneProvider({
     [
       capability?.development,
       sessionId,
-      updateActiveSession,
       updateCheckpoints,
     ],
   );
@@ -1051,37 +1030,8 @@ export function WorkspacePaneProvider({
     [capability?.development, updateSessionCheckpoints],
   );
 
-  const observeLiveAgent = useCallback(
-    (event: HermesLiveAgent, eventSessionId = sessionId) => {
-      const targetSessionId = eventSessionId || sessionId;
-      if (event.filesWritten.length > 0) {
-        markActiveCheckpointChanged(targetSessionId);
-      }
-      if (targetSessionId !== sessionId) return;
-      updateActiveSession((state) => {
-        const index = state.liveAgents.findIndex(
-          (agent) => agent.id === event.id,
-        );
-        if (index < 0) {
-          return { ...state, liveAgents: [...state.liveAgents, event] };
-        }
-        const liveAgents = [...state.liveAgents];
-        liveAgents[index] = event;
-        return { ...state, liveAgents };
-      });
-    },
-    [markActiveCheckpointChanged, sessionId, updateActiveSession],
-  );
-
-  const setLiveAgents = useCallback(
-    (agents: HermesLiveAgent[]) => {
-      updateActiveSession((state) => ({ ...state, liveAgents: agents }));
-    },
-    [updateActiveSession],
-  );
-
   const canOpenToolEvent = useCallback(
-    (event: HermesToolProgress) =>
+    (event: ToolProgress) =>
       Boolean(
         capability &&
           canInspectWorkspaceTool(event) &&
@@ -1093,7 +1043,7 @@ export function WorkspacePaneProvider({
   );
 
   const openToolEvent = useCallback(
-    (event: HermesToolProgress) => {
+    (event: ToolProgress) => {
       const codeExecution = workspaceCodeExecution(event);
       if (codeExecution) {
         openResource(codeExecution, "user");
@@ -1135,20 +1085,12 @@ export function WorkspacePaneProvider({
   );
 
   const observeToolEvent = useCallback(
-    (event: HermesToolProgress, eventSessionId = sessionId) => {
+    (event: ToolProgress, eventSessionId = sessionId) => {
       const targetSessionId = eventSessionId || sessionId;
       if (event.status === "completed" && canMutateWorkspaceTool(event)) {
         markActiveCheckpointChanged(targetSessionId);
       }
       if (targetSessionId !== sessionId) return;
-      if (
-        event.tool === "kanban_create" &&
-        event.status === "completed" &&
-        !event.error
-      ) {
-        setCollaborationRequestVersion((version) => version + 1);
-        persistOpen(true);
-      }
       const codeExecution = workspaceCodeExecution(event);
       if (capability && codeExecution) {
         updateActiveSession((state) => ({
@@ -1164,7 +1106,6 @@ export function WorkspacePaneProvider({
     [
       capability,
       markActiveCheckpointChanged,
-      persistOpen,
       sessionId,
       updateActiveSession,
     ],
@@ -1178,12 +1119,10 @@ export function WorkspacePaneProvider({
       tabs: activeState.tabs,
       activeTab,
       browserRequestVersion,
-      collaborationRequestVersion,
       sessionId,
       files: capability?.files,
       development: capability?.development,
       workspaces: capability?.workspaces,
-      liveAgents: activeState.liveAgents,
       checkpoints,
       setOpen: persistOpen,
       toggle: () => persistOpen(!open),
@@ -1217,22 +1156,17 @@ export function WorkspacePaneProvider({
       canOpenToolEvent,
       openToolEvent,
       observeToolEvent,
-      observeLiveAgent,
-      setLiveAgents,
     }),
     [
       activeState.tabs,
-      activeState.liveAgents,
       activeTab,
       browserRequestVersion,
-      collaborationRequestVersion,
       beginTurn,
       canOpenToolEvent,
       capability,
       checkpoints,
       deleteCheckpoint,
       enabled,
-      observeLiveAgent,
       observeToolEvent,
       openBrowser,
       open,
@@ -1245,7 +1179,6 @@ export function WorkspacePaneProvider({
       restoreBeforeTurn,
       restoreCheckpoint,
       sessionId,
-      setLiveAgents,
       setWidth,
       updateActiveSession,
       updateBrowserTab,
@@ -1764,7 +1697,7 @@ function CodeExecutionView({ resource }: { resource: CodeExecutionResource }) {
     </span>
   ) : (
     <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
-      <span className="hermes-thinking-dot" />
+      <span className="agent-thinking-dot" />
       {t("workspacePane.running")}
     </span>
   );
@@ -2655,285 +2588,7 @@ function WorkspaceEmptyState() {
   );
 }
 
-function compactMetric(value: number): string {
-  if (value < 1_000) return String(value);
-  if (value < 1_000_000)
-    return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}k`;
-  return `${(value / 1_000_000).toFixed(1)}m`;
-}
-
-function SessionTaskFlow({
-  agents,
-  tasks,
-  onStop,
-  onOpenSession,
-}: {
-  agents: HermesLiveAgent[];
-  tasks: HermesKanbanTask[];
-  onStop?: () => void;
-  onOpenSession?: (sessionId: string) => void;
-}) {
-  const { t } = useT();
-  const orderedTasks = useMemo(
-    () => [...tasks].sort((a, b) => a.created_at - b.created_at),
-    [tasks],
-  );
-  const orderedAgents = useMemo(() => {
-    const byId = new Map(agents.map((agent) => [agent.id, agent]));
-    const depthOf = (agent: HermesLiveAgent) => {
-      let depth = 0;
-      let cursor = agent.parentId ? byId.get(agent.parentId) : undefined;
-      const visited = new Set<string>([agent.id]);
-      while (cursor && !visited.has(cursor.id) && depth < 4) {
-        visited.add(cursor.id);
-        depth += 1;
-        cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
-      }
-      return depth;
-    };
-    return [...agents]
-      .sort(
-        (a, b) =>
-          a.startedAt - b.startedAt ||
-          a.taskIndex - b.taskIndex ||
-          a.goal.localeCompare(b.goal),
-      )
-      .map((agent) => ({ agent, depth: depthOf(agent) }));
-  }, [agents]);
-  const activeAgents = agents.filter(
-    (agent) => agent.status === "running" || agent.status === "queued",
-  );
-  const toolCount = agents.reduce(
-    (sum, agent) => sum + (agent.toolCount ?? 0),
-    0,
-  );
-  const fileCount = agents.reduce(
-    (sum, agent) => sum + agent.filesRead.length + agent.filesWritten.length,
-    0,
-  );
-  const tokenCount = agents.reduce(
-    (sum, agent) => sum + (agent.inputTokens ?? 0) + (agent.outputTokens ?? 0),
-    0,
-  );
-
-  return (
-    <ScrollArea className="h-full">
-      <div className="px-4 pb-5 pt-2">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-semibold">
-            {t("workspacePane.collaboration")}
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] tabular-nums text-muted-foreground">
-              {agents.length
-                ? t("workspacePane.agentCount", { count: agents.length })
-                : t("workspacePane.taskCount", { count: tasks.length })}
-            </span>
-            {activeAgents.length > 0 && onStop ? (
-              <button
-                type="button"
-                className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                onClick={onStop}
-                title={t("workspacePane.stopRun")}
-              >
-                <Square className="h-2.5 w-2.5 fill-current" />
-                {t("workspacePane.stopRun")}
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        {agents.length > 0 ? (
-          <>
-            <p className="mb-3 text-[10px] text-muted-foreground/75">
-              {[
-                activeAgents.length
-                  ? t("workspacePane.agentActive", {
-                      count: activeAgents.length,
-                    })
-                  : "",
-                toolCount
-                  ? t("workspacePane.agentTools", { count: toolCount })
-                  : "",
-                fileCount
-                  ? t("workspacePane.agentFiles", { count: fileCount })
-                  : "",
-                tokenCount
-                  ? t("workspacePane.agentTokens", {
-                      count: compactMetric(tokenCount),
-                    })
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            <div className="relative space-y-1 before:absolute before:bottom-3 before:left-[7px] before:top-3 before:w-px before:bg-border/70">
-              {orderedAgents.map(({ agent, depth }) => {
-                const terminal =
-                  agent.status === "completed" ||
-                  agent.status === "failed" ||
-                  agent.status === "interrupted";
-                const lastFile =
-                  agent.filesWritten.at(-1) ?? agent.filesRead.at(-1);
-                const tokens =
-                  (agent.inputTokens ?? 0) + (agent.outputTokens ?? 0);
-                return (
-                  <article
-                    key={agent.id}
-                    className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-2.5 rounded-xl px-1 py-2"
-                    style={{ paddingLeft: `${Math.min(depth, 3) * 12 + 4}px` }}
-                  >
-                    <span
-                      className={cn(
-                        "relative z-10 mt-1.5 h-2 w-2 rounded-full ring-4 ring-background",
-                        agent.status === "completed"
-                          ? "bg-emerald-500"
-                          : agent.status === "running"
-                            ? "animate-pulse bg-sky-500"
-                            : agent.status === "queued"
-                              ? "bg-violet-500"
-                              : "bg-red-500",
-                      )}
-                    />
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <h4 className="min-w-0 flex-1 text-xs font-medium leading-4">
-                          {agent.goal}
-                        </h4>
-                        {agent.childSessionId && onOpenSession ? (
-                          <button
-                            type="button"
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            aria-label={t("workspacePane.openAgentSession")}
-                            title={t("workspacePane.openAgentSession")}
-                            onClick={() => onOpenSession(agent.childSessionId!)}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
-                        <span>
-                          {terminal
-                            ? agent.status
-                            : agent.currentTool || agent.status}
-                        </span>
-                        {agent.model ? <span>{agent.model}</span> : null}
-                        {agent.toolCount ? (
-                          <span>
-                            {t("workspacePane.agentTools", {
-                              count: agent.toolCount,
-                            })}
-                          </span>
-                        ) : null}
-                        {tokens ? (
-                          <span>
-                            {t("workspacePane.agentTokens", {
-                              count: compactMetric(tokens),
-                            })}
-                          </span>
-                        ) : null}
-                      </div>
-                      {lastFile ? (
-                        <p
-                          className="mt-1 truncate font-mono text-[9.5px] text-muted-foreground/70"
-                          title={lastFile}
-                        >
-                          {compactWorkspacePath(lastFile, 5)}
-                        </p>
-                      ) : null}
-                      {agent.progress || agent.summary ? (
-                        <p className="mt-1.5 line-clamp-3 text-[11px] leading-4 text-muted-foreground">
-                          {agent.progress || agent.summary}
-                        </p>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </>
-        ) : null}
-
-        {orderedTasks.length > 0 ? (
-          <div
-            className={cn(
-              agents.length > 0 && "mt-5 border-t border-border/60 pt-4",
-            )}
-          >
-            {agents.length > 0 ? (
-              <h4 className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/65">
-                {t("workspacePane.linkedTasks")}
-              </h4>
-            ) : null}
-            <div className="relative space-y-1 before:absolute before:bottom-3 before:left-[7px] before:top-3 before:w-px before:bg-border/70">
-              {orderedTasks.map((task) => (
-                <article
-                  key={task.id}
-                  className="relative ml-0 grid grid-cols-[16px_minmax(0,1fr)] gap-2.5 rounded-xl px-1 py-2"
-                  style={{
-                    paddingLeft: `${Math.min(task.parents.length, 3) * 12 + 4}px`,
-                  }}
-                >
-                  <span
-                    className={cn(
-                      "relative z-10 mt-1.5 h-2 w-2 rounded-full ring-4 ring-background",
-                      task.status === "done"
-                        ? "bg-emerald-500"
-                        : task.status === "running"
-                          ? "bg-sky-500"
-                          : task.status === "blocked"
-                            ? "bg-red-500"
-                            : task.status === "review"
-                              ? "bg-amber-500"
-                              : "bg-muted-foreground/45",
-                    )}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <h4 className="min-w-0 flex-1 truncate text-xs font-medium">
-                        {task.title}
-                      </h4>
-                      <KanbanStatusBadge status={task.status} />
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                      {task.assignee && <span>{task.assignee}</span>}
-                      {task.model_override && (
-                        <span>{task.model_override}</span>
-                      )}
-                      <code className="truncate opacity-65">{task.id}</code>
-                    </div>
-                    {task.workspace_path && (
-                      <p
-                        className="mt-1 truncate font-mono text-[9.5px] text-muted-foreground/70"
-                        title={task.workspace_path}
-                      >
-                        {task.branch_name ? `${task.branch_name} · ` : ""}
-                        {compactWorkspacePath(task.workspace_path, 5)}
-                      </p>
-                    )}
-                    {task.latest_summary && (
-                      <p className="mt-1.5 line-clamp-3 text-[11px] leading-4 text-muted-foreground">
-                        {task.latest_summary}
-                      </p>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {!agents.length && !orderedTasks.length ? (
-          <p className="py-12 text-center text-xs text-muted-foreground">
-            {t("workspacePane.noAgents")}
-          </p>
-        ) : null}
-      </div>
-    </ScrollArea>
-  );
-}
-
-type WorkbenchMode = "files" | "checkpoints" | "collaboration" | "preview";
+type WorkbenchMode = "files" | "checkpoints" | "preview";
 
 function WorkspaceProjectStrip({
   sessionId,
@@ -4426,16 +4081,11 @@ function WorkspaceRecoveryPointsView() {
 
 export function WorkspacePane({
   visible = true,
-  client,
-  onOpenSession,
 }: {
   visible?: boolean;
-  client?: ChatEngineClient;
-  onOpenSession?: (sessionId: string) => void;
 }) {
   const pane = useWorkspacePane();
   const { t } = useT();
-  const [sessionTasks, setSessionTasks] = useState<HermesKanbanTask[]>([]);
   const [mode, setMode] = useState<WorkbenchMode>("files");
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const active = pane.activeTab;
@@ -4463,43 +4113,12 @@ export function WorkspacePane({
   );
 
   useEffect(() => {
-    let cancelled = false;
-    if (!visible || !pane.open || !pane.sessionId) {
-      setSessionTasks([]);
-      return;
-    }
-    const refreshTasks = async () => {
-      const result = await getHermesKanbanTasks({
-        sessionId: pane.sessionId,
-      });
-      if (cancelled || !result.ok) return;
-      setSessionTasks(result.tasks);
-    };
-    void refreshTasks();
-    const timer = window.setInterval(() => void refreshTasks(), 5_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [pane.open, pane.sessionId, visible]);
-
-  useEffect(() => {
-    if (sessionTasks.length > 0 && pane.tabs.length === 0) {
-      setMode("collaboration");
-    }
-  }, [pane.tabs.length, sessionTasks.length]);
-
-  useEffect(() => {
     if (active?.id) setMode("preview");
   }, [active?.id]);
 
   useEffect(() => {
     if (pane.browserRequestVersion > 0) setMode("preview");
   }, [pane.browserRequestVersion]);
-
-  useEffect(() => {
-    if (pane.collaborationRequestVersion > 0) setMode("collaboration");
-  }, [pane.collaborationRequestVersion]);
 
   const onResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -4639,26 +4258,6 @@ export function WorkspacePane({
                     </button>
                   ))
                 : null}
-              {sessionTasks.length > 0 && (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === "collaboration"}
-                  onClick={() => setMode("collaboration")}
-                  className={cn(
-                    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] transition-colors",
-                    mode === "collaboration"
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {t("workspacePane.collaboration")}
-                  <span className="tabular-nums opacity-60">
-                    {sessionTasks.length}
-                  </span>
-                </button>
-              )}
               {pane.tabs.map((tab) => {
                 const selected = mode === "preview" && tab.id === active?.id;
                 const labels =
@@ -4710,17 +4309,6 @@ export function WorkspacePane({
               />
             ) : mode === "checkpoints" ? (
               <WorkspaceRecoveryPointsView />
-            ) : mode === "collaboration" ? (
-              <SessionTaskFlow
-                agents={pane.liveAgents}
-                tasks={sessionTasks}
-                onStop={
-                  client && pane.sessionId
-                    ? () => client.abort(pane.sessionId)
-                    : undefined
-                }
-                onOpenSession={onOpenSession}
-              />
             ) : !active ? (
               pane.files ? (
                 <WorkspaceFileWorkspace
