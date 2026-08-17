@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
+
+import { SettingsPageActions } from "../page-chrome";
 
 vi.mock("../AgentModelConfigTab", () => ({
   AgentModelConfigTab: () => (
@@ -168,5 +170,29 @@ describe("SettingsView DSH navigation", () => {
     );
     expect(screen.getByRole("heading", { name: "Skills" })).toBeVisible();
     expect(screen.getByTestId("section-content")).toBeInTheDocument();
+  });
+
+  it("portals a DSH section's actions into the scaffold head via owner.actionsHost", async () => {
+    window.history.replaceState(null, "", "/#dsh:skills");
+    const { container } = render(
+      <SettingsView
+        dshSections={[{ id: "skills", label: "Skills" }]}
+        slots={{
+          section: (_sectionId, owner) => (
+            <SettingsPageActions host={owner.actionsHost}>
+              <button type="button">Act</button>
+            </SettingsPageActions>
+          ),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const host = container.querySelector("[data-settings-page-actions]");
+      expect(host).not.toBeNull();
+      expect(host).toContainElement(
+        screen.getByRole("button", { name: "Act" }),
+      );
+    });
   });
 });
