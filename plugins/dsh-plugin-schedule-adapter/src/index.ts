@@ -3,6 +3,7 @@ import z from "@deepseek-ai/schemastery";
 
 import { applyScheduleHttp } from "./http.js";
 import { DshScheduleManager } from "./manager.js";
+import { applyScheduleNotifications } from "./notify.js";
 import { applySchedulesRemote } from "./remote-service.js";
 
 export const name = "amiba-schedule-adapter";
@@ -21,6 +22,7 @@ export function apply(ctx: Context, config: Config): void {
   const manager = new DshScheduleManager(ctx);
   ctx.effect(() => () => manager.dispose(), "amiba-schedule-adapter");
   applySchedulesRemote(ctx, manager);
+  applyScheduleNotifications(ctx);
   if (config.apiToken) {
     ctx.inject(["webServer"], (httpCtx) => {
       applyScheduleHttp(httpCtx, config, manager);

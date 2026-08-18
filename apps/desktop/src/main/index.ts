@@ -33,7 +33,9 @@ import {
   destroyNotifierWindow,
   hideNotifier,
   showDemoNotifier,
+  showPluginNotification,
 } from "./notifier-window";
+import { pluginNotificationOperation } from "./plugin-notification";
 import {
   createQuickAskWindow,
   destroyQuickAskWindow,
@@ -308,7 +310,7 @@ function registerNotifierIpcHandlers(summon: () => void): void {
   // `window.amiba.notifier.demo(kind?)`.
   ipcMain.handle(
     "notifier:demo",
-    (_e, kind?: "chat-completed" | "approval-pending") => {
+    (_e, kind?: "chat-completed" | "approval-pending" | "plugin") => {
       showDemoNotifier(kind ?? "chat-completed");
     },
   );
@@ -541,9 +543,13 @@ if (!gotSingleInstanceLock) {
     installPermissionRequestHandler();
     registerIpcHandlers();
     try {
-      _dshNativeGateway = await startDshNativeGateway(
-        embeddedBrowserController.platformOperations(),
-      );
+      _dshNativeGateway = await startDshNativeGateway([
+        ...embeddedBrowserController.platformOperations(),
+        // DSH plugins post desktop notifications through the runtime's
+        // notification hub; the runtime-gateway plugin forwards each one
+        // here for the heads-up notifier to render.
+        pluginNotificationOperation(showPluginNotification),
+      ]);
       process.env.AMIBA_RUNTIME_GATEWAY_URL = _dshNativeGateway.url;
       process.env.AMIBA_RUNTIME_GATEWAY_TOKEN = _dshNativeGateway.token;
       console.info(

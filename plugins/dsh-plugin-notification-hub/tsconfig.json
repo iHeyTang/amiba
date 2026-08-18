@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.dsh-plugin.json","compilerOptions":{"rootDir":"src"},"include":["src"]}

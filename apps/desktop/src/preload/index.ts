@@ -374,10 +374,11 @@ const api = {
      * Fire a demo notifier card so the user can confirm the floating
      * window appears and clicks register. Call from the main window's
      * devtools console:
-     *   window.amiba.notifier.demo()                  // cron card
+     *   window.amiba.notifier.demo()                   // chat card
      *   window.amiba.notifier.demo("approval-pending") // approval card
+     *   window.amiba.notifier.demo("plugin")           // plugin card
      */
-    demo: (kind?: "chat-completed" | "approval-pending") =>
+    demo: (kind?: "chat-completed" | "approval-pending" | "plugin") =>
       ipcRenderer.invoke("notifier:demo", kind),
   },
 

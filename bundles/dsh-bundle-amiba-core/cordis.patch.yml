@@ -6,6 +6,10 @@
     openAt: first-search
 
 - insert:
+    # Composed first so every later plugin can post into the hub.
+    - id: amiba-notification-hub
+      name: "@amiba/dsh-plugin-notification-hub"
+
     - id: amiba-capability-catalog
       name: "@amiba/dsh-plugin-catalog"
       config:

@@ -211,6 +211,9 @@ importers:
       '@amiba/dsh-plugin-model-plane':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-model-plane
+      '@amiba/dsh-plugin-notification-hub':
+        specifier: workspace:*
+        version: link:../../plugins/dsh-plugin-notification-hub
       '@amiba/dsh-plugin-schedule-adapter':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-schedule-adapter
@@ -1018,11 +1021,33 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
 
+  plugins/dsh-plugin-notification-hub:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@types/node':
+        specifier: 22.9.0
+        version: 22.9.0
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.32.0)(sass@1.100.0)
+
   plugins/dsh-plugin-runtime-gateway:
     dependencies:
       '@amiba/dsh-plugin-catalog':
         specifier: workspace:*
         version: link:../dsh-plugin-catalog
+      '@amiba/dsh-plugin-notification-hub':
+        specifier: workspace:*
+        version: link:../dsh-plugin-notification-hub
       '@deepseek-ai/schemastery':
         specifier: ^3.0.0
         version: 3.18.1
@@ -1103,6 +1128,9 @@ importers:
       '@amiba/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
+      '@amiba/dsh-plugin-notification-hub':
+        specifier: workspace:*
+        version: link:../dsh-plugin-notification-hub
       '@amiba/dsh-plugin-ui-shell':
         specifier: workspace:*
         version: link:../dsh-plugin-ui-shell
@@ -1137,6 +1165,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
+      '@deepseek-ai/dsh-session':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(d7gccyf6bsc5n3avojaaw5u2pm)
       '@deepseek-ai/dsh-tools':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
