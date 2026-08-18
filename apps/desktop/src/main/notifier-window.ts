@@ -6,6 +6,7 @@ import type {
   ApprovalPendingNotifierMessage,
   ChatCompletedNotifierMessage,
 } from "./chat/completion-notification";
+import type { PluginNotifierMessage } from "./plugin-notification";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +31,7 @@ const NOTIFIER_HEIGHT = NOTIFIER_CARD_HEIGHT + NOTIFIER_SHADOW_GUTTER * 2;
 export type NotifierMessage =
   | ChatCompletedNotifierMessage
   | ApprovalPendingNotifierMessage
+  | PluginNotifierMessage
   | {
       type: "dismiss";
       id: string;
@@ -209,17 +211,37 @@ export function destroyNotifierWindow(): void {
 }
 
 /**
+ * Render one plugin-posted notification on the heads-up notifier.
+ *
+ * Called by Electron main's `amiba_notify` native gateway operation; the
+ * payload was already validated by `parsePluginNotification`, so this is
+ * a thin delivery seam kept separate for wiring and tests.
+ */
+export function showPluginNotification(message: PluginNotifierMessage): void {
+  sendToNotifier(message);
+}
+
+/**
  * Fire a fake card so users (and dev) can confirm the notifier pipeline
- * works end-to-end without having to trigger a real approval or wait
- * for a real cron run. `kind` picks between the two card shapes; both
- * dismiss with the buttons (the cron variant's "click to open" raises
- * the main window, but here we just rely on the dismiss action).
+ * works end-to-end without having to trigger a real approval or a real
+ * plugin post. `kind` picks between the card shapes; all of them
+ * dismiss with the buttons.
  */
 export function showDemoNotifier(
-  kind: "chat-completed" | "approval-pending" = "chat-completed",
+  kind: "chat-completed" | "approval-pending" | "plugin" = "chat-completed",
 ): void {
   const stamp = Date.now();
-  if (kind === "chat-completed") {
+  if (kind === "plugin") {
+    sendToNotifier({
+      type: "plugin",
+      id: `demo_${stamp}`,
+      title: "Nightly digest is ready",
+      body: "This is a demo plugin notification card.",
+      kind: "info",
+      source: "demo",
+      timestamp: stamp,
+    });
+  } else if (kind === "chat-completed") {
     sendToNotifier({
       type: "chat-completed",
       id: `demo_${stamp}`,

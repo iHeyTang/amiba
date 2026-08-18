@@ -9,6 +9,11 @@ import {
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  presentPluginNotifierCard,
+  type PluginNotifierCardModel,
+} from "./plugin-card";
+
 /**
  * Mirrors `NotifierMessage` in `main/notifier-window.ts`. Kept local so
  * the renderer entry doesn't pull in main-process types.
@@ -32,6 +37,16 @@ type NotifierMessage =
       message: string;
       timestamp: number;
     }
+  | {
+      type: "plugin";
+      id: string;
+      title: string;
+      body?: string;
+      kind?: string;
+      sessionId?: string;
+      source: string;
+      timestamp: number;
+    }
   | { type: "dismiss"; id: string };
 
 type NotifierCard =
@@ -51,12 +66,18 @@ type NotifierCard =
       command?: string;
       message: string;
       timestamp: number;
+    }
+  | {
+      kind: "plugin";
+      model: PluginNotifierCardModel;
     };
 
 type NotifierTone = "complete" | "approval";
 
 function cardKey(card: NotifierCard): string {
-  return card.kind === "approval-pending" ? card.approvalId : card.id;
+  if (card.kind === "approval-pending") return card.approvalId;
+  if (card.kind === "plugin") return card.model.id;
+  return card.id;
 }
 
 export function NotifierView() {
@@ -88,6 +109,13 @@ export function NotifierView() {
           command: m.command,
           message: m.message,
           timestamp: m.timestamp,
+        };
+        cardRef.current = nextCard;
+        setCard(nextCard);
+      } else if (m.type === "plugin") {
+        const nextCard: NotifierCard = {
+          kind: "plugin",
+          model: presentPluginNotifierCard(m),
         };
         cardRef.current = nextCard;
         setCard(nextCard);
@@ -123,6 +151,25 @@ export function NotifierView() {
           setCard(null);
         }}
         onDismiss={dismiss}
+      />
+    );
+  }
+
+  if (card.kind === "plugin") {
+    const sessionId = card.model.sessionId;
+    return (
+      <PluginCard
+        model={card.model}
+        onDismiss={dismiss}
+        onOpen={
+          sessionId
+            ? () => {
+                cardRef.current = null;
+                void window.amiba.notifier.openSession(sessionId);
+                setCard(null);
+              }
+            : undefined
+        }
       />
     );
   }
@@ -263,6 +310,43 @@ function CompletedCard({
             type="button"
           >
             {openLabel}
+          </button>
+        }
+      />
+    </CardShell>
+  );
+}
+
+/**
+ * Generic card for plugin-posted notifications. Reuses the existing card
+ * tones (`presentPluginNotifierCard` maps calm kinds to the completion
+ * look and attention kinds to the approval look) — no new visual system.
+ */
+function PluginCard({
+  model,
+  onOpen,
+  onDismiss,
+}: {
+  model: PluginNotifierCardModel;
+  onOpen?: () => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useT();
+  const label = t("notifier.plugin.status");
+
+  return (
+    <CardShell label={label} tone={model.tone}>
+      <NotificationLayout
+        title={model.title || t("notifier.plugin.fallbackTitle")}
+        status={<span className="truncate">{model.status || label}</span>}
+        onDismiss={onDismiss}
+        actions={
+          <button
+            className="app-no-drag inline-flex h-6 w-full items-center justify-center rounded-md bg-muted/70 px-2.5 text-[10px] font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+            onClick={onOpen ?? onDismiss}
+            type="button"
+          >
+            {onOpen ? t("notifier.chat.open") : t("notifier.plugin.dismiss")}
           </button>
         }
       />

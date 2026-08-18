@@ -42,6 +42,9 @@ export const en = {
   "notifier.chat.fallbackSummary": "The response is ready to review.",
   "notifier.chat.open": "Open conversation",
   "notifier.approval.status": "Your approval is needed",
+  "notifier.plugin.status": "Notification",
+  "notifier.plugin.fallbackTitle": "Amiba notification",
+  "notifier.plugin.dismiss": "Got it",
 
   // Conversation turn navigation
   "conversationRail.label": "Conversation navigation",

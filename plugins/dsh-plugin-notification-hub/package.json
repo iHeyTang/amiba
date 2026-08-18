@@ -1,8 +1,8 @@
 {
-  "name": "@amiba/dsh-plugin-runtime-gateway",
+  "name": "@amiba/dsh-plugin-notification-hub",
   "version": "0.1.0",
   "private": true,
-  "description": "DSH plugin exposing the authenticated Amiba desktop runtime gateway as a Cordis service.",
+  "description": "Provider-neutral desktop notification hub for Amiba DSH plugins.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -10,19 +10,13 @@
   "files": ["lib"],
   "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit", "test": "vitest run" },
   "dependencies": {
-    "@amiba/dsh-plugin-catalog": "workspace:*",
-    "@amiba/dsh-plugin-notification-hub": "workspace:*",
-    "@deepseek-ai/schemastery": "^3.0.0"
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+    "@deepseek-ai/cordis": "^4.0.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
     "vitest": "^2.1.4"

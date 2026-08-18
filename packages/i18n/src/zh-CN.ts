@@ -37,6 +37,9 @@ export const zhCN: Messages = {
   "notifier.chat.fallbackSummary": "回复已准备好，可以回来查看。",
   "notifier.chat.open": "查看对话",
   "notifier.approval.status": "需要你的确认",
+  "notifier.plugin.status": "通知",
+  "notifier.plugin.fallbackTitle": "Amiba 通知",
+  "notifier.plugin.dismiss": "知道了",
 
   // 会话轮次导航
   "conversationRail.label": "会话导航",

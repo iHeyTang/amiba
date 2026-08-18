@@ -59,6 +59,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-memory",
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",
+      "@amiba/dsh-plugin-notification-hub",
       "@amiba/dsh-plugin-schedule-adapter",
       "@amiba/dsh-plugin-skills",
       "@amiba/dsh-plugin-usage",
@@ -210,6 +211,16 @@ before(
   "@amiba/dsh-plugin-messaging-core",
   "@amiba/dsh-plugin-messaging-channel-webhook",
 );
+// The notification hub composes before its posters (schedule-adapter) and
+// before its desktop delivery sink (runtime-gateway).
+before(
+  "@amiba/dsh-plugin-notification-hub",
+  "@amiba/dsh-plugin-schedule-adapter",
+);
+before(
+  "@amiba/dsh-plugin-notification-hub",
+  "@amiba/dsh-plugin-runtime-gateway",
+);
 
 const uiShellManifest = await json("plugins/dsh-plugin-ui-shell/package.json");
 if (
@@ -299,7 +310,9 @@ for (const required of [
   '"amiba.settings.section"',
   "id: SECTION_ID",
   "label: () => labels().nav",
-  "inject: () => ({ listMemory, listPresets })",
+  // Prefix match: c8f14b9 extended this inject with a nav icon
+  // (`navIcon: () => <Brain />`); the section contract stays the same.
+  "inject: () => ({ listMemory, listPresets",
 ]) {
   if (!memoryClient.includes(required)) {
     fail(`memory Client plugin is missing ${required}`);
