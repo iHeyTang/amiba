@@ -1,8 +1,8 @@
 /**
  * Reusable session history list. By default it groups rows by channel; callers
  * may provide a custom grouping key or hide section headers to render a single
- * time-ordered stream. This lets the main sidebar mix chats and scheduled runs
- * without maintaining two competing list implementations.
+ * time-ordered stream. The main sidebar uses this to switch between a flat
+ * timeline and a by-workspace grouping of the same rows.
  *
  * Search and new-chat are NOT rendered here — both live in the top bar
  * now (VSCode command-center style). The host passes the active query
@@ -66,15 +66,13 @@ export interface SessionsListViewProps {
   /**
    * Override the per-section label. When omitted, the default
    * ``{channel} chats`` template based on the channel descriptor is
-   * used (right for chats). The Scheduled view passes a function that
-   * resolves the cron job id into a human-readable job name.
+   * used (right for chats). The main sidebar's grouped layout passes a
+   * function that resolves a workspace group key into its folder name.
    */
   sectionLabelFor?: (source: string) => string;
   /**
    * Per-section right-edge actions (icon buttons), revealed on hover.
-   * Returning `null`/`undefined` hides the slot for that section. Used
-   * by the Scheduled view to surface a "trigger this job now" button
-   * per cron-job group.
+   * Returning `null`/`undefined` hides the slot for that section.
    */
   sectionActionsFor?: (source: string) => ReactNode;
   /** Optional semantic icon for each top-level history section. */

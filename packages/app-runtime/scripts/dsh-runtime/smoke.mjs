@@ -1,3 +1,14 @@
+/**
+ * BUNDLE-COMPOSITION integration check (documented ruling).
+ *
+ * This script black-box smoke-tests the shipped `dsh-bundle-amiba-core`
+ * composition end-to-end. It therefore MAY reference plugin package names
+ * and drive their public RPC surfaces (e.g. `amibaMemory/list`) — that is
+ * the point of the check, not a host→plugin coupling leak, which is why
+ * `scripts/` directories are excluded from `verify-pluginization.mjs`.
+ * The flip side: when a plugin is added to or pulled from the bundle,
+ * this script must be updated in the same change.
+ */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
