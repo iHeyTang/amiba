@@ -6,13 +6,11 @@ import {
   Keyboard,
   Palette,
   UserRound,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
-import { TokensPage } from "../usage";
 import { AgentModelConfigTab } from "./AgentModelConfigTab";
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
 import { SettingsAgentsPage } from "./SettingsAgentsPage";
@@ -78,13 +76,6 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     group: "general",
     component: page(SettingsShortcuts),
     desktopOnly: true,
-  },
-  {
-    id: "tokens",
-    icon: Wallet,
-    titleKey: "options.nav.tokens",
-    group: "general",
-    component: page(TokensPage),
   },
   {
     id: "behavior",

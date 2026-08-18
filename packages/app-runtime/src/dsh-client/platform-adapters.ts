@@ -20,8 +20,7 @@ type DshPlatformKey =
   | "agentPermissions"
   | "modelPlane"
   | "agentSkills"
-  | "agentCommands"
-  | "agentUsage";
+  | "agentCommands";
 
 export type DshPlatformAdapters = Required<
   Pick<PlatformAdapter, DshPlatformKey>
@@ -413,9 +412,6 @@ export function createDshPlatformAdapters(
           args: { sessionId },
         });
       },
-    },
-    agentUsage: {
-      list: () => client.call("amibaUsage/list", { args: {} }),
     },
   };
 }

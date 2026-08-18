@@ -60,3 +60,10 @@ export {
   ModelSettingsSectionHeader,
 } from "./settings/ModelSettingsSectionChrome";
 export { useRefetchOnFocus } from "./hooks/useRefetchOnFocus";
+export {
+  ChipSwitcher,
+  Heatmap,
+  type ChipSwitcherProps,
+  type HeatmapCellBase,
+  type HeatmapProps,
+} from "./viz";

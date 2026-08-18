@@ -1,5 +1,6 @@
-import type { AgentUsageRecord } from "@amiba/app-runtime/platform";
 import type { SessionEvent } from "@deepseek-ai/dsh-session";
+
+import type { AmibaUsageRecord } from "./remote.js";
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -22,7 +23,7 @@ function usageRecord(
   sessionId: string,
   route: { provider: string; model: string },
   usage: unknown,
-): AgentUsageRecord | undefined {
+): AmibaUsageRecord | undefined {
   const data = recordValue(event.data);
   const value = recordValue(usage);
   const turn = nonnegativeInteger(data?.turn);
@@ -50,9 +51,9 @@ function usageRecord(
 export function projectDshUsage(
   sessionId: string,
   events: readonly SessionEvent[],
-): AgentUsageRecord[] {
+): AmibaUsageRecord[] {
   let route = { provider: "", model: "" };
-  const byStep = new Map<string, AgentUsageRecord>();
+  const byStep = new Map<string, AmibaUsageRecord>();
   for (const event of [...events].sort((left, right) => left.seq - right.seq)) {
     const data = recordValue(event.data);
     if (event.type === "request/header") {

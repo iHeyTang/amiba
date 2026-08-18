@@ -21,6 +21,5 @@ export * from "./models"
 export * from "./chat"
 export * from "./home"
 export * from "./settings"
-export * from "./usage"
 export * from "./viz"
 export { PaneHeaderBar, type PaneHeaderBarProps } from "./navigation/PaneHeaderBar";
