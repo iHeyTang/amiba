@@ -1,22 +1,21 @@
-import type { AgentMcpAdapter } from "@amiba/app-runtime/platform";
 import type {} from "@amiba/dsh-plugin-catalog/client";
-import { McpToolsView } from "@amiba/ui/plugin/mcp";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ReactNode } from "react";
 
 import { AMIBA_MCP_REMOTE } from "../remote.js";
+import { DshMcpToolsTab, type McpToolsAdapter } from "./DshMcpToolsTab.js";
 
 export const name = "amiba-mcp-manager-ui";
 export const inject = ["slots", "remote"];
 
 type McpRemote = ClientContext["remote"]["amibaMcp"];
 type McpPanelProps = PropsRuntime<"amiba.tools.panel"> & {
-  adapter: AgentMcpAdapter;
+  adapter: McpToolsAdapter;
 };
 
 function McpPanel({ adapter }: McpPanelProps): ReactNode {
-  return <McpToolsView adapter={adapter} />;
+  return <DshMcpToolsTab adapter={adapter} />;
 }
 
 function errorOf(value: unknown): Error {
@@ -39,7 +38,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaMcp"],
     (injectedCtx) => {
       const remote: McpRemote = injectedCtx.remote.amibaMcp;
-      const adapter: AgentMcpAdapter = {
+      const adapter: McpToolsAdapter = {
         list: () => valueOf(remote.list()),
         save: (input) => valueOf(remote.save(input)),
         remove: async (serverName) => {

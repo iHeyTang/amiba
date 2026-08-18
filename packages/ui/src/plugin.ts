@@ -34,6 +34,7 @@ export {
   SelectTrigger,
   SelectValue,
 } from "./primitives/select";
+export { Switch } from "./primitives/switch";
 export { Textarea } from "./primitives/textarea";
 export {
   NavigationGroupLabel,

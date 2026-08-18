@@ -9,7 +9,6 @@
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
     "./plugin/messaging": "./src/plugin-messaging.ts",
-    "./plugin/mcp": "./src/plugin-mcp.ts",
     "./plugin/runtime-inventory": "./src/plugin-runtime-inventory.ts",
     "./plugin/schedule": "./src/plugin-schedule.ts",
     "./tailwind-preset": "./tailwind-preset.cjs",

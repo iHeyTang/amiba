@@ -2,7 +2,6 @@ import type {
   AgentCommandEntry,
   AgentMessageCenterSnapshot,
   AgentMessagesAdapter,
-  AgentMcpAdapter,
   AgentPermissionOption,
   AgentPermissionState,
   AgentSchedulesAdapter,
@@ -27,7 +26,6 @@ type DshPlatformKey =
   | "agentSkills"
   | "agentCommands"
   | "agentMessages"
-  | "agentMcp"
   | "agentUsage";
 
 export type DshPlatformAdapters = Required<
@@ -296,14 +294,6 @@ export function createDshPlatformAdapters(
       client.call("amibaMessaging/rotate", { args: { id } }),
   };
 
-  const mcp: AgentMcpAdapter = {
-    list: () => client.call("amibaMcp/list", { args: {} }),
-    save: (input) => client.call("amibaMcp/save", { args: { input } }),
-    async remove(serverName) {
-      await client.call("amibaMcp/removeServer", { args: { serverName } });
-    },
-  };
-
   const modelPlane: ModelPlaneAdapter = {
     snapshot: () => client.call("amibaModelPlane/snapshot", { args: {} }),
     setDefaultSelection: (selection, expectedRevision) =>
@@ -463,7 +453,6 @@ export function createDshPlatformAdapters(
       },
     },
     agentMessages: messages,
-    agentMcp: mcp,
     agentUsage: {
       list: () => client.call("amibaUsage/list", { args: {} }),
     },
