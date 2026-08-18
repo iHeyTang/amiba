@@ -19,11 +19,13 @@ and Electron never registers plugin content in reverse.
 - `amiba.workspace.view`
 - `amiba.chat.header.after`
 - `amiba.chat.content.overlay`
+- `amiba.composer.modelPicker`
 - `amiba.settings.navigation.before`
 - `amiba.settings.navigation.assistant`
 - `amiba.settings.navigation.after`
 - `amiba.settings.section`
 - `amiba.settings.content.overlay`
+- `amiba.agentPreset.section`
 - `amiba.shell.overlay`
 
 Every contributing client plugin declares `@amiba/dsh-plugin-ui-shell` in its

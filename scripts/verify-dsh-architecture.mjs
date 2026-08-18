@@ -69,6 +69,7 @@ const bundleSpecs = [
     directory: "dsh-bundle-amiba-web",
     name: "@amiba/dsh-bundle-amiba-web",
     plugins: [
+      "@amiba/dsh-plugin-agent-preset",
       "@amiba/dsh-plugin-messaging-channel-webhook",
       "@amiba/dsh-plugin-runtime-inventory",
       "@amiba/dsh-plugin-ui-shell",
@@ -166,6 +167,7 @@ for (const desktopOrWebOnly of [
   "@amiba/dsh-plugin-messaging-channel-webhook",
   "@amiba/dsh-plugin-runtime-inventory",
   "@amiba/dsh-plugin-ui-shell",
+  "@amiba/dsh-plugin-agent-preset",
 ]) {
   if (corePatch.includes(desktopOrWebOnly)) {
     fail(`Core bundle contains surface-only plugin ${desktopOrWebOnly}`);
@@ -221,6 +223,10 @@ before(
   "@amiba/dsh-plugin-notification-hub",
   "@amiba/dsh-plugin-runtime-gateway",
 );
+before(
+  "@amiba/dsh-plugin-ui-shell",
+  "@amiba/dsh-plugin-agent-preset",
+);
 
 const uiShellManifest = await json("plugins/dsh-plugin-ui-shell/package.json");
 if (
@@ -255,11 +261,13 @@ for (const slot of [
   "amiba.workspace.view",
   "amiba.chat.header.after",
   "amiba.chat.content.overlay",
+  "amiba.composer.modelPicker",
   "amiba.settings.navigation.before",
   "amiba.settings.navigation.assistant",
   "amiba.settings.navigation.after",
   "amiba.settings.section",
   "amiba.settings.content.overlay",
+  "amiba.agentPreset.section",
   "amiba.shell.overlay",
 ]) {
   if (!uiShellClient.includes(`\"${slot}\"`)) {
@@ -310,9 +318,9 @@ for (const required of [
   '"amiba.settings.section"',
   "id: SECTION_ID",
   "label: () => labels().nav",
-  // Prefix match: c8f14b9 extended this inject with a nav icon
-  // (`navIcon: () => <Brain />`); the section contract stays the same.
-  "inject: () => ({ listMemory, listPresets",
+  // Trailing comma on purpose: the inject face also carries the section's
+  // navIcon thunk (the ui-shell navIcon convention, c8f14b9).
+  "inject: () => ({ listMemory, listPresets,",
 ]) {
   if (!memoryClient.includes(required)) {
     fail(`memory Client plugin is missing ${required}`);
@@ -498,6 +506,61 @@ for (const required of [
 }
 if (skillsClient.includes("getPlatform") || skillsClient.includes("ipc")) {
   fail("Skills Client plugin must not route its UI through Electron");
+}
+
+const agentPresetManifest = await json(
+  "plugins/dsh-plugin-agent-preset/package.json",
+);
+if (
+  JSON.stringify(agentPresetManifest.dsh?.client?.inject) !==
+  JSON.stringify([
+    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-api-remotes",
+    "@amiba/dsh-plugin-ui-shell",
+  ])
+) {
+  fail(
+    "Agent-preset Client plugin must depend on DSH Remote and the settings slot owner",
+  );
+}
+const agentPresetClient = await text(
+  "plugins/dsh-plugin-agent-preset/src/client/index.tsx",
+);
+for (const required of [
+  // Engine-native data plane: the connection service's IApiClient face —
+  // the exact surface the official dsh-client-ui-agent-preset consumed —
+  // not a bespoke Amiba remote and not the host platform adapter.
+  'ctx.get("connection")',
+  "ctx.remote.$on(",
+  '"settings/document-updated"',
+  '"amiba.settings.section"',
+  "id: SECTION_ID",
+  "order: 10,",
+]) {
+  if (!agentPresetClient.includes(required)) {
+    fail(`Agent-preset Client plugin is missing ${required}`);
+  }
+}
+const agentPresetPage = await text(
+  "plugins/dsh-plugin-agent-preset/src/client/DshAgentPresetsPage.tsx",
+);
+for (const required of [
+  // The detail tab strip keeps emitting the ledger slot marker the ui-shell
+  // root scanner portals other plugins' preset sections into.
+  'data-amiba-dsh-slot="amiba.agentPreset.section"',
+  "data-amiba-dsh-slot-only",
+  "data-amiba-dsh-profile-id",
+]) {
+  if (!agentPresetPage.includes(required)) {
+    fail(`Agent-preset detail page is missing slot marker contract ${required}`);
+  }
+}
+for (const body of [agentPresetClient, agentPresetPage]) {
+  if (body.includes("getPlatform") || body.includes("ipc")) {
+    fail(
+      "Agent-preset Client plugin must not route its UI through the host platform adapter",
+    );
+  }
 }
 
 const mcpManifest = await json("plugins/dsh-plugin-mcp-manager/package.json");

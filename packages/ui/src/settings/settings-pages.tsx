@@ -4,14 +4,12 @@ import {
   Fingerprint,
   Keyboard,
   Palette,
-  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
-import { SettingsAgentsPage } from "./SettingsAgentsPage";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
@@ -21,8 +19,10 @@ export interface SettingsPageProps {
   onOpenDetail: (id: string | null) => void;
   /**
    * Ledger of DSH plugin-owned agent-preset detail sections (M1 contribution
-   * slot). Only the agents page consumes this; every other registry page
-   * ignores it. Defaulted (absent) so existing callers/tests keep passing.
+   * slot). No registry page consumes this anymore — the agents page moved to
+   * dsh-plugin-agent-preset, which reads the ledger itself — but the
+   * threading stays as a generic mechanism for future registry pages.
+   * Defaulted (absent) so existing callers/tests keep passing.
    */
   presetSections?: readonly { id: string; label: string }[];
   /** Render target for one preset-section ledger entry, scoped by profileId. */
@@ -81,14 +81,6 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     titleKey: "options.agents.section.behavior",
     group: "assistant",
     component: page(SettingsAssistantBehavior),
-  },
-  {
-    id: "agents",
-    icon: UserRound,
-    titleKey: "options.nav.agents",
-    group: "advanced",
-    component: SettingsAgentsPage,
-    scroll: "self",
   },
   {
     id: "status",

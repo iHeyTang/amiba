@@ -71,11 +71,13 @@ Electron WebView，也没有 preload 特权。
 - `amiba.workspace.view`
 - `amiba.chat.header.after`
 - `amiba.chat.content.overlay`
+- `amiba.composer.modelPicker`
 - `amiba.settings.navigation.before`
 - `amiba.settings.navigation.assistant`
 - `amiba.settings.navigation.after`
 - `amiba.settings.section`
 - `amiba.settings.content.overlay`
+- `amiba.agentPreset.section`
 - `amiba.shell.overlay`
 
 `workspace.navigation` 注入 `openWorkspace(viewId)`；`workspace.view` 与

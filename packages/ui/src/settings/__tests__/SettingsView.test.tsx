@@ -1,6 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
@@ -8,31 +7,6 @@ import { SettingsPageActions } from "../page-chrome";
 
 vi.mock("../AgentBehaviorEditor", () => ({
   SettingsAssistantBehavior: () => <div>Default behavior</div>,
-}));
-vi.mock("../SettingsAgentsPage", () => ({
-  SettingsAgentsPage: (props: {
-    detail?: string;
-    onOpenDetail: (id: string | null) => void;
-    presetSections?: readonly { id: string; label: string }[];
-    renderPresetSection?: (
-      sectionId: string,
-      owner: { profileId: string },
-    ) => ReactNode;
-  }) => (
-    <div data-testid="agents-page">
-      {props.detail ?? ""}
-      {props.presetSections?.map((section) => (
-        <span data-testid={`preset-section-${section.id}`} key={section.id}>
-          {section.label}
-        </span>
-      ))}
-      {props.detail && props.presetSections?.length && props.renderPresetSection
-        ? props.renderPresetSection(props.presetSections[0].id, {
-            profileId: props.detail,
-          })
-        : null}
-    </div>
-  ),
 }));
 
 import { SettingsView } from "../SettingsView";
@@ -108,7 +82,11 @@ describe("SettingsView DSH navigation", () => {
 
     const advanced = screen.getByRole("button", { name: "Advanced" });
     await user.click(advanced);
-    expect(screen.getByRole("button", { name: "Agent presets" })).toBeVisible();
+    // Agent presets migrated from the built-in registry to the
+    // dsh-plugin-agent-preset section ledger — no registry row remains.
+    expect(
+      screen.queryByRole("button", { name: "Agent presets" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Status" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Connection" }),
@@ -230,35 +208,26 @@ describe("SettingsView DSH navigation", () => {
     ).toBeVisible();
   });
 
-  it("parses two-segment hashes into tab + detail", () => {
+  it("resolves the migrated #agents id (with or without a detail segment) against the DSH section ledger", () => {
     window.history.replaceState(null, "", "/#agents/my-preset");
-    render(<SettingsView />);
-    expect(
-      screen.getByRole("button", { name: "Agent presets" }),
-    ).toHaveAttribute("aria-current", "page");
-    expect(screen.getByTestId("agents-page")).toHaveTextContent("my-preset");
-  });
-
-  it("threads dshPresetSections and the presetSection slot through to the agents page on #agents/<preset>", () => {
-    window.history.replaceState(null, "", "/#agents/my-preset");
+    const seen: Array<string | undefined> = [];
     render(
       <SettingsView
-        dshPresetSections={[{ id: "x", label: "X" }]}
         slots={{
-          presetSection: (sectionId, owner) => (
-            <div data-testid="preset-section-render">
-              {sectionId}:{owner.profileId}
-            </div>
-          ),
+          assistantNavigation: (activeSection) => {
+            seen.push(activeSection);
+            return null;
+          },
         }}
       />,
     );
-
-    expect(screen.getByTestId("agents-page")).toHaveTextContent("my-preset");
-    expect(screen.getByTestId("preset-section-x")).toHaveTextContent("X");
-    expect(screen.getByTestId("preset-section-render")).toHaveTextContent(
-      "x:my-preset",
-    );
+    // The registry no longer claims "agents" — the route falls through to
+    // the dsh-section surface (drill-in state is now internal to the
+    // dsh-plugin-agent-preset section), keeping old deep links addressable.
+    expect(seen).toContain("agents");
+    expect(
+      screen.getByRole("button", { name: "Appearance" }),
+    ).not.toHaveAttribute("aria-current", "page");
   });
 
   it("titles DSH sections from the ledger", () => {

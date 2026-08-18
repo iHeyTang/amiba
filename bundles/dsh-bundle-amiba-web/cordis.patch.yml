@@ -94,6 +94,11 @@
     - id: amiba-ui-shell
       name: "@amiba/dsh-plugin-ui-shell"
 
+    # Owns the 智能体预设 settings section; composed after the ui-shell so
+    # the slot owner it contributes into is already registered.
+    - id: amiba-agent-preset
+      name: "@amiba/dsh-plugin-agent-preset"
+
     - id: amiba-runtime-inventory
       name: "@amiba/dsh-plugin-runtime-inventory"
 

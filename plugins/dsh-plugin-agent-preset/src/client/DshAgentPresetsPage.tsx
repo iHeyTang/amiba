@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Check,
   Copy,
   Fingerprint,
@@ -7,18 +8,13 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-
 import {
-  createAgentPreset,
-  deleteAgentPreset,
-  getAgentPresets,
-  normalizeAgentPresetId,
-  renameAgentPreset,
-  setDefaultAgentPreset,
-  type AgentPreset,
-} from "@amiba/app-runtime/core";
-import { useT } from "@amiba/i18n";
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   Badge,
@@ -37,17 +33,37 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  cn,
-} from "../primitives";
-import { AgentBehaviorEditor } from "./AgentBehaviorEditor";
-import {
   SettingsPageActionButton,
   SettingsPageActions,
-  useSettingsPageHeader,
-} from "./page-chrome";
-import type { SettingsPageProps } from "./settings-pages";
+  cn,
+  usePluginT,
+} from "@amiba/ui/plugin";
+
+import { AgentPresetBehaviorEditor } from "./AgentPresetBehaviorEditor.js";
+import {
+  normalizeAgentPresetId,
+  type AgentPreset,
+  type AgentPresetsAdapter,
+} from "./data.js";
+import { agentPresetI18n } from "./i18n.js";
 
 type AgentWorkspaceSection = string;
+
+/** One agent-preset detail tab supplied by the DSH ledger. */
+export interface PresetSectionRow {
+  id: string;
+  label: string;
+}
+
+/** External-store contract for ledger rows and the roster refresh signal. */
+export interface SnapshotSource<T> {
+  getSnapshot: () => T;
+  subscribe: (listener: () => void) => () => void;
+}
+
+function useT() {
+  return usePluginT(agentPresetI18n);
+}
 
 function ProfileListRow({
   active,
@@ -77,9 +93,7 @@ function ProfileListRow({
           {profile.name}
         </span>
         <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-          {profile.description ||
-            profile.model ||
-            t("options.agents.noDescription")}
+          {profile.description || t("options.agents.noDescription")}
         </span>
       </span>
       {active ? (
@@ -94,6 +108,7 @@ function ProfileListRow({
 function AgentPresetList({
   activeName,
   error,
+  headerActionsHost,
   loading,
   onCreate,
   onOpen,
@@ -102,6 +117,7 @@ function AgentPresetList({
 }: {
   activeName: string;
   error: string | null;
+  headerActionsHost?: () => HTMLElement | null;
   loading: boolean;
   onCreate: () => void;
   onOpen: (name: string) => void;
@@ -111,7 +127,7 @@ function AgentPresetList({
   const { t } = useT();
   return (
     <>
-      <SettingsPageActions>
+      <SettingsPageActions host={headerActionsHost}>
         <SettingsPageActionButton
           aria-label={t("common.refresh")}
           icon
@@ -179,50 +195,45 @@ function AgentPresetList({
 }
 
 function AgentPresetDetail({
+  adapter,
   error,
+  headerActionsHost,
   isActive,
   onActivate,
   onBack,
   onDelete,
-  onDescriptionSaved,
   onRename,
   presetSections,
   profile,
-  renderPresetSection,
   saving,
 }: {
+  adapter: AgentPresetsAdapter;
   error: string | null;
+  headerActionsHost?: () => HTMLElement | null;
   isActive: boolean;
   onActivate: () => void;
   onBack: () => void;
   onDelete: () => void;
-  onDescriptionSaved: (description: string) => void;
   onRename: (newName: string) => void;
-  presetSections?: readonly { id: string; label: string }[];
+  presetSections: readonly PresetSectionRow[];
   profile: AgentPreset;
-  renderPresetSection?: (
-    sectionId: string,
-    owner: { profileId: string },
-  ) => ReactNode;
   saving: boolean;
 }) {
   const { t } = useT();
   const [section, setSection] = useState<AgentWorkspaceSection>("behavior");
   const [editingName, setEditingName] = useState(false);
   const [renameDraft, setRenameDraft] = useState(profile.name);
-  // "behavior" is the native tab rendered by AgentBehaviorEditor below — it
-  // is not a ledger concept, so a plugin registering that id is ignored
+  // "behavior" is the native tab rendered by AgentPresetBehaviorEditor below
+  // — it is not a ledger concept, so a plugin registering that id is ignored
   // rather than allowed to shadow or duplicate it.
   const ledgerSections = useMemo(
-    () => (presetSections ?? []).filter((entry) => entry.id !== "behavior"),
+    () => presetSections.filter((entry) => entry.id !== "behavior"),
     [presetSections],
   );
   const ledgerIds = useMemo(
     () => new Set(ledgerSections.map((entry) => entry.id)),
     [ledgerSections],
   );
-
-  useSettingsPageHeader({ title: profile.name, onBack });
 
   useEffect(() => {
     setEditingName(false);
@@ -246,7 +257,7 @@ function AgentPresetDetail({
 
   return (
     <>
-      <SettingsPageActions>
+      <SettingsPageActions host={headerActionsHost}>
         {isActive ? (
           <Badge className="rounded-full" variant="success">
             {t("options.agents.defaultShort")}
@@ -286,7 +297,17 @@ function AgentPresetDetail({
             {error}
           </p>
         ) : null}
-        <div className="flex h-11 shrink-0 items-center">
+        <div className="flex h-11 shrink-0 items-center gap-1.5">
+          {/* The DSH-section scaffold head keeps the section title, so the
+              drill-in back affordance lives on the detail body itself. */}
+          <button
+            aria-label={t("common.back")}
+            className="-ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
+            onClick={onBack}
+            type="button"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
           {editingName ? (
             <Input
               aria-label={t("options.agents.name")}
@@ -349,30 +370,45 @@ function AgentPresetDetail({
       </div>
 
       {section === "behavior" ? (
-        <AgentBehaviorEditor
+        <AgentPresetBehaviorEditor
+          adapter={adapter}
           description={profile.description}
-          embedded
           key={profile.name}
-          onDescriptionSaved={onDescriptionSaved}
           profileId={profile.name}
           sourceEditable={profile.trust !== "system"}
         />
       ) : ledgerIds.has(section) ? (
-        renderPresetSection?.(section, { profileId: profile.name })
+        /* Marker the ui-shell root scanner portals the owning plugin's
+           `amiba.agentPreset.section` contribution into (the same DOM
+           contract the retired host detail page emitted). */
+        <span
+          className="contents"
+          data-amiba-dsh-profile-id={profile.name}
+          data-amiba-dsh-slot="amiba.agentPreset.section"
+          data-amiba-dsh-slot-only={section}
+        />
       ) : null}
     </>
   );
 }
 
-export function SettingsAgentsPage({
-  detail,
-  onOpenDetail,
+export function DshAgentPresetsPage({
+  adapter,
+  headerActionsHost,
   presetSections,
-  renderPresetSection,
-}: SettingsPageProps) {
+  refreshSignal,
+}: {
+  adapter: AgentPresetsAdapter;
+  headerActionsHost?: () => HTMLElement | null;
+  /** Live ledger of plugin-owned preset-detail tabs. */
+  presetSections: SnapshotSource<readonly PresetSectionRow[]>;
+  /** Bumped when the host `agent-presets` settings document changes. */
+  refreshSignal?: SnapshotSource<number>;
+}) {
   const { t } = useT();
   const [profiles, setProfiles] = useState<AgentPreset[]>([]);
   const [active, setActive] = useState("default");
+  const [detail, setDetail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -380,6 +416,15 @@ export function SettingsAgentsPage({
   const [createName, setCreateName] = useState("");
   const [createDisplayName, setCreateDisplayName] = useState("");
   const [cloneFrom, setCloneFrom] = useState("__default__");
+
+  const sections = useSyncExternalStore(
+    presetSections.subscribe,
+    presetSections.getSnapshot,
+  );
+  const refreshVersion = useSyncExternalStore(
+    refreshSignal?.subscribe ?? (() => () => {}),
+    refreshSignal?.getSnapshot ?? (() => 0),
+  );
 
   const namedProfiles = useMemo(
     () => profiles.filter((profile) => profile.trust === "user"),
@@ -397,7 +442,7 @@ export function SettingsAgentsPage({
     async (quiet = false) => {
       if (!quiet) setLoading(true);
       setError(null);
-      const result = await getAgentPresets();
+      const result = await adapter.getAgentPresets();
       setLoading(false);
       if (!result.ok) {
         setError(result.error || t("options.agents.loadFailed"));
@@ -406,24 +451,30 @@ export function SettingsAgentsPage({
       setProfiles(result.profiles);
       setActive(result.active);
     },
-    [t],
+    [adapter, t],
   );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Invalid drill-in id (deleted elsewhere, stale link) → back to the list
-  // once presets have finished loading.
+  // The host emitted `settings/document-updated` for the `agent-presets`
+  // namespace (default changed from another surface) — quiet re-read.
   useEffect(() => {
-    if (detail && !loading && !selected) onOpenDetail(null);
-  }, [detail, loading, selected, onOpenDetail]);
+    if (refreshVersion > 0) void refresh(true);
+  }, [refresh, refreshVersion]);
+
+  // Invalid drill-in id (deleted elsewhere, stale selection) → back to the
+  // list once presets have finished loading.
+  useEffect(() => {
+    if (detail && !loading && !selected) setDetail(null);
+  }, [detail, loading, selected]);
 
   async function activateProfile() {
     if (!selected) return;
     setSaving(true);
     setError(null);
-    const result = await setDefaultAgentPreset(selected.name);
+    const result = await adapter.setDefaultAgentPreset(selected.name);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.activateFailed"));
@@ -436,7 +487,7 @@ export function SettingsAgentsPage({
     if (!createName.trim()) return;
     setSaving(true);
     setError(null);
-    const result = await createAgentPreset({
+    const result = await adapter.createAgentPreset({
       name: createName.trim(),
       clone_from: cloneFrom === "__default__" ? undefined : cloneFrom,
       displayName: createDisplayName.trim(),
@@ -452,14 +503,14 @@ export function SettingsAgentsPage({
     setCreateDisplayName("");
     setCloneFrom("__default__");
     await refresh(true);
-    onOpenDetail(nextName);
+    setDetail(nextName);
   }
 
   async function renameProfile(newName: string) {
     if (!selected) return;
     setSaving(true);
     setError(null);
-    const result = await renameAgentPreset(selected.name, newName);
+    const result = await adapter.renameAgentPreset(selected.name, newName);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.renameFailed"));
@@ -467,7 +518,7 @@ export function SettingsAgentsPage({
     }
     const nextName = normalizeAgentPresetId(newName);
     await refresh(true);
-    onOpenDetail(nextName);
+    setDetail(nextName);
   }
 
   async function removeProfile() {
@@ -477,37 +528,29 @@ export function SettingsAgentsPage({
     }
     setSaving(true);
     setError(null);
-    const result = await deleteAgentPreset(selected.name);
+    const result = await adapter.deleteAgentPreset(selected.name);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.deleteFailed"));
       return;
     }
     await refresh(true);
-    onOpenDetail(null);
+    setDetail(null);
   }
 
   if (detail && selected) {
     return (
       <AgentPresetDetail
+        adapter={adapter}
         error={error}
+        headerActionsHost={headerActionsHost}
         isActive={selected.name === active}
         onActivate={() => void activateProfile()}
-        onBack={() => onOpenDetail(null)}
+        onBack={() => setDetail(null)}
         onDelete={() => void removeProfile()}
-        onDescriptionSaved={(description) =>
-          setProfiles((items) =>
-            items.map((profile) =>
-              profile.name === selected.name
-                ? { ...profile, description }
-                : profile,
-            ),
-          )
-        }
         onRename={(newName) => void renameProfile(newName)}
-        presetSections={presetSections}
+        presetSections={sections}
         profile={selected}
-        renderPresetSection={renderPresetSection}
         saving={saving}
       />
     );
@@ -518,9 +561,10 @@ export function SettingsAgentsPage({
       <AgentPresetList
         activeName={active}
         error={error}
+        headerActionsHost={headerActionsHost}
         loading={loading}
         onCreate={() => setCreateOpen(true)}
-        onOpen={(name) => onOpenDetail(name)}
+        onOpen={(name) => setDetail(name)}
         onRefresh={() => void refresh()}
         profiles={namedProfiles}
       />
