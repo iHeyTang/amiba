@@ -52,8 +52,6 @@ import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { registerIpcHandlers } from "./ipc";
 import { embeddedBrowserController } from "./embedded-browser";
 import { createMainPlatformAdapter } from "./platform";
-import { recordToolActivityEvent, registerToolActivity } from "./tool-activity";
-import { setDshTelemetryPublisher } from "./dsh-telemetry";
 import { cleanupOldSnips } from "./screen-capture";
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace";
 import { disposeWorkspaceDevelopment } from "./workspace-development";
@@ -554,9 +552,6 @@ if (!gotSingleInstanceLock) {
     } catch (error) {
       console.error("[main] DSH native gateway failed to start:", error);
     }
-    registerToolActivity();
-    setDshTelemetryPublisher(recordToolActivityEvent);
-
     createWindow();
     createNotifierWindow();
     // Pre-create the Quick-Ask popup so the first double-tap doesn't

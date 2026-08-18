@@ -7,6 +7,5 @@ export * from "./config";
 export * from "./attachments";
 export * from "./runtime-permissions";
 export * from "./agent-presets";
-export * from "./tool-activity";
 export * from "./sessions-runtime";
 export * from "./wallpaper/use-wallpaper";

@@ -6,183 +6,180 @@
  *   • By tool      — bar chart of share by tool, N-day window
  *   • Recent calls — newest-first list with duration / status
  *
- * Ported from the tool-meter extension's Activity panel; data now
- * flows through a host-injected ToolActivitySource instead of the
- * extension IPC bridge (see ./tool-usage.ts). Freshness is push-driven:
- * load on mount, refetch on window focus, and refetch on every ledger
- * write via `source.onChanged` — no polling.
+ * Ported from `packages/ui/src/usage/ToolsActivityTab.tsx` (itself a
+ * port of the tool-meter extension's Activity panel); data now flows
+ * through the plugin's own Typert Remote instead of a host-injected
+ * `ToolActivitySource` over the desktop IPC bridge. Freshness matches
+ * TokensTab: load on mount, refetch on window focus, and a 30 s poll
+ * while mounted — the desktop push channel (`onChanged` ledger
+ * broadcasts) was IPC-specific and has no Remote equivalent.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  cn,
+  ChipSwitcher,
+  Heatmap,
+  PageContent,
+  ScrollArea,
+  usePluginT,
+  useRefetchOnFocus,
+  type PluginTranslateFn,
+} from "@amiba/ui/plugin";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { ToolActivityDayBucket, ToolActivitySource, ToolInvocation } from "@amiba/app-runtime/core"
-import { useT, type TranslateFn } from "@amiba/i18n"
-
-import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus"
-import { cn, PageContent, ScrollArea } from "../primitives"
-import { ChipSwitcher, Heatmap } from "../viz"
-import { readUsagePref, writeUsagePref } from "./prefs"
+import type { ToolActivityDayBucket, ToolInvocation } from "../tool-activity.js";
+import { usageToolsI18n } from "./i18n.js";
+import { readUsagePref, writeUsagePref } from "./prefs.js";
 import {
   fetchToolHeatmap,
   fetchToolRecent,
   fetchToolSummary,
   type MeterSummary,
+  type ToolActivityReadFn,
   type ToolHeatmapCell,
-} from "./tool-usage"
+} from "./tool-usage.js";
 
-const RECENT_LIMIT = 30
-const HEATMAP_WEEKS = 52
-const DAY_RANGES = [1, 3, 7] as const
-type DayRange = (typeof DAY_RANGES)[number]
-const TREND_RANGE_SETTING_KEY = "usage.tools.ui.trend.days"
-const BYTOOL_RANGE_SETTING_KEY = "usage.tools.ui.bytool.days"
+const RECENT_LIMIT = 30;
+const HEATMAP_WEEKS = 52;
+const DAY_RANGES = [1, 3, 7] as const;
+type DayRange = (typeof DAY_RANGES)[number];
+const TREND_RANGE_SETTING_KEY = "usage.tools.ui.trend.days";
+const BYTOOL_RANGE_SETTING_KEY = "usage.tools.ui.bytool.days";
+const AUTO_REFRESH_INTERVAL_MS = 30_000;
 
 const MONTH_NAMES_ZH = [
   "1月", "2月", "3月", "4月", "5月", "6月",
   "7月", "8月", "9月", "10月", "11月", "12月",
-]
+];
 
 // ---------------------------------------------------------------------------
 // Formatting
 // ---------------------------------------------------------------------------
 
 function formatCount(n: number): string {
-  if (n >= 10_000) return `${(n / 1000).toFixed(1)}K`
-  return String(n)
+  if (n >= 10_000) return `${(n / 1000).toFixed(1)}K`;
+  return String(n);
 }
 
-function formatDuration(ms: number | undefined, t: TranslateFn): string {
-  if (ms === undefined) return t("usage.tools.label.running")
-  return t("usage.tools.label.completed", { ms: String(Math.round(ms)) })
+function formatDuration(ms: number | undefined, t: PluginTranslateFn): string {
+  if (ms === undefined) return t("usage.tools.label.running");
+  return t("usage.tools.label.completed", { ms: String(Math.round(ms)) });
 }
 
 function formatShortSession(id: string | undefined): string {
-  if (!id) return "—"
-  return id.length > 8 ? id.slice(0, 8) + "…" : id
+  if (!id) return "—";
+  return id.length > 8 ? id.slice(0, 8) + "…" : id;
 }
 
 function formatClock(ts: number): string {
-  const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatMonthDay(day: string): string {
-  return day.slice(5)
+  return day.slice(5);
 }
 
-function dayRangeLabel(n: DayRange, t: TranslateFn): string {
-  return n === 1 ? t("usage.range.today") : t("usage.range.lastN", { n: String(n) })
+function dayRangeLabel(n: DayRange, t: PluginTranslateFn): string {
+  return n === 1 ? t("usage.range.today") : t("usage.range.lastN", { n: String(n) });
 }
 
 // ---------------------------------------------------------------------------
 // ToolsActivityTab — the analytics panel, behavior unchanged from the ext
 // ---------------------------------------------------------------------------
 
-export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
-  const reader = source?.read
-  const { t, language } = useT()
+export function ToolsActivityTab({ read }: { read: ToolActivityReadFn }) {
+  const { t, language } = usePluginT(usageToolsI18n);
 
-  const [summary, setSummary] = useState<MeterSummary | null>(null)
-  const [recent, setRecent] = useState<ToolInvocation[]>([])
-  const [heatmap, setHeatmap] = useState<ToolHeatmapCell[]>([])
-  const [trendDays, setTrendDays] = useState<DayRange>(7)
-  const [byToolDays, setByToolDays] = useState<DayRange>(7)
-  const [error, setError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<MeterSummary | null>(null);
+  const [recent, setRecent] = useState<ToolInvocation[]>([]);
+  const [heatmap, setHeatmap] = useState<ToolHeatmapCell[]>([]);
+  const [trendDays, setTrendDays] = useState<DayRange>(7);
+  const [byToolDays, setByToolDays] = useState<DayRange>(7);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void readUsagePref<DayRange>(TREND_RANGE_SETTING_KEY, 7)
-      .then((stored) => {
-        if (DAY_RANGES.includes(stored)) setTrendDays(stored)
-      })
-    void readUsagePref<DayRange>(BYTOOL_RANGE_SETTING_KEY, 7)
-      .then((stored) => {
-        if (DAY_RANGES.includes(stored)) setByToolDays(stored)
-      })
-  }, [])
+    void readUsagePref<DayRange>(TREND_RANGE_SETTING_KEY, 7).then((stored) => {
+      if (DAY_RANGES.includes(stored)) setTrendDays(stored);
+    });
+    void readUsagePref<DayRange>(BYTOOL_RANGE_SETTING_KEY, 7).then((stored) => {
+      if (DAY_RANGES.includes(stored)) setByToolDays(stored);
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
-    if (!reader) return
-    setError(null)
+    setError(null);
     try {
       const [s, r, h] = await Promise.all([
-        fetchToolSummary(reader),
-        fetchToolRecent(reader, RECENT_LIMIT),
-        fetchToolHeatmap(reader, HEATMAP_WEEKS),
-      ])
-      setSummary(s)
-      setRecent(r)
-      setHeatmap(h)
+        fetchToolSummary(read),
+        fetchToolRecent(read, RECENT_LIMIT),
+        fetchToolHeatmap(read, HEATMAP_WEEKS),
+      ]);
+      setSummary(s);
+      setRecent(r);
+      setHeatmap(h);
     } catch (e) {
-      setError((e as Error).message ?? String(e))
+      setError((e as Error).message ?? String(e));
     }
-  }, [reader])
+  }, [read]);
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refresh();
+  }, [refresh]);
 
-  // Push: main broadcasts (debounced) on every ledger write.
+  // Poll while mounted — the ledger is remote, with no push channel.
   useEffect(() => {
-    if (!source?.onChanged) return
-    return source.onChanged(() => void refresh())
-  }, [source, refresh])
+    const id = window.setInterval(() => {
+      void refresh();
+    }, AUTO_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [refresh]);
 
-  useRefetchOnFocus(() => void refresh())
+  useRefetchOnFocus(() => void refresh());
 
   const changeTrendRange = useCallback(
     (days: DayRange) => {
-      if (days === trendDays) return
-      setTrendDays(days)
-      writeUsagePref(TREND_RANGE_SETTING_KEY, days)
+      if (days === trendDays) return;
+      setTrendDays(days);
+      writeUsagePref(TREND_RANGE_SETTING_KEY, days);
     },
     [trendDays],
-  )
+  );
 
   const changeByToolRange = useCallback(
     (days: DayRange) => {
-      if (days === byToolDays) return
-      setByToolDays(days)
-      writeUsagePref(BYTOOL_RANGE_SETTING_KEY, days)
+      if (days === byToolDays) return;
+      setByToolDays(days);
+      writeUsagePref(BYTOOL_RANGE_SETTING_KEY, days);
     },
     [byToolDays],
-  )
+  );
 
   const trendBuckets = useMemo<ToolActivityDayBucket[]>(() => {
-    if (!summary) return []
-    return summary.last7Days.slice(0, trendDays)
-  }, [summary, trendDays])
+    if (!summary) return [];
+    return summary.last7Days.slice(0, trendDays);
+  }, [summary, trendDays]);
 
   const byToolView = useMemo(() => {
-    if (!summary) return [] as Array<{ tool: string; calls: number }>
+    if (!summary) return [] as Array<{ tool: string; calls: number }>;
     const rows = summary.byToolLast7.map((m) => {
-      const slice = m.perDay.slice(0, byToolDays)
-      const calls = slice.reduce((s, d) => s + d.calls, 0)
-      return { tool: m.tool, calls }
-    })
-    return rows.filter((r) => r.calls > 0).sort((a, b) => b.calls - a.calls)
-  }, [summary, byToolDays])
+      const slice = m.perDay.slice(0, byToolDays);
+      const calls = slice.reduce((s, d) => s + d.calls, 0);
+      return { tool: m.tool, calls };
+    });
+    return rows.filter((r) => r.calls > 0).sort((a, b) => b.calls - a.calls);
+  }, [summary, byToolDays]);
 
   const byToolTotal = useMemo(
     () => byToolView.reduce((s, r) => s + r.calls, 0),
     [byToolView],
-  )
+  );
 
   const sparkMax = useMemo(() => {
-    if (trendBuckets.length === 0) return 1
-    const peak = Math.max(...trendBuckets.map((d) => d.calls), 0)
-    return peak > 0 ? peak : 1
-  }, [trendBuckets])
-
-  // No reader injected (non-desktop host) — nothing to show.
-  if (!reader) {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <PageContent size="md">
-          <Empty>{t("usage.label.noData")}</Empty>
-        </PageContent>
-      </div>
-    )
-  }
+    if (trendBuckets.length === 0) return 1;
+    const peak = Math.max(...trendBuckets.map((d) => d.calls), 0);
+    return peak > 0 ? peak : 1;
+  }, [trendBuckets]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -306,7 +303,7 @@ export function ToolsActivityTab({ source }: { source?: ToolActivitySource }) {
         </PageContent>
       </ScrollArea>
     </div>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,9 +315,9 @@ function Section({
   trailing,
   children,
 }: {
-  title: string
-  trailing?: React.ReactNode
-  children: React.ReactNode
+  title: string;
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <section className="space-y-2">
@@ -332,21 +329,21 @@ function Section({
       </div>
       {children}
     </section>
-  )
+  );
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-muted-foreground/70">{children}</p>
+  return <p className="text-xs text-muted-foreground/70">{children}</p>;
 }
 
 function HeroStats({
   summary,
   t,
 }: {
-  summary: MeterSummary | null
-  t: TranslateFn
+  summary: MeterSummary | null;
+  t: PluginTranslateFn;
 }) {
-  const today = summary?.today
+  const today = summary?.today;
   return (
     <div className="grid grid-cols-3 gap-2">
       <HeroCard label={t("usage.tools.hero.calls")} value={today ? String(today.calls) : "0"} />
@@ -359,7 +356,7 @@ function HeroStats({
         value={today ? String(today.unfinished) : "0"}
       />
     </div>
-  )
+  );
 }
 
 function HeroCard({ label, value }: { label: string; value: string }) {
@@ -368,7 +365,7 @@ function HeroCard({ label, value }: { label: string; value: string }) {
       <p className="truncate text-lg font-semibold tabular-nums tracking-tight">{value}</p>
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
     </div>
-  )
+  );
 }
 
 function ToolRow({
@@ -376,11 +373,11 @@ function ToolRow({
   total,
   t,
 }: {
-  tool: { tool: string; calls: number }
-  total: number
-  t: TranslateFn
+  tool: { tool: string; calls: number };
+  total: number;
+  t: PluginTranslateFn;
 }) {
-  const pct = total > 0 ? Math.round((tool.calls / total) * 100) : 0
+  const pct = total > 0 ? Math.round((tool.calls / total) * 100) : 0;
   return (
     <li className="space-y-0.5 text-sm">
       <div className="grid grid-cols-[1fr,80px,40px] items-center gap-2">
@@ -401,11 +398,11 @@ function ToolRow({
         />
       </div>
     </li>
-  )
+  );
 }
 
 function SparkBar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div className="h-1.5 rounded-sm bg-muted">
       <div
@@ -413,7 +410,7 @@ function SparkBar({ value, max }: { value: number; max: number }) {
         style={{ width: `${pct}%` }}
       />
     </div>
-  )
+  );
 }
 
 function ToolHeatmap({
@@ -421,11 +418,11 @@ function ToolHeatmap({
   t,
   language,
 }: {
-  cells: ToolHeatmapCell[]
-  t: TranslateFn
-  language: string
+  cells: ToolHeatmapCell[];
+  t: PluginTranslateFn;
+  language: string;
 }) {
-  const isZh = (language ?? "").toLowerCase().startsWith("zh")
+  const isZh = (language ?? "").toLowerCase().startsWith("zh");
   return (
     <Heatmap
       cells={cells}
@@ -458,5 +455,5 @@ function ToolHeatmap({
       monthNames={isZh ? MONTH_NAMES_ZH : undefined}
       dowLabelWidth={isZh ? 18 : 16}
     />
-  )
+  );
 }

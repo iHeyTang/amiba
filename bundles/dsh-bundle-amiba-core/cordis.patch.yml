@@ -28,6 +28,8 @@
 
     - id: amiba-usage
       name: "@amiba/dsh-plugin-usage"
+      config:
+        root: !!js dshHomePath('amiba-tool-activity')
 
     - id: amiba-model-plane
       name: "@amiba/dsh-plugin-model-plane"

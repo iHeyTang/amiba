@@ -138,22 +138,6 @@ const api = {
   },
 
   /**
-   * Tool-activity ledger bridge for the Tools page. Capture + storage
-   * live in main (`tool-activity.ts`); `read` is a read-only window over
-   * the per-day buckets plus the lifetime aggregate, and `onChanged`
-   * relays main's debounced ledger-write broadcast so the renderer can
-   * refetch on push instead of polling.
-   */
-  toolActivity: {
-    read: (days: number) => ipcRenderer.invoke("tool-activity:read", { days }),
-    onChanged: (cb: () => void) => {
-      const handler = () => cb();
-      ipcRenderer.on("tool-activity:changed", handler);
-      return () => ipcRenderer.off("tool-activity:changed", handler);
-    },
-  },
-
-  /**
    * Workspace binding bridge. A bound directory gives the chat session
    * filesystem context; changes inside that tree are pushed back via
    * `onChanged` so the renderer can re-render the indicator and (later)
