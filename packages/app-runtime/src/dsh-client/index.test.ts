@@ -51,10 +51,10 @@ describe("DshApiClient", () => {
       makeRpcId: () => "rpc-remote",
     })
 
-    await client.call("amibaUsage/list", { args: {} })
+    await client.call("amibaAttachments/list", { args: {} })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:1234/api/amibaUsage/list",
+      "http://127.0.0.1:1234/api/amibaAttachments/list",
       expect.objectContaining({ method: "POST" }),
     )
   })

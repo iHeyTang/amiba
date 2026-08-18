@@ -231,8 +231,7 @@ const MODULES = [
   },
   {
     id: "usage",
-    enforced: false,
-    todo: "T9: the tokens surgery (T8) landed; the remaining reference is the interim packages/ui/src/usage remnant kept for ToolsActivityTab - T9 relocates it, then flip this module to enforced: true.",
+    enforced: true,
     text: [
       { label: "agentUsage platform-adapter key", pattern: boundary("agentUsage") },
       { label: "AgentUsageAdapter platform type", pattern: boundary("AgentUsageAdapter") },
@@ -249,8 +248,7 @@ const MODULES = [
   },
   {
     id: "tool-metering",
-    enforced: false,
-    todo: "T9: move tool-activity capture from apps/desktop/src/main/tool-activity.ts (+ its IPC/preload surface) into dsh-plugin-usage's runtime side, move ToolsActivityTab into the plugin client, then flip this module to enforced: true.",
+    enforced: true,
     text: [
       { label: "toolActivity IPC/preload surface", pattern: boundary("toolActivity") },
       { label: "tool-activity IPC channel prefix", pattern: /tool-activity:/u },
@@ -337,10 +335,12 @@ async function run() {
   }
 
   const strictNote = strictI18n ? " (including i18n bundles, --strict-i18n)" : "";
+  const clean = MODULES.filter((module) => module.enforced).map((module) => module.id);
+  const pending = MODULES.filter((module) => !module.enforced).map((module) => module.id);
   console.log(
     `[pull-the-plugin] verified ${files.length} source files across ${SCAN_ROOTS.join(", ")}${strictNote}: ` +
-      `${MODULES.filter((module) => module.enforced).map((module) => module.id).join(", ")} are clean; ` +
-      `${MODULES.filter((module) => !module.enforced).map((module) => module.id).join(", ")} remain mid-migration.`,
+      `${clean.join(", ")} are clean` +
+      (pending.length ? `; ${pending.join(", ")} remain mid-migration.` : "."),
   );
 }
 
