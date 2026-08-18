@@ -30,12 +30,36 @@ function contentText(value: unknown): string {
   return value
     .map((block) => {
       const item = record(block);
-      return item?.type === "text" && typeof item.text === "string"
-        ? item.text
-        : "";
+      if (item?.type === "text" && typeof item.text === "string") {
+        return item.text;
+      }
+      // Tool results nest their payload one level down:
+      // { type: "tool-result", toolCallId, content: [{ type: "text", … }] }
+      if (item?.type === "tool-result") return contentText(item.content);
+      return "";
     })
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Resolve a tool result's call id from the real DSH wire shape
+ * (`message.source.callId`, mirrored on the tool-result content block),
+ * falling back to the flat `message.toolCallId` used by older logs.
+ */
+function toolResultCallId(message: Record<string, unknown> | null): string {
+  if (typeof message?.toolCallId === "string") return message.toolCallId;
+  const source = record(message?.source);
+  if (typeof source?.callId === "string") return source.callId;
+  if (Array.isArray(message?.content)) {
+    for (const block of message.content) {
+      const item = record(block);
+      if (item?.type === "tool-result" && typeof item.toolCallId === "string") {
+        return item.toolCallId;
+      }
+    }
+  }
+  return "";
 }
 
 function messageFromEvent(event: AgentSessionEvent): Record<string, unknown> | null {
@@ -123,7 +147,7 @@ function applyToolCall(turn: AssistantTurn, entry: AgentSessionHistoryEntry): vo
 function applyToolResult(turn: AssistantTurn, entry: AgentSessionHistoryEntry): void {
   const data = entry.event.data;
   const message = record(data.message);
-  const callId = typeof message?.toolCallId === "string" ? message.toolCallId : "";
+  const callId = toolResultCallId(message);
   if (!callId) return;
   const prior = turn.tools.get(callId);
   turn.tools.set(callId, {
