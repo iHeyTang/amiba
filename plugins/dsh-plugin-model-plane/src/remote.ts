@@ -238,3 +238,15 @@ export const AMIBA_MODEL_PLANE_REMOTE: TypertRemoteContribution = {
     ),
   ],
 };
+
+/**
+ * Zod-inferred wire shapes for the plugin's own client surfaces (the
+ * settings section in `./client/`). Local by design: moved client code must
+ * not import `ModelPlane*` types from `@amiba/app-runtime/platform` — that
+ * platform mirror is scheduled for deletion once every consumer runs on the
+ * plugin's Remote face.
+ */
+export type ModelDefinitionShape = z.infer<typeof modelSchema>;
+export type ModelProviderProfileShape = z.infer<typeof providerSchema>;
+export type AgentModelSelectionShape = z.infer<typeof selectionSchema>;
+export type ModelPlaneSnapshotShape = z.infer<typeof snapshotSchema>;

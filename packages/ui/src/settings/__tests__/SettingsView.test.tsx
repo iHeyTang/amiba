@@ -6,11 +6,6 @@ import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
 import { SettingsPageActions } from "../page-chrome";
 
-vi.mock("../AgentModelConfigTab", () => ({
-  AgentModelConfigTab: () => (
-    <div data-testid="model-settings-view">models</div>
-  ),
-}));
 vi.mock("../AgentBehaviorEditor", () => ({
   SettingsAssistantBehavior: () => <div>Default behavior</div>,
 }));
@@ -45,7 +40,7 @@ import { SettingsView } from "../SettingsView";
 describe("SettingsView DSH navigation", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    window.history.replaceState(null, "", "/#models");
+    window.history.replaceState(null, "", "/#behavior");
     setPlatform({
       kind: "desktop",
       storage: {
@@ -83,7 +78,7 @@ describe("SettingsView DSH navigation", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Models & services" }),
+      screen.getByRole("button", { name: "Behavior & identity" }),
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Tools" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Skills" })).toBeVisible();
@@ -124,7 +119,18 @@ describe("SettingsView DSH navigation", () => {
   it("does not preserve hashes for removed compatibility surfaces", () => {
     window.history.replaceState(null, "", "/#multi-model-collaboration");
     render(<SettingsView />);
-    expect(screen.queryByTestId("model-settings-view")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("no longer routes #models as a registry page (the section moved to dsh-plugin-model-plane)", () => {
+    window.history.replaceState(null, "", "/#models");
+    render(<SettingsView />);
+    expect(
+      screen.queryByRole("button", { name: "Models & services" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -192,10 +198,10 @@ describe("SettingsView DSH navigation", () => {
   });
 
   it("renders the unified head title for the active page", async () => {
-    window.history.replaceState(null, "", "/#models");
+    window.history.replaceState(null, "", "/#behavior");
     render(<SettingsView />);
     expect(
-      await screen.findByRole("heading", { name: "Models & services" }),
+      await screen.findByRole("heading", { name: "Behavior & identity" }),
     ).toBeVisible();
   });
 
