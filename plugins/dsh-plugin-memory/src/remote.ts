@@ -35,6 +35,7 @@ const snapshotSchema = z.object({
 });
 
 const resetResultSchema = z.object({ deletedIds: z.array(z.string()) });
+const presetIdsSchema = z.array(z.string());
 const stringCodec = {
   mode: "strict" as const,
   typeSymbol: "typescript#string",
@@ -45,6 +46,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaMemory: {
       list(preset: string): Promise<RemoteResult<AmibaMemorySnapshot>>;
+      presets(): Promise<RemoteResult<string[]>>;
       reset(
         preset: string,
         target: AmibaMemoryTarget | "all",
@@ -56,6 +58,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaMemory/list": (
       preset: string,
     ) => Promise<RemoteResult<AmibaMemorySnapshot>>;
+    "amibaMemory/presets": () => Promise<RemoteResult<string[]>>;
     "amibaMemory/reset": (
       preset: string,
       target: AmibaMemoryTarget | "all",
@@ -85,6 +88,19 @@ export const AMIBA_MEMORY_REMOTE: TypertRemoteContribution = {
         mode: "strict",
         typeSymbol: "@amiba/dsh-plugin-memory#AmibaMemorySnapshot",
         schema: snapshotSchema,
+      },
+    },
+    {
+      id: "@amiba/dsh-plugin-memory#amibaMemory/presets",
+      service: "amibaMemory",
+      namespace: "amibaMemory",
+      method: "presets",
+      invocation: { kind: "direct" },
+      parameters: [],
+      result: {
+        mode: "strict",
+        typeSymbol: "@amiba/dsh-plugin-memory#AmibaMemoryPresetIds",
+        schema: presetIdsSchema,
       },
     },
     {

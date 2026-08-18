@@ -4,7 +4,6 @@ export {
   SettingsAssistantBehavior,
 } from "./AgentBehaviorEditor";
 export { SettingsLogs } from "./SettingsLogs";
-export { SettingsMemory } from "./SettingsMemory";
 export { SettingsAgentsPage } from "./SettingsAgentsPage";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";

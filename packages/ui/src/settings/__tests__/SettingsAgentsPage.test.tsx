@@ -59,20 +59,6 @@ vi.mock("../../usage", () => ({
   ),
 }));
 
-vi.mock("../SettingsMemory", () => ({
-  SettingsMemory: ({
-    embedded,
-    profileId,
-  }: {
-    embedded?: boolean;
-    profileId?: string;
-  }) => (
-    <div data-embedded={String(embedded)} data-testid="profile-memory">
-      {profileId}
-    </div>
-  ),
-}));
-
 import { SettingsAgentsPage } from "../SettingsAgentsPage";
 
 function profile(
@@ -334,11 +320,6 @@ describe("SettingsAgentsPage", () => {
     expect(await screen.findByTestId("profile-capabilities")).toHaveTextContent(
       "researcher",
     );
-
-    await userEvent.click(screen.getByRole("button", { name: "Memory" }));
-    expect(await screen.findByTestId("profile-memory")).toHaveTextContent(
-      "researcher",
-    );
   });
 
   it("renders a tab per ledger-registered preset section and forwards the profileId to its render callback", async () => {
@@ -369,7 +350,7 @@ describe("SettingsAgentsPage", () => {
     });
   });
 
-  it("suppresses the hardcoded memory tab when the ledger registers a 'memory' section", async () => {
+  it("renders a ledger-registered 'memory' section as an ordinary tab now that memory is fully plugin-owned", async () => {
     const onOpenDetail = vi.fn();
     const renderPresetSection = vi.fn(() => (
       <div data-testid="ledger-memory" />
@@ -382,13 +363,38 @@ describe("SettingsAgentsPage", () => {
     });
 
     await screen.findByTestId("behavior-editor");
-    // Exactly one "Memory" tab — the ledger entry, not the hardcoded one.
     const memoryTabs = screen.getAllByRole("button", { name: "Memory" });
     expect(memoryTabs).toHaveLength(1);
 
     await userEvent.click(memoryTabs[0]);
 
     expect(await screen.findByTestId("ledger-memory")).toBeInTheDocument();
-    expect(screen.queryByTestId("profile-memory")).not.toBeInTheDocument();
+    expect(renderPresetSection).toHaveBeenLastCalledWith("memory", {
+      profileId: "researcher",
+    });
+  });
+
+  it("ignores a ledger section claiming the reserved 'behavior' id", async () => {
+    const onOpenDetail = vi.fn();
+    const renderPresetSection = vi.fn(() => (
+      <div data-testid="ledger-behavior" />
+    ));
+    renderPage({
+      detail: "researcher",
+      onOpenDetail,
+      presetSections: [{ id: "behavior", label: "Ledger Behavior" }],
+      renderPresetSection,
+    });
+
+    await screen.findByTestId("behavior-editor");
+    // Exactly one "Behavior & identity" tab — the native one; a ledger entry
+    // claiming the reserved id never adds a second tab or shadows the body.
+    expect(
+      screen.getAllByRole("button", { name: "Behavior & identity" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Ledger Behavior" }),
+    ).not.toBeInTheDocument();
+    expect(renderPresetSection).not.toHaveBeenCalled();
   });
 });

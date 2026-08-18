@@ -6,7 +6,6 @@ export * from "./channels";
 export * from "./config";
 export * from "./attachments";
 export * from "./runtime-permissions";
-export * from "./runtime-memory";
 export * from "./agent-presets";
 export * from "./tool-activity";
 export * from "./sessions-runtime";

@@ -1,6 +1,5 @@
 import type {
   AgentCommandEntry,
-  AgentMemoryAdapter,
   AgentMessageCenterSnapshot,
   AgentMessagesAdapter,
   AgentMcpAdapter,
@@ -26,7 +25,6 @@ type DshPlatformKey =
   | "agentCredentials"
   | "agentPermissions"
   | "modelPlane"
-  | "agentMemory"
   | "agentSchedules"
   | "agentSkills"
   | "agentCommands"
@@ -158,16 +156,6 @@ async function defaultPermissionDescriptor(client: DshApiClient) {
   return { described, namespace };
 }
 
-async function defaultPreset(
-  client: DshApiClient,
-  requested?: string,
-): Promise<string> {
-  const explicit = requested?.trim();
-  if (explicit && explicit !== "default") return explicit;
-  const roster = await client.listAgentPresets();
-  return roster.presets.find((preset) => preset.isDefault)?.id ?? "standard";
-}
-
 async function ensureLiveSession(
   client: DshApiClient,
   sessionId: string,
@@ -251,19 +239,6 @@ export function createDshPlatformAdapters(
     async remove(attachmentId: string) {
       await client.call("amibaAttachments/removeAttachment", {
         args: { attachmentId },
-      });
-    },
-  };
-
-  const memory: AgentMemoryAdapter = {
-    async list(preset) {
-      return client.call("amibaMemory/list", {
-        args: { preset: await defaultPreset(client, preset) },
-      });
-    },
-    async reset(preset, target = "all") {
-      return client.call("amibaMemory/reset", {
-        args: { preset: await defaultPreset(client, preset), target },
       });
     },
   };
@@ -500,7 +475,6 @@ export function createDshPlatformAdapters(
         return updated;
       },
     },
-    agentMemory: memory,
     agentSchedules: schedules,
     agentSkills: skills,
     agentCommands: {

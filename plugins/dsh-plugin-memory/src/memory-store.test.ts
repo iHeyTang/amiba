@@ -64,6 +64,16 @@ describe("AmibaMemoryStore", () => {
     expect(snapshot.targets[0]?.flaggedCount).toBe(1);
   });
 
+  it("lists the distinct preset ids currently holding memory", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "amiba-memory-"));
+    const store = new AmibaMemoryStore(root);
+    expect(await store.presetIds()).toEqual([]);
+    await store.store({ preset: "researcher", target: "memory", text: "a" });
+    await store.store({ preset: "standard", target: "user", text: "b" });
+    await store.store({ preset: "researcher", target: "user", text: "c" });
+    expect(await store.presetIds()).toEqual(["researcher", "standard"]);
+  });
+
   it("enforces entry and target limits", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "amiba-memory-"));
     const store = new AmibaMemoryStore(root, {

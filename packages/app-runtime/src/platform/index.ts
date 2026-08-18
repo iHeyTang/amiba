@@ -313,40 +313,6 @@ export interface AgentModelsAdapter {
   }>;
 }
 
-export type AgentMemoryTarget = "memory" | "user";
-
-export interface AgentMemoryEntry {
-  id: string;
-  preset: string;
-  target: AgentMemoryTarget;
-  text: string;
-  flagged: string | null;
-  createdAt: string;
-  updatedAt: string;
-  sourceSessionId?: string;
-}
-
-export interface AgentMemoryTargetView {
-  target: AgentMemoryTarget;
-  path: string;
-  entries: AgentMemoryEntry[];
-  charCount: number;
-  charLimit: number;
-  flaggedCount: number;
-}
-
-/** Amiba's DSH-native, preset-scoped long-term memory plugin surface. */
-export interface AgentMemoryAdapter {
-  list(preset?: string): Promise<{
-    preset: string;
-    targets: AgentMemoryTargetView[];
-  }>;
-  reset(
-    preset?: string,
-    target?: AgentMemoryTarget | "all",
-  ): Promise<{ deletedIds: string[] }>;
-}
-
 export interface AgentScheduleView {
   id: string;
   sessionId: string;
@@ -1006,7 +972,6 @@ export interface PlatformAdapter {
   modelPlane?: ModelPlaneAdapter;
   /** Session-scoped DSH execution projection and selection. */
   agentModels?: AgentModelsAdapter;
-  agentMemory?: AgentMemoryAdapter;
   agentSchedules?: AgentSchedulesAdapter;
   agentSkills?: AgentSkillsAdapter;
   agentCommands?: AgentCommandsAdapter;

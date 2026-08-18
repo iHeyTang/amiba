@@ -5,6 +5,11 @@ import {
   cn,
   PageContent,
   ScrollArea,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SettingsPageActionButton,
   SettingsPageActions,
   SettingsPageDescription,
@@ -12,7 +17,13 @@ import {
   type PluginLanguage,
 } from "@amiba/ui/plugin";
 import { Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import type {
   AmibaMemorySnapshot,
@@ -24,7 +35,7 @@ export const name = "amiba-memory-ui";
 export const inject = ["slots", "remote"];
 
 const SECTION_ID = "memory";
-const PRESET = "standard";
+const DEFAULT_PRESET = "standard";
 
 const ZH = {
   active: "已启用",
@@ -41,6 +52,7 @@ const ZH = {
   pluginTitle: "DSH 长期记忆插件",
   preset: "记忆作用域",
   presetDescription: "每个 DSH Agent Preset 拥有独立的长期记忆集合。",
+  presetSwitcherLabel: "切换记忆作用域",
   refresh: "刷新",
   subtitle: "由原生 DSH 插件提供、按 Preset 隔离的长期记忆",
   subtitleTooltip: "DSH 会话历史与压缩属于会话记忆，和跨会话长期记忆相互独立。",
@@ -66,6 +78,7 @@ const EN: typeof ZH = {
   preset: "Memory scope",
   presetDescription:
     "Each DSH agent preset keeps an independent long-term memory collection.",
+  presetSwitcherLabel: "Switch memory scope",
   refresh: "Refresh",
   subtitle: "Preset-scoped long-term memory supplied by a native DSH plugin",
   subtitleTooltip:
@@ -180,14 +193,29 @@ function MemoryBlock({
 }
 
 type MemoryRemote = ClientContext["remote"]["amibaMemory"];
-type MemorySectionProps = PropsRuntime<"amiba.settings.section"> & {
-  listMemory: MemoryRemote["list"];
-};
 
-function MemorySettings({
+/**
+ * Shared memory body: the settings-section registration (top-level Settings,
+ * carries the preset switcher) and the preset-detail registration (one tab
+ * per agent preset, scoped by `profileId`) both render this, differing only
+ * in which preset they read and whether they own the page's header actions.
+ */
+function MemoryView({
+  embedded = false,
   headerActionsHost,
   listMemory,
-}: MemorySectionProps): ReactNode {
+  preset,
+  presetControl,
+}: {
+  embedded?: boolean;
+  headerActionsHost?: () => HTMLElement | null;
+  listMemory: MemoryRemote["list"];
+  preset: string;
+  /** Interactive replacement for the read-only preset value cell — only the
+   *  top-level settings section supplies one; preset-detail tabs are already
+   *  scoped by their tab, so they keep the plain read-out. */
+  presetControl?: ReactNode;
+}): ReactNode {
   const { language } = usePluginT();
   const copy = labels(language);
   const [snapshot, setSnapshot] = useState<AmibaMemorySnapshot | null>(null);
@@ -198,7 +226,7 @@ function MemorySettings({
     setLoading(true);
     setError(null);
     try {
-      const result = await listMemory(PRESET);
+      const result = await listMemory(preset);
       if (!result.ok) throw new Error(result.error.message);
       setSnapshot(result.value);
     } catch (cause) {
@@ -207,32 +235,48 @@ function MemorySettings({
     } finally {
       setLoading(false);
     }
-  }, [listMemory]);
+  }, [listMemory, preset]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const items = snapshot?.targets ?? [];
+  const refreshButton = (
+    <SettingsPageActionButton
+      aria-label={copy.refresh}
+      disabled={loading}
+      icon
+      onClick={() => void refresh()}
+      title={copy.refresh}
+      type="button"
+      variant="ghost"
+    >
+      {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+    </SettingsPageActionButton>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <SettingsPageActions host={headerActionsHost}>
-        <SettingsPageActionButton
-          aria-label={copy.refresh}
-          disabled={loading}
-          icon
-          onClick={() => void refresh()}
-          title={copy.refresh}
-          type="button"
-          variant="ghost"
-        >
-          {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-        </SettingsPageActionButton>
-      </SettingsPageActions>
+      {embedded ? null : (
+        <SettingsPageActions host={headerActionsHost}>
+          {refreshButton}
+        </SettingsPageActions>
+      )}
       <ScrollArea className="min-h-0 flex-1">
-        <PageContent bodyClassName="space-y-4" size="md">
-          <SettingsPageDescription>{copy.subtitle}</SettingsPageDescription>
+        <PageContent
+          bodyClassName="space-y-4"
+          className={embedded ? "pt-4" : undefined}
+          size="md"
+        >
+          {embedded ? (
+            <div className="flex items-center justify-between gap-3">
+              <SettingsPageDescription>{copy.subtitle}</SettingsPageDescription>
+              <div className="flex items-center gap-1">{refreshButton}</div>
+            </div>
+          ) : (
+            <SettingsPageDescription>{copy.subtitle}</SettingsPageDescription>
+          )}
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
           <section className="rounded-md border border-border/60 bg-muted/10">
             <div className="flex items-center gap-4 px-4 py-3">
@@ -253,9 +297,11 @@ function MemorySettings({
                   {copy.presetDescription}
                 </p>
               </div>
-              <div className="truncate rounded-md border border-input bg-background px-3 py-2 font-mono text-xs">
-                {snapshot?.preset ?? PRESET}
-              </div>
+              {presetControl ?? (
+                <div className="truncate rounded-md border border-input bg-background px-3 py-2 font-mono text-xs">
+                  {snapshot?.preset ?? preset}
+                </div>
+              )}
             </div>
           </section>
           {items.map((entry) => (
@@ -267,30 +313,138 @@ function MemorySettings({
   );
 }
 
-/** Register one ledger-backed Settings section from Memory's Client half. */
+type MemorySectionProps = PropsRuntime<"amiba.settings.section"> & {
+  listMemory: MemoryRemote["list"];
+  listPresets: MemoryRemote["presets"];
+};
+
+/** Top-level Settings section: adds the preset switcher driving which
+ *  preset's memory `MemoryView` displays. */
+function MemorySettings({
+  headerActionsHost,
+  listMemory,
+  listPresets,
+}: MemorySectionProps): ReactNode {
+  const { language } = usePluginT();
+  const copy = labels(language);
+  const [presetOptions, setPresetOptions] = useState<string[]>([
+    DEFAULT_PRESET,
+  ]);
+  const [preset, setPreset] = useState(DEFAULT_PRESET);
+  const [presetsLoading, setPresetsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await listPresets();
+        if (cancelled || !result.ok || result.value.length === 0) return;
+        setPresetOptions(result.value);
+        setPreset((current) =>
+          result.value.includes(current)
+            ? current
+            : result.value.includes(DEFAULT_PRESET)
+              ? DEFAULT_PRESET
+              : (result.value[0] ?? DEFAULT_PRESET),
+        );
+      } finally {
+        if (!cancelled) setPresetsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [listPresets]);
+
+  return (
+    <MemoryView
+      headerActionsHost={headerActionsHost}
+      listMemory={listMemory}
+      preset={preset}
+      presetControl={
+        <Select
+          disabled={presetsLoading}
+          onValueChange={setPreset}
+          value={preset}
+        >
+          <SelectTrigger
+            aria-label={copy.presetSwitcherLabel}
+            className="h-9 font-mono text-xs"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {presetOptions.map((id) => (
+              <SelectItem key={id} value={id}>
+                {id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      }
+    />
+  );
+}
+
+type MemoryPresetSectionProps = PropsRuntime<"amiba.agentPreset.section"> & {
+  listMemory: MemoryRemote["list"];
+};
+
+/** Preset-detail tab (M1 `amiba.agentPreset.section`): the same view,
+ *  scoped to the owning preset instead of a user-driven switcher. */
+function MemoryPresetSection({
+  listMemory,
+  profileId,
+}: MemoryPresetSectionProps): ReactElement {
+  return <MemoryView embedded listMemory={listMemory} preset={profileId} />;
+}
+
+/** Register the Settings section and the preset-detail section from Memory's
+ *  Client half — both read the same `remote.amibaMemory` face. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_MEMORY_REMOTE);
   // Mounting contributes `remote.amibaMemory`; Cordis still requires consumers
   // to declare that dynamically-created service before reading it. Keeping the
-  // UI registration in a dependent fiber also guarantees that the Settings
-  // entry disappears if the Remote face is ever retracted.
+  // UI registrations in a dependent fiber also guarantees both entries
+  // disappear together if the Remote face is ever retracted.
   const sectionFiber = ctx.inject(
     ["slots", "remote.amibaMemory"],
     (injectedCtx) => {
       const remote = injectedCtx.remote.amibaMemory;
       const listMemory: MemoryRemote["list"] = (preset) => remote.list(preset);
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.settings.section",
-            id: SECTION_ID,
-            order: 300,
-            label: () => labels().nav,
-            inject: () => ({ listMemory }),
-          },
-          MemorySettings,
-        ),
+      const listPresets: MemoryRemote["presets"] = () => remote.presets();
+      const disposeSection = injectedCtx.slots.inject(
+        "amiba.settings.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.settings.section",
+              id: SECTION_ID,
+              order: 300,
+              label: () => labels().nav,
+              inject: () => ({ listMemory, listPresets }),
+            },
+            MemorySettings,
+          ),
       );
+      const disposePresetSection = injectedCtx.slots.inject(
+        "amiba.agentPreset.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.agentPreset.section",
+              id: SECTION_ID,
+              order: 300,
+              label: () => labels().nav,
+              inject: () => ({ listMemory }),
+            },
+            MemoryPresetSection,
+          ),
+      );
+      return () => {
+        disposePresetSection();
+        disposeSection();
+      };
     },
   );
   await sectionFiber;

@@ -42,7 +42,6 @@ import {
 import { SkillsPage } from "../skills";
 import { ToolsPage } from "../usage";
 import { AgentBehaviorEditor } from "./AgentBehaviorEditor";
-import { SettingsMemory } from "./SettingsMemory";
 import {
   SettingsPageActionButton,
   SettingsPageActions,
@@ -213,9 +212,16 @@ function AgentPresetDetail({
   const [section, setSection] = useState<AgentWorkspaceSection>("behavior");
   const [editingName, setEditingName] = useState(false);
   const [renameDraft, setRenameDraft] = useState(profile.name);
-  const ledgerIds = useMemo(
-    () => new Set((presetSections ?? []).map((entry) => entry.id)),
+  // "behavior" is the native tab rendered by AgentBehaviorEditor below — it
+  // is not a ledger concept, so a plugin registering that id is ignored
+  // rather than allowed to shadow or duplicate it.
+  const ledgerSections = useMemo(
+    () => (presetSections ?? []).filter((entry) => entry.id !== "behavior"),
     [presetSections],
+  );
+  const ledgerIds = useMemo(
+    () => new Set(ledgerSections.map((entry) => entry.id)),
+    [ledgerSections],
   );
 
   useSettingsPageHeader({ title: profile.name, onBack });
@@ -233,14 +239,13 @@ function AgentPresetDetail({
   }
 
   // Hardcoded tabs stay until later tasks migrate each module to a ledger
-  // registration (T2-T4). A ledger entry whose id matches one of these wins
+  // registration (T3-T4). A ledger entry whose id matches one of these wins
   // — the hardcoded tab is dropped from the strip and its body defers to
   // renderPresetSection instead, so a later module flip is just registering.
   const hardcodedSections: Array<{ id: AgentWorkspaceSection; label: string }> =
     [
       { id: "skills", label: t("options.nav.skills") },
       { id: "capabilities", label: t("options.nav.tools") },
-      { id: "memory", label: t("options.nav.memory") },
     ].filter((item) => !ledgerIds.has(item.id));
 
   const workspaceSections: Array<{
@@ -249,7 +254,7 @@ function AgentPresetDetail({
   }> = [
     { id: "behavior", label: t("options.agents.section.behavior") },
     ...hardcodedSections,
-    ...(presetSections ?? []),
+    ...ledgerSections,
   ];
 
   return (
@@ -371,9 +376,7 @@ function AgentPresetDetail({
         <SkillsPage embedded key={profile.name} profileId={profile.name} />
       ) : section === "capabilities" ? (
         <ToolsPage embedded key={profile.name} profileId={profile.name} />
-      ) : (
-        <SettingsMemory embedded key={profile.name} profileId={profile.name} />
-      )}
+      ) : null}
     </>
   );
 }

@@ -288,6 +288,17 @@ export class AmibaMemoryStore {
     );
   }
 
+  /**
+   * Every preset id that currently owns at least one stored entry, sorted for
+   * deterministic display. This is a storage-derived fallback roster — it
+   * only knows presets that have actually written memory, not the full
+   * engine roster (a fresh preset with no memory yet is invisible here).
+   */
+  async presetIds(): Promise<string[]> {
+    const document = await readDocument(this.file);
+    return [...new Set(document.entries.map((entry) => entry.preset))].sort();
+  }
+
   async store(input: {
     preset: string;
     target: AmibaMemoryTarget;

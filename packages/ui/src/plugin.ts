@@ -15,6 +15,13 @@ export { cn } from "./primitives/cn";
 export { PageContent } from "./primitives/page-content";
 export { ScrollArea } from "./primitives/scroll-area";
 export {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./primitives/select";
+export {
   NavigationGroupLabel,
   NavigationRow,
 } from "./navigation/NavigationRow";
