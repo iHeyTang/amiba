@@ -197,7 +197,6 @@ export const zhCN: Messages = {
   // Options nav
   "options.nav.appearance": "外观",
   "options.nav.shortcuts": "快捷键",
-  "options.nav.agents": "智能体预设",
   "options.nav.skills": "技能",
   "options.nav.memory": "记忆",
   "options.nav.messaging": "通知渠道",
@@ -211,25 +210,8 @@ export const zhCN: Messages = {
   "options.nav.section.diagnostics": "诊断",
   "options.nav.section.extensions": "扩展",
 
-  // Agent profiles
-  "options.agents.title": "智能体预设",
-  "options.agents.profiles": "智能体预设",
-  "options.agents.active": "默认任务预设",
-  "options.agents.defaultShort": "默认",
-  "options.agents.setActive": "设为默认任务预设",
-  "options.agents.create": "新建智能体预设",
-  "options.agents.rename": "重命名智能体预设",
-  "options.agents.name": "预设名称",
-  "options.agents.startFrom": "创建方式",
-  "options.agents.fresh": "当前默认预设",
-  "options.agents.displayName": "显示名称",
-  "options.agents.displayNamePlaceholder": "例如：资料研究员",
-  "options.agents.noDescription": "未添加描述",
-  "options.agents.customEmptyTitle": "还没有独立智能体预设",
-  "options.agents.customEmptyDescription":
-    "助手一级入口管理默认配置；在这里新建需要独立行为、技能、工具或记忆的智能体。",
-  "options.agents.cloneDefault": "Amiba",
-  "options.agents.empty": "暂无智能体预设",
+  // Agent behavior & identity（预设管理 UI 已迁移到 dsh-plugin-agent-preset
+  // 并自带 overlay 词典；这里只保留 host 原生「行为与人设」页面及其编辑器的键）
   "options.agents.section.behavior": "行为与人设",
   "options.agents.role.title": "描述",
   "options.agents.role.description":
@@ -239,14 +221,9 @@ export const zhCN: Messages = {
   "options.agents.soul.description":
     "由这个 DSH 智能体预设统一拥有的长期身份、原则、工作方式与表达风格。",
   "options.agents.soul.placeholder": "描述这个智能体应该如何思考、工作与沟通…",
-  "options.agents.deleteConfirm": "删除「{name}」及其预设数据？",
   "options.agents.loadFailed": "无法加载智能体预设",
   "options.agents.soulLoadFailed": "无法加载 SOUL.md",
   "options.agents.saveFailed": "无法保存预设",
-  "options.agents.activateFailed": "无法切换默认预设",
-  "options.agents.createFailed": "无法新建预设",
-  "options.agents.renameFailed": "无法重命名预设",
-  "options.agents.deleteFailed": "无法删除预设",
 
   // Task agent picker
   "sidepanel.agentPicker.label": "选择智能体",

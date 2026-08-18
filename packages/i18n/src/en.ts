@@ -206,7 +206,6 @@ export const en = {
   // Options nav
   "options.nav.appearance": "Appearance",
   "options.nav.shortcuts": "Shortcuts",
-  "options.nav.agents": "Agent presets",
   "options.nav.skills": "Skills",
   "options.nav.memory": "Memory",
   "options.nav.messaging": "Message channels",
@@ -220,25 +219,9 @@ export const en = {
   "options.nav.section.diagnostics": "Diagnostics",
   "options.nav.section.extensions": "Extensions",
 
-  // Agent profiles
-  "options.agents.title": "Agent presets",
-  "options.agents.profiles": "Agent presets",
-  "options.agents.active": "Default task preset",
-  "options.agents.defaultShort": "Default",
-  "options.agents.setActive": "Make default task preset",
-  "options.agents.create": "New agent preset",
-  "options.agents.rename": "Rename agent preset",
-  "options.agents.name": "Preset name",
-  "options.agents.startFrom": "Start from",
-  "options.agents.fresh": "Current default preset",
-  "options.agents.displayName": "Display name",
-  "options.agents.displayNamePlaceholder": "For example: Researcher",
-  "options.agents.noDescription": "No description",
-  "options.agents.customEmptyTitle": "No independent agent presets",
-  "options.agents.customEmptyDescription":
-    "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, skills, tools, or memory.",
-  "options.agents.cloneDefault": "Amiba",
-  "options.agents.empty": "No agent presets",
+  // Agent behavior & identity (the preset-management UI moved to
+  // dsh-plugin-agent-preset with its own overlay dict; these keys serve the
+  // host-native Behavior & identity page and its editor only)
   "options.agents.section.behavior": "Behavior & identity",
   "options.agents.role.title": "Description",
   "options.agents.role.description":
@@ -250,14 +233,9 @@ export const en = {
     "Durable identity, working principles, and expression owned by this DSH Agent Preset.",
   "options.agents.soul.placeholder":
     "Describe how this agent should think, work, and communicate…",
-  "options.agents.deleteConfirm": "Delete “{name}” and its preset data?",
   "options.agents.loadFailed": "Couldn't load agent presets",
   "options.agents.soulLoadFailed": "Couldn't load SOUL.md",
   "options.agents.saveFailed": "Couldn't save the preset",
-  "options.agents.activateFailed": "Couldn't change the default preset",
-  "options.agents.createFailed": "Couldn't create the preset",
-  "options.agents.renameFailed": "Couldn't rename the preset",
-  "options.agents.deleteFailed": "Couldn't delete the preset",
 
   // Task agent picker
   "sidepanel.agentPicker.label": "Choose agent",

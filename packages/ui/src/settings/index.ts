@@ -3,7 +3,6 @@ export {
   SettingsAssistantBehavior,
 } from "./AgentBehaviorEditor";
 export { SettingsLogs } from "./SettingsLogs";
-export { SettingsAgentsPage } from "./SettingsAgentsPage";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";
 export { SettingsView, type SettingsViewProps } from "./SettingsView";

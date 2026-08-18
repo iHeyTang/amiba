@@ -19,9 +19,10 @@ import { APP_SIDEBAR_DEFAULT_WIDTH } from "../navigation/sidebar-layout";
  * catch-all:
  *   General:     Appearance → Shortcuts → Usage
  *   Assistant:   Behavior & identity, followed by DSH plugin-owned
- *                sections such as Models & services, Tools, and Skills
+ *                sections such as Agent presets, Models & services, Tools,
+ *                and Skills
  *   Plugins:      supplied by DSH Client plugins through the section ledger
- *   Advanced:    Agent presets → Status → Logs
+ *   Advanced:    Status → Logs
  *
  * The registry in ./settings-pages is the single source of navigation
  * entries, head titles, and routing targets — this component only owns the
@@ -75,8 +76,9 @@ export interface SettingsViewProps {
     /**
      * Render target for one DSH plugin-owned agent-preset detail section,
      * scoped to the preset the ledger tab was opened under. Forwarded to
-     * the active page as `renderPresetSection`; only the agents page reads
-     * it today.
+     * the active page as `renderPresetSection`; no registry page reads it
+     * today (the agents page moved to dsh-plugin-agent-preset, which emits
+     * the same slot marker itself) — kept as the generic mechanism.
      */
     presetSection?: (
       sectionId: string,
@@ -135,8 +137,8 @@ export interface SettingsViewProps {
   dshSections?: readonly { id: string; label: string }[];
   /**
    * Ledger of DSH plugin-owned agent-preset detail sections. Passed through
-   * to every registry page as `presetSections`; only the agents page (which
-   * renders the preset detail tab strip) consumes it.
+   * to every registry page as `presetSections`; no registry page consumes
+   * it since the agents page moved to dsh-plugin-agent-preset.
    */
   dshPresetSections?: readonly { id: string; label: string }[];
 }
@@ -274,7 +276,7 @@ export function SettingsView({
             ))}
             {slots?.assistantNavigation?.(dshSection)}
 
-            {/* ── Advanced — hidden until a user needs scoped agents ── */}
+            {/* ── Advanced — diagnostics, collapsed by default ── */}
             <button
               aria-expanded={advancedOpen}
               className="mt-3 flex h-7 w-full items-center gap-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:text-muted-foreground"

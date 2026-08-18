@@ -264,6 +264,32 @@ const MODULES = [
     ],
   },
   {
+    id: "agent-preset-ui",
+    enforced: true,
+    // Preset DATA stays engine/host-plane-native by design: the
+    // `getPlatform().agentPresets` adapter, the `AgentPreset` platform type,
+    // and the app-runtime core helpers still back the host-native
+    // 行为与人设 (Behavior & identity) page and are NOT forbidden here.
+    // Only the preset-MANAGEMENT UI (roster + drill-in detail) is
+    // plugin-owned (dsh-plugin-agent-preset).
+    text: [
+      { label: "SettingsAgentsPage host component", pattern: boundary("SettingsAgentsPage") },
+      { label: "AgentPresetList moved component", pattern: boundary("AgentPresetList") },
+      { label: "AgentPresetDetail moved component", pattern: boundary("AgentPresetDetail") },
+      { label: "DshAgentPresetsPage plugin component", pattern: boundary("DshAgentPresetsPage") },
+      { label: "options.nav.agents retired nav key", pattern: /options\.nav\.agents/u },
+      {
+        label:
+          "options.agents.* management-UI i18n family (behavior-editor keys excepted)",
+        pattern:
+          /options\.agents\.(?!loadFailed\b|saveFailed\b|soulLoadFailed\b|section\.behavior\b|role\.|soul\.)/u,
+      },
+    ],
+    paths: [
+      "packages/ui/src/settings/SettingsAgentsPage.tsx",
+    ],
+  },
+  {
     id: "model-plane",
     enforced: true,
     text: [
