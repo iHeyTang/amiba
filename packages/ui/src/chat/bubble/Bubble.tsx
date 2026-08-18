@@ -183,32 +183,34 @@ export function Bubble({
 
     return (
       <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
-        {hasReasoningFold && (
-          /* The thought fold precedes everything: reasoning happens before
-             the answer, and it renders regardless of trace suppression. */
-          <div className={cn(hasBody || traceVisible ? "mb-2" : "")}>
-            <ReasoningFold
-              reasoningText={trace.reasoningText}
-              reasoningMs={m.reasoningMs}
-              streaming={!!m.streaming}
-            />
-          </div>
-        )}
-        {traceVisible && (
+        {(hasReasoningFold || traceVisible) && (
+          /* The thought fold precedes everything and shares one tight
+             cluster with the execution rows, regardless of trace
+             suppression. */
           <div className={cn("flex flex-col gap-0.5", hasBody ? "mb-2" : "")}>
-            {trace.fallbackToolDetails.length > 0 && (
+            {hasReasoningFold && (
+              <ReasoningFold
+                reasoningText={trace.reasoningText}
+                reasoningMs={m.reasoningMs}
+                streaming={!!m.streaming}
+              />
+            )}
+            {traceVisible && trace.fallbackToolDetails.length > 0 && (
               <TraceDisclosure
                 label={t("sidepanel.trace.toolDetails")}
                 text={trace.fallbackToolDetails}
                 streaming={!!m.streaming}
               />
             )}
-            {trace.items.map((item) => {
-              if (item.kind === "tool") {
-                return <ToolChip key={item.id} event={item.event} />;
-              }
-              return <ApprovalRecordChip key={item.id} record={item.record} />;
-            })}
+            {traceVisible &&
+              trace.items.map((item) => {
+                if (item.kind === "tool") {
+                  return <ToolChip key={item.id} event={item.event} />;
+                }
+                return (
+                  <ApprovalRecordChip key={item.id} record={item.record} />
+                );
+              })}
             {awaitingAnswerOnly && (
               <div
                 className="inline-flex min-h-7 items-center px-1.5 text-[11px] text-muted-foreground"
@@ -492,7 +494,7 @@ function TraceDisclosure({
             : t("sidepanel.trace.expandDetails")
         }
         onClick={() => setExpanded((value) => !value)}
-        className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
         <ChevronRight
@@ -593,7 +595,7 @@ function ExecutionDisclosure({
         : latestProgress || t("sidepanel.trace.executionDetails");
 
   return (
-    <div className="min-w-0 px-1 py-0.5 text-sm" data-execution-summary>
+    <div className="min-w-0 text-sm" data-execution-summary>
       <button
         type="button"
         disabled={!hasDetails}
@@ -615,7 +617,7 @@ function ExecutionDisclosure({
       >
         <span
           className={cn(
-            "min-w-0 truncate text-muted-foreground/75",
+            "min-w-0 truncate",
             streaming && "agent-thinking-text",
             summaryTool && "font-mono",
           )}
@@ -725,12 +727,16 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
   }
 
   return (
-    <ExecutionDisclosure
-      details={details}
-      tools={tools}
-      streaming={messages.some((message) => message.streaming)}
-      latestProgress={latestProgress}
-    />
+    /* Rendered as a sibling of bubbles (not inside one), so it re-adds the
+       bubble root's horizontal inset to stay aligned with them. */
+    <div className="px-1 py-0.5">
+      <ExecutionDisclosure
+        details={details}
+        tools={tools}
+        streaming={messages.some((message) => message.streaming)}
+        latestProgress={latestProgress}
+      />
+    </div>
   );
 }
 
@@ -1012,22 +1018,31 @@ function InterleavedAssistantFlow({
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
 
+  const hasProcessCluster =
+    trace.reasoningText.length > 0 || processDetails.length > 0;
+
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div className="flex min-w-0 flex-col gap-2">
-        {trace.reasoningText.length > 0 && (
-          <ReasoningFold
-            reasoningText={trace.reasoningText}
-            reasoningMs={message.reasoningMs}
-            streaming={!!message.streaming}
-          />
-        )}
-        {processDetails.length > 0 && (
-          <ExecutionDisclosure
-            details={processDetails}
-            tools={processTools}
-            streaming={processStreaming}
-          />
+        {hasProcessCluster && (
+          /* One tight cluster: the thought fold and the execution fold share
+             a style and sit flush so the process reads as a single unit. */
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {trace.reasoningText.length > 0 && (
+              <ReasoningFold
+                reasoningText={trace.reasoningText}
+                reasoningMs={message.reasoningMs}
+                streaming={!!message.streaming}
+              />
+            )}
+            {processDetails.length > 0 && (
+              <ExecutionDisclosure
+                details={processDetails}
+                tools={processTools}
+                streaming={processStreaming}
+              />
+            )}
+          </div>
         )}
         {resultText.length > 0 && (
           <Streamdown
