@@ -4,16 +4,21 @@ import type {
   PropsRuntime,
 } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { ToolsDirectoryView } from "@amiba/ui/plugin/tools";
 import { type ReactNode } from "react";
 
-import type { ToolInventory } from "../remote.js";
 import { AMIBA_TOOLS_REMOTE } from "../remote.js";
+import {
+  DshAgentCapabilitiesPage,
+  type ToolsDirectoryAdapter,
+} from "./DshAgentCapabilitiesPage.js";
 
 export const name = "amiba-tools-catalog-ui";
 export const inject = ["slots", "remote"];
 
 const SECTION_ID = "tools";
+// Matches `SettingsAgentsPage`'s (now retired) hardcoded "capabilities" tab
+// id, so this ledger registration seamlessly replaces it.
+const PRESET_SECTION_ID = "capabilities";
 type ToolsRemote = ClientContext["remote"]["amibaTools"];
 
 export interface AmibaToolsPanelOwner {
@@ -31,27 +36,56 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   }
 }
 
+function sectionLabel(): string {
+  return document.documentElement.lang.toLowerCase().startsWith("zh")
+    ? "工具"
+    : "Tools";
+}
+
 type ToolsSectionProps = PropsRuntime<"amiba.settings.section"> & {
-  listTools(): Promise<ToolInventory>;
+  adapter: ToolsDirectoryAdapter;
 } & PropsRenderSlots<"amiba.tools.panel">;
 
 function ToolsSettings({
+  adapter,
   chromeHeightPx,
   headerActionsHost,
-  listTools,
   renderSlot,
 }: ToolsSectionProps): ReactNode {
   return (
-    <ToolsDirectoryView
-      adapter={{ list: listTools }}
+    <DshAgentCapabilitiesPage
+      adapter={adapter}
       chromeHeightPx={chromeHeightPx}
       headerActionsHost={headerActionsHost}
     >
       {renderSlot("amiba.tools.panel", {
         chromeHeightPx,
       })}
-    </ToolsDirectoryView>
+    </DshAgentCapabilitiesPage>
   );
+}
+
+type ToolsPresetSectionProps = PropsRuntime<"amiba.agentPreset.section"> & {
+  adapter: ToolsDirectoryAdapter;
+};
+
+/**
+ * Preset-detail tab (M1 `amiba.agentPreset.section`): the same directory
+ * view, embedded under an agent preset's detail tabs.
+ *
+ * Unlike memory (per-preset storage) or skills (per-session DSH
+ * composition), the DSH runtime tool catalog is a single global inventory —
+ * `amibaTools/list()` takes no session or preset argument at the RPC level.
+ * `profileId` still arrives here (every `amiba.agentPreset.section`
+ * registrant receives one, per the M1 contract) but is intentionally not
+ * used to scope the query — this preserves the pre-migration host tab's own
+ * behavior, where `AgentCapabilitiesPage`'s `profileId` prop was accepted
+ * and never forwarded to the DSH adapter either. No `amiba.tools.panel`
+ * children are rendered here: that slot is scoped to the single top-level
+ * Tools settings section, not per-preset.
+ */
+function ToolsPresetSection({ adapter }: ToolsPresetSectionProps): ReactNode {
+  return <DshAgentCapabilitiesPage adapter={adapter} embedded />;
 }
 
 function errorOf(value: unknown): Error {
@@ -68,29 +102,48 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaTools"],
     (injectedCtx) => {
       const remote: ToolsRemote = injectedCtx.remote.amibaTools;
-      const listTools = async () => {
-        const result = await remote.list();
-        if (!result.ok) throw errorOf(result.error);
-        return result.value;
+      const adapter: ToolsDirectoryAdapter = {
+        async list() {
+          const result = await remote.list();
+          if (!result.ok) throw errorOf(result.error);
+          return result.value;
+        },
       };
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.settings.section",
-            id: SECTION_ID,
-            order: 100,
-            children: {
-              "amiba.tools.panel": { kind: "list", scope: "root" },
+      const disposeSection = injectedCtx.slots.inject(
+        "amiba.settings.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.settings.section",
+              id: SECTION_ID,
+              order: 100,
+              children: {
+                "amiba.tools.panel": { kind: "list", scope: "root" },
+              },
+              label: sectionLabel,
+              inject: () => ({ adapter }),
             },
-            label: () =>
-              document.documentElement.lang.toLowerCase().startsWith("zh")
-                ? "工具"
-                : "Tools",
-            inject: () => ({ listTools }),
-          },
-          ToolsSettings,
-        ),
+            ToolsSettings,
+          ),
       );
+      const disposePresetSection = injectedCtx.slots.inject(
+        "amiba.agentPreset.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.agentPreset.section",
+              id: PRESET_SECTION_ID,
+              order: 250,
+              label: sectionLabel,
+              inject: () => ({ adapter }),
+            },
+            ToolsPresetSection,
+          ),
+      );
+      return () => {
+        disposePresetSection();
+        disposeSection();
+      };
     },
   );
   await sectionFiber;

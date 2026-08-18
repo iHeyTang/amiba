@@ -585,35 +585,6 @@ export interface AgentMcpAdapter {
   remove(serverName: string): Promise<void>;
 }
 
-export interface AgentToolSchemaView {
-  name: string;
-  description?: string;
-  parameters: unknown;
-  source: AgentToolSourceView;
-}
-
-export type AgentToolSourceKind = "dsh-core" | "dsh-plugin" | "mcp-server";
-
-export interface AgentToolSourceView {
-  kind: AgentToolSourceKind;
-  id: string;
-  name: string;
-  packageName?: string;
-  loadMode: "core" | "plugin" | "mcp";
-  executionTarget: "dsh-runtime" | "desktop-service" | "external-process";
-  dynamic: boolean;
-  provider?: string;
-}
-
-export interface AgentToolInventory {
-  tools: AgentToolSchemaView[];
-}
-
-/** All DSH ToolRuntime schemas, including official, MCP, and plugin contributions. */
-export interface AgentToolsAdapter {
-  list(): Promise<AgentToolInventory>;
-}
-
 export interface AgentUsageRecord {
   ts: number;
   sessionId: string;
@@ -989,7 +960,6 @@ export interface PlatformAdapter {
   agentCommands?: AgentCommandsAdapter;
   agentMessages?: AgentMessagesAdapter;
   agentMcp?: AgentMcpAdapter;
-  agentTools?: AgentToolsAdapter;
   agentUsage?: AgentUsageAdapter;
   agentDiagnostics?: AgentDiagnosticsAdapter;
   /** Desktop-only visible browser and Agent-control bridge. */

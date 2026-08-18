@@ -7,6 +7,7 @@
  */
 export {
   usePluginT,
+  type MessageKey,
   type PluginLanguage,
   type PluginTranslateFn,
 } from "@amiba/i18n/plugin";
@@ -24,6 +25,7 @@ export {
 export { Input } from "./primitives/input";
 export { Label } from "./primitives/label";
 export { PageContent } from "./primitives/page-content";
+export { PaneHeaderBar } from "./navigation/PaneHeaderBar";
 export { ScrollArea } from "./primitives/scroll-area";
 export {
   Select,
@@ -42,5 +44,9 @@ export {
   SettingsPageActions,
   SettingsPageDescription,
 } from "./settings/page-chrome";
-export { MODEL_SETTINGS_SURFACE_CLASS } from "./settings/ModelSettingsSectionChrome";
+export {
+  MODEL_SETTINGS_SECTION_CLASS,
+  MODEL_SETTINGS_SURFACE_CLASS,
+  ModelSettingsSectionHeader,
+} from "./settings/ModelSettingsSectionChrome";
 export { useRefetchOnFocus } from "./hooks/useRefetchOnFocus";

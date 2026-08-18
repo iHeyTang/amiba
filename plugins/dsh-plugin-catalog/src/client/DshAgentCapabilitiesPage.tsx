@@ -15,29 +15,45 @@ import {
   type ReactNode,
 } from "react";
 
-import { usePluginT as useT, type MessageKey } from "@amiba/i18n/plugin";
 import {
-  type AgentToolInventory,
-  type AgentToolSchemaView,
-  type AgentToolSourceKind,
-  type AgentToolSourceView,
-  type AgentToolsAdapter,
-} from "@amiba/app-runtime/platform";
-
-import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
-import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
-import { Button, PageContent, ScrollArea } from "../primitives";
-import {
+  Button,
   MODEL_SETTINGS_SECTION_CLASS,
   MODEL_SETTINGS_SURFACE_CLASS,
   ModelSettingsSectionHeader,
-} from "../settings/ModelSettingsSectionChrome";
-import { SettingsPageDescription } from "../settings/page-chrome";
+  PageContent,
+  PaneHeaderBar,
+  ScrollArea,
+  SettingsPageDescription,
+  usePluginT as useT,
+  useRefetchOnFocus,
+  type MessageKey,
+} from "@amiba/ui/plugin";
 
-type SourceFilter = "all" | AgentToolSourceKind;
+import type { ToolSourceDescriptor, ToolSourceKind } from "../provenance.js";
+import type { ToolInventory, ToolSchemaView } from "../remote.js";
+
+type SourceFilter = "all" | ToolSourceKind;
+
+/**
+ * Adapter this view renders — the catalog plugin's own runtime tool
+ * inventory. Deliberately local to the plugin rather than the host platform
+ * contract: this view (and its host wrapper `AgentCapabilitiesPage`/
+ * `ToolsPage`) used to reach `@amiba/app-runtime/platform`'s
+ * `AgentToolsAdapter`/`AgentToolInventory`/`AgentToolSchemaView`/
+ * `AgentToolSourceKind`/`AgentToolSourceView`. Once this component moved
+ * here those types had zero remaining consumers anywhere in the repo — no
+ * chat-composer tool-mention surface reads them, unlike
+ * `AgentSkillsAdapter` — so they were deleted from the platform contract
+ * outright rather than narrowed. `client/index.tsx` builds an instance of
+ * this shape directly from the plugin's own Remote face
+ * (`ctx.remote.amibaTools`).
+ */
+export interface ToolsDirectoryAdapter {
+  list(): Promise<ToolInventory>;
+}
 
 const SOURCES: Array<{
-  id: AgentToolSourceKind;
+  id: ToolSourceKind;
   icon: LucideIcon;
   title: MessageKey;
   description: MessageKey;
@@ -62,18 +78,18 @@ const SOURCES: Array<{
   },
 ];
 
-function sourceConfig(kind: AgentToolSourceKind) {
+function sourceConfig(kind: ToolSourceKind) {
   return SOURCES.find((source) => source.id === kind) ?? SOURCES[0]!;
 }
 
-const LOAD_MODE_KEYS: Record<AgentToolSourceView["loadMode"], MessageKey> = {
+const LOAD_MODE_KEYS: Record<ToolSourceDescriptor["loadMode"], MessageKey> = {
   core: "agentCapabilities.dsh.loadMode.core",
   plugin: "agentCapabilities.dsh.loadMode.plugin",
   mcp: "agentCapabilities.dsh.loadMode.mcp",
 };
 
 const EXECUTION_TARGET_KEYS: Record<
-  AgentToolSourceView["executionTarget"],
+  ToolSourceDescriptor["executionTarget"],
   MessageKey
 > = {
   "dsh-runtime": "agentCapabilities.dsh.executionTarget.dshRuntime",
@@ -88,7 +104,7 @@ export function DshAgentCapabilitiesPage({
   headerActionsHost,
   children,
 }: {
-  adapter: AgentToolsAdapter;
+  adapter: ToolsDirectoryAdapter;
   embedded?: boolean;
   /** Still needed for the tool-detail drill-in's own back+title header,
    *  which stays local (see the `selectedTool` branch below). */
@@ -98,8 +114,8 @@ export function DshAgentCapabilitiesPage({
   children?: ReactNode;
 }) {
   const { t } = useT();
-  const [inventory, setInventory] = useState<AgentToolInventory | null>(null);
-  const [selectedTool, setSelectedTool] = useState<AgentToolSchemaView | null>(
+  const [inventory, setInventory] = useState<ToolInventory | null>(null);
+  const [selectedTool, setSelectedTool] = useState<ToolSchemaView | null>(
     null,
   );
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
@@ -130,7 +146,7 @@ export function DshAgentCapabilitiesPage({
   useRefetchOnFocus(() => void refresh());
 
   const sourceCounts = useMemo(() => {
-    const result = new Map<AgentToolSourceKind, number>();
+    const result = new Map<ToolSourceKind, number>();
     for (const tool of inventory?.tools ?? []) {
       result.set(tool.source.kind, (result.get(tool.source.kind) ?? 0) + 1);
     }
@@ -138,7 +154,7 @@ export function DshAgentCapabilitiesPage({
   }, [inventory]);
 
   const grouped = useMemo(() => {
-    const result = new Map<AgentToolSourceKind, AgentToolSchemaView[]>();
+    const result = new Map<ToolSourceKind, ToolSchemaView[]>();
     for (const tool of inventory?.tools ?? []) {
       if (sourceFilter !== "all" && tool.source.kind !== sourceFilter) continue;
       result.set(tool.source.kind, [
@@ -334,7 +350,7 @@ function ToolSourceIndex({
   onChange,
 }: {
   active: SourceFilter;
-  counts: Map<AgentToolSourceKind, number>;
+  counts: Map<ToolSourceKind, number>;
   total: number;
   onChange(source: SourceFilter): void;
 }) {
@@ -398,7 +414,7 @@ function ToolSourceIndex({
   );
 }
 
-function ToolSourceSection({ source }: { source: AgentToolSourceView }) {
+function ToolSourceSection({ source }: { source: ToolSourceDescriptor }) {
   const { t } = useT();
   const category = sourceConfig(source.kind);
   return (

@@ -7,8 +7,6 @@ import type {
   AgentPermissionState,
   AgentSchedulesAdapter,
   AgentSkillsAdapter,
-  AgentToolInventory,
-  AgentToolsAdapter,
   ModelPlaneAdapter,
   PlatformAdapter,
 } from "../platform/index.js";
@@ -30,7 +28,6 @@ type DshPlatformKey =
   | "agentCommands"
   | "agentMessages"
   | "agentMcp"
-  | "agentTools"
   | "agentUsage";
 
 export type DshPlatformAdapters = Required<
@@ -307,11 +304,6 @@ export function createDshPlatformAdapters(
     },
   };
 
-  const tools: AgentToolsAdapter = {
-    list: () =>
-      client.call<AgentToolInventory>("amibaTools/list", { args: {} }),
-  };
-
   const modelPlane: ModelPlaneAdapter = {
     snapshot: () => client.call("amibaModelPlane/snapshot", { args: {} }),
     setDefaultSelection: (selection, expectedRevision) =>
@@ -472,7 +464,6 @@ export function createDshPlatformAdapters(
     },
     agentMessages: messages,
     agentMcp: mcp,
-    agentTools: tools,
     agentUsage: {
       list: () => client.call("amibaUsage/list", { args: {} }),
     },

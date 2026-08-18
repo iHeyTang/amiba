@@ -1,13 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
-import { AgentCapabilitiesPage } from "../AgentCapabilitiesPage";
+import { DshAgentCapabilitiesPage } from "../DshAgentCapabilitiesPage";
 
 const listTools = vi.fn();
 
-describe("AgentCapabilitiesPage DSH inventory", () => {
+describe("DshAgentCapabilitiesPage DSH inventory", () => {
   beforeEach(() => {
     listTools.mockResolvedValue({
       tools: [
@@ -44,25 +43,11 @@ describe("AgentCapabilitiesPage DSH inventory", () => {
         },
       ],
     });
-    setPlatform({
-      storage: {
-        get: vi.fn().mockResolvedValue({}),
-        set: vi.fn(),
-        remove: vi.fn(),
-        watch: vi.fn(() => () => {}),
-      },
-      agentTools: { list: listTools },
-      agentMcp: {
-        list: vi.fn().mockResolvedValue({ servers: [], toolsOnly: true }),
-        save: vi.fn(),
-        remove: vi.fn(),
-      },
-    } as unknown as PlatformAdapter);
   });
 
   it("shows the complete runtime catalog without selecting a session", async () => {
     const user = userEvent.setup();
-    render(<AgentCapabilitiesPage profileId="default" />);
+    render(<DshAgentCapabilitiesPage adapter={{ list: listTools }} />);
     await screen.findByRole("button", { name: /read_file/ });
     expect(listTools).toHaveBeenCalledWith();
     expect(screen.getAllByText("Registered")).toHaveLength(2);

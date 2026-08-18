@@ -39,7 +39,6 @@ import {
   SelectValue,
   cn,
 } from "../primitives";
-import { ToolsPage } from "../usage";
 import { AgentBehaviorEditor } from "./AgentBehaviorEditor";
 import {
   SettingsPageActionButton,
@@ -237,21 +236,11 @@ function AgentPresetDetail({
     onRename(trimmed);
   }
 
-  // Hardcoded tabs stay until later tasks migrate each module to a ledger
-  // registration (T4). A ledger entry whose id matches one of these wins
-  // — the hardcoded tab is dropped from the strip and its body defers to
-  // renderPresetSection instead, so a later module flip is just registering.
-  const hardcodedSections: Array<{ id: AgentWorkspaceSection; label: string }> =
-    [
-      { id: "capabilities", label: t("options.nav.tools") },
-    ].filter((item) => !ledgerIds.has(item.id));
-
   const workspaceSections: Array<{
     id: AgentWorkspaceSection;
     label: string;
   }> = [
     { id: "behavior", label: t("options.agents.section.behavior") },
-    ...hardcodedSections,
     ...ledgerSections,
   ];
 
@@ -370,8 +359,6 @@ function AgentPresetDetail({
         />
       ) : ledgerIds.has(section) ? (
         renderPresetSection?.(section, { profileId: profile.name })
-      ) : section === "capabilities" ? (
-        <ToolsPage embedded key={profile.name} profileId={profile.name} />
       ) : null}
     </>
   );

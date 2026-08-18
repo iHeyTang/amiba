@@ -31,20 +31,6 @@ vi.mock("../AgentBehaviorEditor", () => ({
   },
 }));
 
-vi.mock("../../usage", () => ({
-  ToolsPage: ({
-    embedded,
-    profileId,
-  }: {
-    embedded?: boolean;
-    profileId?: string;
-  }) => (
-    <div data-embedded={String(embedded)} data-testid="profile-capabilities">
-      {profileId}
-    </div>
-  ),
-}));
-
 import { SettingsAgentsPage } from "../SettingsAgentsPage";
 
 function profile(
@@ -292,11 +278,6 @@ describe("SettingsAgentsPage", () => {
         profileId: "researcher",
       }),
     );
-
-    await userEvent.click(screen.getByRole("button", { name: "Tools" }));
-    expect(await screen.findByTestId("profile-capabilities")).toHaveTextContent(
-      "researcher",
-    );
   });
 
   it("renders a tab per ledger-registered preset section and forwards the profileId to its render callback", async () => {
@@ -347,6 +328,30 @@ describe("SettingsAgentsPage", () => {
 
     expect(await screen.findByTestId("ledger-skills")).toBeInTheDocument();
     expect(renderPresetSection).toHaveBeenLastCalledWith("skills", {
+      profileId: "researcher",
+    });
+  });
+
+  it("renders a ledger-registered 'capabilities' section as an ordinary tab now that tools/catalog is fully plugin-owned", async () => {
+    const onOpenDetail = vi.fn();
+    const renderPresetSection = vi.fn(() => (
+      <div data-testid="ledger-capabilities" />
+    ));
+    renderPage({
+      detail: "researcher",
+      onOpenDetail,
+      presetSections: [{ id: "capabilities", label: "Tools" }],
+      renderPresetSection,
+    });
+
+    await screen.findByTestId("behavior-editor");
+    const toolsTabs = screen.getAllByRole("button", { name: "Tools" });
+    expect(toolsTabs).toHaveLength(1);
+
+    await userEvent.click(toolsTabs[0]);
+
+    expect(await screen.findByTestId("ledger-capabilities")).toBeInTheDocument();
+    expect(renderPresetSection).toHaveBeenLastCalledWith("capabilities", {
       profileId: "researcher",
     });
   });

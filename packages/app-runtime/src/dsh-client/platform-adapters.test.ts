@@ -103,9 +103,6 @@ describe("createDshPlatformAdapters", () => {
           },
           "session.create": { sessionId: "session-1", agentPreset: "standard" },
           "amibaCommands/list": [{ name: "help", description: "Show help" }],
-          "amibaTools/list": {
-            tools: [],
-          },
         })[method],
       seen,
     );
@@ -114,14 +111,13 @@ describe("createDshPlatformAdapters", () => {
     await expect(adapters.agentCommands.list("session-1")).resolves.toEqual([
       { name: "help", description: "Show help" },
     ]);
-    await expect(adapters.agentTools.list()).resolves.toEqual({ tools: [] });
 
     expect(
       seen.filter((entry) => entry.method === "session.create"),
     ).toHaveLength(1);
     expect(seen.at(-1)).toEqual({
-      method: "amibaTools/list",
-      payload: { args: {} },
+      method: "amibaCommands/list",
+      payload: { args: { sessionId: "session-1" } },
     });
   });
 
