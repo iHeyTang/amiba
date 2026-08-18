@@ -298,6 +298,27 @@ describe("chat message chrome", () => {
     expect(screen.getByText("Inspect the project")).toBeInTheDocument();
   });
 
+  it("labels the completed thought fold with its duration", () => {
+    render(
+      <Bubble
+        m={
+          {
+            uiId: "assistant-thought-duration",
+            role: "assistant",
+            content: "答案",
+            reasoning: "想了很久的推理内容",
+            reasoningMs: 12_000,
+          } as UiMessage
+        }
+      />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: /sidepanel\.trace\.thoughtForSeconds/,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("hides completed progress notes and keeps tool evidence folded", async () => {
     const { container } = render(
       <Bubble

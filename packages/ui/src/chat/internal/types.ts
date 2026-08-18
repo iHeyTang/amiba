@@ -1,7 +1,7 @@
 /**
  * UI-level message shape used by the chat bubble renderer.
  *
- * Distinct from the wire-protocol types in @amiba/core:
+ * Distinct from the wire-protocol types in @amiba/app-runtime/core:
  *
  *   - `ChatRuntimeState` (core) — what the engine sends on the port.
  *   - `UiMessage` (here)        — what the React component renders, which
@@ -18,29 +18,16 @@ import type {
   ApprovalRecord,
   AttachmentBadge,
   ChatMessage,
-  HermesToolProgress
-} from "@amiba/core"
+  ToolProgress
+} from "@amiba/app-runtime/core"
 
 export interface UiMessage extends ChatMessage {
   uiId: string
+  /** DSH append-only event sequence used for fork-at-message operations. */
+  runtimeSeq?: number
   streaming?: boolean
-  /**
-   * Workspace bound to this user turn. Fresh messages store it explicitly so
-   * the conversation can show a compact context badge immediately; restored
-   * legacy messages derive the same value from their `<workspace>` block.
-   */
+  /** Workspace bound to this user turn for immediate local presentation. */
   workspacePath?: string
-  /**
-   * Pages attached as system context for this turn (live current tab and/or
-   * pinned snapshots). Persisted alongside the message so the provenance
-   * chip survives panel reloads.
-   */
-  pageBadges?: Array<{ title: string; url: string }>
-  /**
-   * @deprecated Older sessions saved a single attachment under `pageBadge`.
-   * Still read for backward compatibility but never written to again.
-   */
-  pageBadge?: { title: string; url: string }
   /**
    * Files (images / text) the user uploaded with this turn. Persisted as
    * lightweight metadata + a downscaled image thumbnail so the chip /
@@ -58,14 +45,15 @@ export interface UiMessage extends ChatMessage {
   /** Streamed tool-argument markdown kept for backward-compatible details. */
   streamVerbose?: string
   /**
-   * Hermes `reasoning.available` text. In current gateways this is an
-   * intermediate progress note, not a reliable chain-of-thought channel.
-   * The UI may show the latest note while a run is active and discards it
-   * from the completed execution record.
+   * Runtime reasoning text. Accumulated across the whole run; the UI shows
+   * a live fold while streaming and keeps a collapsed "thought for …" fold
+   * on the completed message.
    */
   reasoning?: string
-  /** Live tool-progress events from the gateway, rendered as chips. */
-  hermesToolProgress?: HermesToolProgress[]
+  /** Wall-clock duration of the reasoning stream in milliseconds. */
+  reasoningMs?: number
+  /** Live tool-progress events from DSH, rendered as chips. */
+  toolProgress?: ToolProgress[]
   /**
    * Per-event timeline preserving the real interleave of model text and
    * tool calls as they streamed in. Each item carries a stable `id` so
@@ -77,12 +65,12 @@ export interface UiMessage extends ChatMessage {
    * ones. The above-composer banner is only for in-flight prompts; this
    * is the persistent audit trail that lives on the message itself.
    */
-  hermesApprovalRecords?: ApprovalRecord[]
+  approvalRecords?: ApprovalRecord[]
 }
 
 /**
  * Interleaved text + tool + approval items in the order they streamed in.
- * Matches `AssistantTimelineItem` in @amiba/core, but kept locally so the
+ * Matches `AssistantTimelineItem` in @amiba/app-runtime/core, but kept locally so the
  * UI can extend it later without breaking the wire protocol.
  */
 export type AssistantTimelineItem =
@@ -97,7 +85,7 @@ export interface ChatError {
   status?: number
   hint?: string
   /** Origin for errors raised locally rather than by the chat runtime. */
-  source?: "run" | "voice"
+  source?: "run"
 }
 
 /**

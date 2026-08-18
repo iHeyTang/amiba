@@ -188,6 +188,7 @@ export function Bubble({
           <div className={cn(hasBody || traceVisible ? "mb-2" : "")}>
             <ReasoningFold
               reasoningText={trace.reasoningText}
+              reasoningMs={m.reasoningMs}
               streaming={!!m.streaming}
             />
           </div>
@@ -418,17 +419,36 @@ function compactProgressNote(text: string): string {
   return latest.length > 160 ? `${latest.slice(0, 159)}…` : latest;
 }
 
+function thoughtLabel(
+  t: ReturnType<typeof useT>["t"],
+  reasoningMs?: number,
+): string {
+  if (reasoningMs === undefined || reasoningMs <= 0) {
+    return t("sidepanel.trace.thoughtProcess");
+  }
+  const seconds = Math.max(1, Math.round(reasoningMs / 1000));
+  if (seconds < 60) {
+    return t("sidepanel.trace.thoughtForSeconds", { seconds });
+  }
+  return t("sidepanel.trace.thoughtForMinutes", {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  });
+}
+
 /**
  * The one reasoning presentation for every assistant render path.
  * Streaming: the collapsed label is the moving latest line; expanding
  * reveals the full accumulated thought stream, appended live.
- * Completed: a quiet "Thought process" fold that stays available.
+ * Completed: a quiet "thought for …" fold that stays available.
  */
 function ReasoningFold({
   reasoningText,
+  reasoningMs,
   streaming,
 }: {
   reasoningText: string;
+  reasoningMs?: number;
   streaming: boolean;
 }) {
   const { t } = useT();
@@ -437,7 +457,7 @@ function ReasoningFold({
       label={
         streaming
           ? compactProgressNote(reasoningText)
-          : t("sidepanel.trace.thoughtProcess")
+          : thoughtLabel(t, reasoningMs)
       }
       labelClassName={streaming ? "agent-thinking-text" : undefined}
       text={reasoningText}
@@ -473,12 +493,6 @@ function TraceDisclosure({
         onClick={() => setExpanded((value) => !value)}
         className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        <span
-          aria-hidden
-          className="inline-flex h-3 w-3 shrink-0 items-center justify-center"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-current opacity-45" />
-        </span>
         <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
         <ChevronRight
           aria-hidden
@@ -516,6 +530,7 @@ type TurnTraceDetail =
       kind: "reasoning";
       id: string;
       text: string;
+      reasoningMs?: number;
     }
   | {
       kind: "tool";
@@ -627,7 +642,7 @@ function ExecutionDisclosure({
               return (
                 <TraceDisclosure
                   key={detail.id}
-                  label={t("sidepanel.trace.thoughtProcess")}
+                  label={thoughtLabel(t, detail.reasoningMs)}
                   text={detail.text}
                   streaming={false}
                 />
@@ -665,6 +680,7 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
         kind: "reasoning",
         id: `${message.uiId}:reasoning`,
         text: trace.reasoningText,
+        reasoningMs: message.reasoningMs,
       });
     }
     if (trace.fallbackToolDetails) {
@@ -960,6 +976,7 @@ function InterleavedAssistantFlow({
         {trace.reasoningText.length > 0 && (
           <ReasoningFold
             reasoningText={trace.reasoningText}
+            reasoningMs={message.reasoningMs}
             streaming={!!message.streaming}
           />
         )}

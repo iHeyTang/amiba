@@ -43,6 +43,8 @@ interface ChunkSlot {
 interface VerboseSlot {
   assistantUiId: string;
   reasoning: string;
+  reasoningStartAt: number | null;
+  reasoningEndAt: number | null;
   tools: ToolCall[];
   toolOrder: string[];
   toolsById: Map<string, ToolProgress>;
@@ -228,6 +230,10 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       it.kind === "text" ? { ...it } : it,
     );
     const assistantUiId = v.assistantUiId;
+    const reasoningMs =
+      v.reasoningStartAt !== null && v.reasoningEndAt !== null
+        ? Math.max(0, v.reasoningEndAt - v.reasoningStartAt)
+        : undefined;
     sessions.setActiveMessages((prev) =>
       (prev as UiMessage[]).map((m) =>
         m.uiId === assistantUiId
@@ -235,6 +241,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
               ...m,
               streamVerbose: md,
               reasoning: rs || undefined,
+              ...(rs && reasoningMs !== undefined ? { reasoningMs } : {}),
               toolProgress: progressWithDetails,
               assistantTimeline: timelineSnapshot,
             }
@@ -261,6 +268,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     verboseStateRef.current = {
       assistantUiId,
       reasoning: "",
+      reasoningStartAt: null,
+      reasoningEndAt: null,
       tools: [],
       toolOrder: [],
       toolsById: new Map(),
@@ -279,6 +288,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       verboseStateRef.current = {
         assistantUiId,
         reasoning: "",
+        reasoningStartAt: null,
+        reasoningEndAt: null,
         tools: [],
         toolOrder: [],
         toolsById: new Map(),
@@ -299,6 +310,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     verboseStateRef.current = {
       assistantUiId: state.assistantUiId,
       reasoning: state.reasoning,
+      reasoningStartAt: state.reasoningStartedAt,
+      reasoningEndAt: state.reasoningEndedAt,
       tools: state.toolCalls.slice(),
       toolOrder: state.toolOrder.slice(),
       toolsById: new Map(
@@ -342,7 +355,12 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       // projection both accumulate with `+=`); append here too or the live
       // view shows only the latest fragment and the folded post-turn block
       // collapses to the final (often whitespace-only) delta.
-      if (v) v.reasoning += text;
+      if (v) {
+        v.reasoning += text;
+        const now = Date.now();
+        if (v.reasoningStartAt === null) v.reasoningStartAt = now;
+        v.reasoningEndAt = now;
+      }
       scheduleVerboseFlush();
     },
     [scheduleVerboseFlush],

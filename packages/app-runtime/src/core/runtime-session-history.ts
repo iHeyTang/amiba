@@ -1,0 +1,260 @@
+import type {
+  AgentSessionHistoryEntry,
+  AgentSessionEvent,
+} from "@amiba/app-runtime/platform";
+
+import type { ToolProgress } from "./runtime-protocol";
+import type { SessionMessage } from "./sessions";
+
+type RuntimeSessionMessage = SessionMessage & {
+  reasoning?: string;
+  /** Wall-clock duration of the reasoning stream, from durable event times. */
+  reasoningMs?: number;
+  toolProgress?: ToolProgress[];
+  assistantTimeline?: Array<
+    | { kind: "text"; id: string; text: string }
+    | { kind: "tool"; id: string; toolCallId: string }
+  >;
+  runtimeSeq?: number;
+};
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function contentText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((block) => {
+      const item = record(block);
+      return item?.type === "text" && typeof item.text === "string"
+        ? item.text
+        : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function messageFromEvent(event: AgentSessionEvent): Record<string, unknown> | null {
+  if (event.type === "user/message") return record(event.data);
+  if (event.type === "assistant/message") return record(event.data.message);
+  return null;
+}
+
+interface AssistantTurn {
+  turn: number;
+  firstSeq: number;
+  text: string;
+  draftText: string;
+  reasoning: string;
+  reasoningStartAt: number | null;
+  reasoningEndAt: number | null;
+  tools: Map<string, ToolProgress>;
+  timeline: RuntimeSessionMessage["assistantTimeline"];
+}
+
+function beginTurn(event: AgentSessionEvent): AssistantTurn {
+  return {
+    turn:
+      typeof event.data.turn === "number" ? event.data.turn : event.seq,
+    firstSeq: event.seq,
+    text: "",
+    draftText: "",
+    reasoning: "",
+    reasoningStartAt: null,
+    reasoningEndAt: null,
+    tools: new Map(),
+    timeline: [],
+  };
+}
+
+function finishTurn(
+  turn: AssistantTurn | null,
+  output: RuntimeSessionMessage[],
+): void {
+  if (!turn) return;
+  const content = turn.text || turn.draftText;
+  const tools = [...turn.tools.values()];
+  if (!content && !turn.reasoning && tools.length === 0) return;
+  const reasoningMs =
+    turn.reasoningStartAt !== null && turn.reasoningEndAt !== null
+      ? Math.max(0, turn.reasoningEndAt - turn.reasoningStartAt)
+      : undefined;
+  output.push({
+    role: "assistant",
+    content,
+    uiId: `dsh:turn:${turn.firstSeq}`,
+    runtimeSeq: turn.firstSeq,
+    ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
+    ...(turn.reasoning && reasoningMs !== undefined ? { reasoningMs } : {}),
+    ...(tools.length ? { toolProgress: tools } : {}),
+    ...(turn.timeline?.length ? { assistantTimeline: turn.timeline } : {}),
+  });
+}
+
+function applyToolCall(turn: AssistantTurn, entry: AgentSessionHistoryEntry): void {
+  const data = entry.event.data;
+  const callId = typeof data.callId === "string" ? data.callId : "";
+  if (!callId) return;
+  const rawArgs = typeof data.arguments === "string" ? data.arguments : "";
+  let args: Record<string, unknown> | undefined;
+  try {
+    args = record(JSON.parse(rawArgs)) ?? undefined;
+  } catch {
+    args = rawArgs ? { raw: rawArgs } : undefined;
+  }
+  turn.tools.set(callId, {
+    tool: typeof data.name === "string" ? data.name : "tool",
+    toolCallId: callId,
+    status: "running",
+    args,
+    startedAt: entry.event.time,
+  });
+  turn.timeline?.push({
+    kind: "tool",
+    id: `dsh:tool:${entry.event.seq}`,
+    toolCallId: callId,
+  });
+}
+
+function applyToolResult(turn: AssistantTurn, entry: AgentSessionHistoryEntry): void {
+  const data = entry.event.data;
+  const message = record(data.message);
+  const callId = typeof message?.toolCallId === "string" ? message.toolCallId : "";
+  if (!callId) return;
+  const prior = turn.tools.get(callId);
+  turn.tools.set(callId, {
+    tool: prior?.tool ?? "tool",
+    toolCallId: callId,
+    status: "completed",
+    args: prior?.args,
+    result: {
+      text: contentText(message?.content),
+      view: entry.view,
+      meta: data.meta,
+    },
+    error: Boolean(message?.isError || data.error),
+    startedAt: prior?.startedAt,
+    durationMs:
+      prior?.startedAt && entry.event.time >= prior.startedAt
+        ? entry.event.time - prior.startedAt
+        : undefined,
+  });
+}
+
+/** Fold DSH's durable event log into the existing presentation message shape. */
+export function projectRuntimeSessionHistory(
+  entries: readonly AgentSessionHistoryEntry[],
+): RuntimeSessionMessage[] {
+  const output: RuntimeSessionMessage[] = [];
+  let turn: AssistantTurn | null = null;
+  const commands = new Map<string, { name: string; args: string; seq: number }>();
+
+  for (const entry of [...entries].sort((a, b) => a.event.seq - b.event.seq)) {
+    const event = entry.event;
+    if (event.type === "command/run") {
+      finishTurn(turn, output);
+      turn = null;
+      const commandId = typeof event.data.commandId === "string"
+        ? event.data.commandId
+        : `seq-${event.seq}`;
+      const name = typeof event.data.name === "string" ? event.data.name : "command";
+      const args = typeof event.data.args === "string" ? event.data.args : "";
+      commands.set(commandId, { name, args, seq: event.seq });
+      output.push({
+        role: "user",
+        content: `/${name}${args}`,
+        uiId: `dsh:command:${commandId}:input`,
+        runtimeSeq: event.seq,
+      });
+      continue;
+    }
+    if (event.type === "command/done") {
+      finishTurn(turn, output);
+      turn = null;
+      const commandId = typeof event.data.commandId === "string"
+        ? event.data.commandId
+        : `seq-${event.seq}`;
+      const command = commands.get(commandId);
+      const text = typeof event.data.text === "string" ? event.data.text : "";
+      if (text) {
+        output.push({
+          role: "assistant",
+          content: text,
+          uiId: `dsh:command:${commandId}:result`,
+          runtimeSeq: event.seq,
+        });
+      } else if (!command && event.data.kind === "error") {
+        output.push({
+          role: "assistant",
+          content: "Command failed.",
+          uiId: `dsh:command:${commandId}:result`,
+          runtimeSeq: event.seq,
+        });
+      }
+      continue;
+    }
+    if (event.type === "turn/start") {
+      finishTurn(turn, output);
+      turn = beginTurn(event);
+      continue;
+    }
+    if (event.type === "user/message") {
+      const message = messageFromEvent(event);
+      const source = record(message?.source);
+      if (source?.kind && source.kind !== "user") continue;
+      output.push({
+        role: "user",
+        content: contentText(message?.content),
+        uiId:
+          typeof message?.id === "string"
+            ? `dsh:${message.id}`
+            : `dsh:user:${event.seq}`,
+        runtimeSeq: event.seq,
+      });
+      continue;
+    }
+    if (!turn) turn = beginTurn(event);
+    if (event.type === "assistant/chunk") {
+      const chunk = record(event.data.chunk);
+      if (typeof chunk?.text !== "string") continue;
+      if (chunk.type === "reasoning-delta") {
+        turn.reasoning += chunk.text;
+        if (turn.reasoningStartAt === null) turn.reasoningStartAt = event.time;
+        turn.reasoningEndAt = event.time;
+      } else if (chunk.type === "text-delta") turn.draftText += chunk.text;
+      continue;
+    }
+    if (event.type === "assistant/message") {
+      const message = messageFromEvent(event);
+      const text = contentText(message?.content);
+      if (text) {
+        turn.text += text;
+        turn.timeline?.push({
+          kind: "text",
+          id: `dsh:text:${event.seq}`,
+          text,
+        });
+      }
+      turn.draftText = "";
+      continue;
+    }
+    if (event.type === "tool/call") {
+      applyToolCall(turn, entry);
+      continue;
+    }
+    if (event.type === "tool/result") {
+      applyToolResult(turn, entry);
+      continue;
+    }
+    if (event.type === "turn/end") {
+      finishTurn(turn, output);
+      turn = null;
+    }
+  }
+  finishTurn(turn, output);
+  return output;
+}
