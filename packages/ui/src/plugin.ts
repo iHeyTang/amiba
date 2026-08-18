@@ -11,6 +11,7 @@ export {
   type PluginLanguage,
   type PluginTranslateFn,
 } from "@amiba/i18n/plugin";
+export { Badge } from "./primitives/badge";
 export { Button } from "./primitives/button";
 export { cn } from "./primitives/cn";
 export { CollectionState } from "./primitives/collection-state";
