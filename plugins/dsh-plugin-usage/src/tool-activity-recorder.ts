@@ -79,7 +79,7 @@ export class ToolActivityRecorder {
         startedAt !== undefined && event.time >= startedAt
           ? event.time - startedAt
           : undefined;
-      this.markCompleted(callId, durationMs);
+      this.markCompleted(sessionId, callId, durationMs);
     }
   }
 
@@ -157,14 +157,22 @@ export class ToolActivityRecorder {
     });
   }
 
-  private markCompleted(toolCallId: string, durationMs: number | undefined): void {
+  private markCompleted(
+    sessionId: string,
+    toolCallId: string,
+    durationMs: number | undefined,
+  ): void {
     this.enqueue(async () => {
       // Walk recent days — a tool can technically span midnight, but 99%
-      // of the time the started row is in today's bucket.
+      // of the time the started row is in today's bucket. Match on the
+      // session too: engines may hand out sequential call ids, so a bare
+      // callId can collide across concurrent sessions.
       for (let i = 0; i < COMPLETE_LOOKBACK_DAYS; i++) {
         const day = toolActivityDayKey(Date.now() - i * DAY_MS);
         const rows = await this.readDay(day);
-        const idx = rows.findIndex((r) => r.toolCallId === toolCallId);
+        const idx = rows.findIndex(
+          (r) => r.toolCallId === toolCallId && r.sessionId === sessionId,
+        );
         if (idx < 0) continue;
         const row = rows[idx]!;
         if (row.completed) return;

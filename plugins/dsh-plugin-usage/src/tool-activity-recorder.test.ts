@@ -75,6 +75,24 @@ describe("ToolActivityRecorder", () => {
     });
   });
 
+  it("scopes completion to the session when call ids collide across sessions", async () => {
+    const recorder = new ToolActivityRecorder(await tempRoot());
+    const start = Date.now();
+
+    recorder.accept("session-a", toolCall(start, "call-1", "search", 1));
+    recorder.accept("session-b", toolCall(start + 10, "call-1", "bash", 1));
+    recorder.accept("session-b", toolResult(start + 60, "call-1"));
+
+    const rows = (await recorder.read(1)).days[0]!.rows;
+    expect(rows.find((r) => r.sessionId === "session-a")).toMatchObject({
+      completed: false,
+    });
+    expect(rows.find((r) => r.sessionId === "session-b")).toMatchObject({
+      completed: true,
+      durationMs: 50,
+    });
+  });
+
   it("keeps an uncompleted call as unfinished with no duration", async () => {
     const recorder = new ToolActivityRecorder(await tempRoot());
     const start = Date.now();
