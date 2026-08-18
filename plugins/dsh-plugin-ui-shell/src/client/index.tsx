@@ -293,6 +293,23 @@ interface SettingsSectionRow {
   id: string;
   label: string;
   order: number;
+  icon?: ReactNode;
+}
+
+/**
+ * Amiba convention on top of the closed upstream slot-options shape: a
+ * section's `inject` face may carry `navIcon` (a thunk returning the nav
+ * glyph). The registration options type cannot grow an icon field, so the
+ * ledger reads it from the business face instead; sections without one
+ * fall back to the generic Blocks glyph.
+ */
+function resolveSectionNavIcon(
+  inject: ((...args: never[]) => Record<string, unknown>) | undefined,
+): ReactNode {
+  const navIcon = inject?.().navIcon;
+  return typeof navIcon === "function"
+    ? ((navIcon as () => ReactNode)() ?? undefined)
+    : undefined;
 }
 
 type SettingsSectionNavigationProps =
@@ -315,7 +332,7 @@ function SettingsSectionNavigation({
   return sections.map((section) => (
     <NavigationRow
       active={activeSection === section.id}
-      icon={<Blocks />}
+      icon={section.icon ?? <Blocks />}
       key={section.id}
       label={section.label}
       onClick={() => openSettings(section.id)}
@@ -381,6 +398,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
               label:
                 resolveSlotLabel(entry.options.label) ?? entry.options.id ?? "",
               order: entry.options.order ?? 0,
+              icon: resolveSectionNavIcon(entry.inject),
             }))
             .filter((entry) => entry.id.length > 0)
             .sort((left, right) => left.order - right.order);

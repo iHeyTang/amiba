@@ -16,7 +16,7 @@ import {
   usePluginT,
   type PluginLanguage,
 } from "@amiba/ui/plugin";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Brain, Loader2, RefreshCw } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -428,7 +428,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               id: SECTION_ID,
               order: 300,
               label: () => labels().nav,
-              inject: () => ({ listMemory, listPresets }),
+              inject: () => ({ listMemory, listPresets, navIcon: () => <Brain /> }),
             },
             MemorySettings,
           ),

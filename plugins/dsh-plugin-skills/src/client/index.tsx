@@ -1,6 +1,7 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
+import { Sparkles } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { AMIBA_SKILLS_REMOTE } from "../remote.js";
@@ -131,7 +132,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               id: SECTION_ID,
               order: 200,
               label: sectionLabel,
-              inject: () => ({ adapter }),
+              inject: () => ({ adapter, navIcon: () => <Sparkles /> }),
             },
             SkillsSettings,
           ),

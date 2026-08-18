@@ -6,6 +6,7 @@ import {
   DshPluginInventoryView,
   type DshPluginInventoryAdapter,
 } from "@amiba/ui/plugin/runtime-inventory";
+import { Blocks } from "lucide-react";
 import type { ReactNode } from "react";
 
 export const name = "amiba-runtime-inventory-ui";
@@ -99,7 +100,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
               document.documentElement.lang.toLowerCase().startsWith("zh")
                 ? "插件"
                 : "Plugins",
-            inject: () => ({ adapter }),
+            inject: () => ({ adapter, navIcon: () => <Blocks /> }),
           },
           RuntimeInventorySection,
         ),

@@ -7,8 +7,14 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
-    "./projector": { "types": "./lib/projector.d.ts", "default": "./lib/projector.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./projector": {
+      "types": "./lib/projector.d.ts",
+      "default": "./lib/projector.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
@@ -25,7 +31,10 @@
       "platform": "web"
     }
   },
-  "files": ["lib", "README.md"],
+  "files": [
+    "lib",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -37,6 +46,7 @@
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.0.0",
+    "lucide-react": "^0.460.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

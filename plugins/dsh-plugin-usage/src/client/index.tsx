@@ -1,6 +1,7 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
+import { Wallet } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { AMIBA_USAGE_REMOTE } from "../remote.js";
@@ -66,7 +67,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               id: SECTION_ID,
               order: 500,
               label: () => labels().nav,
-              inject: () => ({ list, readToolActivity }),
+              inject: () => ({ list, readToolActivity, navIcon: () => <Wallet /> }),
             },
             UsageSettings,
           ),

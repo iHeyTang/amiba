@@ -2,6 +2,7 @@ import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { PageContent, ScrollArea } from "@amiba/ui/plugin";
+import { Bot } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { AMIBA_MODEL_PLANE_REMOTE } from "../remote.js";
@@ -113,7 +114,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               document.documentElement.lang.toLowerCase().startsWith("zh")
                 ? "模型与服务"
                 : "Models & services",
-            inject: () => ({ adapter }),
+            inject: () => ({ adapter, navIcon: () => <Bot /> }),
           },
           ModelPlaneSettings,
         ),

@@ -4,6 +4,7 @@ import type {
   PropsRuntime,
 } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
+import { Wrench } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { AMIBA_TOOLS_REMOTE } from "../remote.js";
@@ -121,7 +122,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
                 "amiba.tools.panel": { kind: "list", scope: "root" },
               },
               label: sectionLabel,
-              inject: () => ({ adapter }),
+              inject: () => ({ adapter, navIcon: () => <Wrench /> }),
             },
             ToolsSettings,
           ),
