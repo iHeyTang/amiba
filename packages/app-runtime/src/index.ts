@@ -13,7 +13,6 @@ export const APP_RUNTIME_MODULES = [
   "dsh-client",
   "dsh-distribution",
   "dsh-runtime",
-  "model-plane",
   "model-plane-dsh",
   "utils",
 ] as const;

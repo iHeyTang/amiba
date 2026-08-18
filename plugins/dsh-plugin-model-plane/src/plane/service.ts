@@ -17,12 +17,12 @@ import {
   publicProvider,
   type StoredModelProvider,
   type StoredModelRegistry,
-} from "./core";
-import { discoverModelsFromProvider } from "./discovery";
+} from "./core.js";
+import { discoverModelsFromProvider } from "./discovery.js";
 import {
   applyModelProviderCapabilities,
   builtInModelProviders,
-} from "./drivers";
+} from "./drivers.js";
 
 export interface ModelPlaneStore {
   get(key: string): Promise<Record<string, unknown>>;

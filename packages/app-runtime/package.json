@@ -21,7 +21,6 @@
       "default": "./dist/dsh-runtime/index.js"
     },
     "./dsh-runtime-manifest": "./dsh-runtime-manifest.json",
-    "./model-plane": "./src/model-plane/index.ts",
     "./model-plane-dsh": "./src/model-plane-dsh/index.ts",
     "./utils": "./src/utils/index.ts"
   },

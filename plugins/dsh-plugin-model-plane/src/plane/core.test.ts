@@ -10,7 +10,7 @@ import {
   modelDiscoveryUrl,
   normalizeModels,
   normalizeRegistry,
-} from "./index";
+} from "./index.js";
 
 describe("harness-independent Model Plane", () => {
   it("keeps reasoning effort as one model capability with optional wire spelling", () => {

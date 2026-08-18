@@ -627,7 +627,6 @@ for (const subpath of [
   "./dsh-client",
   "./dsh-distribution",
   "./dsh-runtime",
-  "./model-plane",
   "./model-plane-dsh",
   "./utils",
 ]) {
@@ -744,7 +743,7 @@ if (
 if (appRuntime.dependencies?.["@amiba/i18n"]) {
   fail("@amiba/app-runtime must not depend back on the UI i18n package");
 }
-for (const legacy of ["extension-host", "managed-extensions", "mcp"]) {
+for (const legacy of ["extension-host", "managed-extensions", "mcp", "model-plane"]) {
   const directory = `packages/app-runtime/src/${legacy}`;
   if (!(await exists(directory))) continue;
   const files = await sourceFiles(directory);
@@ -753,7 +752,7 @@ for (const legacy of ["extension-host", "managed-extensions", "mcp"]) {
   }
 }
 
-for (const file of await sourceFiles("packages/app-runtime/src/model-plane")) {
+for (const file of await sourceFiles("plugins/dsh-plugin-model-plane/src/plane")) {
   const body = await readFile(file, "utf8");
   if (
     /from\s+["']@deepseek-ai\//u.test(body) ||
