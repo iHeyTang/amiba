@@ -1,12 +1,3 @@
-import { useT } from "@amiba/i18n";
-import {
-  getPlatform,
-  type AgentModelSelection,
-  type ModelDefinition,
-  type ModelPlaneSnapshot,
-  type ModelProviderProfile,
-  type ModelProviderProtocol,
-} from "@amiba/app-runtime/platform";
 import {
   Check,
   ChevronDown,
@@ -23,14 +14,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  ModelIcon,
-  ModelIdentityName,
-  ModelInfoCard,
-  ModelPickerDialog,
-  type ModelPickerGroup,
-} from "../models";
-import type { ModelMetadata } from "../models/model-metadata";
-import {
   Badge,
   Button,
   Dialog,
@@ -41,6 +24,13 @@ import {
   DialogTitle,
   Input,
   Label,
+  MODEL_SETTINGS_SECTION_CLASS,
+  MODEL_SETTINGS_SURFACE_CLASS,
+  ModelIcon,
+  ModelIdentityName,
+  ModelInfoCard,
+  ModelPickerDialog,
+  ModelSettingsSectionHeader,
   ScrollArea,
   Select,
   SelectContent,
@@ -49,12 +39,61 @@ import {
   SelectValue,
   Switch,
   cn,
-} from "../primitives";
-import {
-  MODEL_SETTINGS_SECTION_CLASS,
-  MODEL_SETTINGS_SURFACE_CLASS,
-  ModelSettingsSectionHeader,
-} from "./ModelSettingsSectionChrome";
+  usePluginT,
+  type ModelMetadata,
+  type ModelPickerGroup,
+} from "@amiba/ui/plugin";
+
+import type {
+  AgentModelSelectionShape as AgentModelSelection,
+  ModelDefinitionShape as ModelDefinition,
+  ModelPlaneSnapshotShape as ModelPlaneSnapshot,
+  ModelProviderProfileShape as ModelProviderProfile,
+} from "../remote.js";
+import { modelPlaneI18n } from "./i18n.js";
+
+type ModelProviderProtocol = ModelProviderProfile["protocol"];
+
+/**
+ * The settings surface's view of the Model Plane. Local to the plugin — the
+ * shape mirrors the plugin's own Remote face (`../remote.ts`), not the host
+ * `PlatformAdapter` contract; `client/index.tsx` builds an instance directly
+ * from `ctx.remote.amibaModelPlane`.
+ */
+export interface ModelPlaneAdapter {
+  snapshot(): Promise<ModelPlaneSnapshot>;
+  setDefaultSelection(
+    selection: AgentModelSelection,
+    expectedRevision?: number,
+  ): Promise<ModelPlaneSnapshot>;
+  upsert(input: {
+    provider: ModelProviderProfile;
+    apiKey?: string;
+    expectedRevision?: number;
+  }): Promise<ModelPlaneSnapshot>;
+  remove(
+    providerId: string,
+    expectedRevision?: number,
+  ): Promise<ModelPlaneSnapshot>;
+  discover(input: {
+    provider: ModelProviderProfile;
+    apiKey?: string;
+  }): Promise<{ models: ModelDefinition[] }>;
+  unsetCredential(
+    providerId: string,
+    expectedRevision?: number,
+  ): Promise<ModelPlaneSnapshot>;
+}
+
+/**
+ * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
+ * Every call site in this file should use this, not the bare `usePluginT`,
+ * so overlay-covered keys resolve locally instead of depending on the host
+ * `options.models.*` / `options.dshModels.*` bundles.
+ */
+function useT() {
+  return usePluginT(modelPlaneI18n);
+}
 
 interface ProviderRow {
   provider: ModelProviderProfile;
@@ -131,7 +170,11 @@ function providerStatus(
   };
 }
 
-export function ModelProviderConfigTab() {
+export function ModelProviderConfigTab({
+  adapter,
+}: {
+  adapter: ModelPlaneAdapter;
+}) {
   const { t } = useT();
   const [snapshot, setSnapshot] = useState<ModelPlaneSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -143,22 +186,16 @@ export function ModelProviderConfigTab() {
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
-    const plane = getPlatform().modelPlane;
-    if (!plane) {
-      setError(t("options.dshModels.unavailable"));
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      setSnapshot(await plane.snapshot());
+      setSnapshot(await adapter.snapshot());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [adapter]);
 
   useEffect(() => {
     void load();
@@ -179,13 +216,12 @@ export function ModelProviderConfigTab() {
   );
 
   async function setDefault(selection: AgentModelSelection) {
-    const plane = getPlatform().modelPlane;
-    if (!plane || !snapshot) return;
+    if (!snapshot) return;
     setPending("default");
     setError(null);
     try {
       setSnapshot(
-        await plane.setDefaultSelection(selection, snapshot.revision),
+        await adapter.setDefaultSelection(selection, snapshot.revision),
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -198,13 +234,12 @@ export function ModelProviderConfigTab() {
     provider: ModelProviderProfile,
     pendingKey: string,
   ) {
-    const plane = getPlatform().modelPlane;
-    if (!plane || !snapshot) return;
+    if (!snapshot) return;
     setPending(pendingKey);
     setError(null);
     try {
       setSnapshot(
-        await plane.upsert({
+        await adapter.upsert({
           provider,
           expectedRevision: snapshot.revision,
         }),
@@ -312,6 +347,7 @@ export function ModelProviderConfigTab() {
 
       {activeProvider && snapshot ? (
         <ProviderEditor
+          adapter={adapter}
           onClose={() => setSelectedProviderId(null)}
           onSaved={(next) => {
             setSnapshot(next);
@@ -323,6 +359,7 @@ export function ModelProviderConfigTab() {
       ) : null}
       {creating && snapshot ? (
         <CreateProviderDialog
+          adapter={adapter}
           onClose={() => setCreating(false)}
           onSaved={(next) => {
             setCreating(false);
@@ -829,11 +866,13 @@ function ModelDefinitionCard({
 }
 
 function ProviderEditor({
+  adapter,
   row,
   snapshot,
   onClose,
   onSaved,
 }: {
+  adapter: ModelPlaneAdapter;
   row: ProviderRow;
   snapshot: ModelPlaneSnapshot;
   onClose: () => void;
@@ -864,13 +903,11 @@ function ProviderEditor({
   }
 
   async function save() {
-    const plane = getPlatform().modelPlane;
-    if (!plane) return;
     setSaving(true);
     setError(null);
     try {
       onSaved(
-        await plane.upsert({
+        await adapter.upsert({
           provider: editedProvider(),
           ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           expectedRevision: snapshot.revision,
@@ -884,12 +921,10 @@ function ProviderEditor({
   }
 
   async function discover() {
-    const plane = getPlatform().modelPlane;
-    if (!plane) return;
     setDiscovering(true);
     setError(null);
     try {
-      const result = await plane.discover({
+      const result = await adapter.discover({
         provider: editedProvider(),
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       });
@@ -902,13 +937,12 @@ function ProviderEditor({
   }
 
   async function remove() {
-    const plane = getPlatform().modelPlane;
-    if (row.provider.source !== "user" || !plane) return;
+    if (row.provider.source !== "user") return;
     if (!window.confirm(t("options.dshModels.deleteConfirm"))) return;
     setSaving(true);
     setError(null);
     try {
-      onSaved(await plane.remove(row.provider.id, snapshot.revision));
+      onSaved(await adapter.remove(row.provider.id, snapshot.revision));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -917,12 +951,12 @@ function ProviderEditor({
   }
 
   async function unsetCredential() {
-    const plane = getPlatform().modelPlane;
-    if (!plane) return;
     setSaving(true);
     setError(null);
     try {
-      onSaved(await plane.unsetCredential(row.provider.id, snapshot.revision));
+      onSaved(
+        await adapter.unsetCredential(row.provider.id, snapshot.revision),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -1172,10 +1206,12 @@ function ProviderProtocolSelect({
 }
 
 function CreateProviderDialog({
+  adapter,
   snapshot,
   onClose,
   onSaved,
 }: {
+  adapter: ModelPlaneAdapter;
   snapshot: ModelPlaneSnapshot;
   onClose: () => void;
   onSaved: (snapshot: ModelPlaneSnapshot) => void;
@@ -1201,16 +1237,11 @@ function CreateProviderDialog({
       setError(t("options.dshModels.requiredProviderFields"));
       return;
     }
-    const plane = getPlatform().modelPlane;
-    if (!plane) {
-      setError(t("options.dshModels.unavailable"));
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
       onSaved(
-        await plane.upsert({
+        await adapter.upsert({
           provider: {
             id,
             displayName: displayName.trim() || id,

@@ -59,6 +59,14 @@ export {
   MODEL_SETTINGS_SURFACE_CLASS,
   ModelSettingsSectionHeader,
 } from "./settings/ModelSettingsSectionChrome";
+export { ModelIcon } from "./models/ModelIcon";
+export { ModelIdentityName } from "./models/ModelSummary";
+export { ModelInfoCard } from "./models/ModelInfoCard";
+export {
+  ModelPickerDialog,
+  type ModelPickerGroup,
+} from "./models/ModelPickerDialog";
+export { type ModelMetadata } from "./models/model-metadata";
 export { useRefetchOnFocus } from "./hooks/useRefetchOnFocus";
 export {
   ChipSwitcher,

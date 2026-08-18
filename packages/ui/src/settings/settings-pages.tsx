@@ -1,6 +1,5 @@
 import {
   Activity,
-  Bot,
   FileText,
   Fingerprint,
   Keyboard,
@@ -11,7 +10,6 @@ import {
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
-import { AgentModelConfigTab } from "./AgentModelConfigTab";
 import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
 import { SettingsAgentsPage } from "./SettingsAgentsPage";
 import { SettingsLogs } from "./SettingsLogs";
@@ -83,13 +81,6 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     titleKey: "options.agents.section.behavior",
     group: "assistant",
     component: page(SettingsAssistantBehavior),
-  },
-  {
-    id: "models",
-    icon: Bot,
-    titleKey: "options.models.config.navTitle",
-    group: "assistant",
-    component: page(AgentModelConfigTab),
   },
   {
     id: "agents",

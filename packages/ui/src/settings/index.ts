@@ -1,4 +1,3 @@
-export { AgentModelConfigTab } from "./AgentModelConfigTab";
 export {
   AgentBehaviorEditor,
   SettingsAssistantBehavior,

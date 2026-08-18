@@ -1,18 +1,37 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
+// Key-echo both i18n surfaces: the component's own overlay hook
+// (`usePluginT` via `@amiba/i18n/plugin`) and the host `useT` that the
+// shared `@amiba/ui` model primitives (ModelPickerDialog, ModelInfoCard)
+// still call internally — assertions below match raw keys either way.
 vi.mock("@amiba/i18n", () => {
   const t = (key: string) => key;
   return { useT: () => ({ t }) };
 });
+vi.mock("@amiba/i18n/plugin", () => {
+  const t = (key: string) => key;
+  return { usePluginT: () => ({ t }) };
+});
 
-import { ModelProviderConfigTab } from "../ModelProviderConfigTab";
+import {
+  ModelProviderConfigTab,
+  type ModelPlaneAdapter,
+} from "../ModelProviderConfigTab";
 
 const snapshot = vi.fn();
 const upsert = vi.fn();
 const setDefaultSelection = vi.fn();
+
+const adapter: ModelPlaneAdapter = {
+  snapshot,
+  setDefaultSelection,
+  upsert,
+  remove: vi.fn(),
+  discover: vi.fn(),
+  unsetCredential: vi.fn(),
+};
 
 const modelPlaneSnapshot = {
   revision: 4,
@@ -72,27 +91,11 @@ describe("ModelProviderConfigTab", () => {
         model: "deepseek-v4-flash",
       },
     });
-    setPlatform({
-      storage: {
-        get: vi.fn().mockResolvedValue({}),
-        set: vi.fn(),
-        remove: vi.fn(),
-        watch: vi.fn(() => () => {}),
-      },
-      modelPlane: {
-        snapshot,
-        setDefaultSelection,
-        upsert,
-        remove: vi.fn(),
-        discover: vi.fn(),
-        unsetCredential: vi.fn(),
-      },
-    } as unknown as PlatformAdapter);
   });
 
   it("restores the model-first settings hierarchy on top of Model Plane", async () => {
     const user = userEvent.setup();
-    render(<ModelProviderConfigTab />);
+    render(<ModelProviderConfigTab adapter={adapter} />);
 
     expect(
       await screen.findByText("options.models.config.defaultsTitle"),
