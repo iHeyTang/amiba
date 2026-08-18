@@ -1,3 +1,4 @@
+/// <reference path="../assets.d.ts" />
 import anthropicIcon from "@lobehub/icons-static-svg/icons/anthropic.svg";
 import arceeIcon from "@lobehub/icons-static-svg/icons/arcee-color.svg";
 import azureAiIcon from "@lobehub/icons-static-svg/icons/azureai-color.svg";

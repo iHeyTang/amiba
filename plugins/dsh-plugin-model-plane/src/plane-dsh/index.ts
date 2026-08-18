@@ -1,4 +1,6 @@
-import type { ModelDefinition, ModelProviderProfile } from "@amiba/app-runtime/platform";
+import type { ModelDefinition } from "@amiba/app-runtime/platform";
+
+import type { ModelProviderProfile } from "../plane/types.js";
 
 export interface DshProjectionBinding {
   settingsNs: "llm-deepseek" | "llm-pi-ai";

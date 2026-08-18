@@ -1,4 +1,6 @@
-import type { ModelDefinition, ModelProviderProfile } from "@amiba/app-runtime/platform";
+import type { ModelDefinition } from "@amiba/app-runtime/platform";
+
+import type { ModelProviderProfile } from "./types.js";
 
 import { asObject } from "./core.js";
 import { applyModelProviderCapabilities } from "./drivers.js";

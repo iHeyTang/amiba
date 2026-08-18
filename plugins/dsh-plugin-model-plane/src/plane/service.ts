@@ -2,10 +2,13 @@ import type {
   AgentCredentialView,
   AgentModelSelection,
   ModelDefinition,
+} from "@amiba/app-runtime/platform";
+
+import type {
   ModelPlaneAdapter,
   ModelPlaneSnapshot,
   ModelProviderProfile,
-} from "@amiba/app-runtime/platform";
+} from "./types.js";
 
 import {
   MODEL_REGISTRY_VERSION,

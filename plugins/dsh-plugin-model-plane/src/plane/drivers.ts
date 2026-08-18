@@ -1,4 +1,4 @@
-import type { ModelProviderProfile } from "@amiba/app-runtime/platform";
+import type { ModelProviderProfile } from "./types.js";
 
 const DEEPSEEK_REASONING = {
   efforts: [

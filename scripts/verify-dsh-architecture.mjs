@@ -627,7 +627,6 @@ for (const subpath of [
   "./dsh-client",
   "./dsh-distribution",
   "./dsh-runtime",
-  "./model-plane-dsh",
   "./utils",
 ]) {
   if (!appRuntime.exports?.[subpath]) {
@@ -756,8 +755,7 @@ for (const file of await sourceFiles("plugins/dsh-plugin-model-plane/src/plane")
   const body = await readFile(file, "utf8");
   if (
     /from\s+["']@deepseek-ai\//u.test(body) ||
-    /from\s+["']@amiba\/app-runtime\/model-plane-dsh/u.test(body) ||
-    /from\s+["']\.\.\/model-plane-dsh/u.test(body)
+    /from\s+["']\.\.\/plane-dsh/u.test(body)
   ) {
     fail(
       `canonical Model Plane depends on DSH in ${path.relative(root, file)}`,
@@ -861,14 +859,14 @@ const dshPlatformAdapters = await text(
   "packages/app-runtime/src/dsh-client/platform-adapters.ts",
 );
 // Domain remotes (amibaMemory/amibaSkills/amibaTools/amibaSchedules/
-// amibaMessaging/amibaMcp/amibaUsage) are intentionally absent here: the
-// pluginization-convergence migration made those domains fully plugin-owned
-// (their Client plugins mount `ctx.remote` directly), retiring the host
-// platform-adapter hop. Only mechanism-level surfaces remain in this layer.
+// amibaMessaging/amibaMcp/amibaUsage/amibaModelPlane) are intentionally
+// absent here: the pluginization-convergence migration made those domains
+// fully plugin-owned (their Client plugins mount `ctx.remote` directly),
+// retiring the host platform-adapter hop. Only mechanism-level surfaces
+// remain in this layer.
 for (const remote of [
   "amibaCommands",
   "amibaAttachments",
-  "amibaModelPlane",
 ]) {
   if (!dshPlatformAdapters.includes(`\"${remote}/`)) {
     fail(`shared UI platform does not consume DSH Remote ${remote}`);

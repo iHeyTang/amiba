@@ -2,9 +2,12 @@ import type {
   AgentModelSelection,
   ModelDefinition,
   ModelGroup,
+} from "@amiba/app-runtime/platform";
+
+import type {
   ModelProviderProfile,
   ModelProviderProtocol,
-} from "@amiba/app-runtime/platform";
+} from "./types.js";
 
 export type StoredModelProvider = ModelProviderProfile;
 

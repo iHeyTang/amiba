@@ -3,7 +3,6 @@ import type {
   AgentPermissionOption,
   AgentPermissionState,
   AgentSkillsAdapter,
-  ModelPlaneAdapter,
   PlatformAdapter,
 } from "../platform/index.js";
 
@@ -18,7 +17,6 @@ type DshPlatformKey =
   | "agentSettings"
   | "agentCredentials"
   | "agentPermissions"
-  | "modelPlane"
   | "agentSkills"
   | "agentCommands";
 
@@ -256,29 +254,8 @@ export function createDshPlatformAdapters(
     },
   };
 
-  const modelPlane: ModelPlaneAdapter = {
-    snapshot: () => client.call("amibaModelPlane/snapshot", { args: {} }),
-    setDefaultSelection: (selection, expectedRevision) =>
-      client.call("amibaModelPlane/setDefaultSelection", {
-        args: { selection, expectedRevision },
-      }),
-    upsert: (input) =>
-      client.call("amibaModelPlane/upsert", { args: { input } }),
-    remove: (providerId, expectedRevision) =>
-      client.call("amibaModelPlane/remove", {
-        args: { providerId, expectedRevision },
-      }),
-    discover: (input) =>
-      client.call("amibaModelPlane/discover", { args: { input } }),
-    unsetCredential: (providerId, expectedRevision) =>
-      client.call("amibaModelPlane/unsetCredential", {
-        args: { providerId, expectedRevision },
-      }),
-  };
-
   return {
     agentAttachments: attachments,
-    modelPlane,
     agentModels: {
       async directory(sessionId) {
         try {

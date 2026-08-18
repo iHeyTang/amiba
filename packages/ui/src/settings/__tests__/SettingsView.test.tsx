@@ -116,25 +116,50 @@ describe("SettingsView DSH navigation", () => {
     expect(screen.getByRole("button", { name: "Logs" })).toBeVisible();
   });
 
-  it("does not preserve hashes for removed compatibility surfaces", () => {
+  it("hands removed compatibility ids to the section ledger instead of a registry page", () => {
     window.history.replaceState(null, "", "/#multi-model-collaboration");
-    render(<SettingsView />);
-    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
-      "aria-current",
-      "page",
+    const seen: Array<string | undefined> = [];
+    render(
+      <SettingsView
+        slots={{
+          assistantNavigation: (activeSection) => {
+            seen.push(activeSection);
+            return null;
+          },
+        }}
+      />,
     );
+    // Unknown ids resolve as dsh sections now; a dead id simply has no
+    // section claiming it, and no built-in page pretends to own it.
+    expect(seen).toContain("multi-model-collaboration");
+    expect(
+      screen.getByRole("button", { name: "Appearance" }),
+    ).not.toHaveAttribute("aria-current", "page");
   });
 
-  it("no longer routes #models as a registry page (the section moved to dsh-plugin-model-plane)", () => {
+  it("resolves a non-registry id against the DSH section ledger: #models becomes the dsh:models route", () => {
     window.history.replaceState(null, "", "/#models");
-    render(<SettingsView />);
+    const seen: Array<string | undefined> = [];
+    render(
+      <SettingsView
+        slots={{
+          assistantNavigation: (activeSection) => {
+            seen.push(activeSection);
+            return null;
+          },
+        }}
+      />,
+    );
+    // No registry page claims the id — the route is handed to the
+    // dsh-section surface instead of falling back to Appearance, so plugin
+    // sections stay addressable by bare id after a registry page migrates.
+    expect(seen).toContain("models");
     expect(
       screen.queryByRole("button", { name: "Models & services" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(
+      screen.getByRole("button", { name: "Appearance" }),
+    ).not.toHaveAttribute("aria-current", "page");
   });
 
   it("gates a desktopOnly route off-desktop: #shortcuts falls back to Appearance and Shortcuts is absent from nav", () => {

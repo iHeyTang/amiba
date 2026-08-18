@@ -1,10 +1,10 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
-import type { ModelPlaneService } from "./plane/index.js";
 import type {
-  AgentModelSelection,
+  ModelPlaneService,
   ModelProviderProfile,
-} from "@amiba/app-runtime/platform";
+} from "./plane/index.js";
+import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 
 class AmibaModelPlaneRemoteService extends TypertRemoteService {
   constructor(

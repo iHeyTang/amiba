@@ -46,22 +46,26 @@ describe("createDshPlatformAdapters", () => {
     const client = rpcClient(
       (method) =>
         ({
-          "amibaModelPlane/snapshot": {
-            revision: 1,
-            providers: [],
-            groups: [],
-            credentials: {},
-            failures: [],
+          "amibaAttachments/readForPrompt": {
+            attachmentId: "att-1",
+            name: "notes.txt",
+            mime: "text/plain",
+            size: 5,
+            kind: "text",
+            dataBase64: "aGVsbG8=",
           },
         })[method],
       seen,
     );
     const adapters = createDshPlatformAdapters(client);
 
-    await adapters.modelPlane.snapshot();
+    await adapters.agentAttachments.readForPrompt("att-1");
 
     expect(seen).toEqual([
-      { method: "amibaModelPlane/snapshot", payload: { args: {} } },
+      {
+        method: "amibaAttachments/readForPrompt",
+        payload: { args: { attachmentId: "att-1" } },
+      },
     ]);
   });
 

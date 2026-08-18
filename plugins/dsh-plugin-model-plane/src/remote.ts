@@ -6,9 +6,12 @@ import { z } from "zod";
 import type {
   AgentModelSelection,
   ModelDefinition,
+} from "@amiba/app-runtime/platform";
+
+import type {
   ModelPlaneSnapshot,
   ModelProviderProfile,
-} from "@amiba/app-runtime/platform";
+} from "./plane/types.js";
 
 const effortSchema = z.object({
   id: z.string(),

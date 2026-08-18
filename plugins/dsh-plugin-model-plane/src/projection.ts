@@ -5,13 +5,13 @@ import type {
   ModelCredentialVault,
   ModelProviderProjection,
 } from "./plane/index.js";
-import type { ModelProviderProfile } from "@amiba/app-runtime/platform";
+import type { ModelProviderProfile } from "./plane/types.js";
 import {
   apiForDshProvider,
   bindingForDshProvider,
   deepSeekModelRows,
   piAiModelRows,
-} from "@amiba/app-runtime/model-plane-dsh";
+} from "./plane-dsh/index.js";
 
 function descriptor(ctx: Context, namespace: string) {
   const entry = ctx.settings

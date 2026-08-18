@@ -260,6 +260,27 @@ const MODULES = [
       "packages/ui/src/usage/ToolsActivityTab.tsx",
     ],
   },
+  {
+    id: "model-plane",
+    enforced: true,
+    text: [
+      { label: "modelPlane platform-adapter key", pattern: boundary("modelPlane") },
+      { label: "ModelPlaneAdapter platform type", pattern: boundary("ModelPlaneAdapter") },
+      { label: "ModelPlaneSnapshot shape type", pattern: boundary("ModelPlaneSnapshot") },
+      { label: "ModelProviderProfile shape type", pattern: boundary("ModelProviderProfile") },
+      { label: "ModelProviderConfigTab host component", pattern: boundary("ModelProviderConfigTab") },
+      { label: "DshComposerModelPicker host component", pattern: boundary("DshComposerModelPicker") },
+      { label: "amibaModelPlane DSH remote namespace", pattern: /amibaModelPlane/u },
+    ],
+    paths: [
+      "packages/app-runtime/src/model-plane",
+      "packages/app-runtime/src/model-plane-dsh",
+      "packages/ui/src/settings/ModelProviderConfigTab.tsx",
+      "packages/ui/src/settings/AgentModelConfigTab.tsx",
+      "packages/ui/src/chat/DshComposerModelPicker.tsx",
+      "packages/ui/src/chat/ComposerModelPicker.tsx",
+    ],
+  },
 ];
 
 async function run() {

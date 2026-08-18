@@ -523,29 +523,10 @@ export const en = {
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
 
   // Models / DSH model config
-  "options.models.title": "Models",
-  "options.models.subtitle":
-    "Which providers and models Amiba uses for chat, embedding, and tool calls.",
-  "options.models.catalog.loading": "Loading…",
-  "options.models.catalog.ready": "Catalog ready",
-  "options.models.catalog.unavailable": "Catalog unavailable",
-  "options.models.catalog.updatedAt": "Catalog {time}",
-  "options.models.refreshCatalog": "Refresh catalog",
-  "options.models.loadingSettings": "Loading settings…",
-  "options.models.config.navTitle": "Models & services",
-  "options.models.display.navTitle": "Shown in chat",
-  "options.models.display.navDescription": "Choose models for the input bar",
   "options.models.display.title": "Service providers",
-  "options.models.providers.sectionTitle": "Service providers",
   "options.models.display.search": "Search providers or models…",
   "options.models.display.empty": "No matching providers or models.",
-  "options.models.display.source.config": "Local config",
-  "options.models.display.source.saved": "Saved here",
-  "options.models.display.source.detected": "Credential detected",
-  "options.models.display.source.available": "Not connected",
   "options.models.display.current": "Current",
-  "options.models.display.currentDescription":
-    "This is the active main provider. Switch models before hiding it.",
   "options.models.display.currentModel": "Current main model",
   "options.models.display.availableModels": "{count} models",
   "options.models.display.providerToggle": "Show {name} in model menus",
@@ -553,8 +534,6 @@ export const en = {
   "options.models.display.modelToggle": "Show {name} in model menus",
   "options.models.display.noModels":
     "No models are currently available from this provider.",
-  "options.models.display.saveFailed":
-    "Could not save the model visibility preference.",
   "options.models.card.context": "Context",
   "options.models.card.maxInput": "Max input",
   "options.models.card.maxOutput": "Max output",
@@ -592,171 +571,24 @@ export const en = {
   "options.models.details.openFor": "View details for {name}",
   "options.models.details.dialogDescription":
     "Extended model information and its available data sources.",
-  "options.models.details.referenceNote":
-    "Model information references {source}.",
-  "options.models.details.noSupplemental":
-    "The local runtime or provider did not supply an extended profile, and no community catalog entry matched this model.",
   "options.models.config.defaultsTitle": "Model assignments",
-  "options.models.config.mainModel": "Main model",
   "options.models.config.main": "Default model",
-  "options.models.config.mainDescription":
-    "Used whenever a task has no dedicated override.",
   "options.models.config.mainUnset": "Not set — choose a model",
-  "options.models.config.auxiliaryModels": "Auxiliary models",
-  "options.models.config.useMainModel": "Use the main model",
-  "options.models.config.useMainModelDescription":
-    "Do not assign a separate model; always follow the current main model.",
-  "options.models.config.configuredCount": "{count} of {total} configured",
-  "options.models.config.saved": "Saved",
-  "options.models.config.clear": "Clear",
-  "options.models.config.select": "Choose",
-  "options.models.config.search": "Search model id, provider, or description…",
   "options.models.config.searchForTask": "Search models for {task}…",
   "options.models.config.pickerTitle": "Choose a model for {task}",
   "options.models.config.pickerDescription":
     "Search configured providers and assign a model to this task.",
-  "options.models.config.noMatchingModels": "No matching models.",
-  "options.models.config.readMainFailed": "Could not read the main model.",
-  "options.models.config.setMainFailed": "Could not set the main model.",
-  "options.models.config.setCustomFailed":
-    "Could not set the custom main model.",
-  "options.models.config.saveFailed": "Could not save the model assignment.",
-  "options.models.config.clearFailed": "Could not clear the model assignment.",
-  "options.models.config.context": "Context",
-  "options.models.config.contextOverride": "Context (override)",
-  "options.models.config.contextOverrideHint":
-    "config.yaml override: {configured}\nAuto-detected: {detected}",
-  "options.models.config.contextDetectedHint":
-    "Auto-detected from agent model metadata",
-  "options.models.config.unknown": "unknown",
-  "options.models.config.modelFamilyHint": "Model family from models.dev",
-  "options.models.config.capability.vision": "Vision",
-  "options.models.config.capability.visionHint":
-    "Supports image input according to models.dev",
-  "options.models.config.capability.reasoning": "Reasoning",
-  "options.models.config.capability.reasoningHint":
-    "Supports reasoning tokens or extended thinking",
-  "options.models.config.capability.tools": "Tools",
-  "options.models.config.capability.toolsHint":
-    "Supports OpenAI-style function calling",
-  "options.models.config.capability.output": "Output {count}",
-  "options.models.config.capability.outputHint":
-    "Maximum output of {count} tokens per call",
-  "options.models.config.slot.vision": "Vision",
-  "options.models.config.slot.webExtract": "Web extraction",
-  "options.models.config.slot.compression": "Context compression",
-  "options.models.config.slot.sessionSearch": "Session search",
-  "options.models.config.slot.skillsHub": "Skills hub",
-  "options.models.config.slot.approval": "Approval",
-  "options.models.config.slot.mcp": "MCP",
-  "options.models.config.slot.titleGeneration": "Title generation",
   "options.models.provider.addCustom": "Add custom endpoint",
-  "options.models.provider.customName": "Custom OpenAI-compatible endpoint",
-  "options.models.provider.credentials": "Credentials",
-  "options.models.provider.endpoint": "Endpoint: {url}",
-  "options.models.provider.metadataPartial":
-    "Provider metadata is only partially available. Make sure the local service is installed and connected.",
-  "options.models.provider.customDescription":
-    "Use any OpenAI-compatible endpoint as the main model. Enter its model id and endpoint here.",
-  "options.models.provider.customModel": "Model id",
-  "options.models.provider.customModelPlaceholder":
-    "e.g. gpt-4o, llama-3.3-70b",
-  "options.models.provider.customEndpoint": "Endpoint URL",
-  "options.models.provider.setDefault": "Set as main model",
-  "options.models.provider.loadingCredentials": "Loading credentials…",
   "options.models.provider.credentialValue": "Credential",
   "options.models.provider.credentialPlaceholder": "Enter access credential",
-  "options.models.provider.showCredential": "Show credential",
-  "options.models.provider.hideCredential": "Hide credential",
-  "options.models.provider.credentialActive": "In use",
-  "options.models.provider.credentialConfigured": "Configured",
-  "options.models.provider.credentialResolution":
-    "Saving the current connection clears other mutually exclusive saved credentials and preserves shared endpoint settings.",
-  "options.models.provider.connection.title": "Connection status",
-  "options.models.provider.connection.details": "Connection details",
-  "options.models.provider.connection.credentialSource": "Credential source",
-  "options.models.provider.connection.reason": "Reason",
-  "options.models.provider.connection.external": "External connection",
-  "options.models.provider.connection.otherMethods": "Other detected methods",
-  "options.models.provider.connection.detectedNotUsed":
-    "Detected, not currently used",
-  "options.models.provider.connection.githubIdentity": "GitHub identity",
-  "options.models.provider.connection.copilotService": "Copilot service",
-  "options.models.provider.connection.notDetected": "Not detected",
-  "options.models.provider.connection.detected": "Identity credential detected",
-  "options.models.provider.connection.required": "GitHub login required",
-  "options.models.provider.connection.status.none": "Not connected",
-  "options.models.provider.connection.status.detected": "Detected",
-  "options.models.provider.connection.status.configured": "Configured",
   "options.models.provider.connection.status.verification_required":
     "Verification required",
-  "options.models.provider.connection.status.verified": "Verified",
-  "options.models.provider.connection.status.unavailable": "Unavailable",
-  "options.models.provider.connection.scope.title": "Scope",
-  "options.models.provider.connection.scope.profile": "This agent",
-  "options.models.provider.connection.scope.shared": "Shared credential",
-  "options.models.provider.connection.scope.system": "System login",
-  "options.models.provider.connection.scope.none": "Setup required",
   "options.models.provider.service.status.not_applicable":
     "No separate verification",
   "options.models.provider.service.status.not_checked": "Not verified",
-  "options.models.provider.service.status.verified": "Verified and available",
-  "options.models.provider.service.status.unavailable": "Service unavailable",
-  "options.models.provider.service.copilotHint":
-    "The GitHub identity must be exchanged for Copilot service access",
-  "options.models.provider.service.copilotDenied":
-    "GitHub is signed in, but no usable Copilot service credential was issued",
-  "options.models.provider.service.copilotUnsupportedToken":
-    "The current GitHub credential type is not supported by the Copilot API",
-  "options.models.provider.service.copilotVerificationFailed":
-    "Service verification could not be completed. Try again later",
-  "options.models.provider.method.anthropicApiKey": "Anthropic API Key",
-  "options.models.provider.method.anthropicOauth": "Anthropic OAuth",
-  "options.models.provider.method.claudeSetupToken": "Claude Setup Token",
-  "options.models.provider.method.copilotToken": "Copilot GitHub Token",
-  "options.models.provider.method.githubCliToken": "GitHub CLI Token",
-  "options.models.provider.method.githubToken": "GitHub Token",
-  "options.models.provider.method.claudeCode": "Claude Code login",
-  "options.models.provider.method.githubCli": "GitHub CLI login",
-  "options.models.provider.authHint.oauthDevice":
-    "You can also sign in through the device authorization flow.",
-  "options.models.provider.authHint.oauthExternal":
-    "You can also use an external CLI login detected on this device.",
-  "options.models.provider.authHint.externalProcess":
-    "This service can also be supplied by an authenticated external process.",
-  "options.models.provider.authHint.awsSdk":
-    "Amiba also reads local AWS SDK configuration or IAM environment credentials.",
-  "options.models.provider.authHint.copilot":
-    "GitHub identity and Copilot service access are separate states. Copilot is usable only after service verification succeeds.",
-  "options.models.provider.authHint.vertex":
-    "Amiba also reads Google Cloud ADC or service-account configuration.",
-  "options.models.provider.saveCredentials": "Save credentials",
-  "options.models.provider.saved": "Saved",
-  "options.models.provider.readCredentialsFailed":
-    "Could not read provider credentials.",
-  "options.models.provider.saveFailed": "Could not save provider credentials.",
   "options.models.provider.models": "Available models",
-  "options.models.provider.refreshModels": "Refresh model list",
-  "options.models.provider.loadingModels": "Loading models…",
-  "options.models.provider.referenceList":
-    "A reference list is shown. Save credentials and refresh to fetch the full list.",
-  "options.models.provider.pricingHint":
-    "Prices are USD per million tokens and may differ by route. Treat your provider bill as the source of truth.",
   "options.models.provider.noModels":
     "No models are available yet. Save the required credentials, then refresh this list.",
-  "options.models.meta.context": "Context",
-  "options.models.meta.contextCap": "Context cap",
-  "options.models.meta.outputCap": "Output cap",
-  "options.models.meta.tokens": "Tokens",
-  "options.models.meta.input": "Input",
-  "options.models.meta.output": "Output",
-  "options.models.meta.inputPrice": "Input price",
-  "options.models.meta.outputPrice": "Output price",
-  "options.models.meta.pricing": "Pricing",
-  "options.models.meta.pricingTier": "Pricing tier",
-  "options.models.meta.modality": "Modality",
-  "options.models.meta.parameters": "Parameters",
-  "options.models.meta.capabilities": "Capabilities",
 
   // Status + logs
   "options.status.title": "Status",
@@ -816,7 +648,6 @@ export const en = {
   "sidepanel.modelPicker.noMatches": "No matching models.",
   "sidepanel.modelPicker.loading": "Loading available models…",
   "sidepanel.modelPicker.loadFailed": "Couldn’t load models. Reopen to retry.",
-  "sidepanel.modelPicker.switchFailed": "Couldn’t switch models. Try again.",
   "sidepanel.modelPicker.reasoningEffort": "Reasoning effort",
   "sidepanel.queue.tooltip": "Queue: send after the current turn finishes",
   "sidepanel.stop": "Stop generation",

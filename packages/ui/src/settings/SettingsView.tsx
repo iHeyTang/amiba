@@ -45,6 +45,12 @@ function routeFromLocation(): SettingsRoute {
   const page = settingsPageById(tab);
   const isDesktop = getPlatform().kind === "desktop";
   if (page && (isDesktop || !page.desktopOnly)) return { tab, detail };
+  // Ids the built-in registry does not know at all resolve against the DSH
+  // settings-section ledger instead, so plugin sections stay addressable by
+  // bare id (deep links like `#models` keep working after a page migrates
+  // from the registry to a plugin contribution). Registry pages gated off
+  // this surface (desktopOnly off-desktop) still fall back to Appearance.
+  if (!page && tab) return { tab: `dsh:${tab}` };
   return { tab: "appearance" };
 }
 
