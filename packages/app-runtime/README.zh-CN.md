@@ -14,7 +14,7 @@ Amiba 各渲染面（桌面端与 DSH Web Shell）及 Electron 主进程共用�
 | --- | --- | --- |
 | `./platform` | `src/platform` | `PlatformAdapter` 契约：与运行时无关的能力面（storage、shell、引擎原生的 session/model/preset/settings/credential/permission 投影、桌面端专属的 workspace 桥）。各应用在启动时经 `setPlatform()` 安装自己的实现。**只含机制与引擎原生形状**——域 adapter（记忆、技能、MCP、消息、定时任务、用量、model plane 等）全部住在各自的 `dsh-plugin-*` 包里，由 `scripts/verify-pluginization.mjs` 机器把关。 |
 | `./protocol` | `src/protocol` | Amiba 界面与所选智能体运行时之间的稳定产品协议（chat 角色、message/turn/step 形状）。刻意不含任何 adapter 实现类型；运行时 adapter 在此边界翻译各自的原生事件流。 |
-| `./core` | `src/core` | UI 消费的共享应用状态与服务：会话与会话历史投影、chat-engine 客户端协议、智能体预设与上下文、附件、定时运行、运行时权限、配置、渠道、壁纸。 |
+| `./core` | `src/core` | UI 消费的共享应用状态与服务：会话与会话历史投影、chat-engine 客户端协议、智能体预设与上下文、附件、运行时权限、配置、渠道、壁纸。 |
 | `./dsh-client` | `src/dsh-client` | DSH API 客户端及其粘合层：`DshApiClient`（RPC + events.mux）、Amiba 事件桥、chat-engine 适配器、`createDshPlatformAdapters`（把引擎原生的平台面接到客户端上），以及官方 Web Shell 使用的 web-platform 组合。 |
 | `./dsh-distribution` | `src/dsh-distribution` | Core/Web/Desktop 三种 Profile 的契约：bundle 身份（`@amiba/dsh-bundle-amiba-{core,web,desktop}`）、Profile 名称与 manifest 组合。纯数据，以预构建的 `.js`/`.d.ts` 发布，浏览器侧消费者永远不会加载 Node 代码。 |
 | `./dsh-runtime` | `src/dsh-runtime` | 仅限 Node：管理钉版的 Node/DSH 制品——staging 的准备与校验、Profile 生命周期、应用打包路径。读取 `dsh-runtime-manifest.json`；从 `dist/` 构建产物导出。 |
