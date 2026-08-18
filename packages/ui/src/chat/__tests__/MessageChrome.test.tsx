@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -339,9 +339,11 @@ describe("chat message chrome", () => {
                 durationMs: 840,
               },
             ],
+            // Projection order: the step's tool activity precedes its
+            // closing message, so the trailing text is the turn's result.
             assistantTimeline: [
-              { kind: "text", id: "text-1", text: "Final answer" },
               { kind: "tool", id: "tool-1", toolCallId: "call-1" },
+              { kind: "text", id: "text-1", text: "Final answer" },
             ],
           } as UiMessage
         }
@@ -620,18 +622,27 @@ describe("chat message chrome", () => {
       />,
     );
 
-    const before = screen.getByText("I will inspect the directory.");
+    // Two-part model: intermediate narration folds into the process
+    // disclosure (hidden until expanded); the trailing text is the result
+    // and renders after the fold.
     const execution = container.querySelector("[data-execution-summary]");
     const after = screen.getByText("Here is what I found.");
-
     expect(execution).not.toBeNull();
     expect(
-      before.compareDocumentPosition(execution!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.queryByText("I will inspect the directory."),
+    ).not.toBeInTheDocument();
     expect(
       execution!.compareDocumentPosition(after) &
         Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(execution!.querySelector("button")!);
+    const narration = screen.getByText("I will inspect the directory.");
+    const narrationExecution = container.querySelector(
+      "[data-execution-summary]",
+    );
+    expect(
+      narrationExecution!.contains(narration),
     ).toBeTruthy();
   });
 

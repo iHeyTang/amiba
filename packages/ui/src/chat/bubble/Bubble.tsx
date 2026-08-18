@@ -29,6 +29,7 @@ import {
   EXPANDED_MAX_HEIGHT_CLASS,
   type UiMessage,
 } from "../internal/types";
+import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
@@ -533,6 +534,12 @@ type TurnTraceDetail =
       reasoningMs?: number;
     }
   | {
+      /** Intermediate step narration, folded with the tools it accompanied. */
+      kind: "narration";
+      id: string;
+      text: string;
+    }
+  | {
       kind: "tool";
       id: string;
       event: ToolProgress;
@@ -646,6 +653,18 @@ function ExecutionDisclosure({
                   text={detail.text}
                   streaming={false}
                 />
+              );
+            }
+            if (detail.kind === "narration") {
+              return (
+                <Streamdown
+                  key={detail.id}
+                  mode="static"
+                  parseIncompleteMarkdown
+                  className="chat-md chat-md--reasoning break-words px-1.5 text-xs text-muted-foreground/85"
+                >
+                  {detail.text}
+                </Streamdown>
               );
             }
             if (detail.kind === "tool") {
@@ -970,6 +989,29 @@ function InterleavedAssistantFlow({
   const hasFinalDestination =
     !message.streaming &&
     Boolean(message.agentFinalUrl && onOpenAgentDestination);
+  // Two-part turn presentation: everything before the trailing text run is
+  // process (narration folded with the tools it accompanied); the trailing
+  // run is the result. While streaming, the current text streams in the
+  // result slot and is demoted into the fold as soon as another tool call
+  // proves it was narration.
+  const { head: processSegments, tail: resultSegments } =
+    splitTrailingTextRun(flow);
+  const processDetails: TurnTraceDetail[] = processSegments.flatMap(
+    (segment) =>
+      segment.kind === "execution"
+        ? segment.details
+        : [{ kind: "narration" as const, id: segment.id, text: segment.text }],
+  );
+  const processTools: ToolProgress[] = processSegments.flatMap((segment) =>
+    segment.kind === "execution" ? segment.tools : [],
+  );
+  const resultText = resultSegments
+    .map((segment) => (segment.kind === "text" ? segment.text : ""))
+    .join("\n\n")
+    .trim();
+  const resultStreaming = !!message.streaming;
+  const processStreaming = resultStreaming && resultText.length === 0;
+
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div className="flex min-w-0 flex-col gap-2">
@@ -980,31 +1022,24 @@ function InterleavedAssistantFlow({
             streaming={!!message.streaming}
           />
         )}
-        {flow.map((item, index) => {
-          const active = !!message.streaming && index === flow.length - 1;
-          if (item.kind === "execution") {
-            return (
-              <ExecutionDisclosure
-                key={item.id}
-                details={item.details}
-                tools={item.tools}
-                streaming={active}
-              />
-            );
-          }
-          return (
-            <Streamdown
-              key={item.id}
-              mode={active ? "streaming" : "static"}
-              parseIncompleteMarkdown
-              caret="circle"
-              isAnimating={active}
-              className="chat-md break-words"
-            >
-              {item.text}
-            </Streamdown>
-          );
-        })}
+        {processDetails.length > 0 && (
+          <ExecutionDisclosure
+            details={processDetails}
+            tools={processTools}
+            streaming={processStreaming}
+          />
+        )}
+        {resultText.length > 0 && (
+          <Streamdown
+            mode={resultStreaming ? "streaming" : "static"}
+            parseIncompleteMarkdown
+            caret="circle"
+            isAnimating={resultStreaming}
+            className="chat-md break-words"
+          >
+            {resultText}
+          </Streamdown>
+        )}
       </div>
       {!message.streaming &&
         message.agentFinalUrl &&
