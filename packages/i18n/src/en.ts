@@ -658,7 +658,6 @@ export const en = {
   "sidepanel.trace.actions.generateMedia": "Generate media",
   "sidepanel.trace.actions.inspectMedia": "Inspect media",
   "sidepanel.trace.actions.askUser": "Ask user",
-  "sidepanel.trace.actions.schedule": "Manage schedule",
   "sidepanel.trace.actions.searchSessions": "Search past sessions",
   "sidepanel.trace.actions.manageProject": "Manage project",
   "sidepanel.trace.actions.manageBoard": "Manage task board",

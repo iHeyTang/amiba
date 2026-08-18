@@ -261,11 +261,6 @@ const TOOL_SPECS: Record<string, ToolSpec> = {
     actionKey: "sidepanel.trace.actions.askUser",
     icon: MousePointer2,
   },
-  cronjob: {
-    kind: "tasks",
-    actionKey: "sidepanel.trace.actions.schedule",
-    icon: ListTodo,
-  },
   project_create: {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.manageProject",
@@ -562,13 +557,6 @@ export function hasToolDetail(event: ToolProgress): boolean {
           failed ||
           (Array.isArray(args.todos) && args.todos.length > 0) ||
           Boolean(firstCollection(event.result)?.length)
-        );
-      }
-      if (event.tool === "cronjob") {
-        return (
-          failed ||
-          (["list", "show"].includes(stringValue(args, "action")) &&
-            event.result !== undefined)
         );
       }
       return failed || event.result !== undefined;

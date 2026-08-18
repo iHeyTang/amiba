@@ -627,7 +627,6 @@ export const zhCN: Messages = {
   "sidepanel.trace.actions.generateMedia": "生成媒体",
   "sidepanel.trace.actions.inspectMedia": "检查媒体",
   "sidepanel.trace.actions.askUser": "询问用户",
-  "sidepanel.trace.actions.schedule": "管理计划",
   "sidepanel.trace.actions.searchSessions": "搜索历史会话",
   "sidepanel.trace.actions.manageProject": "管理项目",
   "sidepanel.trace.actions.manageBoard": "管理任务板",
