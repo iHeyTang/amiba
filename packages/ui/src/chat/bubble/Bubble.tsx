@@ -1,4 +1,4 @@
-import type { ApprovalRecord, HermesToolProgress } from "@amiba/core";
+import type { ApprovalRecord, ToolProgress } from "@amiba/app-runtime/core";
 import { cn } from "../../primitives";
 import {
   ChevronDown,
@@ -6,10 +6,6 @@ import {
   ChevronUp,
   FileDiff,
   GitBranch,
-  Globe,
-  Pencil,
-  RotateCcw,
-  Scissors,
   Undo2,
 } from "lucide-react";
 import {
@@ -24,10 +20,8 @@ import { useT } from "@amiba/i18n";
 
 import {
   bubbleTextContent,
-  hostnameOf,
   stripManagedResourceContext,
   splitThinkingFromBody,
-  splitWorkspaceFromBody,
 } from "../internal/helpers";
 import {
   CAPPED_HEIGHT_CLASS,
@@ -89,21 +83,9 @@ export function Bubble({
   const { t } = useT();
 
   if (m.role === "user") {
-    // Workspace remains session-level execution context and sidebar grouping.
-    // Strip its internal prompt block from persisted messages, but don't echo
-    // the same immutable directory on every user bubble.
-    const { body: expandedBodyText } = splitWorkspaceFromBody(
-      bubbleTextContent(m.content),
-    );
-    const bodyText = stripManagedResourceContext(expandedBodyText);
-    const pageBadges =
-      m.pageBadges && m.pageBadges.length > 0
-        ? m.pageBadges
-        : m.pageBadge
-          ? [m.pageBadge]
-          : [];
+    const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
     const fileBadges = m.attachmentBadges ?? [];
-    const hasReferences = pageBadges.length > 0 || fileBadges.length > 0;
+    const hasReferences = fileBadges.length > 0;
     const hasContent = bodyText.length > 0;
     return (
       <div
@@ -119,18 +101,6 @@ export function Bubble({
           >
             {fileBadges.map((b) => (
               <AttachmentBadgeView key={b.uiId} badge={b} />
-            ))}
-            {pageBadges.map((b, i) => (
-              <div
-                key={`page-${b.url}-${i}`}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] text-muted-foreground"
-                title={b.url}
-              >
-                <Globe className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">
-                  {b.title || hostnameOf(b.url) || b.url}
-                </span>
-              </div>
             ))}
           </div>
         )}
@@ -191,7 +161,7 @@ export function Bubble({
       return (
         <div className="px-1 py-1 text-sm" aria-live="polite">
           <div className="inline-flex max-w-full items-center text-muted-foreground">
-            <span className="hermes-thinking-text truncate">
+            <span className="agent-thinking-text truncate">
               {t("sidepanel.trace.thinking")}
             </span>
           </div>
@@ -210,17 +180,16 @@ export function Bubble({
       <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
         {traceVisible && (
           <div className={cn("flex flex-col gap-0.5", hasBody ? "mb-2" : "")}>
-            {m.streaming && trace.reasoningText.length > 0 && (
-              <div className="inline-flex min-h-7 max-w-full items-center px-1.5 text-[11px] text-muted-foreground">
-                <span className="hermes-thinking-text truncate">
-                  {compactProgressNote(trace.reasoningText)}
-                </span>
-              </div>
+            {trace.reasoningText.length > 0 && (
+              <ReasoningFold
+                reasoningText={trace.reasoningText}
+                streaming={!!m.streaming}
+              />
             )}
-            {trace.legacyToolDetails.length > 0 && (
+            {trace.fallbackToolDetails.length > 0 && (
               <TraceDisclosure
                 label={t("sidepanel.trace.toolDetails")}
-                text={trace.legacyToolDetails}
+                text={trace.fallbackToolDetails}
                 streaming={!!m.streaming}
               />
             )}
@@ -235,7 +204,7 @@ export function Bubble({
                 className="inline-flex min-h-7 items-center px-1.5 text-[11px] text-muted-foreground"
                 aria-live="polite"
               >
-                <span className="hermes-thinking-text">
+                <span className="agent-thinking-text">
                   {t("sidepanel.trace.generating")}
                 </span>
               </div>
@@ -355,7 +324,7 @@ function RunBoundary({
 }
 
 type ResolvedTraceItem =
-  | { kind: "tool"; id: string; event: HermesToolProgress }
+  | { kind: "tool"; id: string; event: ToolProgress }
   | { kind: "approval"; id: string; record: ApprovalRecord };
 
 function resolveAssistantTrace(m: UiMessage) {
@@ -370,8 +339,8 @@ function resolveAssistantTrace(m: UiMessage) {
   ]
     .filter((text) => text.length > 0)
     .join("\n\n");
-  const toolProgress = m.hermesToolProgress ?? [];
-  const approvalRecords = m.hermesApprovalRecords ?? [];
+  const toolProgress = m.toolProgress ?? [];
+  const approvalRecords = m.approvalRecords ?? [];
   const progressMap = new Map(
     toolProgress.map((event) => [event.toolCallId, event] as const),
   );
@@ -412,7 +381,7 @@ function resolveAssistantTrace(m: UiMessage) {
   }
 
   const hasPerToolDetails = toolProgress.some(hasToolDetail);
-  const legacyToolDetails =
+  const fallbackToolDetails =
     verboseText.trim().length > 0 && !hasPerToolDetails
       ? verboseText.trim()
       : "";
@@ -421,13 +390,13 @@ function resolveAssistantTrace(m: UiMessage) {
     bodyText,
     runBoundary: terminal.state,
     reasoningText,
-    legacyToolDetails,
+    fallbackToolDetails,
     toolProgress,
     items,
     hasRunningTool: toolProgress.some((event) => event.status === "running"),
     hasTrace:
-      (!!m.streaming && reasoningText.length > 0) ||
-      legacyToolDetails.length > 0 ||
+      reasoningText.length > 0 ||
+      fallbackToolDetails.length > 0 ||
       items.length > 0,
   };
 }
@@ -441,12 +410,42 @@ function compactProgressNote(text: string): string {
   return latest.length > 160 ? `${latest.slice(0, 159)}…` : latest;
 }
 
+/**
+ * The one reasoning presentation for every assistant render path.
+ * Streaming: the collapsed label is the moving latest line; expanding
+ * reveals the full accumulated thought stream, appended live.
+ * Completed: a quiet "Thought process" fold that stays available.
+ */
+function ReasoningFold({
+  reasoningText,
+  streaming,
+}: {
+  reasoningText: string;
+  streaming: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <TraceDisclosure
+      label={
+        streaming
+          ? compactProgressNote(reasoningText)
+          : t("sidepanel.trace.thoughtProcess")
+      }
+      labelClassName={streaming ? "agent-thinking-text" : undefined}
+      text={reasoningText}
+      streaming={streaming}
+    />
+  );
+}
+
 function TraceDisclosure({
   label,
+  labelClassName,
   text,
   streaming,
 }: {
   label: string;
+  labelClassName?: string;
   text: string;
   streaming: boolean;
 }) {
@@ -472,7 +471,7 @@ function TraceDisclosure({
         >
           <span className="h-1.5 w-1.5 rounded-full bg-current opacity-45" />
         </span>
-        <span className="min-w-0 truncate">{label}</span>
+        <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
         <ChevronRight
           aria-hidden
           className={cn(
@@ -500,15 +499,20 @@ function TraceDisclosure({
 
 type TurnTraceDetail =
   | {
-      kind: "legacy";
+      kind: "fallback";
       id: string;
       text: string;
       streaming: boolean;
     }
   | {
+      kind: "reasoning";
+      id: string;
+      text: string;
+    }
+  | {
       kind: "tool";
       id: string;
-      event: HermesToolProgress;
+      event: ToolProgress;
     }
   | {
       kind: "approval";
@@ -526,7 +530,7 @@ function ExecutionDisclosure({
   latestProgress = "",
 }: {
   details: TurnTraceDetail[];
-  tools: HermesToolProgress[];
+  tools: ToolProgress[];
   streaming: boolean;
   latestProgress?: string;
 }) {
@@ -582,7 +586,7 @@ function ExecutionDisclosure({
         <span
           className={cn(
             "min-w-0 truncate text-muted-foreground/75",
-            streaming && "hermes-thinking-text",
+            streaming && "agent-thinking-text",
             summaryTool && "font-mono",
           )}
         >
@@ -601,13 +605,23 @@ function ExecutionDisclosure({
       {expanded && hasDetails && (
         <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
           {details.map((detail) => {
-            if (detail.kind === "legacy") {
+            if (detail.kind === "fallback") {
               return (
                 <TraceDisclosure
                   key={detail.id}
                   label={t("sidepanel.trace.toolDetails")}
                   text={detail.text}
                   streaming={detail.streaming}
+                />
+              );
+            }
+            if (detail.kind === "reasoning") {
+              return (
+                <TraceDisclosure
+                  key={detail.id}
+                  label={t("sidepanel.trace.thoughtProcess")}
+                  text={detail.text}
+                  streaming={false}
                 />
               );
             }
@@ -624,10 +638,10 @@ function ExecutionDisclosure({
   );
 }
 
-/** Collapses one or more adjacent legacy execution-only messages. */
+/** Collapses adjacent execution-only messages that lack per-tool details. */
 function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
   const details: TurnTraceDetail[] = [];
-  const tools: HermesToolProgress[] = [];
+  const tools: ToolProgress[] = [];
   const seenToolIds = new Set<string>();
   const seenApprovalIds = new Set<string>();
   let latestProgress = "";
@@ -636,12 +650,20 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
     const trace = resolveAssistantTrace(message);
     if (message.streaming && trace.reasoningText) {
       latestProgress = compactProgressNote(trace.reasoningText);
-    }
-    if (trace.legacyToolDetails) {
+    } else if (trace.reasoningText && !trace.bodyText) {
+      // Body-carrying messages render their own inline thought fold via
+      // the Bubble trace; the aggregate only owns execution-only bubbles.
       details.push({
-        kind: "legacy",
-        id: `${message.uiId}:legacy`,
-        text: trace.legacyToolDetails,
+        kind: "reasoning",
+        id: `${message.uiId}:reasoning`,
+        text: trace.reasoningText,
+      });
+    }
+    if (trace.fallbackToolDetails) {
+      details.push({
+        kind: "fallback",
+        id: `${message.uiId}:fallback`,
+        text: trace.fallbackToolDetails,
         streaming: !!message.streaming,
       });
     }
@@ -689,12 +711,12 @@ type TurnReplyItem =
     };
 
 /**
- * Historical Hermes rows do not contain `assistantTimeline`. Preserve their
+ * Rows created before the unified timeline do not contain `assistantTimeline`.
  * row order instead of lifting every tool call to the start of the user turn:
  *
  *   assistant text → every following tool → next assistant text
  *
- * Hermes may persist the first tool on the same assistant row as the prose,
+ * A runtime may persist the first tool on the same assistant row as prose,
  * then persist later tools on empty assistant rows. Those storage boundaries
  * are not visible conversation boundaries, so all tools remain one compact
  * disclosure until the next visible message.
@@ -806,19 +828,19 @@ type AssistantFlowItem =
       kind: "execution";
       id: string;
       details: TurnTraceDetail[];
-      tools: HermesToolProgress[];
+      tools: ToolProgress[];
     };
 
 function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   const timeline = message.assistantTimeline ?? [];
   const tools = new Map(
-    (message.hermesToolProgress ?? []).map((event) => [
+    (message.toolProgress ?? []).map((event) => [
       event.toolCallId,
       event,
     ]),
   );
   const approvals = new Map(
-    (message.hermesApprovalRecords ?? []).map((record) => [
+    (message.approvalRecords ?? []).map((record) => [
       record.approvalId,
       record,
     ]),
@@ -827,7 +849,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   const seenApprovals = new Set<string>();
   const flow: AssistantFlowItem[] = [];
   let pendingDetails: TurnTraceDetail[] = [];
-  let pendingTools: HermesToolProgress[] = [];
+  let pendingTools: ToolProgress[] = [];
 
   const flushExecution = () => {
     if (pendingDetails.length === 0) return;
@@ -886,19 +908,19 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     appendText(`${message.uiId}:text-tail`, rawBody.slice(timelineText.length));
   }
 
-  for (const event of message.hermesToolProgress ?? []) {
+  for (const event of message.toolProgress ?? []) {
     appendTool(`tool:${event.toolCallId}`, event.toolCallId);
   }
-  for (const record of message.hermesApprovalRecords ?? []) {
+  for (const record of message.approvalRecords ?? []) {
     appendApproval(`approval:${record.approvalId}`, record.approvalId);
   }
 
   const trace = resolveAssistantTrace(message);
-  if (trace.legacyToolDetails) {
+  if (trace.fallbackToolDetails) {
     pendingDetails.push({
-      kind: "legacy",
-      id: `${message.uiId}:legacy`,
-      text: trace.legacyToolDetails,
+      kind: "fallback",
+      id: `${message.uiId}:fallback`,
+      text: trace.fallbackToolDetails,
       streaming: !!message.streaming,
     });
   }
@@ -924,6 +946,12 @@ function InterleavedAssistantFlow({
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div className="flex min-w-0 flex-col gap-2">
+        {trace.reasoningText.length > 0 && (
+          <ReasoningFold
+            reasoningText={trace.reasoningText}
+            streaming={!!message.streaming}
+          />
+        )}
         {flow.map((item, index) => {
           const active = !!message.streaming && index === flow.length - 1;
           if (item.kind === "execution") {
@@ -980,22 +1008,13 @@ export function UserStickyBubble({
   m,
   onOpenAgentDestination,
   userOrdinal,
-  onEdit,
-  onRetry,
   onBranch,
-  onTruncate,
   onRestore,
 }: {
   m: UiMessage;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
-  onEdit?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onRetry?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
-  onTruncate?: (
-    message: UiMessage,
-    userOrdinal: number,
-  ) => void | Promise<void>;
   onRestore?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
 }) {
   const { t } = useT();
@@ -1066,8 +1085,7 @@ export function UserStickyBubble({
             )}
           </button>
         )}
-        {(onEdit || onRetry || onBranch || onTruncate || onRestore) &&
-        !m.streaming ? (
+        {(onBranch || onRestore) && !m.streaming ? (
           <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 rounded-lg border border-border/50 bg-background/90 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             {onRestore ? (
               <UserActionButton
@@ -1076,32 +1094,11 @@ export function UserStickyBubble({
                 onClick={() => void onRestore(m, userOrdinal)}
               />
             ) : null}
-            {onEdit ? (
-              <UserActionButton
-                label={t("sidepanel.message.edit")}
-                icon={<Pencil />}
-                onClick={() => void onEdit(m, userOrdinal)}
-              />
-            ) : null}
-            {onRetry ? (
-              <UserActionButton
-                label={t("sidepanel.message.retry")}
-                icon={<RotateCcw />}
-                onClick={() => void onRetry(m, userOrdinal)}
-              />
-            ) : null}
             {onBranch ? (
               <UserActionButton
                 label={t("sidepanel.message.branch")}
                 icon={<GitBranch />}
                 onClick={() => void onBranch(m, userOrdinal)}
-              />
-            ) : null}
-            {onTruncate ? (
-              <UserActionButton
-                label={t("sidepanel.message.truncate")}
-                icon={<Scissors />}
-                onClick={() => void onTruncate(m, userOrdinal)}
               />
             ) : null}
           </div>
@@ -1122,10 +1119,7 @@ export function MessageTurns({
   messages,
   onOpenAgentDestination,
   onReviewWorkspaceChanges,
-  onEditUserMessage,
-  onRetryUserMessage,
   onBranchUserMessage,
-  onTruncateUserMessage,
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
 }: {
@@ -1134,19 +1128,7 @@ export function MessageTurns({
   onReviewWorkspaceChanges?: (
     resource: WorkspaceReviewResource,
   ) => void | Promise<void>;
-  onEditUserMessage?: (
-    message: UiMessage,
-    userOrdinal: number,
-  ) => void | Promise<void>;
-  onRetryUserMessage?: (
-    message: UiMessage,
-    userOrdinal: number,
-  ) => void | Promise<void>;
   onBranchUserMessage?: (
-    message: UiMessage,
-    userOrdinal: number,
-  ) => void | Promise<void>;
-  onTruncateUserMessage?: (
     message: UiMessage,
     userOrdinal: number,
   ) => void | Promise<void>;
@@ -1185,7 +1167,7 @@ export function MessageTurns({
           ? null
           : workspaceReviewResourceFromEvents(
               turn.replies.flatMap(
-                (message) => message.hermesToolProgress ?? [],
+                (message) => message.toolProgress ?? [],
               ),
               `turn:${turn.user?.uiId ?? i}`,
             );
@@ -1200,10 +1182,7 @@ export function MessageTurns({
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
                 userOrdinal={turn.userOrdinal}
-                onEdit={onEditUserMessage}
-                onRetry={onRetryUserMessage}
                 onBranch={onBranchUserMessage}
-                onTruncate={onTruncateUserMessage}
                 onRestore={
                   restorableTurnOrdinals?.has(turn.userOrdinal)
                     ? onRestoreBeforeTurn
