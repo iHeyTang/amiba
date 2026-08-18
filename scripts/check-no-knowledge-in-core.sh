@@ -11,11 +11,11 @@ set -euo pipefail
 
 ROOTS=(
   apps/desktop/src
-  packages/core/src
+  packages/app-runtime/src/core
+  packages/app-runtime/src/platform
+  packages/app-runtime/src/utils
   packages/ui/src
   packages/i18n/src
-  packages/platform/src
-  packages/utils/src
 )
 
 # Patterns mirror docs/superpowers/specs/2026-06-03-desktop-extension-system-design.md §9.2.

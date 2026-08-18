@@ -1,6 +1,6 @@
 /**
- * Tool-activity recorder — captures the chat engine's `tool.started` /
- * `tool.completed` events into per-day JSON buckets on disk and serves
+ * Tool-activity recorder — captures the process-wide DSH `tool.started` /
+ * `tool.completed` projection into per-day JSON buckets on disk and serves
  * them back to the renderer's Usage page over IPC.
  *
  * Layout under `<userData>/tool-activity/`:
@@ -24,7 +24,7 @@ import {
   type ToolActivityReadResult,
   type ToolActivityTotals,
   type ToolInvocation,
-} from "@amiba/core"
+} from "@amiba/app-runtime/core"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** How many days back markCompleted searches for the started row. */
@@ -146,7 +146,7 @@ interface ToolCompletedPayload extends ToolStartedPayload {
 }
 
 /**
- * Chat-event sink. Compose with the extension host's broadcaster in
+ * DSH event sink. Compose with other DSH-owned telemetry consumers in
  * `setChatEventPublisher` — same event names + payloads either way.
  */
 export function recordToolActivityEvent(event: string, payload: unknown): void {

@@ -1,13 +1,11 @@
 /**
- * Hermes brand mark — base64-inlined so the asset works in any bundler
- * without requiring a special loader (Plasmo's `data-base64:` scheme,
- * Vite's `?url`, webpack's file-loader, etc.). The two variants are:
+ * Amiba brand mark — base64-inlined so desktop renderers do not depend on
+ * runtime asset resolution. The two variants are:
  *
  *   - `logoLightBg` — dark glyph, render on light surfaces
  *   - `logoDarkBg`  — light glyph, render on dark surfaces
  *
- * ~24KB each in base64. Source PNGs live in
- * `apps/browser-extension/src/assets/amiba-logo-{light,dark}.png`; regenerate via:
+ * ~24KB each in base64. Regenerate from the canonical Amiba logo PNGs via:
  *
  *   base64 -i amiba-logo-light.png | tr -d '\n'
  */

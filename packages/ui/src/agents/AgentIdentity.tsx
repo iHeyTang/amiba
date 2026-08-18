@@ -1,6 +1,6 @@
 import { Fingerprint } from "lucide-react";
 
-import type { HermesProfile } from "@amiba/core";
+import type { AgentPreset } from "@amiba/app-runtime/core";
 
 import { cn } from "../primitives";
 
@@ -12,7 +12,7 @@ export function AgentIdentity({
 }: {
   className?: string;
   iconClassName?: string;
-  profile: Pick<HermesProfile, "name" | "description">;
+  profile: Pick<AgentPreset, "name" | "description">;
   showDescription?: boolean;
 }) {
   return (

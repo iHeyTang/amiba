@@ -1,0 +1,31 @@
+import type { Context } from "@deepseek-ai/cordis";
+import z from "@deepseek-ai/schemastery";
+
+import { DshMcpManager } from "./manager.js";
+import { applyMcpRemote } from "./remote-service.js";
+import { applyMcpHttp } from "./supervisor.js";
+
+export const name = "amiba-mcp-manager";
+export const inject = ["tools", "amibaToolCatalog"];
+
+export interface Config {
+  apiToken: string;
+  root: string;
+}
+
+export const Config: z<Config> = z.object({
+  apiToken: z.string().default(""),
+  root: z.string().required(),
+});
+
+/** Mounts official DSH MCP client plugin instances from Amiba's product MCP configuration. */
+export function apply(ctx: Context, config: Config): void {
+  const manager = new DshMcpManager(ctx, config.root, ctx.amibaToolCatalog);
+  ctx.effect(() => () => manager.dispose(), "amiba-mcp-manager");
+  applyMcpRemote(ctx, manager);
+  if (config.apiToken) {
+    ctx.inject(["webServer"], (httpCtx) => {
+      applyMcpHttp(httpCtx, config, ctx.amibaToolCatalog, manager);
+    });
+  }
+}

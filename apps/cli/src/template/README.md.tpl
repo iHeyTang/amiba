@@ -1,33 +1,24 @@
 # {{NAME}}
 
-An Amiba Extension (`{{ID}}`).
+Independent DSH plugin for Amiba. Package: `@{{AUTHOR}}/{{NAME}}`.
 
-## Develop
+This project has two optional halves:
 
-```bash
-pnpm install            # installs the @amiba/* SDK from GitHub Release tarballs
-pnpm dev                # watch-build; load it from Amiba → Settings → Extensions
-```
-
-> **First install:** pnpm may prompt `approve-builds` for `esbuild` (bundled with Vite). Run `pnpm approve-builds`, or add `onlyBuiltDependencies=["esbuild"]` to a project `.npmrc`, to suppress it.
-
-The Extension is the lifecycle root for every capability it contributes. Declare
-UI under `contributes`, Composer resource projections under `mentions`, and
-low-level Agent dependencies under `hermesPlugins` in `manifest.json`.
-
-## Build & package
+- `src/index.ts`: Host plugin running inside DSH/Cordis.
+- `src/client/index.tsx`: DSH Client plugin contributing to an Amiba child slot.
 
 ```bash
-pnpm build              # vite build (main + ui) -> dist/
-pnpm pack               # -> extension.tgz
+pnpm install
+pnpm build
+pnpm dev
+pnpm pack
 ```
 
-## Release
+Load the package through a DSH bundle or Loader entry. Electron is only the
+desktop shell and does not maintain a second plugin registry. Change the slot
+in `src/client/index.tsx` to contribute elsewhere in the Amiba root.
 
-Push a `v*` tag; `.github/workflows/release.yml` builds, packs, and attaches
-`extension.tgz` to the GitHub Release. Add the repo to the marketplace index to
-make it installable from the desktop app.
-
-> The SDK is consumed via tarball URLs pinned to `sdk-v1` (host extension-API
-> level 1). `manifest.apiVersion` must be <= the desktop's implemented level or
-> the Extension is marked incompatible.
+The same Client entry can declare its own nested children on
+`ctx.slots.register({ children: ... })` and render them with
+`PropsRenderSlots`. Downstream plugins then inject those child slots directly;
+no Electron registration or DOM bridge is required.

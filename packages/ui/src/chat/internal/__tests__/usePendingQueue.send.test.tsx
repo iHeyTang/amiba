@@ -12,7 +12,7 @@ const storage = {
   remove: vi.fn(async () => {}),
   watch: vi.fn(() => () => {}),
 }
-vi.mock("@amiba/platform", () => ({
+vi.mock("@amiba/app-runtime/platform", () => ({
   getPlatform: () => ({ storage }),
 }))
 vi.mock("@amiba/i18n", () => ({
@@ -48,13 +48,10 @@ function makeArgs(
     setAttachments: vi.fn(),
     setAttachmentError: vi.fn(),
     attachmentUploading: false,
-    navigateOpenPolicy: "auto",
-    setNavigateOpenPolicy: vi.fn(),
     setPendingSourceApp: vi.fn(),
     busy: false,
     markCurrentAssistantStopped: vi.fn(),
     rejectPendingTurn: vi.fn(),
-    pageContextCapability: undefined,
     runChatTurn,
     ...overrides,
   }

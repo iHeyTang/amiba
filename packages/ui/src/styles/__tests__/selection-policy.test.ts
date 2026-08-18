@@ -6,26 +6,18 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sharedTokens = readFileSync(resolve(here, "../tokens.css"), "utf8");
-const presetTokens = readFileSync(
-  resolve(here, "../../../../tailwind-preset/styles/tokens.css"),
-  "utf8",
-);
 
 describe("desktop selection policy", () => {
-  it("keeps the shared UI and Tailwind preset policies in sync", () => {
-    for (const css of [sharedTokens, presetTokens]) {
-      expect(css).toContain("user-select: none");
-      expect(css).toContain('[data-selection="text"]');
-      expect(css).toContain('[contenteditable="true"]');
-      expect(css).toContain("user-select: text");
-    }
+  it("owns the complete product selection policy", () => {
+    expect(sharedTokens).toContain("user-select: none");
+    expect(sharedTokens).toContain('[data-selection="text"]');
+    expect(sharedTokens).toContain('[contenteditable="true"]');
+    expect(sharedTokens).toContain("user-select: text");
   });
 
   it("protects controls nested inside selectable content", () => {
-    for (const css of [sharedTokens, presetTokens]) {
-      expect(css).toMatch(
-        /:where\(\s*button,[\s\S]*?\[role="button"\][\s\S]*?user-select: none/,
-      );
-    }
+    expect(sharedTokens).toMatch(
+      /:where\(\s*button,[\s\S]*?\[role="button"\][\s\S]*?user-select: none/,
+    );
   });
 });

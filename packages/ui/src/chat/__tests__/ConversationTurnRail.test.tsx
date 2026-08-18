@@ -19,8 +19,7 @@ const messages = [
   {
     uiId: "user-1",
     role: "user",
-    content:
-      "<workspace>Bound directory: /tmp/project</workspace>\nInspect the workspace structure",
+    content: "Inspect the workspace structure",
   },
   {
     uiId: "assistant-1",

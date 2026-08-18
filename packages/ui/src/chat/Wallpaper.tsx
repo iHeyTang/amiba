@@ -12,7 +12,7 @@
 import { ImageIcon as ImageBadgeIcon, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
-import type { Wallpaper, WallpaperController } from "@amiba/core";
+import type { Wallpaper, WallpaperController } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
 interface WallpaperBackdropProps {

@@ -1,7 +1,7 @@
 import type { InitialConfigType } from "@lexical/react/LexicalComposer"
 import { MentionNode } from "./MentionNode"
 
-export const EDITOR_NAMESPACE = "hermes-composer"
+export const EDITOR_NAMESPACE = "amiba-composer"
 
 export function baseEditorConfig(
   overrides: Partial<InitialConfigType> = {},

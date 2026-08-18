@@ -2,7 +2,7 @@ import { Command } from "cmdk";
 import { Check, Fingerprint, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { HermesProfile } from "@amiba/core";
+import type { AgentPreset } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 
 import {
@@ -26,9 +26,9 @@ export function AgentPickerDialog({
   error?: string | null;
   loading?: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (profile: HermesProfile) => void;
+  onSelect: (profile: AgentPreset) => void;
   open: boolean;
-  profiles: HermesProfile[];
+  profiles: AgentPreset[];
   selectedProfileId: string;
 }) {
   const { t } = useT();

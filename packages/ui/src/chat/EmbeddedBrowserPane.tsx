@@ -19,7 +19,7 @@ import {
   getPlatform,
   type EmbeddedBrowserAdapter,
   type EmbeddedBrowserPageState,
-} from "@amiba/platform";
+} from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 
 import { cn } from "../primitives";

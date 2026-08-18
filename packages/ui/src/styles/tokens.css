@@ -1,18 +1,17 @@
-/* NOTE: kept in sync manually with packages/tailwind-preset/styles/tokens.css — edit both. */
+/* Amiba product tokens. Extension templates receive an independent snapshot. */
 /*
- * Hermes shadcn HSL token palette + base layer + Radix ScrollArea fixes.
+ * Amiba shadcn HSL token palette + base layer + Radix ScrollArea fixes.
  *
  * Cascade order:
  *   1. `:root` defines the light palette (also the SSR-time fallback).
  *   2. `@media (prefers-color-scheme: dark)` rewrites the tokens to the dark
  *      palette unless the document explicitly opted into light via `.light`.
- *   3. The explicit `.dark` / `.light` classes (set by @amiba/theme's
- *      `useResolvedTheme`) always win — lets the user pin a theme regardless
- *      of OS preference.
+ *   3. The explicit `.dark` / `.light` classes set by the UI theme controller
+ *      always win — lets the user pin a theme regardless of OS preference.
  *
- * Consumers must `@tailwind base` themselves and import this CSS after,
- * because the `@layer base` rules below rely on Tailwind's base layer
- * already being declared.
+ * Consumers must include `@tailwind base` in the same stylesheet. Keep the
+ * CSS `@import` at the top so PostCSS/Vite can inline these `@layer base`
+ * rules before Tailwind expands its directives.
  */
 
 @layer base {
@@ -154,7 +153,7 @@
      *
      * Content surfaces opt back in with `data-selection="text"`. Native text
      * editors remain selectable without an opt-in. Keeping this policy here
-     * makes it apply consistently to desktop and browser-extension surfaces.
+     * makes it apply consistently to every application surface.
      */
     -webkit-user-select: none;
     user-select: none;
@@ -215,8 +214,8 @@
 }
 
 /*
- * Radix ScrollArea fixes — shared by every consumer of @amiba/ui because
- * they ship with the ScrollArea primitive.
+ * Radix ScrollArea fixes — included here so extensions that use a ScrollArea
+ * primitive get correct behaviour without extra CSS (no-ops otherwise).
  *
  * - Stop scroll chaining at the viewport so wheel-at-edge doesn't bounce
  *   the parent surface.
@@ -237,8 +236,8 @@
 /* ──────────────────────────────────────────────────────────────────────────
  * Accent (brand-colour) themes — an axis orthogonal to light/dark.
  *
- * @amiba/theme sets one `.accent-<id>` class on <html> alongside `.dark` /
- * `.light`. Each accent re-points only the brand trio (--primary,
+ * The UI theme controller sets one `.accent-<id>` class on <html> alongside
+ * `.dark` / `.light`. Each accent re-points only the brand trio (--primary,
  * --primary-foreground, --ring); the neutral palette is shared, so an accent
  * reads correctly on either light or dark.
  *

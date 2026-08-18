@@ -1,0 +1,35 @@
+{
+  "name": "@amiba/dsh-plugin-messaging-channel-webhook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH message-channel provider for authenticated webhook ingress and reply delivery.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-messaging-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/node": "22.9.0",
+    "typescript": "5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

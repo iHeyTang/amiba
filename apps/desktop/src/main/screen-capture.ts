@@ -19,18 +19,12 @@
  *      `userData/snips/`, and resolves with the path + a 256px thumb
  *      data URL for the composer chip preview.
  *
- * We deliberately do NOT run local OCR on the cropped PNG. The agent
- * already has a `vision_analyze` tool that reads images on demand via a
- * modern multimodal model — it produces better text than any
- * on-device OCR (Apple Shortcuts / Tesseract), with no setup friction
- * and no per-snip latency. The composer stays empty after a snip; the
- * user types their question and the agent decides whether to call
- * vision on the attachment.
+ * We deliberately do NOT run local OCR on the cropped PNG. The image enters
+ * DSH as native multimodal content, so the active model sees the actual pixels
+ * without a second OCR subsystem or an invented tool name.
  *
  * Cancellation: pressing Escape (or releasing without dragging at least
- * a 4x4 region) closes the overlay and resolves with null. Windows is
- * stubbed today — desktopCapturer works there but the overlay alpha
- * behaviour differs enough that we leave that to a follow-up.
+ * a 4x4 region) closes the overlay and resolves with null.
  */
 import fs from "node:fs/promises"
 import path from "node:path"
@@ -122,15 +116,6 @@ const MIN_RECT_PX = 4
  * null when the user cancelled / nothing usable could be captured.
  */
 export async function startScreenCapture(): Promise<ScreenCaptureResult | null> {
-  if (process.platform === "win32") {
-    // Windows stub: desktopCapturer + an overlay window technically work
-    // here, but the transparent always-on-top behavior and the OCR path
-    // differ enough that the first pass shipped Mac-only. Surface as a
-    // soft no-op so the hotkey just doesn't do anything until we wire
-    // the Windows variant up.
-    return null
-  }
-
   const cursorPoint = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursorPoint)
   const { bounds, scaleFactor } = display
@@ -470,4 +455,3 @@ function renderOverlayHtml(
 </body>
 </html>`
 }
-

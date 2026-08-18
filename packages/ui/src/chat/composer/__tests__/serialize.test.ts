@@ -28,7 +28,7 @@ describe("token serialize/parse", () => {
   })
 
   it("round-trips a dynamic (dotted) registry type once registered", () => {
-    // Backplane integration contributes "lark.doc" with fields [url, title].
+    // A provider plugin contributes "lark.doc" with fields [url, title].
     registerMentionType("lark.doc", ["url", "title"])
     const doc: MentionData = {
       type: "lark.doc",

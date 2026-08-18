@@ -1,4 +1,4 @@
-import { setPlatform } from "@amiba/platform"
+import { setPlatform } from "@amiba/app-runtime/platform"
 import React from "react"
 import { createRoot } from "react-dom/client"
 

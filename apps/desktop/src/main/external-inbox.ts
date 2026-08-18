@@ -6,9 +6,9 @@
  *      The OS hands the URL back via `open-url` (mac) or as an argv tail
  *      on the second-instance launch (win/linux).
  *
- *   2. Unix domain socket — `<userData>/inbox.sock`, line-delimited JSON
+ *   2. Local IPC — `<userData>/inbox.sock` on macOS/Linux or a stable named
+ *      pipe on Windows, with line-delimited JSON
  *      `{ "text": "...", "attachments": [...], "sourceApp": "..." }\n`.
- *      macOS + Linux only; Windows skips it cleanly (no socket, no error).
  *
  * Both funnel into `deliverPrompt`, which writes the hand-off into
  * `home.pendingPrompt` (the same key HomeView uses) and summons the
@@ -25,7 +25,11 @@ import net from "node:net"
 import path from "node:path"
 import { app } from "electron"
 
+import { dshAttachments } from "./dsh-attachments"
+import { inboxSocketPathFor } from "./external-inbox-path"
 import { mainStore } from "./storage"
+
+export { inboxSocketPathFor } from "./external-inbox-path"
 
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt"
 export const PROTOCOL_SCHEME = "amiba"
@@ -60,6 +64,56 @@ export interface DeliverPromptAttachment {
   textPreview?: string
 }
 
+export interface StagedPromptAttachment
+  extends Omit<DeliverPromptAttachment, "path" | "uiId" | "name" | "mime" | "size" | "kind"> {
+  uiId?: string
+  name: string
+  mime: string
+  size: number
+  kind: "image" | "text" | "pdf"
+  attachmentId: string
+}
+
+function attachmentKind(
+  attachment: DeliverPromptAttachment,
+): "image" | "text" | "pdf" | null {
+  if (
+    attachment.kind === "image" ||
+    attachment.kind === "text" ||
+    attachment.kind === "pdf"
+  ) {
+    return attachment.kind
+  }
+  const mime = (attachment.mime ?? "").toLowerCase()
+  if (mime === "application/pdf") return "pdf"
+  if (mime.startsWith("text/") || /(?:json|xml|javascript|typescript|yaml)/u.test(mime)) {
+    return "text"
+  }
+  const extension = path.extname(attachment.name || attachment.path).toLowerCase()
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(extension)) return "image"
+  if (extension === ".pdf") return "pdf"
+  if ([
+    ".txt", ".md", ".csv", ".tsv", ".json", ".jsonc", ".yml", ".yaml",
+    ".toml", ".ini", ".xml", ".html", ".css", ".js", ".jsx", ".ts",
+    ".tsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".h", ".cpp",
+    ".sh", ".zsh", ".sql", ".graphql", ".vue", ".svelte", ".log",
+  ].includes(extension)) return "text"
+  return null
+}
+
+function nativeImage(
+  attachment: DeliverPromptAttachment,
+): boolean {
+  const mime = (attachment.mime ?? "").toLowerCase()
+  if (["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"].includes(mime)) {
+    return true
+  }
+  if (mime && mime !== "application/octet-stream") return false
+  return [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(
+    path.extname(attachment.name || attachment.path).toLowerCase(),
+  )
+}
+
 /**
  * Write to the same key HomeView writes, then raise the window. Returns
  * `false` when the payload had nothing to deliver, so callers can skip
@@ -70,7 +124,63 @@ export async function deliverPrompt(
   summon: Summon,
 ): Promise<boolean> {
   const text = payload.text?.trim() ?? ""
-  const attachments = (payload.attachments ?? []).slice(0, MAX_ATTACHMENTS)
+  const attachments: StagedPromptAttachment[] = []
+  for (const [index, attachment] of (payload.attachments ?? [])
+    .slice(0, MAX_ATTACHMENTS)
+    .entries()) {
+    const kind = attachmentKind(attachment)
+    if (!kind || (kind === "image" && !nativeImage(attachment))) {
+      console.warn(
+        "[external-inbox] dropping unsupported attachment:",
+        attachment.name ?? attachment.path,
+      )
+      continue
+    }
+    const name = attachment.name?.trim() || path.basename(attachment.path) || "file"
+    const mime = attachment.mime?.trim() || "application/octet-stream"
+    try {
+      const staged = await dshAttachments.importFile({
+        sessionId: `inbox-${Date.now()}-${index}`,
+        name,
+        mime,
+        path: attachment.path,
+      })
+      attachments.push({
+        ...attachment,
+        name,
+        mime,
+        kind,
+        attachmentId: staged.attachmentId,
+        size: staged.size,
+      })
+    } catch (error) {
+      console.warn(
+        "[external-inbox] attachment import failed:",
+        error instanceof Error ? error.message : error,
+      )
+    }
+  }
+  return deliverStagedPrompt(
+    {
+      text: text || undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      sourceApp: payload.sourceApp,
+    },
+    summon,
+  )
+}
+
+/** Internal hand-off for bytes already admitted by the DSH plugin. */
+export async function deliverStagedPrompt(
+  payload: {
+    text?: string
+    attachments?: StagedPromptAttachment[]
+    sourceApp?: string
+  },
+  summon: Summon,
+): Promise<boolean> {
+  const text = payload.text?.trim() ?? ""
+  const attachments = payload.attachments ?? []
   if (!text && attachments.length === 0) return false
   await mainStore.set({
     [HOME_PENDING_PROMPT_KEY]: {
@@ -197,7 +307,7 @@ export function attachSecondInstanceHandler(summon: Summon): void {
 
 /** Stable path other tools can connect to. */
 export function inboxSocketPath(): string {
-  return path.join(app.getPath("userData"), "inbox.sock")
+  return inboxSocketPathFor(process.platform, app.getPath("userData"))
 }
 
 interface InboxMessage {
@@ -230,21 +340,15 @@ function coerceAttachment(raw: unknown): DeliverPromptAttachment | null {
 }
 
 /**
- * Bind a Unix domain socket and parse line-delimited JSON. Each
+ * Bind a Unix domain socket or Windows named pipe and parse line-delimited JSON. Each
  * connection may stream multiple `{ "text": "..." }` lines; we keep a
  * per-socket buffer so partial reads don't split a JSON object. The
  * per-line buffer is capped at `MAX_PAYLOAD_BYTES` — once exceeded the
  * connection is closed so a misbehaving client can't OOM us.
- *
- * Windows has no AF_UNIX sockets in any portable form — we'd need
- * named pipes (`\\.\pipe\amiba-inbox`) instead. For now this just
- * no-ops on win32; the protocol handler still works there.
  */
 export async function startUnixSocketInbox(
   summon: Summon,
 ): Promise<net.Server | null> {
-  if (process.platform === "win32") return null
-
   const socketPath = inboxSocketPath()
   // Stale sockets from a previous crashed run will make `listen()` fail
   // with EADDRINUSE. Probe by attempting to connect; if nothing answers
@@ -252,8 +356,10 @@ export async function startUnixSocketInbox(
   // sibling Amiba process, but we hold a single-instance lock above so
   // that can't actually happen — still, the connect probe keeps us
   // honest if someone disables the lock later.)
-  await fs.mkdir(path.dirname(socketPath), { recursive: true })
-  await removeStaleSocket(socketPath)
+  if (process.platform !== "win32") {
+    await fs.mkdir(path.dirname(socketPath), { recursive: true })
+    await removeStaleSocket(socketPath)
+  }
 
   const server = net.createServer((conn) => {
     let buf = ""
@@ -299,10 +405,12 @@ export async function startUnixSocketInbox(
   // (already user-private) but the file's default mode follows umask,
   // which can be 0666. Explicitly chmod to 0600 so other local users
   // can't drop prompts into our window.
-  try {
-    await fs.chmod(socketPath, 0o600)
-  } catch {
-    // best-effort
+  if (process.platform !== "win32") {
+    try {
+      await fs.chmod(socketPath, 0o600)
+    } catch {
+      // best-effort
+    }
   }
 
   return server
@@ -366,5 +474,7 @@ export async function stopUnixSocketInbox(
 ): Promise<void> {
   if (!server) return
   await new Promise<void>((resolve) => server.close(() => resolve()))
-  await fs.unlink(inboxSocketPath()).catch(() => {})
+  if (process.platform !== "win32") {
+    await fs.unlink(inboxSocketPath()).catch(() => {})
+  }
 }

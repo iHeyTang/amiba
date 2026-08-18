@@ -13,10 +13,12 @@ __pycache__/
 .env
 .env.*
 !.env.example
-.amiba.local.ts
-.amiba.local.generated-*.mjs
 coverage
 *.tsbuildinfo
 sdk-dist/
-apps/desktop/resources/hermes-runtime/
-apps/desktop/.hermes-runtime-build-*/
+packages/app-runtime/resources/dsh-runtime/
+packages/app-runtime/.dsh-runtime-build-*/
+plugins/dsh-plugin-*/lib/
+plugins/dsh-plugin-*/vite.config.js
+plugins/dsh-plugin-*/vite.config.d.ts
+.dsh-runtime-build-*/

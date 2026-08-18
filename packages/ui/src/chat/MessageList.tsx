@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@amiba/core"
+import type { ChatMessage } from "@amiba/app-runtime/core"
 import { ScrollArea } from "../primitives"
 import { cn } from "../primitives"
 import { useEffect, useRef } from "react"

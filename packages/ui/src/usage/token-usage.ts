@@ -1,13 +1,12 @@
 /**
  * Token-usage aggregation.
  *
- * Pure read-through over hermes-agent's session list, running
- * client-side. No local storage, no event subscription, no cost
- * computation. Every fetch pulls the session list via the backplane
- * (`listHermesSessions`) and aggregates on demand — the exact logic
- * that used to live in the token-meter extension's main runner.
+ * Reads provider-reported usage from the canonical DSH event log via
+ * `AgentUsageAdapter`.
+ * There is no cost computation because account-specific billing cannot be
+ * inferred from token counts.
  *
- * Cost / USD is intentionally absent: hermes-agent's own cost numbers
+ * Cost / USD is intentionally absent: provider-reported cost numbers
  * depend on per-account plan terms (subscription-included, prepaid
  * credits, per-token rate cards) that this panel can't reason about
  * honestly. We surface tokens — the one number we can measure exactly
@@ -15,7 +14,7 @@
  * lives.
  */
 
-import { listHermesSessions, type HermesSession } from "@amiba/core"
+import { getPlatform, type AgentUsageRecord } from "@amiba/app-runtime/platform"
 
 import type { HeatmapCellBase } from "../viz"
 
@@ -30,6 +29,8 @@ export interface TurnUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  turn?: number
+  step?: number
 }
 
 export interface BucketTotals {
@@ -83,8 +84,6 @@ export interface TokenHeatmapCell extends HeatmapCellBase {
 // Aggregation
 // ---------------------------------------------------------------------------
 
-const SESSION_FETCH_LIMIT = 200
-
 function dayKey(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -109,37 +108,41 @@ interface SessionRow {
   promptTokens: number
   completionTokens: number
   totalTokens: number
-  messageCount: number
+  turnCount: number
+  turn?: number
+  step?: number
 }
 
-function normalize(s: HermesSession): SessionRow | null {
-  if (!s || typeof s.id !== "string") return null
-  const lastActiveSec =
-    typeof s.last_active === "number"
-      ? s.last_active
-      : typeof s.started_at === "number"
-        ? s.started_at
-        : 0
-  const lastActiveTs = lastActiveSec > 0 ? Math.round(lastActiveSec * 1000) : 0
-  if (lastActiveTs === 0) return null
-  const prompt = s.input_tokens ?? 0
-  const completion = s.output_tokens ?? 0
+function normalizeDsh(record: AgentUsageRecord): SessionRow {
+  const prompt =
+    record.uncachedInputTokens +
+    record.cacheReadTokens +
+    record.cacheWriteTokens
+  const model = [record.provider, record.model].filter(Boolean).join("/")
   return {
-    sessionId: s.id,
-    model: s.model ?? "",
-    lastActiveTs,
+    sessionId: record.sessionId,
+    model,
+    lastActiveTs: record.ts,
     promptTokens: prompt,
-    completionTokens: completion,
-    totalTokens: prompt + completion,
-    messageCount: s.message_count ?? 0,
+    completionTokens: record.outputTokens,
+    totalTokens: prompt + record.outputTokens,
+    turnCount: 1,
+    turn: record.turn,
+    step: record.step,
   }
 }
 
-function addSession<T extends ReturnType<typeof emptyTotals>>(t: T, row: SessionRow): T {
+function addSession<T extends ReturnType<typeof emptyTotals>>(
+  t: T,
+  row: SessionRow,
+  sessions: Set<string>,
+): T {
+  const isNewSession = !sessions.has(row.sessionId)
+  sessions.add(row.sessionId)
   return {
     ...t,
-    turns: t.turns + row.messageCount,
-    sessions: t.sessions + 1,
+    turns: t.turns + row.turnCount,
+    sessions: t.sessions + (isNewSession ? 1 : 0),
     promptTokens: t.promptTokens + row.promptTokens,
     completionTokens: t.completionTokens + row.completionTokens,
     totalTokens: t.totalTokens + row.totalTokens,
@@ -147,15 +150,15 @@ function addSession<T extends ReturnType<typeof emptyTotals>>(t: T, row: Session
 }
 
 async function fetchRows(): Promise<SessionRow[]> {
-  const r = await listHermesSessions({ limit: SESSION_FETCH_LIMIT })
-  const raw = r.ok ? r.sessions : []
-  const rows: SessionRow[] = []
-  for (const s of raw) {
-    const n = normalize(s)
-    if (n) rows.push(n)
+  const usage = getPlatform().agentUsage
+  if (!usage) throw new Error("DSH usage reporting is unavailable.")
+  const result = await usage.list()
+  if (result.records.length === 0 && result.failures.length > 0) {
+    throw new Error(result.failures[0]!.message)
   }
-  rows.sort((a, b) => b.lastActiveTs - a.lastActiveTs)
-  return rows
+  return result.records
+    .map(normalizeDsh)
+    .sort((a, b) => b.lastActiveTs - a.lastActiveTs)
 }
 
 // ---------------------------------------------------------------------------
@@ -168,32 +171,37 @@ export async function fetchTokenSummary(): Promise<MeterSummary> {
 
   let today: DayBucket = { day: todayKey, ...emptyTotals() }
   let lifetime = emptyTotals()
+  const lifetimeSessions = new Set<string>()
+  const todaySessions = new Set<string>()
   const last7Map = new Map<string, DayBucket>()
+  const last7Sessions = new Map<string, Set<string>>()
   // model -> dayKey -> DayBucket. We bucket per-day per-model so the
   // UI can sum any window length (today / 3d / 7d) client-side
   // without re-aggregating.
   const byModelDay = new Map<string, Map<string, DayBucket>>()
+  const modelSessionSets = new Map<string, Set<string>>()
 
   for (let i = 0; i < 7; i++) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const k = dayKey(d)
     last7Map.set(k, { day: k, ...emptyTotals() })
+    last7Sessions.set(k, new Set())
   }
 
   for (const row of rows) {
-    lifetime = { ...addSession(lifetime, row) }
+    lifetime = { ...addSession(lifetime, row, lifetimeSessions) }
 
     const k = dayKey(new Date(row.lastActiveTs))
     const inWindow = last7Map.has(k)
 
     if (k === todayKey) {
-      today = { ...addSession(today, row), day: todayKey }
+      today = { ...addSession(today, row, todaySessions), day: todayKey }
     }
 
     if (inWindow) {
       const dayBucket = last7Map.get(k)!
-      last7Map.set(k, { ...addSession(dayBucket, row), day: k })
+      last7Map.set(k, { ...addSession(dayBucket, row, last7Sessions.get(k)!), day: k })
 
       const modelKey = row.model || "(unknown)"
       let modelDays = byModelDay.get(modelKey)
@@ -206,7 +214,10 @@ export async function fetchTokenSummary(): Promise<MeterSummary> {
         byModelDay.set(modelKey, modelDays)
       }
       const cur = modelDays.get(k) ?? { day: k, ...emptyTotals() }
-      modelDays.set(k, { ...addSession(cur, row), day: k })
+      const modelSessionKey = `${modelKey}\0${k}`
+      const seen = modelSessionSets.get(modelSessionKey) ?? new Set<string>()
+      modelSessionSets.set(modelSessionKey, seen)
+      modelDays.set(k, { ...addSession(cur, row, seen), day: k })
     }
   }
 
@@ -256,6 +267,8 @@ export async function fetchTokenRecent(limit: number): Promise<TurnUsage[]> {
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
     totalTokens: r.totalTokens,
+    turn: r.turn,
+    step: r.step,
   }))
 }
 

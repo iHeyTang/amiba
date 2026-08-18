@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { getHermesMessages, type SessionMeta } from "@amiba/core";
-import { getPlatform, type WorkspaceChange } from "@amiba/platform";
-import { splitWorkspaceFromBody } from "./helpers";
+import type { SessionMeta } from "@amiba/app-runtime/core";
+import { getPlatform, type WorkspaceChange } from "@amiba/app-runtime/platform";
 
 export interface WorkspaceBindingsState {
-  /** False on runtimes such as the browser extension that have no directories. */
+  /** False on hosts that do not expose a native workspace adapter. */
   supported: boolean;
   /** Becomes true after the initial binding snapshot has resolved. */
   ready: boolean;
@@ -25,15 +24,13 @@ export interface WorkspaceBindingsState {
 export function useWorkspaceBindings(
   sessions: SessionMeta[] = [],
 ): WorkspaceBindingsState {
-  const workspaces = getPlatform().workspaces;
+  const platform = getPlatform();
+  const workspaces = platform.workspaces;
   const [explicitBindings, setExplicitBindings] = useState<
     Record<string, string>
   >({});
   const [defaultRoot, setDefaultRoot] = useState<string | null>(null);
   const [ready, setReady] = useState(!workspaces);
-  const bindingsRef = useRef(explicitBindings);
-  const attemptedLegacyRestoreRef = useRef(new Set<string>());
-  bindingsRef.current = explicitBindings;
 
   useEffect(() => {
     if (!workspaces) {
@@ -90,53 +87,6 @@ export function useWorkspaceBindings(
       unsubscribe();
     };
   }, [workspaces]);
-
-  useEffect(() => {
-    if (!workspaces || !ready) return;
-
-    // Earlier desktop builds persisted the injected `<workspace>` message but
-    // not the session→directory index used by the sidebar and structured cwd.
-    // Hermes exposes a short first-message preview, so only fetch the small
-    // subset of legacy candidates that visibly start with that internal tag.
-    const candidates = sessions.filter((session) => {
-      if (bindingsRef.current[session.id]) return false;
-      if (attemptedLegacyRestoreRef.current.has(session.id)) return false;
-      return session.preview
-        ?.trimStart()
-        .toLowerCase()
-        .startsWith("<workspace");
-    });
-
-    for (const session of candidates) {
-      attemptedLegacyRestoreRef.current.add(session.id);
-      const messagesRequest = session.agent?.profileId
-        ? getHermesMessages(session.id, session.agent.profileId)
-        : getHermesMessages(session.id);
-      void messagesRequest
-        .then(async (result) => {
-          if (!result.ok || bindingsRef.current[session.id]) return;
-          let restoredPath = "";
-          for (const message of result.messages) {
-            if (
-              message.role !== "user" ||
-              typeof message.content !== "string"
-            ) {
-              continue;
-            }
-            restoredPath = splitWorkspaceFromBody(
-              message.content,
-            ).workspacePath;
-            if (restoredPath) break;
-          }
-          if (!restoredPath || bindingsRef.current[session.id]) return;
-          await workspaces.bind(session.id, restoredPath);
-        })
-        .catch(() => {
-          // A missing or moved legacy directory should leave the conversation
-          // in the normal unbound group rather than blocking the sidebar.
-        });
-    }
-  }, [sessions, ready, workspaces]);
 
   const bySessionId = useMemo(() => {
     const resolved = { ...explicitBindings };

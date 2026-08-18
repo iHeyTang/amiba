@@ -2,7 +2,7 @@
  * Per-session workspace binding with a product-level $HOME fallback.
  *
  * Each chat session can pin a different directory; the chat engine forwards
- * it as the structured cwd for each Hermes run and also adds a compact
+ * it as the structured cwd for each DSH turn and also adds a compact
  * user-turn context note so workspace switches stay explicit without
  * rebuilding the persisted system prompt. Sessions without a binding resolve
  * to the user's home directory. The default root is never watched recursively;
@@ -19,7 +19,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import chokidar from "chokidar"
-import type { WorkspaceChange } from "@amiba/platform"
+import type { WorkspaceChange } from "@amiba/app-runtime/platform"
 
 import { mainStore } from "./storage"
 import { getDefaultWorkspaceRoot } from "./workspace-root"
@@ -173,23 +173,12 @@ class WorkspaceManager extends EventEmitter {
   }
 
   /**
-   * Legacy/global accessor. Returns the binding from the most-recently
-   * bound session as a "current" approximation for surfaces that
-   * predate per-session bindings.
-   */
-  getCurrent(): string | null {
-    let last: string | null = null
-    for (const b of this.bindings.values()) last = b.path
-    return last ?? getDefaultWorkspaceRoot()
-  }
-
-  /**
    * Resolve an existing path inside a session's bound workspace.
    *
    * Both the root and target go through `realpath`, so a lexical path that
    * looks contained but escapes through a symlink is rejected. Relative tool
    * paths are anchored to the workspace root; authoritative absolute paths
-   * reported by Hermes are accepted when they remain inside the same root.
+   * reported by DSH are accepted when they remain inside the same root.
    */
   async resolvePathForSession(
     sessionId: string,

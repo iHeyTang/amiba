@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-import { cn } from "../primitives";
+import { cn } from "../primitives/cn";
 
 export interface NavigationRowProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {

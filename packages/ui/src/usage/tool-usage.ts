@@ -17,7 +17,7 @@ import {
   type ToolActivityReader,
   type ToolActivityTotals,
   type ToolInvocation,
-} from "@amiba/core"
+} from "@amiba/app-runtime/core"
 
 import type { HeatmapCellBase } from "../viz"
 

@@ -2,7 +2,7 @@ import { Command } from "cmdk";
 import { MessageSquare, Plus, Settings } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import type { SessionMeta } from "@amiba/core";
+import type { SessionMeta } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import {
   Dialog,

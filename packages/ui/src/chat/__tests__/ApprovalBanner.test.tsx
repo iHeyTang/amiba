@@ -14,7 +14,7 @@ describe("ApprovalBanner", () => {
         approvals={[
           {
             approvalId: "approval-1",
-            runId: "run-1",
+            requestId: "run-1",
             tool: "terminal",
             command: "python3 -c 'print(1)'",
             description: "command parser limit or malformed executable payload",

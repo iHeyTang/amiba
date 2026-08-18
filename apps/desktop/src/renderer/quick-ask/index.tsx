@@ -1,19 +1,13 @@
-import { SessionsProvider } from "@amiba/core";
-import { setPlatform } from "@amiba/platform";
+import { SessionsProvider } from "@amiba/app-runtime/core";
+import { DshApiClient } from "@amiba/app-runtime/dsh-client";
+import { setPlatform } from "@amiba/app-runtime/platform";
 import React from "react";
 import { createRoot } from "react-dom/client";
 
 import { createElectronAdapter } from "../platform/electron";
+import { installDshClientTransport } from "../dsh-client-transport";
 import "../styles/globals.css";
 import { QuickAskView } from "./QuickAskView";
-
-// Each BrowserWindow has its OWN renderer process — the main window's
-// `setPlatform()` call in `renderer/index.tsx` does not carry over. The
-// Quick-Ask popup must initialise its own PlatformAdapter before any
-// hook (`useComposerAttachments`, `useWallpaper`, etc.) runs, or
-// `getPlatform()` throws "PlatformAdapter not initialized" the moment
-// React mounts and the renderer crashes to a blank window.
-setPlatform(createElectronAdapter());
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root element missing");
@@ -24,10 +18,26 @@ if (!root) throw new Error("root element missing");
 // underlying SessionDB index via the platform-storage broadcast, so a
 // session created in Quick-Ask propagates into the main window's history
 // drawer the next refresh tick.
-createRoot(root).render(
-  <React.StrictMode>
-    <SessionsProvider>
-      <QuickAskView />
-    </SessionsProvider>
-  </React.StrictMode>,
-);
+void (async () => {
+  try {
+    // Each BrowserWindow owns a separate renderer. Quick Ask therefore joins
+    // the same DSH Client graph through the generic Electron transport before
+    // any shared UI hook reads the platform contract.
+    const boot = await window.amiba.dshClient.boot();
+    installDshClientTransport(boot.baseUrl);
+    const dshClient = new DshApiClient({ baseUrl: boot.baseUrl });
+    setPlatform(createElectronAdapter(dshClient));
+    createRoot(root).render(
+      <React.StrictMode>
+        <SessionsProvider>
+          <QuickAskView dshClient={dshClient} />
+        </SessionsProvider>
+      </React.StrictMode>,
+    );
+  } catch (error) {
+    const failure = document.createElement("pre");
+    failure.className = "p-4 text-sm text-destructive whitespace-pre-wrap";
+    failure.textContent = error instanceof Error ? error.message : String(error);
+    root.replaceChildren(failure);
+  }
+})();

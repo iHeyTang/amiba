@@ -11,10 +11,18 @@ import {
 import type {
   WorkspaceChange,
   WorkspaceCheckpointOptions,
-} from "@amiba/platform";
+} from "@amiba/app-runtime/platform";
 
 import { mainStore, type StorageChangeMap } from "./storage";
 import { embeddedBrowserController } from "./embedded-browser";
+import { dshRuntime, managedDshPaths } from "./dsh-runtime";
+import {
+  loadDshClientBoot,
+  proxyDshClientFetch,
+  type DshProxyRequest,
+} from "./dsh-client-boot";
+import { dshDiagnostics } from "./dsh-diagnostics";
+import { DshProfilePluginManager } from "./dsh-profile-plugins";
 import { workspaceManager } from "./workspace";
 import {
   addWorkspaceProjectFolder,
@@ -111,7 +119,47 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  const dshProfilePlugins = new DshProfilePluginManager({
+    paths: managedDshPaths(),
+    runtime: dshRuntime,
+  });
   embeddedBrowserController.registerIpc();
+
+  // DSH Client Web Shell boot + Electron transport seam. The graph is
+  // composed by DSH's client-modules service; Electron only carries it across
+  // the isolated preload boundary and forwards API fetches from a file origin.
+  ipcMain.handle("dsh-client:boot", () => loadDshClientBoot(dshRuntime));
+  ipcMain.handle(
+    "dsh-client:fetch",
+    (_event, request: DshProxyRequest) =>
+      proxyDshClientFetch(dshRuntime, request),
+  );
+
+  // The Plugins Client contribution owns the product workflow. Electron only
+  // supplies the native file picker and the process boundary required to run
+  // DSH's official profile plugin command while its Host is stopped.
+  ipcMain.handle("dsh-plugins:list", () => dshProfilePlugins.list());
+  ipcMain.handle("dsh-plugins:install-registry", (_event, spec: string) =>
+    dshProfilePlugins.installRegistry(spec),
+  );
+  ipcMain.handle("dsh-plugins:install-archive", async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      properties: ["openFile"],
+      filters: [{ name: "DSH plugin package", extensions: ["tgz"] }],
+    };
+    const result = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options);
+    const filename = result.canceled ? undefined : result.filePaths[0];
+    return filename ? dshProfilePlugins.installArchive(filename) : null;
+  });
+  ipcMain.handle("dsh-plugins:remove", (_event, packageName: string) =>
+    dshProfilePlugins.remove(packageName),
+  );
+  ipcMain.handle("dsh-plugins:update", (_event, packageName: string) =>
+    dshProfilePlugins.update(packageName),
+  );
 
   // Storage handlers route to the shared `mainStore`, the same instance the
   // main-process PlatformAdapter uses. Renderer writes and main-side reads
@@ -134,6 +182,18 @@ export function registerIpcHandlers() {
 
   ipcMain.handle("shell:open-external", (_e, url: string) =>
     shell.openExternal(url),
+  );
+
+  ipcMain.handle("agent-diagnostics:status", () => dshDiagnostics.status());
+  ipcMain.handle("agent-diagnostics:restart", () => dshDiagnostics.restart());
+  ipcMain.handle(
+    "agent-diagnostics:logs",
+    (
+      _event,
+      input?: Parameters<
+        import("@amiba/app-runtime/platform").AgentDiagnosticsAdapter["logs"]
+      >[0],
+    ) => dshDiagnostics.logs(input),
   );
 
   ipcMain.handle(

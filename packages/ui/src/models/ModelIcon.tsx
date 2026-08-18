@@ -12,7 +12,6 @@ import gemmaIcon from "@lobehub/icons-static-svg/icons/gemma-color.svg";
 import githubCopilotIcon from "@lobehub/icons-static-svg/icons/githubcopilot.svg";
 import grokIcon from "@lobehub/icons-static-svg/icons/grok.svg";
 import groqIcon from "@lobehub/icons-static-svg/icons/groq.svg";
-import hermesAgentIcon from "@lobehub/icons-static-svg/icons/hermesagent.svg";
 import huggingFaceIcon from "@lobehub/icons-static-svg/icons/huggingface-color.svg";
 import kimiIcon from "@lobehub/icons-static-svg/icons/kimi-color.svg";
 import kiloCodeIcon from "@lobehub/icons-static-svg/icons/kilocode.svg";
@@ -57,7 +56,6 @@ const MODEL_ICON_URLS = {
   githubcopilot: githubCopilotIcon,
   grok: grokIcon,
   groq: groqIcon,
-  hermesagent: hermesAgentIcon,
   huggingface: huggingFaceIcon,
   kimi: kimiIcon,
   kilocode: kiloCodeIcon,
@@ -151,7 +149,6 @@ const MODEL_FAMILY_RULES: ModelFamilyRule[] = [
   { icon: "nova", pattern: /(^|[/_.:-])nova(?=$|[/_.:-])/ },
   { icon: "perplexity", pattern: /(^|[/_.:-])sonar(?=$|[/_.:-])/ },
   { icon: "cohere", pattern: /(^|[/_.:-])command-[ar](?=$|[/_.:-])/ },
-  { icon: "hermesagent", pattern: /(^|[/_.:-])hermes(?=$|[/_.:-])/ },
 ];
 
 const PROVIDER_ICONS: Record<string, ModelIconName> = {
@@ -169,7 +166,6 @@ const PROVIDER_ICONS: Record<string, ModelIconName> = {
   "github-copilot": "githubcopilot",
   google: "gemini",
   groq: "groq",
-  "hermes-agent": "hermesagent",
   huggingface: "huggingface",
   "kimi-coding": "kimi",
   "kimi-coding-cn": "kimi",

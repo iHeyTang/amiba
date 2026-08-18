@@ -29,10 +29,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/core";
+import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/app-runtime/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 import { CascadeMenu, Input, type CascadeMenuItem, cn } from "../primitives";
-import { TopSection } from "./SessionGroups";
+import { TopSection } from "./TopSection";
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -55,7 +55,7 @@ export interface SessionsListViewProps {
   onToggleSelected?: (id: string) => void;
   /**
    * Fired once on mount so the host can re-fetch the underlying index —
-   * multi-channel rows authored elsewhere (gateway / CLI / cron) appear
+   * rows authored elsewhere (DSH plugins / CLI / schedules) appear
    * without waiting for the next storage-watch broadcast.
    */
   onRefresh?: () => void | Promise<void>;

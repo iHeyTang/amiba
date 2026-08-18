@@ -1,22 +1,17 @@
 import { shell } from "electron"
-import type { PlatformAdapter, StorageChangeMap } from "@amiba/platform"
+import type { PlatformAdapter, StorageChangeMap } from "@amiba/app-runtime/platform"
 
 import { mainStore } from "./storage"
 import { workspaceManager } from "./workspace"
-
-const notImpl = (name: string) => () =>
-  Promise.reject(new Error(`[MainPlatformAdapter] ${name} not implemented (main process)`))
 
 /**
  * PlatformAdapter for the Electron main process.
  *
  * - **storage** is real (backed by `mainStore`, the same file the renderer
- *   sees through IPC). Lets shared code in @amiba/core (`backplaneFetch`,
- *   `HermesClient`) read settings.* keys from main without round-tripping
- *   IPC back to itself.
+ *   sees through IPC), so shared main-process services read settings without
+ *   round-tripping IPC back to themselves.
  * - **shell.openExternal** uses Electron's built-in shell module.
- * - Every other sub-API is `notImpl` — those are browser-extension concepts
- *   (chrome.tabs, chrome.bookmarks, …) with no desktop counterpart.
+ * - Session-scoped workspace access is real and shared with IPC handlers.
  */
 export function createMainPlatformAdapter(): PlatformAdapter {
   return {
@@ -41,28 +36,6 @@ export function createMainPlatformAdapter(): PlatformAdapter {
         })
       }
     },
-
-    runtime: {
-      sendMessage: notImpl("runtime.sendMessage") as never,
-      onMessage: () => () => {},
-      getInstallId: notImpl("runtime.getInstallId") as never
-    },
-
-    tabs: {
-      query: notImpl("tabs.query") as never,
-      create: notImpl("tabs.create") as never,
-      update: notImpl("tabs.update") as never,
-      remove: notImpl("tabs.remove") as never
-    },
-
-    scripting: { executeScript: notImpl("scripting.executeScript") as never },
-    bookmarks: { search: notImpl("bookmarks.search") as never },
-    history: { search: notImpl("history.search") as never },
-    windows: {
-      getCurrent: notImpl("windows.getCurrent") as never,
-      create: notImpl("windows.create") as never
-    },
-    notifications: { notify: notImpl("notifications.notify") as never },
 
     shell: { openExternal: (url) => shell.openExternal(url) },
 

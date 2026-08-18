@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  setPlatform,
-  type PlatformAdapter,
-} from "@amiba/platform";
+import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 import { queueChatPrompt } from "../chat-session-request";
 
 const storageSet = vi.fn(
@@ -22,55 +19,6 @@ const platform: PlatformAdapter = {
       return () => {};
     },
   },
-  runtime: {
-    async sendMessage<T>() {
-      return undefined as T;
-    },
-    onMessage() {
-      return () => {};
-    },
-    async getInstallId() {
-      return "test";
-    },
-  },
-  tabs: {
-    async query() {
-      return [];
-    },
-    async create() {
-      return { id: 1 };
-    },
-    async update() {
-      return { id: 1 };
-    },
-    async remove() {},
-  },
-  scripting: {
-    async executeScript() {
-      return [];
-    },
-  },
-  bookmarks: {
-    async search() {
-      return [];
-    },
-  },
-  history: {
-    async search() {
-      return [];
-    },
-  },
-  windows: {
-    async getCurrent() {
-      return { id: 1, focused: true };
-    },
-    async create() {
-      return { id: 1 };
-    },
-  },
-  notifications: {
-    async notify() {},
-  },
   shell: {
     async openExternal() {},
   },
@@ -85,14 +33,36 @@ describe("queueChatPrompt workspace hand-off", () => {
   it("keeps a draft workspace with the first prompt without creating a session", async () => {
     await queueChatPrompt({
       text: "Review this repository",
-      workspacePath: "/workspaces/hermes-x",
+      workspacePath: "/workspaces/amiba-project",
     });
 
     expect(storageSet).toHaveBeenCalledOnce();
     expect(storageSet.mock.calls[0]?.[0]).toMatchObject({
       "home.pendingPrompt": {
         text: "Review this repository",
-        workspacePath: "/workspaces/hermes-x",
+        workspacePath: "/workspaces/amiba-project",
+      },
+    });
+  });
+
+  it("hands the draft model to the first-turn transaction", async () => {
+    await queueChatPrompt({
+      text: "Explain this repository",
+      modelSelection: {
+        provider: "deepseek",
+        model: "deepseek-reasoner",
+        reasoningEffort: "high",
+      },
+    });
+
+    expect(storageSet.mock.calls[0]?.[0]).toMatchObject({
+      "home.pendingPrompt": {
+        text: "Explain this repository",
+        modelSelection: {
+          provider: "deepseek",
+          model: "deepseek-reasoner",
+          reasoningEffort: "high",
+        },
       },
     });
   });

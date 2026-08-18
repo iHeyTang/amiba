@@ -14,9 +14,9 @@ import {
   resolveChannel,
   SOURCE_LOCAL,
   type SessionMeta,
-} from "@amiba/core";
+} from "@amiba/app-runtime/core";
 import { cn } from "../primitives";
-import { ScheduledSection, TopSection } from "./SessionGroups";
+import { TopSection } from "./TopSection";
 
 interface Props {
   open: boolean;
@@ -28,20 +28,11 @@ interface Props {
   /** Open the session as a tab and activate it. */
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
-  /** Permanent delete: drops the session from history + closes its tab. */
+  /** Hide from Amiba history and close its tab; DSH keeps the event log. */
   onDelete: (id: string) => void;
   /**
-   * Open a cron-source session as a tab. The drawer queries SessionDB
-   * directly for cron sessions (one canonical source, matches
-   * ``hermes sessions list --source cron``), so the caller just needs
-   * to ``sessions.openTab(id)``. Optional: surfaces that don't expose
-   * cron tasks (e.g. the slim ChatView) can omit this and the
-   * Scheduled section stays hidden.
-   */
-  onOpenCronSession?: (sessionId: string) => void;
-  /**
    * Re-fetch the session index. Fires once each time the drawer opens
-   * so multi-channel rows authored elsewhere (gateway / CLI / cron)
+   * so rows authored elsewhere (DSH plugins / CLI / schedules)
    * appear without waiting for the next storage-watch broadcast. Wired
    * by the host to ``sessions.refresh``; omit when the host doesn't
    * want a refresh on open.
@@ -56,8 +47,7 @@ interface DateBucket {
 
 /**
  * Bins sessions by `updatedAt` into Pinned + Today / Yesterday /
- * Earlier this week / This month / Older. Mirrors the grouping the
- * Hermes WebUI uses; gives the sidebar a familiar structure even when
+ * Earlier this week / This month / Older. Keeps the sidebar scannable when
  * there are dozens of sessions.
  */
 function groupSessionsByDate(
@@ -88,9 +78,6 @@ function groupSessionsByDate(
   const rest: SessionMeta[] = [];
   for (const s of sessions) {
     if (s.archived) continue;
-    // Cron-run sessions belong only in the Scheduled-tasks group;
-    // skip them here so they don't double-appear in the chat history.
-    if (s.id.startsWith("cron_")) continue;
     if (s.pinned) pinned.push(s);
     else rest.push(s);
   }
@@ -124,7 +111,6 @@ export function SessionDrawer({
   onOpen,
   onRename,
   onDelete,
-  onOpenCronSession,
   onRefresh,
 }: Props) {
   const { t } = useT();
@@ -132,13 +118,11 @@ export function SessionDrawer({
   const [editingValue, setEditingValue] = useState("");
 
   /**
-   * Per-section collapse state. Keyed by SessionDB source so adding a
+   * Per-section collapse state. Keyed by session source so adding a
    * new channel surface doesn't clobber the user's collapse choices for
-   * existing ones. ``scheduled`` is the only fixed key.
+   * existing ones.
    */
-  const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({
-    scheduled: false,
-  });
+  const [topCollapsed, setTopCollapsed] = useState<Record<string, boolean>>({});
   const toggleTop = (id: string) =>
     setTopCollapsed((p) => ({ ...p, [id]: !p[id] }));
 
@@ -151,8 +135,8 @@ export function SessionDrawer({
     }
   }, [open]);
 
-  // Refresh the index once per drawer-open so multi-channel rows
-  // authored elsewhere (gateway / CLI / cron) appear immediately —
+  // Refresh the index once per drawer-open so rows authored elsewhere
+  // (DSH plugins / CLI / schedules) appear immediately —
   // sessions-runtime only fetches on initial mount otherwise.
   useEffect(() => {
     if (!open || !onRefresh) return;
@@ -169,7 +153,7 @@ export function SessionDrawer({
    */
   const channelSections = useMemo(() => {
     const live = sessions.filter(
-      (s) => !s.archived && !s.id.startsWith("cron_"),
+      (s) => !s.archived,
     );
 
     const bySource = new Map<string, SessionMeta[]>();
@@ -310,18 +294,6 @@ export function SessionDrawer({
               })
             )}
 
-            {onOpenCronSession && (
-              <ScheduledSection
-                open={open && !topCollapsed.scheduled}
-                collapsed={!!topCollapsed.scheduled}
-                onToggle={() => toggleTop("scheduled")}
-                activeId={activeId}
-                onOpenCronSession={(id) => {
-                  onOpenCronSession(id);
-                  onClose();
-                }}
-              />
-            )}
           </div>
         </ScrollArea>
       </div>

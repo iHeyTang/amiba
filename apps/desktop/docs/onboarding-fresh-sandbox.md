@@ -1,7 +1,7 @@
-# Fresh Runtime sandbox
+# Fresh DSH runtime sandbox
 
-Exercise first-launch writable state and automatic built-in Runtime startup
-without touching the user's system Hermes, `~/.hermes`, or launchd service:
+Exercise first-launch writable state and automatic managed DSH startup without
+touching the user's normal Amiba data or any system DSH installation:
 
 ```bash
 pnpm dev:desktop:fresh        # ephemeral; removed on exit
@@ -16,21 +16,18 @@ The harness is macOS-only and lives at
 The script creates a sandbox HOME and exports:
 
 ```text
-AMIBA_HERMES_USER_DATA_DIR=<sandbox>/amiba-user-data
+AMIBA_USER_DATA_DIR=<sandbox>/amiba-user-data
 ```
 
-Amiba executes the built-in Runtime directly and writes only `HERMES_HOME` data
-below that directory. A `hermes` on PATH and a running system gateway on the
-conventional 8642/9394 ports are irrelevant. Amiba's sandboxed
-gateway/backplane use 18642/19394.
-
-The script no longer stops or restarts `ai.hermes.gateway`; managed-runtime
-isolation makes that unnecessary.
+Amiba launches the bundled, pinned DSH process directly. Desktop state and the
+managed DSH home both resolve below the overridden user-data directory. A
+separate `dsh` executable on `PATH` is ignored; DSH binds an ephemeral loopback
+port and authenticates Amiba's private plugin endpoints with a per-launch token.
 
 ## Modes
 
-- `fresh` creates a temporary writable `HERMES_HOME` and removes it on exit.
-- `fresh:keep` uses `~/.hermes-fresh-sandbox` so configuration and sessions
+- `fresh` creates a temporary writable home and removes it on exit.
+- `fresh:keep` uses `~/.amiba-dsh-fresh-sandbox` so configuration and sessions
   survive subsequent launches. Both modes execute the same built-in Runtime.
 
 Both modes preserve the normal pnpm/node paths required by the development

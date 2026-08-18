@@ -4,7 +4,7 @@
  * fire-and-forget — a failed persist should never break the UI.
  */
 
-import { getPlatform } from "@amiba/platform"
+import { getPlatform } from "@amiba/app-runtime/platform"
 
 export async function readUsagePref<T>(key: string, fallback: T): Promise<T> {
   try {

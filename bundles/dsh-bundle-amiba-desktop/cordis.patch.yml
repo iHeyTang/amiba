@@ -1,0 +1,11 @@
+# Electron is an optional provider of native execution, never the owner of an
+# Amiba domain capability.
+- insert:
+    - id: amiba-runtime-gateway
+      name: "@amiba/dsh-plugin-runtime-gateway"
+      config:
+        url: !!js process.env.AMIBA_RUNTIME_GATEWAY_URL
+        token: !!js process.env.AMIBA_RUNTIME_GATEWAY_TOKEN
+
+    - id: amiba-browser-provider-electron
+      name: "@amiba/dsh-plugin-browser-provider-electron"

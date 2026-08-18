@@ -1,7 +1,7 @@
 {
   "name": "@amiba/cli",
   "version": "0.1.0",
-  "description": "Developer tooling for Amiba Extensions.",
+  "description": "Amiba's product CLI and developer tooling for DSH plugins.",
   "type": "module",
   "bin": {
     "amiba": "dist/cli.js"
@@ -11,7 +11,9 @@
     ".": "./dist/cli.js"
   },
   "scripts": {
+    "prebuild": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "build": "tsc",
+    "pretypecheck": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
     "prepare": "tsc"
@@ -21,13 +23,14 @@
     "access": "public"
   },
   "dependencies": {
+    "@amiba/app-runtime": "workspace:*",
     "commander": "^12.0.0",
     "kleur": "^4.1.5",
     "prompts": "^2.4.2",
     "tar": "^7.0.0"
   },
   "devDependencies": {
-    "@amiba/extension-api": "workspace:*",
+    "@amiba/extension-sdk": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/prompts": "^2.4.9",
     "@types/tar": "^6.1.0",

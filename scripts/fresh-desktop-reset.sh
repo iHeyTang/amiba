@@ -19,7 +19,7 @@ fi
 
 TMP_PARENT=$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || echo "/tmp")
 shopt -s nullglob
-EPHEMERAL=("${TMP_PARENT%/}/hermes-fresh."*)
+EPHEMERAL=("${TMP_PARENT%/}/amiba-dsh-fresh."*)
 shopt -u nullglob
 if (( ${#EPHEMERAL[@]} > 0 )); then
   for dir in "${EPHEMERAL[@]}"; do
@@ -32,7 +32,7 @@ else
   echo "[reset] no ephemeral sandboxes to remove"
 fi
 
-PERSISTENT_SANDBOX="$HOME/.hermes-fresh-sandbox"
+PERSISTENT_SANDBOX="$HOME/.amiba-dsh-fresh-sandbox"
 if (( NUKE_PERSISTENT == 1 )); then
   if [[ -d "$PERSISTENT_SANDBOX" ]]; then
     rm -rf "$PERSISTENT_SANDBOX"

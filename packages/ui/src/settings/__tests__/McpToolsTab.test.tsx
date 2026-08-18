@@ -1,46 +1,35 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const core = vi.hoisted(() => ({
-  getHermesInstalledMcps: vi.fn(),
-}));
-
-vi.mock("@amiba/core", () => core);
+import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
 import { McpToolsTab } from "../McpToolsTab";
 
-describe("McpToolsTab", () => {
+const list = vi.fn();
+
+describe("McpToolsTab DSH plugin", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    core.getHermesInstalledMcps.mockResolvedValue({
-      ok: true,
-      items: [
-        {
-          slug: "filesystem",
-          label: "Filesystem",
-          description: "Access selected local folders.",
-          source: "curated",
-          installed: true,
-          enabled: true,
-          transport_kind: "stdio",
-        },
-      ],
+    list.mockResolvedValue({
+      toolsOnly: true,
+      servers: [{
+        serverName: "filesystem",
+        transport: "stdio",
+        enabled: true,
+        command: "mcp-filesystem",
+        args: [],
+        envKeys: [],
+        headerKeys: [],
+      }],
     });
+    setPlatform({
+      storage: { get: vi.fn().mockResolvedValue({}), set: vi.fn(), remove: vi.fn(), watch: vi.fn(() => () => {}) },
+      agentMcp: { list, save: vi.fn(), remove: vi.fn() },
+    } as unknown as PlatformAdapter);
   });
 
-  it("presents MCP as a profile-scoped source of tools", async () => {
-    render(<McpToolsTab profileId="researcher" />);
-
-    expect(await screen.findByText("Filesystem")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Connect tools provided by external services through MCP.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("External tools")).toBeInTheDocument();
-    expect(screen.queryByText("Shared at runtime")).not.toBeInTheDocument();
-    expect(screen.getByText("MCP · stdio")).toBeInTheDocument();
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
-    expect(core.getHermesInstalledMcps).toHaveBeenCalledWith("researcher");
+  it("lists MCP tool providers composed as DSH plugins", async () => {
+    render(<McpToolsTab />);
+    expect(await screen.findByText("filesystem")).toBeVisible();
+    expect(screen.getByText(/DSH MCP/)).toHaveTextContent("STDIO");
+    expect(list).toHaveBeenCalled();
   });
 });

@@ -61,7 +61,7 @@ body,
  * ------------------
  * These class names mirror the tiny critical shell in index.html. The shell
  * paints before the renderer bundle is evaluated; React then takes over the
- * same visual language and keeps it alive while Hermes/backplane start.
+ * same visual language and keeps it alive while managed DSH starts.
  */
 :root {
   --amiba-boot-canvas: #ffffff;

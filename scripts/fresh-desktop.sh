@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Launch the desktop dev server in a sandboxed environment that mimics a
-# brand-new user data directory while executing the normal built-in Runtime
-# directly from application resources. The real ~/.hermes remains untouched.
+# brand-new user data directory while executing the managed DSH runtime
+# directly from application resources. Normal Amiba state remains untouched.
 #
 # Two modes:
 #   (default)  ephemeral: mktemp HOME, user data is wiped on exit.
-#   --keep     persistent: HOME=~/.hermes-fresh-sandbox, user configuration
+#   --keep     persistent: HOME=~/.amiba-dsh-fresh-sandbox, user configuration
 #              and sessions are reused. Fast for UI work.
 #
-# Neither mode copies the Runtime or uses a system Hermes installation.
+# Neither mode copies the runtime or uses a system DSH installation.
 
 set -euo pipefail
 
@@ -33,15 +33,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if (( KEEP == 1 )); then
-  SANDBOX="$HOME/.hermes-fresh-sandbox"
+  SANDBOX="$HOME/.amiba-dsh-fresh-sandbox"
   mkdir -p "$SANDBOX"
   echo "[fresh] sandbox HOME = $SANDBOX (persistent)"
 else
-  SANDBOX=$(mktemp -d -t hermes-fresh)
+  SANDBOX=$(mktemp -d -t amiba-dsh-fresh)
   echo "[fresh] sandbox HOME = $SANDBOX (ephemeral, wiped on exit)"
 fi
 
-export AMIBA_HERMES_USER_DATA_DIR="$SANDBOX/amiba-user-data"
+export AMIBA_USER_DATA_DIR="$SANDBOX/amiba-user-data"
 
 # Resolve the dirs holding pnpm + node BEFORE we rebuild PATH. The reset
 # below keeps the harness deterministic while preserving pnpm and node.
@@ -58,7 +58,7 @@ NODE_BIN_DIR=$(dirname "$(command -v node 2>/dev/null || echo /usr/bin/node)")
 pnpm runtime:verify
 
 export HOME="$SANDBOX"
-# The managed runtime never discovers PATH Hermes, but keep only the minimum
+# The managed runtime never discovers a PATH-installed DSH, so keep only the minimum
 # tools here so the desktop process environment remains reproducible.
 export PATH="$SANDBOX/.local/bin:$PNPM_BIN_DIR:$NODE_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin"
 

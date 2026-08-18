@@ -4,14 +4,12 @@ import type { BuiltinMentionType, MentionData } from "./providers/types"
 const BUILTIN_FIELDS: Record<BuiltinMentionType, string[]> = {
   skill: ["name"],
   session: ["id", "title"],
-  persona: ["key"],
-  channel: ["id"],
   file: ["path"],
   page: ["tabId", "title"], // page may have no fields -> "@[page:]"
 }
 
-// Dynamic mention types contributed by backplane integrations
-// (GET /hermes/mention-resources), keyed by registry key, e.g. "lark.doc".
+// Dynamic mention types contributed by managed extension providers, keyed by
+// registry key, e.g. "amiba.extension".
 // Registered at runtime when the mention-resource providers are built, so the
 // token <-> payload mapping stays in lockstep with what the backend declares.
 const dynamicFields: Record<string, string[]> = {}

@@ -1,163 +1,93 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
-const cronCore = vi.hoisted(() => ({
-  createHermesCronJob: vi.fn(async () => ({ ok: true })),
-  deleteHermesCronJob: vi.fn(async () => ({ ok: true })),
-  getHermesCronJobs: vi.fn(),
-  pauseHermesCronJob: vi.fn(async () => ({ ok: true })),
-  resumeHermesCronJob: vi.fn(async () => ({ ok: true })),
-  triggerHermesCronJob: vi.fn(async () => ({ ok: true })),
-  updateHermesCronJob: vi.fn(async () => ({ ok: true })),
+vi.mock("@amiba/app-runtime/core", () => ({
+  useSessions: () => ({
+    activeId: "session-1",
+    sessions: [{ id: "session-1", title: "Main session", source: "local" }],
+  }),
 }));
-
-vi.mock("@amiba/core", () => cronCore);
 
 import { ScheduledTasksPage } from "../ScheduledTasksPage";
 
-const registeredJob = {
-  id: "daily-digest",
-  name: "Daily digest",
-  prompt: "Summarise the latest activity",
-  skills: [],
-  skill: null,
-  model: null,
-  provider: null,
-  base_url: null,
-  script: null,
-  no_agent: false,
-  context_from: null,
-  schedule: { kind: "cron" },
-  schedule_display: "0 9 * * *",
-  repeat: { times: null, completed: 0 },
-  enabled: true,
-  state: "scheduled",
-  paused_at: null,
-  paused_reason: null,
-  created_at: "2026-07-23T00:00:00Z",
-  next_run_at: "2026-07-24T01:00:00Z",
-  last_run_at: null,
-  last_status: null,
-  last_error: null,
-  last_delivery_error: null,
-  deliver: "local",
-  origin: null,
-  enabled_toolsets: null,
-  workdir: null,
-};
+const list = vi.fn();
 
-const pausedJob = {
-  ...registeredJob,
-  id: "weekly-review",
-  name: "Weekly review",
-  prompt: "Review the week",
-  schedule_display: "0 16 * * 5",
-  enabled: false,
-  state: "paused",
-};
-
-describe("ScheduledTasksPage", () => {
+describe("ScheduledTasksPage DSH reminders", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    cronCore.getHermesCronJobs.mockResolvedValue({
-      ok: true,
-      jobs: [registeredJob],
-    });
-  });
-
-  it("shows registered jobs instead of cron-run history", async () => {
-    render(<ScheduledTasksPage />);
-
-    expect(screen.getAllByRole("heading", { name: "Automation" })).toHaveLength(
-      1,
+    list.mockImplementation(async (sessionId: string) =>
+      sessionId === "session-1"
+        ? [
+            {
+              id: "reminder-1",
+              sessionId: "session-1",
+              kind: "after",
+              prompt: "Summarise the latest activity",
+              scheduledAt: "2026-08-20T01:00:00.000Z",
+              state: "scheduled",
+              deliveryMode: "session-local",
+              afterSeconds: 1800,
+            },
+          ]
+        : [
+            {
+              id: "reminder-2",
+              sessionId: "session-2",
+              kind: "every",
+              prompt: "Check project health",
+              scheduledAt: "2026-08-20T02:00:00.000Z",
+              state: "scheduled",
+              deliveryMode: "session-local",
+              everySeconds: 3600,
+            },
+          ],
     );
-    expect(await screen.findByText("Daily digest")).toBeInTheDocument();
-    expect(screen.getByText("Daily at 09:00")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Summarise the latest activity"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("daily-digest")).not.toBeInTheDocument();
-    expect(screen.queryByText(/total/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("Never run")).not.toBeInTheDocument();
+    setPlatform({
+      storage: {
+        get: vi.fn().mockResolvedValue({}),
+        set: vi.fn(),
+        remove: vi.fn(),
+        watch: vi.fn(() => () => {}),
+      },
+      agentSessions: {
+        list: vi.fn().mockResolvedValue([
+          {
+            sessionId: "session-1",
+            title: "Main session",
+            createdAt: 1,
+            updatedAt: 2,
+            agentPreset: "standard",
+          },
+          {
+            sessionId: "session-2",
+            title: "Project session",
+            createdAt: 1,
+            updatedAt: 2,
+            agentPreset: "standard",
+          },
+        ]),
+      },
+      agentSchedules: { list, create: vi.fn(), remove: vi.fn() },
+    } as unknown as PlatformAdapter);
   });
 
-  it("keeps task lifecycle actions available in the workspace", async () => {
+  it("aggregates reminders without exposing session setup in the page", async () => {
+    const user = userEvent.setup();
     render(<ScheduledTasksPage />);
-
-    expect(await screen.findByText("Daily digest")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Run now" }),
-    ).not.toBeInTheDocument();
+      await screen.findByText("Summarise the latest activity"),
+    ).toBeVisible();
+    expect(screen.getByText("Check project health")).toBeVisible();
+    expect(list).toHaveBeenCalledWith("session-1");
+    expect(list).toHaveBeenCalledWith("session-2");
+    expect(screen.getByText("Main session")).toBeVisible();
+    expect(screen.getByText("Project session")).toBeVisible();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: "More actions for Daily digest",
-      }),
-    );
-    await userEvent.click(screen.getByRole("menuitem", { name: "Run now" }));
-
-    expect(cronCore.triggerHermesCronJob).toHaveBeenCalledWith("daily-digest");
-  });
-
-  it("moves secondary actions into an accessible more menu", async () => {
-    render(<ScheduledTasksPage />);
-
-    await userEvent.click(
-      await screen.findByRole("button", {
-        name: "More actions for Daily digest",
-      }),
-    );
-
+    await user.click(screen.getByRole("button", { name: "New reminder" }));
     expect(
-      screen.getByRole("menuitem", { name: "Edit task" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Copy task ID" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Delete task" }),
-    ).toBeInTheDocument();
-  });
-
-  it("uses the row switch to pause an enabled task", async () => {
-    render(<ScheduledTasksPage />);
-
-    await userEvent.click(
-      await screen.findByRole("switch", { name: "Pause Daily digest" }),
-    );
-
-    expect(cronCore.pauseHermesCronJob).toHaveBeenCalledWith("daily-digest");
-  });
-
-  it("searches tasks and filters them by lifecycle state", async () => {
-    cronCore.getHermesCronJobs.mockResolvedValue({
-      ok: true,
-      jobs: [registeredJob, pausedJob],
-    });
-    render(<ScheduledTasksPage />);
-
-    const search = await screen.findByRole("searchbox", {
-      name: "Search scheduled tasks",
-    });
-    await userEvent.type(search, "weekly");
-
-    expect(screen.queryByText("Daily digest")).not.toBeInTheDocument();
-    expect(screen.getByText("Weekly review")).toBeInTheDocument();
-
-    await userEvent.clear(search);
-
-    const enabledRow = screen.getByText("Daily digest").closest("li");
-    const pausedRow = screen.getByText("Weekly review").closest("li");
-    expect(enabledRow).not.toBeNull();
-    expect(pausedRow).not.toBeNull();
-    expect(within(enabledRow!).getByText(/^Next /)).toBeInTheDocument();
-    expect(within(pausedRow!).getByText("Paused")).toBeInTheDocument();
-    expect(within(pausedRow!).queryByText(/^Next /)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Paused" }));
-
-    expect(screen.queryByText("Daily digest")).not.toBeInTheDocument();
-    expect(screen.getByText("Weekly review")).toBeInTheDocument();
+      screen.getByRole("combobox", { name: "Owning conversation" }),
+    ).toBeVisible();
   });
 });

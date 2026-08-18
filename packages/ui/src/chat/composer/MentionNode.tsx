@@ -9,7 +9,7 @@ export type SerializedMentionNode = Spread<{ mention: MentionData }, SerializedL
 export class MentionNode extends DecoratorNode<ReactNode> {
   __mention: MentionData
 
-  static getType(): string { return "hermes-mention" }
+  static getType(): string { return "amiba-mention" }
   static clone(node: MentionNode): MentionNode { return new MentionNode(node.__mention, node.__key) }
 
   constructor(mention: MentionData, key?: NodeKey) {

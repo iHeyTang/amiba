@@ -1,27 +1,15 @@
-export { ChatView, type ChatViewProps } from "./ChatView";
 export { default as ChatSurface, type ChatSurfaceProps } from "./ChatSurface";
 export {
   default as FullScreenChatView,
   type FullScreenChatViewProps,
 } from "./FullScreenChatView";
 export { ScheduledTasksPage } from "./ScheduledTasksPage";
-export { TaskCenterPage } from "./TaskCenterPage";
-export { KanbanStatusBadge } from "./KanbanStatusBadge";
 export {
   SessionTitleProvider,
   useSessionTitle,
   useSetSessionTitle,
 } from "./useSessionTitle";
 export type {
-  ActiveTabInfo,
-  BrowserTabSnapshot,
-  LearnCapability,
-  LearnStatus,
-  LearnTraceResult,
-  NavigateOpenPolicy,
-  NavigateOpenPolicyCapability,
-  PageContextCapability,
-  PageContextSnapshot,
   PendingPromptAttachment,
   PendingPromptCapability,
   PendingPromptResult,
@@ -40,7 +28,6 @@ export {
   WorkspaceControl,
   type WorkspaceControlProps,
 } from "./WorkspaceControl";
-export { ChannelChip } from "./internal/ChannelChip";
 export { SessionDrawer } from "./SessionDrawer";
 export {
   WallpaperBackdrop,
@@ -70,13 +57,6 @@ export {
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments";
 export {
-  useVoiceRecorder,
-  MicrophoneButton,
-  type UseVoiceRecorderOptions,
-  type VoiceRecorder,
-  type MicrophoneButtonProps,
-} from "./useVoiceRecorder";
-export {
   queueChatPrompt,
   useChatSessionRequester,
   type ChatSessionRequest,
@@ -97,14 +77,12 @@ export {
   EmptyState,
   ErrorBlock,
   KindIcon,
-  PageChip,
   type AgentDestinationChipProps,
   type AttachmentBadgeViewProps,
   type AttachmentChipProps,
   type EmptyStateProps,
   type ErrorBlockProps,
   type KindIconProps,
-  type PageChipProps,
 } from "./bubble/chips";
 export { ToolChip, ToolProgressChips } from "./bubble/tool-chip";
 export {
@@ -142,7 +120,7 @@ export {
 // <ChatSurface mentionProviders={…}>, and reuse insertMentionAtTrigger inside
 // their own onSelect handlers.
 export { insertMentionAtTrigger } from "./composer/providers/skills";
-export { makeManagedExtensionMentionProvider } from "./composer/providers/managed-extensions";
+export { makeWorkspaceFilesProvider } from "./workspace-files-provider";
 export type {
   TriggerProvider,
   MenuItem,

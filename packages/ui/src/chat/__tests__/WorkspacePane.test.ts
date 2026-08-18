@@ -1,4 +1,4 @@
-import type { HermesToolProgress } from "@amiba/core";
+import type { ToolProgress } from "@amiba/app-runtime/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,8 +9,8 @@ import {
 } from "../WorkspacePane";
 
 function event(
-  partial: Partial<HermesToolProgress> & Pick<HermesToolProgress, "tool">,
-): HermesToolProgress {
+  partial: Partial<ToolProgress> & Pick<ToolProgress, "tool">,
+): ToolProgress {
   return {
     toolCallId: "tool-1",
     status: "completed",
@@ -29,7 +29,7 @@ describe("workspace pane tool resources", () => {
     expect(workspaceFileTargets(toolEvent)).toEqual(["src/App.tsx"]);
   });
 
-  it("prefers Hermes' authoritative resolved write path", () => {
+  it("prefers the runtime's authoritative resolved write path", () => {
     const toolEvent = event({
       tool: "write_file",
       args: { path: "src/App.tsx" },
@@ -108,7 +108,7 @@ describe("workspace pane tool resources", () => {
     });
   });
 
-  it("defaults Hermes execute_code previews to Python syntax", () => {
+  it("defaults execute_code previews to Python syntax", () => {
     const toolEvent = event({
       tool: "execute_code",
       args: {

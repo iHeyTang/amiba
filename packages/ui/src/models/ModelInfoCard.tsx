@@ -178,7 +178,7 @@ export function ModelInfoCard({
   );
   addReferenceDetail(
     normalized.reference.knowledgeCutoff,
-    "knowledge",
+    "cutoff",
     t("options.models.card.knowledgeCutoff"),
     BookOpen,
   );

@@ -58,7 +58,7 @@ describe("workspace review parser", () => {
     expect(review.deletions).toBe(1);
   });
 
-  it("understands Hermes rendered file headers and aggregates tool calls", () => {
+  it("understands rendered file headers and aggregates tool calls", () => {
     const review = parseWorkspaceReview([
       {
         toolCallId: "tool-1",
@@ -146,7 +146,7 @@ describe("workspace review parser", () => {
     });
   });
 
-  it("recovers the gateway's JSON-string diff result", () => {
+  it("recovers a tool's JSON-string diff result", () => {
     const resource = workspaceReviewResourceFromEvents(
       [
         {

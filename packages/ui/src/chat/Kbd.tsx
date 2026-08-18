@@ -9,7 +9,7 @@
  *                            for use in `Composer.extrasBelow`.
  *
  * Keeping both here so every surface (main `<ChatSurface />`, the
- * Quick-Ask Spotlight popup, `<ChatView />`) uses the same caption row
+ * Quick-Ask Spotlight popup) uses the same caption row
  * without forking the styling.
  */
 import { cn } from "../primitives"

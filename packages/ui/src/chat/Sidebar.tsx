@@ -1,7 +1,7 @@
 /**
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
- *   • top (fixed):   new-chat, then the built-in + extension nav rows.
+ *   • top (fixed):   new-chat, then DSH workspace slot contributions.
  *   • middle (flex): unified chat + scheduled-run history, switchable between
  *                    a time-ordered stream and workspace-directory groups.
  *   • bottom (fixed): the settings row.
@@ -10,7 +10,6 @@
 import {
   Archive,
   ArchiveRestore,
-  BookOpen,
   CheckSquare,
   Clock,
   Folder,
@@ -21,26 +20,20 @@ import {
   MoreHorizontal,
   Pin,
   Plus,
-  PlugZap,
   Settings,
   Trash2,
-  Upload,
-  Wallet,
-  Workflow,
-  Wrench,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
-import type { SessionMeta } from "@amiba/core";
+import type { SessionMeta } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
-import type { MainContribution } from "@amiba/extension-host/renderer";
 import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
-/** Extension ids are arbitrary strings; no compile-time union needed. */
+/** Workspace plugin ids are intentionally open-ended. */
 export type ActivityViewId = string;
 export type HistoryLayout = "timeline" | "grouped";
 
@@ -64,28 +57,11 @@ function workspaceName(path: string): string {
   return normalized.split(/[\\/]/).filter(Boolean).at(-1) || path;
 }
 
-const ICON_MAP: Record<string, ReactNode> = {
-  "book-open": <BookOpen className="h-4 w-4" />,
-  wallet: <Wallet className="h-4 w-4" />,
-  wrench: <Wrench className="h-4 w-4" />,
-};
-
-export function resolveExtensionIcon(name: string): ReactNode | null {
-  return ICON_MAP[name] ?? null;
-}
-
-interface NavRow {
-  id: string;
-  icon: ReactNode;
-  label: string;
-  order: number;
-}
-
 export interface SidebarProps {
-  activeView: string;
-  onSelectView: (id: string) => void;
+  navigationBefore?: ReactNode;
+  workspaceNavigation?: ReactNode;
+  navigationAfter?: ReactNode;
   onNewChat: () => void;
-  extensionItems?: MainContribution[];
   sessions: SessionMeta[];
   runningSessionIds?: ReadonlySet<string>;
   failedSessionIds?: ReadonlySet<string>;
@@ -98,7 +74,6 @@ export interface SidebarProps {
   onArchiveSession?: (id: string, archived: boolean) => void | Promise<void>;
   onBranchSession?: (id: string) => void | Promise<void>;
   onExportSession?: (id: string) => void | Promise<void>;
-  onImportSessions?: (file: File) => void | Promise<void>;
   onBulkSessions?: (
     ids: string[],
     action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
@@ -112,15 +87,14 @@ export interface SidebarProps {
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
   onOpenSettings: () => void;
-  showCapabilityExtensions?: boolean;
   className?: string;
 }
 
 export function Sidebar({
-  activeView,
-  onSelectView,
+  navigationBefore,
+  workspaceNavigation,
+  navigationAfter,
   onNewChat,
-  extensionItems,
   sessions,
   runningSessionIds,
   failedSessionIds,
@@ -133,7 +107,6 @@ export function Sidebar({
   onArchiveSession,
   onBranchSession,
   onExportSession,
-  onImportSessions,
   onBulkSessions,
   onRefreshSessions,
   scheduledSessions,
@@ -144,7 +117,6 @@ export function Sidebar({
   historyLayout,
   onHistoryLayoutChange,
   onOpenSettings,
-  showCapabilityExtensions = false,
   className,
 }: SidebarProps) {
   const { t } = useT();
@@ -230,43 +202,6 @@ export function Sidebar({
     workspaceBindings.bySessionId,
   ]);
 
-  // Built-in non-chat destinations get low implicit orders so extension items
-  // (manifest default order 100) sort after them, while an extension that sets
-  // order=0 can still sort first.
-  const coreNav: NavRow[] = [
-    {
-      id: "tasks",
-      icon: <ListTodo className="h-4 w-4" />,
-      label: t("tasks.title"),
-      order: 1,
-    },
-    {
-      id: "scheduled",
-      icon: <Workflow className="h-4 w-4" />,
-      label: t("options.cron.title"),
-      order: 2,
-    },
-    ...(showCapabilityExtensions
-      ? [
-          {
-            id: "capability-extensions",
-            icon: <PlugZap className="h-4 w-4" />,
-            label: t("options.extensions.library.title"),
-            order: 3,
-          },
-        ]
-      : []),
-  ];
-  const extNav: NavRow[] = (extensionItems ?? []).map((e) => ({
-    id: e.extensionId,
-    icon: resolveExtensionIcon(e.icon) ?? (
-      <BookOpen className="h-[18px] w-[18px]" />
-    ),
-    label: e.label,
-    order: e.order,
-  }));
-  const navRows = [...coreNav, ...extNav].sort((a, b) => a.order - b.order);
-
   return (
     <nav
       aria-label={t("sidepanel.sessions.activityBar.aria")}
@@ -274,22 +209,15 @@ export function Sidebar({
     >
       {/* Top (fixed): new-chat + nav rows. Search lives in the pane header. */}
       <div className="flex shrink-0 flex-col gap-0.5 p-2 pb-1">
+        {navigationBefore}
         <SidebarItem
           id="new-chat"
           icon={<Plus className="h-4 w-4" />}
           label={t("chat.newChat")}
           onClick={onNewChat}
         />
-        {navRows.map((row) => (
-          <SidebarItem
-            key={row.id}
-            id={row.id}
-            icon={row.icon}
-            label={row.label}
-            active={row.id === activeView}
-            onClick={() => onSelectView(row.id)}
-          />
-        ))}
+        {workspaceNavigation}
+        {navigationAfter}
       </div>
 
       {/* Middle (flex): chats and scheduled runs always remain visible. */}
@@ -357,7 +285,6 @@ export function Sidebar({
               <HistoryMoreMenu
                 layout={historyLayout}
                 onLayoutChange={onHistoryLayoutChange}
-                onImport={onImportSessions}
                 onStartSelection={
                   onBulkSessions
                     ? () => {
@@ -495,16 +422,13 @@ function SessionBulkButton({
 function HistoryMoreMenu({
   layout,
   onLayoutChange,
-  onImport,
   onStartSelection,
 }: {
   layout: HistoryLayout;
   onLayoutChange: (layout: HistoryLayout) => void;
-  onImport?: (file: File) => void | Promise<void>;
   onStartSelection?: () => void;
 }) {
   const { t } = useT();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const menuItems: CascadeMenuItem[] = [
     ...(onStartSelection
       ? [
@@ -516,21 +440,11 @@ function HistoryMoreMenu({
           },
         ]
       : []),
-    ...(onImport
-      ? [
-          {
-            id: "import",
-            label: t("sidepanel.sessions.import"),
-            icon: <Upload />,
-            onSelect: () => fileInputRef.current?.click(),
-          },
-        ]
-      : []),
     {
       id: "layout",
       label: t("sidepanel.sessions.layout.menu"),
       icon: layout === "timeline" ? <List /> : <ListTree />,
-      separatorBefore: Boolean(onStartSelection || onImport),
+      separatorBefore: Boolean(onStartSelection),
       children: [
         {
           id: "timeline",
@@ -551,36 +465,21 @@ function HistoryMoreMenu({
   ];
 
   return (
-    <>
-      <CascadeMenu
-        align="start"
-        ariaLabel={t("sidepanel.sessions.more")}
-        items={menuItems}
-        maxDepth={5}
-        trigger={
-          <button
-            type="button"
-            aria-label={t("sidepanel.sessions.more")}
-            title={t("sidepanel.sessions.more")}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-        }
-      />
-      {onImport ? (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = "";
-            if (file) void onImport(file);
-          }}
-        />
-      ) : null}
-    </>
+    <CascadeMenu
+      align="start"
+      ariaLabel={t("sidepanel.sessions.more")}
+      items={menuItems}
+      maxDepth={5}
+      trigger={
+        <button
+          type="button"
+          aria-label={t("sidepanel.sessions.more")}
+          title={t("sidepanel.sessions.more")}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+      }
+    />
   );
 }

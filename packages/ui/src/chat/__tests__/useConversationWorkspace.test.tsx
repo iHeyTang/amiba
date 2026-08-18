@@ -1,8 +1,8 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlatformAdapter, WorkspaceChange } from "@amiba/platform";
-import { setPlatform } from "@amiba/platform";
+import type { PlatformAdapter, WorkspaceChange } from "@amiba/app-runtime/platform";
+import { setPlatform } from "@amiba/app-runtime/platform";
 
 import { useConversationWorkspace } from "../internal/useConversationWorkspace";
 

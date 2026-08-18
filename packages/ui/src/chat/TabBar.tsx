@@ -3,9 +3,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../primitives";
 import { useT } from "@amiba/i18n";
-import type { SessionMeta } from "@amiba/core";
+import type { SessionMeta } from "@amiba/app-runtime/core";
 import { cn } from "../primitives";
-import { ChannelChip } from "./internal/ChannelChip";
 
 interface Props {
   tabs: SessionMeta[];
@@ -243,11 +242,6 @@ function Tab({
       )}
       title={title}
     >
-      <ChannelChip
-        source={session.source}
-        variant="compact"
-        className="mr-0.5"
-      />
       <span className="max-w-[140px] truncate">{title}</span>
       <button
         type="button"

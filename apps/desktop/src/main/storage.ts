@@ -154,9 +154,8 @@ class Store extends EventEmitter {
 }
 
 /**
- * Singleton store used by both the main-process PlatformAdapter (so
- * HermesClient + backplaneFetch can read `settings.backplane.key`) and the
- * IPC handlers that serve the renderer's adapter. Sharing the instance means
+ * Singleton store used by the main-process PlatformAdapter and the IPC
+ * handlers that serve the renderer. Sharing the instance means
  * renderer writes and main-side reads see the same state without race
  * conditions across two `fs.readFile` paths.
  */

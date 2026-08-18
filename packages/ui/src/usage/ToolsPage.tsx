@@ -1,6 +1,6 @@
 /** Profile-scoped tool access, grouped by built-in and external sources. */
 
-import type { ToolActivitySource } from "@amiba/core"
+import type { ToolActivitySource } from "@amiba/app-runtime/core"
 
 import { AgentCapabilitiesPage } from "./AgentCapabilitiesPage"
 

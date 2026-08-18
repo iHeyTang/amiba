@@ -39,8 +39,8 @@ import {
   useSessions,
   type AgentExecutionContext,
   type SessionsController,
-} from "@amiba/core";
-import { getPlatform } from "@amiba/platform";
+} from "@amiba/app-runtime/core";
+import { getPlatform, type AgentModelSelection } from "@amiba/app-runtime/platform";
 
 import type { PendingPromptAttachment } from "./internal/capabilities";
 
@@ -55,6 +55,7 @@ interface PendingPromptPayload {
   sourceApp?: string;
   workspacePath?: string;
   agent?: AgentExecutionContext;
+  modelSelection?: AgentModelSelection;
   ts: number;
 }
 
@@ -68,7 +69,7 @@ export interface ChatSessionRequest {
    */
   text?: string;
   /**
-   * Optional attachments. Paths must point at already-settled files; the
+   * Optional attachments. Opaque ids must point at already-settled files; the
    * autosend path doesn't wait for in-progress uploads to finish.
    */
   attachments?: PendingPromptAttachment[];
@@ -82,8 +83,10 @@ export interface ChatSessionRequest {
    * binds it only after ``ensureActive()`` creates the real conversation.
    */
   workspacePath?: string;
-  /** Hermes Profile and optional task-scoped response mode. */
+  /** DSH Agent Preset for the new task. */
   agent?: AgentExecutionContext;
+  /** Model selected on the id-less new-task surface for the first turn. */
+  modelSelection?: AgentModelSelection;
   /**
    * Extra storage keys to write in the same atomic patch as the pending
    * prompt. Use for "set this companion setting only when the user
@@ -107,7 +110,8 @@ export interface ChatSessionRequest {
  */
 export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
   const text = req.text?.trim() ?? "";
-  const attachments = req.attachments?.filter((a) => a.path) ?? undefined;
+  const attachments =
+    req.attachments?.filter((a) => a.attachmentId) ?? undefined;
   const hasAttachments = !!attachments && attachments.length > 0;
   if (!text && !hasAttachments) {
     throw new Error(
@@ -122,6 +126,7 @@ export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
     sourceApp: req.sourceApp,
     workspacePath: req.workspacePath?.trim() || undefined,
     agent: req.agent,
+    modelSelection: req.modelSelection,
     ts: Date.now(),
   };
   await getPlatform().storage.set({

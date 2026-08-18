@@ -2,10 +2,7 @@ import {
   Bot,
   ChevronDown,
   ChevronUp,
-  Disc,
-  Eye,
   Globe,
-  History,
   Loader2,
   MousePointerClick,
   Pencil,
@@ -23,34 +20,29 @@ import {
   type ReactNode,
 } from "react";
 
-import { useT, type MessageKey, type TranslateFn } from "@amiba/i18n";
-import { getPlatform, type StorageChangeMap } from "@amiba/platform";
+import { useT } from "@amiba/i18n";
+import {
+  getPlatform,
+  type AgentModelSelection,
+  type StorageChangeMap,
+} from "@amiba/app-runtime/platform";
 import { useResolvedTheme } from "../theme";
-import { Button, AmibaLogo, ScrollArea } from "../primitives";
+import { AmibaLogo, ScrollArea } from "../primitives";
 import { cn } from "../primitives";
-import { shortId } from "@amiba/utils";
+import { shortId } from "@amiba/app-runtime/utils";
 // Wire-protocol types + engine + helpers — everything that was previously
-// imported from extension-local paths now lives in @amiba/core.
+// imported from extension-local paths now lives in @amiba/app-runtime/core.
 import {
   attachmentToBadge,
   classify,
   deleteAttachmentFile,
   formatBytesShort,
   formatFileAttachmentsForPrompt,
-  getHermesProfiles,
+  getAgentPresets,
   isAttachmentReadOk,
-  isLocalChannel,
   normalizeAgentContext,
-  postHermesApprovalDecision,
-  postHermesClarifyResponse,
   readBlobAsAttachment,
-  resolveChannel,
-  transcribeAudio,
-  triggerHermesAutoTitle,
   useSessions,
-  useVoicePrefs,
-  DEFAULT_HERMES_MODEL,
-  HERMES_APPROVAL_GATEWAY_TIMEOUT_MS,
   type AgentExecutionContext,
   type ApprovalOutcome,
   type ApprovalRecord,
@@ -61,15 +53,11 @@ import {
   type ChatEngineClient,
   type ChatMessage,
   type ChatRuntimeState,
-  type HermesApprovalDecision,
-  type HermesApprovalRequest,
-  type HermesClarifyRequest,
-  type HermesToolProgress,
   type SnapshotFrame,
   type StreamEvent,
-  type StreamedToolCall,
-  type TurnMetadata,
-} from "@amiba/core";
+  type UserQuestionRequest,
+  type UserQuestionAnswerItem,
+} from "@amiba/app-runtime/core";
 
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
@@ -85,9 +73,7 @@ import {
 } from "./Composer";
 import { ConversationTurnRail } from "./ConversationTurnRail";
 import { useComposerAttachments } from "./useComposerAttachments";
-import { useVoiceRecorder } from "./useVoiceRecorder";
 import { SessionDrawer } from "./SessionDrawer";
-import { TabBar } from "./TabBar";
 import {
   bubbleTextContent,
   formatToolDuration,
@@ -101,10 +87,7 @@ import {
   type UiMessage,
 } from "./internal/types";
 
-// Capability interfaces let extension-only features (page-context, learn,
-// navigateOpenPolicy) plug in without polluting this file with chrome.* APIs.
 import type {
-  NavigateOpenPolicy,
   PendingPromptResult,
   ChatSurfaceCapabilities,
 } from "./internal/capabilities";
@@ -112,7 +95,6 @@ import type { TriggerProvider } from "./composer/providers/types";
 import { PendingQueueRail } from "./internal/PendingQueueRail";
 import { useApprovals } from "./internal/useApprovals";
 import { useConversationWorkspace } from "./internal/useConversationWorkspace";
-import { useLearnMode } from "./internal/useLearnMode";
 import {
   pendingQueueStorageKey,
   previewPendingTurn,
@@ -122,15 +104,6 @@ import {
 } from "./internal/usePendingQueue";
 import { useStreamBuffer } from "./internal/useStreamBuffer";
 
-const SETTINGS_KEYS = {
-  model: "settings.chat.model",
-  /** Where navigate opens + (when not Auto) where all browser tools run. */
-  navigateOpenPolicy: "settings.sidepanel.navigateOpenPolicy",
-};
-
-// applyOpenPolicyToRunTarget moved into the extension wrapper as part of
-// NavigateOpenPolicyCapability — chrome.runtime/windows/tabs all live there.
-
 // UiMessage / AssistantTimelineItem / ChatError / COMPOSER_TEXTAREA_MAX_PX
 // now live in @amiba/chat-ui (alongside the rendering components).
 // Imported below in the consolidated import block.
@@ -139,30 +112,18 @@ const SETTINGS_KEYS = {
 // live in internal/usePendingQueue.ts (the queue subsystem owns its own
 // types + helpers). Imported above.
 
-// openAgentDestinationInUserWindow lives in the extension wrapper as a
-// concrete chrome.windows + chrome.tabs implementation; ChatSurface
-// receives it as the `openAgentDestination` prop.
+// URL opening stays host-owned so the shared chat surface never acquires
+// Electron privileges directly.
 
 // ChatError moved to @amiba/chat-ui (see consolidated import block).
 
 /**
- * Layout variants:
- *  - "sidebar"     — Plasmo side panel; owns the viewport with `h-screen`,
- *                    shows its own TabBar at the top.
- *  - "fullscreen"  — embedded inside the standalone chat tab (chat.html).
- *                    Fills its parent with `h-full` and hides the TabBar
- *                    because the chat tab renders sessions in a right rail
- *                    instead.
- *
- * Chat state, composer, message rendering, and approvals are identical
- * across variants — only chrome (root height + TabBar) differs.
+ * Chat state, composer, message rendering, and approvals are shared by the
+ * desktop conversation view and Quick Ask.
  */
 /**
- * Width preset for the messages column in `variant="fullscreen"`. The
- * composer keeps a fixed cap regardless; only the message flow above it
- * resizes. Ignored in `variant="sidebar"` (the side panel is already a
- * narrow column). Re-exported from @amiba/chat-ui so external surfaces
- * (e.g. tabs/chat.tsx) that import it from `~sidepanel/index` still work.
+ * Width preset for the desktop messages column. The composer keeps a fixed
+ * cap regardless; only the message flow above it resizes.
  */
 // (MessagesMaxWidth type itself is imported in the consolidated block at the
 // top of this file; we re-export it for external callers.)
@@ -178,7 +139,6 @@ const MESSAGES_MAX_WIDTH_CLASS: Record<MessagesMaxWidth, string> = {
 };
 
 export interface ChatSurfaceProps {
-  variant?: "sidebar" | "fullscreen";
   messagesMaxWidth?: MessagesMaxWidth;
   /**
    * What to render when no active session OR active session has no
@@ -265,43 +225,18 @@ export interface ChatSurfaceProps {
   onComposerEmptyChange?: (empty: boolean) => void;
 
   /**
-   * Chat engine the view talks to. Extension provides ChromeChatEngineClient
-   * (wraps `chrome.runtime.connect({ name: CHAT_PORT_NAME })`); desktop
-   * provides ElectronChatEngineClient (IPC to main-process HermesClient).
+   * Chat engine the view talks to. Desktop uses IPC to the main-process DSH
+   * client and receives DSH lifecycle frames through this contract.
    */
   client: ChatEngineClient;
 
-  /**
-   * Extension-only capabilities. When omitted, the corresponding UI hides:
-   *  - `pageContext` undefined → no live page chip, no pin button, no
-   *                              drag-paste page snapshot row
-   *  - `learn` undefined → no Record/Stop buttons
-   *  - `navigateOpenPolicy` undefined → no NavigateOpenPolicyToggle in
-   *                                     the composer toolbar (slot still
-   *                                     respected if caller provides one)
-   *  - `pendingPrompt` undefined → no auto-fire on mount
-   */
+  /** Optional desktop hand-off and workspace integrations. */
   capabilities?: ChatSurfaceCapabilities;
 
   /**
-   * UI slots for surface-specific extras that aren't expressed by capabilities
-   * (they're whole React subtrees, not behaviour). Extension supplies the
-   * BridgeStatusBar + the NavigateOpenPolicyToggle component; desktop omits
-   * them.
+   * UI slots for surface-specific React subtrees.
    */
   slots?: {
-    /** Above the composer — extension renders `<BridgeStatusBar />`. */
-    bridgeBar?: ReactNode;
-    /**
-     * Render-prop for the NavigateOpenPolicyToggle slot in the composer
-     * toolbar. The toggle needs internal ChatSurface state (current
-     * policy + change handler) so we pass them in as ctx. Extension
-     * returns `<NavigateOpenPolicyToggle ...ctx />`; desktop omits.
-     */
-    navigateOpenPolicyToggle?: (ctx: {
-      policy: NavigateOpenPolicy;
-      onChange: (next: NavigateOpenPolicy) => void;
-    }) => ReactNode;
     /**
      * Rendered when there's no active session. Desktop passes
      * ``<HomeView panelMode />`` here so the empty state looks and
@@ -313,8 +248,8 @@ export interface ChatSurfaceProps {
   };
 
   /**
-   * Extra @ providers contributed by host apps (e.g. desktop's @file,
-   * extension's @page). Forwarded verbatim to `<Composer mentionProviders>`.
+   * Extra @ providers contributed by the desktop host (for example @file).
+   * Forwarded verbatim to `<Composer mentionProviders>`.
    * Leave undefined to use only the built-in skills / slash / sessions /
    * personas / channels providers.
    */
@@ -322,15 +257,12 @@ export interface ChatSurfaceProps {
 
   /**
    * Open Settings, optionally at the recovery pane chosen by ErrorBlock.
-   * Extension hosts may ignore the pane; desktop uses SettingsView hash
-   * routing to land directly on models, connection, voice, or error logs.
+   * SettingsView hash routing lands directly on models, connection, or logs.
    */
   openSettings: (tab?: string) => void;
 
   /**
-   * Open an agent-destination URL in the user's primary browser/window.
-   * Extension impl uses chrome.windows + chrome.tabs; desktop uses
-   * `shell.openExternal`.
+   * Open an agent-destination URL in the user's primary browser.
    */
   openAgentDestination: (url: string) => void | Promise<void>;
 }
@@ -387,7 +319,6 @@ export function measureComposerDockClearance(dock: HTMLElement): number {
 }
 
 export default function ChatSurface({
-  variant = "sidebar",
   messagesMaxWidth = "comfortable",
   emptyState = "hero",
   composerAutoFocus = false,
@@ -409,10 +340,8 @@ export default function ChatSurface({
   openSettings,
   openAgentDestination,
 }: ChatSurfaceProps) {
-  // The side panel sits next to the user's active tab, so we let the user
-  // opt into mirroring that page's theme via Settings → Theme = "Match
-  // active page". Other preferences (`auto`/`light`/`dark`) behave the same
-  // as in the popup/options.
+  // Resolve the shared desktop theme before rendering either main chat or
+  // Quick Ask.
   useResolvedTheme();
   const { t } = useT();
 
@@ -422,10 +351,6 @@ export default function ChatSurface({
   const workspacePane = useWorkspacePane();
 
   const [input, setInput] = useState("");
-  const [lastRewind, setLastRewind] = useState<{
-    sessionId: string;
-    sinceMessageId: number;
-  } | null>(null);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -442,17 +367,13 @@ export default function ChatSurface({
     sessions.activeMessages.some((message) => message.role === "user");
 
   useEffect(() => {
-    setLastRewind(null);
-  }, [sessions.activeId]);
-
-  useEffect(() => {
     let alive = true;
-    void getHermesProfiles().then((result) => {
+    void getAgentPresets().then((result) => {
       if (!alive || !result.ok) return;
       defaultProfileIdRef.current = result.active || "default";
       if (!sessions.activeId) {
         setDraftAgent((current) =>
-          current.profileId === "default" && !current.personality
+          current.profileId === "default"
             ? { profileId: defaultProfileIdRef.current }
             : current,
         );
@@ -485,8 +406,8 @@ export default function ChatSurface({
   // changed (e.g. the empty-state home composer submitting into an
   // already-active empty session).
   const [pendingPromptTick, setPendingPromptTick] = useState(0);
-  // Set when the new-tab Home launcher hands off a prompt via
-  // `chrome.storage.local.home.pendingPrompt`. We populate the composer
+  // Set when the Home launcher hands off a prompt through platform storage.
+  // We populate the composer
   // with the text and then auto-fire `send()` once the panel is ready —
   // the user already pressed Enter on Home, so an extra Send click here
   // would be friction.
@@ -498,47 +419,16 @@ export default function ChatSurface({
   const [pendingSourceApp, setPendingSourceApp] = useState<string | null>(null);
   // A workspace selected on the id-less HomeView cannot be bound yet. The
   // pending-prompt hand-off parks it here until runChatTurn mints the real
-  // session id, then binds it before any message reaches Hermes.
+  // session id, then binds it before any message reaches DSH.
   const pendingWorkspacePathRef = useRef<string | null>(null);
+  // The id-less Home surface can choose from the global DSH catalog. Keep the
+  // draft choice until the first submit so the engine can atomically create
+  // the real session, bind this model, and only then issue the prompt.
+  const pendingModelSelectionRef = useRef<AgentModelSelection | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Cron session click → open the existing SessionDB row as a tab. The
-  // drawer's Scheduled-tasks group now lists cron-source sessions from
-  // SessionDB directly (matches ``hermes sessions list --source cron``),
-  // so the row already exists and we just need to bring it to front.
-  const onOpenCronSession = useCallback(
-    async (sessionId: string): Promise<void> => {
-      if (sessionId === sessions.activeId) {
-        await sessions.deselect();
-        return;
-      }
-      await sessions.openTab(sessionId);
-    },
-    [sessions],
-  );
-  const [config, setConfig] = useState({
-    model: DEFAULT_HERMES_MODEL,
-  });
-  // Persisted across panel reloads so toggling "include current page"
-  // survives the SW restarts that happen whenever the side panel is
-  // closed and re-opened. We default to `true` so a fresh install
-  /**
-   * Open: Auto / Agent / New tab / Same tab — single control for where browser
-   * tools run. Non-Auto pins `runTarget` in the service worker; Auto leaves
-   * `runTarget` to `my_browser_navigate` + model `open_in` (defaulting to the
-   * agent window when still ambiguous). Persisted in chrome.storage.local.
-   */
-  const [navigateOpenPolicy, setNavigateOpenPolicy] =
-    useState<NavigateOpenPolicy>("auto");
-  // ``pageError`` outlives the pin button because non-pin flows
-  // (microphone permission, etc.) still surface here. Pin's send-time
-  // snapshot capture swallows failures rather than promoting them to
-  // this banner — the agent's tools degrade gracefully when no snapshot
-  // arrives, and the user shouldn't have to dismiss a warning for a
-  // capture they never explicitly requested.
-  const [pageError, setPageError] = useState<string | null>(null);
   // Composer-time uploads — owned by the shared `useComposerAttachments`
   // hook so this surface, HomeView, and the Quick-Ask popup all share
   // one implementation. The hook owns picker / paste / upload state +
@@ -562,30 +452,10 @@ export default function ChatSurface({
     setAttachments,
     attachmentUploading,
     attachmentBusy,
-    setAttachmentBusy,
     attachmentError,
     setAttachmentError,
     addFiles,
   } = att;
-  const learnMode = useLearnMode({
-    learn: capabilities.learn,
-    pageContext: capabilities.pageContext,
-    sessions,
-    attachmentControls: {
-      setAttachments,
-      setAttachmentBusy,
-      setAttachmentError,
-    },
-    setPageError,
-    t,
-  });
-  const {
-    recording: learnRecording,
-    eventCount: learnEventCount,
-    stopBusy: learnStopBusy,
-    start: startLearnFromPanel,
-    stopAndAttach: stopLearnToComposer,
-  } = learnMode;
   // Conversation workspaces are read-only here. The id-less Home surface
   // chooses the directory and the first send binds it to the newly-created
   // session; switching conversations only restores that immutable binding.
@@ -606,9 +476,9 @@ export default function ChatSurface({
   // refs that used to live here were lifted out so a single hook owns
   // both the storage and the API.
   /**
-   * Promise plumbing so `runChatTurn` can `await` a stream that runs in the
-   * service worker. Resolved by the terminal port event for this sessionId;
-   * left empty when the panel reopens to an already-running stream (no local
+   * Promise plumbing so `runChatTurn` can await a stream owned by the desktop
+   * engine. Resolved by the terminal event for this sessionId; left empty
+   * when the renderer reopens to an already-running stream (no local
    * `runChatTurn` is waiting on it in that case).
    */
   const pendingTurnRef = useRef<{
@@ -622,14 +492,14 @@ export default function ChatSurface({
    * we know the local-only `userMsg` exists); the terminal-event
    * handlers clear it. `handleSnapshot` on a switch-back-during-stream
    * uses this to re-insert the user bubble when `loadMessages` raced
-   * the gateway's persistence and came back without it.
+   * DSH event persistence and came back without it.
    *
    * Without this cache, the symptom is: send a message → switch to a
    * different session → switch back before the stream finishes →
    * **user bubble vanishes** until a hard refresh (because `saveMessages`
-   * is a no-op by design — the gateway is the persistence authority —
-   * but `loadMessages` reads from the gateway and the user-message DB
-   * write hasn't landed yet). The cache scopes by sessionId so multiple
+   * is a no-op by design — DSH is the persistence authority — while
+   * `loadMessages` reads its event log before the user event has landed).
+   * The cache scopes by sessionId so multiple
    * in-flight sessions don't trample each other.
    */
   const inFlightTurnByIdRef = useRef<
@@ -668,8 +538,7 @@ export default function ChatSurface({
     approvalInFlight,
     approvalError,
     setApprovalError,
-    activeRunId,
-    setActiveRunId,
+    setActiveTurnId,
     appendApprovalRecord,
     markApprovalOutcome,
     respondToApproval,
@@ -677,36 +546,40 @@ export default function ChatSurface({
     onApprovalResolvedEvent,
     reset: resetApprovals,
   } = approvals;
-  const [pendingClarifications, setPendingClarifications] = useState<
-    HermesClarifyRequest[]
+  const [pendingQuestions, setPendingQuestions] = useState<
+    UserQuestionRequest[]
   >([]);
   const [clarifyInFlight, setClarifyInFlight] = useState(false);
   const [clarifyError, setClarifyError] = useState<string | null>(null);
 
-  function resetClarifications() {
-    setPendingClarifications([]);
+  function resetQuestions() {
+    setPendingQuestions([]);
     setClarifyInFlight(false);
     setClarifyError(null);
   }
 
-  async function respondToClarify(response: string) {
-    const request = pendingClarifications[0];
+  async function respondToQuestion(answers: UserQuestionAnswerItem[]) {
+    const request = pendingQuestions[0];
     if (!request || clarifyInFlight) return;
+    if (
+      answers.length !== request.questions.length ||
+      request.questions.some(
+        (question, index) => answers[index]?.id !== question.id,
+      )
+    ) {
+      setClarifyError(t("sidepanel.clarify.sendFailed"));
+      return;
+    }
     setClarifyInFlight(true);
     setClarifyError(null);
-    const result = await postHermesClarifyResponse({
-      runId: request.runId,
-      clarifyId: request.clarifyId,
-      response,
-      profileId: request.profileId,
-    });
+    const result = await client.respondToQuestions(request, answers);
     setClarifyInFlight(false);
     if (!result.ok) {
       setClarifyError(result.error || t("sidepanel.clarify.sendFailed"));
       return;
     }
-    setPendingClarifications((current) =>
-      current.filter((item) => item.clarifyId !== request.clarifyId),
+    setPendingQuestions((current) =>
+      current.filter((item) => item.requestId !== request.requestId),
     );
   }
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
@@ -797,13 +670,10 @@ export default function ChatSurface({
     setAttachments,
     setAttachmentError,
     attachmentUploading,
-    navigateOpenPolicy,
-    setNavigateOpenPolicy,
     setPendingSourceApp,
     busy,
     markCurrentAssistantStopped: () => markCurrentAssistantStopped(),
     rejectPendingTurn: (sid, err) => rejectPendingTurn(sid, err),
-    pageContextCapability: capabilities.pageContext,
     runChatTurn: (args: RunChatTurnArgs) => runChatTurn(args),
   });
   const {
@@ -830,8 +700,8 @@ export default function ChatSurface({
   // writes `{ text?, attachments?, sourceApp? }` into storage and opens
   // the chat view; we drain that key here, prefill the composer with
   // whichever fields are populated, and flag the turn for auto-send.
-  // We clear the storage key immediately so re-mounts (SW restart,
-  // panel reopen) don't resubmit the same prompt.
+  // The host clears the storage key atomically so renderer remounts do not
+  // resubmit the same prompt.
   useEffect(() => {
     const drain = capabilities.pendingPrompt?.drain;
     if (!drain) return;
@@ -849,10 +719,8 @@ export default function ChatSurface({
     // cancellation would silently drop the user's prompt. The payload
     // is session-agnostic; whichever effect run wins should still seed
     // the composer.
-    void drain().then((raw) => {
-      if (raw == null) return;
-      const payload: PendingPromptResult =
-        typeof raw === "string" ? { text: raw } : raw;
+    void drain().then((payload: PendingPromptResult | null) => {
+      if (payload == null) return;
       const text = payload.text?.trim() ?? "";
       const incoming = payload.attachments ?? [];
       const promotedAttachments: Attachment[] = incoming.map((a) => ({
@@ -861,7 +729,7 @@ export default function ChatSurface({
         mime: a.mime,
         size: a.size,
         kind: a.kind,
-        path: a.path,
+        attachmentId: a.attachmentId,
         thumbDataUrl: a.thumbDataUrl,
         textPreview: a.textPreview,
         // External hand-offs have already settled their bytes on disk —
@@ -879,6 +747,9 @@ export default function ChatSurface({
       }
       if (payload.agent) {
         setDraftAgent(normalizeAgentContext(payload.agent));
+      }
+      if (payload.modelSelection) {
+        pendingModelSelectionRef.current = payload.modelSelection;
       }
       if (text) setInput(text);
       if (promotedAttachments.length > 0) {
@@ -921,11 +792,12 @@ export default function ChatSurface({
   }, [pendingAutosend, sessions.ready, busy, input]);
 
   // -------------------------------------------------------------------------
-  // Chat port: subscribe/snapshot/event handling.
+  // Chat engine subscription/snapshot/event handling.
   //
-  // The agent loop lives in the service worker. The panel posts user input
-  // and receives `StreamEvent`s back over a long-lived port. Snapshot is the
-  // recovery path — sent on `subscribe` so a freshly mounted panel (or one
+  // The agent loop lives in managed DSH behind the desktop engine. The
+  // renderer posts user input and receives `StreamEvent`s over its IPC
+  // subscription. Snapshot is the recovery path — sent on `subscribe` so a
+  // freshly mounted renderer (or one
   // switching to a session that was streaming in another tab) can rebuild
   // the in-flight assistant bubble from accumulated runtime state.
   //
@@ -940,32 +812,32 @@ export default function ChatSurface({
     if (sessionId !== sessions.activeId) return;
 
     if (kind === "absent") {
-      // SW has no record of this session. Two situations land here:
+      // The engine has no active run for this session. Two situations land here:
       //   1. User switched to a fresh / never-submitted session
       //      → panel-level state must drop so the composer reflects
       //        the new session.
       //   2. A subscribe-snapshot round-trip raced ahead of our own
       //      `submit` (typical of the new-tab → chat handoff). The
-      //      SW will produce real state imminently and emit `begin`,
+      //      the engine will produce real state imminently and emit `begin`,
       //      so suppress hygiene here to avoid a busy/UI flicker.
       // `pendingTurnRef` is set the instant runChatTurn posts submit,
       // so it's the authoritative "we're mid-submission" signal.
       if (pendingTurnRef.current?.sessionId === sessionId) return;
       setBusy(false);
       resetApprovals();
-      resetClarifications();
+      resetQuestions();
       return;
     }
 
-    // Live / interrupted / completed — SW state carries information
+    // Live / interrupted / completed — engine state carries information
     // the panel may not yet have in ``prev`` (the messages loaded from
     // SessionDB). The three kinds have different invariants:
     //
     //   - "completed": SessionDB has the FULL final assistant turn
-    //     (api_server commits before the stream resolves). ``prev``
+    //     (DSH commits before the stream resolves). ``prev``
     //     already contains it. The engine's in-memory runtime
     //     ``assistantUiId`` is its own ephemeral id (``shortId("a")``)
-    //     which never matches the ``hermes:<row>`` ids ``loadMessages``
+    //     which never matches the runtime sequence ids from ``loadMessages``
     //     produces — synthesizing would APPEND a duplicate bubble
     //     ("agent 回复重复一次" report). The only thing we still need
     //     from the snapshot is panel-only UI metadata
@@ -973,11 +845,11 @@ export default function ChatSurface({
     //     round-trip through SessionDB — overlay onto the last
     //     assistant message instead.
     //   - "live": stream is still in flight. Panel may have closed
-    //     before api_server committed the assistant placeholder, so
+    //     before DSH committed the assistant placeholder, so
     //     synthesis IS the right thing — there's nothing in ``prev``
     //     to update yet.
-    //   - "interrupted": engine crashed mid-stream. SessionDB has
-    //     whatever api_server managed to write before the failure;
+    //   - "interrupted": engine crashed mid-stream. DSH history has
+    //     whatever events were committed before the failure;
     //     the engine's state has the (potentially longer) text it had
     //     accumulated locally. Overlay onto the matching bubble if
     //     present, else synthesize the partial text. The actionable
@@ -988,9 +860,8 @@ export default function ChatSurface({
     stream.hydrateFromSnapshot(state);
     setBusy(state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
-    setPendingClarifications(state.pendingClarifications ?? []);
-    setActiveRunId(state.runId ?? null);
-    workspacePane.setLiveAgents(state.liveAgents ?? []);
+    setPendingQuestions(state.pendingQuestions ?? []);
+    setActiveTurnId(state.turnId ?? null);
 
     if (kind === "completed") {
       // No content rewrite — SessionDB is authoritative for completed
@@ -1057,17 +928,16 @@ export default function ChatSurface({
         content: "",
         ...merged,
       };
-      // The matching user bubble normally comes from ``loadMessages``
-      // (api_server persists user messages at request time). But
-      // `loadMessages` is an HTTP read against the gateway; on a
-      // switch-back-during-stream it can race the user-message DB
-      // write and return without it, leaving the panel showing only
+      // The matching user bubble normally comes from `loadMessages`.
+      // On a switch-back during streaming, that DSH history read can race
+      // the user event append and return without it, leaving the renderer with
+      // only
       // the assistant bubble (or nothing) until the next refresh.
       // Pull the user bubble out of `inFlightTurnByIdRef` — the cache
       // we populated in `runChatTurn` before posting — when the
       // snapshot's assistantUiId matches our cache entry AND ``prev``
       // doesn't already contain a user message with the same content
-      // near the tail (loaded-from-gateway dedup).
+      // near the tail (loaded-from-DSH dedup).
       const cached = inFlightTurnByIdRef.current.get(sessionId);
       const cacheMatchesThisTurn =
         cached && cached.assistantUiId === state.assistantUiId;
@@ -1153,22 +1023,6 @@ export default function ChatSurface({
     // memory only. Without this, the conversation looks empty when the
     // session is re-opened from another surface.
     void sessions.flushPersist();
-    // Fire-and-forget LLM-generated title via the backplane. The endpoint
-    // short-circuits when the session is already titled or beyond the
-    // first-exchange window, so it's safe to call after every stream end.
-    const profileId =
-      agentBySessionRef.current.get(sessionId)?.profileId ??
-      sessions.sessions.find((session) => session.id === sessionId)?.agent
-        ?.profileId;
-    void triggerHermesAutoTitle(sessionId, profileId)
-      .then((res) => {
-        if (res && "ok" in res && res.ok && res.title) {
-          void sessions.applyAutoTitle(sessionId, res.title);
-        }
-      })
-      .catch((e) => {
-        console.warn("[sidepanel] auto-title trigger failed:", e);
-      });
     setBusy(false);
     inFlightTurnByIdRef.current.delete(sessionId);
     resolvePendingTurn(sessionId);
@@ -1177,9 +1031,9 @@ export default function ChatSurface({
   /**
    * Seal whichever assistant message is currently streaming with the
    * `[stopped]` suffix, clear all the streaming-side refs, persist, and
-   * flip `busy` off. Used by `handleStreamAborted` (SW echoed abort) AND
-   * `sendQueueItemNow` (local pre-emption — we don't wait for the SW
-   * echo to keep the queue feeling responsive). Idempotent: if there's
+   * flip `busy` off. Used by `handleStreamAborted` (engine-confirmed abort)
+   * and `sendQueueItemNow` (local pre-emption — the UI does not wait for the
+   * engine echo). Idempotent: if there's
    * no streaming bubble to seal, this is a no-op apart from the busy
    * clearance.
    */
@@ -1255,7 +1109,7 @@ export default function ChatSurface({
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
     setQueuePaused(false);
     resetApprovals();
-    resetClarifications();
+    resetQuestions();
     setError({
       message: event.message,
       status: event.status,
@@ -1273,11 +1127,8 @@ export default function ChatSurface({
   }
 
   function handleStreamEvent(sessionId: string, event: StreamEvent): void {
-    if (event.kind === "hermesToolProgress") {
+    if (event.kind === "toolProgress") {
       workspacePane.observeToolEvent(event.event, sessionId);
-    }
-    if (event.kind === "liveAgent") {
-      workspacePane.observeLiveAgent(event.event, sessionId);
     }
     if (sessionId !== sessions.activeId) {
       // Terminal events for non-active sessions still need to settle the
@@ -1303,22 +1154,20 @@ export default function ChatSurface({
       case "toolCalls":
         stream.onToolCalls(event.calls);
         break;
-      case "hermesToolProgress":
-        stream.onHermesToolProgress(event.event);
-        break;
-      case "liveAgent":
+      case "toolProgress":
+        stream.onToolProgress(event.event);
         break;
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
           console.warn(
-            "[sidepanel] gateway returned session id %s but we expected %s; ignoring.",
+            "[chat] DSH returned session id %s but we expected %s; ignoring.",
             event.sessionId,
             sessionId,
           );
         }
         break;
-      case "run":
-        setActiveRunId(event.runId || null);
+      case "turn":
+        setActiveTurnId(event.turnId || null);
         break;
       case "approvalRequest":
         onApprovalRequestEvent(event.request);
@@ -1326,18 +1175,18 @@ export default function ChatSurface({
       case "approvalResolved":
         onApprovalResolvedEvent(event.approvalId);
         break;
-      case "clarifyRequest":
-        setPendingClarifications((current) => [
+      case "questionRequest":
+        setPendingQuestions((current) => [
           ...current.filter(
-            (item) => item.clarifyId !== event.request.clarifyId,
+            (item) => item.requestId !== event.request.requestId,
           ),
           event.request,
         ]);
         setClarifyError(null);
         break;
-      case "clarifyResolved":
-        setPendingClarifications((current) =>
-          current.filter((item) => item.clarifyId !== event.clarifyId),
+      case "questionResolved":
+        setPendingQuestions((current) =>
+          current.filter((item) => item.requestId !== event.requestId),
         );
         setClarifyInFlight(false);
         setClarifyError(null);
@@ -1367,10 +1216,7 @@ export default function ChatSurface({
     streamHandlerRef.current = handleStreamEvent;
   });
 
-  // Single subscription to the engine — replaces chrome.runtime.connect port
-  // wiring. Extension's ChromeChatEngineClient wraps a `chrome.runtime.Port`;
-  // desktop's ElectronChatEngineClient wraps IPC; the surface here is the
-  // same.
+  // One stable subscription to the managed DSH engine over desktop IPC.
   useEffect(() => {
     const unsubSnap = client.onSnapshot((frame) =>
       snapshotHandlerRef.current(frame),
@@ -1398,82 +1244,8 @@ export default function ChatSurface({
   // shared component takes care of it on every value/maxTextareaPx
   // change.
 
-  // Learn-mode handlers (start / stopAndAttach), state (recording /
-  // eventCount / stopBusy), and the engine-status subscription are now
-  // owned by `useLearnMode` above — see internal/useLearnMode.ts.
-
-  // navigate-open-policy: extension's Options page can mutate the policy;
-  // capability surfaces those mutations so the side-panel state stays in sync.
-  useEffect(() => {
-    if (!capabilities.navigateOpenPolicy) return;
-    return capabilities.navigateOpenPolicy.onChange((p) =>
-      setNavigateOpenPolicy(p),
-    );
-  }, [capabilities.navigateOpenPolicy]);
-
-  // Load chat-config on mount and watch for changes from the Options page so
-  // the side panel always reflects the latest gateway alias. The actual
-  // inference model is selected independently from the composer picker.
-  useEffect(() => {
-    void (async () => {
-      const storage = getPlatform().storage;
-      const r = await storage.get([
-        SETTINGS_KEYS.model,
-        SETTINGS_KEYS.navigateOpenPolicy,
-      ]);
-      const storedNavPolicy = r[SETTINGS_KEYS.navigateOpenPolicy];
-      const legacyRun = (
-        await storage.get("settings.sidepanel.runModeDefault")
-      )["settings.sidepanel.runModeDefault"] as string | undefined;
-      let navPol: NavigateOpenPolicy =
-        storedNavPolicy === "agent" ||
-        storedNavPolicy === "user_new_tab" ||
-        storedNavPolicy === "user_same_tab"
-          ? (storedNavPolicy as NavigateOpenPolicy)
-          : "auto";
-      if (
-        storedNavPolicy === undefined &&
-        (legacyRun === "user" || legacyRun === "agent")
-      ) {
-        navPol = legacyRun === "user" ? "user_same_tab" : "agent";
-      }
-      setNavigateOpenPolicy(navPol);
-      try {
-        await capabilities.navigateOpenPolicy?.apply(navPol);
-      } catch {
-        // Capability may not be wired (desktop) — that's fine, browser-tool
-        // routing only matters in the extension.
-      }
-      setConfig({
-        model:
-          typeof r[SETTINGS_KEYS.model] === "string"
-            ? (r[SETTINGS_KEYS.model] as string)
-            : DEFAULT_HERMES_MODEL,
-      });
-    })();
-
-    const unsub = getPlatform().storage.watch(
-      [SETTINGS_KEYS.model],
-      (changes: StorageChangeMap) => {
-        setConfig((prev) => ({
-          model:
-            typeof changes[SETTINGS_KEYS.model]?.newValue === "string"
-              ? (changes[SETTINGS_KEYS.model]!.newValue as string)
-              : prev.model,
-        }));
-      },
-    );
-    return unsub;
-  }, [capabilities.navigateOpenPolicy]);
-
-  // Lifecycle of an assistant bubble is owned by the SW snapshot.
-  // `handleSnapshot` dispatches on a tagged `kind` (absent / live /
-  // interrupted / completed) — see `SnapshotFrame` in
-  // background/chat/types.ts. The panel no longer infers anything from
-  // `m.streaming` itself: that flag is volatile (see
-  // lib/sessions/store.ts), set only as an in-memory hint between
-  // `runChatTurn` appending the bubble and the SW's first event, and
-  // re-derived from the snapshot for any pre-existing in-flight stream.
+  // Lifecycle of an assistant bubble is owned by DSH-backed engine snapshots.
+  // The UI never infers a durable run state from the volatile `streaming` flag.
 
   // Auto-scroll on new content.
   useEffect(() => {
@@ -1482,9 +1254,8 @@ export default function ChatSurface({
   }, [sessions.activeMessages]);
 
   // Session switch: drop panel-local stream accumulators and compose-time
-  // affordances (pinned pages, attachments). The previous session's stream
-  // keeps running in the SW; switching back to that session will
-  // re-subscribe and rebuild local state from the snapshot.
+  // attachments. The previous session's DSH turn keeps running; switching
+  // back re-subscribes and rebuilds local state from the engine snapshot.
   //
   // Note we do NOT delete the outgoing session's queued attachments here:
   // the queue is persisted per-session (see effects below) and the
@@ -1512,11 +1283,10 @@ export default function ChatSurface({
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
         resetApprovals();
-        resetClarifications();
+        resetQuestions();
         // The top-level recovery card belongs to the outgoing session.
         // The incoming snapshot will restore its own error, if any.
         setError(null);
-        setPageError(null);
         // Same fire-and-forget GC as `newChat` — the composer-time
         // attachments belonged to the session we're leaving.
         for (const a of attachments) void deleteAttachmentFile(a);
@@ -1537,24 +1307,10 @@ export default function ChatSurface({
   async function runChatTurn(args: {
     text: string;
     attachments: Attachment[];
-    navigateOpenPolicyForTurn: NavigateOpenPolicy;
-    /**
-     * Frozen view of "the page the user was looking at when they sent".
-     * Replayed verbatim to the agent so multi-step tools see the same
-     * tab for the whole turn, even after the user navigates away. May be
-     * undefined on desktop or when the capability declines to snapshot.
-     */
-    turnMetadataForTurn?: TurnMetadata;
   }): Promise<void> {
-    const {
-      text,
-      attachments: attachmentsForTurn,
-      navigateOpenPolicyForTurn,
-      turnMetadataForTurn,
-    } = args;
+    const { text, attachments: attachmentsForTurn } = args;
 
     setError(null);
-    setPageError(null);
 
     const sessionAgent = sessions.sessions.find(
       (session) => session.id === sessions.activeId,
@@ -1596,7 +1352,7 @@ export default function ChatSurface({
     // A desktop task never has an undefined cwd. During the first send the
     // active-session workspace hook can still be crossing the IPC boundary,
     // so resolve it synchronously here before constructing the persisted user
-    // message or starting Hermes. Unbound sessions resolve to Amiba's $HOME
+    // message or starting DSH. Unbound sessions resolve to Amiba's $HOME
     // default in the desktop workspace adapter.
     if (!workspaceForTurn && workspaces) {
       try {
@@ -1615,13 +1371,12 @@ export default function ChatSurface({
       }
     }
 
-    // Every attachment — image, text, pdf, binary — is inlined into the
-    // user message content as a plain-text `<file-attachment>` block.
-    // The agent reads the file by path with whatever tools it has; we
-    // don't use OpenAI multimodal parts and we don't emit a separate
-    // system-role message — wire shape stays `{role:"user", content:str}`.
+    // Attachment metadata is inlined into the text for durable history and
+    // tool routing. The engine additionally sends supported raster images as
+    // native DSH image parts; text/PDF bytes stay behind the capability
+    // plugin's path-confined tools.
     const attachmentsForSend = attachmentsForTurn.filter(
-      (a) => a.path && !a.uploading,
+      (a) => a.attachmentId && !a.uploading,
     );
     const fileAttachmentBlock =
       attachmentsForSend.length > 0
@@ -1658,14 +1413,14 @@ export default function ChatSurface({
     });
     // Cache the (userMsg, assistantUiId) pair so a tab-switch-and-back
     // during the stream can re-insert the user bubble if loadMessages
-    // beat the gateway's persistence write. Cleared by the terminal
+    // beats DSH's event append. Cleared by the terminal
     // event handlers (done / aborted / error).
     inFlightTurnByIdRef.current.set(sessionId, {
       user: userMsg,
       assistantUiId: assistantMsg.uiId,
     });
     // Persist immediately so a refresh between bubble-append and the
-    // first SW echo doesn't lose the user message. The standard
+    // first engine echo doesn't lose the user message. The standard
     // `schedulePersistMessages` debounce is 250ms — long enough for a
     // quick reload after send-now to miss it.
     void sessions.flushPersist();
@@ -1683,14 +1438,6 @@ export default function ChatSurface({
       });
     });
     setBusy(true);
-
-    // Push runTarget from Open policy *before* the gateway may dispatch tools.
-    // No-op when navigateOpenPolicy capability is absent (desktop).
-    try {
-      await capabilities.navigateOpenPolicy?.apply(navigateOpenPolicyForTurn);
-    } catch (e) {
-      console.warn("[sidepanel] navigateOpenPolicy apply failed:", e);
-    }
 
     // Snapshot the history we're sending so we don't accidentally include
     // the empty assistant placeholder we just appended.
@@ -1716,19 +1463,19 @@ export default function ChatSurface({
       },
     ];
 
-    // The recovery point must exist before Hermes can dispatch a mutating
+    // The recovery point must exist before DSH can dispatch a mutating
     // tool. Await it here instead of reacting to the later `begin` event,
     // which can race the first write-file callback.
     await workspacePane.beginTurn(turnIndex);
 
-    // Prime the panel-local accumulators BEFORE submitting so the port
-    // event listener (which fires asynchronously once the SW broadcasts
-    // back) finds populated state to mutate. The SW also maintains its
-    // own copy for snapshot-on-resubscribe; the two are kept in sync by
-    // applying every event on both sides.
+    // Prime the renderer accumulators before submitting so an immediate DSH
+    // event always finds populated state to mutate. Engine snapshots remain
+    // the authoritative recovery path after remounts.
     stream.prime(assistantMsg.uiId);
 
     try {
+      const modelSelection = pendingModelSelectionRef.current;
+      pendingModelSelectionRef.current = null;
       await new Promise<void>((resolve, reject) => {
         pendingTurnRef.current = { sessionId, resolve, reject };
         try {
@@ -1738,10 +1485,20 @@ export default function ChatSurface({
               (session) => session.id === sessionId,
             )?.title,
             assistantUiId: assistantMsg.uiId,
-            model: config.model,
             history,
+            ...(attachmentsForSend.length > 0
+              ? {
+                  attachments: attachmentsForSend.map((attachment) => ({
+                    name: attachment.name,
+                    mime: attachment.mime,
+                    size: attachment.size,
+                    kind: attachment.kind,
+                    attachmentId: attachment.attachmentId as string,
+                  })),
+                }
+              : {}),
             agent: agentForTurn,
-            turnMetadata: turnMetadataForTurn,
+            ...(modelSelection ? { modelSelection } : {}),
           });
         } catch (e) {
           pendingTurnRef.current = null;
@@ -1778,8 +1535,6 @@ export default function ChatSurface({
               void runChatTurn({
                 text: head.text,
                 attachments: head.attachments,
-                navigateOpenPolicyForTurn: head.navigateOpenPolicySnapshot,
-                turnMetadataForTurn: head.turnMetadataSnapshot,
               }),
           );
           return tail;
@@ -1797,8 +1552,7 @@ export default function ChatSurface({
 
   const resolveUserMessageId = useCallback(
     async (message: UiMessage, userOrdinal: number): Promise<number> => {
-      const direct = /^hermes:(\d+)$/.exec(message.uiId);
-      if (direct) return Number(direct[1]);
+      if (typeof message.runtimeSeq === "number") return message.runtimeSeq;
       const resolved = await sessions.resolveUserMessageId(
         sessions.activeId,
         userOrdinal,
@@ -1809,52 +1563,6 @@ export default function ChatSurface({
       return resolved;
     },
     [sessions, t],
-  );
-
-  const editUserMessage = useCallback(
-    async (message: UiMessage, userOrdinal: number) => {
-      if (!sessions.activeId || busy) return;
-      try {
-        const messageId = await resolveUserMessageId(message, userOrdinal);
-        const result = await sessions.rewindSession(
-          sessions.activeId,
-          messageId,
-        );
-        setLastRewind({
-          sessionId: sessions.activeId,
-          sinceMessageId: messageId,
-        });
-        setInput(result.content);
-        requestAnimationFrame(() => composerRef.current?.focus());
-      } catch (cause) {
-        setError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          source: "run",
-        });
-      }
-    },
-    [busy, resolveUserMessageId, sessions],
-  );
-
-  const retryUserMessage = useCallback(
-    async (message: UiMessage, userOrdinal: number) => {
-      if (!sessions.activeId || busy) return;
-      try {
-        const messageId = await resolveUserMessageId(message, userOrdinal);
-        const result = await sessions.rewindSession(
-          sessions.activeId,
-          messageId,
-        );
-        setLastRewind(null);
-        await send(result.content);
-      } catch (cause) {
-        setError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          source: "run",
-        });
-      }
-    },
-    [busy, resolveUserMessageId, send, sessions],
   );
 
   const branchUserMessage = useCallback(
@@ -1882,71 +1590,18 @@ export default function ChatSurface({
     [busy, resolveUserMessageId, sessions],
   );
 
-  const truncateAtUserMessage = useCallback(
-    async (message: UiMessage, userOrdinal: number) => {
-      if (!sessions.activeId || busy) return;
-      if (!window.confirm(t("sidepanel.message.truncateConfirm"))) return;
-      try {
-        const messageId = await resolveUserMessageId(message, userOrdinal);
-        await sessions.rewindSession(sessions.activeId, messageId);
-        setLastRewind({
-          sessionId: sessions.activeId,
-          sinceMessageId: messageId,
-        });
-      } catch (cause) {
-        setError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          source: "run",
-        });
-      }
-    },
-    [busy, resolveUserMessageId, sessions, t],
-  );
-
-  const restoreLastRewind = useCallback(async () => {
-    if (!lastRewind || lastRewind.sessionId !== sessions.activeId) return;
-    try {
-      await sessions.restoreSession(
-        lastRewind.sessionId,
-        lastRewind.sinceMessageId,
-      );
-      setLastRewind(null);
-    } catch (cause) {
-      setError({
-        message: cause instanceof Error ? cause.message : String(cause),
-        source: "run",
-      });
-    }
-  }, [lastRewind, sessions]);
-
   /**
    * Append (or refresh) the persistent approval record on whichever
    * assistant message is currently streaming. Idempotent: re-emits of
-   * the same approval (e.g. gateway retry, panel reopen during a still-
+   * the same approval (e.g. DSH retry, renderer reopen during a still-
    * pending approval) overwrite the existing record rather than
    * stacking duplicates. Skipped silently when there's no active
-   * assistant message — the gateway shouldn't fire an approval outside
+   * assistant message — DSH shouldn't fire an approval outside
    * a turn, but we don't want to crash if it does.
    */
   // Approval-flow helpers (appendApprovalRecord / markApprovalOutcome /
   // respondToApproval) and the per-card in-flight tracker now live in
   // `useApprovals` — see destructure near the top of the component.
-
-  async function handleNavigateOpenPolicyChange(next: NavigateOpenPolicy) {
-    setNavigateOpenPolicy(next);
-    await getPlatform().storage.set({
-      [SETTINGS_KEYS.navigateOpenPolicy]: next,
-    });
-    // Both the broadcast to other surfaces (SW / Options page) and the
-    // runTarget application live in the navigateOpenPolicy capability. When
-    // absent (desktop) the policy state still tracks but doesn't affect any
-    // browser-tools routing because there are none.
-    try {
-      await capabilities.navigateOpenPolicy?.apply(next);
-    } catch (e) {
-      console.warn("[sidepanel] navigateOpenPolicy apply failed:", e);
-    }
-  }
 
   async function newChat() {
     const sid = sessions.activeId;
@@ -1963,9 +1618,7 @@ export default function ChatSurface({
     }
     markCurrentAssistantStopped();
     setError(null);
-    setPageError(null);
     setInput("");
-    setLastRewind(null);
     setPendingAutosend(false);
     setPendingSourceApp(null);
     // The persisted queue still belongs to the outgoing session; only its
@@ -1975,7 +1628,7 @@ export default function ChatSurface({
     setEditingQueueId(null);
     setQueuePaused(false);
     resetApprovals();
-    resetClarifications();
+    resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
     for (const a of attachments) void deleteAttachmentFile(a);
@@ -2041,9 +1694,7 @@ export default function ChatSurface({
     },
     [setWorkspaceError, t, workspacePane],
   );
-  const showTurnRail =
-    variant === "fullscreen" &&
-    messages.some((message) => message.role === "user");
+  const showTurnRail = messages.some((message) => message.role === "user");
   // The home/empty state is identified solely by the absence of a session
   // id. A persisted session with zero messages is still a real conversation
   // and therefore uses the normal chat layout.
@@ -2063,94 +1714,7 @@ export default function ChatSurface({
   // containing block across compact and multiline drafts.
   const expandComposerArea = !isComposerOnlyEmpty || composerOnlyExpanded;
 
-  // Read-only mode: the active session originates from another channel
-  // (Feishu, Telegram, …) that owns the writing engine. We render the
-  // history but replace the composer with a notice; sending here would
-  // race that engine because amiba has no outbound delivery path
-  // back to those platforms.
-  const activeSession = hasActive
-    ? sessions.sessions.find((s) => s.id === sessions.activeId)
-    : undefined;
-  const readOnlyRemote =
-    !!activeSession && !isLocalChannel(activeSession.source);
-  const remoteChannelLabel = (() => {
-    if (!readOnlyRemote || !activeSession) return "";
-    const d = resolveChannel(activeSession.source);
-    const translated = t(d.labelKey as MessageKey);
-    return translated === d.labelKey ? d.fallbackLabel : translated;
-  })();
-
-  // Voice input — wired into Composer's `microphone` prop. The recorder
-  // hook owns the MediaRecorder lifecycle; once the user toggles stop we
-  // POST the blob to /v1/stt and either append the transcript to `input`
-  // (default) or fire `send()` immediately (`autoSend` pref).
-  const voicePrefs = useVoicePrefs();
-  const voiceRecorder = useVoiceRecorder({
-    deviceId: voicePrefs.deviceId || undefined,
-  });
-  const [voiceTranscribing, setVoiceTranscribing] = useState(false);
-  const handleVoiceToggle = useCallback(() => {
-    if (voiceTranscribing) return;
-    if (!voiceRecorder.recording) {
-      void voiceRecorder.start().catch((e) => {
-        const message = String((e as Error)?.message || e);
-        setError({
-          message:
-            message === "Permission denied"
-              ? t("composer.voice.permissionDenied")
-              : t("composer.voice.transcribeFailed", { error: message }),
-          source: "voice",
-        });
-      });
-      return;
-    }
-    setVoiceTranscribing(true);
-    void (async () => {
-      try {
-        const blob = await voiceRecorder.stop();
-        if (!blob || blob.size === 0) return;
-        const result = await transcribeAudio(blob);
-        if (result.ok !== true) {
-          // ``in`` narrows reliably even under the extension app's
-          // non-strict tsconfig where discriminated unions don't.
-          const message = "error" in result ? result.error : "unknown";
-          setError({
-            message: t("composer.voice.transcribeFailed", { error: message }),
-            source: "voice",
-          });
-          return;
-        }
-        const transcript = result.text.trim();
-        if (!transcript) return;
-        setInput((prev) => {
-          if (!prev) return transcript;
-          // Add a space only when the existing buffer doesn't already
-          // end with whitespace, so users who appended mid-edit don't
-          // get double spaces.
-          return /\s$/.test(prev) ? prev + transcript : prev + " " + transcript;
-        });
-        if (voicePrefs.autoSend) {
-          // Defer one tick so the setInput state lands before send reads it.
-          setTimeout(() => {
-            sendRef.current?.().catch(() => {
-              /* surfaced via the normal send error path */
-            });
-          }, 0);
-        }
-      } catch (e) {
-        setError({
-          message: t("composer.voice.transcribeFailed", {
-            error: String((e as Error)?.message || e),
-          }),
-          source: "voice",
-        });
-      } finally {
-        setVoiceTranscribing(false);
-      }
-    })();
-  }, [voiceRecorder, voiceTranscribing, voicePrefs.autoSend, t]);
-
-  // Composer JSX shared by the bottom dock and the legacy centred empty
+  // Composer JSX shared by the bottom dock and the centred empty
   // state. Most hosts still choose one branch or the other; Quick Ask opts
   // into the persistent dock path so React keeps this exact subtree mounted
   // while the first session is created or New chat returns to empty.
@@ -2160,7 +1724,6 @@ export default function ChatSurface({
       value={input}
       onChange={setInput}
       onSubmit={(text) => {
-        setLastRewind(null);
         void send(text);
       }}
       busy={busy}
@@ -2168,7 +1731,7 @@ export default function ChatSurface({
       autoFocus={composerAutoFocus}
       canSubmit={
         (input.trim().length > 0 ||
-          attachments.some((a) => a.path && !a.uploading)) &&
+          attachments.some((a) => a.attachmentId && !a.uploading)) &&
         !attachmentUploading &&
         !attachmentBusy
       }
@@ -2223,6 +1786,7 @@ export default function ChatSurface({
       ]}
       modelPicker
       approvalModePicker
+      permissionSessionId={sessions.activeId}
       topAffordance={
         editingQueueId != null ? (
           <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
@@ -2238,30 +1802,9 @@ export default function ChatSurface({
               <X className="h-2.5 w-2.5" />
             </button>
           </div>
-        ) : lastRewind?.sessionId === sessions.activeId ? (
-          <div className="flex items-center gap-1 px-2 pt-1 text-[10px] text-muted-foreground/70">
-            <History className="h-2.5 w-2.5" />
-            <span>{t("sidepanel.message.historyTrimmed")}</span>
-            <button
-              type="button"
-              onClick={() => void restoreLastRewind()}
-              className="rounded px-1 py-0.5 font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              {t("sidepanel.message.undo")}
-            </button>
-          </div>
         ) : undefined
       }
       attachments={att}
-      microphone={
-        voicePrefs.enabled
-          ? {
-              recording: voiceRecorder.recording,
-              transcribing: voiceTranscribing,
-              onToggle: handleVoiceToggle,
-            }
-          : undefined
-      }
       mentionProviders={mentionProviders}
       agentPicker={{
         value: effectiveAgent,
@@ -2286,38 +1829,14 @@ export default function ChatSurface({
       pickerOverlayVariant={composerPickerOverlayVariant}
       pickerRefreshKey={composerPickerRefreshKey}
       chipRow={undefined}
-      actionsLeft={
-        hasActive
-          ? slots?.navigateOpenPolicyToggle?.({
-              policy: navigateOpenPolicy,
-              onChange: (next) => void handleNavigateOpenPolicyChange(next),
-            })
-          : undefined
-      }
     />
   );
-
-  // Read-only notice — shown instead of ``composerNode`` when the
-  // active session originates from a non-local channel. Single-line,
-  // no actions: amiba has no outbound path to deliver a reply back
-  // to Feishu / Telegram / etc., so we don't pretend the composer is
-  // safe to use here. Users continue the conversation on the
-  // originating platform.
-  const readOnlyNoticeNode = readOnlyRemote ? (
-    <div className="flex items-start gap-2 rounded-md border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-      <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 flex-1">
-        {t("sidepanel.sessions.readOnlyNotice", { name: remoteChannelLabel })}
-      </span>
-    </div>
-  ) : null;
 
   return (
     <div
       className={cn(
         "relative flex flex-col bg-background text-foreground",
-        // sidebar variant takes the full viewport; fullscreen variant
-        // is mounted inside a flex column and consumes the remaining
+        // The surface is mounted inside a flex column and consumes the remaining
         // space (the host already places a top-bar sibling above us, so
         // `h-full` would overflow by the bar's height and spill a page-
         // level scrollbar — `flex-1 min-h-0` makes us share the column
@@ -2327,33 +1846,13 @@ export default function ChatSurface({
         // the Quick-Ask popup can shrink its window to the composer's
         // natural height; without this it'd collapse to zero because
         // the popup body has no explicit height in compact mode.
-        variant === "fullscreen"
-          ? expandComposerArea
-            ? "min-h-0 flex-1"
-            : ""
-          : "h-screen",
+        expandComposerArea ? "min-h-0 flex-1" : "",
         surfaceClassName,
       )}
     >
-      {variant === "sidebar" && (
-        <TabBar
-          tabs={sessions.openTabs}
-          activeId={sessions.activeId}
-          onActivate={(id) => void sessions.switchToTab(id)}
-          onClose={(id) => void sessions.closeTab(id)}
-          onCloseMany={(ids) => void sessions.closeTabs(ids)}
-          onNew={() => void newChat()}
-          onOpenHistory={() => setHistoryOpen(true)}
-          onOpenSettings={() => openSettings()}
-        />
-      )}
-
       {/*
-        `pt-2` reserves a fixed 8px strip of `bg-background` between the
-        TabBar and the scrollable chat area. Because the gap lives OUTSIDE
-        the ScrollArea it never scrolls, so a sticky user bubble (which
-        pins to the ScrollArea's viewport top) lands a few pixels below
-        the tabs instead of butting up against them.
+        The fixed strip stays outside the ScrollArea so a sticky user bubble
+        lands a few pixels below the host header instead of butting against it.
       */}
       <div
         ref={conversationFrameRef}
@@ -2379,8 +1878,7 @@ export default function ChatSurface({
             // The message column is constrained independently from the
             // panel-level turn rail. This keeps the rail pinned to the
             // panel's left edge while the conversation stays centered.
-            variant === "fullscreen" &&
-              MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
+            MESSAGES_MAX_WIDTH_CLASS[messagesMaxWidth],
           )}
         >
           {!hasActive ? (
@@ -2405,7 +1903,7 @@ export default function ChatSurface({
                       </span>
                     </div>
                   )}
-                  {readOnlyNoticeNode ?? composerNode}
+                  {composerNode}
                 </div>
               )
             ) : slots?.emptyState ? (
@@ -2432,14 +1930,7 @@ export default function ChatSurface({
                     {t("newtab.subtitle")}
                   </p>
                 </div>
-                <div
-                  className={cn(
-                    "w-full",
-                    variant === "fullscreen" ? "max-w-2xl" : "max-w-md",
-                  )}
-                >
-                  {readOnlyNoticeNode ?? composerNode}
-                </div>
+                <div className={cn("w-full", "max-w-2xl")}>{composerNode}</div>
                 {error && (
                   <ErrorBlock error={error} onOpenSettings={openSettings} />
                 )}
@@ -2471,10 +1962,7 @@ export default function ChatSurface({
                   restorableTurnOrdinals={restorableTurnOrdinals}
                   onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
                   onOpenAgentDestination={openAgentDestination}
-                  onEditUserMessage={editUserMessage}
-                  onRetryUserMessage={retryUserMessage}
                   onBranchUserMessage={branchUserMessage}
-                  onTruncateUserMessage={truncateAtUserMessage}
                 />
 
                 {error && (
@@ -2514,33 +2002,11 @@ export default function ChatSurface({
             // Composer always gets a fixed cap in fullscreen — a wide
             // input line is uncomfortable to type into regardless of how
             // wide the user set the message column above.
-            variant === "fullscreen" &&
-              !composerDockInEmptyHost &&
-              "mx-auto w-full max-w-3xl",
+            !composerDockInEmptyHost && "mx-auto w-full max-w-3xl",
           )}
         >
-          {/*
-          Bridge/connection pill is extension-only — provided via the
-          `bridgeBar` slot. Desktop omits and the row is hidden.
-        */}
-          {hasActive ? slots?.bridgeBar : null}
-          {hasActive && (pageError || attachmentError || workspaceError) && (
+          {hasActive && (attachmentError || workspaceError) && (
             <div className="mb-1 flex flex-col gap-1">
-              {pageError && (
-                <div className="flex items-start justify-between gap-2 rounded border border-amber-400/50 bg-amber-50/40 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-                  <span className="min-w-0 flex-1 break-words">
-                    {pageError}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPageError(null)}
-                    className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
               {attachmentError && (
                 <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
                   <span className="min-w-0 flex-1 break-words">
@@ -2573,41 +2039,6 @@ export default function ChatSurface({
               )}
             </div>
           )}
-          {hasActive && capabilities.learn && (
-            <div className="mb-1 flex shrink-0 flex-wrap items-center gap-1">
-              {!learnRecording ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-[11px]"
-                  disabled={attachmentUploading}
-                  title={t("sidepanel.learn.tooltip")}
-                  onClick={() => void startLearnFromPanel()}
-                >
-                  <Disc className="h-3 w-3 shrink-0" />
-                  {t("sidepanel.learn.record")}
-                </Button>
-              ) : (
-                <>
-                  <span className="max-w-[10rem] truncate text-[11px] text-muted-foreground">
-                    {t("sidepanel.learn.recording", { count: learnEventCount })}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-6 px-2 text-[11px]"
-                    disabled={learnStopBusy || attachmentUploading}
-                    onClick={() => void stopLearnToComposer()}
-                  >
-                    {learnStopBusy
-                      ? t("sidepanel.learn.processing")
-                      : t("sidepanel.learn.stop")}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
           {/* Approval state remains a blocking banner. Queue entries now share the
           composer's context rail with its immutable workspace tab. */}
           <div
@@ -2625,15 +2056,15 @@ export default function ChatSurface({
                 onDismissError={() => setApprovalError(null)}
               />
             )}
-            {hasActive && pendingClarifications.length > 0 && (
+            {hasActive && pendingQuestions.length > 0 && (
               <ClarifyBanner
                 error={clarifyError}
                 inFlight={clarifyInFlight}
-                onRespond={(response) => void respondToClarify(response)}
-                request={pendingClarifications[0]}
+                onRespond={(answers) => void respondToQuestion(answers)}
+                request={pendingQuestions[0]}
               />
             )}
-            {readOnlyNoticeNode ?? composerNode}
+            {composerNode}
             {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
           </div>
@@ -2664,7 +2095,6 @@ export default function ChatSurface({
           void getPlatform().storage.remove(pendingQueueStorageKey(id));
           void sessions.remove(id);
         }}
-        onOpenCronSession={onOpenCronSession}
         onRefresh={() => void sessions.refresh()}
       />
     </div>

@@ -10,7 +10,6 @@ vi.mock("@amiba/i18n", () => ({
 }));
 
 import { AttachmentButton } from "../useComposerAttachments";
-import { MicrophoneButton } from "../useVoiceRecorder";
 
 describe("composer chrome", () => {
   it("starts with a two-line writing surface", () => {
@@ -47,8 +46,8 @@ describe("composer chrome", () => {
     );
   });
 
-  it("uses quiet borderless attachment and voice controls", () => {
-    const { rerender } = render(<AttachmentButton onClick={() => {}} />);
+  it("uses a quiet borderless attachment control", () => {
+    render(<AttachmentButton onClick={() => {}} />);
 
     const attachment = screen.getByRole("button", {
       name: "sidepanel.attach",
@@ -62,17 +61,5 @@ describe("composer chrome", () => {
     expect(attachment).not.toHaveClass("border");
     expect(attachment.querySelector("svg")).toHaveClass("lucide-plus");
 
-    rerender(<MicrophoneButton recording={false} onClick={() => {}} />);
-
-    const microphone = screen.getByRole("button", {
-      name: "composer.voice.startRecording",
-    });
-    expect(microphone).toHaveClass(
-      "h-7",
-      "w-7",
-      "rounded-full",
-      "hover:bg-muted/60",
-    );
-    expect(microphone).not.toHaveClass("border");
   });
 });

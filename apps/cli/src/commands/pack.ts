@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import kleur from "kleur"
 import { create as tarCreate } from "tar"
-import { readExtensionManifest } from "../lib/manifest.js"
+import { readDshPluginPackage } from "../lib/plugin-package.js"
 
 interface PackOptions {
   output: string
@@ -9,11 +9,11 @@ interface PackOptions {
 
 export async function packCommand(opts: PackOptions) {
   const cwd = process.cwd()
-  const manifest = readExtensionManifest(cwd)
+  const manifest = readDshPluginPackage(cwd)
   const outPath = resolve(cwd, opts.output)
-  await tarCreate({ gzip: true, cwd, file: outPath }, ["manifest.json", "dist"])
+  await tarCreate({ gzip: true, cwd, file: outPath }, ["package.json", "README.md", "lib"])
   console.log(
     kleur.green("✓"),
-    `Packed ${kleur.cyan(manifest.id + "@" + manifest.version)} → ${kleur.dim(outPath)}`,
+    `Packed ${kleur.cyan(manifest.name + "@" + manifest.version)} → ${kleur.dim(outPath)}`,
   )
 }

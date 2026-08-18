@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { useSessions } from "@amiba/core";
-import { getPlatform } from "@amiba/platform";
+import { useSessions } from "@amiba/app-runtime/core";
+import { getPlatform } from "@amiba/app-runtime/platform";
 
 export interface UseConversationWorkspaceArgs {
   sessions: ReturnType<typeof useSessions>;
@@ -20,7 +20,7 @@ export interface UseConversationWorkspaceResult {
  *
  * Workspace selection belongs exclusively to the id-less Home surface. Its
  * first submission creates the session and binds the chosen directory before
- * Hermes receives the message. From that point on the conversation only reads
+ * DSH receives the message. From that point on the conversation only reads
  * this association: switching conversations restores their own directory, but
  * the conversation composer cannot replace or detach it.
  */

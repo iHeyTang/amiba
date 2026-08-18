@@ -19,7 +19,6 @@ import {
   AttachmentButton,
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments";
-import { MicrophoneButton } from "./useVoiceRecorder";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import { ComposerAgentPicker } from "./ComposerAgentPicker";
 import { ComposerApprovalModePicker } from "./ComposerApprovalModePicker";
@@ -38,16 +37,16 @@ import {
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types";
 import { buildProviderRegistry } from "./composer/providers/registry";
-import { loadMentionResourceProviders } from "./composer/providers/mention-resources";
 import { expandMentionsAsync } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
-import type { AgentExecutionContext } from "@amiba/core";
+import type { AgentExecutionContext } from "@amiba/app-runtime/core";
+import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 
 /**
  * The chat surface's input box. **One implementation** used by every
- * surface (main panel `<ChatSurface />`, `<ChatView />`, the
+ * surface (main panel `<ChatSurface />`, the
  * Spotlight-style `<QuickAskView />` popup, anywhere else); the visual
  * identity lives here and only here.
  *
@@ -81,7 +80,7 @@ import type { AgentExecutionContext } from "@amiba/core";
  *   -  busy +  canSubmit → ArrowUp, click queues (`onSubmit`; the parent
  *                          decides whether to enqueue or no-op).
  * Surfaces without a queue concept just early-return inside their
- * `onSubmit` when `busy` is true (HomeView, ChatView do this implicitly);
+ * `onSubmit` when `busy` is true (HomeView does this implicitly);
  * surfaces with a queue (ChatSurface) push to their FIFO.
  */
 export interface ComposerHandle {
@@ -172,30 +171,19 @@ export interface ComposerProps {
    */
   attachments?: UseComposerAttachmentsResult;
   /**
-   * Voice input affordance. When set, a microphone button renders next
-   * to the paperclip; click toggles record/stop. The Composer owns
-   * nothing else — the surface drives MediaRecorder + STT, then writes
-   * the transcript back via `onChange`. Leave undefined to hide.
-   */
-  microphone?: {
-    recording: boolean;
-    onToggle: () => void;
-    /**
-     * Audio capture has stopped and we're round-tripping to STT. The
-     * button swaps the mic glyph for a spinner so the wait reads as
-     * deliberate work rather than a frozen control.
-     */
-    transcribing?: boolean;
-    /** Force-disable independent of transcribing (rare). */
-    disabled?: boolean;
-  };
-  /**
-   * Show a compact Hermes inference-model selector beside the send controls.
+   * Show a compact DSH inference-model selector beside the send controls.
    * It lists models from configured or currently authenticated providers.
    */
-  modelPicker?: boolean;
-  /** Show the active Hermes approval policy as a switchable composer pill. */
+  modelPicker?:
+    | boolean
+    | {
+        draftSelection?: AgentModelSelection;
+        onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+      };
+  /** Show the active DSH permission preset as a switchable composer pill. */
   approvalModePicker?: boolean;
+  /** Runtime session used to distinguish pinned permissions from new-task defaults. */
+  permissionSessionId?: string;
   /** Visual treatment for the modal overlay behind model and Profile dialogs. */
   pickerOverlayVariant?: ComposerPickerOverlayVariant;
   /** Height treatment for model and Profile dialogs in constrained hosts. */
@@ -203,9 +191,8 @@ export interface ComposerProps {
   /** Reload picker state when a persistent host is activated again. */
   pickerRefreshKey?: number;
   /**
-   * Task-scoped Hermes Profile and optional response mode. Once a task has
-   * messages, callers lock Profile changes so execution and history keep
-   * using the same isolated runtime. Response modes remain turn-switchable.
+   * Task-scoped DSH Agent Preset. Once a task has messages, callers lock
+   * changes so execution and history keep using the same composition.
    */
   agentPicker?: {
     value: AgentExecutionContext;
@@ -217,8 +204,7 @@ export interface ComposerProps {
   // genuinely surface-specific needs to fit in the composer. Anything
   // common (paperclip, chips, hints) is built-in above.
   // ---------------------------------------------------------------------
-  /** Outside the frame, above it. Used by ChatView for bridge status,
-   *  page-context chips, etc. that don't visually merge with the frame. */
+  /** Outside the frame, above it. Used for host-local notices. */
   extrasAbove?: ReactNode;
   /**
    * Execution context visually joined to the top of the composer. This is
@@ -254,7 +240,7 @@ export interface ComposerProps {
   // Frame
   /**
    * Visual identity of the frame:
-   *   - "default" (the chat surface, Quick-Ask, ChatView): a compact
+   *   - "default" (the chat surface and Quick-Ask): a compact
    *     rounded-2xl surface with a quiet, focus-stable edge.
    *   - "hero" (homepage empty state): a softly edged glass surface — 24px
    *     radius, translucent bg-card, soft elevation, larger
@@ -344,9 +330,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onKeyDownExtra,
       onPaste,
       attachments,
-      microphone,
       modelPicker,
       approvalModePicker,
+      permissionSessionId,
       pickerDialogSize = "default",
       pickerOverlayVariant = "dimmed",
       pickerRefreshKey = 0,
@@ -377,40 +363,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   ) {
     const innerRef = useRef<RichComposerHandle>(null);
 
-    // Backplane-contributed mention resources (e.g. lark.doc/chat/user) become
-    // generic @-providers, fetched once from GET /hermes/mention-resources.
-    // Empty until the fetch resolves (and stays empty if the backplane is
-    // down) — the composer degrades to its built-in + injected providers.
-    const [dynamicMentionProviders, setDynamicMentionProviders] = useState<
-      TriggerProvider[]
-    >([]);
-    useEffect(() => {
-      let alive = true;
-      loadMentionResourceProviders()
-        .then((ps) => {
-          if (alive) setDynamicMentionProviders(ps);
-        })
-        .catch(() => {});
-      return () => {
-        alive = false;
-      };
-    }, []);
-
-    // The single mention-provider source: backplane-dynamic first, then any
-    // host-injected ones (Files on desktop, Page-context on the extension).
-    // Threaded to BOTH the trigger menu (via RichComposerEditor) and the
-    // send-time `@[...]` expansion registry, so the two never diverge.
     const effectiveMentionProviders = useMemo(
-      () => [...dynamicMentionProviders, ...(mentionProviders ?? [])],
-      [dynamicMentionProviders, mentionProviders],
+      () => mentionProviders ?? [],
+      [mentionProviders],
     );
 
     // Active provider list (built-in @ skills + / commands, plus the resolved
     // mention providers). Used both for the trigger menu and send-time
     // `@[...]` expansion.
     const providerRegistry = useMemo(
-      () => buildProviderRegistry(effectiveMentionProviders),
-      [effectiveMentionProviders],
+      () =>
+        buildProviderRegistry(effectiveMentionProviders, {
+          sessionId: permissionSessionId,
+        }),
+      [effectiveMentionProviders, permissionSessionId],
     );
 
     // Single normal-send path. Slash UI-action commands with a wired handler
@@ -424,7 +390,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (resolvingMentionRef.current) return;
       resolvingMentionRef.current = true;
       try {
-        const finalText = await expandMentionsAsync(value, providerRegistry.all);
+        const finalText = await expandMentionsAsync(
+          value,
+          providerRegistry.all,
+        );
         onSubmit(finalText);
       } finally {
         resolvingMentionRef.current = false;
@@ -709,6 +678,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               handleSend();
             }}
             mentionProviders={effectiveMentionProviders}
+            sessionId={permissionSessionId}
             onKeyDownExtra={onKeyDownExtra}
             onPaste={handlePaste}
             className={cn(
@@ -741,8 +711,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 Order of items in the bottom action row — same on EVERY
                 surface that uses Composer:
                   1. attachment add button (auto-rendered when attachments prop set)
-                  2. Hermes Profile (when enabled)
-                  3. Hermes approval policy (when enabled)
+                  2. DSH agent preset (when enabled)
+                  3. DSH approval policy (when enabled)
                   4. surface-specific extras (actionsLeft slot)
               */}
               {attachments ? (
@@ -768,30 +738,30 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {approvalModePicker ? (
                 <ComposerApprovalModePicker
                   disabled={disabled}
-                  profileId={agentPicker?.value.profileId}
+                  sessionId={permissionSessionId}
                   refreshKey={pickerRefreshKey}
                 />
               ) : null}
               {actionsLeft}
             </div>
-            {/* Mic sits next to the send button — speech-to-text is the
-                output-side affordance, not an attachment. Grouping it on
-                the right keeps the left rail consistent across surfaces. */}
             {modelPicker ? (
               <ComposerModelPicker
                 dialogSize={pickerDialogSize}
                 disabled={disabled}
                 overlayVariant={pickerOverlayVariant}
                 profileId={agentPicker?.value.profileId}
+                sessionId={permissionSessionId}
                 refreshKey={pickerRefreshKey}
-              />
-            ) : null}
-            {microphone ? (
-              <MicrophoneButton
-                recording={microphone.recording}
-                transcribing={microphone.transcribing}
-                onClick={microphone.onToggle}
-                disabled={microphone.disabled}
+                draftSelection={
+                  typeof modelPicker === "object"
+                    ? modelPicker.draftSelection
+                    : undefined
+                }
+                onDraftSelectionChange={
+                  typeof modelPicker === "object"
+                    ? modelPicker.onDraftSelectionChange
+                    : undefined
+                }
               />
             ) : null}
             {sendButtonNode}

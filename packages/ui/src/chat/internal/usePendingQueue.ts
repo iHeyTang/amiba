@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPlatform } from "@amiba/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
-import { shortId } from "@amiba/utils";
+import { shortId } from "@amiba/app-runtime/utils";
 import {
   deleteAttachmentFile,
   useSessions,
   type Attachment,
   type ChatEngineClient,
-  type TurnMetadata,
-} from "@amiba/core";
+} from "@amiba/app-runtime/core";
 
-import type { NavigateOpenPolicy, PageContextCapability } from "./capabilities";
 import { pickSendText } from "./pickSendText";
 
 /** One user turn waiting while the model is still streaming the previous reply. */
@@ -18,15 +16,6 @@ export interface PendingChatTurn {
   queueId: string;
   text: string;
   attachments: Attachment[];
-  navigateOpenPolicySnapshot: NavigateOpenPolicy;
-  /**
-   * Browser-tab snapshot captured when the user pressed send (queued or
-   * immediate). Replayed verbatim when the turn fires so the agent's
-   * "current tab" tool sees the page the user was actually looking at,
-   * not whatever they switched to afterwards. ``undefined`` for surfaces
-   * without ``pageContext`` (desktop) or restricted pages.
-   */
-  turnMetadataSnapshot?: TurnMetadata;
 }
 
 /** Per-session storage key for the pending-turn queue — survives reloads
@@ -41,7 +30,7 @@ export function previewPendingTurn(t: PendingChatTurn): string {
   const parts: string[] = [];
   const body = t.text.trim();
   if (body) parts.push(body.length > 160 ? `${body.slice(0, 157)}…` : body);
-  const n = t.attachments.filter((a) => a.path && !a.uploading).length;
+  const n = t.attachments.filter((a) => a.attachmentId && !a.uploading).length;
   if (n > 0) parts.push(n === 1 ? "(1 attachment)" : `(${n} attachments)`);
   return parts.length > 0 ? parts.join(" ") : "(empty turn)";
 }
@@ -52,8 +41,6 @@ export function previewPendingTurn(t: PendingChatTurn): string {
 export interface RunChatTurnArgs {
   text: string;
   attachments: Attachment[];
-  navigateOpenPolicyForTurn: NavigateOpenPolicy;
-  turnMetadataForTurn?: TurnMetadata;
 }
 
 /**
@@ -63,7 +50,7 @@ export interface RunChatTurnArgs {
  *
  *   - `send` — typing+submit path. Adds to the queue when busy, else
  *     fires `runChatTurn` directly.
- *   - `stop` — Stop button. Aborts the SW stream, keeps the queue, and
+   *   - `stop` — Stop button. Aborts the DSH stream, keeps the queue, and
  *     freezes auto-drain.
  *   - `sendNow(queueId)` — pre-empts the in-flight stream, seals the
  *     previous assistant locally, fires the named item immediately.
@@ -90,11 +77,6 @@ export interface UsePendingQueueArgs {
   setAttachmentError: (v: string | null) => void;
   attachmentUploading: boolean;
 
-  // Per-turn context owned by the surface.
-  navigateOpenPolicy: NavigateOpenPolicy;
-  /** `editPendingQueueItem` restores the queued item's navigate-open
-   * policy snapshot to the composer toggle. */
-  setNavigateOpenPolicy: (v: NavigateOpenPolicy) => void;
   /** Clear the "from <App>" handoff chip when a fresh, non-queued send
    * fires — the chip belongs to a single turn. */
   setPendingSourceApp: (v: string | null) => void;
@@ -104,13 +86,8 @@ export interface UsePendingQueueArgs {
   markCurrentAssistantStopped: () => void;
   rejectPendingTurn: (sessionId: string, err: Error) => void;
 
-  // Browser-tab capability — captured on send so a queued turn fires
-  // with the tab the user was looking at, not the one they're on now.
-  pageContextCapability: PageContextCapability | undefined;
-
   // The actual turn runner. Lives in ChatSurface because it depends on
-  // navigateOpenPolicy.apply, badges, history assembly, snapshot
-  // priming — concerns far broader than the queue. The hook calls back
+  // badges, history assembly, and snapshot priming. The hook calls back
   // into it for normal sends, send-now, and finally-drain.
   runChatTurn: (args: RunChatTurnArgs) => Promise<void>;
 }
@@ -138,7 +115,7 @@ export interface UsePendingQueueResult {
   /**
    * `textArg` is the Composer's mention-expanded send text. When present
    * it's what gets dispatched to the engine / queued; omit it to fall
-   * back to the raw composer input (backward-compatible).
+   * back to the raw composer input.
    */
   send: (textArg?: string) => Promise<void>;
   stop: () => void;
@@ -159,13 +136,10 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     setAttachments,
     setAttachmentError,
     attachmentUploading,
-    navigateOpenPolicy,
-    setNavigateOpenPolicy,
     setPendingSourceApp,
     busy,
     markCurrentAssistantStopped,
     rejectPendingTurn,
-    pageContextCapability,
     runChatTurn,
   } = args;
   const { t: _t } = useT();
@@ -182,10 +156,10 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   /**
    * Send-now preemption flags. When `sendNow` decides to seal the
    * in-flight turn locally and fire the next one directly (instead of
-   * waiting for the SW's `aborted` echo to drive the cascade), it sets
+   * waiting for the engine's `aborted` echo to drive the cascade), it sets
    * these so the rest of the pipeline doesn't double-handle the
    * preemption:
-   *   - `ignoreAbortForSessionRef` — silences the SW's eventual
+   *   - `ignoreAbortForSessionRef` — silences the engine's eventual
    *     `aborted` event for the named session.
    *   - `suppressFinallyDrainRef` — skips the queue-drain in the
    *     unwinding old runChatTurn's `finally`, since we're driving
@@ -262,8 +236,6 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         void runChatTurn({
           text: head.text,
           attachments: head.attachments,
-          navigateOpenPolicyForTurn: head.navigateOpenPolicySnapshot,
-          turnMetadataForTurn: head.turnMetadataSnapshot,
         }),
       );
       return tail;
@@ -275,18 +247,12 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       const editingThisOne = editingQueueId === queueId;
       let item: PendingChatTurn | undefined;
       if (editingThisOne) {
-        const previous = queue.find((q) => q.queueId === queueId);
         item = {
           queueId,
           text: input,
           attachments: attachments
-            .filter((a) => a.path && !a.uploading)
+            .filter((a) => a.attachmentId && !a.uploading)
             .map((a) => ({ ...a })),
-          navigateOpenPolicySnapshot: navigateOpenPolicy,
-          // Keep the original snapshot from queue time — re-capturing
-          // here would point at "wherever the user is right now while
-          // editing", which is rarely the page they wanted to reference.
-          turnMetadataSnapshot: previous?.turnMetadataSnapshot,
         };
         setEditingQueueId(null);
         setInput("");
@@ -305,13 +271,13 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       if (busy && sid) {
         // Drive the preemption locally. Order matters:
         //   1. Set the gates BEFORE rejecting / aborting so neither the
-        //      finally that fires next microtask nor the SW's echo
+        //      finally that fires next microtask nor the engine's echo
         //      double-handles us.
         //   2. Seal the bubble locally so the user sees `[stopped]`
-        //      immediately, not after a SW round-trip.
+        //      immediately, not after an engine round-trip.
         //   3. Reject the old pendingTurn so the old runChatTurn unwinds
         //      promptly into its finally (which we just gated).
-        //   4. Fire abort to the SW — best-effort cleanup; the echoed
+        //   4. Fire abort to DSH — best-effort cleanup; the echoed
         //      `aborted` event hits `ignoreAbortForSessionRef` and
         //      no-ops.
         suppressFinallyDrainRef.current = true;
@@ -328,8 +294,6 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       void runChatTurn({
         text: item.text,
         attachments: item.attachments,
-        navigateOpenPolicyForTurn: item.navigateOpenPolicySnapshot,
-        turnMetadataForTurn: item.turnMetadataSnapshot,
       });
     },
     [
@@ -337,7 +301,6 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       queue,
       input,
       attachments,
-      navigateOpenPolicy,
       sessions,
       client,
       busy,
@@ -362,7 +325,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // anything (e.g. "here's a screenshot — what's wrong with it?"). We
     // still gate on having SOMETHING to send so an empty composer with
     // no attachments stays a no-op.
-    if (!text && attachments.every((a) => !a.path || a.uploading)) return;
+    if (!text && attachments.every((a) => !a.attachmentId || a.uploading)) return;
     if (attachmentUploading) return;
     if (!sessions.ready) return;
 
@@ -374,20 +337,9 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       return;
     }
 
-    const attachmentsForSend = attachments.filter((a) => a.path && !a.uploading);
-
-    // Capture the user's current tab BEFORE the queue/send branches.
-    // Snapshot belongs to the moment the user pressed send — by the
-    // time a queued turn fires, the user has very possibly switched
-    // tabs. ``undefined`` on desktop or when the capability declines
-    // (restricted URL etc.).
-    let turnMetadataForSend: TurnMetadata | undefined;
-    try {
-      const snap = await pageContextCapability?.captureBrowserTabSnapshot();
-      if (snap) turnMetadataForSend = { browser_tab_snapshot: snap };
-    } catch {
-      // Snapshot failures should never block the user's send.
-    }
+    const attachmentsForSend = attachments.filter(
+      (a) => a.attachmentId && !a.uploading,
+    );
 
     if (busy) {
       setQueue((prev) => [
@@ -396,8 +348,6 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           queueId: shortId("q"),
           text,
           attachments: attachmentsForSend.map((a) => ({ ...a })),
-          navigateOpenPolicySnapshot: navigateOpenPolicy,
-          turnMetadataSnapshot: turnMetadataForSend,
         },
       ]);
       setInput("");
@@ -428,8 +378,6 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     await runChatTurn({
       text,
       attachments: attachmentsForSend,
-      navigateOpenPolicyForTurn: navigateOpenPolicy,
-      turnMetadataForTurn: turnMetadataForSend,
     });
   }, [
     input,
@@ -437,9 +385,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     attachmentUploading,
     sessions.ready,
     editingQueueId,
-    navigateOpenPolicy,
     busy,
-    pageContextCapability,
     runChatTurn,
     setInput,
     setAttachments,
@@ -502,9 +448,8 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       if (!item) return;
       const draftText = input;
       const draftAttachments = attachments.filter(
-        (a) => a.path && !a.uploading,
+        (a) => a.attachmentId && !a.uploading,
       );
-      const draftPolicy = navigateOpenPolicy;
       const hasDraft =
         draftText.trim().length > 0 || draftAttachments.length > 0;
 
@@ -516,31 +461,20 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
             queueId: shortId("q"),
             text: draftText,
             attachments: draftAttachments.map((a) => ({ ...a })),
-            navigateOpenPolicySnapshot: draftPolicy,
-            // No fresh snapshot here — this branch only fires when the
-            // composer already had a draft AND the user clicked "edit
-            // another queued item". The draft was typed earlier without
-            // a snapshot pipeline, so we let the queued item ride
-            // without one rather than re-snapshot at edit time (which
-            // would point at whatever tab the user is on right now,
-            // not the draft's original context).
           },
         ];
       });
       setEditingQueueId(queueId);
       setInput(item.text);
       setAttachments(item.attachments.map((a) => ({ ...a })));
-      setNavigateOpenPolicy(item.navigateOpenPolicySnapshot);
       setPausedState(true);
     },
     [
       queue,
       input,
       attachments,
-      navigateOpenPolicy,
       setInput,
       setAttachments,
-      setNavigateOpenPolicy,
     ],
   );
 

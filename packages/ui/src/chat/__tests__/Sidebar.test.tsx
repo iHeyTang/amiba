@@ -24,11 +24,9 @@ beforeEach(() => {
 });
 
 function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
+  const onSelectView = vi.fn();
   const props = {
-    activeView: "chats",
-    onSelectView: vi.fn(),
     onNewChat: vi.fn(),
-    extensionItems: [],
     sessions: [
       {
         id: "s1",
@@ -52,10 +50,19 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     historyLayout: "timeline" as const,
     onHistoryLayoutChange: vi.fn(),
     onOpenSettings: vi.fn(),
+    workspaceNavigation: (
+      <button
+        data-testid="sidebar-item-scheduled"
+        type="button"
+        onClick={() => onSelectView("scheduled")}
+      >
+        Automation
+      </button>
+    ),
     ...overrides,
   };
   render(<Sidebar {...props} />);
-  return props;
+  return { ...props, onSelectView };
 }
 
 describe("Sidebar", () => {
@@ -73,34 +80,10 @@ describe("Sidebar", () => {
     expect(props.onNewChat).toHaveBeenCalledTimes(1);
   });
 
-  it("selects a built-in nav view", async () => {
+  it("selects a workspace plugin nav view", async () => {
     const props = setup();
     await userEvent.click(screen.getByTestId("sidebar-item-scheduled"));
     expect(props.onSelectView).toHaveBeenCalledWith("scheduled");
-  });
-
-  it("shows capability extensions as a first-class main destination", async () => {
-    const props = setup({ showCapabilityExtensions: true });
-    await userEvent.click(
-      screen.getByTestId("sidebar-item-capability-extensions"),
-    );
-    expect(props.onSelectView).toHaveBeenCalledWith("capability-extensions");
-  });
-
-  it("selects an extension nav view by its extensionId", async () => {
-    const props = setup({
-      extensionItems: [
-        {
-          extensionId: "village",
-          icon: "book-open",
-          label: "Village",
-          viewUrl: "x",
-          order: 100,
-        },
-      ],
-    });
-    await userEvent.click(screen.getByTestId("sidebar-item-village"));
-    expect(props.onSelectView).toHaveBeenCalledWith("village");
   });
 
   it("opens settings from the footer row", async () => {
@@ -213,7 +196,7 @@ describe("Sidebar", () => {
     workspaceBindings.current = {
       supported: true,
       ready: true,
-      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+      bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
       historyLayout: "grouped",
@@ -246,7 +229,7 @@ describe("Sidebar", () => {
     workspaceBindings.current = {
       supported: true,
       ready: true,
-      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+      bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
       historyLayout: "grouped",
@@ -351,8 +334,8 @@ describe("Sidebar", () => {
       supported: true,
       ready: true,
       bySessionId: {
-        s1: "/Users/amira/Code/hermes-x",
-        s2: "/Users/amira/Code/hermes-x",
+        s1: "/Users/amira/Code/amiba-project",
+        s2: "/Users/amira/Code/amiba-project",
         s3: "/Users/amira/Code/superun",
       },
     };
@@ -390,16 +373,16 @@ describe("Sidebar", () => {
       ],
     });
 
-    const hermesGroup = screen.getByRole("button", { name: "hermes-x" });
-    expect(hermesGroup).toHaveAttribute("title", "/Users/amira/Code/hermes-x");
-    expect(hermesGroup).toHaveClass("h-full", "w-full", "px-2.5");
-    expect(hermesGroup.parentElement).not.toHaveClass("px-2.5");
+    const workspaceGroup = screen.getByRole("button", { name: "amiba-project" });
+    expect(workspaceGroup).toHaveAttribute("title", "/Users/amira/Code/amiba-project");
+    expect(workspaceGroup).toHaveClass("h-full", "w-full", "px-2.5");
+    expect(workspaceGroup.parentElement).not.toHaveClass("px-2.5");
     expect(screen.getByText("superun")).toBeInTheDocument();
     expect(screen.getByText("Independent tasks")).toBeInTheDocument();
     expect(screen.getByText("Refine workbench")).toBeInTheDocument();
     expect(screen.getByText("Fix tool cards")).toBeInTheDocument();
 
-    await userEvent.click(hermesGroup);
+    await userEvent.click(workspaceGroup);
     expect(screen.queryByText("Refine workbench")).not.toBeInTheDocument();
     expect(screen.queryByText("Fix tool cards")).not.toBeInTheDocument();
     expect(screen.getByText("Review analytics")).toBeInTheDocument();
@@ -431,17 +414,13 @@ describe("Sidebar", () => {
     expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped");
   });
 
-  it("keeps import and bulk selection inside the overflow menu", async () => {
+  it("keeps bulk selection inside the overflow menu", async () => {
     const props = setup({
-      onImportSessions: vi.fn(),
       onBulkSessions: vi.fn(),
     });
     const header = screen.getByTestId("sessions-header");
     expect(header).toHaveClass("pr-1.5");
 
-    expect(
-      screen.queryByRole("button", { name: "Import tasks…" }),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Select tasks" }),
     ).not.toBeInTheDocument();
@@ -450,8 +429,8 @@ describe("Sidebar", () => {
       screen.getByRole("button", { name: "More task actions" }),
     );
     expect(
-      screen.getByRole("menuitem", { name: "Import tasks…" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("menuitem", { name: "Import tasks…" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("menuitem", { name: "Select tasks" }),
     );
@@ -460,7 +439,6 @@ describe("Sidebar", () => {
     expect(
       screen.queryByRole("button", { name: "More task actions" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-item-tasks")).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("First chat"));
     expect(header).toHaveTextContent("1 selected");
@@ -472,7 +450,7 @@ describe("Sidebar", () => {
     workspaceBindings.current = {
       supported: true,
       ready: true,
-      bySessionId: { s1: "/Users/amira/Code/hermes-x" },
+      bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
       historyLayout: "grouped",
@@ -496,12 +474,6 @@ describe("Sidebar", () => {
     await userEvent.click(titleButton);
     expect(titleButton).toHaveAttribute("aria-pressed", "true");
     expect(titleButton).toHaveClass("pl-8");
-  });
-
-  it("opens the task board from the primary navigation", async () => {
-    const props = setup();
-    await userEvent.click(screen.getByTestId("sidebar-item-tasks"));
-    expect(props.onSelectView).toHaveBeenCalledWith("tasks");
   });
 
   it("reveals history in batches of twenty with stable copy", async () => {

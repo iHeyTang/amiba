@@ -1,178 +1,55 @@
 # @amiba/cli
 
-The **amiba CLI** (command: `amiba`) provides developer tooling for Extensions:
-
-- scaffold / dev / build / pack / install desktop Extensions
-  (the WebView model: `manifest.json` + `dist/main.cjs` + self-contained React
-  UI pages served via a loopback HTTP server into an Electron `<webview>`).
-
-## Installation
-
-```sh
-pnpm add -g @amiba/cli   # installs the `amiba` command
-# or, from a local checkout:
-node apps/cli/dist/cli.js --help
-```
+`amiba` is the product CLI for the same DSH distribution used by Amiba Web and
+Desktop. It also scaffolds and builds independent `dsh-plugin-*` projects. It
+does not create Electron WebViews, manifests, registries, or a second Extension
+Host.
 
 ## Commands
 
-### `amiba create [name]`
+```bash
+amiba run "summarize this repository"
+amiba web --host 127.0.0.1 --port 14514
+amiba doctor
 
-Scaffold a new desktop **Extension** from the built-in template.
-
-```sh
-amiba create my-extension --id com.example.my-extension
+amiba plugin create issue-tracker --id issue-tracker
+cd dsh-plugin-issue-tracker
+amiba plugin build
+amiba plugin dev
+amiba plugin pack
 ```
 
-The scaffold produces:
+`run` composes the official DSH base/headless bundles with
+`dsh-bundle-amiba-core`. `web` adds the Amiba Web bundle, while Desktop adds
+only the native-provider bundle on top. All three surfaces preserve additional
+third-party bundles installed into their profile. CLI launches DSH with the
+Node binary from `@amiba/app-runtime/dsh-runtime`; it does not execute DSH with the
+Node that happened to launch the CLI.
 
-```
-my-extension/
-├── manifest.json          # declares sidebarViews + settingsTabs
-├── package.json
-├── tsconfig.json
-├── vite.main.config.ts    # builds src/main → dist/main.cjs
-├── vite.ui.config.ts      # builds src/ui/* → dist/ui/*/index.html
-└── src/
-    ├── main/index.ts      # activate(host) — registers IPC handlers
-    ├── ui/
-    │   ├── shared/
-    │   │   ├── amiba-bridge.ts    # typed window.amiba re-export
-    │   │   └── styles.css
-    │   ├── sidebar/
-    │   │   ├── index.html
-    │   │   ├── main.tsx
-    │   │   └── App.tsx
-    │   └── settings/
-    │       ├── index.html
-    │       ├── main.tsx
-    │       └── App.tsx
-    └── i18n/
-        ├── en.json
-        └── zh-CN.json
-```
+By default the CLI reuses Desktop's DSH home, so DSH settings, credentials,
+sessions, and installed profile layers remain one ecosystem. Override the
+location with `--dsh-home`, `AMIBA_DSH_HOME`, or `DSH_HOME`.
+Override the managed artifact only for development with `--runtime-dir` or
+`AMIBA_DSH_RUNTIME_DIR`.
 
-### `amiba dev`
+The generated project follows DSH's package contract:
 
-Build the Extension in watch mode. Spawns two parallel Vite watch processes
-(main + UI) and touches `manifest.json` on any output change so the running
-desktop app hot-reloads the Extension automatically.
-
-```sh
-amiba dev
+```text
+dsh-plugin-issue-tracker/
+├── package.json              # DSH Client graph metadata
+├── src/
+│   ├── index.ts              # Host Cordis plugin
+│   └── client/
+│       ├── index.tsx         # DSH Client plugin
+│       └── styles.css        # contribution-owned styles
+├── tsconfig.build.json
+└── vite.config.ts            # DSH ModuleLoader client bundle
 ```
 
-Recommended workflow:
+The example Client plugin registers into `amiba.chat.header.after`. Other
+Amiba children slots are exported by `@amiba/extension-sdk`. A plugin is loaded
+by a DSH bundle or Loader entry; Electron never discovers it directly.
 
-1. Terminal 1: `pnpm dev:desktop`
-2. Terminal 2: `cd <extension dir> && pnpm dev`
-3. In the app: **Settings → Extensions → Add local Extension…** → pick the Extension
-   directory. Every rebuild hot-reloads from then on.
-
-Options:
-
-| Flag | Description |
-|------|-------------|
-| `--no-symlink` | Accepted for backward compatibility; has no effect |
-
-### `amiba build`
-
-Production build — runs `vite build -c vite.main.config.ts` followed by
-`vite build -c vite.ui.config.ts`. Validates `manifest.json` first.
-
-```sh
-amiba build
-```
-
-Output:
-
-```
-dist/
-├── main.cjs                  # Node/main-process bundle
-├── main.cjs.map
-└── ui/
-    ├── sidebar/index.html    # self-contained React page
-    ├── settings/index.html   # self-contained React page
-    └── assets/               # shared JS chunks
-```
-
-### `amiba pack`
-
-Produce `extension.tgz` ready for attaching to a GitHub Release.
-Tarballs `manifest.json` + `dist/` (which contains `main.cjs` and
-`ui/<surface>/index.html`).
-
-```sh
-amiba pack
-amiba pack -o dist/extension.tgz
-```
-
-Options:
-
-| Flag | Description |
-|------|-------------|
-| `-o, --output <path>` | Output tarball path (default: `extension.tgz`) |
-
-### `amiba install <repo>`
-
-Install an Extension directly from a GitHub Release into
-`<userData>/extensions/<id>/`.
-
-```sh
-# Install the latest release
-amiba install owner/repo
-
-# Install a specific tag
-amiba install owner/repo@v1.2.3
-
-# Install and verify the tarball checksum
-amiba install owner/repo --sha256 <hex>
-```
-
-Arguments:
-
-| Argument | Description |
-|----------|-------------|
-| `<repo>` | GitHub repository as `owner/repo`, optionally with `@tag` |
-
-Options:
-
-| Flag | Description |
-|------|-------------|
-| `--sha256 <hex>` | Verify the downloaded `extension.tgz` against this SHA-256 hex digest |
-
-The command:
-
-1. Fetches the GitHub Release (latest, or the pinned tag).
-2. Locates the `extension.tgz` asset attached to that release.
-3. Downloads the tarball and optionally verifies its SHA-256.
-4. Extracts and validates `manifest.json` at the archive root.
-5. Moves the directory into `<userData>/extensions/<id>/`.
-
-If Amiba Desktop is running, it will hot-reload the newly installed Extension
-automatically via its manifest-watcher.
-
-The install path honours the `AMIBA_DEV_EXTENSIONS_PATH` environment variable
-(same override the desktop itself uses).
-
-This command re-implements the GitHub-release-to-disk flow in pure Node rather
-than delegating to `@amiba/extension-host/main`, which depends on Electron
-and is therefore unavailable in a plain Node CLI process.
-
-## Extension architecture
-
-```
-Desktop (Electron)
-└── ExtensionWebView src="http://127.0.0.1:<port>/extensions/<id>/dist/ui/sidebar/index.html"
-        │  served by ext-http-server (loopback) → reads from extension root on disk
-        │
-        └── React page
-                └── window.amiba  (injected by webview-bridge preload)
-                        ├── amiba.ipc.invoke(channel, args)
-                        ├── amiba.settings.get/set(key, value)
-                        └── amiba.on("language" | "theme", cb)
-```
-
-The ext-http-server resolves `/extensions/<id>/<relative-path>` to
-`<extensionRoot>/<relative-path>`, so paths in `manifest.json` like
-`"view": "dist/ui/sidebar/index.html"` map directly to the file on disk.
+`amiba plugin pack` produces `dsh-plugin.tgz` containing `package.json`, `README.md`,
+and the built `lib/` directory. Installation is deliberately not implemented
+as an Electron registry operation; it belongs to the DSH Loader/config layer.

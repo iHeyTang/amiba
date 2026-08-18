@@ -98,7 +98,7 @@ describe("ModelInfoCard", () => {
     ).toHaveAttribute("data-model-metadata-tone", "cyan");
   });
 
-  it("renders Hermes provider pricing without exposing provenance internals", () => {
+  it("renders provider pricing without exposing provenance internals", () => {
     render(
       <ModelInfoCard
         metadata={{
@@ -107,7 +107,7 @@ describe("ModelInfoCard", () => {
           cache_read_price: "$0.30",
           pricing_source: "provider-live",
           fast_mode: true,
-          fast_mode_source: "hermes-runtime",
+          fast_mode_source: "runtime-internal",
         }}
         model="provider-model"
         provider="example"
@@ -120,7 +120,7 @@ describe("ModelInfoCard", () => {
     expect(screen.getByText("$0.30/M")).toBeInTheDocument();
     expect(screen.getByText("Fast mode")).toBeInTheDocument();
     expect(screen.queryByText("Provider Live")).not.toBeInTheDocument();
-    expect(screen.queryByText("Hermes Runtime")).not.toBeInTheDocument();
+    expect(screen.queryByText("Runtime Internal")).not.toBeInTheDocument();
   });
 
   it("keeps the external row focused on capabilities before limits", () => {

@@ -1,8 +1,8 @@
-import { getPlatform } from "@amiba/platform"
+import { getPlatform } from "@amiba/app-runtime/platform"
 import { useEffect, useState } from "react"
 
 /**
- * Theme handling for Hermes UI surfaces.
+ * Theme handling for Amiba UI surfaces.
  *
  * Surfaces never paint custom backgrounds — every panel inherits the shadcn
  * HSL tokens defined in `@amiba/ui/styles/tokens.css`, which flip between

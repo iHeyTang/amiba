@@ -28,45 +28,11 @@ export function stripManagedResourceContext(text: string): string {
 }
 
 /**
- * Remove the internal workspace instruction that the desktop engine prepends
- * to a user turn while retaining its bound directory as renderable metadata.
- *
- * Fresh local messages carry `UiMessage.workspacePath`; persisted Hermes
- * history may only contain the legacy `<workspace>` block, so the bubble
- * renderer needs both paths during migration.
- */
-export function splitWorkspaceFromBody(text: string): {
-  body: string
-  workspacePath: string
-} {
-  let workspacePath = ""
-  const body = text.replace(
-    /<workspace(?:\s[^>]*)?>([\s\S]*?)<\/workspace>/gi,
-    (_block, inner: string) => {
-      const pathMatch = inner.match(
-        /(?:^|\n)[ \t]*Bound directory:[ \t]*(.+?)[ \t]*(?=\r?\n|$)/i,
-      )
-      const path = pathMatch?.[1]?.trim()
-      if (path) workspacePath = path
-      return ""
-    },
-  )
-
-  return {
-    body: body
-      .replace(/^(?:[ \t]*\r?\n)+/, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trimEnd(),
-    workspacePath,
-  }
-}
-
-/**
  * Pull `<think>` / `<reasoning>` / `<scratchpad>` blocks out of an assistant
  * message body so they can be rendered through the existing "reasoning trace"
  * slot (smaller, muted, hideable) instead of leaking inline into the answer.
  *
- * Why this lives client-side: some upstream gateways forward the model's raw
+ * Why this lives client-side: some model providers forward the model's raw
  * stream verbatim (tags included) into `delta.content` instead of routing
  * them to `reasoning_content`. Streamdown then strips the unknown HTML-ish
  * tags at render time but keeps the content between them, so the user sees

@@ -4,46 +4,83 @@ import { createCommand } from "./commands/create.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
 import { packCommand } from "./commands/pack.js"
-import { installCommand } from "./commands/install.js"
+import { inspectAmibaDsh, runDsh } from "./lib/dsh-runtime.js"
 
 const program = new Command()
 
 program
   .name("amiba")
-  .description("Developer tooling for Amiba Extensions")
+  .description("Amiba: a product distribution built on DeepSeek Harness")
   .version("0.1.0")
+  .option("--dsh-home <path>", "use an explicit DSH home")
+  .option("--runtime-dir <path>", "use an explicit Amiba managed DSH runtime")
 
 program
+  .command("run")
+  .description("Run one task through the Electron-independent Amiba profile")
+  .argument("<task...>", "task to run")
+  .action(async (task: string[]) => {
+    const result = await runDsh({
+      surface: "headless",
+      args: [task.join(" ")],
+      home: program.opts().dshHome as string | undefined,
+      runtimeDir: program.opts().runtimeDir as string | undefined,
+    })
+    if (result.error) throw result.error
+    process.exitCode = result.status ?? 1
+  })
+
+program
+  .command("web")
+  .description("Start the Amiba Web client without Electron")
+  .option("--host <host>", "bind host", "127.0.0.1")
+  .option("--port <port>", "bind port", "3080")
+  .action(async (options) => {
+    const result = await runDsh({
+      surface: "web",
+      args: ["--host", options.host, "--port", options.port],
+      home: program.opts().dshHome as string | undefined,
+      runtimeDir: program.opts().runtimeDir as string | undefined,
+    })
+    if (result.error) throw result.error
+    process.exitCode = result.status ?? 1
+  })
+
+program
+  .command("doctor")
+  .description("Inspect the local Amiba DSH distribution")
+  .action(async () => {
+    const report = await inspectAmibaDsh({
+      home: program.opts().dshHome as string | undefined,
+      runtimeDir: program.opts().runtimeDir as string | undefined,
+    })
+    console.log(JSON.stringify(report, null, 2))
+  })
+
+const plugin = program
+  .command("plugin")
+  .description("Create, develop, build, and package DSH plugins")
+
+plugin
   .command("create")
-  .description("Scaffold a new Extension")
-  .argument("[name]", "Extension folder name")
-  .option("--id <id>", "reverse-DNS Extension id (e.g. com.example.my-app)")
+  .description("Scaffold an independent dsh-plugin-* project")
+  .argument("[name]", "Plugin name or dsh-plugin-* folder name")
+  .option("--id <id>", "Cordis plugin id (e.g. issue-tracker)")
   .option("--no-install", "skip pnpm install after scaffold")
   .action(createCommand)
 
-program
+plugin
   .command("dev")
-  .description("Build the Extension in watch mode for local development")
-  .option(
-    "--no-symlink",
-    "copy files instead of symlinking (for testing copy-based installs)",
-  )
+  .description("Build the DSH plugin in watch mode")
   .action(devCommand)
 
-program.command("build").description("Production build").action(buildCommand)
+plugin.command("build").description("Production build").action(buildCommand)
 
-program
+plugin
   .command("pack")
-  .description("Produce extension.tgz for distribution")
-  .option("-o, --output <path>", "output tarball path", "extension.tgz")
+  .description("Produce dsh-plugin.tgz for distribution")
+  .option("-o, --output <path>", "output tarball path", "dsh-plugin.tgz")
   .action(packCommand)
-
-program
-  .command("install")
-  .description("Install an Extension from a GitHub repository")
-  .argument("<repo>", "GitHub repo as owner/repo[@tag]; tag defaults to latest")
-  .option("--sha256 <hex>", "verify downloaded tarball against this hex digest")
-  .action(installCommand)
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err)

@@ -4,7 +4,7 @@
  *
  * The Composer expands `@[type:payload]` mention tokens into agent-facing
  * text at send time and passes the RESULT to `onSubmit(finalText)`. Every
- * consumer (ChatView, ChatSurface→usePendingQueue, HomeView) must dispatch
+ * consumer (ChatSurface→usePendingQueue, HomeView) must dispatch
  * THAT expanded text — not re-read the raw composer input, which still
  * contains the un-expanded `@[...]` tokens.
  *

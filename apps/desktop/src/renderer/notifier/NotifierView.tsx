@@ -1,4 +1,4 @@
-import { HERMES_APPROVAL_GATEWAY_TIMEOUT_MS } from "@amiba/core";
+import { APPROVAL_DEFAULT_TIMEOUT_MS } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import {
   ApprovalCode,
@@ -341,7 +341,7 @@ function ApprovalPendingCard({
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <ApprovalCountdownBar
               requestedAt={requestedAt}
-              timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
+              timeoutMs={APPROVAL_DEFAULT_TIMEOUT_MS}
             />
             {tool && (
               <span className="shrink-0 truncate font-mono text-[10px] leading-4 text-muted-foreground/75">

@@ -1,9 +1,10 @@
-import { listHermesSessions } from "@amiba/core"
+import { getPlatform } from "@amiba/app-runtime/platform"
 import type { LexicalEditor } from "lexical"
 import { insertMentionAtTrigger } from "./skills"
 import type { MenuItem, MentionData, TriggerProvider } from "./types"
 
 export function makeSessionsProvider(): TriggerProvider {
+  const dshSessions = getPlatform().agentSessions
   return {
     trigger: "@",
     id: "sessions",
@@ -11,8 +12,11 @@ export function makeSessionsProvider(): TriggerProvider {
     ownsType: "session",
     match: () => true,
     async search(query: string): Promise<MenuItem[]> {
-      const res = await listHermesSessions({})
-      const sessions = "sessions" in res ? res.sessions : []
+      if (!dshSessions) return []
+      const sessions = (await dshSessions.list()).map((session) => ({
+        id: session.sessionId,
+        title: session.title ?? session.sessionId,
+      }))
       const q = query.toLowerCase()
       return sessions
         .filter((s) => (s.title ?? "").toLowerCase().includes(q))
@@ -27,7 +31,15 @@ export function makeSessionsProvider(): TriggerProvider {
       if (item.insert) insertMentionAtTrigger(editor, item.insert)
     },
     serialize(m: MentionData): string {
-      return `(session: ${m.payload.title || m.payload.id})`
+      const label = (m.payload.title || m.payload.id).replace(/([\\\]])/gu, "\\$1")
+      return `@[${label}](dsh-session:${base64UrlJson(m.payload.id)})`
     },
   }
+}
+
+function base64UrlJson(value: string): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value))
+  let binary = ""
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/gu, "")
 }

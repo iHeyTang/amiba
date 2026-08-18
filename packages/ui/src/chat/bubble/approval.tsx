@@ -1,10 +1,10 @@
 import {
-  HERMES_APPROVAL_GATEWAY_TIMEOUT_MS,
+  APPROVAL_DEFAULT_TIMEOUT_MS,
+  type ApprovalDecision,
   type ApprovalOutcome,
   type ApprovalRecord,
-  type HermesApprovalDecision,
-  type HermesApprovalRequest
-} from "@amiba/core"
+  type ApprovalRequest
+} from "@amiba/app-runtime/core"
 import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
 import { Loader2, X } from "lucide-react"
@@ -12,7 +12,7 @@ import { useEffect, useState } from "react"
 import { ApprovalCode } from "./approval-syntax"
 
 interface ApprovalDecisionMeta {
-  value: HermesApprovalDecision
+  value: ApprovalDecision
   label: string
   description: string
   variant: "neutral" | "destructive"
@@ -86,6 +86,16 @@ function approvalOutcomeInfo(t: TranslateFn): Record<ApprovalOutcome, ApprovalOu
       tooltip: t("sidepanel.permission.denied.tooltip"),
       className: "border-destructive/30 bg-destructive/5 text-destructive"
     },
+    cancelled: {
+      label: t("sidepanel.permission.denied"),
+      tooltip: t("sidepanel.permission.denied.tooltip"),
+      className: "border-border bg-muted/40 text-muted-foreground"
+    },
+    unavailable: {
+      label: t("sidepanel.permission.expired"),
+      tooltip: t("sidepanel.permission.expired.tooltip"),
+      className: "border-border bg-muted/40 text-muted-foreground"
+    },
     expired: {
       label: t("sidepanel.permission.expired"),
       tooltip: t("sidepanel.permission.expired.tooltip"),
@@ -100,17 +110,18 @@ function approvalOutcomeInfo(t: TranslateFn): Record<ApprovalOutcome, ApprovalOu
 }
 
 export interface ApprovalBannerProps {
-  approvals: HermesApprovalRequest[]
-  inFlight: Record<string, HermesApprovalDecision>
+  approvals: ApprovalRequest[]
+  inFlight: Record<string, ApprovalDecision>
   error: string | null
-  onRespond: (request: HermesApprovalRequest, decision: HermesApprovalDecision) => void
+  onRespond: (request: ApprovalRequest, decision: ApprovalDecision) => void
   onDismissError: () => void
 }
 
 /**
- * Gateway approval prompts. Sits above the queue/composer so the user
- * can't miss it — the agent is genuinely blocked on the gateway side
- * until they choose. Four decisions match Hermes's wire format:
+ * DSH approval prompts. Sits above the queue/composer so the user
+ * can't miss it — the agent is genuinely blocked in the runtime
+ * until they choose. The runtime adapter maps these product decisions to its
+ * native response and remembered-policy capabilities:
  *
  *   - `once`    — allow this specific call only
  *   - `session` — allow for the rest of this chat session
@@ -158,7 +169,7 @@ export function ApprovalBanner({
               <div className="flex items-start gap-2">
                 <ApprovalCountdownBar
                   requestedAt={requestedAt}
-                  timeoutMs={HERMES_APPROVAL_GATEWAY_TIMEOUT_MS}
+                  timeoutMs={APPROVAL_DEFAULT_TIMEOUT_MS}
                 />
                 <div className="flex min-w-0 flex-1 items-start gap-1.5">
                   <p

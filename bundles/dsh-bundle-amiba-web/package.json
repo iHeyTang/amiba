@@ -1,0 +1,20 @@
+{
+  "name": "@amiba/dsh-bundle-amiba-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amiba Web client shell and HTTP message-channel composition for DSH.",
+  "type": "module",
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-messaging-channel-webhook": "workspace:*",
+    "@amiba/dsh-plugin-runtime-inventory": "workspace:*",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*"
+  }
+}

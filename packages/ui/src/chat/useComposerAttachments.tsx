@@ -7,7 +7,7 @@
  *
  *   - State: live `attachments[]`, `attachmentUploading`, `attachmentBusy`,
  *     `attachmentError`.
- *   - Mutations: `addFiles` (upload via backplane), `removeAttachment`
+ *   - Mutations: `addFiles` (stage via the host), `removeAttachment`
  *     (drop chip + best-effort delete on disk).
  *   - Pickers: `openFilePicker()` (native `showOpenFilePicker` with a
  *     hidden `<input type="file">` fallback) and a clipboard `handlePaste`
@@ -28,11 +28,11 @@ import {
   isAttachmentReadOk,
   readFileAsAttachment,
   type Attachment,
-} from "@amiba/core"
+} from "@amiba/app-runtime/core"
 import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
 import { cn } from "../primitives"
-import { shortId } from "@amiba/utils"
+import { shortId } from "@amiba/app-runtime/utils"
 import { Plus } from "lucide-react"
 import {
   useCallback,
@@ -60,7 +60,7 @@ export interface UseComposerAttachmentsOptions {
    * Resolve (or create) the session id the uploaded bytes should be
    * scoped under. Called once per `addFiles` invocation. Surfaces with
    * no active session (e.g. the home page) may return a synthetic id —
-   * the backplane just uses it as a folder name.
+   * the attachment adapter uses it as a scoped folder name.
    */
   getSessionId: () => Promise<string> | string
 }
@@ -132,7 +132,7 @@ export function useComposerAttachments(
   const attachmentUploading = attachments.some((a) => !!a.uploading)
 
   const hasReadyAttachment = useCallback(
-    () => attachments.some((a) => a.path && !a.uploading),
+    () => attachments.some((a) => a.attachmentId && !a.uploading),
     [attachments],
   )
 
@@ -164,7 +164,7 @@ export function useComposerAttachments(
               if (!prev.some((a) => a.uiId === uiId)) {
                 // User removed the chip mid-upload — delete the file
                 // that landed on disk anyway so we don't leak.
-                if (r.attachment.path) void deleteAttachmentFile(r.attachment)
+                if (r.attachment.attachmentId) void deleteAttachmentFile(r.attachment)
                 return prev
               }
               return prev.map((a) => (a.uiId === uiId ? r.attachment : a))
@@ -191,7 +191,7 @@ export function useComposerAttachments(
   const removeAttachment = useCallback((uiId: string) => {
     setAttachments((prev) => {
       const target = prev.find((a) => a.uiId === uiId)
-      if (target?.path) void deleteAttachmentFile(target)
+      if (target?.attachmentId) void deleteAttachmentFile(target)
       return prev.filter((a) => a.uiId !== uiId)
     })
   }, [])
@@ -199,7 +199,7 @@ export function useComposerAttachments(
   const clearAttachments = useCallback(() => {
     setAttachments((prev) => {
       for (const a of prev) {
-        if (a.path) void deleteAttachmentFile(a)
+        if (a.attachmentId) void deleteAttachmentFile(a)
       }
       return []
     })

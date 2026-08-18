@@ -1,91 +1,48 @@
 /**
- * Hermes Home page — cron-run reader + recent chats + composer hand-off.
+ * Amiba Home page — recent tasks + composer hand-off.
  *
- * Shared by extension's `chrome_url_overrides.newtab` page and desktop's
- * main BrowserWindow. Pure UI; chrome-specific behaviours (bookmark
- * shortcuts, favicon lookup) come in via the `HomeCapabilities` prop —
- * when absent, the corresponding section hides or falls back to a
- * generic icon.
+ * Used by the desktop main window and by the empty conversation state.
+ * Runtime behavior is supplied by the desktop platform and managed DSH
+ * adapters; the component owns presentation only.
  */
 
-import {
-  ChevronDown,
-  ChevronUp,
-  Globe,
-  Settings,
-  Settings2,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  getHermesProfiles,
+  getAgentPresets,
   normalizeAgentContext,
-  transcribeAudio,
   useSessions,
-  useVoicePrefs,
   useWallpaper,
   type WallpaperController,
   type AgentExecutionContext,
-} from "@amiba/core";
+} from "@amiba/app-runtime/core";
 import {
   Composer,
   ComposerNotice,
   queueChatPrompt,
   useComposerAttachments,
-  useVoiceRecorder,
   WallpaperBackdrop,
   WallpaperCredit,
   WorkspaceControl,
   type ComposerHandle,
 } from "../chat";
-import { getPlatform } from "@amiba/platform";
-import { shortId } from "@amiba/utils";
+import { getPlatform, type AgentModelSelection } from "@amiba/app-runtime/platform";
+import { shortId } from "@amiba/app-runtime/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
-import {
-  AmibaLogo,
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogTitle,
-  Input,
-} from "../primitives";
+import { AmibaLogo } from "../primitives";
 import { cn } from "../primitives";
-import type {
-  FaviconCapability,
-  HomeCapabilities,
-  HomeShortcut,
-  HomeShortcutsController,
-} from "./capabilities";
-
-const NO_SHORTCUTS_CONTROLLER: HomeShortcutsController = {
-  ready: true,
-  items: [],
-  error: null,
-  async add() {},
-  async remove() {},
-  async rename() {},
-  async reorder() {},
-  async refresh() {},
-};
-
-function useNoShortcuts(): HomeShortcutsController {
-  return NO_SHORTCUTS_CONTROLLER;
-}
 
 export interface HomeViewProps {
   /** Where to send the user when they hit "Open in tab" / submit chat. */
   onOpenChat: () => void;
   /** TabBar gear / top-bar gear → open Settings. */
   onOpenSettings: () => void;
-  /** Extension-only capabilities (bookmark shortcuts + favicon URL). */
-  capabilities?: HomeCapabilities;
   /**
    * Pixel reserve on the left edge of the top header so OS chrome
    * (macOS traffic lights when running inside Electron with a hidden
-   * title bar) doesn't visually collide with the Hermes logo + title.
+   * title bar) doesn't visually collide with the Amiba logo + title.
    * Default 0 — extension uses 0; desktop passes ~78 on mac.
    */
   headerLeftInset?: number;
@@ -125,7 +82,6 @@ export default function HomeView(props: HomeViewProps) {
 function Home({
   onOpenChat,
   onOpenSettings,
-  capabilities,
   headerLeftInset,
   headerClassName,
   hideInternalHeader,
@@ -133,14 +89,9 @@ function Home({
 }: HomeViewProps) {
   const { t, language } = useT();
   const sessions = useSessions();
-  // Shortcuts hook is capability-provided — stable across renders. Falls
-  // back to a no-op so the rules-of-hooks order stays consistent.
-  const useShortcutsHook =
-    capabilities?.shortcuts?.useController ?? useNoShortcuts;
-  const shortcuts = useShortcutsHook();
   const wallpaper = useWallpaper();
   // Composer attachments — same hook the main panel and Quick-Ask use.
-  // The session id is just a folder name for the backplane upload path;
+  // The session id scopes the host attachment staging directory;
   // we use a stable HomeView-scoped one so re-uploads land in the same
   // bucket and clean up cleanly on chat hand-off.
   const homeUploadSessionRef = useRef<string>(shortId("home"));
@@ -166,6 +117,8 @@ function Home({
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
+  const [draftModelSelection, setDraftModelSelection] =
+    useState<AgentModelSelection>();
   const [busy, setBusy] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState<
@@ -175,17 +128,6 @@ function Home({
   const inputRef = useRef<ComposerHandle | null>(null);
   const canChooseWorkspace = Boolean(getPlatform().workspaces?.chooseDirectory);
 
-  // Voice input — same pipeline as the chat composer. The recorder hook
-  // owns the MediaRecorder lifecycle; once the user stops we POST the
-  // blob to /hermes/stt and append the transcript to ``input``. ``enabled``
-  // gates the button on/off so the prefs page can hide voice entirely.
-  const voicePrefs = useVoicePrefs();
-  const voiceRecorder = useVoiceRecorder({
-    deviceId: voicePrefs.deviceId || undefined,
-  });
-  const [voiceTranscribing, setVoiceTranscribing] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-
   // On mount: focus the composer textarea.
   useEffect(() => {
     inputRef.current?.focus();
@@ -193,7 +135,7 @@ function Home({
 
   useEffect(() => {
     let alive = true;
-    void getHermesProfiles().then((result) => {
+    void getAgentPresets().then((result) => {
       if (alive && result.ok) {
         setAgent({ profileId: result.active || "default" });
       }
@@ -226,9 +168,7 @@ function Home({
     };
   }, []);
 
-  // Navigate to the chat view. Extension does an in-page redirect to
-  // `tabs/chat.html`; desktop just switches a state variable in App.
-  // Either way, the caller supplies `onOpenChat`.
+  // Navigate to the desktop chat view through the caller-provided handler.
   function goToChatTab() {
     onOpenChat();
   }
@@ -253,7 +193,7 @@ function Home({
   async function submitToChat(text: string) {
     const trimmed = text.trim();
     const readyAttachments = att.attachments.filter(
-      (a) => a.path && !a.uploading,
+      (a) => a.attachmentId && !a.uploading,
     );
     if (att.attachmentUploading) return;
     if (!trimmed && readyAttachments.length === 0) return;
@@ -288,6 +228,7 @@ function Home({
       await queueChatPrompt({
         text: trimmed || undefined,
         agent,
+        modelSelection: draftModelSelection,
         // The default root is resolved again by the receiving chat surface.
         // Only carry an explicit override through the pending-prompt handoff.
         workspacePath:
@@ -297,18 +238,20 @@ function Home({
         attachments:
           readyAttachments.length > 0
             ? readyAttachments
-                // `readyAttachments` is already filtered on `a.path` above
-                // (`att.attachments.filter((a) => a.path && !a.uploading)`),
-                // so each entry's path is a string at runtime. The filter
+                // `readyAttachments` is already filtered on `attachmentId`
+                // above, so each entry's id is a string at runtime. The filter
                 // doesn't narrow the type, so re-check here for TS.
-                .filter((a): a is typeof a & { path: string } => !!a.path)
+                .filter(
+                  (a): a is typeof a & { attachmentId: string } =>
+                    !!a.attachmentId,
+                )
                 .map((a) => ({
                   uiId: a.uiId,
                   name: a.name,
                   mime: a.mime,
                   size: a.size,
                   kind: a.kind,
-                  path: a.path,
+                  attachmentId: a.attachmentId,
                   thumbDataUrl: a.thumbDataUrl,
                   textPreview: a.textPreview,
                 }))
@@ -318,56 +261,13 @@ function Home({
       // deleting the files (the chat surface now owns them). Mint a
       // new staging session for the next round.
       att.setAttachments([]);
+      setDraftModelSelection(undefined);
       homeUploadSessionRef.current = shortId("home");
       goToChatTab();
     } finally {
       setBusy(false);
     }
   }
-
-  const handleVoiceToggle = useCallback(() => {
-    if (voiceTranscribing) return;
-    setVoiceError(null);
-    if (!voiceRecorder.recording) {
-      void voiceRecorder.start().catch((e) => {
-        const message = String((e as Error)?.message || e);
-        setVoiceError(
-          message === "Permission denied"
-            ? t("composer.voice.permissionDenied")
-            : message,
-        );
-      });
-      return;
-    }
-    setVoiceTranscribing(true);
-    void (async () => {
-      try {
-        const blob = await voiceRecorder.stop();
-        if (!blob || blob.size === 0) return;
-        const result = await transcribeAudio(blob);
-        if (result.ok !== true) {
-          // ``in`` narrows under both strict and non-strict tsconfigs
-          // (the workspace ships both via different apps).
-          const message = "error" in result ? result.error : "unknown";
-          setVoiceError(message);
-          return;
-        }
-        const transcript = result.text.trim();
-        if (!transcript) return;
-        setInput((prev) => {
-          if (!prev) return transcript;
-          // Avoid double-space when the buffer already ends in whitespace
-          // (mid-edit append from a paused dictation).
-          return /\s$/.test(prev) ? prev + transcript : prev + " " + transcript;
-        });
-        inputRef.current?.focus();
-      } catch (e) {
-        setVoiceError(String((e as Error)?.message || e));
-      } finally {
-        setVoiceTranscribing(false);
-      }
-    })();
-  }, [voiceRecorder, voiceTranscribing, t]);
 
   const canSend =
     (input.trim().length > 0 || att.hasReadyAttachment()) &&
@@ -433,9 +333,9 @@ function Home({
               theme. */}
           {panelMode ? (
             // Panel mode (embedded in the chat surface's empty state):
-            // a centred Hermes mark over a single-line description.
+            // a centred Amiba mark over a single-line description.
             // Matches the look the ChatSurface fallback used to
-            // render, so the home composer reads as "Hermes here, type
+            // render, so the home composer reads as "Amiba here, type
             // below" instead of an out-of-context wordmark + tagline.
             <div className="flex flex-col items-center gap-2 text-center">
               <AmibaLogo size={56} />
@@ -481,18 +381,12 @@ function Home({
             maxTextareaPx={280}
             placeholder={{ typewriter: placeholderExamples }}
             attachments={att}
-            microphone={
-              voicePrefs.enabled
-                ? {
-                    recording: voiceRecorder.recording,
-                    transcribing: voiceTranscribing,
-                    onToggle: handleVoiceToggle,
-                  }
-                : undefined
-            }
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
-            modelPicker
+            modelPicker={{
+              draftSelection: draftModelSelection,
+              onDraftSelectionChange: setDraftModelSelection,
+            }}
             approvalModePicker
             agentPicker={{
               value: agent,
@@ -522,575 +416,21 @@ function Home({
               ) : undefined
             }
             floatingNotice={
-              voiceError || workspaceError ? (
+              workspaceError ? (
                 <ComposerNotice
-                  detail={voiceError || workspaceError || ""}
-                  onDismiss={() => {
-                    if (voiceError) setVoiceError(null);
-                    else setWorkspaceError(null);
-                  }}
-                  title={
-                    voiceError
-                      ? voiceError.includes("No STT provider available")
-                        ? t("composer.voice.noProvider")
-                        : t("composer.voice.transcribeFailedTitle")
-                      : t("workspace.errorTitle")
-                  }
+                  detail={workspaceError}
+                  onDismiss={() => setWorkspaceError(null)}
+                  title={t("workspace.errorTitle")}
                 />
               ) : undefined
             }
           />
         </section>
-
-        {/*
-          Shortcuts strip is extension-only (backed by chrome.bookmarks).
-          Render only when the capability is supplied — desktop omits, so
-          the empty-state "add your most-visited sites" hint never appears.
-        */}
-        {capabilities?.shortcuts && (
-          <ShortcutsStrip
-            controller={shortcuts}
-            ambientMode={wallpaper.enabled ? wallpaper.mode : null}
-            faviconCapability={capabilities?.favicon}
-          />
-        )}
       </main>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Home shortcuts — quick-launch strip between the composer and the dashboard.
-//
-// Cards are bookmarks under a dedicated folder; see
-// `lib/home-shortcuts/use-home-shortcuts.ts`. The strip exposes the bare
-// minimum of newtab-native interactions (add, remove, drag-reorder); deeper
-// edits (rename, move out of folder, etc.) happen in Chrome's bookmark
-// manager and stream back here via bookmark events.
-// ---------------------------------------------------------------------------
-
-function faviconUrl(
-  url: string,
-  size = 32,
-  bust?: number,
-  capability?: FaviconCapability,
-): string {
-  // Capability-provided. Extension binds to Chrome's `_favicon/` service;
-  // desktop omits and we fall back to "" so the UI renders a generic
-  // globe icon. `bust` flips the query so re-renders that should re-check
-  // (newtab mount, tab regains visibility) actually re-hit the favicon
-  // service instead of being pinned to the renderer's HTTP cache.
-  if (!capability) return "";
-  const base = capability.resolve(url, size);
-  if (!base) return "";
-  return bust ? `${base}&v=${bust}` : base;
-}
-
-function normalizeAddUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
-    ? trimmed
-    : `https://${trimmed}`;
-  try {
-    // Throws on truly malformed input; otherwise normalises (case, idn, …).
-    const u = new URL(withScheme);
-    return u.toString();
-  } catch {
-    return null;
-  }
-}
-
-function hostFromUrl(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-function ShortcutsStrip({
-  controller,
-  ambientMode,
-  faviconCapability,
-}: {
-  controller: HomeShortcutsController;
-  ambientMode: "light" | "dark" | null;
-  faviconCapability?: FaviconCapability;
-}) {
-  const { t } = useT();
-  const { ready, items } = controller;
-  const [managerOpen, setManagerOpen] = useState(false);
-  // Cache-buster passed to `faviconUrl`. Reseeded on mount AND every time
-  // the tab becomes visible again, so cards re-check Chrome's favicon
-  // service after a click-through that populated the cache. Without this
-  // the renderer's HTTP cache pins whatever response landed first
-  // (usually Chrome's default globe) for the whole tab session.
-  const [faviconBust, setFaviconBust] = useState<number>(() => Date.now());
-  useEffect(() => {
-    function onVisibility() {
-      if (document.visibilityState === "visible") {
-        setFaviconBust(Date.now());
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, []);
-
-  // Hide the section entirely while we're still resolving the folder on
-  // first paint: the dashboard below is what users see first, and an
-  // empty-but-loading strip flashing in is more visual noise than help.
-  // Once `ready` is true, render — empty state included.
-  if (!ready) return null;
-
-  // Pill text colour follows the wallpaper, not the theme — see the
-  // `ambientMode` prop doc above.
-  const ambientTextClass =
-    ambientMode === "light"
-      ? "text-neutral-900"
-      : ambientMode === "dark"
-        ? "text-white"
-        : "text-foreground";
-
-  function openShortcut(url: string) {
-    try {
-      window.location.assign(url);
-    } catch {
-      // Fallback — open in a new tab if the current navigation is blocked.
-      window.open(url, "_self");
-    }
-  }
-
-  return (
-    <section className="mx-auto w-full max-w-4xl shrink-0">
-      <ul className="flex flex-wrap items-center justify-center gap-2.5">
-        {items.map((s) => (
-          <li key={s.id}>
-            <ShortcutCard
-              item={s}
-              faviconBust={faviconBust}
-              onOpen={() => openShortcut(s.url)}
-              ambientTextClass={ambientTextClass}
-              faviconCapability={faviconCapability}
-            />
-          </li>
-        ))}
-        <li>
-          <button
-            type="button"
-            onClick={() => setManagerOpen(true)}
-            aria-label={t("newtab.shortcuts.manage.tooltip")}
-            title={t("newtab.shortcuts.manage.tooltip")}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-full px-3",
-              // Match the shortcut pills exactly so the row reads as
-              // one continuous control surface; secondary status is
-              // signalled by the icon + text choice, not by the
-              // chrome being weaker.
-              "bg-gradient-to-b from-card/28 to-card/12",
-              "backdrop-blur-2xl backdrop-saturate-110",
-              "backdrop-brightness-115 dark:backdrop-brightness-85",
-              "shadow-[inset_0_1px_0_0_rgb(255_255_255_/_0.2),0_1px_2px_0_rgb(0_0_0_/_0.06),0_4px_12px_-2px_rgb(0_0_0_/_0.1)]",
-              "dark:shadow-[inset_0_1px_0_0_rgb(255_255_255_/_0.08),0_1px_2px_0_rgb(0_0_0_/_0.3),0_4px_12px_-2px_rgb(0_0_0_/_0.4)]",
-              ambientTextClass,
-              "text-xs transition-all duration-200",
-              "hover:from-card/45 hover:to-card/25",
-            )}
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            <span>{t("newtab.shortcuts.manage")}</span>
-          </button>
-        </li>
-      </ul>
-
-      {items.length === 0 && (
-        <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-          {t("newtab.shortcuts.empty")}
-        </p>
-      )}
-
-      {managerOpen && (
-        <ShortcutsManager
-          controller={controller}
-          faviconBust={faviconBust}
-          onClose={() => setManagerOpen(false)}
-          faviconCapability={faviconCapability}
-        />
-      )}
-    </section>
-  );
-}
-
-function ShortcutCard({
-  item,
-  faviconBust,
-  onOpen,
-  ambientTextClass,
-  faviconCapability,
-}: {
-  item: HomeShortcut;
-  faviconBust: number;
-  onOpen: () => void;
-  ambientTextClass: string;
-  faviconCapability?: FaviconCapability;
-}) {
-  // Tie the "icon failed" state to the *exact* src that failed, not a
-  // sticky boolean: when `faviconBust` (or item.url) changes, the src
-  // changes, `failed` flips back to false, and the next render tries
-  // the favicon again.
-  const src = faviconUrl(item.url, 32, faviconBust, faviconCapability);
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const failed = failedSrc === src;
-  // Display fallback: hostname rather than the raw URL when the stored
-  // title is the auto-placeholder we wrote before scraping `<title>`.
-  const trimmedTitle = item.title?.trim() || "";
-  const titleLooksAuto =
-    !trimmedTitle ||
-    trimmedTitle === item.url ||
-    trimmedTitle === item.url.replace(/\/$/, "");
-  const label = titleLooksAuto ? hostFromUrl(item.url) : trimmedTitle;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={`${label}\n${item.url}`}
-      className={cn(
-        "inline-flex h-8 max-w-[220px] items-center gap-1.5 rounded-full pl-1 pr-3",
-        "bg-gradient-to-b from-card/28 to-card/12",
-        "backdrop-blur-2xl backdrop-saturate-110",
-        "backdrop-brightness-115 dark:backdrop-brightness-85",
-        // Three-layer shadow recipe = real glass:
-        //   1. `inset 0 1px 0 rgba(255,255,255,X)` — a 1px-thick white
-        //      highlight along the inner top edge that follows the
-        //      pill's rounded curvature (the "wet-glass" catch-light).
-        //   2. `0 1px 2px black` — tight outline shadow that defines
-        //      the pill against the wallpaper without a hard border.
-        //   3. `0 4px 12px -2px black` — diffuse drop shadow that
-        //      lifts the pill off the surface.
-        // Dark mode flips the highlight down (white is less visible
-        // anyway) and pushes the dark shadows harder for contrast.
-        "shadow-[inset_0_1px_0_0_rgb(255_255_255_/_0.2),0_1px_2px_0_rgb(0_0_0_/_0.06),0_4px_12px_-2px_rgb(0_0_0_/_0.1)]",
-        "dark:shadow-[inset_0_1px_0_0_rgb(255_255_255_/_0.08),0_1px_2px_0_rgb(0_0_0_/_0.3),0_4px_12px_-2px_rgb(0_0_0_/_0.4)]",
-        // `transition-all` (not `transition-[background-color]`) so the
-        // gradient stops Tailwind sets via CSS variables actually
-        // animate on hover — `background-image` is not in the default
-        // `transition` property list, which is why the previous hover
-        // change appeared instant.
-        ambientTextClass,
-        "text-xs transition-all duration-200",
-        "hover:from-card/45 hover:to-card/25",
-      )}
-    >
-      {/* Theme-matched favicon "tile" — pure white in light mode,
-          near-black in dark mode. Mirrors how browser tabs render
-          favicons: a flat surface the icon sits on with predictable
-          contrast, decoupled from whatever colour the pill's glass
-          happens to reveal underneath. */}
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white dark:bg-neutral-900">
-        {failed ? (
-          <Globe className="h-3.5 w-3.5 text-neutral-500" />
-        ) : (
-          <img
-            src={src}
-            alt=""
-            width={16}
-            height={16}
-            onError={() => setFailedSrc(src)}
-            className="h-4 w-4"
-          />
-        )}
-      </span>
-      <span className="truncate">{label}</span>
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Shortcuts manager — modal dialog. Centralises every mutation (add, rename,
-// remove, reorder) so the homepage strip itself can stay strictly read-only.
-// Closes on Esc, backdrop click, or the explicit ×.
-// ---------------------------------------------------------------------------
-
-function ShortcutsManager({
-  controller,
-  faviconBust,
-  onClose,
-  faviconCapability,
-}: {
-  controller: HomeShortcutsController;
-  faviconBust: number;
-  onClose: () => void;
-  faviconCapability?: FaviconCapability;
-}) {
-  const { t } = useT();
-  const { items, add, remove, rename, reorder } = controller;
-
-  return (
-    <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent
-        aria-label={t("newtab.shortcuts.manage.title")}
-        className="max-h-[calc(100vh-6rem)] gap-0 overflow-y-auto p-0"
-        hideDefaultClose
-        size="md"
-      >
-        <DialogTitle className="sr-only">
-          {t("newtab.shortcuts.manage.title")}
-        </DialogTitle>
-        <header className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-          <h2 className="text-sm font-semibold tracking-tight">
-            {t("newtab.shortcuts.manage.title")}
-          </h2>
-          <DialogClose asChild>
-            <button
-              type="button"
-              aria-label={t("newtab.shortcuts.manage.close")}
-              title={t("newtab.shortcuts.manage.close")}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </DialogClose>
-        </header>
-
-        <div className="px-4 pb-4 pt-3">
-          <ManagerAddRow onAdd={add} />
-
-          {items.length === 0 ? (
-            <p className="mt-4 text-center text-xs text-muted-foreground">
-              {t("newtab.shortcuts.manage.listEmpty")}
-            </p>
-          ) : (
-            <ul className="mt-3 divide-y divide-border/40 rounded-lg border border-border/60">
-              {items.map((s, i) => (
-                <ManagerRow
-                  key={s.id}
-                  item={s}
-                  faviconBust={faviconBust}
-                  isFirst={i === 0}
-                  isLast={i === items.length - 1}
-                  onRename={(title) => rename(s.id, title)}
-                  onRemove={() => remove(s.id)}
-                  onMoveUp={() => reorder(i, i - 1)}
-                  onMoveDown={() => reorder(i, i + 1)}
-                  faviconCapability={faviconCapability}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ManagerAddRow({
-  onAdd,
-}: {
-  onAdd: (input: { url: string; title: string }) => Promise<void>;
-}) {
-  const { t } = useT();
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit() {
-    const normalized = normalizeAddUrl(url);
-    if (!normalized) {
-      setErr(t("newtab.shortcuts.add.invalidUrl"));
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await onAdd({ url: normalized, title: title.trim() });
-      setUrl("");
-      setTitle("");
-      setErr(null);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {/* Column order mirrors the list rows below: title (primary) on the
-          left, URL (secondary) on the right. Mixing the two orders would
-          make users re-read each row top-to-bottom. */}
-      <div className="flex items-stretch gap-1.5">
-        <Input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder={t("newtab.shortcuts.add.dialog.titlePlaceholder")}
-          className="h-8 flex-1 px-2.5 text-xs"
-        />
-        <Input
-          type="url"
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            if (err) setErr(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder={t("newtab.shortcuts.add.dialog.urlPlaceholder")}
-          className="h-8 flex-[2] px-2.5 text-xs"
-        />
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={submitting || url.trim().length === 0}
-          className={cn(
-            "shrink-0 rounded-md px-3 text-xs font-medium transition-colors",
-            "bg-foreground text-background hover:bg-foreground/85",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          {t("newtab.shortcuts.add.dialog.confirm")}
-        </button>
-      </div>
-      {err && <p className="text-[11px] text-destructive">{err}</p>}
-    </div>
-  );
-}
-
-function ManagerRow({
-  item,
-  faviconBust,
-  isFirst,
-  isLast,
-  onRename,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
-  faviconCapability,
-}: {
-  item: HomeShortcut;
-  faviconBust: number;
-  isFirst: boolean;
-  isLast: boolean;
-  onRename: (title: string) => Promise<void> | void;
-  onRemove: () => Promise<void> | void;
-  onMoveUp: () => Promise<void> | void;
-  onMoveDown: () => Promise<void> | void;
-  faviconCapability?: FaviconCapability;
-}) {
-  const { t } = useT();
-  const src = faviconUrl(item.url, 32, faviconBust, faviconCapability);
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const failed = failedSrc === src;
-  const trimmedTitle = item.title?.trim() || "";
-  const titleLooksAuto =
-    !trimmedTitle ||
-    trimmedTitle === item.url ||
-    trimmedTitle === item.url.replace(/\/$/, "");
-  const initialLabel = titleLooksAuto ? hostFromUrl(item.url) : trimmedTitle;
-  // Local input state so the user can type without the bookmark
-  // round-tripping on every keystroke. Commit on blur or Enter.
-  const [draft, setDraft] = useState(initialLabel);
-  // If the upstream item title changes (e.g. agent renamed it from
-  // elsewhere, or scrape finished), pick up the new value — but only
-  // when the input isn't currently dirty (user is typing).
-  useEffect(() => {
-    setDraft(initialLabel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.id, item.title]);
-
-  function commit() {
-    const next = draft.trim();
-    if (!next || next === initialLabel) return;
-    void onRename(next);
-  }
-
-  return (
-    <li className="flex items-center gap-2 px-2.5 py-2">
-      {/* Same tile colour as the homepage pills — keeps the modal's
-          row visually consistent with what the user sees outside it. */}
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white dark:bg-neutral-900">
-        {failed ? (
-          <Globe className="h-3.5 w-3.5 text-neutral-500" />
-        ) : (
-          <img
-            src={src}
-            alt=""
-            width={16}
-            height={16}
-            onError={() => setFailedSrc(src)}
-            className="h-4 w-4"
-          />
-        )}
-      </span>
-      <Input
-        type="text"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.currentTarget as HTMLInputElement).blur();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            setDraft(initialLabel);
-            (e.currentTarget as HTMLInputElement).blur();
-          }
-        }}
-        aria-label={t("newtab.shortcuts.rename")}
-        className="h-auto min-w-0 flex-1 rounded-md border-transparent bg-transparent px-1.5 py-1 text-xs text-foreground hover:border-border focus-visible:border-foreground/30 focus-visible:bg-background focus-visible:ring-0"
-      />
-      <span
-        className="hidden truncate text-[10px] text-muted-foreground/70 sm:inline-block sm:max-w-[140px]"
-        title={item.url}
-      >
-        {hostFromUrl(item.url)}
-      </span>
-      <div className="flex shrink-0 items-center">
-        <button
-          type="button"
-          onClick={() => void onMoveUp()}
-          disabled={isFirst}
-          aria-label={t("newtab.shortcuts.manage.moveUp")}
-          title={t("newtab.shortcuts.manage.moveUp")}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          <ChevronUp className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void onMoveDown()}
-          disabled={isLast}
-          aria-label={t("newtab.shortcuts.manage.moveDown")}
-          title={t("newtab.shortcuts.manage.moveDown")}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void onRemove()}
-          aria-label={t("newtab.shortcuts.remove")}
-          title={t("newtab.shortcuts.remove")}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </li>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Top bar
 // ---------------------------------------------------------------------------
 
 function TopBar({

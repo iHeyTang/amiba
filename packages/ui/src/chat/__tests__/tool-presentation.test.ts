@@ -43,7 +43,7 @@ describe("file tool targets", () => {
 });
 
 describe("file search presentation", () => {
-  it("parses file results with Hermes' pagination hint suffix", () => {
+  it("parses file results with a pagination hint suffix", () => {
     const result = parseFileSearchResult(
       '{"files":["src/App.tsx","src/lib/api.ts"],"total_count":8,"truncated":true}\n\n[Hint: Results truncated.]',
     );

@@ -1,5 +1,3 @@
-import type { HermesCatalogModelEntry } from "@amiba/core";
-
 /**
  * Resolve the human-facing name for a model.
  *
@@ -18,15 +16,4 @@ export function resolveModelDisplayName(
     return name;
   }
   return normalizedId;
-}
-
-/** Provider/Hermes names win; supplemental catalog names only fill gaps. */
-export function resolveCatalogModelDisplayName(
-  entry: Pick<HermesCatalogModelEntry, "description" | "id" | "supplemental">,
-): string {
-  return resolveModelDisplayName(
-    entry.id,
-    entry.description,
-    entry.supplemental?.description,
-  );
 }

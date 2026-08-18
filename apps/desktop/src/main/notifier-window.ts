@@ -259,7 +259,7 @@ export function showDemoNotifier(
       command: "rm -rf demo",
       message:
         "This is a demo approval card. Allow/Deny do nothing here — " +
-        "real cards POST a decision to the gateway.",
+        "real cards send a decision to DSH.",
       timestamp: stamp,
     });
   }

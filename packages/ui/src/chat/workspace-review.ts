@@ -1,4 +1,4 @@
-import type { HermesToolProgress } from "@amiba/core";
+import type { ToolProgress } from "@amiba/app-runtime/core";
 
 export interface WorkspaceReviewEntry {
   toolCallId: string;
@@ -75,7 +75,7 @@ function firstString(
   return "";
 }
 
-export function workspaceFileTargets(event: HermesToolProgress): string[] {
+export function workspaceFileTargets(event: ToolProgress): string[] {
   const args = event.args ?? {};
   const result = recordOf(decodeResult(event.result));
   const targets: string[] = [];
@@ -96,10 +96,10 @@ export function workspaceFileTargets(event: HermesToolProgress): string[] {
 }
 
 export function workspaceReviewResourceFromEvents(
-  events: HermesToolProgress[],
+  events: ToolProgress[],
   reviewId: string,
 ): WorkspaceReviewResource | null {
-  const latestByTool = new Map<string, HermesToolProgress>();
+  const latestByTool = new Map<string, ToolProgress>();
   for (const event of events) latestByTool.set(event.toolCallId, event);
 
   const entries = [...latestByTool.values()]
@@ -137,7 +137,7 @@ function diffLikeText(value: unknown): string {
   return "";
 }
 
-function workspaceMutationDiff(event: HermesToolProgress): string {
+function workspaceMutationDiff(event: ToolProgress): string {
   const direct = diffLikeText(event.inlineDiff);
   if (direct) return direct;
   if (event.tool !== "patch") return "";

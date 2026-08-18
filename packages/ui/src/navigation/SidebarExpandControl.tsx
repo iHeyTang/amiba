@@ -1,6 +1,6 @@
 import { PanelLeftOpen } from "lucide-react";
 
-import { useT } from "@amiba/i18n";
+import { usePluginT as useT } from "@amiba/i18n/plugin";
 import { cn } from "../primitives";
 
 export interface SidebarExpandControlProps {

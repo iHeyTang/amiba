@@ -66,31 +66,6 @@ function RecoveryProbe() {
   );
 }
 
-function KanbanProbe() {
-  const pane = useWorkspacePane();
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          pane.observeToolEvent({
-            tool: "kanban_create",
-            toolCallId: "kanban-1",
-            status: "completed",
-            result: { ok: true, task_id: "task-1" },
-          })
-        }
-      >
-        observe durable task
-      </button>
-      <output aria-label="workspace open">{String(pane.open)}</output>
-      <output aria-label="execution requests">
-        {pane.collaborationRequestVersion}
-      </output>
-    </>
-  );
-}
-
 function ReviewProbe() {
   const pane = useWorkspacePane();
   return (
@@ -243,25 +218,6 @@ describe("WorkspacePane responsive behavior", () => {
     expect(screen.getByLabelText("recovery points")).toHaveTextContent("1");
     expect(screen.getByLabelText("workspace open")).toHaveTextContent("false");
     expect(screen.getByLabelText("workspace tabs")).toHaveTextContent("0");
-  });
-
-  it("opens the linked execution view when the primary agent creates a durable task", async () => {
-    const capability = { files: {} } as WorkspaceInspectorCapability;
-    render(
-      <WorkspacePaneProvider capability={capability} sessionId="session-1">
-        <KanbanProbe />
-      </WorkspacePaneProvider>,
-    );
-
-    expect(screen.getByLabelText("workspace open")).toHaveTextContent("false");
-    expect(screen.getByLabelText("execution requests")).toHaveTextContent("0");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "observe durable task" }),
-    );
-
-    expect(screen.getByLabelText("workspace open")).toHaveTextContent("true");
-    expect(screen.getByLabelText("execution requests")).toHaveTextContent("1");
   });
 
   it("does not expose review, outputs, or terminal as fixed workbench states", async () => {

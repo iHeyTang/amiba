@@ -1,163 +1,75 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const core = vi.hoisted(() => ({
-  approveHermesPairing: vi.fn(),
-  createHermesWebhook: vi.fn(),
-  deleteHermesWebhook: vi.fn(),
-  getHermesMessagingPlatforms: vi.fn(),
-  getHermesPairings: vi.fn(),
-  getHermesWebhooks: vi.fn(),
-  restartHermesGateway: vi.fn(),
-  revokeHermesPairing: vi.fn(),
-  saveHermesMessagingPlatform: vi.fn(),
-  setHermesWebhookEnabled: vi.fn(),
-  testHermesMessagingPlatform: vi.fn(),
-  updateHermesWebhook: vi.fn(),
-}));
+import { DshSettingsMessaging } from "../DshSettingsMessaging";
 
-vi.mock("@amiba/core", () => core);
+const list = vi.fn();
+const listSessions = vi.fn();
+const adapter = {
+  list,
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+  rotateSecret: vi.fn(),
+};
 
-import { SettingsMessaging } from "../SettingsMessaging";
-
-const platforms = [
-  {
-    id: "telegram",
-    name: "Telegram",
-    description: "Chat through Telegram.",
-    docs_url: "https://example.com/telegram",
-    enabled: false,
-    configured: false,
-    gateway_running: true,
-    state: "not_configured",
-    fields: [
-      {
-        key: "TELEGRAM_BOT_TOKEN",
-        required: true,
-        configured: false,
-        label: "Bot token",
-        description: "Token from BotFather",
-        secret: true,
-        advanced: false,
-      },
-    ],
-  },
-  {
-    id: "discord",
-    name: "Discord",
-    description: "Chat through Discord.",
-    enabled: true,
-    configured: true,
-    gateway_running: true,
-    state: "connected",
-    fields: [],
-  },
-];
-
-describe("SettingsMessaging channel setup", () => {
+describe("DshSettingsMessaging", () => {
   beforeEach(() => {
-    Object.values(core).forEach((mock) => mock.mockReset());
-    core.getHermesMessagingPlatforms.mockResolvedValue({
-      ok: true,
-      gateway_running: true,
-      gateway_state: "running",
-      platforms,
-    });
-    core.saveHermesMessagingPlatform.mockResolvedValue({ ok: true });
-    core.restartHermesGateway.mockResolvedValue({ ok: true });
-    core.testHermesMessagingPlatform.mockResolvedValue({
-      ok: true,
-      state: "connected",
-    });
-  });
-
-  it("renders live channel status in user-facing language", async () => {
-    render(<SettingsMessaging profileId="default" />);
-
-    expect(await screen.findByText("1 of 2 channels connected")).toBeVisible();
-    expect(screen.getByText("Messaging service is running")).toBeVisible();
-    expect(screen.getByText("Connected")).toBeVisible();
-    expect(screen.getByText("Needs setup")).toBeVisible();
-    expect(screen.getByText("Configured")).toBeVisible();
-    expect(screen.getByText("Other channels")).toBeVisible();
-    expect(screen.getByRole("img", { name: "Discord logo" })).toBeVisible();
-    expect(screen.getByRole("img", { name: "Telegram logo" })).toBeVisible();
-
-    const discord = screen.getByText("Discord");
-    const telegram = screen.getByText("Telegram");
-    expect(
-      discord.compareDocumentPosition(telegram) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(screen.queryByText("TELEGRAM_BOT_TOKEN")).not.toBeInTheDocument();
-    expect(core.getHermesMessagingPlatforms).toHaveBeenCalledWith("default");
-  });
-
-  it("keeps a previously configured channel pinned when it is disabled", async () => {
-    core.getHermesMessagingPlatforms.mockResolvedValueOnce({
-      ok: true,
-      gateway_running: true,
-      gateway_state: "running",
-      platforms: [
-        ...platforms,
+    list.mockResolvedValue({
+      providers: [
         {
-          id: "feishu",
-          name: "Feishu / Lark",
-          description: "Use Amiba inside Feishu or Lark.",
-          enabled: false,
-          configured: true,
-          gateway_running: true,
-          state: "disabled",
-          fields: [],
+          id: "webhook",
+          name: "Webhook",
+          description: "Authenticated JSON transport",
+          supportsInbound: true,
+          supportsOutbound: true,
         },
       ],
+      channels: [
+        {
+          id: "channel-1",
+          provider: "webhook",
+          name: "Operations",
+          sessionId: "session-1",
+          enabled: true,
+          allowedSenders: [],
+          createdAt: "2026-08-15T00:00:00.000Z",
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+      inboundEndpoint: "http://127.0.0.1:2026/api/amiba/message-inbound",
     });
-
-    render(<SettingsMessaging profileId="default" />);
-
-    const configuredSection = (await screen.findByText("Configured")).closest(
-      "section",
-    );
-    const otherSection = screen.getByText("Other channels").closest("section");
-    expect(configuredSection).not.toBeNull();
-    expect(otherSection).not.toBeNull();
-    expect(within(configuredSection!).getByText("Discord")).toBeVisible();
-    expect(within(configuredSection!).getByText("Feishu / Lark")).toBeVisible();
-    expect(within(otherSection!).queryByText("Feishu / Lark")).toBeNull();
+    listSessions.mockResolvedValue([
+      {
+        sessionId: "session-1",
+        title: "Operations conversation",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ]);
   });
 
-  it("guides setup, saves the real credential, and restarts Gateway", async () => {
-    const user = userEvent.setup();
-    render(<SettingsMessaging profileId="default" />);
-
-    await user.click(await screen.findByRole("button", { name: "Set up" }));
-    expect(screen.getByText("Prepare the channel")).toBeVisible();
-    expect(screen.getByText("Add connection details")).toBeVisible();
-    expect(screen.getByText("Connect and verify")).toBeVisible();
-
-    const connect = screen.getByRole("button", { name: "Save and connect" });
-    expect(connect).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/Bot token/), "real-token");
-    expect(connect).toBeEnabled();
-    await user.click(connect);
-
-    await waitFor(() => {
-      expect(core.saveHermesMessagingPlatform).toHaveBeenCalledWith(
-        "telegram",
-        {
-          enabled: true,
-          env: { TELEGRAM_BOT_TOKEN: "real-token" },
-        },
-        "default",
-      );
-    });
-    expect(core.restartHermesGateway).toHaveBeenCalledOnce();
+  it("shows providers and routed channels when an older snapshot lacks delivery counters", async () => {
+    render(
+      <DshSettingsMessaging
+        adapter={adapter}
+        sessionsAdapter={{ list: listSessions }}
+      />,
+    );
+    expect(await screen.findByText("Operations")).toBeVisible();
+    expect(screen.getByText("Configured")).toBeVisible();
+    expect(screen.getByText("Available channels")).toBeVisible();
     expect(
-      await screen.findByText(
-        "Telegram was saved. Connection status will update automatically.",
-      ),
+      screen.getByRole("searchbox", { name: "Search channels" }),
     ).toBeVisible();
+    expect(screen.getAllByText("Webhook")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Set up Webhook" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add channel" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/message-inbound/)).toBeVisible();
+    expect(list).toHaveBeenCalled();
   });
 });

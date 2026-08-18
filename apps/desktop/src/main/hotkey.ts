@@ -1,7 +1,9 @@
 import path from "node:path"
+import { readFile, unlink } from "node:fs/promises"
 import { globalShortcut, systemPreferences } from "electron"
 
-import { deliverPrompt } from "./external-inbox"
+import { dshAttachments } from "./dsh-attachments"
+import { deliverStagedPrompt } from "./external-inbox"
 import { startScreenCapture } from "./screen-capture"
 import { mainStore, type StorageChangeMap } from "./storage"
 
@@ -57,9 +59,8 @@ const DOUBLE_TAP_MAX_MS = 400
  * platform. We keep the chord identical to what `Period` would mean
  * (⌘⇧.) — only the spelling changed.
  *
- * On non-mac platforms the shortcut still registers, but
- * `startScreenCapture` is a no-op there for now (Windows stub) so the
- * binding is effectively dormant.
+ * The capture implementation uses Electron's cross-platform desktop source
+ * and overlay APIs; macOS only adds its Space/fullscreen window-level tuning.
  */
 const SNIP_ACCELERATOR = "CommandOrControl+Shift+."
 
@@ -271,12 +272,10 @@ function applyHotkey(next: SummonHotkey) {
 
 /**
  * Fire the snip flow: drop the region selector, then promote the
- * captured PNG into the chat composer as a real image attachment (via
- * the same `pendingPrompt` channel HomeView already watches). We do NOT
- * extract text from the image locally — the agent's vision tool reads
- * the PNG on demand using a multimodal model, which is both more
- * accurate than any on-device OCR and needs zero setup. The composer
- * stays empty so the user can type their actual question.
+ * captured PNG into the DSH attachment plugin before handing it to the
+ * composer. We do not extract text locally: DSH sends the pixels through its
+ * native image content path. The composer stays empty so the user can type
+ * their actual question.
  *
  * In-flight guard: a stray double-press of ⌘⇧. while the selector
  * overlay is up would otherwise spawn a second full-screen overlay on
@@ -292,7 +291,14 @@ function handleSnipHotkey(): void {
       const result = await startScreenCapture()
       if (!result) return
       const name = path.basename(result.imagePath)
-      await deliverPrompt(
+      const staged = await dshAttachments.put({
+        sessionId: `snip-${Date.now()}`,
+        name,
+        mime: "image/png",
+        bytes: await readFile(result.imagePath),
+      })
+      await unlink(result.imagePath).catch(() => {})
+      await deliverStagedPrompt(
         {
           attachments: [
             {
@@ -301,7 +307,7 @@ function handleSnipHotkey(): void {
               mime: "image/png",
               size: result.sizeBytes,
               kind: "image",
-              path: result.imagePath,
+              attachmentId: staged.attachmentId,
               thumbDataUrl: result.thumbDataUrl || undefined,
             },
           ],

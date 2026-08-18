@@ -3,7 +3,7 @@ import {
   type Attachment,
   type AttachmentBadge,
   type AttachmentKind
-} from "@amiba/core"
+} from "@amiba/app-runtime/core"
 import { useT } from "@amiba/i18n"
 import {
   Button,
@@ -20,7 +20,6 @@ import {
   ExternalLink,
   File as FileIcon,
   FileText,
-  Globe,
   History,
   ImageIcon,
   Loader2,
@@ -125,9 +124,8 @@ export interface AgentDestinationChipProps {
   url: string
   title?: string
   /**
-   * How to open the destination URL. Extension impl uses chrome.windows +
-   * chrome.tabs to land in the user's main window; desktop impl uses
-   * `shell.openExternal` (system default browser).
+   * How to open the destination URL. The desktop host uses
+   * `shell.openExternal` so this component remains unprivileged.
    */
   onOpen: (url: string) => void | Promise<void>
 }
@@ -135,7 +133,7 @@ export interface AgentDestinationChipProps {
 /**
  * "Open in my browser →" chip stamped onto a finished assistant bubble for
  * runs that happened on the agent surface. Closes the loop on the delegate-
- * and-forget pattern: user asks Hermes to look something up, lets it run in
+ * and-forget pattern: user asks the agent to look something up, lets it run in
  * the background, gets the answer, and *then* decides "I want to see this
  * myself" without re-issuing the URL.
  */
@@ -151,59 +149,6 @@ export function AgentDestinationChip({ url, title, onOpen }: AgentDestinationChi
       <ExternalLink className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{display}</span>
     </button>
-  )
-}
-
-export interface PageChipProps {
-  title?: string
-  url?: string
-  favIconUrl?: string
-  /**
-   * A "live" chip is the auto-tracked current tab; styled with a dashed
-   * border to telegraph that its target updates as the user switches tabs.
-   * Pinned chips render solid and own a remove (×) action.
-   */
-  live?: boolean
-  onRemove?: () => void
-}
-
-export function PageChip({ title, url, favIconUrl, live, onRemove }: PageChipProps) {
-  const { t } = useT()
-  const host = hostnameOf(url)
-  const display = title || host || "page"
-  return (
-    <div
-      className={cn(
-        "inline-flex max-w-[180px] items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px]",
-        live
-          ? "border-dashed border-primary/50 bg-primary/5 text-foreground/80"
-          : "border-border bg-muted/40 text-muted-foreground"
-      )}
-      title={url ? `${display}\n${url}` : display}>
-      {favIconUrl ? (
-        <img
-          src={favIconUrl}
-          alt=""
-          className="h-3 w-3 shrink-0 rounded-sm"
-          onError={(e) => {
-            ;(e.currentTarget as HTMLImageElement).style.display = "none"
-          }}
-        />
-      ) : (
-        <Globe className="h-3 w-3 shrink-0" />
-      )}
-      <span className="truncate">{display}</span>
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="-mr-0.5 ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-          title={t("sidepanel.attachment.remove")}
-          aria-label={t("sidepanel.attachment.removePage")}>
-          <X className="h-2.5 w-2.5" />
-        </button>
-      )}
-    </div>
   )
 }
 
@@ -309,10 +254,7 @@ export function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
   titleLines.push(attachment.name)
   titleLines.push(`${attachment.kind} • ${sizeLabel}`)
   if (attachment.mime) titleLines.push(attachment.mime)
-  if (attachment.path) titleLines.push(attachment.path)
-  if (attachment.fromPageContext && attachment.sourceUrl) {
-    titleLines.push(`from ${attachment.sourceUrl}`)
-  }
+  if (attachment.attachmentId) titleLines.push(attachment.attachmentId)
   if (attachment.textPreview) {
     titleLines.push("")
     titleLines.push(attachment.textPreview)
@@ -362,15 +304,6 @@ export function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
         {attachment.uploading ? `${t("sidepanel.attachment.uploading")} · ` : ""}
         {attachment.name}
       </span>
-      {attachment.fromPageContext && (
-        <span
-          className="ml-0.5 rounded-sm bg-foreground/10 px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
-          title={t("sidepanel.attachment.autoFrom", {
-            source: attachment.sourceUrl ?? t("sidepanel.attachment.autoFrom.fallback")
-          })}>
-          page
-        </span>
-      )}
       <button
         type="button"
         onClick={onRemove}
@@ -398,16 +331,12 @@ export interface AttachmentBadgeViewProps {
  * - image without a thumbnail → generic ``ImageIcon``, chip is inert.
  * - text / pdf / binary → ``KindIcon`` glyph, chip is inert.
  *
- * Mirrors the styling of ``pageBadges`` so the user-bubble footer reads
- * as one cohesive "what was attached to this turn" row.
+ * Keeps every file type in one cohesive "attached to this turn" row.
  */
 export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
   const titleLines: string[] = [badge.name, `${badge.kind} • ${formatBytesShort(badge.size)}`]
   if (badge.mime) titleLines.push(badge.mime)
-  if (badge.path) titleLines.push(badge.path)
-  if (badge.fromPageContext && badge.sourceUrl) {
-    titleLines.push(`from ${badge.sourceUrl}`)
-  }
+  if (badge.attachmentId) titleLines.push(badge.attachmentId)
   const title = titleLines.join("\n")
 
   const isClickableImage = badge.kind === "image" && !!badge.thumbDataUrl
@@ -436,17 +365,6 @@ export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
     <>
       {iconSlot}
       <span className="truncate">{badge.name}</span>
-      {badge.fromPageContext && (
-        <span
-          className="rounded-sm bg-foreground/10 px-1 text-[8px] uppercase tracking-wide"
-          title={
-            badge.sourceUrl
-              ? `Auto-attached from ${badge.sourceUrl}`
-              : "Auto-attached from a tab"
-          }>
-          page
-        </span>
-      )}
     </>
   )
 

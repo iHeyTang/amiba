@@ -1,6 +1,4 @@
 import { fileURLToPath } from "node:url";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import path from "node:path";
 import type net from "node:net";
 import {
@@ -11,27 +9,15 @@ import {
   nativeTheme,
   session,
   shell,
-  systemPreferences,
 } from "electron";
-import { setPlatform } from "@amiba/platform";
-import {
-  backplaneFetch,
-  getHermesSession,
-  listHermesSessions,
-} from "@amiba/core";
-import {
-  bootMainExtensionHost,
-  registerExtHttpChannel,
-  seedBundledExtensions,
-} from "@amiba/extension-host/main";
-import { startExtHttpServer } from "./ext-http-server";
+import { setPlatform } from "@amiba/app-runtime/platform";
 import {
   MAC_TRAFFIC_LIGHT_TOP,
   WINDOW_TITLE_BAR_HEIGHT,
 } from "../shared/window-chrome";
 
 // Process-level safety nets. Without these, an unhandled rejection inside
-// any async path (storage I/O, cron-watcher tick, IPC handler) can leave
+// any async path (storage I/O, runtime events, IPC handlers) can leave
 // the process in "deprecated future-throw" mode where Node may terminate
 // or behave inconsistently across versions. We log + continue so the
 // user's main window stays alive while we surface the bug.
@@ -42,12 +28,6 @@ process.on("uncaughtException", (err) => {
   console.error("[main] uncaughtException:", err);
 });
 
-import {
-  registerChatHandlers,
-  resolveApproval,
-  setChatEventPublisher,
-} from "./chat/engine";
-import { startCronWatcher, stopCronWatcher } from "./cron-watcher";
 import {
   createNotifierWindow,
   destroyNotifierWindow,
@@ -68,88 +48,32 @@ import {
   startUnixSocketInbox,
   stopUnixSocketInbox,
 } from "./external-inbox";
-import {
-  getManagedHermesPythonPath,
-  registerHermesRuntimeHandlers,
-  stopAllHermesJobs,
-} from "./hermes-runtime";
-import {
-  startManagedExtensionsController,
-  type ManagedExtensionsController,
-} from "./managed-extensions";
-import { migrateLegacyManagedExtensionsRoot } from "./managed-extensions-migration";
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { registerIpcHandlers } from "./ipc";
 import { embeddedBrowserController } from "./embedded-browser";
 import { createMainPlatformAdapter } from "./platform";
 import { recordToolActivityEvent, registerToolActivity } from "./tool-activity";
+import { setDshTelemetryPublisher } from "./dsh-telemetry";
 import { cleanupOldSnips } from "./screen-capture";
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace";
 import { disposeWorkspaceDevelopment } from "./workspace-development";
 import { mainStore } from "./storage";
+import { dshRuntime } from "./dsh-runtime";
+import {
+  startDshNativeGateway,
+  type DshNativeGateway,
+} from "./dsh-native-gateway";
+import { resolveUserDataOverride } from "./user-data";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const userDataOverride = resolveUserDataOverride(process.env.AMIBA_USER_DATA_DIR);
+if (userDataOverride) app.setPath("userData", userDataOverride);
+
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
 const IS_MAC = process.platform === "darwin";
-
-/**
- * Return the absolute path to the extensions root directory (where marketplace
- * installs land). The env override AMIBA_DEV_EXTENSIONS_PATH is still
- * honoured so `AMIBA_DEV_EXTENSIONS_PATH=... pnpm dev:desktop` can test
- * marketplace-style installs against a custom directory.
- *
- * The directory is created if it does not yet exist.
- */
-function getExtensionsRoot(): string {
-  const dir =
-    process.env.AMIBA_DEV_EXTENSIONS_PATH ??
-    join(app.getPath("userData"), "extensions");
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-/**
- * Return the absolute path to the extensions registry JSON file.
- * Always lives in <userData>/extensions-registry.json.
- */
-function getRegistryPath(): string {
-  return join(app.getPath("userData"), "extensions-registry.json");
-}
-
-/**
- * Extensions that ship WITH the app (default-installed). Each is built from
- * its own sibling repo; `dir` is both the sibling repo folder name (dev) and
- * the packaged resources subfolder name. Seeded into the registry at boot
- * (source: "bundled") so users get them without a marketplace install.
- *
- * Currently empty — Skills and Usage (ex skills / token-meter / tool-meter
- * extensions) are built-in native pages now (packages/ui/src/skills and
- * /usage). The seeding + pruning mechanism stays for future bundled exts;
- * ids removed from this list are pruned from the registry at boot.
- */
-const BUNDLED_EXTS: { id: string; dir: string }[] = [];
-
-/**
- * Resolve a bundled extension's root dir (the folder with manifest.json +
- * dist/). Packaged: `resources/bundled-extensions/<dir>` (populated by
- * electron-builder `extraResources` — not yet wired; see the bundling TODO).
- * Dev: the sibling ext repo next to the `amiba` monorepo, overridable via
- * AMIBA_DEV_BUNDLED_EXTS_DIR for non-standard checkouts. app.getAppPath()
- * in dev is `amiba/apps/desktop`, so three levels up is the directory that
- * holds both `amiba/` and any sibling ext repos.
- */
-function resolveBundledExtRoot(dir: string): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, "bundled-extensions", dir);
-  }
-  const base =
-    process.env.AMIBA_DEV_BUNDLED_EXTS_DIR ??
-    join(app.getAppPath(), "..", "..", "..");
-  return join(base, dir);
-}
 
 /**
  * Resolve the app icon shipped under `apps/desktop/resources/icon.png`.
@@ -171,21 +95,40 @@ function iconPath(): string {
  *   - bing.com / bing.net  — Bing wallpaper feed (`HPImageArchive.aspx`)
  *                            plus the actual image CDN.
  *
- * Browser extensions get this for free via `host_permissions`; Electron
- * renderers go through normal CORS, and Bing doesn't ship CORS headers
- * on these endpoints. We rewrite the response headers here in main so
- * the renderer's fetch + canvas measureLuminance() work unchanged.
+ * Electron renderers go through normal CORS, and Bing doesn't ship CORS
+ * headers on these endpoints. Main rewrites those response headers so the
+ * wallpaper fetch and canvas luminance measurement can operate.
  */
 const CORS_BYPASS_URL_PATTERNS = [
   "https://www.bing.com/*",
   "https://*.bing.net/*",
   "https://*.bing.com/*",
+  // The exact live DSH authority is checked again in the handler. This
+  // wildcard merely lets webRequest observe the OS-assigned loopback port.
+  "http://127.0.0.1:*/*",
 ];
+
+function isManagedDshShellAsset(rawUrl: string): boolean {
+  const baseUrl = dshRuntime.current?.baseUrl;
+  if (!baseUrl) return false;
+  const target = new URL(rawUrl);
+  const runtime = new URL(baseUrl);
+  return (
+    target.origin === runtime.origin &&
+    (target.pathname.startsWith("/assets/") ||
+      target.pathname.startsWith("/plugins/"))
+  );
+}
 
 function installCorsBypass() {
   session.defaultSession.webRequest.onHeadersReceived(
     { urls: CORS_BYPASS_URL_PATTERNS },
     (details, callback) => {
+      const isBing = details.url.startsWith("https://");
+      if (!isBing && !isManagedDshShellAsset(details.url)) {
+        callback({ responseHeaders: details.responseHeaders });
+        return;
+      }
       const headers = { ...(details.responseHeaders ?? {}) };
       // Strip whatever upstream sent so our injected header wins.
       for (const k of Object.keys(headers)) {
@@ -198,35 +141,53 @@ function installCorsBypass() {
         }
       }
       headers["Access-Control-Allow-Origin"] = ["*"];
+      if (!isBing) {
+        headers["Cross-Origin-Resource-Policy"] = ["cross-origin"];
+      }
       callback({ responseHeaders: headers });
     },
   );
 }
 
 /**
- * Permit ``media`` permission requests from the renderer so
- * ``navigator.mediaDevices.getUserMedia({ audio: true })`` reaches the
- * OS layer instead of being rejected at the Electron boundary. Also
- * permit ``clipboard-sanitized-write`` so the chat bubble's copy-code
- * button (Streamdown calls ``navigator.clipboard.writeText``) doesn't
- * silently reject — Streamdown swallows the rejection with no onError
- * handler, so denial here looks like a dead button in the UI.
- *
- * On macOS, the OS-level decision is still gated by
- * ``NSMicrophoneUsageDescription`` in Info.plist (declared via
- * ``build.mac.extendInfo`` in ``package.json`` for packaged builds,
- * Electron.app's own Info.plist in dev) AND the user's choice in
- * Privacy & Security → Microphone. Without this handler, Electron
- * defaults to silently denying media requests for navigated content
- * (file:// + dev http://), surfacing in the renderer as a
- * ``NotAllowedError: Permission denied`` — the exact failure the Voice
- * settings test was hitting.
- *
- * Other request kinds (notifications, geolocation, MIDI, …) fall
- * through to Electron's default handler.
+ * The DSH browser client opens its event streams with the page Origin. The
+ * production renderer is file://, which DSH correctly rejects as an opaque
+ * web origin. Electron is the trusted local platform boundary, so rewrite
+ * Origin only for the exact, currently managed DSH WebSocket authority.
+ */
+function installDshClientWebSocketHeaders(): void {
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["ws://127.0.0.1:*/*"] },
+    (details, callback) => {
+      const baseUrl = dshRuntime.current?.baseUrl;
+      if (!baseUrl) {
+        callback({ requestHeaders: details.requestHeaders });
+        return;
+      }
+      const requestUrl = new URL(details.url);
+      const runtimeUrl = new URL(baseUrl);
+      if (requestUrl.host !== runtimeUrl.host) {
+        callback({ requestHeaders: details.requestHeaders });
+        return;
+      }
+      const headers = { ...details.requestHeaders };
+      for (const name of Object.keys(headers)) {
+        if (name.toLowerCase() === "origin") delete headers[name];
+      }
+      headers.Origin = runtimeUrl.origin;
+      callback({ requestHeaders: headers });
+    },
+  );
+}
+
+/**
+ * Permit clipboard writes for the chat bubble's copy-code action. Other
+ * privileged requests, including media capture, remain denied. Voice input
+ * belonged to the removed compatibility runtime; a future DSH provider plugin
+ * must declare and own that capability explicitly.
  */
 function installPermissionRequestHandler(): void {
-  const allowed = new Set(["media", "clipboard-sanitized-write"]);
+  const allowed = new Set(["clipboard-sanitized-write"]);
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, permission, callback) => {
       callback(allowed.has(permission));
@@ -251,48 +212,6 @@ function installPermissionRequestHandler(): void {
   browserSession.setPermissionCheckHandler(() => false);
 }
 
-/**
- * Renderer-facing IPC: ``voice:ensure-microphone-access`` triggers the
- * native permission flow without yet starting a recording. The renderer
- * calls this immediately before ``getUserMedia`` so that on macOS the
- * "Amiba wants to use the microphone" dialog appears (first call) or
- * the stored decision is returned (subsequent calls), and the renderer
- * can present a friendly hint when access is denied at the OS level
- * instead of the generic ``Permission denied`` string.
- *
- * Returns one of macOS's media-access-status strings:
- *   - ``"granted"`` — proceed with getUserMedia
- *   - ``"denied"`` / ``"restricted"`` — the user must flip the toggle
- *     in System Settings → Privacy & Security → Microphone
- *   - ``"not-determined"`` — only seen if the OS dialog was suppressed
- *     (very rare; treat as denied)
- *   - ``"unknown"`` — non-macOS platforms (Windows / Linux) where the
- *     check is a no-op; renderer should proceed and let getUserMedia
- *     report any failure.
- */
-function registerVoicePermissionHandler(): void {
-  ipcMain.handle(
-    "voice:ensure-microphone-access",
-    async (): Promise<
-      "granted" | "denied" | "restricted" | "not-determined" | "unknown"
-    > => {
-      if (process.platform !== "darwin") return "unknown";
-      const current = systemPreferences.getMediaAccessStatus("microphone");
-      if (current === "granted") return "granted";
-      if (current === "not-determined") {
-        try {
-          const ok = await systemPreferences.askForMediaAccess("microphone");
-          return ok ? "granted" : "denied";
-        } catch (err) {
-          console.warn("[main] askForMediaAccess(microphone) failed:", err);
-          return "denied";
-        }
-      }
-      return current;
-    },
-  );
-}
-
 // Track the main window explicitly. The notifier + quick-ask windows
 // are persistent (hidden on dismiss, not destroyed), so any "find the
 // main window" lookup via BrowserWindow.getAllWindows() would happily
@@ -304,29 +223,7 @@ let startupWindowTheme: "light" | "dark" = nativeTheme.shouldUseDarkColors
   ? "dark"
   : "light";
 
-// Extension HTTP server — started inside app.whenReady() once the
-// registryPath is known. Stopped in before-quit alongside the extension host.
-let _extHttpServer: import("./ext-http-server").ExtHttpServer | null = null;
-let _managedExtensionsController: ManagedExtensionsController | null = null;
-
-async function resolveRegisteredMcpProvider(providerId: string) {
-  const response = await backplaneFetch(
-    `/hermes/tools/installed-mcps/${encodeURIComponent(providerId)}/connection`,
-  );
-  if (!response.ok) return null;
-  const payload = (await response.json()) as {
-    ok?: boolean;
-    connection?: {
-      url?: string;
-      command?: string;
-      args?: string[];
-      env?: Record<string, string>;
-      cwd?: string;
-      headers?: Record<string, string>;
-    };
-  };
-  return payload.ok && payload.connection ? payload.connection : null;
-}
+let _dshNativeGateway: DshNativeGateway | null = null;
 
 /**
  * Bring the main window forward when the user hits the global shortcut.
@@ -397,7 +294,7 @@ function openSessionInMainWindow(
  *   - `notifier:open-session` — the explicit View action raises the primary
  *     window and asks its renderer to open the matching conversation.
  *   - `notifier:approve` / `notifier:deny` — forward the verdict to the
- *     chat engine so the gateway's pending approval resolves.
+ *     chat engine so the DSH pending approval resolves.
  */
 function registerNotifierIpcHandlers(summon: () => void): void {
   ipcMain.handle("notifier:open-session", (_event, sessionId: string) => {
@@ -418,20 +315,19 @@ function registerNotifierIpcHandlers(summon: () => void): void {
     },
   );
   ipcMain.handle("notifier:approve", (_e, approvalId: string) => {
-    resolveApproval(approvalId, "approve");
+    void approvalId;
     hideNotifier({ restorePreviousApp: true });
   });
   ipcMain.handle("notifier:deny", (_e, approvalId: string) => {
-    resolveApproval(approvalId, "deny");
+    void approvalId;
     hideNotifier({ restorePreviousApp: true });
   });
 }
 
 /**
  * Quick-Ask Spotlight popup back-channels: dismiss + dynamic resize.
- * The popup gets streaming chat via the existing `chat:client-to-engine`
- * IPC like any other surface, so we only need to expose the window-
- * level ops here.
+ * The popup streams directly from DSH like the main surface, so Electron
+ * exposes only window-level operations here.
  */
 function registerQuickAskIpcHandlers(summon: () => void): void {
   ipcMain.handle("quick-ask:dismiss", () => {
@@ -514,9 +410,9 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      // Required to allow <webview> tags in the renderer. Extension views
-      // are hosted in isolated <webview> elements (file:// URLs) with
-      // their own preload bridge — no node integration inside them.
+      // Required only for Amiba's visible browser pane. DSH Client plugins
+      // render through the official slot runtime; they never receive an
+      // Electron <webview> or preload bridge.
       webviewTag: true,
     },
   });
@@ -524,8 +420,11 @@ function createWindow() {
   mainWindow = win;
   win.webContents.on(
     "will-attach-webview",
-    (_event, webPreferences, params) => {
-      if (params.partition !== "persist:amiba-browser") return;
+    (event, webPreferences, params) => {
+      if (params.partition !== "persist:amiba-browser") {
+        event.preventDefault();
+        return;
+      }
       // The page is untrusted web content. Enforce these preferences in main
       // even if renderer attributes are accidentally changed later.
       webPreferences.nodeIntegration = false;
@@ -604,9 +503,8 @@ if (!gotSingleInstanceLock) {
   let inboxServer: net.Server | null = null;
 
   app.whenReady().then(async () => {
-    // Install the main-process PlatformAdapter BEFORE registering any handler
-    // that imports backplaneFetch / HermesClient — those call getPlatform() at
-    // request time and need the adapter wired up first.
+    // Install the main-process PlatformAdapter before shared handlers resolve
+    // platform services.
     setPlatform(createMainPlatformAdapter());
     // Resolve the user's stored preference before the first BrowserWindow is
     // created so Electron's native canvas and the HTML critical shell paint
@@ -641,193 +539,23 @@ if (!gotSingleInstanceLock) {
     // and-forget so a slow disk doesn't delay the window appearing.
     void cleanupOldSnips();
     installCorsBypass();
+    installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
-    registerVoicePermissionHandler();
     registerIpcHandlers();
-    registerChatHandlers();
     try {
-      const userDataRoot = app.getPath("userData");
-      const migration = await migrateLegacyManagedExtensionsRoot(userDataRoot);
-      if (migration.migratedRoot || migration.movedEntries.length) {
-        console.info("[main] migrated legacy managed Extension data:", migration);
-      }
-      if (migration.conflicts.length) {
-        console.warn(
-          "[main] preserved conflicting legacy managed Extension data:",
-          migration.conflicts,
-        );
-      }
-      _managedExtensionsController = await startManagedExtensionsController({
-        root: join(userDataRoot, "managed-extensions"),
-        pythonCommand: getManagedHermesPythonPath(),
-        resolveRegisteredProvider: resolveRegisteredMcpProvider,
-        hostTools: embeddedBrowserController.hostTools(),
-        openBrowser: (url) => embeddedBrowserController.openForAgent(url),
-      });
-      process.env.AMIBA_EXTENSIONS_BRIDGE_URL =
-        _managedExtensionsController.extensionBridgeUrl;
-      process.env.AMIBA_EXTENSIONS_BRIDGE_TOKEN =
-        _managedExtensionsController.extensionBridgeToken;
+      _dshNativeGateway = await startDshNativeGateway(
+        embeddedBrowserController.platformOperations(),
+      );
+      process.env.AMIBA_RUNTIME_GATEWAY_URL = _dshNativeGateway.url;
+      process.env.AMIBA_RUNTIME_GATEWAY_TOKEN = _dshNativeGateway.token;
       console.info(
-        `[main] managed Extensions plugin bridge: ${_managedExtensionsController.extensionBridgeUrl}`,
+        `[main] DSH native gateway: ${_dshNativeGateway.url}`,
       );
     } catch (error) {
-      console.error("[main] managed Extensions failed to start:", error);
+      console.error("[main] DSH native gateway failed to start:", error);
     }
-    registerHermesRuntimeHandlers();
     registerToolActivity();
-
-    const extensionsRoot = getExtensionsRoot();
-    const registryPath = getRegistryPath();
-
-    // Seed default-bundled extensions into the registry BEFORE the host
-    // discovers it, so first launch (empty registry) still loads them.
-    // Idempotent + version-aware; preserves the user's enable/disable choice.
-    const seedResult = seedBundledExtensions(
-      registryPath,
-      BUNDLED_EXTS.map((b) => ({
-        id: b.id,
-        root: resolveBundledExtRoot(b.dir),
-      })),
-    );
-    console.info("[main] bundled-ext seed:", JSON.stringify(seedResult));
-
-    // Start the local HTTP server that serves extension WebView assets.
-    // Bound to loopback only (127.0.0.1), OS-assigned port.
-    const extHttpServer = await startExtHttpServer({ registryPath });
-    _extHttpServer = extHttpServer;
-    console.info(
-      `[main] extension http server listening at ${extHttpServer.url()}`,
-    );
-
-    // Expose the base URL to the renderer via IPC so use-contributes
-    // can build http:// URLs without knowing the port at compile time.
-    registerExtHttpChannel(() => extHttpServer.url());
-
-    // Absolute path to the webview bridge preload bundle (built as a second
-    // preload entry — see electron.vite.config.ts).
-    const webviewBridgePath = path.join(
-      __dirname,
-      "../preload/webview-bridge.js",
-    );
-
-    // Track current language and theme so webviews can request initial state.
-    //
-    // Both are RESOLVED values pushed from the renderer — only the renderer
-    // can resolve "auto" against `prefers-color-scheme` (theme) and
-    // `navigator.language` (language). Main is just a broker: it caches
-    // whatever the renderer pushed last and rebroadcasts to every webview
-    // on change. Storing the preference here would be wrong because the
-    // stored preference can be "auto" (the default).
-    let currentLanguage: "en" | "zh-CN" = "en";
-    let currentTheme: "light" | "dark" = startupWindowTheme;
-
-    function broadcastToWebviews(channel: string, payload: unknown) {
-      for (const wc of require("electron").webContents.getAllWebContents()) {
-        try {
-          wc.send(channel, payload);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-
-    ipcMain.handle("language:set-resolved", (_e, language: unknown) => {
-      if (language !== "en" && language !== "zh-CN") return;
-      if (language === currentLanguage) return;
-      currentLanguage = language;
-      broadcastToWebviews("webview:language-changed", currentLanguage);
-    });
-
-    ipcMain.handle("theme:set-resolved", (_e, theme: unknown) => {
-      if (theme !== "light" && theme !== "dark") return;
-      if (theme === currentTheme) return;
-      currentTheme = theme;
-      startupWindowTheme = theme;
-      broadcastToWebviews("webview:theme-changed", currentTheme);
-    });
-
-    // Absolute path to the extension runner bundle.
-    // In production: out/main/../extension-runner/index.js
-    // In dev: same path (electron-vite outputs all targets under out/)
-    const runnerPath = path.join(__dirname, "../extension-runner/index.js");
-
-    const extensionHost = await bootMainExtensionHost({
-      registryPath,
-      extensionsRoot,
-      runnerPath,
-      settingsStore: {
-        get: async (key, fallback) => {
-          const r = await mainStore.get([key]);
-          return (r[key] as never) ?? fallback;
-        },
-        set: (key, value) => mainStore.set({ [key]: value }),
-      },
-      callTool: async () => {
-        throw new Error("hermes.callTool not wired yet");
-      },
-      // Backs host.hermes.getSession for extensions. Goes through the
-      // backplane (`/hermes/sessions/{id}` reverse-proxies upstream
-      // `/api/sessions/{id}`), with auth already wired by the @amiba/core
-      // wrapper. Returns null on 404 / network failure / non-200 so the
-      // extension treats "no data" and "unreachable" the same way.
-      getSession: async (sessionId: string) => {
-        if (!sessionId || typeof sessionId !== "string") return null;
-        try {
-          const r = await getHermesSession(sessionId);
-          if ("ok" in r && r.ok) return r.session as unknown;
-          return null;
-        } catch {
-          return null;
-        }
-      },
-      // Bulk session list — backs host.hermes.listSessions. Returns []
-      // on failure for the same reason as getSession's null return:
-      // extension code stays simple.
-      listSessions: async (opts) => {
-        try {
-          const r = await listHermesSessions(opts ?? {});
-          if ("ok" in r && r.ok) return r.sessions as unknown[];
-          return [];
-        } catch {
-          return [];
-        }
-      },
-      // Backs host.hermes.backplaneFetch — the generic backplane channel
-      // for extensions (skills / tools / cron endpoints have no dedicated
-      // bridge method). Reuses @amiba/core's backplaneFetch (auth bearer +
-      // loopback base URL already wired), then reads the Response to a
-      // serializable { ok, status, body } envelope since the raw Response
-      // can't cross the utility-process RPC boundary. Network failures
-      // collapse to { ok:false, status:0, body:"" } so the extension's
-      // client treats "unreachable" and "errored" uniformly.
-      backplaneFetch: async (path, init) => {
-        try {
-          const res = await backplaneFetch(path, init ?? {});
-          const body = await res.text();
-          return { ok: res.ok, status: res.status, body };
-        } catch {
-          return { ok: false, status: 0, body: "" };
-        }
-      },
-      getI18n: async (_extensionId, _locale) => ({}),
-      getLanguage: () => currentLanguage,
-      getTheme: () => currentTheme,
-      webviewBridgePath,
-    });
-
-    (
-      globalThis as { __amibaExtensionHost?: typeof extensionHost }
-    ).__amibaExtensionHost = extensionHost;
-
-    // Fan chat-engine events out to both sinks: the extension host's
-    // broadcaster (host.chat.onEvent subscribers) and the built-in
-    // tool-activity recorder behind the Usage page. Wired here (not in
-    // registerChatHandlers) because the host has to exist first.
-    setChatEventPublisher((event, payload) => {
-      extensionHost.publishChatEvent(event, payload);
-      recordToolActivityEvent(event, payload);
-    });
+    setDshTelemetryPublisher(recordToolActivityEvent);
 
     createWindow();
     createNotifierWindow();
@@ -862,11 +590,6 @@ if (!gotSingleInstanceLock) {
     }
     registerNotifierIpcHandlers(summonWindow);
     registerQuickAskIpcHandlers(summonWindow);
-    // Poll the gateway for new cron-run completions and push them to
-    // the Heads-up Notifier. The watcher tolerates a not-yet-ready
-    // backplane (silent retry every 30s) so it's safe to start while the
-    // built-in Runtime services are still initializing.
-    startCronWatcher();
 
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the
@@ -910,32 +633,27 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-// Shut down the extension host gracefully before the process exits.
+// Shut down DSH and its narrow native gateway before the process exits.
 // `before-quit` fires before `will-quit` and before any windows are
 // closed; we prevent the default and re-call `app.quit()` after the
 // async shutdown so the normal `will-quit` / `window-all-closed` chain
 // still runs.
-let _extensionHostShutdownDone = false;
+let _runtimeShutdownDone = false;
 app.on("before-quit", async (event) => {
-  if (_extensionHostShutdownDone) return;
+  if (_runtimeShutdownDone) return;
   event.preventDefault();
-  const host = (
-    globalThis as { __amibaExtensionHost?: { shutdown(): Promise<void> } }
-  ).__amibaExtensionHost;
-  if (host) await host.shutdown();
-  if (_extHttpServer)
-    await _extHttpServer.stop().catch(() => {
+  if (_dshNativeGateway) {
+    await _dshNativeGateway.stop().catch(() => {
       /* ignore shutdown errors */
     });
-  if (_managedExtensionsController) {
-    await _managedExtensionsController.stop().catch(() => {
-      /* ignore shutdown errors */
-    });
-    _managedExtensionsController = null;
+    _dshNativeGateway = null;
   }
-  delete process.env.AMIBA_EXTENSIONS_BRIDGE_URL;
-  delete process.env.AMIBA_EXTENSIONS_BRIDGE_TOKEN;
-  _extensionHostShutdownDone = true;
+  await dshRuntime.stop().catch(() => {
+    /* ignore runtime shutdown errors */
+  });
+  delete process.env.AMIBA_RUNTIME_GATEWAY_URL;
+  delete process.env.AMIBA_RUNTIME_GATEWAY_TOKEN;
+  _runtimeShutdownDone = true;
   app.quit();
 });
 
@@ -945,10 +663,8 @@ app.on("before-quit", async (event) => {
 // the uiohook hook used by double-tap mode.
 app.on("will-quit", () => {
   stopHotkeyManager();
-  stopCronWatcher();
   destroyNotifierWindow();
   destroyQuickAskWindow();
-  stopAllHermesJobs();
   void disposeWorkspaceDevelopment();
   void stopWorkspaceManager();
 });

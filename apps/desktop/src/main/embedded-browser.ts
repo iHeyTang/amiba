@@ -10,7 +10,7 @@ import {
   type IpcMainInvokeEvent,
   type WebContents,
 } from "electron";
-import type { AmibaHostTool } from "@amiba/mcp-host/extension-bridge";
+import type { DshNativeOperation } from "./dsh-native-gateway";
 
 const MAX_TAB_ID_LENGTH = 160;
 const MAX_SNAPSHOT_CHARS = 18_000;
@@ -477,42 +477,10 @@ class EmbeddedBrowserController {
     return this.pageState(entry);
   }
 
-  async openForAgent(url: string): Promise<BrowserPageState> {
-    return this.withAgentActivity("extension-preview", async (entry) => {
-      entry.console.length = 0;
-      await entry.contents.loadURL(normalizeEmbeddedBrowserUrl(url));
-      return this.pageState(entry);
-    });
-  }
-
-  hostTools(): readonly AmibaHostTool[] {
-    const objectSchema = (
-      properties: Record<string, unknown>,
-      required: string[] = [],
-    ) => ({
-      type: "object",
-      properties,
-      ...(required.length ? { required } : {}),
-      additionalProperties: false,
-    });
+  platformOperations(): readonly DshNativeOperation[] {
     return [
       {
-        definition: {
-          name: "amiba_browser_open",
-          toolset: "browser",
-          description:
-            "Open a URL in Amiba's visible built-in browser. Use this browser for localhost previews and interactive verification so the user can watch and share the same browser session.",
-          inputSchema: objectSchema(
-            {
-              url: {
-                type: "string",
-                description:
-                  "URL, localhost address, search query, or absolute local file path.",
-              },
-            },
-            ["url"],
-          ),
-        },
+        name: "amiba_browser_open",
         call: (args) =>
           this.withAgentActivity("navigate", async (entry) => {
             await entry.contents.loadURL(
@@ -525,13 +493,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_snapshot",
-          toolset: "browser",
-          description:
-            "Read the current visible Amiba browser page as text plus interactive element refs such as e1. Call this before clicking or typing, then use the returned ref.",
-          inputSchema: objectSchema({}),
-        },
+        name: "amiba_browser_snapshot",
         call: () =>
           this.withAgentActivity("snapshot", async (entry) => {
             const snapshot = objectArguments(
@@ -547,21 +509,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_click",
-          toolset: "browser",
-          description:
-            "Click an element in Amiba's visible built-in browser using a snapshot ref (e.g. e3 or @e3), CSS selector, or visible text.",
-          inputSchema: objectSchema(
-            {
-              target: {
-                type: "string",
-                description: "Snapshot ref, CSS selector, or visible text.",
-              },
-            },
-            ["target"],
-          ),
-        },
+        name: "amiba_browser_click",
         call: (args) =>
           this.withAgentActivity("click", async (entry) => {
             const target = requiredString(args, "target");
@@ -583,27 +531,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_type",
-          toolset: "browser",
-          description:
-            "Fill an input or editable element in Amiba's visible built-in browser. Use a ref from amiba_browser_snapshot when possible.",
-          inputSchema: objectSchema(
-            {
-              target: {
-                type: "string",
-                description: "Snapshot ref, CSS selector, or visible text.",
-              },
-              text: { type: "string" },
-              submit: {
-                type: "boolean",
-                default: false,
-                description: "Submit the enclosing form after filling.",
-              },
-            },
-            ["target", "text"],
-          ),
-        },
+        name: "amiba_browser_type",
         call: (args) =>
           this.withAgentActivity("type", async (entry) => {
             const target = requiredString(args, "target");
@@ -637,21 +565,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_press",
-          toolset: "browser",
-          description:
-            "Press a keyboard key in the currently focused element of Amiba's visible built-in browser, for example Enter, Tab, Escape, ArrowDown, or Control+A.",
-          inputSchema: objectSchema(
-            {
-              key: {
-                type: "string",
-                description: "Electron keyCode string or modifier combination.",
-              },
-            },
-            ["key"],
-          ),
-        },
+        name: "amiba_browser_press",
         call: (args) =>
           this.withAgentActivity("press", async (entry) => {
             const raw = requiredString(args, "key");
@@ -696,19 +610,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_scroll",
-          toolset: "browser",
-          description: "Scroll Amiba's visible built-in browser page.",
-          inputSchema: objectSchema({
-            direction: {
-              type: "string",
-              enum: ["up", "down", "left", "right"],
-              default: "down",
-            },
-            amount: { type: "number", minimum: 1, maximum: 5000, default: 600 },
-          }),
-        },
+        name: "amiba_browser_scroll",
         call: (args) =>
           this.withAgentActivity("scroll", async (entry) => {
             const direction = ["up", "down", "left", "right"].includes(
@@ -739,13 +641,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_screenshot",
-          toolset: "browser",
-          description:
-            "Capture the current visible Amiba browser viewport. Use this to visually verify layout and rendering.",
-          inputSchema: objectSchema({}),
-        },
+        name: "amiba_browser_screenshot",
         call: () =>
           this.withAgentActivity("screenshot", async (entry) => {
             const image = await entry.contents.capturePage();
@@ -767,15 +663,7 @@ class EmbeddedBrowserController {
           }),
       },
       {
-        definition: {
-          name: "amiba_browser_console",
-          toolset: "browser",
-          description:
-            "Read recent JavaScript console messages from the current visible Amiba browser tab. Useful after previewing a locally developed page.",
-          inputSchema: objectSchema({
-            clear: { type: "boolean", default: false },
-          }),
-        },
+        name: "amiba_browser_console",
         call: (args) =>
           this.withAgentActivity("console", async (entry) => {
             const messages = entry.console.slice(-100);

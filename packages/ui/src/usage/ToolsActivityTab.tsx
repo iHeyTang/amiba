@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import type { ToolActivityDayBucket, ToolActivitySource, ToolInvocation } from "@amiba/core"
+import type { ToolActivityDayBucket, ToolActivitySource, ToolInvocation } from "@amiba/app-runtime/core"
 import { useT, type TranslateFn } from "@amiba/i18n"
 
 import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus"

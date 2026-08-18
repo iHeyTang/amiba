@@ -1,4 +1,4 @@
-import type { HermesToolProgress } from "@amiba/core";
+import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
 import { ChevronRight } from "lucide-react";
@@ -22,7 +22,7 @@ function ToolTarget({
 }) {
   const textClass = cn(
     "font-mono text-foreground/65",
-    running && "hermes-thinking-text",
+    running && "agent-thinking-text",
   );
   if (presentation.kind !== "read-file" && presentation.kind !== "write-file") {
     return (
@@ -60,7 +60,7 @@ function ToolTarget({
  * One quiet execution row. The conversation exposes the semantic action and
  * its target; only calls with useful evidence can be opened.
  */
-export function ToolChip({ event }: { event: HermesToolProgress }) {
+export function ToolChip({ event }: { event: ToolProgress }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
   const [expanded, setExpanded] = useState(false);
@@ -139,7 +139,7 @@ export function ToolChip({ event }: { event: HermesToolProgress }) {
         <span
           className={cn(
             "shrink-0 text-foreground/75",
-            running && "hermes-thinking-text",
+            running && "agent-thinking-text",
           )}
         >
           {presentation.action}
@@ -171,11 +171,11 @@ export function ToolChip({ event }: { event: HermesToolProgress }) {
   );
 }
 
-/** Legacy stack-of-chips renderer used for old messages without a timeline. */
+/** Stack-of-chips fallback for messages without an interleaved timeline. */
 export function ToolProgressChips({
   events,
 }: {
-  events: HermesToolProgress[];
+  events: ToolProgress[];
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">

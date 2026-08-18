@@ -9,8 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "isolatedModules": true,
-    "resolveJsonModule": true
+    "isolatedModules": true
   },
-  "include": ["src", "vite.ui.config.ts", "vite.main.config.ts"]
+  "include": ["src", "vite.config.ts"]
 }

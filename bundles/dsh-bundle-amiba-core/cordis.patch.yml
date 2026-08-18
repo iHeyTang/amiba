@@ -1,0 +1,76 @@
+# Electron-independent Amiba product capabilities. Every feature remains an
+# independent dsh-plugin-* package; this bundle owns composition only.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('amiba-session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: amiba-capability-catalog
+      name: "@amiba/dsh-plugin-catalog"
+      config:
+        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+
+    - id: amiba-browser-core
+      name: "@amiba/dsh-plugin-browser-core"
+
+    - id: amiba-browser-provider-cdp
+      name: "@amiba/dsh-plugin-browser-provider-cdp"
+      config:
+        endpoint: !!js process.env.AMIBA_BROWSER_CDP_URL ?? ''
+        allowRemote: !!js process.env.AMIBA_BROWSER_CDP_ALLOW_REMOTE === '1'
+        initialUrl: about:blank
+
+    - id: amiba-skills
+      name: "@amiba/dsh-plugin-skills"
+      config:
+        root: !!js dshHomePath('skills')
+
+    - id: amiba-usage
+      name: "@amiba/dsh-plugin-usage"
+
+    - id: amiba-model-plane
+      name: "@amiba/dsh-plugin-model-plane"
+      config:
+        root: !!js dshHomePath('amiba-model-plane')
+
+    - id: amiba-memory
+      name: "@amiba/dsh-plugin-memory"
+      config:
+        root: !!js dshHomePath('amiba-memory')
+        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+        memoryCharLimit: 24000
+        userCharLimit: 12000
+        entryCharLimit: 2000
+
+    - id: amiba-attachments
+      name: "@amiba/dsh-plugin-attachments"
+      config:
+        root: !!js dshHomePath('amiba-attachments')
+
+    - id: amiba-messaging-core
+      name: "@amiba/dsh-plugin-messaging-core"
+      config:
+        root: !!js dshHomePath('amiba-message-center')
+
+    - id: amiba-mcp-manager
+      name: "@amiba/dsh-plugin-mcp-manager"
+      config:
+        root: !!js dshHomePath('mcp')
+        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+
+    - id: amiba-commands-adapter
+      name: "@amiba/dsh-plugin-commands-adapter"
+      config:
+        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+
+    - id: amiba-schedule-adapter
+      name: "@amiba/dsh-plugin-schedule-adapter"
+      config:
+        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+
+    - id: time-context
+      name: "@deepseek-ai/dsh-time-context"
+
+    - id: schedule
+      name: "@deepseek-ai/dsh-schedule"

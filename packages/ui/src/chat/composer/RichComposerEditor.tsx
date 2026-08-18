@@ -44,6 +44,8 @@ export interface RichComposerEditorProps {
   children?: ReactNode
   /** Additional @ / slash mention providers, merged with the built-in registry. */
   mentionProviders?: TriggerProvider[]
+  /** Active runtime session used for scoped DSH Skill/Command discovery. */
+  sessionId?: string
 }
 
 export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEditorProps>(
@@ -61,6 +63,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
       onPaste,
       children,
       mentionProviders,
+      sessionId,
     } = props
     return (
       <LexicalComposer initialConfig={baseEditorConfig({ editable: !disabled })}>
@@ -109,7 +112,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
           <ImperativeHandlePlugin handleRef={ref} />
-          <TriggerMenuPlugin extraProviders={mentionProviders} />
+          <TriggerMenuPlugin extraProviders={mentionProviders} sessionId={sessionId} />
           {children}
         </div>
       </LexicalComposer>

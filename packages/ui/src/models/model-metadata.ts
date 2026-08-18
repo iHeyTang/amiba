@@ -48,7 +48,7 @@ export interface NormalizedModelMetadata {
  * Fields that are useful while scanning a provider's model list.
  *
  * This is deliberately a display allowlist, not a provenance allowlist:
- * provider/Hermes metadata and supplemental catalogs may both contribute.
+ * provider/runtime metadata and supplemental catalogs may both contribute.
  * Reference-only fields (release date, family, pricing, etc.) stay in the
  * details dialog.
  */
@@ -76,7 +76,7 @@ const MODEL_DETAIL_ONLY_METADATA_GROUPS = [
 ] as const;
 
 /**
- * Aliases that describe the same fact. If provider/Hermes metadata explicitly
+ * Aliases that describe the same fact. If provider/runtime metadata explicitly
  * supplies any member of a group, supplemental values from the whole group are
  * discarded before the provider value is applied.
  */
@@ -148,7 +148,7 @@ function copyDefinedValues(
 /**
  * Merge catalog metadata with semantic provider precedence.
  *
- * `supplemental` is the fallback. Provider/Hermes values win both exact-key
+ * `supplemental` is the fallback. Provider/runtime values win both exact-key
  * collisions and alias collisions (`vision` versus `supports_vision`).
  */
 export function mergeModelMetadata(

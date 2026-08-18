@@ -3,7 +3,7 @@ import { cn } from "./cn"
 import { logoDarkBg, logoLightBg } from "./amiba-logo-assets"
 
 /**
- * Brand mark for Hermes Agent surfaces. Two PNG variants are inlined as
+ * Brand mark for Amiba surfaces. Two PNG variants are inlined as
  * base64 data URIs (see `amiba-logo-assets.ts`, sourced from
  * `amiba-logo-{light,dark}.png`):
  *

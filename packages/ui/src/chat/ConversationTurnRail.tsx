@@ -17,7 +17,6 @@ import {
 } from "../primitives";
 import {
   bubbleTextContent,
-  splitWorkspaceFromBody,
   stripManagedResourceContext,
 } from "./internal/helpers";
 import type { UiMessage } from "./internal/types";
@@ -27,9 +26,7 @@ const RAIL_WIDTH_PX = 32;
 const MIN_CONTENT_GAP_PX = 16;
 
 function visibleMessageText(content: unknown): string {
-  let text = stripManagedResourceContext(
-    splitWorkspaceFromBody(bubbleTextContent(content)).body,
-  );
+  let text = stripManagedResourceContext(bubbleTextContent(content));
   const attachmentEnd = text.toLowerCase().lastIndexOf("</file-attachment>");
   if (attachmentEnd >= 0) {
     text = text.slice(attachmentEnd + "</file-attachment>".length);
@@ -43,8 +40,6 @@ function messagePreview(message: UiMessage): string {
 
   const references = [
     ...(message.attachmentBadges ?? []).map((badge) => badge.name),
-    ...(message.pageBadges ?? []).map((badge) => badge.title),
-    ...(message.pageBadge?.title ? [message.pageBadge.title] : []),
   ].filter(Boolean);
   return references.join(" · ");
 }

@@ -78,25 +78,17 @@ describe("accent token cascade (regression)", () => {
     resolve(here, "../../styles/tokens.css"),
     "utf8",
   )
-  const presetCss = readFileSync(
-    resolve(here, "../../../../tailwind-preset/styles/tokens.css"),
-    "utf8",
-  )
 
   it("qualifies every accent with :root + theme class for light AND dark", () => {
-    for (const css of [tokensCss, presetCss]) {
-      for (const { id } of ACCENTS) {
-        expect(css).toContain(`:root.light.accent-${id}`)
-        expect(css).toContain(`:root.dark.accent-${id}`)
-      }
+    for (const { id } of ACCENTS) {
+      expect(tokensCss).toContain(`:root.light.accent-${id}`)
+      expect(tokensCss).toContain(`:root.dark.accent-${id}`)
     }
   })
 
   it("has no bare `.accent-*` brand rule that the base would override", () => {
-    for (const css of [tokensCss, presetCss]) {
-      expect(css).not.toMatch(/^\s*\.accent-/m)
-      expect(css).not.toMatch(/^\s*\.dark\.accent-/m)
-    }
+    expect(tokensCss).not.toMatch(/^\s*\.accent-/m)
+    expect(tokensCss).not.toMatch(/^\s*\.dark\.accent-/m)
   })
 })
 

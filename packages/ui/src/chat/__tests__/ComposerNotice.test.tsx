@@ -13,17 +13,17 @@ describe("ComposerNotice", () => {
     const user = userEvent.setup();
     render(
       <ComposerNotice
-        detail="No STT provider available. Configure a provider."
+        detail="The runtime returned an invalid response."
         onDismiss={vi.fn()}
-        title="Voice transcription isn't configured"
+        title="Runtime request failed"
       />,
     );
 
     expect(
-      screen.getByText("Voice transcription isn't configured"),
+      screen.getByText("Runtime request failed"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("No STT provider available. Configure a provider."),
+      screen.queryByText("The runtime returned an invalid response."),
     ).not.toBeInTheDocument();
 
     await user.click(
@@ -33,7 +33,7 @@ describe("ComposerNotice", () => {
     );
 
     expect(
-      screen.getByText("No STT provider available. Configure a provider."),
+      screen.getByText("The runtime returned an invalid response."),
     ).toBeInTheDocument();
   });
 

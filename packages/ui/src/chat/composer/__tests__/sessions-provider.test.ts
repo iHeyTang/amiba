@@ -1,9 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { makeSessionsProvider } from "../providers/sessions"
 
-vi.mock("@amiba/core", () => ({
-  listHermesSessions: vi.fn().mockResolvedValue({
-    sessions: [{ id: "a1", title: "登录重构", updated_at: "2026-06-01" }],
+vi.mock("@amiba/app-runtime/platform", () => ({
+  getPlatform: () => ({
+    agentSessions: {
+      list: vi.fn().mockResolvedValue([
+        { sessionId: "a1", title: "登录重构", updatedAt: 1 },
+      ]),
+    },
   }),
 }))
 

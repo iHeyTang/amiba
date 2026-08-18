@@ -26,13 +26,14 @@
  * ``sessions.ensureActive()``. Quick-Ask conversations still appear in the
  * main window's history drawer alongside everything else.
  */
-import { useSessions } from "@amiba/core";
+import { useSessions } from "@amiba/app-runtime/core";
 import { useResolvedTheme } from "@amiba/ui";
 import { ChatSurface } from "@amiba/ui";
 import { cn } from "@amiba/ui";
 import type { PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui";
 import { useT } from "@amiba/i18n";
-import { getPlatform } from "@amiba/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
+import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { ArrowUpRight, SquarePen } from "lucide-react";
 import {
   useCallback,
@@ -43,7 +44,7 @@ import {
   useState,
 } from "react";
 
-import { ElectronChatEngineClient } from "../chat/electron-engine-client";
+import { createDesktopDshChatClient } from "../chat/dsh-chat-client";
 import {
   resolveQuickAskCardLayout,
   resolveQuickAskSurfaceLayout,
@@ -54,7 +55,7 @@ type QuickAskPrefill = { text?: string; sourceApp?: string };
 /** Shadow-safe room inside the transparent BrowserWindow stage. */
 const SHADOW_GUTTER_X_PX = 16;
 
-export function QuickAskView() {
+export function QuickAskView({ dshClient }: { dshClient: DshApiClient }) {
   // Each BrowserWindow is its own renderer process, so the theme hook
   // must run here too — without it the dark BrowserWindow background
   // bleeds through any transparent area while the card paints with
@@ -62,7 +63,10 @@ export function QuickAskView() {
   useResolvedTheme();
   const sessions = useSessions();
   const { t } = useT();
-  const client = useMemo(() => new ElectronChatEngineClient(), []);
+  const client = useMemo(
+    () => createDesktopDshChatClient(dshClient),
+    [dshClient],
+  );
   const bridge = useMemo(() => window.amiba, []);
   const openExternal = useCallback(
     (url: string) => getPlatform().shell.openExternal(url),
@@ -135,7 +139,7 @@ export function QuickAskView() {
         ? payload.sourceApp
         : undefined;
       prefillRef.current = text || sourceApp ? { text, sourceApp } : null;
-      // This renderer is created while hidden, before the backplane is always
+      // This renderer is created while hidden, before managed DSH is always
       // ready. Refresh model/Profile state on each real summon so a transient
       // mount-time failure never becomes the visible Quick Ask state.
       setPickerRefreshKey((current) => current + 1);
@@ -270,7 +274,6 @@ export function QuickAskView() {
             surface full-height lets its persistent dock stay bottom-anchored
             while the card grows upward around multiline drafts. */}
         <ChatSurface
-          variant="fullscreen"
           emptyState="composer-only"
           composerAutoFocus
           composerOnlyExpanded

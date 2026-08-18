@@ -31,39 +31,44 @@ export async function createCommand(
     promptList.push({
       type: "text",
       name: "name",
-      message: "Extension folder name",
-      initial: "my-extension",
+      message: "DSH plugin name",
+      initial: "my-plugin",
     })
   }
   if (!opts.id) {
     promptList.push({
       type: "text",
       name: "id",
-      message: "Extension id (reverse-DNS)",
-      initial: "com.example.my-extension",
+      message: "Cordis plugin id",
+      initial: "my-plugin",
     })
   }
   promptList.push({
     type: "text",
     name: "author",
-    message: "Author",
-    initial: "",
+    message: "npm scope (without @)",
+    initial: "example",
   })
 
   const replies = (await prompts(promptList)) as Record<string, string>
 
-  const finalName = name ?? replies["name"]
-  const finalId = opts.id ?? replies["id"]
-  const author = replies["author"] || finalId
+  const requestedName = name ?? replies["name"]
+  const slug = requestedName?.replace(/^dsh-plugin-/u, "")
+  const finalName = slug ? `dsh-plugin-${slug}` : undefined
+  const finalId = opts.id ?? replies["id"] ?? slug ?? ""
+  const author = replies["author"] || "example"
 
-  if (!finalName) throw new Error("Extension name is required")
-  if (!finalId) throw new Error("Extension id is required")
+  if (!finalName || !slug) throw new Error("Plugin name is required")
+  if (!finalId) throw new Error("Plugin id is required")
 
-  if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(finalId)) {
-    throw new Error(
-      `invalid id "${finalId}" — must be reverse-DNS like com.example.my-extension`,
-    )
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(slug) || !/^[a-z0-9][a-z0-9-]*$/u.test(finalId)) {
+    throw new Error("plugin name and id may contain only lowercase letters, digits, and hyphens")
   }
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(author)) {
+    throw new Error("npm scope may contain only lowercase letters, digits, and hyphens")
+  }
+  const pluginName = finalName
+  const pluginSlug = slug
 
   const target = join(process.cwd(), finalName)
   if (existsSync(target)) {
@@ -83,7 +88,8 @@ export async function createCommand(
         walk(src, out)
       } else if (isTpl) {
         const content = readFileSync(src, "utf8")
-          .replaceAll("{{NAME}}", finalName)
+          .replaceAll("{{NAME}}", pluginName)
+          .replaceAll("{{SLUG}}", pluginSlug)
           .replaceAll("{{ID}}", finalId)
           .replaceAll("{{AUTHOR}}", author)
         writeFileSync(out, content)
@@ -98,7 +104,7 @@ export async function createCommand(
 
   console.log(
     kleur.green("✓"),
-    `Scaffolded ${kleur.cyan(finalName)} (${kleur.dim(finalId)})`,
+    `Scaffolded ${kleur.cyan(finalName)} (${kleur.dim(`@${author}/${finalName}`)})`,
   )
 
   if (opts.install !== false) {
@@ -108,8 +114,8 @@ export async function createCommand(
 
   console.log(kleur.bold("\nNext steps:"))
   console.log("  ", kleur.cyan(`cd ${finalName}`))
-  console.log("  ", kleur.cyan("pnpm amiba dev"))
+  console.log("  ", kleur.cyan("pnpm dev"))
   console.log(
-    "    └─ Add this folder in Amiba → Settings → Extensions; rebuilds then hot-reload.",
+    "    └─ Add the package to a DSH bundle/Loader graph; Electron does not load plugins.",
   )
 }

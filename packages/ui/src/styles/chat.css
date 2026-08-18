@@ -1,6 +1,8 @@
+@import "@xterm/xterm/css/xterm.css";
+
 /*
- * Shared chat surface styles — used by both the extension (Plasmo side
- * panel + new-tab dashboard) and the desktop app. Owns the `.chat-md`
+ * Shared desktop chat surface styles — used by the main conversation,
+ * empty-state composer, and Quick Ask. Owns the `.chat-md`
  * Streamdown skin, the running-tool / placeholder dot animation, the
  * streaming caret breath, and the `.chat-md--glass` overlay variant.
  *
@@ -480,7 +482,7 @@
  * from its parent. Without this rule the dot renders as a 0×0 invisible
  * span and the running-tool chip looks frozen.
  */
-@keyframes hermes-thinking-pulse {
+@keyframes agent-thinking-pulse {
   0%,
   100% {
     opacity: 0.35;
@@ -492,18 +494,18 @@
   }
 }
 
-.hermes-thinking-dot {
+.agent-thinking-dot {
   display: inline-block;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
   background-color: currentColor;
-  animation: hermes-thinking-pulse 1.4s ease-in-out infinite;
+  animation: agent-thinking-pulse 1.4s ease-in-out infinite;
   /* Nudge optical alignment with adjacent text baselines. */
   vertical-align: middle;
 }
 
-@keyframes hermes-thinking-text-pulse {
+@keyframes agent-thinking-text-pulse {
   0%,
   100% {
     opacity: 0.52;
@@ -513,8 +515,8 @@
   }
 }
 
-.hermes-thinking-text {
-  animation: hermes-thinking-text-pulse 1.8s ease-in-out infinite;
+.agent-thinking-text {
+  animation: agent-thinking-text-pulse 1.8s ease-in-out infinite;
 }
 
 /*
@@ -548,7 +550,7 @@
  * caret only has visible content while `isAnimating` is true, so this rule
  * is a no-op once streaming finishes.
  */
-@keyframes hermes-caret-breath {
+@keyframes agent-caret-breath {
   0%,
   100% {
     opacity: 0.3;
@@ -559,13 +561,13 @@
 }
 
 .chat-md > *:last-child::after {
-  animation: hermes-caret-breath 1.4s ease-in-out infinite;
+  animation: agent-caret-breath 1.4s ease-in-out infinite;
 }
 
 /* Respect users who prefer reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .hermes-thinking-dot,
-  .hermes-thinking-text,
+  .agent-thinking-dot,
+  .agent-thinking-text,
   .amiba-session-status-breathe,
   .chat-md > *:last-child::after {
     animation: none;

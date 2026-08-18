@@ -2,20 +2,24 @@
   "name": "@amiba/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Hermes desktop app (Electron + Vite + React).",
+  "description": "DSH-native desktop agent app (Electron + Vite + React).",
   "author": "iHeyTang",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "concurrently --names \"runner,desktop\" --prefix-colors \"yellow,cyan\" --kill-others-on-fail \"vite build --config vite.runner.config.ts --watch\" \"electron-vite dev\"",
-    "runtime:prepare": "node scripts/prepare-hermes-runtime.mjs",
-    "runtime:prepare:local": "node scripts/prepare-hermes-runtime.mjs --dev",
-    "runtime:verify": "node scripts/prepare-hermes-runtime.mjs --verify",
-    "build": "vite build --config vite.runner.config.ts && electron-vite build",
+    "predev": "pnpm runtime:prepare",
+    "dev": "electron-vite dev",
+    "runtime:prepare": "pnpm --dir ../../packages/app-runtime runtime:prepare",
+    "runtime:verify": "pnpm --dir ../../packages/app-runtime runtime:verify",
+    "prebuild": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
+    "build": "electron-vite build && node scripts/verify-desktop-bundle.mjs",
     "preview": "electron-vite preview",
     "start": "electron .",
-    "package": "pnpm runtime:prepare && vite build --config vite.runner.config.ts && electron-vite build && node scripts/fix-node-pty-permissions.mjs && electron-builder",
+    "prepackage": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
+    "package": "pnpm runtime:prepare && electron-vite build && node scripts/fix-node-pty-permissions.mjs && electron-builder",
     "postinstall": "electron-builder install-app-deps && node scripts/fix-node-pty-permissions.mjs",
+    "pretest": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "test": "node --experimental-strip-types --test src/main/__tests__/*.test.mjs",
+    "pretypecheck": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "build": {
@@ -32,6 +36,10 @@
       {
         "from": "resources",
         "to": "resources"
+      },
+      {
+        "from": "../../packages/app-runtime/resources/dsh-runtime",
+        "to": "resources/dsh-runtime"
       }
     ],
     "mac": {
@@ -42,10 +50,7 @@
           "target": "dmg"
         }
       ],
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input to the chat composer.",
-        "NSCameraUsageDescription": "Hermes does not use the camera; this entry exists only to satisfy Electron's permission probe."
-      }
+      "extendInfo": {}
     },
     "win": {
       "icon": "resources/icon.png",
@@ -61,15 +66,11 @@
     }
   },
   "dependencies": {
-    "@amiba/core": "workspace:*",
-    "@amiba/extension-api": "workspace:*",
-    "@amiba/extension-host": "workspace:*",
+    "@amiba/app-runtime": "workspace:*",
+    "@amiba/extension-sdk": "workspace:*",
     "@amiba/i18n": "workspace:*",
-    "@amiba/managed-extensions": "workspace:*",
-    "@amiba/mcp-host": "workspace:*",
-    "@amiba/platform": "workspace:*",
     "@amiba/ui": "workspace:*",
-    "@amiba/utils": "workspace:*",
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-label": "^2.1.0",
@@ -80,6 +81,8 @@
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.4",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "chokidar": "^3.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -91,13 +94,13 @@
     "react-router-dom": "^6.27.0",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^2.5.4",
-    "uiohook-napi": "^1.5.4"
+    "uiohook-napi": "^1.5.4",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@types/node": "22.9.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "@amiba/tailwind-preset": "workspace:*",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "10.4.20",
     "concurrently": "^9.1.0",

@@ -1,62 +1,41 @@
-import type { PlatformAdapter, StorageChangeMap } from "@amiba/platform"
+import {
+  createDshPlatformAdapters,
+  type DshApiClient,
+} from "@amiba/app-runtime/dsh-client";
+import type { PlatformAdapter, StorageChangeMap } from "@amiba/app-runtime/platform";
 
-const notImpl = (name: string) => () =>
-  Promise.reject(new Error(`[ElectronAdapter] ${name} not implemented yet`))
-
-export function createElectronAdapter(): PlatformAdapter {
-  const bridge = window.amiba
+export function createElectronAdapter(dshClient?: DshApiClient): PlatformAdapter {
+  const bridge = window.amiba;
 
   return {
     kind: "desktop",
+    windowChrome: bridge.windowChrome,
 
     storage: {
       get: (keys) => bridge.storage.get(keys),
       set: (patch) => bridge.storage.set(patch),
       remove: (keys) => bridge.storage.remove(keys),
       watch: (keys, listener) => {
-        const filter = keys === undefined ? null : Array.isArray(keys) ? keys : [keys]
+        const filter =
+          keys === undefined ? null : Array.isArray(keys) ? keys : [keys];
         return bridge.storage.onChanged((changes: StorageChangeMap) => {
           if (filter === null) {
-            listener(changes)
-            return
+            listener(changes);
+            return;
           }
-          const filtered: StorageChangeMap = {}
+          const filtered: StorageChangeMap = {};
           for (const k of filter) {
-            if (k in changes) filtered[k] = changes[k]
+            if (k in changes) filtered[k] = changes[k];
           }
-          if (Object.keys(filtered).length > 0) listener(filtered)
-        })
-      }
+          if (Object.keys(filtered).length > 0) listener(filtered);
+        });
+      },
     },
-
-    runtime: {
-      sendMessage: notImpl("runtime.sendMessage") as never,
-      onMessage: () => () => {},
-      getInstallId: notImpl("runtime.getInstallId") as never
-    },
-
-    tabs: {
-      query: notImpl("tabs.query") as never,
-      create: notImpl("tabs.create") as never,
-      update: notImpl("tabs.update") as never,
-      remove: notImpl("tabs.remove") as never
-    },
-
-    scripting: {
-      executeScript: notImpl("scripting.executeScript") as never
-    },
-
-    bookmarks: { search: notImpl("bookmarks.search") as never },
-    history: { search: notImpl("history.search") as never },
-
-    windows: {
-      getCurrent: notImpl("windows.getCurrent") as never,
-      create: notImpl("windows.create") as never
-    },
-
-    notifications: { notify: notImpl("notifications.notify") as never },
 
     shell: { openExternal: (url) => bridge.shell.openExternal(url) },
+
+    ...(dshClient ? createDshPlatformAdapters(dshClient) : {}),
+    agentDiagnostics: bridge.agentDiagnostics,
 
     embeddedBrowser: bridge.embeddedBrowser,
 
@@ -68,7 +47,7 @@ export function createElectronAdapter(): PlatformAdapter {
       unbind: (sessionId) => bridge.workspaces.unbind(sessionId),
       getCurrent: (sessionId) => bridge.workspaces.getCurrent(sessionId),
       listBindings: () => bridge.workspaces.listBindings(),
-      onChange: (cb) => bridge.workspaces.onChanged(cb)
+      onChange: (cb) => bridge.workspaces.onChanged(cb),
     },
 
     workspaceFiles: {
@@ -76,11 +55,12 @@ export function createElectronAdapter(): PlatformAdapter {
       search: (sessionId, query) => bridge.files.search(sessionId, query),
       read: (sessionId, path) => bridge.files.read(sessionId, path),
       reveal: (sessionId, path) => bridge.files.reveal(sessionId, path),
-      openExternal: (sessionId, path) => bridge.files.openExternal(sessionId, path),
+      openExternal: (sessionId, path) =>
+        bridge.files.openExternal(sessionId, path),
       watch: (sessionId, paths, listener) =>
-        bridge.files.watch(sessionId, paths, listener)
+        bridge.files.watch(sessionId, paths, listener),
     },
 
-    workspaceDevelopment: bridge.workspaceDevelopment
-  }
+    workspaceDevelopment: bridge.workspaceDevelopment,
+  };
 }

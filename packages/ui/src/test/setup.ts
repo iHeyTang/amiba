@@ -3,7 +3,7 @@ import {
   hasPlatform,
   setPlatform,
   type PlatformAdapter,
-} from "@amiba/platform";
+} from "@amiba/app-runtime/platform";
 
 // cmdk (and some Radix primitives) use ResizeObserver and scrollIntoView
 // internally; jsdom does not implement them, so provide minimal no-op stubs

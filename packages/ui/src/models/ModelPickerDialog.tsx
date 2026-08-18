@@ -1,6 +1,6 @@
 import { useT } from "@amiba/i18n";
 import { Command } from "cmdk";
-import { Check, Loader2, RotateCcw, Workflow } from "lucide-react";
+import { Check, Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
@@ -34,7 +34,6 @@ export interface ModelPickerOption {
 
 export interface ModelPickerGroup {
   id: string;
-  kind?: "provider" | "virtual";
   label: string;
   models: ModelPickerOption[];
   provider: string;
@@ -125,16 +124,6 @@ export function ModelPickerDialog({
     [groups, normalizedQuery],
   );
 
-  const providerGroups = filteredGroups.filter(
-    (group) => group.kind !== "virtual",
-  );
-  const virtualGroups = filteredGroups.filter(
-    (group) => group.kind === "virtual",
-  );
-  const virtualModelCount = virtualGroups.reduce(
-    (count, group) => count + group.models.length,
-    0,
-  );
   const hasModels = filteredGroups.length > 0;
   const dialogTitle = title ?? t("sidepanel.modelPicker.label");
   const descriptionText = description ?? t("sidepanel.modelPicker.description");
@@ -219,7 +208,7 @@ export function ModelPickerDialog({
           </div>
         ) : (
           <>
-            {providerGroups.map((group) => (
+            {filteredGroups.map((group) => (
               <ModelCommandGroup
                 disabled={saving}
                 group={group}
@@ -229,27 +218,6 @@ export function ModelPickerDialog({
               />
             ))}
 
-            {virtualGroups.length > 0 ? (
-              <>
-                {providerGroups.length > 0 ? (
-                  <div className="mx-1 my-2 h-px bg-border/55" />
-                ) : null}
-                <ModelSectionLabel
-                  count={virtualModelCount}
-                  icon={<Workflow className="h-3.5 w-3.5" />}
-                  label={t("sidepanel.modelPicker.virtualCapabilities")}
-                />
-                {virtualGroups.map((group) => (
-                  <ModelCommandGroup
-                    disabled={saving}
-                    group={group}
-                    key={group.id}
-                    onSelect={onSelect}
-                    selected={selected}
-                  />
-                ))}
-              </>
-            ) : null}
           </>
         )}
 
@@ -306,11 +274,6 @@ function ModelCommandGroup({
       {group.models.map((option) => (
         <ModelCommandItem
           disabled={disabled}
-          icon={
-            group.kind === "virtual" ? (
-              <Workflow aria-hidden className="h-4 w-4 shrink-0" />
-            ) : undefined
-          }
           isCurrent={
             selected?.provider === group.provider &&
             selected.model === option.model
@@ -331,29 +294,6 @@ function ModelCommandGroup({
         />
       ))}
     </Command.Group>
-  );
-}
-
-function ModelSectionLabel({
-  count,
-  icon,
-  label,
-}: {
-  count: number;
-  icon: ReactNode;
-  label: string;
-}) {
-  return (
-    <div
-      className="flex h-8 items-center gap-2 px-3 text-[11px] font-medium text-muted-foreground"
-      data-model-picker-section
-    >
-      {icon}
-      <span>{label}</span>
-      <span className="ml-auto tabular-nums text-[10px] text-muted-foreground/70">
-        {count}
-      </span>
-    </div>
   );
 }
 

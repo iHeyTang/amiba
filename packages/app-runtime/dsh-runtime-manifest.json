@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "bundleSchemaVersion": 7,
+  "amibaPluginRevision": "2026-08-16.2",
+  "repository": "deepseek-ai/deepseek-harness",
+  "commit": "47f943859bef60e4160492346772ded9b24f765a",
+  "version": "0.1.0-rc.6",
+  "nodeVersion": "22.22.0"
+}

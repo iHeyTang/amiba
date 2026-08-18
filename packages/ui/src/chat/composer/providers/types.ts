@@ -1,11 +1,11 @@
 import type { ReactNode } from "react"
 import type { LexicalEditor } from "lexical"
 
-export type BuiltinMentionType = "skill" | "session" | "persona" | "channel" | "file" | "page"
+export type BuiltinMentionType = "skill" | "session" | "file" | "page"
 
 // Built-in types plus dynamic registry keys (`<integration>.<type>`, e.g.
-// "lark.doc") contributed by backplane integrations via
-// GET /hermes/mention-resources. The `string & {}` keeps editor autocomplete
+// "amiba.extension") contributed by managed extension providers. The
+// `string & {}` keeps editor autocomplete
 // for the builtins while accepting any registry key.
 export type MentionType = BuiltinMentionType | (string & {})
 

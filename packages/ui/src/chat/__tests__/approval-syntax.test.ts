@@ -19,7 +19,7 @@ describe("approval syntax detection", () => {
     ]);
   });
 
-  it("recognizes Hermes execute_code heredocs", () => {
+  it("recognizes execute_code heredocs", () => {
     expectPreserved(
       "execute_code <<'PY'\nimport pathlib\nprint(pathlib.Path.cwd())\nPY",
       ["shell", "python", "shell"],

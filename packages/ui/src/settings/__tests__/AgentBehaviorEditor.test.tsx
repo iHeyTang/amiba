@@ -9,23 +9,17 @@ const mocks = vi.hoisted(() => ({
   updateSoul: vi.fn(),
 }));
 
-vi.mock("@amiba/core", () => ({
-  getHermesProfiles: mocks.getProfiles,
-  getHermesProfileSoul: mocks.getSoul,
-  updateHermesProfileDescription: mocks.updateDescription,
-  updateHermesProfileSoul: mocks.updateSoul,
+vi.mock("@amiba/app-runtime/core", () => ({
+  getAgentPresets: mocks.getProfiles,
+  readAgentPresetComposition: mocks.getSoul,
+  updateAgentPresetDescription: mocks.updateDescription,
+  updateAgentPresetComposition: mocks.updateSoul,
 }));
 
 vi.mock("@amiba/i18n", () => {
   const t = (key: string) => key;
   return { useT: () => ({ t }) };
 });
-
-vi.mock("../AgentPersonalitySection", () => ({
-  AgentPersonalitySection: ({ profileId }: { profileId: string }) => (
-    <div data-testid="personality-section">{profileId}</div>
-  ),
-}));
 
 import {
   AgentBehaviorEditor,
@@ -73,19 +67,16 @@ describe("AgentBehaviorEditor", () => {
       "researcher",
       "Cite primary sources.",
     );
-    expect(screen.getByTestId("personality-section")).toHaveTextContent(
-      "researcher",
-    );
   });
 
   it("maps the Assistant-level page to the root default configuration", async () => {
     mocks.getProfiles.mockResolvedValue({
       ok: true,
-      active: "default",
-      current: "default",
+      active: "standard",
+      current: "standard",
       profiles: [
         {
-          name: "default",
+          name: "standard",
           is_default: true,
           description: "Root assistant",
         },
@@ -95,13 +86,10 @@ describe("AgentBehaviorEditor", () => {
     render(<SettingsAssistantBehavior />);
 
     await waitFor(() => {
-      expect(mocks.getSoul).toHaveBeenCalledWith("default");
+      expect(mocks.getSoul).toHaveBeenCalledWith("standard");
     });
     expect(
       await screen.findByDisplayValue("Root assistant"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("personality-section")).toHaveTextContent(
-      "default",
-    );
   });
 });
