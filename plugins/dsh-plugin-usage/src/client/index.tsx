@@ -1,0 +1,77 @@
+import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type {} from "@amiba/dsh-plugin-ui-shell/client";
+import { type ReactNode } from "react";
+
+import { AMIBA_USAGE_REMOTE } from "../remote.js";
+import { labels } from "./TokensTab.js";
+import { TokensPage } from "./TokensPage.js";
+import type { UsageListFn } from "./token-usage.js";
+
+export const name = "amiba-usage-ui";
+export const inject = ["slots", "remote"];
+
+const SECTION_ID = "usage";
+
+type UsageRemote = ClientContext["remote"]["amibaUsage"];
+
+function errorOf(value: unknown): Error {
+  if (value && typeof value === "object") {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string") return new Error(message);
+  }
+  return new Error(String(value));
+}
+
+type UsageSectionProps = PropsRuntime<"amiba.settings.section"> & {
+  list: UsageListFn;
+};
+
+/** Top-level Settings section: renders the Tokens view. No header actions
+ *  — the tab already auto-refreshes on mount, focus, and a 30 s interval,
+ *  the same behavior the host `SETTINGS_PAGES` "tokens" entry had. */
+function UsageSettings({ list }: UsageSectionProps): ReactNode {
+  return <TokensPage list={list} />;
+}
+
+/** Register the "usage" Settings section from Usage's Client half. */
+export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
+  const disposeRemote = await ctx.remote.$mount(AMIBA_USAGE_REMOTE);
+  // Mounting contributes `remote.amibaUsage`; Cordis still requires
+  // consumers to declare that dynamically-created service before reading
+  // it. Keeping the registration in a dependent fiber guarantees the
+  // section disappears if the Remote face is ever retracted.
+  const sectionFiber = ctx.inject(
+    ["slots", "remote.amibaUsage"],
+    (injectedCtx) => {
+      const remote: UsageRemote = injectedCtx.remote.amibaUsage;
+      const list: UsageListFn = async () => {
+        const result = await remote.list();
+        if (!result.ok) throw errorOf(result.error);
+        return result.value;
+      };
+      const disposeSection = injectedCtx.slots.inject(
+        "amiba.settings.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.settings.section",
+              id: SECTION_ID,
+              order: 500,
+              label: () => labels().nav,
+              inject: () => ({ list }),
+            },
+            UsageSettings,
+          ),
+      );
+      return () => {
+        disposeSection();
+      };
+    },
+  );
+  await sectionFiber;
+  return async () => {
+    await sectionFiber.dispose();
+    await disposeRemote();
+  };
+}

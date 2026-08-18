@@ -27,8 +27,7 @@ type DshPlatformKey =
   | "agentSkills"
   | "agentCommands"
   | "agentMessages"
-  | "agentMcp"
-  | "agentUsage";
+  | "agentMcp";
 
 export type DshPlatformAdapters = Required<
   Pick<PlatformAdapter, DshPlatformKey>
@@ -464,8 +463,5 @@ export function createDshPlatformAdapters(
     },
     agentMessages: messages,
     agentMcp: mcp,
-    agentUsage: {
-      list: () => client.call("amibaUsage/list", { args: {} }),
-    },
   };
 }

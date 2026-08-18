@@ -585,27 +585,6 @@ export interface AgentMcpAdapter {
   remove(serverName: string): Promise<void>;
 }
 
-export interface AgentUsageRecord {
-  ts: number;
-  sessionId: string;
-  turn: number;
-  step: number;
-  provider: string;
-  model: string;
-  uncachedInputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  outputTokens: number;
-}
-
-/** Provider-reported DSH usage, deduplicated at the canonical turn/step seam. */
-export interface AgentUsageAdapter {
-  list(): Promise<{
-    records: AgentUsageRecord[];
-    failures: Array<{ sessionId: string; message: string }>;
-  }>;
-}
-
 export type AgentRuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
 export interface AgentRuntimeLogEntry {
@@ -960,7 +939,6 @@ export interface PlatformAdapter {
   agentCommands?: AgentCommandsAdapter;
   agentMessages?: AgentMessagesAdapter;
   agentMcp?: AgentMcpAdapter;
-  agentUsage?: AgentUsageAdapter;
   agentDiagnostics?: AgentDiagnosticsAdapter;
   /** Desktop-only visible browser and Agent-control bridge. */
   embeddedBrowser?: EmbeddedBrowserAdapter;

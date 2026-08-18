@@ -1,8 +1,8 @@
-import type { AgentUsageAdapter, AgentUsageRecord } from "@amiba/app-runtime/platform";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-session-query";
 
 import { projectDshUsage } from "./projector.js";
+import type { AmibaUsageFailure, AmibaUsageListResult, AmibaUsageRecord } from "./remote.js";
 
 const HISTORY_CONCURRENCY = 4;
 
@@ -26,11 +26,11 @@ async function mapConcurrent<T, R>(
 }
 
 export class DshUsageReader {
-  private inFlight: ReturnType<AgentUsageAdapter["list"]> | null = null;
+  private inFlight: Promise<AmibaUsageListResult> | null = null;
 
   constructor(private readonly ctx: Context) {}
 
-  list(): ReturnType<AgentUsageAdapter["list"]> {
+  list(): Promise<AmibaUsageListResult> {
     if (this.inFlight) return this.inFlight;
     this.inFlight = this.read().finally(() => {
       this.inFlight = null;
@@ -38,7 +38,7 @@ export class DshUsageReader {
     return this.inFlight;
   }
 
-  private async read() {
+  private async read(): Promise<AmibaUsageListResult> {
     const sessions = await this.ctx.sessionQuery.listSessions();
     const rows = await mapConcurrent(sessions, HISTORY_CONCURRENCY, async (session) => {
       const sessionId = String(session.header.id);
@@ -49,7 +49,7 @@ export class DshUsageReader {
         };
       } catch (cause) {
         return {
-          records: [] as AgentUsageRecord[],
+          records: [] as AmibaUsageRecord[],
           failure: {
             sessionId,
             message: cause instanceof Error ? cause.message : String(cause),
@@ -59,7 +59,7 @@ export class DshUsageReader {
     });
     return {
       records: rows.flatMap((row) => row.records).sort((left, right) => right.ts - left.ts),
-      failures: rows.flatMap((row) => row.failure ? [row.failure] : []),
+      failures: rows.flatMap((row) => (row.failure ? [row.failure] : []) as AmibaUsageFailure[]),
     };
   }
 }

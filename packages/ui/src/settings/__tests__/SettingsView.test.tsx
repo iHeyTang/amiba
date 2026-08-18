@@ -173,13 +173,13 @@ describe("SettingsView DSH navigation", () => {
     );
 
     const tools = screen.getByRole("button", { name: "Tools" });
-    const usage = screen.getByRole("button", { name: "Tokens" });
+    const appearance = screen.getByRole("button", { name: "Appearance" });
     expect(tools).toHaveAttribute("aria-current", "page");
-    expect(usage).not.toHaveAttribute("aria-current");
+    expect(appearance).not.toHaveAttribute("aria-current");
 
-    await user.click(usage);
+    await user.click(appearance);
 
-    expect(usage).toHaveAttribute("aria-current", "page");
+    expect(appearance).toHaveAttribute("aria-current", "page");
     expect(tools).not.toHaveAttribute("aria-current");
   });
 
