@@ -287,7 +287,7 @@ for (const required of [
   '"amiba.settings.section"',
   "id: SECTION_ID",
   "label: () => labels().nav",
-  "inject: () => ({ listMemory, resetMemory })",
+  "inject: () => ({ listMemory, listPresets })",
 ]) {
   if (!memoryClient.includes(required)) {
     fail(`memory Client plugin is missing ${required}`);
@@ -343,7 +343,7 @@ for (const required of [
   '"remote.amibaMessaging"',
   '"amiba.settings.section"',
   "id: SECTION_ID",
-  "MessagingSettingsView",
+  "DshSettingsMessaging",
 ]) {
   if (!messagingClient.includes(required)) {
     fail(`messaging-core Client plugin is missing ${required}`);
@@ -392,7 +392,7 @@ if (
   !uiShellClient.includes('getAttribute("data-amiba-dsh-active-section")') ||
   !uiShellClient.includes("active={activeSection === section.id}") ||
   uiShellClient.includes("useActiveSettingsSection") ||
-  !settingsView.includes("assistantNavigation?.(dshSectionFromTab(mainTab))") ||
+  !settingsView.includes("assistantNavigation?.(dshSection)") ||
   !productShell.includes(
     "data-amiba-dsh-active-section={activeSettingsSection}",
   )
@@ -465,7 +465,7 @@ for (const required of [
   "ctx.remote.$mount(AMIBA_SKILLS_REMOTE)",
   '"remote.amibaSkills"',
   '"amiba.settings.section"',
-  "SkillsDirectoryView",
+  "DshSkillsPage",
 ]) {
   if (!skillsClient.includes(required)) {
     fail(`Skills Client plugin is missing ${required}`);
@@ -495,7 +495,7 @@ for (const required of [
   '"remote.amibaMcp"',
   'slots.inject("amiba.tools.panel"',
   'name: "amiba.tools.panel"',
-  "McpToolsView",
+  "DshMcpToolsTab",
 ]) {
   if (!mcpClient.includes(required)) {
     fail(`MCP Client plugin is missing child contribution ${required}`);
@@ -861,15 +861,13 @@ for (const retiredDesktopRoot of [
 const dshPlatformAdapters = await text(
   "packages/app-runtime/src/dsh-client/platform-adapters.ts",
 );
+// Domain remotes (amibaMemory/amibaSkills/amibaTools/amibaSchedules/
+// amibaMessaging/amibaMcp/amibaUsage) are intentionally absent here: the
+// pluginization-convergence migration made those domains fully plugin-owned
+// (their Client plugins mount `ctx.remote` directly), retiring the host
+// platform-adapter hop. Only mechanism-level surfaces remain in this layer.
 for (const remote of [
-  "amibaMemory",
-  "amibaSchedules",
-  "amibaSkills",
   "amibaCommands",
-  "amibaMessaging",
-  "amibaMcp",
-  "amibaTools",
-  "amibaUsage",
   "amibaAttachments",
   "amibaModelPlane",
 ]) {

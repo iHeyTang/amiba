@@ -313,50 +313,6 @@ export interface AgentModelsAdapter {
   }>;
 }
 
-export interface AgentSkillEntry {
-  name: string;
-  description: string;
-  whenToUse?: string;
-  modelInvocable: boolean;
-  userInvocable: boolean;
-  source: string;
-  provider: string;
-  resourceBase?: AgentSkillResourceBase;
-  editable: boolean;
-}
-
-export type AgentSkillResourceBase =
-  | { kind: "directory"; path: string }
-  | { kind: "url"; url: string }
-  | { kind: "opaque"; description: string };
-
-export interface AgentSkillDocument {
-  name: string;
-  document: string;
-  editable: boolean;
-  source: string;
-  provider: string;
-  resourceBase?: AgentSkillResourceBase;
-}
-
-export interface AgentSkillFileEntry {
-  path: string;
-  size: number;
-}
-
-export interface AgentSkillFileList {
-  root: string;
-  files: AgentSkillFileEntry[];
-  truncated: boolean;
-}
-
-export interface AgentSkillFileContent {
-  path: string;
-  size: number;
-  encoding: "utf-8" | "binary" | "too-large";
-  content?: string;
-}
-
 /**
  * One row of the DSH-engine-native, session-scoped skill catalog (the
  * `skill.list` RPC — `@deepseek-ai/dsh-host-apiproxy`'s `SkillEntry`).
@@ -364,9 +320,10 @@ export interface AgentSkillFileContent {
  * it as "the user-invocable skill catalog for the session's project", so
  * every row it returns already satisfies that filter by construction — this
  * is a documented invariant, not a guess. `source`/`provider`/
- * `resourceBase`/`editable` (see `AgentSkillEntry` above) are NOT part of
- * the engine wire contract ("provider/source vocabulary stays host-side"
- * per its own doc-comment) and have no equivalent here.
+ * `resourceBase`/`editable` (the full authoring-entry shape now local to
+ * `dsh-plugin-skills`) are NOT part of the engine wire contract
+ * ("provider/source vocabulary stays host-side" per its own doc-comment)
+ * and have no equivalent here.
  */
 export interface AgentSkillMention {
   name: string;
@@ -380,10 +337,10 @@ export interface AgentSkillMention {
  * The chat composer's `/`-skill mention surface only, backed by the
  * DSH-engine-native `skill.list` RPC (`DshApiClient.listSkills`) — never a
  * plugin Remote. The full skills-authoring CRUD surface (browse / read /
- * edit / save / remove against `AgentSkillEntry`/`AgentSkillDocument`/
- * `AgentSkillFileList`/`AgentSkillFileContent` above) moved out of the
- * platform contract entirely: `dsh-plugin-skills` now builds its own local
- * adapter directly from its own Remote face for that surface, decoupled
+ * edit / save / remove) moved out of the platform contract entirely:
+ * `dsh-plugin-skills` declares its own local shape types
+ * (`SkillsDirectoryAdapter` and friends in `DshSkillsPage.tsx`) and builds
+ * an adapter directly from its own Remote face for that surface, decoupled
  * from `PlatformAdapter`.
  */
 export interface AgentSkillsAdapter {
