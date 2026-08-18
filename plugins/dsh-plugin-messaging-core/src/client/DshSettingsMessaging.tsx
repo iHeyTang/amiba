@@ -39,9 +39,10 @@ import {
   SelectValue,
   SettingsPageDescription,
   cn,
-  usePluginT as useT,
+  usePluginT,
 } from "@amiba/ui/plugin";
 
+import { messagingI18n } from "./i18n.js";
 import type { MessageChannelView } from "../center.js";
 import type {
   MessageCenterSnapshot,
@@ -49,6 +50,16 @@ import type {
   MessageChannelPatch,
   MessageChannelSecret,
 } from "../remote.js";
+
+/**
+ * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
+ * Every call site in this file should use this, not the bare `usePluginT`,
+ * so overlay-covered keys resolve locally instead of depending on the host
+ * `options.messaging.*` bundle.
+ */
+function useT() {
+  return usePluginT(messagingI18n);
+}
 
 /** Client-facing messaging surface consumed by the settings section registration in `./index.tsx`. */
 export interface MessagingAdapter {
