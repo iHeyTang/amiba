@@ -1,6 +1,6 @@
 import type { Context } from "@deepseek-ai/cordis";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
-import type { ModelPlaneService } from "@amiba/app-runtime/model-plane";
+import type { ModelPlaneService } from "./plane/index.js";
 import type {
   AgentModelSelection,
   ModelProviderProfile,

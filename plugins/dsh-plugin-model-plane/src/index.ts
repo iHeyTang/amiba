@@ -1,6 +1,6 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
-import { ModelPlaneService } from "@amiba/app-runtime/model-plane";
+import { ModelPlaneService } from "./plane/index.js";
 
 import { dshCredentialVault, dshModelProjection } from "./projection.js";
 import { applyModelPlaneRemote } from "./remote-service.js";

@@ -1,7 +1,7 @@
 import type { ModelDefinition, ModelProviderProfile } from "@amiba/app-runtime/platform";
 
-import { asObject } from "./core";
-import { applyModelProviderCapabilities } from "./drivers";
+import { asObject } from "./core.js";
+import { applyModelProviderCapabilities } from "./drivers.js";
 
 export function modelDiscoveryUrl(provider: ModelProviderProfile): URL {
   const defaultBase =

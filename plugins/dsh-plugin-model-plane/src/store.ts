@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import type { ModelPlaneStore } from "@amiba/app-runtime/model-plane";
+import type { ModelPlaneStore } from "./plane/index.js";
 
 function documentOf(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

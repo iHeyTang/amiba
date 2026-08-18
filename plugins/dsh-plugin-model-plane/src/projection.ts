@@ -4,7 +4,7 @@ import { settingsNamespace } from "@deepseek-ai/dsh-settings";
 import type {
   ModelCredentialVault,
   ModelProviderProjection,
-} from "@amiba/app-runtime/model-plane";
+} from "./plane/index.js";
 import type { ModelProviderProfile } from "@amiba/app-runtime/platform";
 import {
   apiForDshProvider,
