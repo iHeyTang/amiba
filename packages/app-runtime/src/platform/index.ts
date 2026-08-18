@@ -553,38 +553,6 @@ export interface AgentMessagesAdapter {
   }>;
 }
 
-export interface AgentMcpServerView {
-  serverName: string;
-  transport: "stdio" | "streamable-http";
-  enabled: boolean;
-  command?: string;
-  args?: string[];
-  cwd?: string;
-  url?: string;
-  envKeys: string[];
-  headerKeys: string[];
-}
-
-export interface AgentMcpSaveInput {
-  serverName: string;
-  transport: "stdio" | "streamable-http";
-  enabled: boolean;
-  command?: string;
-  args?: string[];
-  cwd?: string;
-  url?: string;
-  /** Undefined preserves existing secrets; an object replaces them. */
-  env?: Record<string, string>;
-  /** Undefined preserves existing secrets; an object replaces them. */
-  headers?: Record<string, string>;
-}
-
-export interface AgentMcpAdapter {
-  list(): Promise<{ servers: AgentMcpServerView[]; toolsOnly: true }>;
-  save(input: AgentMcpSaveInput): Promise<{ server: AgentMcpServerView }>;
-  remove(serverName: string): Promise<void>;
-}
-
 export interface AgentUsageRecord {
   ts: number;
   sessionId: string;
@@ -959,7 +927,6 @@ export interface PlatformAdapter {
   agentSkills?: AgentSkillsAdapter;
   agentCommands?: AgentCommandsAdapter;
   agentMessages?: AgentMessagesAdapter;
-  agentMcp?: AgentMcpAdapter;
   agentUsage?: AgentUsageAdapter;
   agentDiagnostics?: AgentDiagnosticsAdapter;
   /** Desktop-only visible browser and Agent-control bridge. */

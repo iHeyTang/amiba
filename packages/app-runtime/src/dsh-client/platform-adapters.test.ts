@@ -52,7 +52,6 @@ describe("createDshPlatformAdapters", () => {
             channels: [],
             inboundEndpoint: "http://127.0.0.1:1/api/amiba/message-inbound",
           },
-          "amibaMcp/list": { servers: [], toolsOnly: true },
           "amibaUsage/list": { records: [], failures: [] },
           "amibaModelPlane/snapshot": {
             revision: 1,
@@ -68,7 +67,6 @@ describe("createDshPlatformAdapters", () => {
 
     await adapters.agentSchedules.list("session-1");
     await adapters.agentMessages.list();
-    await adapters.agentMcp.list();
     await adapters.agentUsage.list();
     await adapters.modelPlane.snapshot();
 
@@ -78,7 +76,6 @@ describe("createDshPlatformAdapters", () => {
         payload: { args: { sessionId: "session-1" } },
       },
       { method: "amibaMessaging/list", payload: { args: {} } },
-      { method: "amibaMcp/list", payload: { args: {} } },
       { method: "amibaUsage/list", payload: { args: {} } },
       { method: "amibaModelPlane/snapshot", payload: { args: {} } },
     ]);

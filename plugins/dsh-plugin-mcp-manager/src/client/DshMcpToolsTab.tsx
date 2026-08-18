@@ -9,18 +9,60 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
-  type AgentMcpAdapter,
-  type AgentMcpSaveInput,
-  type AgentMcpServerView,
-} from "@amiba/app-runtime/platform";
-import { usePluginT as useT } from "@amiba/i18n/plugin";
-
-import { Button, Input, Switch, cn } from "../primitives";
-import {
+  Button,
+  Input,
   MODEL_SETTINGS_SECTION_CLASS,
   MODEL_SETTINGS_SURFACE_CLASS,
   ModelSettingsSectionHeader,
-} from "./ModelSettingsSectionChrome";
+  Switch,
+  cn,
+  usePluginT as useT,
+} from "@amiba/ui/plugin";
+
+/**
+ * Server shape and CRUD adapter this view renders — the MCP manager
+ * plugin's own configured-server directory. Deliberately local to the
+ * plugin rather than the host platform contract: this view (and its host
+ * wrapper `McpToolsTab`) used to reach `@amiba/app-runtime/platform`'s
+ * `AgentMcpAdapter`/`AgentMcpSaveInput`/`AgentMcpServerView`, which in turn
+ * only ever forwarded to this plugin's own `amibaMcp/*` Typert Remote (see
+ * `../remote.js`) — never a genuine engine-native DSH RPC. Once this
+ * component moved here those types had zero remaining consumers anywhere in
+ * the repo, so they were deleted from the platform contract outright.
+ * `client/index.tsx` builds an instance of this shape directly from the
+ * plugin's own Remote face (`ctx.remote.amibaMcp`).
+ */
+export interface McpServerView {
+  serverName: string;
+  transport: "stdio" | "streamable-http";
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  url?: string;
+  envKeys: string[];
+  headerKeys: string[];
+}
+
+export interface McpSaveInput {
+  serverName: string;
+  transport: "stdio" | "streamable-http";
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  url?: string;
+  /** Undefined preserves existing secrets; an object replaces them. */
+  env?: Record<string, string>;
+  /** Undefined preserves existing secrets; an object replaces them. */
+  headers?: Record<string, string>;
+}
+
+export interface McpToolsAdapter {
+  list(): Promise<{ servers: McpServerView[]; toolsOnly: true }>;
+  save(input: McpSaveInput): Promise<{ server: McpServerView }>;
+  remove(serverName: string): Promise<void>;
+}
 
 function parseStringMap(value: string): Record<string, string> | undefined {
   const text = value.trim();
@@ -46,8 +88,8 @@ function DshMcpEditor({
   onError,
   onSaved,
 }: {
-  adapter: AgentMcpAdapter;
-  item?: AgentMcpServerView;
+  adapter: McpToolsAdapter;
+  item?: McpServerView;
   onCancel(): void;
   onError(value: string | null): void;
   onSaved(): void | Promise<void>;
@@ -69,7 +111,7 @@ function DshMcpEditor({
     setSaving(true);
     onError(null);
     try {
-      const input: AgentMcpSaveInput = {
+      const input: McpSaveInput = {
         serverName: serverName.trim(),
         transport,
         enabled: item?.enabled ?? true,
@@ -197,12 +239,12 @@ function DshMcpEditor({
   );
 }
 
-export function DshMcpToolsTab({ adapter }: { adapter: AgentMcpAdapter }) {
+export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
   const { t } = useT();
-  const [items, setItems] = useState<AgentMcpServerView[]>([]);
+  const [items, setItems] = useState<McpServerView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<AgentMcpServerView | "new" | null>(
+  const [editing, setEditing] = useState<McpServerView | "new" | null>(
     null,
   );
   const [busy, setBusy] = useState<string | null>(null);
@@ -224,7 +266,7 @@ export function DshMcpToolsTab({ adapter }: { adapter: AgentMcpAdapter }) {
     void refresh();
   }, [refresh]);
 
-  const toggle = async (item: AgentMcpServerView, enabled: boolean) => {
+  const toggle = async (item: McpServerView, enabled: boolean) => {
     setBusy(item.serverName);
     setError(null);
     try {
@@ -241,7 +283,7 @@ export function DshMcpToolsTab({ adapter }: { adapter: AgentMcpAdapter }) {
     }
   };
 
-  const remove = async (item: AgentMcpServerView) => {
+  const remove = async (item: McpServerView) => {
     if (
       !confirm(
         t("externalTools.mcp.dsh.deleteConfirm", { name: item.serverName }),
