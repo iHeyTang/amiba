@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPageScaffold } from "../SettingsPageScaffold";
@@ -110,7 +111,15 @@ function profilesResponse(name: string, description?: string) {
   };
 }
 
-function renderPage(props: { detail?: string; onOpenDetail: (id: string | null) => void }) {
+function renderPage(props: {
+  detail?: string;
+  onOpenDetail: (id: string | null) => void;
+  presetSections?: readonly { id: string; label: string }[];
+  renderPresetSection?: (
+    sectionId: string,
+    owner: { profileId: string },
+  ) => ReactNode;
+}) {
   return render(
     <SettingsPageScaffold title="Agents" scroll="self">
       <SettingsAgentsPage {...props} />
@@ -330,5 +339,56 @@ describe("SettingsAgentsPage", () => {
     expect(await screen.findByTestId("profile-memory")).toHaveTextContent(
       "researcher",
     );
+  });
+
+  it("renders a tab per ledger-registered preset section and forwards the profileId to its render callback", async () => {
+    const onOpenDetail = vi.fn();
+    const renderPresetSection = vi.fn(
+      (sectionId: string, owner: { profileId: string }) => (
+        <div data-testid="preset-section">
+          {sectionId}:{owner.profileId}
+        </div>
+      ),
+    );
+    renderPage({
+      detail: "researcher",
+      onOpenDetail,
+      presetSections: [{ id: "x", label: "X" }],
+      renderPresetSection,
+    });
+
+    await screen.findByTestId("behavior-editor");
+    const tab = screen.getByRole("button", { name: "X" });
+    await userEvent.click(tab);
+
+    expect(await screen.findByTestId("preset-section")).toHaveTextContent(
+      "x:researcher",
+    );
+    expect(renderPresetSection).toHaveBeenLastCalledWith("x", {
+      profileId: "researcher",
+    });
+  });
+
+  it("suppresses the hardcoded memory tab when the ledger registers a 'memory' section", async () => {
+    const onOpenDetail = vi.fn();
+    const renderPresetSection = vi.fn(() => (
+      <div data-testid="ledger-memory" />
+    ));
+    renderPage({
+      detail: "researcher",
+      onOpenDetail,
+      presetSections: [{ id: "memory", label: "Memory" }],
+      renderPresetSection,
+    });
+
+    await screen.findByTestId("behavior-editor");
+    // Exactly one "Memory" tab — the ledger entry, not the hardcoded one.
+    const memoryTabs = screen.getAllByRole("button", { name: "Memory" });
+    expect(memoryTabs).toHaveLength(1);
+
+    await userEvent.click(memoryTabs[0]);
+
+    expect(await screen.findByTestId("ledger-memory")).toBeInTheDocument();
+    expect(screen.queryByTestId("profile-memory")).not.toBeInTheDocument();
   });
 });

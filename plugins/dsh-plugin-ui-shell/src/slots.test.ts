@@ -11,6 +11,7 @@ describe("Amiba root slot contract", () => {
         "amiba.workspace.view",
         "amiba.chat.header.after",
         "amiba.settings.section",
+        "amiba.agentPreset.section",
         "amiba.shell.overlay",
       ]),
     );

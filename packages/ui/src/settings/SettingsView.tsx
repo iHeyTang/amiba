@@ -65,6 +65,16 @@ export interface SettingsViewProps {
       sectionId: string,
       owner: { actionsHost: () => HTMLElement | null },
     ) => React.ReactNode;
+    /**
+     * Render target for one DSH plugin-owned agent-preset detail section,
+     * scoped to the preset the ledger tab was opened under. Forwarded to
+     * the active page as `renderPresetSection`; only the agents page reads
+     * it today.
+     */
+    presetSection?: (
+      sectionId: string,
+      owner: { profileId: string },
+    ) => React.ReactNode;
     /** Settings content overlay; entries opt into pointer events. */
     contentOverlay?: React.ReactNode;
   };
@@ -116,6 +126,12 @@ export interface SettingsViewProps {
    * back to their raw id.
    */
   dshSections?: readonly { id: string; label: string }[];
+  /**
+   * Ledger of DSH plugin-owned agent-preset detail sections. Passed through
+   * to every registry page as `presetSections`; only the agents page (which
+   * renders the preset detail tab strip) consumes it.
+   */
+  dshPresetSections?: readonly { id: string; label: string }[];
 }
 
 export function SettingsView({
@@ -127,6 +143,7 @@ export function SettingsView({
   paneHeaderClassName,
   paneHeaderChromeHeightPx,
   dshSections,
+  dshPresetSections,
 }: SettingsViewProps = {}) {
   useResolvedTheme();
   const { t } = useT();
@@ -318,6 +335,8 @@ export function SettingsView({
             <activePage.component
               detail={route.detail}
               onOpenDetail={(id) => navigate(activePage.id, id ?? undefined)}
+              presetSections={dshPresetSections}
+              renderPresetSection={slots?.presetSection}
             />
           </SettingsPageScaffold>
         ) : null}

@@ -13,6 +13,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-slots";
 import {
   AMIBA_ROOT_SLOTS,
+  type AmibaAgentPresetSectionOwner,
   type AmibaRootSlot,
   type AmibaSettingsNavigationOwner,
   type AmibaSettingsSectionOwner,
@@ -50,6 +51,7 @@ if (
 }
 
 export type {
+  AmibaAgentPresetSectionOwner,
   AmibaRootSlot,
   AmibaSettingsNavigationOwner,
   AmibaSettingsSectionOwner,
@@ -70,7 +72,8 @@ interface SlotTarget {
   owner: AmibaSettingsSectionOwner &
     AmibaSettingsNavigationOwner &
     AmibaWorkspaceNavigationOwner &
-    AmibaWorkspaceViewOwner;
+    AmibaWorkspaceViewOwner &
+    Partial<AmibaAgentPresetSectionOwner>;
 }
 
 function isRootSlot(value: string): value is AmibaRootSlot {
@@ -85,7 +88,9 @@ function findSlotTargets(): Map<string, SlotTarget> {
     const filterId =
       element.getAttribute("data-amiba-dsh-slot-only")?.trim() || undefined;
     if (
-      (name === "amiba.settings.section" || name === "amiba.workspace.view") &&
+      (name === "amiba.settings.section" ||
+        name === "amiba.workspace.view" ||
+        name === "amiba.agentPreset.section") &&
       !filterId
     )
       continue;
@@ -107,6 +112,9 @@ function findSlotTargets(): Map<string, SlotTarget> {
     const rawActiveSection = element
       .getAttribute("data-amiba-dsh-active-section")
       ?.trim();
+    const rawProfileId = element
+      .getAttribute("data-amiba-dsh-profile-id")
+      ?.trim();
     const headerActionsHost = (element as SlotMarkerElement)[
       SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP
     ];
@@ -120,6 +128,7 @@ function findSlotTargets(): Map<string, SlotTarget> {
         : {}),
       ...(rawActiveView ? { activeView: rawActiveView } : {}),
       ...(rawActiveSection ? { activeSection: rawActiveSection } : {}),
+      ...(rawProfileId ? { profileId: rawProfileId } : {}),
       ...(element.hasAttribute("data-amiba-dsh-sidebar-collapsed")
         ? {
             sidebarCollapsed:
@@ -157,7 +166,8 @@ function sameTargets(
       candidate.owner.activeSection !== target.owner.activeSection ||
       candidate.owner.sidebarCollapsed !== target.owner.sidebarCollapsed ||
       candidate.owner.showSidebarExpandControl !==
-        target.owner.showSidebarExpandControl
+        target.owner.showSidebarExpandControl ||
+      candidate.owner.profileId !== target.owner.profileId
     ) {
       return false;
     }
@@ -186,6 +196,7 @@ function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
         "data-amiba-dsh-active-section",
         "data-amiba-dsh-sidebar-collapsed",
         "data-amiba-dsh-show-sidebar-expand",
+        "data-amiba-dsh-profile-id",
       ],
       attributes: true,
       childList: true,
@@ -201,7 +212,8 @@ function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
       [...targets.entries()].map(([id, target]) =>
         createPortal(
           (target.name === "amiba.settings.section" ||
-            target.name === "amiba.workspace.view") &&
+            target.name === "amiba.workspace.view" ||
+            target.name === "amiba.agentPreset.section") &&
             target.filterId
             ? renderSlot(target.name, target.owner, {
                 only: target.filterId,
@@ -345,6 +357,48 @@ export async function apply(ctx: ClientContext): Promise<void> {
         };
       },
     };
+    let presetSectionsVersion = -1;
+    let presetSectionsLanguage = "";
+    let presetSections: readonly SettingsSectionRow[] = [];
+    const presetSectionsSource = {
+      getSnapshot: () => {
+        const version = ctx.slots.getVersion("amiba.agentPreset.section");
+        const language = document.documentElement.lang;
+        if (
+          version !== presetSectionsVersion ||
+          language !== presetSectionsLanguage
+        ) {
+          presetSectionsVersion = version;
+          presetSectionsLanguage = language;
+          presetSections = ctx.slots
+            .entriesOfSlot("amiba.agentPreset.section")
+            .map((entry) => ({
+              id: entry.options.id ?? "",
+              label:
+                resolveSlotLabel(entry.options.label) ?? entry.options.id ?? "",
+              order: entry.options.order ?? 0,
+            }))
+            .filter((entry) => entry.id.length > 0)
+            .sort((left, right) => left.order - right.order);
+        }
+        return presetSections;
+      },
+      subscribe: (listener: () => void) => {
+        const disposeSlotSubscription = ctx.slots.subscribe(
+          "amiba.agentPreset.section",
+          listener,
+        );
+        const languageObserver = new MutationObserver(listener);
+        languageObserver.observe(document.documentElement, {
+          attributeFilter: ["lang"],
+          attributes: true,
+        });
+        return () => {
+          languageObserver.disconnect();
+          disposeSlotSubscription();
+        };
+      },
+    };
     const disposeLayout = ctx.reflect.provide("layout", layout);
     const disposeRoot = ctx.slots.register(
       {
@@ -354,6 +408,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             <AmibaProductShell
               dshClient={dshClient}
               settingsSections={sectionsSource}
+              presetSections={presetSectionsSource}
             />
           ),
         }),
@@ -387,6 +442,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
             scope: "root",
           },
           "amiba.settings.content.overlay": {
+            kind: "list",
+            scope: "root",
+          },
+          "amiba.agentPreset.section": {
             kind: "list",
             scope: "root",
           },

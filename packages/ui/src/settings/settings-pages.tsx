@@ -9,7 +9,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
 import { TokensPage } from "../usage";
@@ -23,6 +23,17 @@ import { SettingsStatus } from "./SettingsStatus";
 export interface SettingsPageProps {
   detail?: string;
   onOpenDetail: (id: string | null) => void;
+  /**
+   * Ledger of DSH plugin-owned agent-preset detail sections (M1 contribution
+   * slot). Only the agents page consumes this; every other registry page
+   * ignores it. Defaulted (absent) so existing callers/tests keep passing.
+   */
+  presetSections?: readonly { id: string; label: string }[];
+  /** Render target for one preset-section ledger entry, scoped by profileId. */
+  renderPresetSection?: (
+    sectionId: string,
+    owner: { profileId: string },
+  ) => ReactNode;
 }
 
 export interface SettingsPageDescriptor {

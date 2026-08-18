@@ -10,6 +10,7 @@ export const AMIBA_ROOT_SLOTS = [
   "amiba.settings.navigation.after",
   "amiba.settings.section",
   "amiba.settings.content.overlay",
+  "amiba.agentPreset.section",
   "amiba.shell.overlay",
 ] as const;
 
@@ -21,6 +22,12 @@ export interface AmibaSettingsSectionOwner {
    *  content renders in its own React root; portal into this node via
    *  SettingsPageActions' `host` prop. */
   headerActionsHost?: () => HTMLElement | null;
+}
+
+export interface AmibaAgentPresetSectionOwner {
+  /** The agent preset (profile) whose detail tab strip this section renders
+   *  under — scopes the section's content to that preset. */
+  profileId: string;
 }
 
 export interface AmibaSettingsNavigationOwner {
@@ -69,6 +76,11 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       owner: AmibaSettingsSectionOwner;
     };
     "amiba.settings.content.overlay": { kind: "list"; scope: "root" };
+    "amiba.agentPreset.section": {
+      kind: "list";
+      scope: "root";
+      owner: AmibaAgentPresetSectionOwner;
+    };
     "amiba.shell.overlay": { kind: "list"; scope: "root" };
   }
 }

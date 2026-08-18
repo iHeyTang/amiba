@@ -42,6 +42,10 @@ export interface SettingsSectionsSource {
   subscribe: (listener: () => void) => () => void;
 }
 
+/** Same shape as SettingsSectionsSource — kept as a distinct alias since the
+ *  agent-preset ledger and the settings-section ledger are separate slots. */
+export type PresetSectionsSource = SettingsSectionsSource;
+
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
@@ -68,6 +72,7 @@ function SlotTarget({
   sidebarCollapsed,
   showSidebarExpandControl,
   headerActionsHost,
+  profileId,
 }: {
   name: string;
   filterId?: string;
@@ -78,6 +83,10 @@ function SlotTarget({
   sidebarCollapsed?: boolean;
   showSidebarExpandControl?: boolean;
   headerActionsHost?: () => HTMLElement | null;
+  /** Plain string — rides the data-attribute channel like activeView/
+   *  activeSection, unlike headerActionsHost which needs the property
+   *  side-channel because functions can't serialize into an attribute. */
+  profileId?: string;
 }): ReactElement {
   const markerRef = useCallback(
     (el: SlotMarkerElement | null) => {
@@ -95,6 +104,7 @@ function SlotTarget({
       data-amiba-dsh-top-bar-left-inset={topBarLeftInset}
       data-amiba-dsh-sidebar-collapsed={sidebarCollapsed}
       data-amiba-dsh-show-sidebar-expand={showSidebarExpandControl}
+      data-amiba-dsh-profile-id={profileId}
       data-amiba-dsh-slot={name}
       data-amiba-dsh-slot-only={filterId}
     />
@@ -256,15 +266,18 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 export function AmibaProductShell({
   dshClient,
   settingsSections,
+  presetSections,
 }: {
   dshClient: DshApiClient;
   settingsSections?: SettingsSectionsSource;
+  presetSections?: PresetSectionsSource;
 }): ReactElement {
   return (
     <SessionsProvider>
       <ProductShellInner
         dshClient={dshClient}
         settingsSections={settingsSections}
+        presetSections={presetSections}
       />
     </SessionsProvider>
   );
@@ -273,9 +286,11 @@ export function AmibaProductShell({
 function ProductShellInner({
   dshClient,
   settingsSections,
+  presetSections,
 }: {
   dshClient: DshApiClient;
   settingsSections?: SettingsSectionsSource;
+  presetSections?: PresetSectionsSource;
 }): ReactElement {
   const { t } = useT();
   const platform = getPlatform();
@@ -285,6 +300,10 @@ function ProductShellInner({
   const sections = useSyncExternalStore(
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
+  );
+  const presetSectionRows = useSyncExternalStore(
+    presetSections?.subscribe ?? (() => () => {}),
+    presetSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
   );
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
@@ -380,6 +399,7 @@ function ProductShellInner({
       <div data-amiba-product-shell className="h-screen w-full">
         <SettingsView
           dshSections={sections}
+          dshPresetSections={presetSectionRows}
           slots={{
             navigationBefore: (
               <SlotTarget name="amiba.settings.navigation.before" />
@@ -399,6 +419,13 @@ function ProductShellInner({
                 filterId={sectionId}
                 chromeHeightPx={desktop ? topBarHeightPx : undefined}
                 headerActionsHost={owner.actionsHost}
+              />
+            ),
+            presetSection: (sectionId, owner) => (
+              <SlotTarget
+                name="amiba.agentPreset.section"
+                filterId={sectionId}
+                profileId={owner.profileId}
               />
             ),
             contentOverlay: (

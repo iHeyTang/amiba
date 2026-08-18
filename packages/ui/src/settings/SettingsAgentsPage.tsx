@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   createAgentPreset,
@@ -50,7 +50,7 @@ import {
 } from "./page-chrome";
 import type { SettingsPageProps } from "./settings-pages";
 
-type AgentWorkspaceSection = "behavior" | "skills" | "capabilities" | "memory";
+type AgentWorkspaceSection = string;
 
 function ProfileListRow({
   active,
@@ -189,7 +189,9 @@ function AgentPresetDetail({
   onDelete,
   onDescriptionSaved,
   onRename,
+  presetSections,
   profile,
+  renderPresetSection,
   saving,
 }: {
   error: string | null;
@@ -199,13 +201,22 @@ function AgentPresetDetail({
   onDelete: () => void;
   onDescriptionSaved: (description: string) => void;
   onRename: (newName: string) => void;
+  presetSections?: readonly { id: string; label: string }[];
   profile: AgentPreset;
+  renderPresetSection?: (
+    sectionId: string,
+    owner: { profileId: string },
+  ) => ReactNode;
   saving: boolean;
 }) {
   const { t } = useT();
   const [section, setSection] = useState<AgentWorkspaceSection>("behavior");
   const [editingName, setEditingName] = useState(false);
   const [renameDraft, setRenameDraft] = useState(profile.name);
+  const ledgerIds = useMemo(
+    () => new Set((presetSections ?? []).map((entry) => entry.id)),
+    [presetSections],
+  );
 
   useSettingsPageHeader({ title: profile.name, onBack });
 
@@ -221,14 +232,24 @@ function AgentPresetDetail({
     onRename(trimmed);
   }
 
+  // Hardcoded tabs stay until later tasks migrate each module to a ledger
+  // registration (T2-T4). A ledger entry whose id matches one of these wins
+  // — the hardcoded tab is dropped from the strip and its body defers to
+  // renderPresetSection instead, so a later module flip is just registering.
+  const hardcodedSections: Array<{ id: AgentWorkspaceSection; label: string }> =
+    [
+      { id: "skills", label: t("options.nav.skills") },
+      { id: "capabilities", label: t("options.nav.tools") },
+      { id: "memory", label: t("options.nav.memory") },
+    ].filter((item) => !ledgerIds.has(item.id));
+
   const workspaceSections: Array<{
     id: AgentWorkspaceSection;
     label: string;
   }> = [
     { id: "behavior", label: t("options.agents.section.behavior") },
-    { id: "skills", label: t("options.nav.skills") },
-    { id: "capabilities", label: t("options.nav.tools") },
-    { id: "memory", label: t("options.nav.memory") },
+    ...hardcodedSections,
+    ...(presetSections ?? []),
   ];
 
   return (
@@ -344,6 +365,8 @@ function AgentPresetDetail({
           profileId={profile.name}
           sourceEditable={profile.trust !== "system"}
         />
+      ) : ledgerIds.has(section) ? (
+        renderPresetSection?.(section, { profileId: profile.name })
       ) : section === "skills" ? (
         <SkillsPage embedded key={profile.name} profileId={profile.name} />
       ) : section === "capabilities" ? (
@@ -355,7 +378,12 @@ function AgentPresetDetail({
   );
 }
 
-export function SettingsAgentsPage({ detail, onOpenDetail }: SettingsPageProps) {
+export function SettingsAgentsPage({
+  detail,
+  onOpenDetail,
+  presetSections,
+  renderPresetSection,
+}: SettingsPageProps) {
   const { t } = useT();
   const [profiles, setProfiles] = useState<AgentPreset[]>([]);
   const [active, setActive] = useState("default");
@@ -491,7 +519,9 @@ export function SettingsAgentsPage({ detail, onOpenDetail }: SettingsPageProps) 
           )
         }
         onRename={(newName) => void renameProfile(newName)}
+        presetSections={presetSections}
         profile={selected}
+        renderPresetSection={renderPresetSection}
         saving={saving}
       />
     );
