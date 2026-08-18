@@ -46,9 +46,21 @@ import {
   SettingsPageDescription,
   Textarea,
   cn,
-  usePluginT as useT,
+  usePluginT,
   useRefetchOnFocus,
 } from "@amiba/ui/plugin";
+
+import { skillsI18n } from "./i18n.js";
+
+/**
+ * Wraps `usePluginT` with this plugin's own i18n overlay (see
+ * `./i18n.ts`). Every call site in this file should use this, not the bare
+ * `usePluginT`, so overlay-covered keys resolve locally instead of
+ * depending on the host `options.skills.*` bundle.
+ */
+function useT() {
+  return usePluginT(skillsI18n);
+}
 
 /**
  * Full skills-authoring CRUD surface this view renders — browse, read,

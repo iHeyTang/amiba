@@ -4,10 +4,25 @@ import { en, type MessageKey } from "./en";
 import { zhCN } from "./zh-CN";
 
 export type PluginLanguage = "en" | "zh-CN";
+
+// `MessageKey` keeps autocomplete/typo-checking for the (currently large)
+// set of still-shared host keys a plugin might reach for, while `string &
+// {}` (rather than plain `string`) keeps that autocomplete alive instead of
+// widening the union to `string` and losing it. See the `usePluginT` doc
+// comment below for why plugin-local keys are intentionally NOT part of
+// `MessageKey`.
 export type PluginTranslateFn = (
-  key: MessageKey,
+  key: MessageKey | (string & {}),
   params?: Record<string, unknown>,
 ) => string;
+
+/**
+ * A plugin's own locale catalog, keyed the same way the host catalogs are
+ * (flat `"domain.key"` strings -> template string). Both languages are
+ * required so a plugin can't ship an overlay that silently falls back to the
+ * host (or to the raw key) for a language it forgot to translate.
+ */
+export type PluginCatalogOverlay = Record<PluginLanguage, Record<string, string>>;
 
 const CATALOG: Record<PluginLanguage, Record<string, string>> = {
   en: { ...en },
@@ -30,13 +45,78 @@ function interpolate(template: string, params?: Record<string, unknown>) {
 }
 
 /**
+ * Non-hook translation core shared by `usePluginT`. Kept separate from the
+ * hook so the overlay-precedence/fallback chain can be unit tested directly
+ * (no React render needed) and so any future non-React plugin surface can
+ * reuse it without paying for a hook.
+ *
+ * Resolution order for a given key, highest precedence first:
+ *   1. `overlay[language][key]`     — the plugin's own catalog, active language
+ *   2. `overlay.en[key]`            — the plugin's own catalog, English fallback
+ *   3. host catalog[language][key]  — `en.ts` / `zh-CN.ts`, active language
+ *   4. host catalog.en[key]         — `en.ts`, English fallback
+ *   5. `key` itself                 — last resort, same as today's `useT()`
+ */
+export function resolvePluginTemplate(
+  key: string,
+  language: PluginLanguage,
+  overlay?: PluginCatalogOverlay,
+): string {
+  const hostCatalog = CATALOG[language] ?? CATALOG.en;
+  return (
+    overlay?.[language]?.[key] ??
+    overlay?.en[key] ??
+    hostCatalog[key] ??
+    CATALOG.en[key] ??
+    key
+  );
+}
+
+/**
+ * Builds a `t()` function bound to a fixed language + overlay. Exposed
+ * alongside `resolvePluginTemplate` for non-hook callers; `usePluginT`
+ * itself is a thin `useMemo` wrapper around this.
+ */
+export function createPluginTranslator(
+  language: PluginLanguage,
+  overlay?: PluginCatalogOverlay,
+): PluginTranslateFn {
+  return (key, params) =>
+    interpolate(resolvePluginTemplate(key, language, overlay), params);
+}
+
+/**
  * Client-safe locale hook for DSH plugins.
  *
  * It intentionally observes only the document-level language contract. This
  * keeps browser plugins independent from Electron and from Amiba's React root
  * while still following the language selected in Appearance settings.
+ *
+ * ## Plugin catalog overlay (M2 mechanism of record)
+ *
+ * `usePluginT` builds its base catalog from the HOST bundles (`en.ts` /
+ * `zh-CN.ts`). That's fine for the handful of truly shared strings
+ * (`common.*`), but the M2 pluginization doctrine is "plugin-local dicts":
+ * a plugin's own `options.<domain>.*` strings should live in the plugin,
+ * not depend on host keys that get purged once every plugin has migrated
+ * (T11). This hook is the escape hatch for that: pass an `overlay` with the
+ * plugin's own `{ en, "zh-CN" }` dictionaries and its keys take precedence
+ * over the host catalog (see `resolvePluginTemplate` above for the exact
+ * fallback order). Overlay keys are typed as `Record<string, string>`
+ * (not `MessageKey`) on purpose — they are the plugin's own namespace and
+ * are never meant to join the host `MessageKey` union.
+ *
+ * Callers that don't pass an overlay behave exactly as before (host
+ * catalog only) — the parameter is optional and backward compatible.
+ *
+ * @example
+ * ```ts
+ * import overlay from "./i18n"; // { en: {...}, "zh-CN": {...} }
+ * const { t } = usePluginT(overlay);
+ * t("options.skills.dsh.edit"); // resolves from the plugin's own overlay first
+ * ```
  */
-export function usePluginT(): {
+export function usePluginT(overlay?: PluginCatalogOverlay): {
   t: PluginTranslateFn;
   language: PluginLanguage;
 } {
@@ -51,13 +131,10 @@ export function usePluginT(): {
     return () => observer.disconnect();
   }, []);
 
-  const t = useMemo<PluginTranslateFn>(() => {
-    const catalog = CATALOG[language] ?? en;
-    return (key, params) => {
-      const template = catalog[key] ?? en[key] ?? key;
-      return interpolate(template, params);
-    };
-  }, [language]);
+  const t = useMemo<PluginTranslateFn>(
+    () => createPluginTranslator(language, overlay),
+    [language, overlay],
+  );
 
   return { t, language };
 }

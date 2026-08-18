@@ -8,6 +8,7 @@
 export {
   usePluginT,
   type MessageKey,
+  type PluginCatalogOverlay,
   type PluginLanguage,
   type PluginTranslateFn,
 } from "@amiba/i18n/plugin";

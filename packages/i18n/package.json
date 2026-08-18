@@ -10,7 +10,9 @@
     "./plugin": "./src/plugin.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@amiba/app-runtime": "workspace:*"
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@types/react": "18.3.12",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
   }
 }
