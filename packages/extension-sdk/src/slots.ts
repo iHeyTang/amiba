@@ -65,6 +65,12 @@ export interface AmibaComposerModelSelection {
  * the slot contribution so the plugin never touches the platform contract
  * itself. `directory` resolves `null` while the session has no materialized
  * engine directory (blank/draft composers).
+ *
+ * Owner-prop contract: function props (this surface, selection callbacks)
+ * are snapshotted when the slot marker is scanned and only refresh when the
+ * serialized owner fingerprint changes — hosts MUST pass identity-stable
+ * functions (memoized pass-throughs, setState-style setters), never inline
+ * closures over changing state.
  */
 export interface AmibaComposerAgentModels {
   directory(sessionId: string): Promise<{

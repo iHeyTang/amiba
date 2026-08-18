@@ -2,7 +2,7 @@
   "name": "@amiba/app-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba application runtime: domain, platform, DSH, model-plane, and utility services.",
+  "description": "Amiba application runtime: domain, platform, DSH, and utility services.",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

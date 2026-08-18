@@ -118,6 +118,18 @@ for (const packageName of pluginPackages) {
   const manifest = await json(`${project}/package.json`);
   if (manifest.name !== packageName)
     fail(`${project} has the wrong package name`);
+  // Without this subpath, Node exports encapsulation blocks the DSH client
+  // loader's manifest read and the plugin's Client half is SILENTLY skipped
+  // (runtime half keeps running) — bitten once by dsh-plugin-model-plane.
+  if (
+    manifest.dsh?.client &&
+    manifest.exports &&
+    manifest.exports["./package.json"] !== "./package.json"
+  ) {
+    fail(
+      `${packageName} declares dsh.client but does not export ./package.json`,
+    );
+  }
   if (!(await exists(`${project}/README.md`)))
     fail(`${project} needs its own README.md`);
   if (!(await exists(`${project}/src/index.ts`)))

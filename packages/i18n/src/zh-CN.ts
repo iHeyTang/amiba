@@ -200,7 +200,6 @@ export const zhCN: Messages = {
   // Options nav
   "options.nav.appearance": "外观",
   "options.nav.shortcuts": "快捷键",
-  "options.nav.models": "模型",
   "options.nav.agents": "智能体预设",
   "options.nav.skills": "技能",
   "options.nav.memory": "记忆",
@@ -212,7 +211,6 @@ export const zhCN: Messages = {
   "options.nav.section.general": "通用",
   "options.nav.section.agent": "助手",
   "options.nav.section.advanced": "高级",
-  "options.nav.section.models": "模型",
   "options.nav.section.diagnostics": "诊断",
   "options.nav.section.extensions": "扩展",
 
@@ -295,35 +293,6 @@ export const zhCN: Messages = {
   "sidepanel.permissionPreset.enableFullAccess": "启用完全访问",
 
   // 独立于 Harness 的模型平面
-  "options.dshModels.description":
-    "模型提供方与模型由 Amiba 统一管理，再投影给当前 Harness 和其他 AI 原生能力使用。",
-  "options.dshModels.providers": "模型提供方",
-  "options.dshModels.models": "个模型",
-  "options.dshModels.addProvider": "添加提供方",
-  "options.dshModels.openConfiguration": "打开配置文件",
-  "options.dshModels.unavailable": "当前界面没有暴露 Amiba 模型平面。",
-  "options.dshModels.empty": "当前没有可配置的模型提供方。",
-  "options.dshModels.failures": "Harness 投影诊断",
-  "options.dshModels.auth.native": "提供方原生认证",
-  "options.dshModels.auth.configured": "密钥已配置",
-  "options.dshModels.auth.missing": "需要密钥",
-  "options.dshModels.apiKey": "API 密钥",
-  "options.dshModels.apiKeyPlaceholder": "输入只写 API 密钥",
-  "options.dshModels.keepCredential": "留空可保留已存储的密钥",
-  "options.dshModels.baseURL": "接口地址",
-  "options.dshModels.modelCatalog": "模型列表",
-  "options.dshModels.fetchModels": "获取可用模型",
-  "options.dshModels.deleteConfirm":
-    "移除这个自定义提供方吗？对应的运行时投影将被停用。",
-  "options.dshModels.providerId": "提供方 ID",
-  "options.dshModels.displayName": "显示名称",
-  "options.dshModels.protocol": "接口协议",
-  "options.dshModels.initialModel": "初始模型",
-  "options.dshModels.invalidProviderId":
-    "提供方 ID 必须以小写字母开头，且只能包含字母、数字、_ 或 -。",
-  "options.dshModels.requiredProviderFields": "接口地址和初始模型不能为空。",
-  "options.dshModels.customUnavailable":
-    "当前没有可兼容这个提供方的执行适配器。",
 
   // 扩展设置页
   "options.extensions.library.title": "能力扩展",
@@ -821,8 +790,6 @@ export const zhCN: Messages = {
   "sidepanel.sessions.group.channelChats": "{name}对话",
 
   // 会话历史与 DSH 定时运行
-  "modelSelection.inherit": "使用默认模型",
-  "modelSelection.inherit.description": "跟随当前智能体档案的默认模型。",
   "sidepanel.sessions.history.empty": "暂无对话或定时任务运行记录。",
   "sidepanel.sessions.layout.aria": "历史记录布局",
   "sidepanel.sessions.layout.menu": "显示方式",

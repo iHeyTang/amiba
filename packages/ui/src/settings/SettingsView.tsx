@@ -49,8 +49,9 @@ function routeFromLocation(): SettingsRoute {
   // settings-section ledger instead, so plugin sections stay addressable by
   // bare id (deep links like `#models` keep working after a page migrates
   // from the registry to a plugin contribution). Registry pages gated off
-  // this surface (desktopOnly off-desktop) still fall back to Appearance.
-  if (!page && tab) return { tab: `dsh:${tab}` };
+  // this surface (desktopOnly off-desktop) and malformed `dsh:`-prefixed
+  // stubs still fall back to Appearance.
+  if (!page && tab && !tab.startsWith("dsh:")) return { tab: `dsh:${tab}` };
   return { tab: "appearance" };
 }
 

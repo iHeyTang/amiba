@@ -209,7 +209,6 @@ export const en = {
   // Options nav
   "options.nav.appearance": "Appearance",
   "options.nav.shortcuts": "Shortcuts",
-  "options.nav.models": "Models",
   "options.nav.agents": "Agent presets",
   "options.nav.skills": "Skills",
   "options.nav.memory": "Memory",
@@ -221,7 +220,6 @@ export const en = {
   "options.nav.section.general": "General",
   "options.nav.section.agent": "Assistant",
   "options.nav.section.advanced": "Advanced",
-  "options.nav.section.models": "Models",
   "options.nav.section.diagnostics": "Diagnostics",
   "options.nav.section.extensions": "Extensions",
 
@@ -311,37 +309,6 @@ export const en = {
   "sidepanel.permissionPreset.enableFullAccess": "Enable full access",
 
   // Harness-independent model plane
-  "options.dshModels.description":
-    "Providers and models are managed once in Amiba, then projected into the active harness and other AI-native capabilities.",
-  "options.dshModels.providers": "Providers",
-  "options.dshModels.models": "models",
-  "options.dshModels.addProvider": "Add provider",
-  "options.dshModels.openConfiguration": "Open configuration",
-  "options.dshModels.unavailable":
-    "The active surface does not expose the Amiba model plane.",
-  "options.dshModels.empty": "No configurable provider is available.",
-  "options.dshModels.failures": "Harness projection diagnostics",
-  "options.dshModels.auth.native": "Provider auth",
-  "options.dshModels.auth.configured": "Key configured",
-  "options.dshModels.auth.missing": "Key required",
-  "options.dshModels.apiKey": "API key",
-  "options.dshModels.apiKeyPlaceholder": "Enter a write-only API key",
-  "options.dshModels.keepCredential": "Leave blank to keep the stored key",
-  "options.dshModels.baseURL": "Base URL",
-  "options.dshModels.modelCatalog": "Model catalog",
-  "options.dshModels.fetchModels": "Fetch available models",
-  "options.dshModels.deleteConfirm":
-    "Remove this custom provider? Its runtime projections will be disabled.",
-  "options.dshModels.providerId": "Provider ID",
-  "options.dshModels.displayName": "Display name",
-  "options.dshModels.protocol": "API protocol",
-  "options.dshModels.initialModel": "Initial model",
-  "options.dshModels.invalidProviderId":
-    "Provider ID must start with a lowercase letter and contain only letters, numbers, _ or -.",
-  "options.dshModels.requiredProviderFields":
-    "Base URL and an initial model are required.",
-  "options.dshModels.customUnavailable":
-    "No compatible execution adapter is available for this provider.",
 
   // Extensions settings page
   "options.extensions.library.title": "Capability extensions",
@@ -867,9 +834,6 @@ export const en = {
   "sidepanel.sessions.group.channelChats": "{name} chats",
 
   // Session history and DSH scheduled runs
-  "modelSelection.inherit": "Use the default model",
-  "modelSelection.inherit.description":
-    "Follow the active agent profile's default model.",
   "sidepanel.sessions.history.empty": "No chats or scheduled runs yet.",
   "sidepanel.sessions.layout.aria": "History layout",
   "sidepanel.sessions.layout.menu": "Display mode",
