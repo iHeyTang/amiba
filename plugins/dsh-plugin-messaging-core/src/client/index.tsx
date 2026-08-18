@@ -1,15 +1,12 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { MessagingSettingsView } from "@amiba/ui/plugin/messaging";
 import { useMemo, type ReactNode } from "react";
 
-import type {
-  MessageCenterSnapshot,
-  MessageChannelInput,
-  MessageChannelPatch,
-  MessageChannelSecret,
-} from "../remote.js";
+import {
+  DshSettingsMessaging,
+  type MessagingAdapter,
+} from "./DshSettingsMessaging.js";
 import { AMIBA_MESSAGING_REMOTE } from "../remote.js";
 
 export const name = "amiba-messaging-ui";
@@ -17,14 +14,6 @@ export const inject = ["slots", "remote"];
 
 const SECTION_ID = "messaging";
 type MessagingRemote = ClientContext["remote"]["amibaMessaging"];
-
-type MessagingAdapter = {
-  list(): Promise<MessageCenterSnapshot>;
-  create(input: MessageChannelInput): Promise<MessageChannelSecret>;
-  update(id: string, patch: MessageChannelPatch): Promise<MessageCenterSnapshot["channels"][number]>;
-  remove(id: string): Promise<{ id: string; deleted: boolean }>;
-  rotateSecret(id: string): Promise<MessageChannelSecret>;
-};
 
 type MessagingSectionProps = PropsRuntime<"amiba.settings.section"> & {
   adapter: MessagingAdapter;
@@ -80,7 +69,7 @@ function MessagingSettings({
     [sessions],
   );
   return (
-    <MessagingSettingsView
+    <DshSettingsMessaging
       adapter={adapter}
       headerActionsHost={headerActionsHost}
       sessionsAdapter={sessionsAdapter}

@@ -433,33 +433,6 @@ export interface AgentCommandsAdapter {
   list(sessionId: string): Promise<AgentCommandEntry[]>;
 }
 
-export interface AgentMessageProviderView {
-  id: string;
-  name: string;
-  description: string;
-  supportsInbound: boolean;
-  supportsOutbound: boolean;
-  inboundPath?: string;
-}
-
-export interface AgentMessageChannelView {
-  id: string;
-  provider: string;
-  name: string;
-  sessionId: string;
-  enabled: boolean;
-  outboundUrl?: string;
-  allowedSenders: string[];
-  createdAt: string;
-  updatedAt: string;
-  delivery: {
-    pendingInbound: number;
-    queuedOutbound: number;
-    failedOutbound: number;
-    lastDeliveryError?: string;
-  };
-}
-
 export type ModelProviderProtocol =
   | "deepseek-chat-completions"
   | "openai-completions"
@@ -517,40 +490,6 @@ export interface ModelPlaneAdapter {
     providerId: string,
     expectedRevision?: number,
   ): Promise<ModelPlaneSnapshot>;
-}
-
-export interface AgentMessageCenterSnapshot {
-  providers: AgentMessageProviderView[];
-  channels: AgentMessageChannelView[];
-  inboundEndpoint: string;
-}
-
-export interface AgentMessageChannelInput {
-  provider: string;
-  name: string;
-  sessionId: string;
-  outboundUrl?: string;
-  allowedSenders?: string[];
-}
-
-/** DSH-native provider registry plus secure channel→session routing. */
-export interface AgentMessagesAdapter {
-  list(): Promise<AgentMessageCenterSnapshot>;
-  create(input: AgentMessageChannelInput): Promise<{
-    channel: AgentMessageChannelView;
-    secret: string;
-  }>;
-  update(
-    id: string,
-    patch: Partial<Omit<AgentMessageChannelInput, "provider">> & {
-      enabled?: boolean;
-    },
-  ): Promise<AgentMessageChannelView>;
-  remove(id: string): Promise<{ id: string; deleted: boolean }>;
-  rotateSecret(id: string): Promise<{
-    channel: AgentMessageChannelView;
-    secret: string;
-  }>;
 }
 
 export interface AgentMcpServerView {
@@ -958,7 +897,6 @@ export interface PlatformAdapter {
   agentSchedules?: AgentSchedulesAdapter;
   agentSkills?: AgentSkillsAdapter;
   agentCommands?: AgentCommandsAdapter;
-  agentMessages?: AgentMessagesAdapter;
   agentMcp?: AgentMcpAdapter;
   agentUsage?: AgentUsageAdapter;
   agentDiagnostics?: AgentDiagnosticsAdapter;

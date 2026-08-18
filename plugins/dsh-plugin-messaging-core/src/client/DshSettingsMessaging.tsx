@@ -17,14 +17,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { usePluginT as useT } from "@amiba/i18n/plugin";
-import {
-  type AgentMessageChannelInput,
-  type AgentMessageCenterSnapshot,
-  type AgentMessageChannelView,
-  type AgentMessagesAdapter,
-  type AgentSessionsAdapter,
-  type AgentSessionSummary,
+import type {
+  AgentSessionsAdapter,
+  AgentSessionSummary,
 } from "@amiba/app-runtime/platform";
 import {
   Badge,
@@ -42,13 +37,30 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
+  SettingsPageDescription,
   cn,
-} from "../primitives";
-import { SettingsPageDescription } from "./page-chrome";
+  usePluginT as useT,
+} from "@amiba/ui/plugin";
+
+import type { MessageChannelView } from "../center.js";
+import type {
+  MessageCenterSnapshot,
+  MessageChannelInput,
+  MessageChannelPatch,
+  MessageChannelSecret,
+} from "../remote.js";
+
+/** Client-facing messaging surface consumed by the settings section registration in `./index.tsx`. */
+export interface MessagingAdapter {
+  list(): Promise<MessageCenterSnapshot>;
+  create(input: MessageChannelInput): Promise<MessageChannelSecret>;
+  update(id: string, patch: MessageChannelPatch): Promise<MessageChannelView>;
+  remove(id: string): Promise<{ id: string; deleted: boolean }>;
+  rotateSecret(id: string): Promise<MessageChannelSecret>;
+}
 
 interface RevealedSecret {
-  channel: AgentMessageChannelView;
+  channel: MessageChannelView;
   secret: string;
 }
 
@@ -56,14 +68,14 @@ export function DshSettingsMessaging({
   adapter,
   sessionsAdapter,
 }: {
-  adapter: AgentMessagesAdapter;
+  adapter: MessagingAdapter;
   sessionsAdapter: Pick<AgentSessionsAdapter, "list">;
   /** Section-hosted head has no action buttons for this pane today; the
    *  prop is accepted for API parity with the other DSH section views. */
   headerActionsHost?: () => HTMLElement | null;
 }) {
   const { t } = useT();
-  const [snapshot, setSnapshot] = useState<AgentMessageCenterSnapshot | null>(
+  const [snapshot, setSnapshot] = useState<MessageCenterSnapshot | null>(
     null,
   );
   const [sessions, setSessions] = useState<AgentSessionSummary[]>([]);
@@ -401,7 +413,7 @@ function ChannelCard({
   onOpen,
   providerName,
 }: {
-  channel: AgentMessageChannelView;
+  channel: MessageChannelView;
   onOpen(): void;
   providerName: string;
 }) {
@@ -499,17 +511,12 @@ function ChannelEditorDialog({
   onSave,
 }: {
   busy: boolean;
-  channel: AgentMessageChannelView | null;
+  channel: MessageChannelView | null;
   sessions: AgentSessionSummary[];
   onOpenChange(open: boolean): void;
-  onRemove(channel: AgentMessageChannelView): void;
-  onRotate(channel: AgentMessageChannelView): void;
-  onSave(
-    channel: AgentMessageChannelView,
-    patch: Partial<Omit<AgentMessageChannelInput, "provider">> & {
-      enabled?: boolean;
-    },
-  ): void;
+  onRemove(channel: MessageChannelView): void;
+  onRotate(channel: MessageChannelView): void;
+  onSave(channel: MessageChannelView, patch: MessageChannelPatch): void;
 }) {
   const { t } = useT();
   const [name, setName] = useState("");
@@ -797,11 +804,11 @@ function CreateChannelDialog({
   sessions,
   onCreated,
 }: {
-  adapter: AgentMessagesAdapter;
+  adapter: MessagingAdapter;
   open: boolean;
   onOpenChange(value: boolean): void;
   initialProvider?: string;
-  providers: AgentMessageCenterSnapshot["providers"];
+  providers: MessageCenterSnapshot["providers"];
   sessions: AgentSessionSummary[];
   onCreated(value: RevealedSecret): void;
 }) {

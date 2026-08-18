@@ -1,7 +1,5 @@
 import type {
   AgentCommandEntry,
-  AgentMessageCenterSnapshot,
-  AgentMessagesAdapter,
   AgentMcpAdapter,
   AgentPermissionOption,
   AgentPermissionState,
@@ -26,7 +24,6 @@ type DshPlatformKey =
   | "agentSchedules"
   | "agentSkills"
   | "agentCommands"
-  | "agentMessages"
   | "agentMcp"
   | "agentUsage";
 
@@ -273,29 +270,6 @@ export function createDshPlatformAdapters(
     },
   };
 
-  const messages: AgentMessagesAdapter = {
-    async list() {
-      const snapshot = await client.call<AgentMessageCenterSnapshot>(
-        "amibaMessaging/list",
-        { args: {} },
-      );
-      return {
-        ...snapshot,
-        inboundEndpoint: snapshot.inboundEndpoint.startsWith("/")
-          ? new URL(snapshot.inboundEndpoint, `${client.baseUrl}/`).toString()
-          : snapshot.inboundEndpoint,
-      };
-    },
-    create: (input) =>
-      client.call("amibaMessaging/create", { args: { input } }),
-    update: (id, patch) =>
-      client.call("amibaMessaging/update", { args: { id, patch } }),
-    remove: (id) =>
-      client.call("amibaMessaging/removeChannel", { args: { id } }),
-    rotateSecret: (id) =>
-      client.call("amibaMessaging/rotate", { args: { id } }),
-  };
-
   const mcp: AgentMcpAdapter = {
     list: () => client.call("amibaMcp/list", { args: {} }),
     save: (input) => client.call("amibaMcp/save", { args: { input } }),
@@ -462,7 +436,6 @@ export function createDshPlatformAdapters(
         });
       },
     },
-    agentMessages: messages,
     agentMcp: mcp,
     agentUsage: {
       list: () => client.call("amibaUsage/list", { args: {} }),
