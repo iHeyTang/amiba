@@ -122,7 +122,6 @@ export const en = {
   "workspacePane.taskCount": "{count} tasks",
   "workspacePane.agentCount": "{count} agents",
   "workspacePane.agentActive": "{count} active",
-  "workspacePane.agentTools": "{count} tools",
   "workspacePane.agentFiles": "{count} files",
   "workspacePane.agentTokens": "{count} tokens",
   "workspacePane.stopRun": "Stop run",
@@ -226,60 +225,6 @@ export const en = {
   "options.nav.section.diagnostics": "Diagnostics",
   "options.nav.section.extensions": "Extensions",
 
-  // Messaging channels
-  "options.messaging.title": "Message channels",
-  "options.messaging.dsh.description":
-    "Route authenticated external messages into DSH sessions through channel-provider plugins.",
-  "options.messaging.dsh.add": "Add channel",
-  "options.messaging.dsh.pluginTitle": "DSH messaging-core plugin",
-  "options.messaging.dsh.pluginDescription":
-    "The core owns authentication, deduplication, session routing, retries, and reply correlation. Transport plugins only implement their channel protocol.",
-  "options.messaging.dsh.channels": "Configured channels",
-  "options.messaging.dsh.channelsDescription":
-    "Each channel targets one durable DSH session.",
-  "options.messaging.dsh.group.configured": "Configured",
-  "options.messaging.dsh.group.configuredDescription":
-    "Routes already connected to a DSH conversation.",
-  "options.messaging.dsh.group.available": "Available channels",
-  "options.messaging.dsh.group.availableDescription":
-    "Set up another route from an installed transport provider.",
-  "options.messaging.dsh.summary.connected":
-    "{connected} of {total} channels active",
-  "options.messaging.dsh.summary.none": "No message channels are active",
-  "options.messaging.dsh.providerCount": "{count} transport providers",
-  "options.messaging.dsh.search": "Search channels",
-  "options.messaging.dsh.searchEmpty": "No channels match this search.",
-  "options.messaging.dsh.manage": "Manage",
-  "options.messaging.dsh.setup": "Set up",
-  "options.messaging.dsh.needsSetup": "Needs setup",
-  "options.messaging.dsh.configure": "Set up {name}",
-  "options.messaging.dsh.disable": "Turn off",
-  "options.messaging.dsh.enable": "Turn on",
-  "options.messaging.dsh.saveChanges": "Save changes",
-  "options.messaging.dsh.empty": "No DSH channels yet",
-  "options.messaging.dsh.emptyDescription":
-    "Create a webhook channel now; additional transports can register as independent DSH plugins.",
-  "options.messaging.dsh.inboundEndpoint": "Inbound endpoint",
-  "options.messaging.dsh.loopbackHint":
-    "This endpoint is loopback-only. Put an authenticated reverse proxy or tunnel in front of it when an external service must reach this device.",
-  "options.messaging.dsh.rotate": "Rotate secret",
-  "options.messaging.dsh.createDescription":
-    "Bind a transport provider to one existing DSH session.",
-  "options.messaging.dsh.provider": "Provider",
-  "options.messaging.dsh.name": "Channel name",
-  "options.messaging.dsh.session": "Target session",
-  "options.messaging.dsh.selectSession": "Select a session",
-  "options.messaging.dsh.outboundUrl": "Reply callback URL (optional)",
-  "options.messaging.dsh.allowedSenders":
-    "Allowed sender IDs (optional, comma-separated)",
-  "options.messaging.dsh.secretTitle": "Channel secret",
-  "options.messaging.dsh.secretDescription":
-    "This bearer secret is shown only once. Store it now; rotating it immediately invalidates the previous value.",
-  "options.messaging.dsh.pending": "{count} awaiting DSH",
-  "options.messaging.dsh.queued": "{count} replies queued",
-  "options.messaging.dsh.failed": "{count} replies need attention",
-  "options.messaging.status.connected": "Connected",
-  "options.messaging.status.disabled": "Off",
   // Agent profiles
   "options.agents.title": "Agent presets",
   "options.agents.profiles": "Agent presets",
@@ -318,87 +263,6 @@ export const en = {
   "options.agents.createFailed": "Couldn't create the preset",
   "options.agents.renameFailed": "Couldn't rename the preset",
   "options.agents.deleteFailed": "Couldn't delete the preset",
-
-  // Skills
-  "options.skills.all": "All",
-  "options.skills.categories": "Categories",
-  "options.skills.totalEnabled": "{total} skills · {enabled} enabled",
-  "options.skills.search": "Search name, description, tag, or category…",
-  "options.skills.clearSearch": "Clear search",
-  "options.skills.clearFilters": "Clear",
-  "options.skills.noMatches": "No skills match the current filters.",
-  "options.skills.dismissError": "Dismiss error",
-  "options.skills.uncategorized": "Uncategorized",
-  "options.skills.enabled": "Enabled",
-  "options.skills.disabled": "Disabled",
-  "options.skills.enabledHint": "Loaded into this agent preset",
-  "options.skills.disabledHint": "Listed in config.yaml/skills.disabled",
-  "options.skills.toggleOn": "Click to disable this skill",
-  "options.skills.toggleOff": "Click to enable this skill",
-  "options.skills.loadFailed": "Couldn't load skills",
-  "options.skills.toggleFailed": "Couldn't change skill state",
-  "options.skills.origin.bundled": "Bundled",
-  "options.skills.origin.hub": "Skill Hub",
-  "options.skills.origin.agent": "Agent-authored",
-  "options.skills.origin.manual": "Manual",
-  "options.skills.origin.external": "External",
-  "options.skills.origin.bundledHint": "Shipped with Amiba",
-  "options.skills.origin.hubHint": "Installed from the Skill Hub",
-  "options.skills.origin.agentHint": "Created by an agent",
-  "options.skills.origin.manualHint": "Added manually to the skills directory",
-  "options.skills.origin.externalHint":
-    "Loaded from an external skills directory in config.yaml",
-  "options.skills.files": "Files ({count})",
-  "options.skills.filesTruncated": "showing the first {count}",
-  "options.skills.loading": "Loading…",
-  "options.skills.reading": "Reading…",
-  "options.skills.noFiles": "No files",
-  "options.skills.selectFile": "Select a file on the left to view its contents",
-  "options.skills.binaryFile": "Binary file · {size}",
-  "options.skills.fileTooLarge": "File is too large to preview ({size})",
-  "options.skills.dsh.title": "Composed DSH skills",
-  "options.skills.dsh.description":
-    "Skills are resolved automatically from the active conversation, project, user roots, and agent preset.",
-  "options.skills.dsh.summary": "{count} skills available",
-  "options.skills.dsh.session": "Conversation skill scope",
-  "options.skills.dsh.noSession": "No conversation (user skills only)",
-  "options.skills.dsh.create": "Create skill",
-  "options.skills.dsh.edit": "Edit skill",
-  "options.skills.dsh.name": "Skill name",
-  "options.skills.dsh.editorHint":
-    "DSH requires YAML frontmatter with matching name and description fields. Invocation policy is controlled by user-invocable and disable-model-invocation.",
-  "options.skills.dsh.user": "User",
-  "options.skills.dsh.composed": "Composed read-only",
-  "options.skills.dsh.userOnly": "User only",
-  "options.skills.dsh.modelOnly": "Model only",
-  "options.skills.dsh.notInvocable": "Not invocable",
-  "options.skills.dsh.sources": "Sources",
-  "options.skills.dsh.source.project": "Project",
-  "options.skills.dsh.source.project.description":
-    "Skills discovered from this workspace's DSH and shared-agent directories.",
-  "options.skills.dsh.source.user": "User",
-  "options.skills.dsh.source.user.description":
-    "Personal skills from the DSH and shared-agent user directories.",
-  "options.skills.dsh.source.runtime": "Runtime",
-  "options.skills.dsh.source.runtime.description":
-    "Skills registered dynamically by the active DSH composition.",
-  "options.skills.dsh.source.bundled": "Bundled",
-  "options.skills.dsh.source.bundled.description":
-    "Read-only skills distributed with the runtime or a plugin.",
-  "options.skills.dsh.source.custom": "Custom provider",
-  "options.skills.dsh.source.custom.description":
-    "Skills contributed by an explicitly configured provider.",
-  "options.skills.dsh.source.other": "Other providers",
-  "options.skills.dsh.source.other.description":
-    "Skills whose provider exposes a non-standard source.",
-  "options.skills.dsh.invocation": "Invocation",
-  "options.skills.dsh.modelInvocable": "Model callable",
-  "options.skills.dsh.userInvocable": "User callable",
-  "options.skills.dsh.sessionSummary":
-    "{count} skills in the current conversation composition",
-  "options.skills.dsh.userSummary": "{count} skills in the user catalog",
-  "options.skills.dsh.search": "Search name, description, source, or provider…",
-  "options.skills.dsh.deleteConfirm": "Delete DSH skill “{name}”?",
 
   // Task agent picker
   "sidepanel.agentPicker.label": "Choose agent",
@@ -658,50 +522,6 @@ export const en = {
   "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
 
-  // Memory settings
-  "options.memory.title": "Memory",
-  "options.memory.subtitle": "The assistant's persistent memory (read-only)",
-  "options.memory.subtitle.tooltip": "DSH home/amiba-memory/memory.json",
-  "options.memory.empty": "(No memory entries yet)",
-  "options.memory.refresh": "Refresh",
-  "options.memory.failedToLoad": "Failed to load",
-  "options.memory.chars": "{count} / {limit} chars",
-  "options.memory.entries": "{count} entries",
-  "options.memory.config.title": "Memory access",
-  "options.memory.config.description":
-    "Allow this assistant to recall and update persistent memory across tasks.",
-  "options.memory.config.toggle": "Allow this assistant to use memory",
-  "options.memory.config.provider": "Memory provider",
-  "options.memory.config.providerDescription":
-    "Choose where this Profile keeps and retrieves long-term memory.",
-  "options.memory.config.saveFailed": "Unable to save memory settings.",
-  "options.memory.charsLen": "{count} chars",
-  "options.memory.target.memory": "MEMORY.md",
-  "options.memory.target.user": "USER.md",
-  "options.memory.desc.memory":
-    "The assistant's observations about environments, projects, and tools.",
-  "options.memory.desc.user":
-    "User preferences and collaboration habits noted by the assistant.",
-  "options.memory.flagTooltip":
-    "Safety-scan flag: {flag}\nThe same rules block entries before MEMORY.md is injected into the system prompt",
-  "options.memory.dsh.subtitle":
-    "Preset-scoped long-term memory supplied by a native DSH plugin",
-  "options.memory.dsh.subtitleTooltip":
-    "DSH session history and compaction remain separate from cross-session memory.",
-  "options.memory.dsh.pluginTitle": "DSH long-term memory plugin",
-  "options.memory.dsh.pluginDescription":
-    "Memory tools, safety scanning, persistence, and model context all run inside the DSH Cordis composition.",
-  "options.memory.dsh.active": "Active",
-  "options.memory.dsh.preset": "Memory scope",
-  "options.memory.dsh.presetDescription":
-    "Each DSH agent preset keeps an independent long-term memory collection.",
-  "options.memory.dsh.target.memory": "Assistant memory",
-  "options.memory.dsh.target.user": "User profile",
-  "options.memory.dsh.reset": "Reset",
-  "options.memory.dsh.resetConfirm":
-    "Clear all long-term memory for this DSH preset? This cannot be undone.",
-  "options.memory.dsh.resetFailed": "Failed to reset DSH memory.",
-
   // Models / DSH model config
   "options.models.title": "Models",
   "options.models.subtitle":
@@ -937,112 +757,6 @@ export const en = {
   "options.models.meta.modality": "Modality",
   "options.models.meta.parameters": "Parameters",
   "options.models.meta.capabilities": "Capabilities",
-  // Automation
-  "options.cron.title": "Automation",
-  "options.cron.pageTitle": "Automation",
-  "options.cron.subtitle": "Tasks Amiba runs for you on a schedule",
-  "options.cron.refresh": "Refresh",
-  "options.cron.newJob": "New job",
-  "options.cron.search": "Search scheduled tasks",
-  "options.cron.search.empty": "No matching tasks",
-  "options.cron.filter.label": "Filter scheduled tasks",
-  "options.cron.filter.all": "All",
-  "options.cron.filter.enabled": "Enabled",
-  "options.cron.filter.paused": "Paused",
-  "options.cron.loading": "Loading scheduled tasks…",
-  "options.cron.empty.title": "No scheduled tasks yet",
-  "options.cron.empty.description":
-    "Create one to let Amiba handle recurring or time-based work.",
-  "options.cron.form.create": "New automation",
-  "options.cron.form.edit": "Edit automation",
-  "options.cron.form.createAction": "Create",
-  "options.cron.form.name": "Name",
-  "options.cron.form.name.placeholder":
-    "Optional — Amiba can derive it from the instructions",
-  "options.cron.form.schedule": "Schedule",
-  "options.cron.form.schedule.hint":
-    "Cron expression, recurring duration, one-shot duration, or ISO time",
-  "options.cron.form.prompt": "Instructions",
-  "options.cron.form.prompt.placeholder":
-    "Self-contained instructions Amiba should execute.",
-  "options.cron.form.prompt.scriptPlaceholder":
-    "Optional when running a script directly",
-  "options.cron.form.execution": "Execution",
-  "options.cron.form.model": "Model",
-  "options.cron.form.skills": "Skills",
-  "options.cron.form.skills.inherit": "No forced skills",
-  "options.cron.form.skills.search": "Search skills…",
-  "options.cron.form.workdir": "Working directory",
-  "options.cron.form.workdir.placeholder": "Defaults to $HOME",
-  "options.cron.form.workdir.choose": "Choose working directory",
-  "options.cron.form.delivery": "Delivery",
-  "options.cron.form.delivery.hint":
-    "local keeps the result in Amiba; all or a platform target also sends it out.",
-  "options.cron.form.advanced.show": "Advanced",
-  "options.cron.form.advanced.hide": "Hide advanced",
-  "options.cron.form.directScript": "Run script directly",
-  "options.cron.form.directScript.hint":
-    "Skip the model and run the script as the automation.",
-  "options.cron.form.script": "Script",
-  "options.cron.form.script.placeholder": "An absolute executable path",
-  "options.cron.form.repeat": "Run limit",
-  "options.cron.form.repeat.placeholder": "Blank means unlimited",
-  "options.cron.state.scheduled": "Enabled",
-  "options.cron.state.running": "Running",
-  "options.cron.state.paused": "Paused",
-  "options.cron.state.completed": "Completed",
-  "options.cron.state.error": "Needs attention",
-  "options.cron.state.unknown": "Unknown",
-  "options.cron.mode.directScript": "Direct script",
-  "options.cron.meta.nextRun": "Next {time}",
-  "options.cron.meta.noNextRun": "No next run",
-  "options.cron.meta.neverRun": "Never run",
-  "options.cron.meta.lastSucceeded": "Last succeeded {time}",
-  "options.cron.meta.lastFailed": "Last failed {time}",
-  "options.cron.meta.lastRun": "Last run {time}",
-  "options.cron.action.runNow": "Run now",
-  "options.cron.action.pause": "Pause",
-  "options.cron.action.resume": "Resume",
-  "options.cron.action.edit": "Edit task",
-  "options.cron.action.copyId": "Copy task ID",
-  "options.cron.action.delete": "Delete task",
-  "options.cron.action.menu": "Task actions",
-  "options.cron.action.moreNamed": "More actions for {name}",
-  "options.cron.action.pauseNamed": "Pause {name}",
-  "options.cron.action.resumeNamed": "Resume {name}",
-  "options.cron.action.copied": "Task ID copied",
-  "options.cron.action.copyFailed": "Couldn't copy the task ID",
-  "options.cron.action.deleteConfirm":
-    "Delete “{name}”? Its saved outputs will also be removed.",
-  "options.cron.dsh.new": "New reminder",
-  "options.cron.dsh.session": "Owning conversation",
-  "options.cron.dsh.noSession":
-    "Create a conversation before adding a reminder",
-  "options.cron.dsh.explanation":
-    "Reminders belong to one DSH conversation and re-enter that same conversation when due. Cron expressions, direct scripts, separate model settings, and external delivery are intentionally not part of this runtime.",
-  "options.cron.dsh.prompt": "Reminder content",
-  "options.cron.dsh.prompt.placeholder":
-    "What should this conversation handle when the reminder becomes due?",
-  "options.cron.dsh.rule": "Timing",
-  "options.cron.dsh.rule.after": "After a delay",
-  "options.cron.dsh.rule.at": "At a date and time",
-  "options.cron.dsh.rule.every": "Fixed interval",
-  "options.cron.dsh.at": "Date and time",
-  "options.cron.dsh.minutes": "Minutes",
-  "options.cron.dsh.sessionHint":
-    "The reminder is persisted in the selected DSH session. Recurring intervals must be at least five minutes.",
-  "options.cron.dsh.oneShot": "One-time",
-  "options.cron.dsh.recurring": "Recurring",
-  "options.cron.dsh.overdue": "Overdue",
-  "options.cron.dsh.filter.scheduled": "Scheduled",
-  "options.cron.dsh.filter.overdue": "Overdue",
-  "options.cron.dsh.deleteConfirm": "Delete reminder “{name}”?",
-  "options.cron.dsh.error.prompt": "Reminder content is required.",
-  "options.cron.dsh.error.future": "Choose a time in the future.",
-  "options.cron.dsh.error.interval":
-    "Recurring intervals must be a whole number of at least five minutes.",
-  "options.cron.dsh.error.delay":
-    "The delay must be a positive whole number of minutes.",
 
   // Status + logs
   "options.status.title": "Status",
@@ -1320,7 +1034,6 @@ export const en = {
   // chats", "Telegram chats", …). Single template keeps section
   // labels uniform across origins.
   "sidepanel.sessions.group.channelChats": "{name} chats",
-  "sidepanel.sessions.group.scheduled": "Automation runs",
 
   // Session history and DSH scheduled runs
   "modelSelection.inherit": "Use the default model",
@@ -1337,17 +1050,6 @@ export const en = {
   "sidepanel.sessions.running": "Running",
   "sidepanel.sessions.failed": "Run failed",
   "sidepanel.sessions.activityBar.aria": "Sidebar views",
-  "sidepanel.sessions.scheduled.loading": "Loading…",
-  "sidepanel.sessions.scheduled.empty":
-    "No scheduled tasks yet. Create one from a chat to get started.",
-  "sidepanel.sessions.scheduled.error":
-    "Couldn't load scheduled tasks. Check that DSH is running.",
-  "sidepanel.sessions.scheduled.noRuns": "No runs yet.",
-  "sidepanel.sessions.scheduled.selectRun": "Select a run to view its output.",
-  "sidepanel.sessions.scheduled.trigger": "Trigger now",
-  "sidepanel.sessions.scheduled.triggerConfirm":
-    'Run "{name}" now? It will fire on the next scheduler tick.',
-  "sidepanel.sessions.scheduled.triggerFailed": "Trigger failed: {error}",
 
   // New tab
   "newtab.greeting": "What can I help with?",
@@ -1445,154 +1147,6 @@ export const en = {
   // represented generically; transport identity remains in DSH.
   "channels.local": "Local",
   "channels.unknown": "Other",
-  // Tokens + Tools pages
-  "options.nav.tokens": "Tokens",
-  "options.nav.tools": "Tools",
-  "usage.range.today": "Today",
-  "usage.range.lastN": "{n}d",
-  "usage.heatmap.dow.mon": "M",
-  "usage.heatmap.dow.wed": "W",
-  "usage.heatmap.dow.fri": "F",
-  "usage.heatmap.legend.less": "Less",
-  "usage.heatmap.legend.more": "More",
-  "usage.heatmap.range": "{weeks}w",
-  "usage.heatmap.tooltip.none": "no activity",
-  "usage.label.noData": "No data yet.",
-  "usage.label.percentage": "{pct}%",
-  "usage.tokens.hero.tokens": "Tokens",
-  "usage.tokens.hero.turns": "Turns",
-  "usage.tokens.hero.sessions": "Sessions",
-  "usage.tokens.section.activity": "Activity",
-  "usage.tokens.section.trend": "Activity trend",
-  "usage.tokens.section.byModel": "By model",
-  "usage.tokens.section.recent": "Recent sessions",
-  "usage.tokens.heatmap.tooltip.tokens": "tokens",
-  "usage.tokens.label.turns": "{count} turns",
-  "usage.tokens.label.tokens": "{in} in / {out} out",
-  "usage.tokens.label.placeholder": "Unknown",
-  "usage.tokens.label.placeholderHint":
-    "The DSH event history for this session did not record a specific model.",
-  "usage.tokens.footer.source":
-    "Data from the local runtime · auto-refreshes every 30 s",
-  "usage.tools.hero.calls": "Calls",
-  "usage.tools.hero.tools": "Tools",
-  "usage.tools.hero.unfinished": "Unfinished",
-  "usage.tools.section.activity": "Activity",
-  "usage.tools.section.trend": "Activity trend",
-  "usage.tools.section.byTool": "By tool",
-  "usage.tools.section.recent": "Recent calls",
-  "usage.tools.heatmap.tooltip.calls": "calls",
-  "usage.tools.label.calls": "{count} calls",
-  "usage.tools.label.running": "Running",
-  "usage.tools.label.completed": "{ms}ms",
-  "usage.tools.footer.source": "Local capture · auto-refreshes every 30 s",
-
-  // Runtime tool catalog, with internal implementation details curated away.
-  "agentCapabilities.title": "Tools",
-  "agentCapabilities.subtitle":
-    "Manage the built-in and external tools available to this assistant.",
-  "agentCapabilities.back": "Back to tools",
-  "agentCapabilities.activity.title": "Tool usage",
-  "agentCapabilities.activity.description":
-    "A diagnostic record of recent tool calls.",
-  "agentCapabilities.activity.action": "Usage",
-  "agentCapabilities.dsh.title": "Tool catalog",
-  "agentCapabilities.dsh.description":
-    "Every tool registered in the DSH runtime, with its actual source.",
-  "agentCapabilities.dsh.empty": "No tools are registered in this runtime.",
-  "agentCapabilities.dsh.noDescription": "No tool description provided.",
-  "agentCapabilities.dsh.ready": "Registered",
-  "agentCapabilities.dsh.schema": "Input schema",
-  "agentCapabilities.dsh.schema.description":
-    "The JSON Schema DSH sends to the selected model for this tool.",
-  "agentCapabilities.dsh.source.filter": "Filter by tool source",
-  "agentCapabilities.dsh.source.all": "All",
-  "agentCapabilities.dsh.source.empty": "This source has no available tools.",
-  "agentCapabilities.dsh.source.dshCore": "Official DSH capabilities",
-  "agentCapabilities.dsh.source.dshCore.description":
-    "Registered by official plugins across the installed DSH presets.",
-  "agentCapabilities.dsh.source.dshPlugin": "Amiba DSH Plugins",
-  "agentCapabilities.dsh.source.dshPlugin.description":
-    "Registered by independent dsh-plugin-* projects assembled by the Amiba bundle.",
-  "agentCapabilities.dsh.source.mcpServer": "MCP Server",
-  "agentCapabilities.dsh.source.mcpServer.description":
-    "Provided by external services connected through the DSH MCP Client plugin.",
-  "agentCapabilities.dsh.source.detail": "Tool source",
-  "agentCapabilities.dsh.source.detail.description":
-    "The actual registration path that contributes this tool to the DSH runtime.",
-  "agentCapabilities.dsh.source.category": "Source type",
-  "agentCapabilities.dsh.source.owner": "Owning plugin",
-  "agentCapabilities.dsh.source.provider": "Capability provider",
-  "agentCapabilities.dsh.source.package": "Implementation package",
-  "agentCapabilities.dsh.source.identifier": "Source identifier",
-  "agentCapabilities.dsh.source.loadMode": "Load mode",
-  "agentCapabilities.dsh.source.executionTarget": "Execution target",
-  "agentCapabilities.dsh.source.dynamic": "Dynamic mount",
-  "agentCapabilities.dsh.source.bundled": "Loaded with runtime",
-  "agentCapabilities.dsh.loadMode.core": "DSH Profile / Bundle",
-  "agentCapabilities.dsh.loadMode.plugin": "Cordis Plugin",
-  "agentCapabilities.dsh.loadMode.mcp": "MCP Client",
-  "agentCapabilities.dsh.executionTarget.dshRuntime": "DSH Runtime",
-  "agentCapabilities.dsh.executionTarget.desktopService":
-    "Desktop platform service",
-  "agentCapabilities.dsh.executionTarget.externalProcess":
-    "External isolated process",
-  "agentCapabilities.dsh.group.workspace": "Workspace and device",
-  "agentCapabilities.dsh.group.workspace.description":
-    "Files, commands, terminals and project operations.",
-  "agentCapabilities.dsh.group.web": "Web and browser",
-  "agentCapabilities.dsh.group.web.description":
-    "Search, fetch and browser interaction tools.",
-  "agentCapabilities.dsh.group.coordinate": "Planning and coordination",
-  "agentCapabilities.dsh.group.coordinate.description":
-    "Questions, goals, todos, schedules and delegation.",
-  "agentCapabilities.dsh.group.memory": "Long-term memory",
-  "agentCapabilities.dsh.group.memory.description":
-    "Preset-scoped memory contributed by the Amiba DSH plugin.",
-  "agentCapabilities.dsh.group.connected": "Plugins and connected services",
-  "agentCapabilities.dsh.group.connected.description":
-    "Skills, MCP servers, Extensions and product integrations.",
-  "agentCapabilities.dsh.group.other": "Other runtime tools",
-  "agentCapabilities.dsh.group.other.description":
-    "Additional tools contributed by the active DSH composition.",
-  // User-added extensions and tools.
-  "externalTools.tab.extensions": "App extensions",
-  "externalTools.tab.plugins": "Agent plugins",
-  "externalTools.tab.mcp": "MCP",
-  "externalTools.status.enabled": "Enabled",
-  "externalTools.status.disabled": "Disabled",
-  "externalTools.configure": "Configure",
-  "externalTools.plugin.add": "Add plugin",
-  "externalTools.plugin.addPrompt":
-    "Help me find and add an Agent plugin. Ask what I need it for, explain the source and permissions, and ask for confirmation before installing anything.",
-  "externalTools.mcp.title": "External tools",
-  "externalTools.mcp.subtitle":
-    "Connect tools provided by external services through MCP.",
-  "externalTools.mcp.loadFailed": "Could not load MCP services.",
-  "externalTools.mcp.add": "Add MCP",
-  "externalTools.mcp.source": "MCP",
-  "externalTools.mcp.addPrompt":
-    "Help me find and add an MCP service for Amiba assistant profile “{profile}”. First ask what I want Amiba to do, explain the options, and ask for confirmation before installing anything.",
-  "externalTools.mcp.configurePrompt":
-    "Help me inspect and configure MCP “{name}” (configuration name: {slug}) in Amiba assistant profile “{profile}”. Explain its current state first, and ask for confirmation before disabling, reconfiguring or removing it.",
-  "externalTools.mcp.emptyTitle": "No MCP services added",
-  "externalTools.mcp.emptyDescription":
-    "Add one when you want Amiba to connect to an external tool or data source.",
-  "externalTools.mcp.dsh.subtitle":
-    "Load external tools as native DSH Cordis plugins. DSH currently bridges MCP tools, not resources or prompts.",
-  "externalTools.mcp.dsh.emptyDescription":
-    "Add a stdio or Streamable HTTP server to register its tools in DSH.",
-  "externalTools.mcp.dsh.serverName": "Server namespace",
-  "externalTools.mcp.dsh.args": "One argument per line",
-  "externalTools.mcp.dsh.cwd": "Working directory (optional)",
-  "externalTools.mcp.dsh.env": "Environment JSON (optional)",
-  "externalTools.mcp.dsh.headers": "Headers JSON (optional)",
-  "externalTools.mcp.dsh.preserveSecrets":
-    "Leave blank to preserve configured secrets: {keys}",
-  "externalTools.mcp.dsh.hotReload":
-    "Saving rewrites the private DSH Cordis patch. Enabled servers hot-reload into the native tool registry.",
-  "externalTools.mcp.dsh.saved": "DSH MCP configuration saved",
-  "externalTools.mcp.dsh.deleteConfirm": "Remove MCP server “{name}”?",
 
   "sidepanel.clarify.label": "The agent needs your input",
   "sidepanel.clarify.confirmSelection": "Confirm selection",

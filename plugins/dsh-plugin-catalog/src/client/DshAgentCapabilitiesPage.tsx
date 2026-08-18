@@ -24,13 +24,23 @@ import {
   PaneHeaderBar,
   ScrollArea,
   SettingsPageDescription,
-  usePluginT as useT,
+  usePluginT,
   useRefetchOnFocus,
-  type MessageKey,
 } from "@amiba/ui/plugin";
 
+import { catalogI18n, type CatalogMessageKey } from "./i18n.js";
 import type { ToolSourceDescriptor, ToolSourceKind } from "../provenance.js";
 import type { ToolInventory, ToolSchemaView } from "../remote.js";
+
+/**
+ * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
+ * Every call site in this file should use this, not the bare `usePluginT`,
+ * so overlay-covered keys resolve locally instead of depending on the host
+ * `agentCapabilities.*` bundle.
+ */
+function useT() {
+  return usePluginT(catalogI18n);
+}
 
 type SourceFilter = "all" | ToolSourceKind;
 
@@ -55,8 +65,8 @@ export interface ToolsDirectoryAdapter {
 const SOURCES: Array<{
   id: ToolSourceKind;
   icon: LucideIcon;
-  title: MessageKey;
-  description: MessageKey;
+  title: CatalogMessageKey;
+  description: CatalogMessageKey;
 }> = [
   {
     id: "dsh-core",
@@ -82,7 +92,10 @@ function sourceConfig(kind: ToolSourceKind) {
   return SOURCES.find((source) => source.id === kind) ?? SOURCES[0]!;
 }
 
-const LOAD_MODE_KEYS: Record<ToolSourceDescriptor["loadMode"], MessageKey> = {
+const LOAD_MODE_KEYS: Record<
+  ToolSourceDescriptor["loadMode"],
+  CatalogMessageKey
+> = {
   core: "agentCapabilities.dsh.loadMode.core",
   plugin: "agentCapabilities.dsh.loadMode.plugin",
   mcp: "agentCapabilities.dsh.loadMode.mcp",
@@ -90,7 +103,7 @@ const LOAD_MODE_KEYS: Record<ToolSourceDescriptor["loadMode"], MessageKey> = {
 
 const EXECUTION_TARGET_KEYS: Record<
   ToolSourceDescriptor["executionTarget"],
-  MessageKey
+  CatalogMessageKey
 > = {
   "dsh-runtime": "agentCapabilities.dsh.executionTarget.dshRuntime",
   "desktop-service": "agentCapabilities.dsh.executionTarget.desktopService",
@@ -358,7 +371,7 @@ function ToolSourceIndex({
   const entries: Array<{
     id: SourceFilter;
     icon: LucideIcon;
-    title: MessageKey;
+    title: CatalogMessageKey;
     count: number;
   }> = [
     {

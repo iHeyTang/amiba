@@ -13,12 +13,14 @@ async function load(sessionId?: string) {
     )[0]?.sessionId;
   if (!resolvedSessionId) return [];
   const result = await platform.agentSkills.list(resolvedSessionId);
-  return result.skills
-    .filter((skill) => skill.userInvocable)
-    .map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-    }));
+  // No user-invocable filter: the engine's `skill.list` RPC returns only
+  // user-invocable rows by contract (`AgentSkillMention.userInvocable` is
+  // the literal type `true` — see its doc comment in
+  // `@amiba/app-runtime/platform`), so filtering here would be dead code.
+  return result.skills.map((skill) => ({
+    name: skill.name,
+    description: skill.description,
+  }));
 }
 
 export function makeSkillsProvider(sessionId?: string): TriggerProvider {

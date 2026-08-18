@@ -73,8 +73,8 @@ describe("SettingsView DSH navigation", () => {
               <button type="button" data-testid="dsh-memory-navigation">
                 Memory
               </button>
-              <button type="button" data-testid="dsh-messaging-navigation">
-                Message channels
+              <button type="button" data-testid="dsh-example-navigation">
+                Example section
               </button>
             </>
           ),
@@ -89,7 +89,7 @@ describe("SettingsView DSH navigation", () => {
     expect(screen.getByRole("button", { name: "Skills" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Memory" })).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Message channels" }),
+      screen.getByRole("button", { name: "Example section" }),
     ).toBeVisible();
     expect(
       screen
@@ -101,7 +101,7 @@ describe("SettingsView DSH navigation", () => {
       screen
         .getByTestId("dsh-memory-navigation")
         .compareDocumentPosition(
-          screen.getByTestId("dsh-messaging-navigation"),
+          screen.getByTestId("dsh-example-navigation"),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(

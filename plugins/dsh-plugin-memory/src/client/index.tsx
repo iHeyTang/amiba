@@ -347,6 +347,12 @@ function MemorySettings({
               ? DEFAULT_PRESET
               : (result.value[0] ?? DEFAULT_PRESET),
         );
+      } catch (cause) {
+        // A rejected transport degrades to the default preset — the same
+        // remote is queried right after by `MemoryView`'s list call, whose
+        // visible `error` state reports the failure to the user. Log so the
+        // switcher's silent fallback stays diagnosable.
+        console.warn("[amiba-memory] preset list failed:", cause);
       } finally {
         if (!cancelled) setPresetsLoading(false);
       }

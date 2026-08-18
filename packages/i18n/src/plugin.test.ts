@@ -87,7 +87,9 @@ describe("createPluginTranslator", () => {
 
   it("interpolates {param} placeholders from host templates identically to before", () => {
     const t = createPluginTranslator("en");
-    expect(t("options.skills.files", { count: 3 })).toBe("Files (3)");
+    expect(t("workspacePane.filesChanged", { count: 3 })).toBe(
+      "3 files changed",
+    );
   });
 
   it("leaves an unmatched placeholder untouched, same as the host t()", () => {
@@ -98,11 +100,13 @@ describe("createPluginTranslator", () => {
 
   it("overlay precedence and interpolation compose together", () => {
     const withOverride: PluginCatalogOverlay = {
-      en: { "options.skills.files": "{count} plugin file(s)" },
-      "zh-CN": { "options.skills.files": "{count} 个插件文件" },
+      en: { "workspacePane.filesChanged": "{count} plugin file(s)" },
+      "zh-CN": { "workspacePane.filesChanged": "{count} 个插件文件" },
     };
     const t = createPluginTranslator("en", withOverride);
-    expect(t("options.skills.files", { count: 2 })).toBe("2 plugin file(s)");
+    expect(t("workspacePane.filesChanged", { count: 2 })).toBe(
+      "2 plugin file(s)",
+    );
   });
 
   it("returns the key unchanged (post-interpolation no-op) for a fully missing key", () => {

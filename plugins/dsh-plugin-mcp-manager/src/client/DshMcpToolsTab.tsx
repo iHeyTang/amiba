@@ -16,8 +16,20 @@ import {
   ModelSettingsSectionHeader,
   Switch,
   cn,
-  usePluginT as useT,
+  usePluginT,
 } from "@amiba/ui/plugin";
+
+import { mcpI18n } from "./i18n.js";
+
+/**
+ * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
+ * Every call site in this file should use this, not the bare `usePluginT`,
+ * so overlay-covered keys resolve locally instead of depending on the host
+ * `externalTools.mcp.*` bundle.
+ */
+function useT() {
+  return usePluginT(mcpI18n);
+}
 
 /**
  * Server shape and CRUD adapter this view renders — the MCP manager
