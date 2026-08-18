@@ -128,6 +128,8 @@ export function Bubble({
     const hasFinalDestination =
       !m.streaming && Boolean(m.agentFinalUrl && onOpenAgentDestination);
 
+    const hasReasoningFold = trace.reasoningText.length > 0;
+
     // A completed assistant message with no answer or inspectable execution
     // record should take up no space in the conversation.
     if (
@@ -135,7 +137,8 @@ export function Bubble({
       !hasBody &&
       !traceVisible &&
       !runBoundary &&
-      !hasFinalDestination
+      !hasFinalDestination &&
+      !hasReasoningFold
     ) {
       return null;
     }
@@ -155,7 +158,8 @@ export function Bubble({
 
     // Before the first reasoning/tool/text event, keep the placeholder to a
     // single quiet line. As soon as real execution state arrives, render it.
-    const hasVisibleContent = hasBody || traceVisible || hasFinalDestination;
+    const hasVisibleContent =
+      hasBody || traceVisible || hasFinalDestination || hasReasoningFold;
     const isEmptyStreaming = !!m.streaming && !hasVisibleContent;
     if (isEmptyStreaming) {
       return (
@@ -178,14 +182,18 @@ export function Bubble({
 
     return (
       <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
+        {hasReasoningFold && (
+          /* The thought fold precedes everything: reasoning happens before
+             the answer, and it renders regardless of trace suppression. */
+          <div className={cn(hasBody || traceVisible ? "mb-2" : "")}>
+            <ReasoningFold
+              reasoningText={trace.reasoningText}
+              streaming={!!m.streaming}
+            />
+          </div>
+        )}
         {traceVisible && (
           <div className={cn("flex flex-col gap-0.5", hasBody ? "mb-2" : "")}>
-            {trace.reasoningText.length > 0 && (
-              <ReasoningFold
-                reasoningText={trace.reasoningText}
-                streaming={!!m.streaming}
-              />
-            )}
             {trace.fallbackToolDetails.length > 0 && (
               <TraceDisclosure
                 label={t("sidepanel.trace.toolDetails")}
@@ -394,10 +402,10 @@ function resolveAssistantTrace(m: UiMessage) {
     toolProgress,
     items,
     hasRunningTool: toolProgress.some((event) => event.status === "running"),
-    hasTrace:
-      reasoningText.length > 0 ||
-      fallbackToolDetails.length > 0 ||
-      items.length > 0,
+    // Reasoning deliberately does NOT count: the thought fold is owned by
+    // the bubble itself (rendered above the body) and must never flip a
+    // body-carrying message into the trace-suppression/aggregation economy.
+    hasTrace: fallbackToolDetails.length > 0 || items.length > 0,
   };
 }
 
@@ -767,7 +775,10 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
     const trace = resolveAssistantTrace(message);
     const hasBody = trace.bodyText.trim().length > 0;
     const hasStandaloneVisual =
-      hasBody || Boolean(message.agentFinalUrl) || Boolean(message.streaming);
+      hasBody ||
+      Boolean(message.agentFinalUrl) ||
+      Boolean(message.streaming) ||
+      trace.reasoningText.length > 0;
 
     if (hasBody) {
       flushExecution();
