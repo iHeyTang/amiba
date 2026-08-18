@@ -8,6 +8,7 @@ import {
   type MessagingAdapter,
 } from "./DshSettingsMessaging.js";
 import { AMIBA_MESSAGING_REMOTE } from "../remote.js";
+import { absoluteInboundEndpoint } from "./inbound-endpoint.js";
 
 export const name = "amiba-messaging-ui";
 export const inject = ["slots", "remote"];
@@ -85,7 +86,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     (injectedCtx) => {
       const remote: MessagingRemote = injectedCtx.remote.amibaMessaging;
       const adapter: MessagingAdapter = {
-        list: () => valueOf(remote.list()),
+        list: async () => {
+          const snapshot = await valueOf(remote.list());
+          return {
+            ...snapshot,
+            inboundEndpoint: absoluteInboundEndpoint(snapshot.inboundEndpoint),
+          };
+        },
         create: (input) => valueOf(remote.create(input)),
         update: (id, patch) => valueOf(remote.update(id, patch)),
         remove: (id) => valueOf(remote.removeChannel(id)),

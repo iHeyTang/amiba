@@ -67,6 +67,13 @@ void (async () => {
   try {
     const boot = await window.amiba.dshClient.boot();
     installDshClientTransport(boot.baseUrl);
+    // DSH Client plugins run under the app origin here, so `location.origin`
+    // never reaches the managed runtime authority. Publish it through the
+    // same DOM side-channel family as the other data-amiba-dsh-* contracts.
+    document.documentElement.setAttribute(
+      "data-amiba-dsh-base-url",
+      boot.baseUrl,
+    );
     const dshApiClient = new DshApiClient({ baseUrl: boot.baseUrl });
     setPlatform(createElectronAdapter(dshApiClient));
     // DSH Client plugins register before Amiba's React root mounts. Publish the
