@@ -252,42 +252,27 @@ export function createDshPlatformAdapters(
       client.call("amibaSchedules/removeSchedule", { args: { sessionId, id } }),
   };
 
+  // Engine-native only: the composer's `/`-skill mention provider is the
+  // sole remaining consumer of `platform.agentSkills`. The full
+  // authoring/CRUD surface moved to dsh-plugin-skills' own Remote face in
+  // T3 — this adapter no longer reaches into that plugin's RPC namespace
+  // at all.
   const skills: AgentSkillsAdapter = {
     async list(sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      return client.call("amibaSkills/list", {
-        args: { sessionId: sessionId ?? null },
-      });
-    },
-    async read(name, sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      return client.call("amibaSkills/read", {
-        args: { name, sessionId: sessionId ?? null },
-      });
-    },
-    async listFiles(name, sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      return client.call("amibaSkills/listFiles", {
-        args: { name, sessionId: sessionId ?? null },
-      });
-    },
-    async readFile(name, path, sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      return client.call("amibaSkills/readFile", {
-        args: { name, path, sessionId: sessionId ?? null },
-      });
-    },
-    async save(name, document, sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      return client.call("amibaSkills/save", {
-        args: { name, document, sessionId: sessionId ?? null },
-      });
-    },
-    async remove(name, sessionId) {
-      if (sessionId) await ensureLiveSession(client, sessionId);
-      await client.call("amibaSkills/removeSkill", {
-        args: { name, sessionId: sessionId ?? null },
-      });
+      await ensureLiveSession(client, sessionId);
+      const { skills: entries } = await client.listSkills(sessionId);
+      return {
+        skills: entries.map((entry) => ({
+          name: entry.name,
+          description: entry.description,
+          whenToUse: entry.whenToUse,
+          modelInvocable: entry.modelInvocable,
+          // `skill.list` is documented as the user-invocable catalog for
+          // the session — every row already satisfies this, so it is a
+          // known constant here, not fabricated data.
+          userInvocable: true,
+        })),
+      };
     },
   };
 

@@ -25,7 +25,7 @@ import type {
   AgentSkillEntry,
   AgentSkillFileContent,
   AgentSkillFileEntry,
-  AgentSkillsAdapter,
+  AgentSkillFileList,
 } from "@amiba/app-runtime/platform";
 import {
   Button,
@@ -49,6 +49,35 @@ import {
   usePluginT as useT,
   useRefetchOnFocus,
 } from "@amiba/ui/plugin";
+
+/**
+ * Full skills-authoring CRUD surface this view renders — browse, read,
+ * edit, save, remove. Deliberately local to the plugin rather than the host
+ * platform contract: `@amiba/app-runtime/platform`'s `AgentSkillsAdapter`
+ * now only exposes the trimmed, engine-native `list(sessionId)` the chat
+ * composer's `/`-skill mentions use. `client/index.tsx` builds an instance
+ * of this shape directly from the plugin's own Remote face
+ * (`ctx.remote.amibaSkills`).
+ */
+export interface SkillsDirectoryAdapter {
+  list(sessionId?: string): Promise<{
+    skills: AgentSkillEntry[];
+    userRoot: string;
+  }>;
+  read(name: string, sessionId?: string): Promise<AgentSkillDocument>;
+  listFiles(name: string, sessionId?: string): Promise<AgentSkillFileList>;
+  readFile(
+    name: string,
+    path: string,
+    sessionId?: string,
+  ): Promise<AgentSkillFileContent>;
+  save(
+    name: string,
+    document: string,
+    sessionId?: string,
+  ): Promise<{ name: string }>;
+  remove(name: string, sessionId?: string): Promise<void>;
+}
 
 type SourceBucket =
   | "all"
@@ -272,7 +301,7 @@ function SkillViewer({
   onClose,
   onEdit,
 }: {
-  adapter: AgentSkillsAdapter;
+  adapter: SkillsDirectoryAdapter;
   sessionId?: string;
   skill: AgentSkillEntry | null;
   onClose(): void;
@@ -481,7 +510,7 @@ export function DshSkillsPage({
   embedded = false,
   headerActionsHost,
 }: {
-  adapter: AgentSkillsAdapter;
+  adapter: SkillsDirectoryAdapter;
   sessionId?: string;
   embedded?: boolean;
   headerActionsHost?: () => HTMLElement | null;

@@ -1,11 +1,10 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import type { AgentSkillsAdapter } from "@amiba/app-runtime/platform";
 import { useMemo, type ReactNode } from "react";
 
 import { AMIBA_SKILLS_REMOTE } from "../remote.js";
-import { DshSkillsPage } from "./DshSkillsPage.js";
+import { DshSkillsPage, type SkillsDirectoryAdapter } from "./DshSkillsPage.js";
 
 export const name = "amiba-skills-ui";
 export const inject = ["slots", "remote"];
@@ -20,7 +19,7 @@ function sectionLabel(): string {
 }
 
 type SkillsSectionProps = PropsRuntime<"amiba.settings.section"> & {
-  adapter: AgentSkillsAdapter;
+  adapter: SkillsDirectoryAdapter;
 };
 
 function SkillsSettings({
@@ -46,7 +45,7 @@ function SkillsSettings({
 }
 
 type SkillsPresetSectionProps = PropsRuntime<"amiba.agentPreset.section"> & {
-  adapter: AgentSkillsAdapter;
+  adapter: SkillsDirectoryAdapter;
 };
 
 /**
@@ -65,6 +64,13 @@ function SkillsPresetSection({
   useSessions,
 }: SkillsPresetSectionProps): ReactNode {
   const sessionState = useSessions((state) => state);
+  // Strict match only: unlike the retired host `SkillsPage.tsx`, this does
+  // NOT fall back to treating an untagged session (`agentPreset` absent) as
+  // belonging to the "default" preset — that fallback existed to cover a
+  // preset literally named "default" colliding with the sentinel meaning
+  // "use the active preset", which cannot occur here since `profileId`
+  // always arrives as a real, unambiguous preset id from the ledger owner.
+  // Dropping it was a deliberate simplification, reviewed and accepted.
   const sessionId = useMemo(() => {
     const current = sessionState.current
       ? sessionState.byId[sessionState.current]
@@ -102,7 +108,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaSkills"],
     (injectedCtx) => {
       const remote: SkillsRemote = injectedCtx.remote.amibaSkills;
-      const adapter: AgentSkillsAdapter = {
+      const adapter: SkillsDirectoryAdapter = {
         list: (sessionId) => valueOf(remote.list(sessionId ?? null)),
         read: (skillName, sessionId) =>
           valueOf(remote.read(skillName, sessionId ?? null)),

@@ -389,25 +389,37 @@ export interface AgentSkillFileContent {
   content?: string;
 }
 
+/**
+ * One row of the DSH-engine-native, session-scoped skill catalog (the
+ * `skill.list` RPC — `@deepseek-ai/dsh-host-apiproxy`'s `SkillEntry`).
+ * `userInvocable` is always `true`: the engine RPC's own contract documents
+ * it as "the user-invocable skill catalog for the session's project", so
+ * every row it returns already satisfies that filter by construction — this
+ * is a documented invariant, not a guess. `source`/`provider`/
+ * `resourceBase`/`editable` (see `AgentSkillEntry` above) are NOT part of
+ * the engine wire contract ("provider/source vocabulary stays host-side"
+ * per its own doc-comment) and have no equivalent here.
+ */
+export interface AgentSkillMention {
+  name: string;
+  description: string;
+  whenToUse?: string;
+  modelInvocable: boolean;
+  userInvocable: true;
+}
+
+/**
+ * The chat composer's `/`-skill mention surface only, backed by the
+ * DSH-engine-native `skill.list` RPC (`DshApiClient.listSkills`) — never a
+ * plugin Remote. The full skills-authoring CRUD surface (browse / read /
+ * edit / save / remove against `AgentSkillEntry`/`AgentSkillDocument`/
+ * `AgentSkillFileList`/`AgentSkillFileContent` above) moved out of the
+ * platform contract entirely: `dsh-plugin-skills` now builds its own local
+ * adapter directly from its own Remote face for that surface, decoupled
+ * from `PlatformAdapter`.
+ */
 export interface AgentSkillsAdapter {
-  /** A session returns the exact DSH composition; omitted lists user-authored skills. */
-  list(sessionId?: string): Promise<{
-    skills: AgentSkillEntry[];
-    userRoot: string;
-  }>;
-  read(name: string, sessionId?: string): Promise<AgentSkillDocument>;
-  listFiles(name: string, sessionId?: string): Promise<AgentSkillFileList>;
-  readFile(
-    name: string,
-    path: string,
-    sessionId?: string,
-  ): Promise<AgentSkillFileContent>;
-  save(
-    name: string,
-    document: string,
-    sessionId?: string,
-  ): Promise<{ name: string }>;
-  remove(name: string, sessionId?: string): Promise<void>;
+  list(sessionId: string): Promise<{ skills: AgentSkillMention[] }>;
 }
 
 export interface AgentCommandEntry {
