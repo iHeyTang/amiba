@@ -20,7 +20,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePluginT as useT } from "@amiba/i18n/plugin";
 import type {
   AgentSkillDocument,
   AgentSkillEntry,
@@ -28,8 +27,6 @@ import type {
   AgentSkillFileEntry,
   AgentSkillsAdapter,
 } from "@amiba/app-runtime/platform";
-
-import { useRefetchOnFocus } from "../hooks/useRefetchOnFocus";
 import {
   Button,
   CollectionState,
@@ -41,19 +38,17 @@ import {
   DialogTitle,
   Input,
   Label,
+  MODEL_SETTINGS_SURFACE_CLASS,
   PageContent,
   ScrollArea,
-  Textarea,
-  cn,
-} from "../primitives";
-import {
-  MODEL_SETTINGS_SURFACE_CLASS,
-} from "../settings/ModelSettingsSectionChrome";
-import {
   SettingsPageActionButton,
   SettingsPageActions,
   SettingsPageDescription,
-} from "../settings/page-chrome";
+  Textarea,
+  cn,
+  usePluginT as useT,
+  useRefetchOnFocus,
+} from "@amiba/ui/plugin";
 
 type SourceBucket =
   | "all"

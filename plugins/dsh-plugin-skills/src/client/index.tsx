@@ -1,17 +1,23 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { SkillsDirectoryView } from "@amiba/ui/plugin/skills";
 import type { AgentSkillsAdapter } from "@amiba/app-runtime/platform";
 import { useMemo, type ReactNode } from "react";
 
 import { AMIBA_SKILLS_REMOTE } from "../remote.js";
+import { DshSkillsPage } from "./DshSkillsPage.js";
 
 export const name = "amiba-skills-ui";
 export const inject = ["slots", "remote"];
 
 const SECTION_ID = "skills";
 type SkillsRemote = ClientContext["remote"]["amibaSkills"];
+
+function sectionLabel(): string {
+  return document.documentElement.lang.toLowerCase().startsWith("zh")
+    ? "技能"
+    : "Skills";
+}
 
 type SkillsSectionProps = PropsRuntime<"amiba.settings.section"> & {
   adapter: AgentSkillsAdapter;
@@ -31,12 +37,49 @@ function SkillsSettings({
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.id;
   }, [sessionState]);
   return (
-    <SkillsDirectoryView
+    <DshSkillsPage
       adapter={adapter}
       headerActionsHost={headerActionsHost}
       sessionId={current}
     />
   );
+}
+
+type SkillsPresetSectionProps = PropsRuntime<"amiba.agentPreset.section"> & {
+  adapter: AgentSkillsAdapter;
+};
+
+/**
+ * Preset-detail tab (M1 `amiba.agentPreset.section`): the same directory
+ * view, scoped to the owning preset's most relevant DSH session instead of
+ * the global "current" session the top-level Settings section follows.
+ *
+ * `amibaSkills/*` calls take a `sessionId`, not a preset id — the mapping
+ * from `profileId` to a session rides the engine-native `useSessions`
+ * standard hook (every session carries its composing `agentPreset`), never
+ * the host `platform.agentSessions` adapter.
+ */
+function SkillsPresetSection({
+  adapter,
+  profileId,
+  useSessions,
+}: SkillsPresetSectionProps): ReactNode {
+  const sessionState = useSessions((state) => state);
+  const sessionId = useMemo(() => {
+    const current = sessionState.current
+      ? sessionState.byId[sessionState.current]
+      : undefined;
+    if (current && !current.origin && current.agentPreset === profileId) {
+      return sessionState.current;
+    }
+    return sessionState.ids
+      .map((id) => sessionState.byId[id])
+      .filter(
+        (item) => item && !item.origin && item.agentPreset === profileId,
+      )
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.id;
+  }, [sessionState, profileId]);
+  return <DshSkillsPage adapter={adapter} embedded sessionId={sessionId} />;
 }
 
 function errorOf(value: unknown): Error {
@@ -73,21 +116,38 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           await valueOf(remote.removeSkill(skillName, sessionId ?? null));
         },
       };
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.settings.section",
-            id: SECTION_ID,
-            order: 200,
-            label: () =>
-              document.documentElement.lang.toLowerCase().startsWith("zh")
-                ? "技能"
-                : "Skills",
-            inject: () => ({ adapter }),
-          },
-          SkillsSettings,
-        ),
+      const disposeSection = injectedCtx.slots.inject(
+        "amiba.settings.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.settings.section",
+              id: SECTION_ID,
+              order: 200,
+              label: sectionLabel,
+              inject: () => ({ adapter }),
+            },
+            SkillsSettings,
+          ),
       );
+      const disposePresetSection = injectedCtx.slots.inject(
+        "amiba.agentPreset.section",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.agentPreset.section",
+              id: SECTION_ID,
+              order: 200,
+              label: sectionLabel,
+              inject: () => ({ adapter }),
+            },
+            SkillsPresetSection,
+          ),
+      );
+      return () => {
+        disposePresetSection();
+        disposeSection();
+      };
     },
   );
   await sectionFiber;

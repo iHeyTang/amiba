@@ -12,7 +12,6 @@
     "./plugin/mcp": "./src/plugin-mcp.ts",
     "./plugin/runtime-inventory": "./src/plugin-runtime-inventory.ts",
     "./plugin/schedule": "./src/plugin-schedule.ts",
-    "./plugin/skills": "./src/plugin-skills.ts",
     "./plugin/tools": "./src/plugin-tools.ts",
     "./tailwind-preset": "./tailwind-preset.cjs",
     "./styles/tokens.css": "./src/styles/tokens.css",
