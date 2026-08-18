@@ -12,11 +12,12 @@ into.
   engine-native — the official `@deepseek-ai/dsh-agent-presets` host row and
   its `agentPreset.*` wire face. This entry only lets DSH discover the
   package's `dsh.client` declaration (the `dsh-plugin-ui-shell` precedent).
-- **Client half** (`src/client/`): registers one `amiba.settings.section`
-  entry (id `agents`, order 10 — first plugin row of the Assistant group,
-  before Models & services at 50). The id preserves the retired registry id so
-  `#agents` deep links keep resolving through SettingsView's `dsh:<id>`
-  ledger fallback.
+- **Client half** (`src/client/`): registers two `amiba.settings.section`
+  entries — `behavior` (order 5, the 行为与人设 page: read-only default-preset
+  description + SOUL) and `agents` (order 10, the roster + drill-in), so the
+  Assistant group reads behavior → agents → Models & services (50). Both ids
+  preserve the retired registry ids so `#behavior` and `#agents` deep links
+  keep resolving through SettingsView's `dsh:<id>` ledger fallback.
 
 ## Data plane
 
@@ -47,6 +48,7 @@ host settings page emitted the same marker.
 ## i18n
 
 Plugin-local overlay dictionaries (`src/client/i18n.ts`, en/zh-CN parity
-tested). Host `options.agents.*` keys exclusively owned by the moved page were
-purged from `packages/i18n`; `common.*` and the behavior-editor family still
-used by the host-native 行为与人设 page stay host-side.
+tested). The entire host `options.agents.*` family — including the
+behavior-editor keys, whose host page moved here too — was purged from
+`packages/i18n`; only shared vocabulary such as `common.*` stays host-side
+(resolved through `usePluginT`'s host-catalog fallback).
