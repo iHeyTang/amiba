@@ -268,25 +268,27 @@ const MODULES = [
     enforced: true,
     // Preset DATA stays engine/host-plane-native by design: the
     // `getPlatform().agentPresets` adapter, the `AgentPreset` platform type,
-    // and the app-runtime core helpers still back the host-native
-    // 行为与人设 (Behavior & identity) page and are NOT forbidden here.
-    // Only the preset-MANAGEMENT UI (roster + drill-in detail) is
-    // plugin-owned (dsh-plugin-agent-preset).
+    // and the app-runtime core roster read (`getAgentPresets`) still back
+    // the host agent pickers (composer/home/chat) and are NOT forbidden
+    // here. The preset UI is fully plugin-owned (dsh-plugin-agent-preset):
+    // the management roster + drill-in detail (AP) and the assistant-level
+    // 行为与人设 (Behavior & identity) settings page (AP2).
     text: [
       { label: "SettingsAgentsPage host component", pattern: boundary("SettingsAgentsPage") },
       { label: "AgentPresetList moved component", pattern: boundary("AgentPresetList") },
       { label: "AgentPresetDetail moved component", pattern: boundary("AgentPresetDetail") },
       { label: "DshAgentPresetsPage plugin component", pattern: boundary("DshAgentPresetsPage") },
+      { label: "AgentBehaviorEditor retired host component", pattern: boundary("AgentBehaviorEditor") },
+      { label: "SettingsAssistantBehavior retired host component", pattern: boundary("SettingsAssistantBehavior") },
       { label: "options.nav.agents retired nav key", pattern: /options\.nav\.agents/u },
       {
-        label:
-          "options.agents.* management-UI i18n family (behavior-editor keys excepted)",
-        pattern:
-          /options\.agents\.(?!loadFailed\b|saveFailed\b|soulLoadFailed\b|section\.behavior\b|role\.|soul\.)/u,
+        label: "options.agents.* i18n family (plugin overlay owns it all)",
+        pattern: /options\.agents\./u,
       },
     ],
     paths: [
       "packages/ui/src/settings/SettingsAgentsPage.tsx",
+      "packages/ui/src/settings/AgentBehaviorEditor.tsx",
     ],
   },
   {

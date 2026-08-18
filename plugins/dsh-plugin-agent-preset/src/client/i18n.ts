@@ -5,13 +5,13 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  *
  * M2 doctrine: the plugin owns its own `options.agents.*` strings instead of
  * depending on the host `en.ts` / `zh-CN.ts` bundles. Every value below was
- * copied verbatim from the host catalogs at migration time. Keys exclusively
- * owned by the moved page were purged from the host bundles in the same
- * commit; the behavior-editor family (`role.*`, `soul.*`, `loadFailed`,
- * `soulLoadFailed`, `saveFailed`, `section.behavior`) still exists host-side
- * for the host-native 行为与人设 settings page — the copies here keep this
- * plugin self-contained either way (overlay precedence wins). `common.*`
- * stays host-side by convention.
+ * copied verbatim from the host catalogs at migration time, and the host
+ * copies were purged in the same commits — the management-UI keys with the
+ * AP move, the behavior-editor family (`role.*`, `soul.*`, `loadFailed`,
+ * `soulLoadFailed`, `saveFailed`, `section.behavior`) with the AP2 move of
+ * the 行为与人设 settings page. This dictionary is now the only owner of the
+ * whole `options.agents.*` family (enforced by verify-pluginization's
+ * agent-preset-ui module). `common.*` stays host-side by convention.
  */
 export const agentPresetI18n: PluginCatalogOverlay = {
   en: {

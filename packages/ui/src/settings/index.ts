@@ -1,7 +1,3 @@
-export {
-  AgentBehaviorEditor,
-  SettingsAssistantBehavior,
-} from "./AgentBehaviorEditor";
 export { SettingsLogs } from "./SettingsLogs";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";
