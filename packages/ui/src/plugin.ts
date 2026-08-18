@@ -36,9 +36,16 @@ export {
 } from "./primitives/select";
 export { Textarea } from "./primitives/textarea";
 export {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./primitives/tooltip";
+export {
   NavigationGroupLabel,
   NavigationRow,
 } from "./navigation/NavigationRow";
+export { SidebarExpandControl } from "./navigation/SidebarExpandControl";
 export {
   SettingsPageActionButton,
   SettingsPageActions,

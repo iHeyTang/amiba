@@ -2,8 +2,8 @@
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
  *   • top (fixed):   new-chat, then DSH workspace slot contributions.
- *   • middle (flex): unified chat + scheduled-run history, switchable between
- *                    a time-ordered stream and workspace-directory groups.
+ *   • middle (flex): chat history, switchable between a time-ordered stream
+ *                    and workspace-directory groups.
  *   • bottom (fixed): the settings row.
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
@@ -11,7 +11,6 @@ import {
   Archive,
   ArchiveRestore,
   CheckSquare,
-  Clock,
   Folder,
   List,
   ListTodo,
@@ -39,7 +38,6 @@ export type HistoryLayout = "timeline" | "grouped";
 
 const HISTORY_ALL_GROUP = "__history_all__";
 const HISTORY_UNBOUND_GROUP = "__history_unbound__";
-const HISTORY_SCHEDULED_GROUP = "__history_scheduled__";
 const HISTORY_WORKSPACE_PREFIX = "__history_workspace__:";
 
 function workspaceGroupKey(path: string): string {
@@ -79,11 +77,6 @@ export interface SidebarProps {
     action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
   ) => void | Promise<void>;
   onRefreshSessions: () => void | Promise<void>;
-  scheduledSessions: SessionMeta[];
-  scheduledReady: boolean;
-  onOpenScheduledSession: (id: string) => void;
-  onRefreshScheduledSessions: () => void | Promise<void>;
-  scheduledLabelFor: (source: string) => string;
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
   onOpenSettings: () => void;
@@ -109,11 +102,6 @@ export function Sidebar({
   onExportSession,
   onBulkSessions,
   onRefreshSessions,
-  scheduledSessions,
-  scheduledReady,
-  onOpenScheduledSession,
-  onRefreshScheduledSessions,
-  scheduledLabelFor,
   historyLayout,
   onHistoryLayoutChange,
   onOpenSettings,
@@ -126,20 +114,9 @@ export function Sidebar({
     () => new Set(),
   );
 
-  const scheduledIds = useMemo(
-    () => new Set(scheduledSessions.map((session) => session.id)),
-    [scheduledSessions],
-  );
   const historySessions = useMemo(
-    () =>
-      [
-        ...sessions,
-        ...scheduledSessions.map((session) => ({
-          ...session,
-          title: `${scheduledLabelFor(session.source ?? "")} · ${session.title}`,
-        })),
-      ].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
-    [sessions, scheduledSessions, scheduledLabelFor],
+    () => [...sessions].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    [sessions],
   );
   const selectedSessions = useMemo(
     () =>
@@ -193,14 +170,8 @@ export function Sidebar({
       .sort((a, b) => b[1] - a[1])
       .map(([path]) => workspaceGroupKey(path));
     if (hasUnbound) ordered.push(HISTORY_UNBOUND_GROUP);
-    if (scheduledSessions.length > 0) ordered.push(HISTORY_SCHEDULED_GROUP);
     return ordered;
-  }, [
-    historyLayout,
-    sessions,
-    scheduledSessions.length,
-    workspaceBindings.bySessionId,
-  ]);
+  }, [historyLayout, sessions, workspaceBindings.bySessionId]);
 
   return (
     <nav
@@ -220,7 +191,7 @@ export function Sidebar({
         {navigationAfter}
       </div>
 
-      {/* Middle (flex): chats and scheduled runs always remain visible. */}
+      {/* Middle (flex): chat history always remains visible. */}
       <div className="flex min-h-0 flex-1 flex-col px-2">
         <div
           data-testid="sessions-header"
@@ -307,11 +278,7 @@ export function Sidebar({
             (historyLayout !== "grouped" || workspaceBindings.ready)
           }
           query=""
-          onOpen={(id) =>
-            scheduledIds.has(id)
-              ? onOpenScheduledSession(id)
-              : onOpenSession(id)
-          }
+          onOpen={onOpenSession}
           onRename={onRenameSession}
           onDelete={onDeleteSession}
           onPin={onPinSession}
@@ -321,57 +288,33 @@ export function Sidebar({
           selecting={selectingSessions}
           selectedIds={selectedSessionIds}
           onToggleSelected={toggleSelectedSession}
-          onRefresh={() => {
-            void onRefreshSessions();
-            void onRefreshScheduledSessions();
-          }}
-          emptyLabel={
-            scheduledReady
-              ? t("sidepanel.sessions.history.empty")
-              : t("sidepanel.sessions.scheduled.loading")
-          }
+          onRefresh={() => void onRefreshSessions()}
+          emptyLabel={t("sidepanel.sessions.history.empty")}
           groupKeyFor={(session) =>
             historyLayout === "timeline"
               ? HISTORY_ALL_GROUP
-              : scheduledIds.has(session.id)
-                ? HISTORY_SCHEDULED_GROUP
-                : workspaceBindings.bySessionId[session.id]
-                  ? workspaceGroupKey(workspaceBindings.bySessionId[session.id])
-                  : HISTORY_UNBOUND_GROUP
+              : workspaceBindings.bySessionId[session.id]
+                ? workspaceGroupKey(workspaceBindings.bySessionId[session.id])
+                : HISTORY_UNBOUND_GROUP
           }
           sectionOrder={groupedSectionOrder}
           sectionLabelFor={(source) =>
-            source === HISTORY_SCHEDULED_GROUP
-              ? t("sidepanel.sessions.group.scheduled")
-              : source === HISTORY_UNBOUND_GROUP
-                ? t("sidepanel.sessions.group.unbound")
-                : workspaceName(workspacePathFromGroup(source) ?? source)
+            source === HISTORY_UNBOUND_GROUP
+              ? t("sidepanel.sessions.group.unbound")
+              : workspaceName(workspacePathFromGroup(source) ?? source)
           }
           sectionIconFor={(source) =>
-            source === HISTORY_SCHEDULED_GROUP ? (
-              <Clock />
-            ) : source === HISTORY_UNBOUND_GROUP ? (
-              <ListTodo />
-            ) : (
-              <Folder />
-            )
+            source === HISTORY_UNBOUND_GROUP ? <ListTodo /> : <Folder />
           }
           sectionTitleFor={(source) =>
             workspacePathFromGroup(source) ?? undefined
           }
           sectionLabelClassName="normal-case tracking-normal text-[12px] text-foreground/75"
           showSectionHeaders={historyLayout === "grouped"}
-          rowIconFor={(session) =>
-            historyLayout === "timeline" ? (
-              scheduledIds.has(session.id) ? (
-                <Clock />
-              ) : (
-                <MessageSquare />
-              )
-            ) : undefined
+          rowIconFor={() =>
+            historyLayout === "timeline" ? <MessageSquare /> : undefined
           }
           indentRows={historyLayout === "grouped"}
-          allowActionsFor={(session) => !scheduledIds.has(session.id)}
         />
       </div>
 

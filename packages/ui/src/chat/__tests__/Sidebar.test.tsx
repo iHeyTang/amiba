@@ -42,11 +42,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     onRenameSession: vi.fn(),
     onDeleteSession: vi.fn(),
     onRefreshSessions: vi.fn(),
-    scheduledSessions: [],
-    scheduledReady: true,
-    onOpenScheduledSession: vi.fn(),
-    onRefreshScheduledSessions: vi.fn(),
-    scheduledLabelFor: vi.fn((source: string) => source),
     historyLayout: "timeline" as const,
     onHistoryLayoutChange: vi.fn(),
     onOpenSettings: vi.fn(),
@@ -287,46 +282,6 @@ describe("Sidebar", () => {
       "amiba-session-status-breathe",
       "bg-[hsl(var(--status-session))]",
     );
-  });
-
-  it("keeps chats and scheduled runs together in the timeline layout", async () => {
-    const props = setup({
-      scheduledSessions: [
-        {
-          id: "cron_daily_1",
-          title: "Jul 22, 11:30",
-          createdAt: 2,
-          updatedAt: 2,
-          messageCount: 1,
-          source: "daily",
-        },
-      ],
-      scheduledLabelFor: () => "Daily report",
-    });
-
-    expect(screen.getByText("First chat")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Daily report · Jul 22, 11:30"));
-    expect(props.onOpenScheduledSession).toHaveBeenCalledWith("cron_daily_1");
-  });
-
-  it("renders tasks and automation in the compact workspace layout", () => {
-    setup({
-      historyLayout: "grouped",
-      scheduledSessions: [
-        {
-          id: "cron_daily_1",
-          title: "Jul 22, 11:30",
-          createdAt: 2,
-          updatedAt: 2,
-          messageCount: 1,
-          source: "daily",
-        },
-      ],
-      scheduledLabelFor: () => "Daily report",
-    });
-
-    expect(screen.getByText("Independent tasks")).toBeInTheDocument();
-    expect(screen.getAllByText("Automation").length).toBeGreaterThan(0);
   });
 
   it("groups related conversations beneath their workspace directory", async () => {

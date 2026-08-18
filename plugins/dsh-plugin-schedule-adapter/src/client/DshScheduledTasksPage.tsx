@@ -9,15 +9,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePluginT as useT } from "@amiba/i18n/plugin";
-import {
-  type AgentScheduleCreateInput,
-  type AgentSchedulesAdapter,
-  type AgentScheduleView,
-  type AgentSessionsAdapter,
-  type AgentSessionSummary,
+import type {
+  AgentSessionsAdapter,
+  AgentSessionSummary,
 } from "@amiba/app-runtime/platform";
-
 import {
   Button,
   CollectionState,
@@ -30,14 +25,21 @@ import {
   Label,
   PageContent,
   ScrollArea,
+  SidebarExpandControl,
   Textarea,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
   cn,
-} from "../primitives";
-import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
+  usePluginT as useT,
+} from "@amiba/ui/plugin";
+
+import type {
+  AgentScheduleCreateInput,
+  AgentSchedulesAdapter,
+  AgentScheduleView,
+} from "../types.js";
 
 export interface DshScheduledTasksPageProps {
   adapter: AgentSchedulesAdapter;

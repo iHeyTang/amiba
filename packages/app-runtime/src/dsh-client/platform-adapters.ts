@@ -5,7 +5,6 @@ import type {
   AgentMcpAdapter,
   AgentPermissionOption,
   AgentPermissionState,
-  AgentSchedulesAdapter,
   AgentSkillsAdapter,
   ModelPlaneAdapter,
   PlatformAdapter,
@@ -23,7 +22,6 @@ type DshPlatformKey =
   | "agentCredentials"
   | "agentPermissions"
   | "modelPlane"
-  | "agentSchedules"
   | "agentSkills"
   | "agentCommands"
   | "agentMessages"
@@ -240,15 +238,6 @@ export function createDshPlatformAdapters(
     },
   };
 
-  const schedules: AgentSchedulesAdapter = {
-    list: (sessionId) =>
-      client.call("amibaSchedules/list", { args: { sessionId } }),
-    create: (sessionId, input) =>
-      client.call("amibaSchedules/create", { args: { sessionId, input } }),
-    remove: (sessionId, id) =>
-      client.call("amibaSchedules/removeSchedule", { args: { sessionId, id } }),
-  };
-
   // Engine-native only: the composer's `/`-skill mention provider is the
   // sole remaining consumer of `platform.agentSkills`. The full
   // authoring/CRUD surface moved to dsh-plugin-skills' own Remote face in
@@ -452,7 +441,6 @@ export function createDshPlatformAdapters(
         return updated;
       },
     },
-    agentSchedules: schedules,
     agentSkills: skills,
     agentCommands: {
       async list(sessionId) {

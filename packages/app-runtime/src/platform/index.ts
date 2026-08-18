@@ -313,38 +313,6 @@ export interface AgentModelsAdapter {
   }>;
 }
 
-export interface AgentScheduleView {
-  id: string;
-  sessionId: string;
-  kind: "after" | "at" | "every";
-  prompt: string;
-  scheduledAt: string;
-  state: "scheduled" | "overdue";
-  deliveryMode: "session-local";
-  afterSeconds?: number;
-  everySeconds?: number;
-}
-
-export interface AgentScheduleCreateInput {
-  prompt: string;
-  afterSeconds?: number;
-  everySeconds?: number;
-  at?: string | { date: string; time: string; time_zone: string };
-}
-
-/** DSH-native, session-owned durable reminder management. */
-export interface AgentSchedulesAdapter {
-  list(sessionId: string): Promise<AgentScheduleView[]>;
-  create(
-    sessionId: string,
-    input: AgentScheduleCreateInput,
-  ): Promise<AgentScheduleView>;
-  remove(
-    sessionId: string,
-    id: string,
-  ): Promise<{ id: string; deleted: boolean; code?: "schedule_not_found" }>;
-}
-
 export interface AgentSkillEntry {
   name: string;
   description: string;
@@ -955,7 +923,6 @@ export interface PlatformAdapter {
   modelPlane?: ModelPlaneAdapter;
   /** Session-scoped DSH execution projection and selection. */
   agentModels?: AgentModelsAdapter;
-  agentSchedules?: AgentSchedulesAdapter;
   agentSkills?: AgentSkillsAdapter;
   agentCommands?: AgentCommandsAdapter;
   agentMessages?: AgentMessagesAdapter;

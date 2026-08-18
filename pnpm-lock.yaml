@@ -1059,6 +1059,15 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.0.1
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@testing-library/user-event':
+        specifier: ^14.5.2
+        version: 14.6.1(@testing-library/dom@10.4.1)
       '@types/node':
         specifier: 22.9.0
         version: 22.9.0
@@ -1068,6 +1077,9 @@ importers:
       '@types/react-dom':
         specifier: 18.3.1
         version: 18.3.1
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
       react:
         specifier: 18.3.1
         version: 18.3.1
