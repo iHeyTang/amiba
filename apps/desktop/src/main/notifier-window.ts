@@ -31,13 +31,6 @@ export type NotifierMessage =
   | ChatCompletedNotifierMessage
   | ApprovalPendingNotifierMessage
   | {
-      type: "cron-completed";
-      id: string;
-      title?: string;
-      summary: string;
-      timestamp: number;
-    }
-  | {
       type: "dismiss";
       id: string;
     };
@@ -223,10 +216,7 @@ export function destroyNotifierWindow(): void {
  * the main window, but here we just rely on the dismiss action).
  */
 export function showDemoNotifier(
-  kind:
-    | "cron-completed"
-    | "chat-completed"
-    | "approval-pending" = "cron-completed",
+  kind: "chat-completed" | "approval-pending" = "chat-completed",
 ): void {
   const stamp = Date.now();
   if (kind === "chat-completed") {
@@ -236,17 +226,6 @@ export function showDemoNotifier(
       sessionId: `demo_${stamp}`,
       title: "Review the release checklist",
       summary: "The checklist is complete and ready for review.",
-      timestamp: stamp,
-    });
-  } else if (kind === "cron-completed") {
-    sendToNotifier({
-      type: "cron-completed",
-      id: `demo_${stamp}`,
-      title: "Demo cron job",
-      summary:
-        "This is a demo notifier card — wired plumbing confirmed. " +
-        "Real cards appear when a cron job finishes or the agent " +
-        "requests approval.",
       timestamp: stamp,
     });
   } else {

@@ -37,9 +37,6 @@ export const en = {
 
   // Heads-up notifier
   "notifier.dismiss": "Dismiss notification",
-  "notifier.cron.status": "Automation finished",
-  "notifier.cron.fallbackTitle": "Task completed",
-  "notifier.cron.open": "Open task",
   "notifier.chat.status": "Conversation completed",
   "notifier.chat.fallbackTitle": "Amiba finished this task",
   "notifier.chat.fallbackSummary": "The response is ready to review.",

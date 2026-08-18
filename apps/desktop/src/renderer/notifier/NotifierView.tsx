@@ -23,13 +23,6 @@ type NotifierMessage =
       timestamp: number;
     }
   | {
-      type: "cron-completed";
-      id: string;
-      title?: string;
-      summary: string;
-      timestamp: number;
-    }
-  | {
       type: "approval-pending";
       approvalId: string;
       sessionId: string;
@@ -48,12 +41,6 @@ type NotifierCard =
       sessionId: string;
       title?: string;
       summary?: string;
-    }
-  | {
-      kind: "cron-completed";
-      id: string;
-      title?: string;
-      summary: string;
     }
   | {
       kind: "approval-pending";
@@ -86,15 +73,6 @@ export function NotifierView() {
           kind: "chat-completed",
           id: m.id,
           sessionId: m.sessionId,
-          title: m.title,
-          summary: m.summary,
-        };
-        cardRef.current = nextCard;
-        setCard(nextCard);
-      } else if (m.type === "cron-completed") {
-        const nextCard: NotifierCard = {
-          kind: "cron-completed",
-          id: m.id,
           title: m.title,
           summary: m.summary,
         };
@@ -135,16 +113,13 @@ export function NotifierView() {
     void window.amiba.notifier.hide();
   };
 
-  if (card.kind === "cron-completed" || card.kind === "chat-completed") {
+  if (card.kind === "chat-completed") {
     return (
       <CompletedCard
-        kind={card.kind === "chat-completed" ? "chat" : "cron"}
         title={card.title}
         onOpen={() => {
           cardRef.current = null;
-          const sessionId =
-            card.kind === "chat-completed" ? card.sessionId : card.id;
-          void window.amiba.notifier.openSession(sessionId);
+          void window.amiba.notifier.openSession(card.sessionId);
           setCard(null);
         }}
         onDismiss={dismiss}
@@ -262,28 +237,18 @@ function NotificationLayout({
 }
 
 function CompletedCard({
-  kind,
   title,
   onOpen,
   onDismiss,
 }: {
-  kind: "chat" | "cron";
   title?: string;
   onOpen: () => void;
   onDismiss: () => void;
 }) {
   const { t } = useT();
-  const status = t(
-    kind === "chat" ? "notifier.chat.status" : "notifier.cron.status",
-  );
-  const fallbackTitle = t(
-    kind === "chat"
-      ? "notifier.chat.fallbackTitle"
-      : "notifier.cron.fallbackTitle",
-  );
-  const openLabel = t(
-    kind === "chat" ? "notifier.chat.open" : "notifier.cron.open",
-  );
+  const status = t("notifier.chat.status");
+  const fallbackTitle = t("notifier.chat.fallbackTitle");
+  const openLabel = t("notifier.chat.open");
 
   return (
     <CardShell label={status} tone="complete">

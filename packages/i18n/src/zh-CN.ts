@@ -32,9 +32,6 @@ export const zhCN: Messages = {
 
   // 桌面悬浮通知
   "notifier.dismiss": "关闭通知",
-  "notifier.cron.status": "自动化已完成",
-  "notifier.cron.fallbackTitle": "任务已完成",
-  "notifier.cron.open": "查看任务",
   "notifier.chat.status": "对话已完成",
   "notifier.chat.fallbackTitle": "Amiba 已完成本次任务",
   "notifier.chat.fallbackSummary": "回复已准备好，可以回来查看。",

@@ -55,7 +55,7 @@ export interface SessionsListViewProps {
   onToggleSelected?: (id: string) => void;
   /**
    * Fired once on mount so the host can re-fetch the underlying index —
-   * rows authored elsewhere (DSH plugins / CLI / schedules) appear
+   * rows authored by external session authors (DSH plugins / CLI) appear
    * without waiting for the next storage-watch broadcast.
    */
   onRefresh?: () => void | Promise<void>;
@@ -91,7 +91,7 @@ export interface SessionsListViewProps {
   rowIconFor?: (session: SessionMeta) => ReactNode;
   /** Align rows beneath a tree-group label rather than with the group icon. */
   indentRows?: boolean;
-  /** Disable rename/delete affordances for read-only rows such as cron runs. */
+  /** Disable rename/delete affordances for read-only rows. */
   allowActionsFor?: (session: SessionMeta) => boolean;
 }
 

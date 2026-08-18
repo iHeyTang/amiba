@@ -214,6 +214,9 @@ const MODULES = [
     enforced: true,
     text: [
       { label: "agentSchedules platform-adapter key", pattern: boundary("agentSchedules") },
+      { label: "cronjob retired-engine tool name", pattern: boundary("cronjob") },
+      { label: "cron-completed notifier kind", pattern: /cron-completed/u },
+      { label: "notifier.cron i18n family", pattern: /notifier\.cron/u },
       { label: "AgentSchedulesAdapter platform type", pattern: boundary("AgentSchedulesAdapter") },
       { label: "AgentScheduleView shape type", pattern: boundary("AgentScheduleView") },
       { label: "AgentScheduleCreateInput shape type", pattern: boundary("AgentScheduleCreateInput") },

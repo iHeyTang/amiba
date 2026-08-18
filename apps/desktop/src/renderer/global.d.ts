@@ -100,7 +100,7 @@ interface AmibaBridgeApi {
     approve(approvalId: string): Promise<void>;
     deny(approvalId: string): Promise<void>;
     demo(
-      kind?: "cron-completed" | "chat-completed" | "approval-pending",
+      kind?: "chat-completed" | "approval-pending",
     ): Promise<void>;
   };
   quickAsk: {

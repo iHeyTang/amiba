@@ -377,7 +377,7 @@ const api = {
      *   window.amiba.notifier.demo()                  // cron card
      *   window.amiba.notifier.demo("approval-pending") // approval card
      */
-    demo: (kind?: "cron-completed" | "chat-completed" | "approval-pending") =>
+    demo: (kind?: "chat-completed" | "approval-pending") =>
       ipcRenderer.invoke("notifier:demo", kind),
   },
 

@@ -19,8 +19,8 @@ interface WallpaperBackdropProps {
   controller: WallpaperController;
   /**
    * Whether to paint a soft gradient overlay over the wallpaper. Off by
-   * default; the home page turns it on when its bottom dashboard
-   * (cron-run reader) is expanded so the cards above the photo have a
+   * default; the home page turns it on when its bottom dashboard is
+   * expanded so the cards above the photo have a
    * calmer tone to sit on. Chat surfaces leave it off — the chat
    * bubbles already render on solid surfaces above the image.
    */

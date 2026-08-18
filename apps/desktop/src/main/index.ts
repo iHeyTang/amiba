@@ -308,8 +308,8 @@ function registerNotifierIpcHandlers(summon: () => void): void {
   // `window.amiba.notifier.demo(kind?)`.
   ipcMain.handle(
     "notifier:demo",
-    (_e, kind?: "cron-completed" | "chat-completed" | "approval-pending") => {
-      showDemoNotifier(kind ?? "cron-completed");
+    (_e, kind?: "chat-completed" | "approval-pending") => {
+      showDemoNotifier(kind ?? "chat-completed");
     },
   );
   ipcMain.handle("notifier:approve", (_e, approvalId: string) => {

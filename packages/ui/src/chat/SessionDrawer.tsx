@@ -32,7 +32,7 @@ interface Props {
   onDelete: (id: string) => void;
   /**
    * Re-fetch the session index. Fires once each time the drawer opens
-   * so rows authored elsewhere (DSH plugins / CLI / schedules)
+   * so rows authored by external session authors (DSH plugins / CLI)
    * appear without waiting for the next storage-watch broadcast. Wired
    * by the host to ``sessions.refresh``; omit when the host doesn't
    * want a refresh on open.
@@ -136,7 +136,7 @@ export function SessionDrawer({
   }, [open]);
 
   // Refresh the index once per drawer-open so rows authored elsewhere
-  // (DSH plugins / CLI / schedules) appear immediately —
+  // (DSH plugins / CLI) appear immediately —
   // sessions-runtime only fetches on initial mount otherwise.
   useEffect(() => {
     if (!open || !onRefresh) return;

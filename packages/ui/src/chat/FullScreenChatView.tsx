@@ -359,9 +359,9 @@ function FullScreenChatViewInner({
     };
   }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
 
-  // DSH schedules wake their owning session instead of minting a parallel
-  // cron-run transcript. The chat list therefore needs only the archive
-  // filter; no local id convention may hide a valid DSH session.
+  // External session authors wake their owning session instead of minting a
+  // parallel transcript, so the chat list needs only the archive filter; no
+  // local id convention may hide a valid DSH session.
   const chatSessions = useMemo(
     () => sessions.sessions.filter((s) => !s.archived),
     [sessions.sessions],
