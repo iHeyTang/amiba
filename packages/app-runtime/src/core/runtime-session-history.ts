@@ -10,6 +10,8 @@ type RuntimeSessionMessage = SessionMessage & {
   reasoning?: string;
   /** Wall-clock duration of the reasoning stream, from durable event times. */
   reasoningMs?: number;
+  /** Wall-clock span of the process phase, from durable event times. */
+  processMs?: number;
   toolProgress?: ToolProgress[];
   assistantTimeline?: Array<
     | { kind: "text"; id: string; text: string }
@@ -76,6 +78,8 @@ interface AssistantTurn {
   reasoning: string;
   reasoningStartAt: number | null;
   reasoningEndAt: number | null;
+  processFirstAt: number | null;
+  processLastAt: number | null;
   tools: Map<string, ToolProgress>;
   timeline: RuntimeSessionMessage["assistantTimeline"];
 }
@@ -90,9 +94,16 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
     reasoning: "",
     reasoningStartAt: null,
     reasoningEndAt: null,
+    processFirstAt: null,
+    processLastAt: null,
     tools: new Map(),
     timeline: [],
   };
+}
+
+function markProcessActivity(turn: AssistantTurn, time: number): void {
+  if (turn.processFirstAt === null) turn.processFirstAt = time;
+  turn.processLastAt = time;
 }
 
 function finishTurn(
@@ -107,6 +118,10 @@ function finishTurn(
     turn.reasoningStartAt !== null && turn.reasoningEndAt !== null
       ? Math.max(0, turn.reasoningEndAt - turn.reasoningStartAt)
       : undefined;
+  const processMs =
+    turn.processFirstAt !== null && turn.processLastAt !== null
+      ? Math.max(0, turn.processLastAt - turn.processFirstAt)
+      : undefined;
   output.push({
     role: "assistant",
     content,
@@ -114,6 +129,7 @@ function finishTurn(
     runtimeSeq: turn.firstSeq,
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
     ...(turn.reasoning && reasoningMs !== undefined ? { reasoningMs } : {}),
+    ...(processMs !== undefined ? { processMs } : {}),
     ...(tools.length ? { toolProgress: tools } : {}),
     ...(turn.timeline?.length ? { assistantTimeline: turn.timeline } : {}),
   });
@@ -249,6 +265,7 @@ export function projectRuntimeSessionHistory(
         turn.reasoning += chunk.text;
         if (turn.reasoningStartAt === null) turn.reasoningStartAt = event.time;
         turn.reasoningEndAt = event.time;
+        markProcessActivity(turn, event.time);
       } else if (chunk.type === "text-delta") turn.draftText += chunk.text;
       continue;
     }
@@ -268,10 +285,12 @@ export function projectRuntimeSessionHistory(
     }
     if (event.type === "tool/call") {
       applyToolCall(turn, entry);
+      markProcessActivity(turn, event.time);
       continue;
     }
     if (event.type === "tool/result") {
       applyToolResult(turn, entry);
+      markProcessActivity(turn, event.time);
       continue;
     }
     if (event.type === "turn/end") {

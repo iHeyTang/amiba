@@ -45,6 +45,8 @@ interface VerboseSlot {
   reasoning: string;
   reasoningStartAt: number | null;
   reasoningEndAt: number | null;
+  processFirstAt: number | null;
+  processLastAt: number | null;
   tools: ToolCall[];
   toolOrder: string[];
   toolsById: Map<string, ToolProgress>;
@@ -234,6 +236,10 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       v.reasoningStartAt !== null && v.reasoningEndAt !== null
         ? Math.max(0, v.reasoningEndAt - v.reasoningStartAt)
         : undefined;
+    const processMs =
+      v.processFirstAt !== null && v.processLastAt !== null
+        ? Math.max(0, v.processLastAt - v.processFirstAt)
+        : undefined;
     sessions.setActiveMessages((prev) =>
       (prev as UiMessage[]).map((m) =>
         m.uiId === assistantUiId
@@ -242,6 +248,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
               streamVerbose: md,
               reasoning: rs || undefined,
               ...(rs && reasoningMs !== undefined ? { reasoningMs } : {}),
+              ...(processMs !== undefined ? { processMs } : {}),
               toolProgress: progressWithDetails,
               assistantTimeline: timelineSnapshot,
             }
@@ -270,6 +277,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       reasoning: "",
       reasoningStartAt: null,
       reasoningEndAt: null,
+      processFirstAt: null,
+      processLastAt: null,
       tools: [],
       toolOrder: [],
       toolsById: new Map(),
@@ -290,6 +299,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
         reasoning: "",
         reasoningStartAt: null,
         reasoningEndAt: null,
+        processFirstAt: null,
+        processLastAt: null,
         tools: [],
         toolOrder: [],
         toolsById: new Map(),
@@ -312,6 +323,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       reasoning: state.reasoning,
       reasoningStartAt: state.reasoningStartedAt,
       reasoningEndAt: state.reasoningEndedAt,
+      processFirstAt: state.reasoningStartedAt,
+      processLastAt: state.reasoningEndedAt,
       tools: state.toolCalls.slice(),
       toolOrder: state.toolOrder.slice(),
       toolsById: new Map(
@@ -360,6 +373,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
         const now = Date.now();
         if (v.reasoningStartAt === null) v.reasoningStartAt = now;
         v.reasoningEndAt = now;
+        if (v.processFirstAt === null) v.processFirstAt = now;
+        v.processLastAt = now;
       }
       scheduleVerboseFlush();
     },
@@ -379,6 +394,9 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     (ev: ToolProgress): void => {
       const v = verboseStateRef.current;
       if (v) {
+        const now = Date.now();
+        if (v.processFirstAt === null) v.processFirstAt = now;
+        v.processLastAt = now;
         if (!v.toolsById.has(ev.toolCallId)) {
           v.toolOrder.push(ev.toolCallId);
           appendToolToVerboseTimeline(ev.toolCallId);

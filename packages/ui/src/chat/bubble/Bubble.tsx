@@ -184,33 +184,42 @@ export function Bubble({
     return (
       <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
         {(hasReasoningFold || traceVisible) && (
-          /* The thought fold precedes everything and shares one tight
-             cluster with the execution rows, regardless of trace
-             suppression. */
-          <div className={cn("flex flex-col gap-0.5", hasBody ? "mb-2" : "")}>
-            {hasReasoningFold && (
-              <ReasoningFold
-                reasoningText={trace.reasoningText}
-                reasoningMs={m.reasoningMs}
-                streaming={!!m.streaming}
-              />
-            )}
-            {traceVisible && trace.fallbackToolDetails.length > 0 && (
-              <TraceDisclosure
-                label={t("sidepanel.trace.toolDetails")}
-                text={trace.fallbackToolDetails}
-                streaming={!!m.streaming}
-              />
-            )}
-            {traceVisible &&
-              trace.items.map((item) => {
-                if (item.kind === "tool") {
-                  return <ToolChip key={item.id} event={item.event} />;
-                }
-                return (
-                  <ApprovalRecordChip key={item.id} record={item.record} />
-                );
-              })}
+          /* One aggregated process row: thought + tools + approvals fold
+             behind a single natural summary, on every render path. */
+          <div className={cn(hasBody ? "mb-2" : "")}>
+            <ExecutionDisclosure
+              details={[
+                ...(hasReasoningFold
+                  ? [
+                      {
+                        kind: "reasoning" as const,
+                        id: `${m.uiId}:reasoning`,
+                        text: trace.reasoningText,
+                        reasoningMs: m.reasoningMs,
+                      },
+                    ]
+                  : []),
+                ...(traceVisible && trace.fallbackToolDetails.length > 0
+                  ? [
+                      {
+                        kind: "fallback" as const,
+                        id: `${m.uiId}:fallback`,
+                        text: trace.fallbackToolDetails,
+                        streaming: !!m.streaming,
+                      },
+                    ]
+                  : []),
+                ...(traceVisible ? trace.items : []),
+              ]}
+              tools={traceVisible ? trace.toolProgress : []}
+              streaming={!!m.streaming && !hasBody}
+              latestProgress={
+                m.streaming && hasReasoningFold
+                  ? compactProgressNote(trace.reasoningText)
+                  : ""
+              }
+              processMs={m.processMs}
+            />
             {awaitingAnswerOnly && (
               <div
                 className="inline-flex min-h-7 items-center px-1.5 text-[11px] text-muted-foreground"
@@ -439,34 +448,19 @@ function thoughtLabel(
   });
 }
 
-/**
- * The one reasoning presentation for every assistant render path.
- * Streaming: the collapsed label is the moving latest line; expanding
- * reveals the full accumulated thought stream, appended live.
- * Completed: a quiet "thought for …" fold that stays available.
- */
-function ReasoningFold({
-  reasoningText,
-  reasoningMs,
-  streaming,
-}: {
-  reasoningText: string;
-  reasoningMs?: number;
-  streaming: boolean;
-}) {
-  const { t } = useT();
-  return (
-    <TraceDisclosure
-      label={
-        streaming
-          ? compactProgressNote(reasoningText)
-          : thoughtLabel(t, reasoningMs)
-      }
-      labelClassName={streaming ? "agent-thinking-text" : undefined}
-      text={reasoningText}
-      streaming={streaming}
-    />
-  );
+/** Natural total-effort label for a completed process aggregate. */
+function workedLabel(
+  t: ReturnType<typeof useT>["t"],
+  processMs: number,
+): string {
+  const seconds = Math.max(1, Math.round(processMs / 1000));
+  if (seconds < 60) {
+    return t("sidepanel.trace.workedForSeconds", { seconds });
+  }
+  return t("sidepanel.trace.workedForMinutes", {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  });
 }
 
 function TraceDisclosure({
@@ -560,11 +554,13 @@ function ExecutionDisclosure({
   tools,
   streaming,
   latestProgress = "",
+  processMs,
 }: {
   details: TurnTraceDetail[];
   tools: ToolProgress[];
   streaming: boolean;
   latestProgress?: string;
+  processMs?: number;
 }) {
   const { t } = useT();
   const [expanded, setExpanded] = useState(false);
@@ -584,15 +580,27 @@ function ExecutionDisclosure({
     ? describeToolCall(summaryTool, t)
     : null;
   const hasDetails = details.length > 0;
+  const thought = details.find(
+    (detail): detail is Extract<TurnTraceDetail, { kind: "reasoning" }> =>
+      detail.kind === "reasoning",
+  );
+  // One natural phrase, not a data pile: total effort when tools ran,
+  // thought duration when the turn was reasoning-only.
+  const completedLabel =
+    tools.length > 0 && typeof processMs === "number" && processMs > 0
+      ? workedLabel(t, processMs)
+      : thought
+        ? thoughtLabel(t, thought.reasoningMs)
+        : tools.length > 0
+          ? t("sidepanel.trace.toolCount", { count: tools.length })
+          : latestProgress || t("sidepanel.trace.executionDetails");
   const summaryLabel = summaryTool
     ? [summaryPresentation?.action, summaryPresentation?.target]
         .filter(Boolean)
         .join(" · ")
     : streaming
       ? latestProgress || t("sidepanel.trace.thinking")
-      : tools.length > 0
-        ? t("sidepanel.trace.toolCount", { count: tools.length })
-        : latestProgress || t("sidepanel.trace.executionDetails");
+      : completedLabel;
 
   return (
     <div className="min-w-0 text-sm" data-execution-summary>
@@ -735,6 +743,10 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
         tools={tools}
         streaming={messages.some((message) => message.streaming)}
         latestProgress={latestProgress}
+        processMs={messages.reduce(
+          (total, message) => total + (message.processMs ?? 0),
+          0,
+        )}
       />
     </div>
   );
@@ -1018,31 +1030,37 @@ function InterleavedAssistantFlow({
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
 
-  const hasProcessCluster =
-    trace.reasoningText.length > 0 || processDetails.length > 0;
+  // The thought stream joins the same aggregate as the tools: one collapsed
+  // process row whose summary reads "思考了 X 秒 · N 次工具调用", with the
+  // full thought text as the first nested detail.
+  const clusterDetails: TurnTraceDetail[] =
+    trace.reasoningText.length > 0
+      ? [
+          {
+            kind: "reasoning" as const,
+            id: `${message.uiId}:reasoning`,
+            text: trace.reasoningText,
+            reasoningMs: message.reasoningMs,
+          },
+          ...processDetails,
+        ]
+      : processDetails;
+  const clusterProgress =
+    !!message.streaming && trace.reasoningText.length > 0
+      ? compactProgressNote(trace.reasoningText)
+      : "";
 
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div className="flex min-w-0 flex-col gap-2">
-        {hasProcessCluster && (
-          /* One tight cluster: the thought fold and the execution fold share
-             a style and sit flush so the process reads as a single unit. */
-          <div className="flex min-w-0 flex-col gap-0.5">
-            {trace.reasoningText.length > 0 && (
-              <ReasoningFold
-                reasoningText={trace.reasoningText}
-                reasoningMs={message.reasoningMs}
-                streaming={!!message.streaming}
-              />
-            )}
-            {processDetails.length > 0 && (
-              <ExecutionDisclosure
-                details={processDetails}
-                tools={processTools}
-                streaming={processStreaming}
-              />
-            )}
-          </div>
+        {clusterDetails.length > 0 && (
+          <ExecutionDisclosure
+            details={clusterDetails}
+            tools={processTools}
+            streaming={processStreaming}
+            latestProgress={clusterProgress}
+            processMs={message.processMs}
+          />
         )}
         {resultText.length > 0 && (
           <Streamdown

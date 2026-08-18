@@ -1112,6 +1112,8 @@ export const en = {
   "sidepanel.trace.thoughtProcess": "Thought process",
   "sidepanel.trace.thoughtForSeconds": "Thought for {seconds}s",
   "sidepanel.trace.thoughtForMinutes": "Thought for {minutes}m {seconds}s",
+  "sidepanel.trace.workedForSeconds": "Worked for {seconds}s",
+  "sidepanel.trace.workedForMinutes": "Worked for {minutes}m {seconds}s",
   "sidepanel.trace.thinking": "Thinking…",
   "sidepanel.trace.toolDetails": "Tool-call details",
   "sidepanel.trace.executionDetails": "Execution details",

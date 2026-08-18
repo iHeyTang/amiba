@@ -10,6 +10,16 @@ import { Bubble, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
 
+/** Expand the aggregated process disclosure a completed bubble folds
+ *  its tool evidence behind. */
+function expandProcess() {
+  fireEvent.click(
+    screen.getAllByRole("button", {
+      name: /sidepanel\.trace\.(toolCount|thoughtProcess|workedFor|thoughtFor)/,
+    })[0]!,
+  );
+}
+
 describe("chat message chrome", () => {
   it("shows completed file changes as a turn-level review entry", async () => {
     const onReview = vi.fn();
@@ -359,20 +369,20 @@ describe("chat message chrome", () => {
     ).not.toBeInTheDocument();
     // Completed turns keep a collapsed thought-process fold; the text stays
     // hidden until it is expanded.
-    const thoughtFold = screen.getByRole("button", {
+    // One aggregated process row: expand it, then the nested thought fold.
+    const summary = screen.getByRole("button", {
       name: /sidepanel\.trace\.thoughtProcess/,
     });
-    await userEvent.click(thoughtFold);
+    await userEvent.click(summary);
+    const nestedThought = screen.getAllByRole("button", {
+      name: /sidepanel\.trace\.thoughtProcess/,
+    })[1]!;
+    await userEvent.click(nestedThought);
     expect(
       screen.getByText("Inspect the repository before answering."),
     ).toBeInTheDocument();
-    await userEvent.click(thoughtFold);
+    await userEvent.click(nestedThought);
 
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: /sidepanel\.trace\.toolCount/,
-      }),
-    );
     await userEvent.click(
       screen.getByRole("button", {
         name: /sidepanel\.trace\.actions\.readFile/,
@@ -413,6 +423,7 @@ describe("chat message chrome", () => {
       />,
     );
 
+    expandProcess();
     expect(screen.getByText("…/022b54fb8e30b67bc4d/")).toHaveClass(
       "min-w-0",
       "truncate",
@@ -456,6 +467,8 @@ describe("chat message chrome", () => {
         }
       />,
     );
+
+    expandProcess();
 
     await userEvent.click(
       screen.getByRole("button", {
@@ -547,9 +560,10 @@ describe("chat message chrome", () => {
       container.querySelector("[data-execution-summary] .legacy-thinking-dot"),
     ).not.toBeInTheDocument();
 
+    // The merged aggregate summary reads as the thought/effort phrase now.
     await userEvent.click(
       screen.getByRole("button", {
-        name: /sidepanel\.trace\.toolCount/,
+        name: /sidepanel\.trace\.thoughtProcess/,
       }),
     );
 
@@ -559,13 +573,12 @@ describe("chat message chrome", () => {
     expect(
       screen.getByText("sidepanel.trace.actions.readFile"),
     ).toBeInTheDocument();
-    // Each execution-only step keeps its own thought-process fold inside
-    // the expanded aggregate, in step order.
+    // Summary + one nested thought fold per execution-only step.
     expect(
       screen.getAllByRole("button", {
         name: /sidepanel\.trace\.thoughtProcess/,
       }),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
 
     for (const action of ["searchFiles", "readFile"]) {
       const button = screen.getByRole("button", {
@@ -832,6 +845,8 @@ describe("chat message chrome", () => {
       />,
     );
 
+    expandProcess();
+
     await userEvent.click(
       screen.getByRole("button", {
         name: /sidepanel\.trace\.actions\.runCommand/,
@@ -925,6 +940,8 @@ describe("chat message chrome", () => {
       />,
     );
 
+    expandProcess();
+
     const skillButton = screen.getByRole("button", {
       name: /sidepanel\.trace\.actions\.useSkill frontend-design-principles/,
     });
@@ -990,6 +1007,8 @@ describe("chat message chrome", () => {
         }
       />,
     );
+
+    expandProcess();
 
     for (const action of ["runCode", "updateTasks", "updateMemory"]) {
       await userEvent.click(

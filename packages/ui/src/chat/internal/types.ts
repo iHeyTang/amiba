@@ -52,6 +52,9 @@ export interface UiMessage extends ChatMessage {
   reasoning?: string
   /** Wall-clock duration of the reasoning stream in milliseconds. */
   reasoningMs?: number
+  /** Wall-clock span of the whole process phase (first reasoning/tool
+   *  activity → last), shown as the aggregate's natural total. */
+  processMs?: number
   /** Live tool-progress events from DSH, rendered as chips. */
   toolProgress?: ToolProgress[]
   /**
