@@ -37,7 +37,7 @@ class AmibaModelPlaneRemoteService extends TypertRemoteService {
   }
 
   @Remote
-  remove(providerId: string, expectedRevision?: number) {
+  removeProvider(providerId: string, expectedRevision?: number) {
     return this.plane.remove(providerId, expectedRevision);
   }
 

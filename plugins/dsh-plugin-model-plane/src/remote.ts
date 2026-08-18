@@ -110,7 +110,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
         apiKey?: string;
         expectedRevision?: number;
       }): Promise<RemoteResult<ModelPlaneSnapshot>>;
-      remove(
+      removeProvider(
         providerId: string,
         expectedRevision?: number,
       ): Promise<RemoteResult<ModelPlaneSnapshot>>;
@@ -129,7 +129,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaModelPlane/snapshot": TypertRemoteNamespaceMap["amibaModelPlane"]["snapshot"];
     "amibaModelPlane/setDefaultSelection": TypertRemoteNamespaceMap["amibaModelPlane"]["setDefaultSelection"];
     "amibaModelPlane/upsert": TypertRemoteNamespaceMap["amibaModelPlane"]["upsert"];
-    "amibaModelPlane/remove": TypertRemoteNamespaceMap["amibaModelPlane"]["remove"];
+    "amibaModelPlane/removeProvider": TypertRemoteNamespaceMap["amibaModelPlane"]["removeProvider"];
     "amibaModelPlane/discover": TypertRemoteNamespaceMap["amibaModelPlane"]["discover"];
     "amibaModelPlane/unsetCredential": TypertRemoteNamespaceMap["amibaModelPlane"]["unsetCredential"];
   }
@@ -192,7 +192,7 @@ export const AMIBA_MODEL_PLANE_REMOTE: TypertRemoteContribution = {
       snapshotResult,
     ),
     descriptor(
-      "remove",
+      "removeProvider",
       [
         {
           name: "providerId",

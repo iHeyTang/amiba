@@ -95,7 +95,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           valueOf(remote.setDefaultSelection(selection, expectedRevision)),
         upsert: (input) => valueOf(remote.upsert(input)),
         remove: (providerId, expectedRevision) =>
-          valueOf(remote.remove(providerId, expectedRevision)),
+          valueOf(remote.removeProvider(providerId, expectedRevision)),
         discover: (input) => valueOf(remote.discover(input)),
         unsetCredential: (providerId, expectedRevision) =>
           valueOf(remote.unsetCredential(providerId, expectedRevision)),
