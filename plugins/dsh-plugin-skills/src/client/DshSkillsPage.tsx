@@ -20,13 +20,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  AgentSkillDocument,
-  AgentSkillEntry,
-  AgentSkillFileContent,
-  AgentSkillFileEntry,
-  AgentSkillFileList,
-} from "@amiba/app-runtime/platform";
 import {
   Button,
   CollectionState,
@@ -54,11 +47,55 @@ import {
  * Full skills-authoring CRUD surface this view renders — browse, read,
  * edit, save, remove. Deliberately local to the plugin rather than the host
  * platform contract: `@amiba/app-runtime/platform`'s `AgentSkillsAdapter`
- * now only exposes the trimmed, engine-native `list(sessionId)` the chat
+ * only exposes the trimmed, engine-native `list(sessionId)` the chat
  * composer's `/`-skill mentions use. `client/index.tsx` builds an instance
  * of this shape directly from the plugin's own Remote face
  * (`ctx.remote.amibaSkills`).
  */
+export type AgentSkillResourceBase =
+  | { kind: "directory"; path: string }
+  | { kind: "url"; url: string }
+  | { kind: "opaque"; description: string };
+
+export interface AgentSkillEntry {
+  name: string;
+  description: string;
+  whenToUse?: string;
+  modelInvocable: boolean;
+  userInvocable: boolean;
+  source: string;
+  provider: string;
+  resourceBase?: AgentSkillResourceBase;
+  editable: boolean;
+}
+
+export interface AgentSkillDocument {
+  name: string;
+  document: string;
+  editable: boolean;
+  source: string;
+  provider: string;
+  resourceBase?: AgentSkillResourceBase;
+}
+
+export interface AgentSkillFileEntry {
+  path: string;
+  size: number;
+}
+
+export interface AgentSkillFileList {
+  root: string;
+  files: AgentSkillFileEntry[];
+  truncated: boolean;
+}
+
+export interface AgentSkillFileContent {
+  path: string;
+  size: number;
+  encoding: "utf-8" | "binary" | "too-large";
+  content?: string;
+}
+
 export interface SkillsDirectoryAdapter {
   list(sessionId?: string): Promise<{
     skills: AgentSkillEntry[];

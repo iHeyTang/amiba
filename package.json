@@ -19,6 +19,7 @@
     "runtime:verify": "pnpm --dir packages/app-runtime runtime:verify",
     "runtime:smoke": "pnpm --dir packages/app-runtime runtime:smoke",
     "verify:architecture": "node scripts/verify-dsh-architecture.mjs",
+    "verify:pluginization": "node scripts/verify-pluginization.mjs",
     "build:desktop": "pnpm --dir apps/desktop build",
     "package:desktop": "pnpm --dir apps/desktop package",
     "clean": "pnpm -r exec rm -rf node_modules dist build .turbo .vite",
