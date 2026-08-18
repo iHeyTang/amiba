@@ -14,7 +14,6 @@ import {
   resolveManagedDshPaths,
   resolvePackagedManagedDshRuntimeDir,
 } from "@amiba/app-runtime/dsh-runtime"
-import { runDshTelemetryMonitor } from "./dsh-telemetry"
 
 const READY_TIMEOUT_MS = 90_000
 const MAX_RUNTIME_LOG_ENTRIES = 5_000
@@ -58,7 +57,6 @@ export class DshRuntimeController {
   private startedAt: number | null = null
   private lastError: string | null = null
   private stopping = false
-  private telemetryController: AbortController | null = null
   private logSequence = 0
   private readonly logEntries: AgentRuntimeLogEntry[] = []
   private readonly logTails: Record<"stdout" | "stderr", string> = {
@@ -237,8 +235,6 @@ export class DshRuntimeController {
         this.child = null
         this.handle = null
         this.startedAt = null
-        this.telemetryController?.abort()
-        this.telemetryController = null
         if (!this.stopping && code !== 0) {
           this.lastError = `DSH runtime exited (code=${code ?? "null"}, signal=${signal ?? "none"}).`
           this.appendLog("system", this.lastError, "error")
@@ -271,15 +267,6 @@ export class DshRuntimeController {
     this.handle = handle
     this.lastError = null
     this.appendLog("system", `Managed DSH is ready at ${baseUrl}.`)
-    const telemetryController = new AbortController()
-    this.telemetryController = telemetryController
-    void runDshTelemetryMonitor(handle.client, telemetryController.signal).catch(
-      (error) => {
-        if (!telemetryController.signal.aborted) {
-          console.warn("[dsh] telemetry stream ended:", error)
-        }
-      },
-    )
     return handle
   }
 
@@ -288,8 +275,6 @@ export class DshRuntimeController {
     this.child = null
     this.handle = null
     this.startedAt = null
-    this.telemetryController?.abort()
-    this.telemetryController = null
     if (!child || child.exitCode !== null) return
     this.stopping = true
     try {

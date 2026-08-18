@@ -1,13 +1,12 @@
 /**
- * Tiny persisted-prefs helper for the Usage plugin's Tokens view, backed
- * by the platform storage adapter. Reads fall back silently; writes are
- * fire-and-forget — a failed persist should never break the UI.
+ * Tiny persisted-prefs helper for the Usage plugin's Tokens and Tools
+ * views, backed by the platform storage adapter. Reads fall back
+ * silently; writes are fire-and-forget — a failed persist should never
+ * break the UI.
  *
- * This is a deliberate fork of `packages/ui/src/usage/prefs.ts`, not a
- * shared import: that host copy still backs `ToolsActivityTab`, which
- * hasn't moved into this plugin yet (tool-activity metering is a
- * separate, later surgery). Once that migration lands, both copies
- * collapse back into one plugin-owned module.
+ * The sole owner since T9: the host fork (`packages/ui/src/usage/prefs.ts`)
+ * was deleted when `ToolsActivityTab` moved into this plugin. Pref keys
+ * are unchanged, so previously stored day-range choices carry over.
  */
 
 import { getPlatform } from "@amiba/app-runtime/platform";

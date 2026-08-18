@@ -5,8 +5,9 @@ import { type ReactNode } from "react";
 
 import { AMIBA_USAGE_REMOTE } from "../remote.js";
 import { labels } from "./TokensTab.js";
-import { TokensPage } from "./TokensPage.js";
+import { UsagePage } from "./UsagePage.js";
 import type { UsageListFn } from "./token-usage.js";
+import type { ToolActivityReadFn } from "./tool-usage.js";
 
 export const name = "amiba-usage-ui";
 export const inject = ["slots", "remote"];
@@ -25,13 +26,14 @@ function errorOf(value: unknown): Error {
 
 type UsageSectionProps = PropsRuntime<"amiba.settings.section"> & {
   list: UsageListFn;
+  readToolActivity: ToolActivityReadFn;
 };
 
-/** Top-level Settings section: renders the Tokens view. No header actions
- *  — the tab already auto-refreshes on mount, focus, and a 30 s interval,
- *  the same behavior the host `SETTINGS_PAGES` "tokens" entry had. */
-function UsageSettings({ list }: UsageSectionProps): ReactNode {
-  return <TokensPage list={list} />;
+/** Top-level Settings section: the Tokens/Tools usage views. No header
+ *  actions — both tabs auto-refresh on mount, focus, and a 30 s
+ *  interval, the same behavior the host `SETTINGS_PAGES` entry had. */
+function UsageSettings({ list, readToolActivity }: UsageSectionProps): ReactNode {
+  return <UsagePage list={list} readToolActivity={readToolActivity} />;
 }
 
 /** Register the "usage" Settings section from Usage's Client half. */
@@ -50,6 +52,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         if (!result.ok) throw errorOf(result.error);
         return result.value;
       };
+      const readToolActivity: ToolActivityReadFn = async (days) => {
+        const result = await remote.readToolActivity(days);
+        if (!result.ok) throw errorOf(result.error);
+        return result.value;
+      };
       const disposeSection = injectedCtx.slots.inject(
         "amiba.settings.section",
         () =>
@@ -59,7 +66,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               id: SECTION_ID,
               order: 500,
               label: () => labels().nav,
-              inject: () => ({ list }),
+              inject: () => ({ list, readToolActivity }),
             },
             UsageSettings,
           ),

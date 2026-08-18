@@ -15,9 +15,9 @@
  * mouse-wheel deltaY into horizontal scroll so users without
  * trackpad horizontal gestures can still navigate.
  *
- * Lifted from extensions/token-meter so other telemetry extensions
- * (tool-meter, future agent-self-introspection panels) can reuse the
- * same visual language without duplication.
+ * Lifted from extensions/token-meter so other telemetry surfaces
+ * (plugin usage views, future agent-self-introspection panels) can
+ * reuse the same visual language without duplication.
  */
 
 import {

@@ -89,7 +89,9 @@ const ZH = {
 };
 
 const EN: typeof ZH = {
-  nav: "Tokens",
+  // Section label. "Usage", not "Tokens": since T9 the section hosts both
+  // the Tokens and Tools views (zh-CN already said 用量 = usage).
+  nav: "Usage",
   sectionActivity: "Activity",
   sectionTrend: "Activity trend",
   sectionByModel: "By model",

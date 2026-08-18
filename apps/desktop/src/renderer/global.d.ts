@@ -66,10 +66,6 @@ interface AmibaBridgeApi {
     openExternal(url: string): Promise<void>;
   };
   embeddedBrowser: import("@amiba/app-runtime/platform").EmbeddedBrowserAdapter;
-  toolActivity: {
-    read(days: number): Promise<import("@amiba/app-runtime/core").ToolActivityReadResult>;
-    onChanged(cb: () => void): () => void;
-  };
   workspaces: {
     chooseDirectory(defaultPath?: string): Promise<string | null>;
     getDefaultRoot(): Promise<string>;
