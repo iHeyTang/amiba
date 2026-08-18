@@ -5,16 +5,12 @@ import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
 import { SettingsPageActions } from "../page-chrome";
 
-vi.mock("../AgentBehaviorEditor", () => ({
-  SettingsAssistantBehavior: () => <div>Default behavior</div>,
-}));
-
 import { SettingsView } from "../SettingsView";
 
 describe("SettingsView DSH navigation", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    window.history.replaceState(null, "", "/#behavior");
+    window.history.replaceState(null, "", "/#appearance");
     setPlatform({
       kind: "desktop",
       storage: {
@@ -51,9 +47,11 @@ describe("SettingsView DSH navigation", () => {
       />,
     );
 
+    // The 行为与人设 page migrated to dsh-plugin-agent-preset with the rest
+    // of the assistant group — no built-in registry row remains for it.
     expect(
-      screen.getByRole("button", { name: "Behavior & identity" }),
-    ).toHaveAttribute("aria-current", "page");
+      screen.queryByRole("button", { name: "Behavior & identity" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tools" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Skills" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Memory" })).toBeVisible();
@@ -201,11 +199,40 @@ describe("SettingsView DSH navigation", () => {
   });
 
   it("renders the unified head title for the active page", async () => {
-    window.history.replaceState(null, "", "/#behavior");
+    window.history.replaceState(null, "", "/#appearance");
     render(<SettingsView />);
     expect(
-      await screen.findByRole("heading", { name: "Behavior & identity" }),
+      await screen.findByRole("heading", { name: "Appearance" }),
     ).toBeVisible();
+  });
+
+  it("resolves the migrated #behavior id against the DSH section ledger and titles it from there", () => {
+    window.history.replaceState(null, "", "/#behavior");
+    const seen: Array<string | undefined> = [];
+    render(
+      <SettingsView
+        dshSections={[{ id: "behavior", label: "Behavior & identity" }]}
+        slots={{
+          assistantNavigation: (activeSection) => {
+            seen.push(activeSection);
+            return null;
+          },
+          section: (sectionId) => (
+            <div data-testid="section-content">{sectionId}</div>
+          ),
+        }}
+      />,
+    );
+    // The registry no longer claims "behavior" — the route falls through to
+    // the dsh-section surface owned by dsh-plugin-agent-preset, keeping the
+    // old deep link addressable, and the scaffold titles it from the ledger.
+    expect(seen).toContain("behavior");
+    expect(
+      screen.getByRole("heading", { name: "Behavior & identity" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("section-content")).toHaveTextContent(
+      "behavior",
+    );
   });
 
   it("resolves the migrated #agents id (with or without a detail segment) against the DSH section ledger", () => {

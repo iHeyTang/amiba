@@ -222,24 +222,6 @@ export const en = {
   "options.nav.section.diagnostics": "Diagnostics",
   "options.nav.section.extensions": "Extensions",
 
-  // Agent behavior & identity (the preset-management UI moved to
-  // dsh-plugin-agent-preset with its own overlay dict; these keys serve the
-  // host-native Behavior & identity page and its editor only)
-  "options.agents.section.behavior": "Behavior & identity",
-  "options.agents.role.title": "Description",
-  "options.agents.role.description":
-    "A short description shown when choosing who should run a task.",
-  "options.agents.role.placeholder":
-    "For example: investigates sources and verifies claims.",
-  "options.agents.soul.title": "Behavior and principles",
-  "options.agents.soul.description":
-    "Durable identity, working principles, and expression owned by this DSH Agent Preset.",
-  "options.agents.soul.placeholder":
-    "Describe how this agent should think, work, and communicate…",
-  "options.agents.loadFailed": "Couldn't load agent presets",
-  "options.agents.soulLoadFailed": "Couldn't load SOUL.md",
-  "options.agents.saveFailed": "Couldn't save the preset",
-
   // Task agent picker
   "sidepanel.agentPicker.label": "Choose agent",
   "sidepanel.agentPicker.description":

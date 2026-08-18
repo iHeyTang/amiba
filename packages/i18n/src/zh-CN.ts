@@ -213,21 +213,6 @@ export const zhCN: Messages = {
   "options.nav.section.diagnostics": "诊断",
   "options.nav.section.extensions": "扩展",
 
-  // Agent behavior & identity（预设管理 UI 已迁移到 dsh-plugin-agent-preset
-  // 并自带 overlay 词典；这里只保留 host 原生「行为与人设」页面及其编辑器的键）
-  "options.agents.section.behavior": "行为与人设",
-  "options.agents.role.title": "描述",
-  "options.agents.role.description":
-    "用一句话说明它擅长什么；选择任务执行者时会展示。",
-  "options.agents.role.placeholder": "例如：负责资料检索与事实核验。",
-  "options.agents.soul.title": "行为与准则",
-  "options.agents.soul.description":
-    "由这个 DSH 智能体预设统一拥有的长期身份、原则、工作方式与表达风格。",
-  "options.agents.soul.placeholder": "描述这个智能体应该如何思考、工作与沟通…",
-  "options.agents.loadFailed": "无法加载智能体预设",
-  "options.agents.soulLoadFailed": "无法加载 SOUL.md",
-  "options.agents.saveFailed": "无法保存预设",
-
   // Task agent picker
   "sidepanel.agentPicker.label": "选择智能体",
   "sidepanel.agentPicker.description": "选择负责这个任务的助手。",

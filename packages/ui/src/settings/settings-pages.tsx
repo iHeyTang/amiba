@@ -1,7 +1,6 @@
 import {
   Activity,
   FileText,
-  Fingerprint,
   Keyboard,
   Palette,
   type LucideIcon,
@@ -9,7 +8,6 @@ import {
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
-import { SettingsAssistantBehavior } from "./AgentBehaviorEditor";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
@@ -75,13 +73,10 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     component: page(SettingsShortcuts),
     desktopOnly: true,
   },
-  {
-    id: "behavior",
-    icon: Fingerprint,
-    titleKey: "options.agents.section.behavior",
-    group: "assistant",
-    component: page(SettingsAssistantBehavior),
-  },
+  // The Assistant group's rows are all DSH plugin-owned settings sections
+  // now (行为与人设 and 智能体预设 from dsh-plugin-agent-preset, 模型与服务
+  // from dsh-plugin-model-plane, …) — projected through the section ledger,
+  // not registered here.
   {
     id: "status",
     icon: Activity,
