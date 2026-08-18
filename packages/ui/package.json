@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@amiba/app-runtime": "workspace:*",
+    "@amiba/extension-sdk": "workspace:*",
     "@amiba/i18n": "workspace:*",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-css": "^6.3.1",

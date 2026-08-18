@@ -59,12 +59,19 @@ export {
   MODEL_SETTINGS_SURFACE_CLASS,
   ModelSettingsSectionHeader,
 } from "./settings/ModelSettingsSectionChrome";
+// Model-plane surfaces shared with the plugin's settings section and its
+// composer slot contribution. ModelPickerDialog/ModelSummary read the host
+// catalog via `useT()` for their built-in strings — acceptable here because
+// those keys are host vocabulary until the MP-T4 purge decides their fate;
+// the contribution's own strings ride its plugin-local overlay.
 export { ModelIcon } from "./models/ModelIcon";
 export { ModelIdentityName } from "./models/ModelSummary";
 export { ModelInfoCard } from "./models/ModelInfoCard";
 export {
   ModelPickerDialog,
   type ModelPickerGroup,
+  type ModelPickerOption,
+  type ModelPickerStatus,
 } from "./models/ModelPickerDialog";
 export { type ModelMetadata } from "./models/model-metadata";
 export { useRefetchOnFocus } from "./hooks/useRefetchOnFocus";
@@ -75,3 +82,9 @@ export {
   type HeatmapCellBase,
   type HeatmapProps,
 } from "./viz";
+export {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  type DialogOverlayVariant,
+} from "./primitives";

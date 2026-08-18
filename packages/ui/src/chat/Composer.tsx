@@ -19,7 +19,7 @@ import {
   AttachmentButton,
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments";
-import { ComposerModelPicker } from "./ComposerModelPicker";
+import { ComposerModelPickerSlot } from "./ComposerModelPickerSlot";
 import { ComposerAgentPicker } from "./ComposerAgentPicker";
 import { ComposerApprovalModePicker } from "./ComposerApprovalModePicker";
 import {
@@ -42,7 +42,9 @@ import { routeSubmit } from "./composer/command-routing";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
+import { getPlatform } from "@amiba/app-runtime/platform";
 import type { AgentModelSelection } from "@amiba/app-runtime/platform";
+import type { AmibaComposerAgentModels } from "@amiba/extension-sdk";
 
 /**
  * The chat surface's input box. **One implementation** used by every
@@ -362,6 +364,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ref,
   ) {
     const innerRef = useRef<RichComposerHandle>(null);
+
+    // Host-wired engine-native pass-through for the model-picker slot. The
+    // Composer IS the host here, so reaching for `getPlatform()` is allowed —
+    // but only lazily, inside the calls, so rendering never requires the
+    // platform and the object identity stays stable across renders.
+    const slotAgentModels = useMemo<AmibaComposerAgentModels>(
+      () => ({
+        directory: async (sessionId) => {
+          const models = getPlatform().agentModels;
+          return models ? models.directory(sessionId) : null;
+        },
+        select: async (sessionId, selection) => {
+          const models = getPlatform().agentModels;
+          if (!models) throw new Error("agentModels adapter unavailable");
+          return models.select(sessionId, selection);
+        },
+      }),
+      [],
+    );
 
     const effectiveMentionProviders = useMemo(
       () => mentionProviders ?? [],
@@ -745,12 +766,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {actionsLeft}
             </div>
             {modelPicker ? (
-              <ComposerModelPicker
+              <ComposerModelPickerSlot
+                agentModels={slotAgentModels}
                 dialogSize={pickerDialogSize}
                 disabled={disabled}
                 overlayVariant={pickerOverlayVariant}
-                profileId={agentPicker?.value.profileId}
-                sessionId={permissionSessionId}
+                sessionId={permissionSessionId ?? null}
                 refreshKey={pickerRefreshKey}
                 draftSelection={
                   typeof modelPicker === "object"

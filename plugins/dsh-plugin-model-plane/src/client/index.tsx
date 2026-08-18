@@ -6,6 +6,10 @@ import { type ReactNode } from "react";
 
 import { AMIBA_MODEL_PLANE_REMOTE } from "../remote.js";
 import {
+  DshComposerModelPicker,
+  type ComposerPickerCatalog,
+} from "./DshComposerModelPicker.js";
+import {
   ModelProviderConfigTab,
   type ModelPlaneAdapter,
 } from "./ModelProviderConfigTab.js";
@@ -19,6 +23,10 @@ type ModelPlaneRemote = ClientContext["remote"]["amibaModelPlane"];
 
 type ModelPlaneSectionProps = PropsRuntime<"amiba.settings.section"> & {
   adapter: ModelPlaneAdapter;
+};
+
+type ComposerPickerSlotProps = PropsRuntime<"amiba.composer.modelPicker"> & {
+  catalog: ComposerPickerCatalog;
 };
 
 function remoteError(value: unknown): Error {
@@ -50,8 +58,31 @@ function ModelPlaneSettings({ adapter }: ModelPlaneSectionProps): ReactNode {
   );
 }
 
-/** Publish the typed Model Plane Remote to every DSH Client surface and
- *  register the 模型与服务 ("Models & services") Settings section. */
+/**
+ * `amiba.composer.modelPicker` contribution: the composer's model chip. The
+ * catalog comes from the plugin's own typed Remote; the engine-native
+ * `agentModels` surface arrives host-wired through the slot's owner props.
+ */
+function ComposerModelPickerContribution(
+  props: ComposerPickerSlotProps,
+): ReactNode {
+  return (
+    <DshComposerModelPicker
+      agentModels={props.agentModels}
+      catalog={props.catalog}
+      dialogSize={props.dialogSize}
+      disabled={props.disabled}
+      draftSelection={props.draftSelection}
+      onDraftSelectionChange={props.onDraftSelectionChange}
+      overlayVariant={props.overlayVariant}
+      refreshKey={props.refreshKey}
+      sessionId={props.sessionId}
+    />
+  );
+}
+
+/** Publish the typed Model Plane Remote, the 模型与服务 ("Models & services")
+ *  Settings section, and the composer picker contribution. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_MODEL_PLANE_REMOTE);
   const sectionFiber = ctx.inject(
@@ -89,8 +120,30 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       );
     },
   );
+  const pickerFiber = ctx.inject(
+    ["slots", "remote.amibaModelPlane"],
+    (injectedCtx) => {
+      const remote: ModelPlaneRemote = injectedCtx.remote.amibaModelPlane;
+      const catalog: ComposerPickerCatalog = {
+        snapshot: () => valueOf(remote.snapshot()),
+      };
+      return injectedCtx.slots.inject("amiba.composer.modelPicker", () =>
+        injectedCtx.slots.register(
+          {
+            name: "amiba.composer.modelPicker",
+            id: "model-plane",
+            order: 100,
+            inject: () => ({ catalog }),
+          },
+          ComposerModelPickerContribution,
+        ),
+      );
+    },
+  );
   await sectionFiber;
+  await pickerFiber;
   return async () => {
+    await pickerFiber.dispose();
     await sectionFiber.dispose();
     await disposeRemote();
   };

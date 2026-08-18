@@ -303,6 +303,9 @@ importers:
       '@amiba/app-runtime':
         specifier: workspace:*
         version: link:../app-runtime
+      '@amiba/extension-sdk':
+        specifier: workspace:*
+        version: link:../extension-sdk
       '@amiba/i18n':
         specifier: workspace:*
         version: link:../i18n

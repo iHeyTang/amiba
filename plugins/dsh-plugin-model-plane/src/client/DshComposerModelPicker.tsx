@@ -1,24 +1,89 @@
-import { getPlatform } from "@amiba/app-runtime/platform";
-import type { AgentModelGroup, AgentModelSelection } from "@amiba/app-runtime/platform";
-import { useT } from "@amiba/i18n";
-import { BrainCircuit, Check, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 import {
   ModelIcon,
   ModelPickerDialog,
-  type ModelPickerGroup,
-  type ModelPickerStatus,
-} from "../models";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
   cn,
+  usePluginT,
   type DialogOverlayVariant,
-} from "../primitives";
+  type ModelPickerGroup,
+  type ModelPickerStatus,
+} from "@amiba/ui/plugin";
+import { BrainCircuit, Check, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-function pickerGroups(groups: AgentModelGroup[]): ModelPickerGroup[] {
+import { pickerI18n } from "./i18n-picker.js";
+
+// ---------------------------------------------------------------------------
+// Plugin-local model-plane shapes. These mirror the plugin's own Remote wire
+// contract (`../remote.js` zod schemas) — the plane vocabulary lives with the
+// plugin now, NOT in `@amiba/app-runtime/platform`. The single allowed
+// platform import above is `AgentModelSelection`: the engine-native selection
+// shape stays host-owned and rides the slot's `agentModels` pass-through.
+// ---------------------------------------------------------------------------
+
+export interface ComposerPickerEffort {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ComposerPickerModel {
+  id: string;
+  name: string;
+  description?: string;
+  reasoning?: {
+    efforts: ComposerPickerEffort[];
+    defaultEffort?: string;
+  };
+}
+
+export interface ComposerPickerModelGroup {
+  id: string;
+  name: string;
+  models: ComposerPickerModel[];
+}
+
+export interface ComposerPickerCatalogSnapshot {
+  groups: ComposerPickerModelGroup[];
+  /** Product default used before an execution session is materialized. */
+  defaultSelection?: AgentModelSelection;
+}
+
+/** The picker's catalog source: the plugin's own typed Model Plane Remote. */
+export interface ComposerPickerCatalog {
+  snapshot(): Promise<ComposerPickerCatalogSnapshot>;
+}
+
+/** Engine-native pass-through delivered by the composer host via slot props. */
+export interface ComposerPickerAgentModels {
+  directory(sessionId: string): Promise<{
+    current: AgentModelSelection;
+    routable: boolean;
+  } | null>;
+  select(
+    sessionId: string,
+    selection: AgentModelSelection,
+  ): Promise<{ selected: AgentModelSelection }>;
+}
+
+export interface DshComposerModelPickerProps {
+  /** Injected by the plugin's slot registration (never host-supplied). */
+  catalog: ComposerPickerCatalog;
+  /** Host-owned engine-native surface, passed through the slot contract. */
+  agentModels: ComposerPickerAgentModels;
+  sessionId: string | null;
+  draftSelection?: AgentModelSelection;
+  onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+  dialogSize?: "default" | "tall";
+  disabled?: boolean;
+  overlayVariant?: DialogOverlayVariant;
+  refreshKey?: number;
+}
+
+function pickerGroups(groups: ComposerPickerModelGroup[]): ModelPickerGroup[] {
   return groups.map((group) => ({
     id: `dsh:${group.id}`,
     label: group.name,
@@ -36,6 +101,8 @@ function pickerGroups(groups: AgentModelGroup[]): ModelPickerGroup[] {
 }
 
 export function DshComposerModelPicker({
+  catalog,
+  agentModels,
   dialogSize = "default",
   disabled = false,
   overlayVariant = "dimmed",
@@ -43,17 +110,9 @@ export function DshComposerModelPicker({
   refreshKey = 0,
   draftSelection,
   onDraftSelectionChange,
-}: {
-  dialogSize?: "default" | "tall";
-  disabled?: boolean;
-  overlayVariant?: DialogOverlayVariant;
-  sessionId?: string;
-  refreshKey?: number;
-  draftSelection?: AgentModelSelection;
-  onDraftSelectionChange?: (selection: AgentModelSelection) => void;
-}) {
-  const { t } = useT();
-  const [groups, setGroups] = useState<AgentModelGroup[]>([]);
+}: DshComposerModelPickerProps) {
+  const { t } = usePluginT(pickerI18n);
+  const [groups, setGroups] = useState<ComposerPickerModelGroup[]>([]);
   const [current, setCurrent] = useState<AgentModelSelection | null>(
     draftSelection ?? null,
   );
@@ -67,16 +126,12 @@ export function DshComposerModelPicker({
 
   const load = useCallback(async () => {
     const generation = ++generationRef.current;
-    const platform = getPlatform();
-    const models = platform.agentModels;
-    const modelPlane = platform.modelPlane;
-    if (!models || !modelPlane) return;
     setLoadState("loading");
     setError(null);
     try {
       const [snapshot, directory] = await Promise.all([
-        modelPlane.snapshot(),
-        sessionId ? models.directory(sessionId) : Promise.resolve(null),
+        catalog.snapshot(),
+        sessionId ? agentModels.directory(sessionId) : Promise.resolve(null),
       ]);
       if (generation !== generationRef.current) return;
       setGroups(snapshot.groups);
@@ -100,7 +155,14 @@ export function DshComposerModelPicker({
       setError(caught instanceof Error ? caught.message : String(caught));
       setLoadState("error");
     }
-  }, [draftSelection, onDraftSelectionChange, sessionId, t]);
+  }, [
+    agentModels,
+    catalog,
+    draftSelection,
+    onDraftSelectionChange,
+    sessionId,
+    t,
+  ]);
 
   useEffect(() => {
     void load();
@@ -125,11 +187,6 @@ export function DshComposerModelPicker({
   async function commitSelection(
     selection: AgentModelSelection,
   ): Promise<boolean> {
-    const models = getPlatform().agentModels;
-    if (!models) {
-      setError(t("sidepanel.modelPicker.loadFailed"));
-      return false;
-    }
     if (!sessionId || !materialized) {
       if (!onDraftSelectionChange) {
         setError(t("sidepanel.modelPicker.loadFailed"));
@@ -144,7 +201,7 @@ export function DshComposerModelPicker({
     setSaving(true);
     setError(null);
     try {
-      const result = await models.select(sessionId, selection);
+      const result = await agentModels.select(sessionId, selection);
       setCurrent(result.selected);
       setLoadState("ready");
       return true;
