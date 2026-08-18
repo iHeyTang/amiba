@@ -1,15 +1,21 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
-import { ComposerModelPicker } from "../ComposerModelPicker";
+import {
+  DshComposerModelPicker,
+  type ComposerPickerAgentModels,
+  type ComposerPickerCatalog,
+} from "../DshComposerModelPicker.js";
 
 const directory = vi.fn();
 const snapshot = vi.fn();
 const select = vi.fn();
 
-describe("ComposerModelPicker DSH adapter", () => {
+const catalog: ComposerPickerCatalog = { snapshot };
+const agentModels: ComposerPickerAgentModels = { directory, select };
+
+describe("DshComposerModelPicker slot contribution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     const groups = [
@@ -36,49 +42,28 @@ describe("ComposerModelPicker DSH adapter", () => {
     directory.mockResolvedValue({
       current: { provider: "deepseek", model: "model-a" },
       routable: true,
-      groups,
-      failures: [],
     });
-    snapshot.mockResolvedValue({
-      revision: 1,
-      providers: [],
-      groups,
-      credentials: {},
-      failures: [],
-    });
+    snapshot.mockResolvedValue({ groups });
     select.mockImplementation(
       async (_sessionId: string, selection: unknown) => ({
         selected: selection,
       }),
     );
-    setPlatform({
-      storage: {
-        get: vi.fn().mockResolvedValue({}),
-        set: vi.fn(),
-        remove: vi.fn(),
-        watch: vi.fn(() => () => {}),
-      },
-      modelPlane: {
-        snapshot,
-        setDefaultSelection: vi.fn(),
-        upsert: vi.fn(),
-        remove: vi.fn(),
-        discover: vi.fn(),
-        unsetCredential: vi.fn(),
-      },
-      agentModels: {
-        directory,
-        select,
-      },
-    } as unknown as PlatformAdapter);
   });
 
-  it("loads and switches the model through the session-scoped DSH API", async () => {
+  it("renders the plane catalog and selects through the agentModels pass-through", async () => {
     const user = userEvent.setup();
-    render(<ComposerModelPicker sessionId="session-1" />);
+    render(
+      <DshComposerModelPicker
+        agentModels={agentModels}
+        catalog={catalog}
+        sessionId="session-1"
+      />,
+    );
 
     const trigger = screen.getByRole("button", { name: "Choose model" });
     await waitFor(() => expect(trigger).toHaveTextContent("Model A"));
+    expect(directory).toHaveBeenCalledWith("session-1");
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog", { name: "Choose model" });
     expect(within(dialog).getAllByText("Model B")).toHaveLength(1);
@@ -116,11 +101,17 @@ describe("ComposerModelPicker DSH adapter", () => {
     const user = userEvent.setup();
     const onDraftSelectionChange = vi.fn();
     render(
-      <ComposerModelPicker onDraftSelectionChange={onDraftSelectionChange} />,
+      <DshComposerModelPicker
+        agentModels={agentModels}
+        catalog={catalog}
+        onDraftSelectionChange={onDraftSelectionChange}
+        sessionId={null}
+      />,
     );
 
     const trigger = screen.getByRole("button", { name: "Choose model" });
     await waitFor(() => expect(snapshot).toHaveBeenCalled());
+    expect(directory).not.toHaveBeenCalled();
     expect(trigger).toHaveTextContent("Choose model");
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog", { name: "Choose model" });
@@ -153,8 +144,6 @@ describe("ComposerModelPicker DSH adapter", () => {
 
   it("uses the Model Plane product default before creating a DSH session", async () => {
     snapshot.mockResolvedValueOnce({
-      revision: 2,
-      providers: [],
       groups: [
         {
           id: "deepseek",
@@ -163,13 +152,16 @@ describe("ComposerModelPicker DSH adapter", () => {
         },
       ],
       defaultSelection: { provider: "deepseek", model: "model-a" },
-      credentials: {},
-      failures: [],
     });
     const onDraftSelectionChange = vi.fn();
 
     render(
-      <ComposerModelPicker onDraftSelectionChange={onDraftSelectionChange} />,
+      <DshComposerModelPicker
+        agentModels={agentModels}
+        catalog={catalog}
+        onDraftSelectionChange={onDraftSelectionChange}
+        sessionId={null}
+      />,
     );
 
     const trigger = screen.getByRole("button", { name: "Choose model" });

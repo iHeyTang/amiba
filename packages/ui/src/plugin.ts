@@ -67,3 +67,21 @@ export {
   type HeatmapCellBase,
   type HeatmapProps,
 } from "./viz";
+// Composer model-picker surface shared with the model-plane plugin's slot
+// contribution. ModelPickerDialog/ModelSummary read the host catalog via
+// `useT()` for their built-in strings — acceptable here because those keys
+// are host vocabulary until the MP-T4 purge decides their fate; the
+// contribution's own strings ride its plugin-local overlay.
+export {
+  ModelIcon,
+  ModelPickerDialog,
+  type ModelPickerGroup,
+  type ModelPickerOption,
+  type ModelPickerStatus,
+} from "./models";
+export {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  type DialogOverlayVariant,
+} from "./primitives";

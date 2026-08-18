@@ -42,10 +42,6 @@ export {
   type ComposerProps,
 } from "./Composer";
 export { ComposerNotice, type ComposerNoticeProps } from "./ComposerNotice";
-export {
-  ComposerModelPicker,
-  type ComposerModelPickerProps,
-} from "./ComposerModelPicker";
 export { ComposerKbdHints, Kbd, type ComposerKbdHint } from "./Kbd";
 export {
   AttachmentButton,

@@ -12,8 +12,12 @@ import {
   type SnapshotSelectorHook,
 } from "@deepseek-ai/dsh-client-ui-slots";
 import {
+  AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP,
+  AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
   AMIBA_ROOT_SLOTS,
   type AmibaAgentPresetSectionOwner,
+  type AmibaComposerModelPickerOwner,
+  type AmibaComposerModelPickerPropsGetter,
   type AmibaRootSlot,
   type AmibaSettingsNavigationOwner,
   type AmibaSettingsSectionOwner,
@@ -52,6 +56,9 @@ if (
 
 export type {
   AmibaAgentPresetSectionOwner,
+  AmibaComposerAgentModels,
+  AmibaComposerModelPickerOwner,
+  AmibaComposerModelSelection,
   AmibaRootSlot,
   AmibaSettingsNavigationOwner,
   AmibaSettingsSectionOwner,
@@ -68,17 +75,32 @@ const SLOT_NAMES: readonly AmibaRootSlot[] = AMIBA_ROOT_SLOTS;
 interface SlotTarget {
   element: Element;
   filterId?: string;
+  /** Per-mount marker id — lets several composers carry the same slot name. */
+  instanceId?: string;
   name: AmibaRootSlot;
+  /**
+   * Serialized subset of rich marker props (composer model picker). Rich
+   * props travel by element property, which MutationObserver cannot watch;
+   * this attribute string is their change signal, compared in
+   * {@link sameTargets} so a draft-selection change re-renders the portal.
+   */
+  stateFingerprint?: string;
   owner: AmibaSettingsSectionOwner &
     AmibaSettingsNavigationOwner &
     AmibaWorkspaceNavigationOwner &
     AmibaWorkspaceViewOwner &
-    Partial<AmibaAgentPresetSectionOwner>;
+    Partial<AmibaAgentPresetSectionOwner> &
+    Partial<AmibaComposerModelPickerOwner>;
 }
 
 function isRootSlot(value: string): value is AmibaRootSlot {
   return (SLOT_NAMES as readonly string[]).includes(value);
 }
+
+/** Marker node carrying the composer model picker's rich-props getter. */
+type ComposerPickerMarkerElement = Element & {
+  [AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP]?: AmibaComposerModelPickerPropsGetter;
+};
 
 function findSlotTargets(): Map<string, SlotTarget> {
   const targets = new Map<string, SlotTarget>();
@@ -118,7 +140,18 @@ function findSlotTargets(): Map<string, SlotTarget> {
     const headerActionsHost = (element as SlotMarkerElement)[
       SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP
     ];
+    const instanceId =
+      element.getAttribute("data-amiba-dsh-slot-instance")?.trim() || undefined;
+    const pickerProps =
+      name === "amiba.composer.modelPicker"
+        ? (element as ComposerPickerMarkerElement)[
+            AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP
+          ]?.()
+        : undefined;
+    const stateFingerprint =
+      element.getAttribute(AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR) ?? undefined;
     const owner: SlotTarget["owner"] = {
+      ...(pickerProps ?? {}),
       ...(Number.isFinite(parsedChromeHeight)
         ? { chromeHeightPx: parsedChromeHeight }
         : {}),
@@ -144,8 +177,19 @@ function findSlotTargets(): Map<string, SlotTarget> {
           }
         : {}),
     };
-    const id = filterId ? `${name}:${filterId}` : name;
-    targets.set(id, { element, filterId, name, owner });
+    const id = filterId
+      ? `${name}:${filterId}`
+      : instanceId
+        ? `${name}@${instanceId}`
+        : name;
+    targets.set(id, {
+      element,
+      filterId,
+      instanceId,
+      name,
+      owner,
+      stateFingerprint,
+    });
   }
   return targets;
 }
@@ -160,6 +204,7 @@ function sameTargets(
     if (
       candidate?.element !== target.element ||
       candidate.filterId !== target.filterId ||
+      candidate.stateFingerprint !== target.stateFingerprint ||
       candidate.owner.chromeHeightPx !== target.owner.chromeHeightPx ||
       candidate.owner.topBarLeftInset !== target.owner.topBarLeftInset ||
       candidate.owner.activeView !== target.owner.activeView ||
@@ -197,6 +242,7 @@ function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
         "data-amiba-dsh-sidebar-collapsed",
         "data-amiba-dsh-show-sidebar-expand",
         "data-amiba-dsh-profile-id",
+        AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
       ],
       attributes: true,
       childList: true,
@@ -425,6 +471,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.workspace.view": { kind: "list", scope: "root" },
           "amiba.chat.header.after": { kind: "list", scope: "root" },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
+          "amiba.composer.modelPicker": { kind: "list", scope: "root" },
           "amiba.settings.navigation.before": {
             kind: "list",
             scope: "root",
