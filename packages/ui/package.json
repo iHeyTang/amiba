@@ -9,7 +9,6 @@
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
     "./plugin/runtime-inventory": "./src/plugin-runtime-inventory.ts",
-    "./plugin/schedule": "./src/plugin-schedule.ts",
     "./tailwind-preset": "./tailwind-preset.cjs",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./styles/chat.css": "./src/styles/chat.css"

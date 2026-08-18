@@ -123,16 +123,6 @@ vi.mock("../useCommandPalette", () => ({
   useCommandPalette: () => ({ open: false, setOpen: mocks.paletteSetOpen }),
 }));
 
-vi.mock("../internal/useScheduledRuns", () => ({
-  useScheduledRuns: () => ({
-    runs: [],
-    ready: true,
-    activeRunTitle: () => null,
-    labelFor: () => "",
-    refresh: vi.fn(),
-  }),
-}));
-
 vi.mock("../useSessionTitle", () => ({
   SessionTitleProvider: ({ children }: { children: React.ReactNode }) =>
     children,

@@ -1,7 +1,4 @@
-import type {
-  AgentScheduleCreateInput,
-  AgentScheduleView,
-} from "@amiba/app-runtime/platform";
+import type { AgentScheduleCreateInput, AgentScheduleView } from "./types.js";
 import type {
   RemoteResult,
   TypertRemoteContribution,

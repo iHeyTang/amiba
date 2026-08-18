@@ -1,20 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
-vi.mock("@amiba/app-runtime/core", () => ({
-  useSessions: () => ({
-    activeId: "session-1",
-    sessions: [{ id: "session-1", title: "Main session", source: "local" }],
-  }),
-}));
-
-import { ScheduledTasksPage } from "../ScheduledTasksPage";
+import { DshScheduledTasksPage } from "../DshScheduledTasksPage";
 
 const list = vi.fn();
 
-describe("ScheduledTasksPage DSH reminders", () => {
+describe("DshScheduledTasksPage DSH reminders", () => {
   beforeEach(() => {
     list.mockImplementation(async (sessionId: string) =>
       sessionId === "session-1"
@@ -43,38 +35,34 @@ describe("ScheduledTasksPage DSH reminders", () => {
             },
           ],
     );
-    setPlatform({
-      storage: {
-        get: vi.fn().mockResolvedValue({}),
-        set: vi.fn(),
-        remove: vi.fn(),
-        watch: vi.fn(() => () => {}),
-      },
-      agentSessions: {
-        list: vi.fn().mockResolvedValue([
-          {
-            sessionId: "session-1",
-            title: "Main session",
-            createdAt: 1,
-            updatedAt: 2,
-            agentPreset: "standard",
-          },
-          {
-            sessionId: "session-2",
-            title: "Project session",
-            createdAt: 1,
-            updatedAt: 2,
-            agentPreset: "standard",
-          },
-        ]),
-      },
-      agentSchedules: { list, create: vi.fn(), remove: vi.fn() },
-    } as unknown as PlatformAdapter);
   });
 
   it("aggregates reminders without exposing session setup in the page", async () => {
     const user = userEvent.setup();
-    render(<ScheduledTasksPage />);
+    render(
+      <DshScheduledTasksPage
+        activeSessionId="session-1"
+        adapter={{ list, create: vi.fn(), remove: vi.fn() }}
+        sessionsAdapter={{
+          list: vi.fn().mockResolvedValue([
+            {
+              sessionId: "session-1",
+              title: "Main session",
+              createdAt: 1,
+              updatedAt: 2,
+              agentPreset: "standard",
+            },
+            {
+              sessionId: "session-2",
+              title: "Project session",
+              createdAt: 1,
+              updatedAt: 2,
+              agentPreset: "standard",
+            },
+          ]),
+        }}
+      />,
+    );
     expect(
       await screen.findByText("Summarise the latest activity"),
     ).toBeVisible();

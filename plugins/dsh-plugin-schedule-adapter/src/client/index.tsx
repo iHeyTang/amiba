@@ -1,16 +1,14 @@
-import type {
-  AgentSchedulesAdapter,
-  AgentSessionSummary,
-} from "@amiba/app-runtime/platform";
+import type { AgentSessionSummary } from "@amiba/app-runtime/platform";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { NavigationRow, usePluginT } from "@amiba/ui/plugin";
-import { ScheduleWorkspaceView } from "@amiba/ui/plugin/schedule";
 import { Workflow } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { AMIBA_SCHEDULES_REMOTE } from "../remote.js";
+import type { AgentSchedulesAdapter } from "../types.js";
+import { DshScheduledTasksPage as ScheduleWorkspaceView } from "./DshScheduledTasksPage.js";
 
 export const name = "amiba-schedules-ui";
 export const inject = ["slots", "remote", "layout"];

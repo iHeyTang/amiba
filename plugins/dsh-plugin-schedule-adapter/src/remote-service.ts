@@ -3,7 +3,7 @@ import {
   Remote,
   TypertRemoteService,
 } from "@deepseek-ai/dsh-typert-protocol";
-import type { AgentScheduleCreateInput } from "@amiba/app-runtime/platform";
+import type { AgentScheduleCreateInput } from "./types.js";
 
 import type { DshScheduleManager } from "./manager.js";
 

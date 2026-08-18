@@ -1,10 +1,7 @@
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
-import type {
-  AgentScheduleCreateInput,
-  AgentScheduleView,
-} from "@amiba/app-runtime/platform";
+import type { AgentScheduleCreateInput, AgentScheduleView } from "./types.js";
 import { randomUUID } from "node:crypto";
 
 type JsonRecord = Record<string, unknown>;

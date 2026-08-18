@@ -46,7 +46,6 @@ describe("createDshPlatformAdapters", () => {
     const client = rpcClient(
       (method) =>
         ({
-          "amibaSchedules/list": [],
           "amibaUsage/list": { records: [], failures: [] },
           "amibaModelPlane/snapshot": {
             revision: 1,
@@ -60,15 +59,10 @@ describe("createDshPlatformAdapters", () => {
     );
     const adapters = createDshPlatformAdapters(client);
 
-    await adapters.agentSchedules.list("session-1");
     await adapters.agentUsage.list();
     await adapters.modelPlane.snapshot();
 
     expect(seen).toEqual([
-      {
-        method: "amibaSchedules/list",
-        payload: { args: { sessionId: "session-1" } },
-      },
       { method: "amibaUsage/list", payload: { args: {} } },
       { method: "amibaModelPlane/snapshot", payload: { args: {} } },
     ]);

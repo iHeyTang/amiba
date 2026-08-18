@@ -38,7 +38,6 @@ import type { MessagesMaxWidth } from "./internal/types";
 import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
-import { useScheduledRuns } from "./internal/useScheduledRuns";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
 import {
@@ -227,7 +226,6 @@ function FullScreenChatViewInner({
   useResolvedTheme();
   const { t } = useT();
   const sessions = useSessions();
-  const scheduled = useScheduledRuns();
   const palette = useCommandPalette();
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
@@ -380,18 +378,9 @@ function FullScreenChatViewInner({
   // the subtree. Highest-priority slot in the placeholder chain.
   const externalTitleOverride = useSessionTitle();
 
-  // The workspace destination owns the title while it is selected. Otherwise
-  // the active conversation (including a cron-run output) provides context.
-  const activeScheduledRunTitle = sessions.activeId
-    ? scheduled.activeRunTitle(sessions.activeId)
-    : null;
-  const chatTopBarPlaceholder =
-    externalTitleOverride || activeScheduledRunTitle || activeChatTitle;
+  const chatTopBarPlaceholder = externalTitleOverride || activeChatTitle;
   const canRenameActiveChatTitle = Boolean(
-    sessions.activeId &&
-      activeChatTitle &&
-      !externalTitleOverride &&
-      !activeScheduledRunTitle,
+    sessions.activeId && activeChatTitle && !externalTitleOverride,
   );
   const renameActiveChatTitle = useCallback(
     (title: string) => {
@@ -587,21 +576,6 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  // Scheduled runs live in History, not in the registered-task workspace.
-  // Opening one behaves like opening any other conversation output.
-  const onOpenRun = useCallback(
-    async (id: string) => {
-      if (!sessions.ready) return;
-      if (id === sessions.activeId) {
-        await sessions.deselect();
-        return;
-      }
-      await sessions.openTab(id);
-      onSidebarViewChange("chats");
-    },
-    [sessions, onSidebarViewChange],
-  );
-
   const primaryWorkspaceActive = sidebarView === "chats";
   const pluginWorkspaceActive = !primaryWorkspaceActive;
   const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
@@ -699,11 +673,6 @@ function FullScreenChatViewInner({
             }}
             onBulkSessions={(ids, action) => sessions.bulkUpdate(ids, action)}
             onRefreshSessions={() => void sessions.refresh()}
-            scheduledSessions={scheduled.runs}
-            scheduledReady={scheduled.ready}
-            onOpenScheduledSession={(id) => void onOpenRun(id)}
-            onRefreshScheduledSessions={scheduled.refresh}
-            scheduledLabelFor={scheduled.labelFor}
             historyLayout={historyLayout}
             onHistoryLayoutChange={onHistoryLayoutChange}
             onOpenSettings={() => openSettings()}
