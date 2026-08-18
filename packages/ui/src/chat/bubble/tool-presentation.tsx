@@ -1,4 +1,4 @@
-import type { HermesToolProgress } from "@amiba/core";
+import type { ToolProgress } from "@amiba/app-runtime/core";
 import type { TranslateFn } from "@amiba/i18n";
 import {
   BookOpen,
@@ -37,6 +37,7 @@ type ToolKind =
   | "write-file"
   | "search-files"
   | "terminal"
+  | "background-job"
   | "code"
   | "delegation"
   | "tasks"
@@ -146,6 +147,18 @@ const TOOL_SPECS: Record<string, ToolSpec> = {
   terminal: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
+    icon: Terminal,
+  },
+  bash: {
+    kind: "terminal",
+    actionKey: "sidepanel.trace.actions.runCommand",
+    icon: Terminal,
+  },
+  job_output: {
+    // Background-job ids (bash-1, …) are runtime internals — the row shows
+    // the semantic action only, never the id.
+    kind: "background-job",
+    actionKey: "sidepanel.trace.actions.readJobOutput",
     icon: Terminal,
   },
   process: {
@@ -296,27 +309,6 @@ const TOOL_SPECS: Record<string, ToolSpec> = {
 };
 
 for (const tool of [
-  "kanban_attach",
-  "kanban_attach_url",
-  "kanban_attachments",
-  "kanban_block",
-  "kanban_comment",
-  "kanban_complete",
-  "kanban_create",
-  "kanban_heartbeat",
-  "kanban_link",
-  "kanban_list",
-  "kanban_show",
-  "kanban_unblock",
-]) {
-  TOOL_SPECS[tool] = {
-    kind: "tasks",
-    actionKey: "sidepanel.trace.actions.manageBoard",
-    icon: ListTodo,
-  };
-}
-
-for (const tool of [
   "spotify_albums",
   "spotify_devices",
   "spotify_library",
@@ -347,19 +339,13 @@ const QUIET_SUCCESS_TOOLS = new Set([
   "ha_call_service",
 ]);
 
-const TASK_INSPECTION_TOOLS = new Set([
-  "kanban_attachments",
-  "kanban_list",
-  "kanban_show",
-]);
-
 function recordOf(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
-function parsedArgs(event: HermesToolProgress): Record<string, unknown> {
+function parsedArgs(event: ToolProgress): Record<string, unknown> {
   if (event.args) return event.args;
   const label = (event.label ?? "").trim();
   if (!label.startsWith("{")) return {};
@@ -415,13 +401,13 @@ function lineRange(args: Record<string, unknown>): string {
   return limit && limit > 1 ? `L${offset}–${offset + limit - 1}` : `L${offset}`;
 }
 
-function fallbackTarget(event: HermesToolProgress): string {
+function fallbackTarget(event: ToolProgress): string {
   const label = (event.label ?? "").trim();
   if (!label || label === event.tool || label.startsWith("{")) return "";
   return oneline(label);
 }
 
-function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
+function targetFor(event: ToolProgress, spec: ToolSpec): string {
   const args = parsedArgs(event);
   switch (spec.kind) {
     case "web-search":
@@ -459,6 +445,9 @@ function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
       return oneline(
         stringValue(args, "command", "data", "action") || fallbackTarget(event),
       );
+    case "background-job":
+      // Never surface internal job ids or their English view titles.
+      return "";
     case "code":
       return (
         stringValue(args, "language", "lang", "runtime") ||
@@ -492,6 +481,8 @@ function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
           fallbackTarget(event),
       );
     default: {
+      // Note: internal correlation ids (job_id, …) are deliberately NOT
+      // semantic targets — they are runtime bookkeeping, not user language.
       const semanticTarget = stringValue(
         args,
         "name",
@@ -499,7 +490,6 @@ function targetFor(event: HermesToolProgress, spec: ToolSpec): string {
         "target",
         "entity_id",
         "service",
-        "job_id",
         "project",
         "device_id",
         "action",
@@ -517,7 +507,7 @@ export interface ToolCallPresentation {
 }
 
 export function describeToolCall(
-  event: HermesToolProgress,
+  event: ToolProgress,
   t: TranslateFn,
 ): ToolCallPresentation {
   const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC;
@@ -529,7 +519,7 @@ export function describeToolCall(
   };
 }
 
-export function hasToolDetail(event: HermesToolProgress): boolean {
+export function hasToolDetail(event: ToolProgress): boolean {
   const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC;
   const args = parsedArgs(event);
   const output = resultText(event.result);
@@ -552,6 +542,7 @@ export function hasToolDetail(event: HermesToolProgress): boolean {
         Boolean(stringValue(args, "patch", "content"))
       );
     case "terminal":
+    case "background-job":
       return failed || Boolean(output);
     case "code":
       return failed || Boolean(output) || Boolean(stringValue(args, "code"));
@@ -580,10 +571,7 @@ export function hasToolDetail(event: HermesToolProgress): boolean {
             event.result !== undefined)
         );
       }
-      return (
-        failed ||
-        (TASK_INSPECTION_TOOLS.has(event.tool) && event.result !== undefined)
-      );
+      return failed || event.result !== undefined;
     case "memory":
       return (
         failed || Boolean(stringValue(args, "content", "old_text", "new_text"))
@@ -1432,7 +1420,7 @@ export function ToolDetail({
   event,
   t,
 }: {
-  event: HermesToolProgress;
+  event: ToolProgress;
   t: TranslateFn;
 }) {
   const workspacePane = useWorkspacePane();

@@ -1085,6 +1085,7 @@ export const zhCN: Messages = {
   "sidepanel.trace.actions.editFile": "编辑文件",
   "sidepanel.trace.actions.searchFiles": "搜索文件",
   "sidepanel.trace.actions.runCommand": "运行命令",
+  "sidepanel.trace.actions.readJobOutput": "读取后台任务输出",
   "sidepanel.trace.actions.runCode": "执行代码",
   "sidepanel.trace.actions.delegate": "委派任务",
   "sidepanel.trace.actions.updateTasks": "更新任务",

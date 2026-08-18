@@ -1137,6 +1137,7 @@ export const en = {
   "sidepanel.trace.actions.editFile": "Edit file",
   "sidepanel.trace.actions.searchFiles": "Search files",
   "sidepanel.trace.actions.runCommand": "Run command",
+  "sidepanel.trace.actions.readJobOutput": "Read background job output",
   "sidepanel.trace.actions.runCode": "Run code",
   "sidepanel.trace.actions.delegate": "Delegate task",
   "sidepanel.trace.actions.updateTasks": "Update tasks",
