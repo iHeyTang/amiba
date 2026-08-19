@@ -6,6 +6,15 @@ The SDK exports typed Host/Client helpers, stable Amiba root child-slot names,
 owner/injection types, and the `SlotMap` declaration merge used by DSH's
 official slot service.
 
+Vocabulary policy: a seat with an official DSH equivalent uses the OFFICIAL
+slot name and inherits the official contract — `settings.section` (owner
+`SettingsSectionOwnerProps { close }`, re-exported here) comes from
+`@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
+`@deepseek-ai/dsh-client-ui-layout`. `amiba.*` names are reserved for vendor
+extensions with no official counterpart; only those appear in
+`AMIBA_ROOT_SLOTS`. Importing this SDK makes the official names visible in
+`SlotMap` — plugins need no extra dependency.
+
 It does not expose Electron, `window.amiba`, a custom manifest, a WebView
 bridge, or an alternate plugin lifecycle. DSH/Cordis remains the loader and
 runtime.
@@ -34,7 +43,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 
 ctx.slots.register(
   {
-    name: "amiba.settings.section",
+    name: "settings.section",
     id: "example.panel",
     children: {
       "example.panel.footer": { kind: "list", scope: "root" },

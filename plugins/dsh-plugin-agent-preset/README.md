@@ -13,7 +13,7 @@ into.
   engine-native — the official `@deepseek-ai/dsh-agent-presets` host row and
   its `agentPreset.*` wire face. This entry only lets DSH discover the
   package's `dsh.client` declaration (the `dsh-plugin-ui-shell` precedent).
-- **Client half** (`src/client/`): registers ONE `amiba.settings.section`
+- **Client half** (`src/client/`): registers ONE `settings.section`
   entry — `agents` (order 5, leading the Assistant group ahead of Models &
   services at 50). The id preserves the retired registry id so `#agents` deep
   links keep resolving through SettingsView's `dsh:<id>` ledger fallback. The
