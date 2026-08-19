@@ -191,10 +191,28 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //
 //   - `conversation.input.dock` / `.composer.dock` / `.input.left` /
 //     `.input.right` take the `InputZone` owner share
-//     (`{ session: ConversationSnapshot; input: InputState }`) — both are
-//     ui-conversation store types produced by an input machine Amiba does
-//     not run (its composer state is its own). The seats wait on the
-//     `ctx.sessions.provide` work.
+//     (`{ session: ConversationSnapshot; input: InputState }`). CORRECTED
+//     RECORD: these do NOT wait on `ctx.sessions.provide` — `InputZone` is an
+//     OWNER share passed at Amiba's own dispatch site, exactly like
+//     `{ locked }` for `conversation.input.plan`, and the seat contract tells
+//     occupants to read the owner share and never subscribe `useInput`.
+//     `session` is already available (`ctx.sessions.binding(id)`, and the
+//     official ConversationSnapshot is real here — its `views`/`chat`/`nodes`
+//     are the documented empty values for a composition with no registered
+//     view Definitions). What blocks adoption is exactly two `InputState`
+//     members: `occurrences` (each entry must address ONE U+FFFC placeholder
+//     in the draft; Amiba's MentionNode projects a multi-character token, so
+//     honouring it means moving that token to the clipboard/model projection
+//     and keeping a side table) and `imageIds` (browser-owned unsent draft
+//     ids; Amiba's attachments are host-staged, so it needs its own id space
+//     in front of that). `draftRev` and a narrowed `phase` follow for free.
+//     SEPARATELY, and permanently unless upstream splits the interface: a
+//     faithful `sessions.provide` for `useInput`/`inputActions` is NOT
+//     possible — three of five `InputActions` members (`addImages`,
+//     `removeImage`, `pruneImages`) traffic in `DraftAttachmentId`s minted and
+//     resolved by the `conversation` service, which Amiba must not own (it
+//     bundles send/cancel/loadOlder/updateQueue/resolveImage, all of which
+//     Amiba implements through its own engine).
 //   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
 //     engine-owned boundary carrying the raw `turn/start` / `turn/end`
 //     events, a `StepLocation[]` ring, and the `data` business-value

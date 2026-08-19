@@ -21,9 +21,6 @@
 - id: session-log-download
   disabled: true
 
-- id: cordis-client-runner
-  disabled: true
-
 - id: ui-theme
   disabled: true
 

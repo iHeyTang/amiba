@@ -161,8 +161,24 @@ Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方
 不采用——用官方名配一个走样的 owner，比继续用 vendor 名更糟）：
 
 - `conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`：
-  owner 是 `InputZone { session: ConversationSnapshot; input: InputState }`，
-  两者都是 ui-conversation store 类型，需要 Phase-4 的 `ctx.sessions.provide`。
+  owner 是 `InputZone { session: ConversationSnapshot; input: InputState }`。
+  **记录纠正**：它们**不**依赖 `ctx.sessions.provide` —— `InputZone` 是 owner
+  share，由 Amiba 自己的 dispatch 点传入（`conversation.input.plan` 的
+  `{ locked }` 就是这么传的），而且席位契约明确要求占位者读 owner share、
+  不要订阅 `useInput`。`session` 现成可得（`ctx.sessions.binding(id)`；官方
+  ConversationSnapshot 在这里是真值，其 `views`/`chat`/`nodes` 就是"没有注册
+  view Definition 的 composition"官方定义的空值）。真正的卡点是 `InputState`
+  的两个成员：`occurrences`（每条必须精确对应草稿里一个 U+FFFC 占位符，而
+  Amiba 的 MentionNode 投的是多字符 token，忠实化意味着把该 token 移到剪贴板／
+  模型投影并维护侧表）与 `imageIds`（浏览器自有的未发送草稿 id；Amiba 的附件
+  是宿主暂存的，需要在其前面加一层自有 id 空间）。`draftRev` 与收窄后的
+  `phase` 随之免费得到。
+  另外单独一条，且在上游拆分接口之前是**永久性**的：`useInput`/`inputActions`
+  的忠实 `sessions.provide` 供给**不可能** —— `InputActions` 五个成员里三个
+  （`addImages`/`removeImage`/`pruneImages`）经手的 `DraftAttachmentId` 由
+  `conversation` 服务铸造与解析，而那个服务名 Amiba 不该拿（它捆着
+  send/cancel/loadOlder/updateQueue/resolveImage，每一项 Amiba 都用自己的引擎
+  另行实现）。
 - `conversation.chat.turnTail`：owner 的 `turn: TurnLocation` 是 engine-owned
   边界，携带原始 `turn/start`/`turn/end` 事件、`StepLocation[]` 与业务数据
   reader，Amiba 的投影三样都没有保留。

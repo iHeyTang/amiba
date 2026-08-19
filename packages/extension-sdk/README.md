@@ -64,12 +64,18 @@ conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
 with no render site. Three seats are NOT adopted yet, for two different
 reasons. Contract Amiba genuinely cannot supply today:
-`conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`
-(the `InputZone` share needs the ui-conversation input machine) and
 `conversation.chat.turnTail` (`TurnLocation` is an engine-owned boundary with
 a business-value reader over machinery Amiba does not run). Render site, not
 contract: `conversation.chat.assistant-actions`, whose `MessageId` is on the
-wire but whose render site folds a whole turn into one bubble.
+wire but whose render site folds a whole turn into one bubble. Own machinery,
+not contract: `conversation.input.dock` / `.composer.dock` / `.input.left` /
+`.input.right` — their `InputZone` share is an OWNER share Amiba passes at its
+own dispatch site (as it already does for `conversation.input.plan`), and the
+blockers are two `InputState` members Amiba must first make truthful,
+`occurrences` (one U+FFFC placeholder per entry) and `imageIds` (a
+browser-owned draft id space). Not the `sessions.provide` channel — see
+`src/slots.ts` for the corrected record, including why a faithful
+`useInput`/`inputActions` bundle is out of reach entirely.
 See `src/slots.ts` for the field-level record. The ui-conversation members of the session standard kit
 (`useInput`/`inputActions`) are type-visible but NOT provided by Amiba's
 runtime yet (recorded Phase-2 deferral) — the framework members
