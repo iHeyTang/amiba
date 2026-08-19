@@ -18,8 +18,8 @@ import { APP_SIDEBAR_DEFAULT_WIDTH } from "../navigation/sidebar-layout";
  * Settings follows the product's real concepts rather than an "advanced"
  * catch-all:
  *   General:     Appearance → Shortcuts → Usage
- *   Assistant:   DSH plugin-owned sections such as Behavior & identity,
- *                Agent presets, Models & services, Tools, and Skills
+ *   Assistant:   DSH plugin-owned sections such as Agent presets (with the
+ *                pinned default's behavior), Models & services, Tools, Skills
  *   Plugins:      supplied by DSH Client plugins through the section ledger
  *   Advanced:    Status → Logs
  *
