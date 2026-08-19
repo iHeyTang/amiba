@@ -17,10 +17,14 @@ import {
   type AmibaShellSlot,
   type SettingsSectionsSource,
 } from "./product-shell.js";
+import {
+  createSessionsBridge,
+  type AmibaSessionsBridge,
+} from "./sessions-bridge.js";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
-export const inject = ["slots"];
+export const inject = ["slots", "sessions"];
 
 const PACKAGE_ID = "@amiba/dsh-plugin-ui-shell";
 const STYLE_ID = `${PACKAGE_ID}/product-shell.css`;
@@ -39,14 +43,17 @@ if (
 
 export type {
   AmibaAgentPresetSectionOwner,
-  AmibaComposerAgentModels,
   AmibaComposerModelPickerOwner,
   AmibaComposerModelSelection,
   AmibaRootSlot,
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
-  // The official settings-section owner contract ({ close }), inherited
-  // from @deepseek-ai/dsh-client-ui-settings through the SDK.
+  // Official owner contracts inherited through the SDK: settings.section
+  // ({ close }) from dsh-client-ui-settings; the two conversation seats
+  // (header utilities: empty owner; input.model: { locked }) from
+  // dsh-client-ui-conversation.
+  ConversationHeaderUtilitiesOwnerProps,
+  ConversationInputModelOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
 
@@ -55,6 +62,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     dshClient: DshApiClient;
     settingsSections: SettingsSectionsSource;
     openSettingsSection: (sectionId: string) => void;
+    sessionsBridge: AmibaSessionsBridge;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -73,6 +81,7 @@ function AmibaRoot({
   dshClient,
   settingsSections,
   openSettingsSection,
+  sessionsBridge,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -85,6 +94,7 @@ function AmibaRoot({
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
+      sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
     />
   );
@@ -205,6 +215,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
+    // R1 selection bridge: keep the official ctx.sessions selection (the
+    // session resolution every official session-scoped slot renders under)
+    // in lock-step with Amiba's own per-window sessions store. The official
+    // side's external switches route through the existing Amiba
+    // open-session path.
+    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId) => {
+      window.dispatchEvent(
+        new CustomEvent("amiba:open-session", { detail: { sessionId } }),
+      );
+    });
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -218,6 +238,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           settingsSections: sectionsSource,
           openSettingsSection: (sectionId: string) =>
             layout.openSettings(sectionId),
+          sessionsBridge,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -230,9 +251,27 @@ export async function apply(ctx: ClientContext): Promise<void> {
             },
           },
           "amiba.workspace.view": { kind: "list", scope: "root" },
-          "amiba.chat.header.after": { kind: "list", scope: "root" },
+          // Official vocabulary: the right-aligned session-header utilities
+          // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces
+          // the retired amiba.chat.header.after). SESSION scope from a
+          // root-scoped parent is legal: neither ChildrenDecl nor the
+          // runtime constrains a child's scope to its declarer's — the
+          // scope axis only selects which standard kit the ENTRY's
+          // components receive, and the renderer's StrictSessionEntry
+          // renders null while no official session is current, so the home
+          // view is unaffected.
+          "conversation.session.header.utilities": {
+            kind: "list",
+            scope: "session",
+          },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
+          // The session-less hero model seat (vendor) and its official
+          // session-scoped counterpart: the composer dispatches
+          // conversation.input.model while it has a session id, the hero
+          // seat otherwise. Same root-declares-session-child shape as the
+          // header utilities above.
           "amiba.composer.modelPicker": { kind: "list", scope: "root" },
+          "conversation.input.model": { kind: "single", scope: "session" },
           // Official vocabulary: the settings-page ledger seat, inherited
           // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
           "settings.section": {
@@ -255,6 +294,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     return () => {
       disposeRoot();
+      sessionsBridge.dispose();
       void disposeLayout();
     };
   }, "amiba-ui-shell: root and semantic child slots");

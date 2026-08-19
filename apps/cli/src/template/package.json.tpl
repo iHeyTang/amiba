@@ -38,6 +38,7 @@
     "@amiba/extension-sdk": "^0.1.0",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
     "@types/node": "22.9.0",
     "@types/react": "18.3.12",

@@ -73,21 +73,35 @@ Electron WebView，也没有 preload 特权。
 词汇表策略：有官方等价物的 seat 使用官方 slot 名并继承官方契约 ——
 `settings.section`（owner `SettingsSectionOwnerProps { close }`）类型来自
 `@deepseek-ai/dsh-client-ui-settings`，`shell.overlay` 来自
-`@deepseek-ai/dsh-client-ui-layout`；`amiba.*` 前缀只用于没有官方对应位的
-vendor 扩展。root 声明：
+`@deepseek-ai/dsh-client-ui-layout`，`conversation.session.header.utilities`
+与 `conversation.input.model` 来自
+`@deepseek-ai/dsh-client-ui-conversation`（session scope 的官方 seat 依赖
+ui-shell 的 sessions bridge 把官方 `ctx.sessions` 选中态与 Amiba 自己的
+activeId 保持同步）；`amiba.*` 前缀只用于没有官方对应位的 vendor 扩展。
+root 声明：
 
 - `amiba.navigation.before`
 - `amiba.navigation.after`
 - `amiba.workspace.navigation`
 - `amiba.workspace.view`
-- `amiba.chat.header.after`
+- `conversation.session.header.utilities`（官方名，session scope，空 owner；
+  取代已退役的 `amiba.chat.header.after` —— 无会话时该 seat 渲染为空）
 - `amiba.chat.content.overlay`
-- `amiba.composer.modelPicker`
+- `amiba.composer.modelPicker`（session-less hero model seat，composer 无会话
+  时经 render prop 派发）
+- `conversation.input.model`（官方名，single，session scope，owner
+  `{ locked }`；composer 有会话时经同一 render prop 派发）
 - `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
   face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
 - `shell.overlay`（官方名）
+
+Phase-2 记录的诚实裁剪：继承 ui-conversation 类型后，session 标准 kit 的
+`useInput`/`inputActions` 成员在类型上可见，但 Amiba 运行时没有 ui-conversation
+的 input machine，也没有为它注册 `sessions.provide` bundle —— 这两个成员运行时
+为 `undefined`（Phase 4 项）。框架成员 `sessionId`/`useSession`/`useProjection`
+由 dsh-client-runtime 直接提供，可用。
 
 曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
 before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染
@@ -129,7 +143,7 @@ child slot。不得把所有能力重新合并到一个“超级插件”。
 SlotMap augmentation，以及可选的 Amiba 原生边界类型。它不实现 Electron、不保存
 registry、不定义自定义 manifest，也不拥有另一套生命周期。`amiba plugin create` 生成标准
 Host + Client DSH plugin，并演示通过官方 slot API 注入
-`amiba.chat.header.after`。
+`conversation.session.header.utilities`。
 
 ## 6. Native gateway
 

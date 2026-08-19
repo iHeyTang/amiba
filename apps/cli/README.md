@@ -46,9 +46,11 @@ dsh-plugin-issue-tracker/
 └── vite.config.ts            # DSH ModuleLoader client bundle
 ```
 
-The example Client plugin registers into `amiba.chat.header.after`. Other
-Amiba children slots are exported by `@amiba/extension-sdk`. A plugin is loaded
-by a DSH bundle or Loader entry; Electron never discovers it directly.
+The example Client plugin registers into the official
+`conversation.session.header.utilities` seat (session scope — it renders
+while a chat session is current). Other Amiba children slots are exported by
+`@amiba/extension-sdk`. A plugin is loaded by a DSH bundle or Loader entry;
+Electron never discovers it directly.
 
 `amiba plugin pack` produces `dsh-plugin.tgz` containing `package.json`, `README.md`,
 and the built `lib/` directory. Installation is deliberately not implemented

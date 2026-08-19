@@ -10,10 +10,21 @@ Vocabulary policy: a seat with an official DSH equivalent uses the OFFICIAL
 slot name and inherits the official contract — `settings.section` (owner
 `SettingsSectionOwnerProps { close }`, re-exported here) comes from
 `@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
-`@deepseek-ai/dsh-client-ui-layout`. `amiba.*` names are reserved for vendor
-extensions with no official counterpart; only those appear in
+`@deepseek-ai/dsh-client-ui-layout`, and the `conversation.*` family
+(`conversation.session.header.utilities` — replacing the retired
+`amiba.chat.header.after` — and `conversation.input.model`, whose owner
+contracts are re-derived here as `ConversationHeaderUtilitiesOwnerProps` and
+`ConversationInputModelOwnerProps`) from
+`@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are reserved for
+vendor extensions with no official counterpart; only those appear in
 `AMIBA_ROOT_SLOTS`. Importing this SDK makes the official names visible in
-`SlotMap` — plugins need no extra dependency.
+`SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
+conversation.* keys type-visible while Amiba runtime-declares only the two
+adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
+with no render site. The ui-conversation members of the session standard kit
+(`useInput`/`inputActions`) are type-visible but NOT provided by Amiba's
+runtime yet (recorded Phase-2 deferral) — the framework members
+(`sessionId`/`useSession`/`useProjection`) are live.
 
 It does not expose Electron, `window.amiba`, a custom manifest, a WebView
 bridge, or an alternate plugin lifecycle. DSH/Cordis remains the loader and
@@ -22,9 +33,9 @@ runtime.
 ```ts
 import type {} from "@amiba/extension-sdk"
 
-ctx.slots.inject("amiba.chat.header.after", () =>
+ctx.slots.inject("conversation.session.header.utilities", () =>
   ctx.slots.register(
-    { name: "amiba.chat.header.after", id: "example.status" },
+    { name: "conversation.session.header.utilities", id: "example.status" },
     StatusContribution,
   ),
 )

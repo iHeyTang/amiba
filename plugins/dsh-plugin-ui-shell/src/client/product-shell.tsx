@@ -9,6 +9,8 @@ import {
 } from "@amiba/app-runtime/platform";
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type { AmibaRootSlot } from "@amiba/extension-sdk";
+
+import type { AmibaSessionsBridge } from "./sessions-bridge.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -16,6 +18,7 @@ import {
   SettingsView,
   makeWorkspaceFilesProvider,
   type ChatSurfaceCapabilities,
+  type ComposerModelPickerRequest,
   type PendingPromptAttachment,
   type PendingPromptResult,
 } from "@amiba/ui";
@@ -53,9 +56,11 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
- * vocabulary plus the two official names the root declares
- * (`settings.section`, `shell.overlay`). Two names from the public
- * vocabulary are absent on purpose:
+ * vocabulary plus the official names the root declares
+ * (`settings.section`, `shell.overlay`,
+ * `conversation.session.header.utilities` — the session-header utilities
+ * strip that replaced the retired `amiba.chat.header.after`). Two names
+ * from the public vocabulary are absent on purpose:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
  *     dsh-plugin-agent-preset as a child of its own settings section;
  *   - `amiba.composer.modelPicker` is dispatched through the composer's
@@ -64,7 +69,9 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
-  | "shell.overlay";
+  | "shell.overlay"
+  | "conversation.session.header.utilities"
+  | "conversation.input.model";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
@@ -254,11 +261,13 @@ export function AmibaProductShell({
   dshClient,
   openSettingsSection,
   renderSlot,
+  sessionsBridge,
   settingsSections,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
+  sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
   return (
@@ -267,6 +276,7 @@ export function AmibaProductShell({
         dshClient={dshClient}
         openSettingsSection={openSettingsSection}
         renderSlot={renderSlot}
+        sessionsBridge={sessionsBridge}
         settingsSections={settingsSections}
       />
     </SessionsProvider>
@@ -277,11 +287,13 @@ function ProductShellInner({
   dshClient,
   openSettingsSection,
   renderSlot,
+  sessionsBridge,
   settingsSections,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
+  sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
   const { t } = useT();
@@ -349,6 +361,18 @@ function ProductShellInner({
       window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
   }, [platform.storage]);
 
+  // The composer's model-picker chip, seat-split (R5): the official
+  // session-scoped conversation.input.model while the composer has a
+  // session (owner { locked } — the occupant reads engine data over the
+  // official wire), the vendor session-less hero seat while drafting.
+  const renderModelPickerSeat = useCallback(
+    (request: ComposerModelPickerRequest) =>
+      request.seat === "session"
+        ? renderSlot("conversation.input.model", request.owner)
+        : renderSlot("amiba.composer.modelPicker", request.owner),
+    [renderSlot],
+  );
+
   const openSession = useCallback(
     async (sessionId: string) => {
       const target = sessionId.trim();
@@ -381,6 +405,16 @@ function ProductShellInner({
     pendingOpenSessionRef.current = null;
     void openSession(target);
   }, [openSession, sessions.ready]);
+
+  // R1 amiba→official selection projection: every activeId transition
+  // (including the mount-time empty selection, which converges a restored
+  // official selection onto this window's per-window-empty design) is
+  // mirrored into the official ctx.sessions current — the session
+  // resolution the official conversation.* seats render under. The bridge
+  // handles the open-after-list race and echo suppression.
+  useEffect(() => {
+    sessionsBridge?.setActive(sessions.activeId);
+  }, [sessionsBridge, sessions.activeId]);
 
   if (view === "settings") {
     return (
@@ -443,20 +477,21 @@ function ProductShellInner({
               onOpenChat={() => {}}
               onOpenSettings={() => setView("settings")}
               panelMode
-              modelPicker={(owner) =>
-                renderSlot("amiba.composer.modelPicker", owner)
-              }
+              modelPicker={renderModelPickerSeat}
             />
           ),
-          modelPicker: (owner) =>
-            renderSlot("amiba.composer.modelPicker", owner),
+          modelPicker: renderModelPickerSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),
           navigationAfter: renderSlot("amiba.navigation.after", {}),
           workspaceView: (viewId, owner) =>
             renderSlot("amiba.workspace.view", owner, { only: viewId }),
-          headerAfter: renderSlot("amiba.chat.header.after", {}),
+          // Official session-scoped seat: the renderer resolves the session
+          // from the official ctx.sessions current (kept in step by the R1
+          // bridge) and renders null while none is current, so the strip is
+          // empty on the home view and on a not-yet-materialized draft.
+          headerAfter: renderSlot("conversation.session.header.utilities", {}),
           contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />

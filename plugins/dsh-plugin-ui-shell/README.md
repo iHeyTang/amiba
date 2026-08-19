@@ -24,10 +24,25 @@ counterpart.
 - `amiba.navigation.after`
 - `amiba.workspace.navigation`
 - `amiba.workspace.view`
-- `amiba.chat.header.after`
+- `conversation.session.header.utilities` — official name from
+  `@deepseek-ai/dsh-client-ui-conversation`: the right-aligned session-header
+  utilities strip (list, SESSION scope, empty owner — utilities derive their
+  state from the framework session kit). Replaces the retired
+  `amiba.chat.header.after`. Session scope means the seat renders only while
+  the official current session is set (the shell's sessions bridge keeps that
+  in step with Amiba's own selection); the home view renders nothing here.
 - `amiba.chat.content.overlay`
-- `amiba.composer.modelPicker` (dispatched through the composer's
-  `modelPicker` render prop)
+- `amiba.composer.modelPicker` — the session-less HERO model seat (root
+  scope, list), dispatched through the composer's `modelPicker` render prop
+  while the composer has no session; the owner share carries the
+  surface-held draft selection and picker chrome
+- `conversation.input.model` — official name from
+  `@deepseek-ai/dsh-client-ui-conversation`: the composer's named model seat
+  (single, SESSION scope, owner `{ locked }`), dispatched through the same
+  render prop once the composer has a session. The occupant reads
+  `sessionId` from the framework session kit and its engine data over the
+  official `session.models`/`session.selectModel` wire — engine data no
+  longer rides owner props
 - `settings.section` — official name and owner contract
   (`SettingsSectionOwnerProps { close }`) inherited from
   `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,
@@ -64,10 +79,10 @@ function HeaderAction() {
 }
 
 export function apply(ctx: ClientContext): void {
-  ctx.slots.inject("amiba.chat.header.after", () =>
+  ctx.slots.inject("conversation.session.header.utilities", () =>
     ctx.slots.register(
       {
-        name: "amiba.chat.header.after",
+        name: "conversation.session.header.utilities",
         id: "my-feature.action",
         order: 100,
       },

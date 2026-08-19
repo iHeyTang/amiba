@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@amiba/app-runtime/platform";
+import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
 import {
   ModelIcon,
   ModelPickerDialog,
@@ -21,7 +22,10 @@ import { pickerI18n } from "./i18n-picker.js";
 // contract (`../remote.js` zod schemas) — the plane vocabulary lives with the
 // plugin now, NOT in `@amiba/app-runtime/platform`. The single allowed
 // platform import above is `AgentModelSelection`: the engine-native selection
-// shape stays host-owned and rides the slot's `agentModels` pass-through.
+// shape. Engine DATA comes over the OFFICIAL wire faces (`session.models` /
+// `session.selectModel` via `ctx.get("connection").api.sessions` — the same
+// calls the official ui-model-selection plugin makes), never through owner
+// props: the former host-wired engine pass-through is retired.
 // ---------------------------------------------------------------------------
 
 export interface ComposerPickerEffort {
@@ -57,24 +61,69 @@ export interface ComposerPickerCatalog {
   snapshot(): Promise<ComposerPickerCatalogSnapshot>;
 }
 
-/** Engine-native pass-through delivered by the composer host via slot props. */
-export interface ComposerPickerAgentModels {
-  directory(sessionId: string): Promise<{
-    current: AgentModelSelection;
-    routable: boolean;
-  } | null>;
+/**
+ * Session-bound engine face over the official wire. Present only on the
+ * official `conversation.input.model` seat; the draft (hero) seat has no
+ * session and therefore no engine.
+ */
+export interface ComposerPickerEngine {
+  /** Fresh advisory directory truth for the bound session (throws on wire failure). */
+  directory(): Promise<{ current: AgentModelSelection; routable: boolean }>;
   select(
-    sessionId: string,
     selection: AgentModelSelection,
   ): Promise<{ selected: AgentModelSelection }>;
+}
+
+/** The two official session wire faces this picker consumes. */
+export type SessionModelWire = Pick<
+  IApiClient["sessions"],
+  "models" | "selectModel"
+>;
+
+type WireSessionId = Parameters<
+  SessionModelWire["models"]
+>[0]["sessionId"];
+
+function wireError(face: string, error: { code: string; message: string }): Error {
+  return new Error(`${face} failed: ${error.code}: ${error.message}`);
+}
+
+/**
+ * Bind the official wire to one session — the exact calls the disabled
+ * official ui-model-selection plugin makes for the same seat
+ * (`session.models` / `session.selectModel`).
+ */
+export function makeSessionModelEngine(
+  wire: SessionModelWire,
+  sessionId: WireSessionId,
+): ComposerPickerEngine {
+  return {
+    directory: async () => {
+      const { result } = await wire.models({ sessionId });
+      if (!result.ok) throw wireError("session.models", result.error);
+      const { current, routable } = result.value;
+      return { current, routable };
+    },
+    select: async (selection) => {
+      const { result } = await wire.selectModel({
+        sessionId,
+        provider: selection.provider,
+        model: selection.model,
+        ...(selection.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: selection.reasoningEffort }),
+      });
+      if (!result.ok) throw wireError("session.selectModel", result.error);
+      return { selected: result.value.selected };
+    },
+  };
 }
 
 export interface DshComposerModelPickerProps {
   /** Injected by the plugin's slot registration (never host-supplied). */
   catalog: ComposerPickerCatalog;
-  /** Host-owned engine-native surface, passed through the slot contract. */
-  agentModels: ComposerPickerAgentModels;
-  sessionId: string | null;
+  /** Session-bound engine over the official wire; absent = draft (session-less) mode. */
+  engine?: ComposerPickerEngine;
   draftSelection?: AgentModelSelection;
   onDraftSelectionChange?: (selection: AgentModelSelection) => void;
   dialogSize?: "default" | "tall";
@@ -102,11 +151,10 @@ function pickerGroups(groups: ComposerPickerModelGroup[]): ModelPickerGroup[] {
 
 export function DshComposerModelPicker({
   catalog,
-  agentModels,
+  engine,
   dialogSize = "default",
   disabled = false,
   overlayVariant = "dimmed",
-  sessionId,
   refreshKey = 0,
   draftSelection,
   onDraftSelectionChange,
@@ -131,7 +179,7 @@ export function DshComposerModelPicker({
     try {
       const [snapshot, directory] = await Promise.all([
         catalog.snapshot(),
-        sessionId ? agentModels.directory(sessionId) : Promise.resolve(null),
+        engine ? engine.directory() : Promise.resolve(null),
       ]);
       if (generation !== generationRef.current) return;
       setGroups(snapshot.groups);
@@ -156,11 +204,10 @@ export function DshComposerModelPicker({
       setLoadState("error");
     }
   }, [
-    agentModels,
     catalog,
     draftSelection,
+    engine,
     onDraftSelectionChange,
-    sessionId,
     t,
   ]);
 
@@ -187,7 +234,7 @@ export function DshComposerModelPicker({
   async function commitSelection(
     selection: AgentModelSelection,
   ): Promise<boolean> {
-    if (!sessionId || !materialized) {
+    if (!engine || !materialized) {
       if (!onDraftSelectionChange) {
         setError(t("sidepanel.modelPicker.loadFailed"));
         return false;
@@ -201,7 +248,7 @@ export function DshComposerModelPicker({
     setSaving(true);
     setError(null);
     try {
-      const result = await agentModels.select(sessionId, selection);
+      const result = await engine.select(selection);
       setCurrent(result.selected);
       setLoadState("ready");
       return true;
