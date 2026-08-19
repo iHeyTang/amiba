@@ -67,7 +67,8 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
  * replaced the retired `amiba.chat.header.after`, and
  * `conversation.session.header.actions`, the title-adjacent action row —
  * and the two composer control seats, `conversation.input.model` and
- * `conversation.input.plan`). Two names from the public vocabulary are
+ * `conversation.input.plan`, and the composer's floating overlay anchor,
+ * `conversation.input.overlay`). Two names from the public vocabulary are
  * absent on purpose:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
  *     dsh-plugin-agent-preset as a child of its own settings section;
@@ -86,6 +87,7 @@ export type AmibaShellSlot =
   | "conversation.session.header.actions"
   | "conversation.input.model"
   | "conversation.input.plan"
+  | "conversation.input.overlay"
   | "tool.call.toolview";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
@@ -526,6 +528,13 @@ function ProductShellInner({
           ),
           modelPicker: renderModelPickerSeat,
           planSeat: renderPlanSeat,
+          // The official composer overlay anchor. The seat declares NO owner
+          // share, so `{}` is the faithful dispatch — anything else would be
+          // a fabricated owner. Session-scoped: the renderer resolves the
+          // session from the official current (kept in step by the R1
+          // bridge) and renders nothing while none is current, which is also
+          // why the home/draft composer keeps Amiba's own trigger menu.
+          inputOverlay: renderSlot("conversation.input.overlay", {}),
           toolView: renderToolViewSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>

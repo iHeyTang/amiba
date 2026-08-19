@@ -251,6 +251,19 @@ export interface ComposerProps {
    * takes the seat.
    */
   planSeat?: ComposerPlanSeatRenderer;
+  /**
+   * The official `conversation.input.overlay` seat (list, session scope, NO
+   * owner share), already dispatched by the host —
+   * `renderSlot("conversation.input.overlay", {})`. It renders as the LAST
+   * child of the `[data-composer-card]` frame, a bare node with no wrapper:
+   * every occupant positions itself against that card
+   * (`position: absolute; bottom: calc(100% + 4px)`) and probes it with
+   * `closest("[data-composer-card]")` to decide whether an outside
+   * pointerdown dismisses it. An unoccupied seat is `undefined` here and
+   * costs nothing — no box, no gap. Surfaces with no plugin runtime
+   * (Quick-Ask) pass nothing and behave exactly as before.
+   */
+  inputOverlay?: ReactNode;
   /** Runtime session used to distinguish pinned permissions from new-task defaults. */
   permissionSessionId?: string;
   /** Visual treatment for the modal overlay behind model and Profile dialogs. */
@@ -402,6 +415,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       modelPicker,
       approvalModePicker,
       planSeat,
+      inputOverlay,
       permissionSessionId,
       pickerDialogSize = "default",
       pickerOverlayVariant = "dimmed",
@@ -703,6 +717,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           </div>
         ) : null}
         <div
+          // The composer CARD. `data-composer-card` is the official anchor
+          // contract of the `conversation.input.overlay` seat rendered at the
+          // end of this element: occupants position themselves against this
+          // box and call `closest("[data-composer-card]")` on themselves to
+          // tell a pointerdown inside the composer apart from one outside it
+          // (an outside press dismisses). The attribute must stay on the
+          // element that contains BOTH the editor and the seat.
+          data-composer-card=""
           className={cn(
             "relative z-10 flex flex-col transition-colors",
             frameVariant === "hero"
@@ -840,6 +862,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               : null}
             {sendButtonNode}
           </div>
+          {/* Official conversation.input.overlay seat: a BARE dispatch, no
+              wrapper — an empty seat must cost no box and no gap, and every
+              occupant supplies its own absolute positioning relative to this
+              card (`bottom: calc(100% + 4px)`, i.e. floating just above the
+              composer). Last child of the card so it never sits between the
+              editor and the tool row in reading order. */}
+          {inputOverlay}
         </div>
         {/* Hidden fallback file input. Renders once at the bottom of
             the wrapper so the picker click-fallback path works on

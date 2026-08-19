@@ -51,10 +51,13 @@ export type {
   // Official owner contracts inherited through the SDK: settings.section
   // ({ close }) from dsh-client-ui-settings; the four conversation seats
   // (header utilities and header actions: empty owner; input.model and
-  // input.plan: { locked }) from dsh-client-ui-conversation.
+  // input.plan: { locked }) from dsh-client-ui-conversation; and
+  // conversation.input.overlay (empty owner) from
+  // dsh-client-ui-input-trigger.
   ConversationHeaderActionsOwnerProps,
   ConversationHeaderUtilitiesOwnerProps,
   ConversationInputModelOwnerProps,
+  ConversationInputOverlayOwnerProps,
   ConversationInputPlanOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
@@ -294,6 +297,23 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // nothing until a plugin takes it, which is exactly the contract
           // ("unoccupied, the seat renders nothing at all").
           "conversation.input.plan": { kind: "single", scope: "session" },
+          // Official vocabulary: the composer's floating overlay anchor,
+          // from @deepseek-ai/dsh-client-ui-input-trigger (list, session
+          // scope, NO owner share at all — every occupant reads its own
+          // store and renders null while closed, so the seat costs nothing
+          // when idle). This is where the official trigger menu
+          // (ui-input-trigger's MenuView) and the official command popup
+          // shell (ui-commands) both land.
+          // DECLARATION-ANCHOR divergence, the same one already recorded for
+          // tool.call.toolview: upstream declares this seat from
+          // ui-conversation's composer entry (the InputBar that owns the
+          // input machine), which Amiba has no equivalent of — its composer
+          // is its own Lexical surface. Declaring it on this root instead is
+          // legal and identical in key/kind/scope/owner; only the
+          // declaration site differs. The render site is the composer card
+          // (`[data-composer-card]`), which is the anchor the official
+          // occupants position against and probe with `closest()`.
+          "conversation.input.overlay": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from
           // @deepseek-ai/dsh-client-ui-tool (keyed, session scope, owner
           // ToolCallOwnerProps). Registration key = the wire tool name, an

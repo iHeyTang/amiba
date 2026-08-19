@@ -59,6 +59,21 @@ counterpart.
   seat). Unoccupied in Amiba today (the official ui-plan package is
   disabled), which is the contract's own default: an empty seat "renders
   nothing at all — the bar paints no placeholder"
+- `conversation.input.overlay` — official name from
+  `@deepseek-ai/dsh-client-ui-input-trigger`: the composer's floating overlay
+  anchor (list, SESSION scope, and NO owner share at all — every occupant
+  reads its own store and renders `null` while closed, so `renderSlot(...,
+  {})` is the faithful dispatch and anything else would be fabricated). The
+  render site is the composer card in `@amiba/ui`'s `Composer`: a BARE
+  dispatch as the last child of the `[data-composer-card]` frame. Both parts
+  of that anchor are contract, not decoration — occupants position themselves
+  `absolute; bottom: calc(100% + 4px)` against the card and probe it with
+  `closest("[data-composer-card]")` to tell a pointerdown inside the composer
+  apart from one outside it. Unoccupied in Amiba today: the two official
+  packages that take this seat upstream (`ui-input-trigger`'s `MenuView` and
+  `ui-commands`' popup shell) are not enabled here, so Amiba's own
+  `TriggerMenu` remains the `/` and `@` menu — see the record in
+  `docs/2026-08-15-dsh-native-architecture.md`
 - `settings.section` — official name and owner contract
   (`SettingsSectionOwnerProps { close }`) inherited from
   `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,

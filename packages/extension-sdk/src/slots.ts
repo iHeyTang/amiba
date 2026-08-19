@@ -9,8 +9,10 @@
  * `conversation.session.header.utilities` and `conversation.input.model`;
  * Phase 3 adds `conversation.input.plan` and
  * `conversation.session.header.actions`) from
- * `@deepseek-ai/dsh-client-ui-conversation`, and `tool.call.toolview` from
- * `@deepseek-ai/dsh-client-ui-tool`. `amiba.*` names are
+ * `@deepseek-ai/dsh-client-ui-conversation`, `tool.call.toolview` from
+ * `@deepseek-ai/dsh-client-ui-tool`, and (Phase 4.3)
+ * `conversation.input.overlay` from
+ * `@deepseek-ai/dsh-client-ui-input-trigger`. `amiba.*` names are
  * reserved for vendor extensions that have no official counterpart. The
  * array below therefore lists ONLY the amiba.* vendor slots; the official
  * names reach consumers through the official packages' SlotMap merges,
@@ -23,13 +25,16 @@
  * {@link AmibaAgentPresetSectionOwner}); the name stays here so the
  * authoring vocabulary has one home.
  *
- * DECLARATION-ANCHOR divergence, recorded once: upstream declares
- * `tool.call.toolview` from `conversation.chat.node`'s `tool-call` entry,
- * the Chat Node that owns the whole call tree. Amiba has no such entry (its
- * conversation is its own projection), so the seat is declared on Amiba's
- * root children table instead — legal, and the same pattern the adopted
- * `conversation.*` seats already use. Only the DECLARATION site differs; the
- * key, kind, scope, and owner contract are the official ones.
+ * DECLARATION-ANCHOR divergence, recorded once for the two seats it applies
+ * to: upstream declares `tool.call.toolview` from `conversation.chat.node`'s
+ * `tool-call` entry (the Chat Node that owns the whole call tree) and
+ * `conversation.input.overlay` from `ui-conversation`'s composer entry (the
+ * InputBar that owns the input machine). Amiba has neither entry — its
+ * conversation and its composer are its own projections — so both seats are
+ * declared on Amiba's root children table instead: legal, and the same
+ * pattern the adopted `conversation.*` seats already use. Only the
+ * DECLARATION site differs; the key, kind, scope, and owner contract are the
+ * official ones.
  */
 
 import type { OwnerOf } from "@deepseek-ai/dsh-client-ui-slots";
@@ -60,6 +65,14 @@ import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 // ui-layout it merges nothing into the cordis Context and cannot TS2717
 // against Amiba's own service faces.
 import type {} from "@deepseek-ai/dsh-client-ui-tool/client";
+// Type home for the official INPUT-TRIGGER vocabulary: the
+// `conversation.input.overlay` SlotMap key (the composer's floating overlay
+// anchor) plus the authoring types of the trigger pipeline itself
+// (`InputTriggerSource` and the `PickOutcome` family). Imported DIRECTLY like
+// ui-tool: the package's `/client` entry merges `inputTriggers` into the
+// cordis Context and `slash.menu` into LocaleNamespaceMap, neither of which
+// Amiba declares, so there is no TS2717 to dodge and no mirror is needed.
+import type {} from "@deepseek-ai/dsh-client-ui-input-trigger/client";
 
 /**
  * Official owner contract of `settings.section`
@@ -114,6 +127,65 @@ export type ConversationInputPlanOwnerProps = OwnerOf<"conversation.input.plan">
  * optional utility cannot reorder session context.
  */
 export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.header.actions">;
+
+/**
+ * Merge anchor for the official INPUT-TRIGGER vocabulary, plus the authoring
+ * types of the trigger pipeline. Named re-exports, not a bare
+ * `import type {}` inclusion: those are elided at declaration emit (the
+ * settings.section lesson), so only this form keeps
+ * `@deepseek-ai/dsh-client-ui-input-trigger/client` on the built SDK's
+ * declaration graph — and therefore keeps `conversation.input.overlay`
+ * type-visible to every SDK consumer.
+ *
+ * `InputTriggerSource` and the `PickOutcome` family are exported for authors
+ * writing `/` and `@` sources. NOTE the runtime caveat recorded below on
+ * {@link ConversationInputOverlayOwnerProps}: Amiba declares and DISPATCHES
+ * the overlay seat, but composes NO `inputTriggers` service today (the
+ * official `ui-input-trigger` row stays disabled), so `ctx.inputTriggers` is
+ * type-visible and `undefined` at runtime. A source registration therefore
+ * has no pipeline to join yet; the seat itself is live for any occupant that
+ * brings its own store.
+ */
+export type {
+  CommandClaim,
+  InputTriggerCandidate,
+  InputTriggerPick,
+  InputTriggerSource,
+  PickOutcome,
+  ReferenceCodec,
+  ReferenceInsert,
+} from "@deepseek-ai/dsh-client-ui-input-trigger/client";
+
+/**
+ * Official owner contract of `conversation.input.overlay` — the composer's
+ * floating overlay anchor (list, session scope). The owner share is EMPTY,
+ * and here that is the *whole* contract rather than an omission: the seat's
+ * declaration in `@deepseek-ai/dsh-client-ui-input-trigger`
+ * (`lib/types/client/slots.d.ts`) carries no `owner` key at all, so
+ * `OwnerOf<>` resolves to `object` and every occupant is expected to read
+ * its OWN store (`MenuView` subscribes the trigger controller's menu store;
+ * the `ui-commands` popup shell subscribes its own) and render `null` while
+ * closed. An empty dispatch (`renderSlot("conversation.input.overlay", {})`)
+ * is therefore the faithful one — anything else would be fabricated.
+ *
+ * Amiba's render site is the composer card in `@amiba/ui`'s `Composer`, a
+ * BARE dispatch inside the `[data-composer-card]` frame: the occupants
+ * position themselves (`position: absolute; bottom: calc(100% + 4px)`)
+ * against that card and probe it with `closest("[data-composer-card]")` to
+ * decide whether an outside pointerdown should dismiss them. An unoccupied
+ * seat renders literally nothing — no wrapper, no box, no flex gap.
+ *
+ * RUNTIME CAVEAT (recorded honestly, Phase 4.3): the two official packages
+ * that occupy this seat upstream — `ui-input-trigger`'s `MenuView` and
+ * `ui-commands`' popup shell — are NOT enabled in Amiba's bundles, so the
+ * seat is unoccupied by official code and Amiba's own `TriggerMenu` remains
+ * the `/` and `@` menu. Both official occupants style themselves from CSS
+ * modules written against the `--dsw-*` design-token layer, which ONLY
+ * `@deepseek-ai/dsh-client-ui-theme` defines and which Amiba deliberately
+ * keeps out of the client graph (it would fight Amiba's own palette). See
+ * `docs/2026-08-15-dsh-native-architecture.md` for the full record.
+ */
+export type ConversationInputOverlayOwnerProps = OwnerOf<"conversation.input.overlay">;
 
 /**
  * Merge anchor for the official TOOL vocabulary plus the authoring types of

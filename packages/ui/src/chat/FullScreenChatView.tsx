@@ -172,6 +172,11 @@ export interface FullScreenChatViewProps {
      */
     planSeat?: ComposerPlanSeatRenderer;
     /**
+     * renderSlot-backed dispatch of the official `conversation.input.overlay`
+     * seat, forwarded through ChatSurface to the internal Composer's card.
+     */
+    inputOverlay?: ReactNode;
+    /**
      * renderSlot-backed dispatch of the official keyed `tool.call.toolview`
      * seat, forwarded through ChatSurface to every tool row in the
      * conversation. Omit it (Quick-Ask, any host outside a DSH plugin

@@ -319,6 +319,7 @@ for (const slot of [
   "amiba.composer.modelPicker",
   "conversation.input.model",
   "conversation.input.plan",
+  "conversation.input.overlay",
   "settings.section",
   "amiba.settings.content.overlay",
   "shell.overlay",
@@ -339,6 +340,12 @@ for (const [slot, kind, scope] of [
   ["conversation.session.header.utilities", "list", "session"],
   ["conversation.input.model", "single", "session"],
   ["conversation.input.plan", "single", "session"],
+  // The composer's floating overlay anchor. A divergent scope here would be
+  // silently destructive: the official occupants resolve their per-session
+  // store from the framework-supplied `sessionId` an inject face only
+  // receives on a SESSION-scoped seat, so a `root` declaration would hand
+  // them no id at all.
+  ["conversation.input.overlay", "list", "session"],
   // The keyed per-tool call row. A divergent kind here would be the worst
   // case of all: entries registered with `key: "<wire tool name>"` against
   // the upstream contract would compile and then never render.
@@ -417,6 +424,11 @@ for (const dispatch of [
   // The plan seat has no vendor counterpart: one dispatch, owner computed
   // by the Composer (the `{ locked }` share asserted below).
   /renderSlot\(\s*"conversation\.input\.plan",\s*owner\s*\)/u,
+  // The composer overlay anchor declares NO owner share at all, so `{}` is
+  // the faithful dispatch and anything else would be a fabricated owner.
+  // This is byte-for-byte the upstream dispatch (ui-conversation's composer
+  // entry does `overlay: renderSlot("conversation.input.overlay", {})`).
+  /renderSlot\(\s*"conversation\.input\.overlay",\s*\{\}\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
@@ -499,6 +511,32 @@ if (
 ) {
   fail(
     "Composer must render the official conversation.input.plan seat immediately right of the access-mode control, with the locked-only owner share and no wrapper",
+  );
+}
+// Composer side of the official `conversation.input.overlay` seat. Two
+// separate facts, each load-bearing and each pinned:
+//   1. `data-composer-card` on the frame that holds BOTH the editor and the
+//      seat. It is the official anchor contract: occupants position against
+//      that box and call `closest("[data-composer-card]")` on themselves to
+//      tell a pointerdown inside the composer apart from one outside it.
+//      Without the attribute, every click inside the composer dismisses the
+//      overlay.
+//   2. A BARE dispatch as the LAST child of that frame — no wrapper element
+//      between the tool row and the seat. A wrapper would spend layout on an
+//      unoccupied seat (the same rule as the plan seat) and would also become
+//      the occupants' positioned ancestor, moving the floating overlay off
+//      the composer card it is supposed to anchor to.
+const composerOverlaySeat =
+  /\{sendButtonNode\}\s*<\/div>([\s\S]*?)\{inputOverlay\}\s*<\/div>/u.exec(
+    composerSource,
+  );
+if (
+  !composerSource.includes('data-composer-card=""') ||
+  composerOverlaySeat === null ||
+  composerOverlaySeat[1].includes("<")
+) {
+  fail(
+    "Composer must anchor the official conversation.input.overlay seat as a bare last-child dispatch inside the [data-composer-card] frame",
   );
 }
 // Host anchor for conversation.session.header.actions: a title-adjacent row
@@ -680,6 +718,23 @@ if (
 ) {
   fail(
     "extension-sdk must inherit the official tool vocabulary through a named re-export, derive the tool.call.toolview owner via OwnerOf, and drop it from the not-adopted record",
+  );
+}
+// The composer overlay seat inherits the official INPUT-TRIGGER vocabulary the
+// same way: a NAMED re-export keeps `dsh-client-ui-input-trigger/client` on
+// the built declaration graph (a bare `import type {}` is elided at
+// declaration emit — the settings.section lesson), and the owner contract is
+// DERIVED with OwnerOf instead of restated. The seat declares no `owner` key
+// at all, so OwnerOf collapses to `object`; writing that empty share out by
+// hand would be a fabrication waiting to drift.
+if (
+  !/export type \{[\s\S]{0,400}?InputTriggerSource,?[\s\S]{0,400}?\} from "@deepseek-ai\/dsh-client-ui-input-trigger\/client"/u.test(
+    slotsSdk,
+  ) ||
+  !slotsSdk.includes('OwnerOf<"conversation.input.overlay">')
+) {
+  fail(
+    "extension-sdk must inherit the official input-trigger vocabulary through a named re-export and derive the conversation.input.overlay owner via OwnerOf",
   );
 }
 const slotsGuard = await text(

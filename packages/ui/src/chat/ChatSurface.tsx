@@ -269,6 +269,16 @@ export interface ChatSurfaceProps {
      */
     planSeat?: ComposerPlanSeatRenderer;
     /**
+     * renderSlot-backed dispatch of the official `conversation.input.overlay`
+     * seat (list, session scope, EMPTY owner), forwarded verbatim to
+     * ``<Composer inputOverlay>``. Hosts inside a DSH plugin runtime back it
+     * with `renderSlot("conversation.input.overlay", {})` — the empty owner
+     * share is the whole contract, so an empty object is the faithful
+     * dispatch. Hosts without one (Quick-Ask) omit it and the composer card
+     * is byte-identical to before.
+     */
+    inputOverlay?: ReactNode;
+    /**
      * renderSlot-backed dispatch of the official KEYED `tool.call.toolview`
      * seat, published to every tool row in the conversation. Hosts inside a
      * DSH plugin runtime back it with
@@ -1822,6 +1832,7 @@ export default function ChatSurface({
       }
       approvalModePicker
       planSeat={slots?.planSeat}
+      inputOverlay={slots?.inputOverlay}
       permissionSessionId={sessions.activeId}
       topAffordance={
         editingQueueId != null ? (
