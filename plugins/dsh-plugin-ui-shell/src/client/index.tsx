@@ -11,16 +11,9 @@ import {
   type PropsRuntime,
   type SnapshotSelectorHook,
 } from "@deepseek-ai/dsh-client-ui-slots";
-import {
-  AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP,
-  AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
-  type AmibaComposerModelPickerOwner,
-  type AmibaComposerModelPickerPropsGetter,
-} from "@amiba/extension-sdk";
 import { NavigationRow } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, type ReactNode } from "react";
 
 import {
   AmibaProductShell,
@@ -66,122 +59,33 @@ type AmibaRootProps = PropsRuntime<"root"> &
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
-const COMPOSER_PICKER_SLOT = "amiba.composer.modelPicker";
 
 /**
- * The one remaining marker/portal channel: the composer's model-picker hole.
- * Every other surface receives its contribution through renderSlot-backed
- * render props; the composer marker survives only until the picker rides a
- * render prop too (Phase 0 step: composer conversion).
+ * The one component registered into the official DSH `root` slot. It
+ * constructs the whole product shell and hands `renderSlot` down as render
+ * props — every plugin contribution renders in this one React tree through
+ * the official dispatch. No DOM marker scanning, no portals: the former
+ * data-amiba-dsh-* side-channel is gone (the only surviving data-amiba-dsh-*
+ * attribute is `data-amiba-dsh-base-url`, a different contract owned by the
+ * desktop renderer bootstrap).
  */
-interface ComposerPickerTarget {
-  element: Element;
-  /**
-   * Serialized subset of the marker's rich props. Rich props travel by
-   * element property, which MutationObserver cannot watch; this attribute
-   * string is their change signal, compared in {@link samePickerTargets} so
-   * a draft-selection change re-renders the portal.
-   */
-  stateFingerprint?: string;
-  owner: AmibaComposerModelPickerOwner;
-}
-
-/** Marker node carrying the composer model picker's rich-props getter. */
-type ComposerPickerMarkerElement = Element & {
-  [AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP]?: AmibaComposerModelPickerPropsGetter;
-};
-
-function findComposerPickerTargets(): Map<string, ComposerPickerTarget> {
-  const targets = new Map<string, ComposerPickerTarget>();
-  for (const element of document.querySelectorAll(
-    `[data-amiba-dsh-slot="${COMPOSER_PICKER_SLOT}"]`,
-  )) {
-    const owner = (element as ComposerPickerMarkerElement)[
-      AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP
-    ]?.();
-    if (!owner) continue;
-    const instanceId =
-      element.getAttribute("data-amiba-dsh-slot-instance")?.trim() || undefined;
-    const stateFingerprint =
-      element.getAttribute(AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR) ?? undefined;
-    const id = instanceId
-      ? `${COMPOSER_PICKER_SLOT}@${instanceId}`
-      : COMPOSER_PICKER_SLOT;
-    targets.set(id, { element, owner, stateFingerprint });
-  }
-  return targets;
-}
-
-function samePickerTargets(
-  left: ReadonlyMap<string, ComposerPickerTarget>,
-  right: ReadonlyMap<string, ComposerPickerTarget>,
-): boolean {
-  if (left.size !== right.size) return false;
-  for (const [id, target] of left) {
-    const candidate = right.get(id);
-    if (
-      candidate?.element !== target.element ||
-      candidate.stateFingerprint !== target.stateFingerprint
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function AmibaRoot({
   renderSlot,
   dshClient,
   settingsSections,
 }: AmibaRootProps): ReactNode {
-  const [targets, setTargets] = useState<
-    ReadonlyMap<string, ComposerPickerTarget>
-  >(() => new Map());
-
   useEffect(() => {
-    const scan = () => {
-      const next = findComposerPickerTargets();
-      setTargets((current) =>
-        samePickerTargets(current, next) ? current : next,
-      );
-    };
-    const observer = new MutationObserver(scan);
-    observer.observe(document.documentElement, {
-      attributeFilter: [
-        "data-amiba-dsh-slot",
-        "data-amiba-dsh-slot-instance",
-        AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
-      ],
-      attributes: true,
-      childList: true,
-      subtree: true,
-    });
-    scan();
+    // Boot handshake: the desktop renderer waits for this (or for the
+    // [data-amiba-product-shell] node) before flushing queued deep links.
     window.dispatchEvent(new CustomEvent(ROOT_READY_EVENT));
-    return () => observer.disconnect();
   }, []);
 
-  const portals = useMemo(
-    () =>
-      [...targets.entries()].map(([id, target]) =>
-        createPortal(
-          renderSlot(COMPOSER_PICKER_SLOT, target.owner),
-          target.element,
-          `amiba-dsh-slot:${id}`,
-        ),
-      ),
-    [renderSlot, targets],
-  );
-
   return (
-    <>
-      <AmibaProductShell
-        dshClient={dshClient}
-        renderSlot={renderSlot}
-        settingsSections={settingsSections}
-      />
-      {portals}
-    </>
+    <AmibaProductShell
+      dshClient={dshClient}
+      renderSlot={renderSlot}
+      settingsSections={settingsSections}
+    />
   );
 }
 

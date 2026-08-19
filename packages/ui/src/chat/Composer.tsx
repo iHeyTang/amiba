@@ -19,7 +19,6 @@ import {
   AttachmentButton,
   type UseComposerAttachmentsResult,
 } from "./useComposerAttachments";
-import { ComposerModelPickerSlot } from "./ComposerModelPickerSlot";
 import { ComposerAgentPicker } from "./ComposerAgentPicker";
 import { ComposerApprovalModePicker } from "./ComposerApprovalModePicker";
 import {
@@ -44,7 +43,20 @@ import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
 import { getPlatform } from "@amiba/app-runtime/platform";
 import type { AgentModelSelection } from "@amiba/app-runtime/platform";
-import type { AmibaComposerAgentModels } from "@amiba/extension-sdk";
+import type {
+  AmibaComposerAgentModels,
+  AmibaComposerModelPickerOwner,
+} from "@amiba/extension-sdk";
+
+/**
+ * Renders the composer's model-picker chip from the owner props Composer
+ * computes. The host builds this from the official DSH dispatch —
+ * `(owner) => renderSlot("amiba.composer.modelPicker", owner)` — and threads
+ * it down; Composer itself has ZERO model-plane knowledge.
+ */
+export type ComposerModelPickerRenderer = (
+  owner: AmibaComposerModelPickerOwner,
+) => ReactNode;
 
 /**
  * The chat surface's input box. **One implementation** used by every
@@ -174,14 +186,18 @@ export interface ComposerProps {
   attachments?: UseComposerAttachmentsResult;
   /**
    * Show a compact DSH inference-model selector beside the send controls.
-   * It lists models from configured or currently authenticated providers.
+   * The picker NODE comes from `render` — the host's renderSlot-backed
+   * dispatch of `amiba.composer.modelPicker`; Composer computes the owner
+   * props (engine-native `agentModels` pass-through, session id, picker
+   * chrome) and hands them over. Surfaces without a DSH plugin runtime
+   * (Quick-Ask) pass nothing and Composer renders nothing where the chip
+   * would sit.
    */
-  modelPicker?:
-    | boolean
-    | {
-        draftSelection?: AgentModelSelection;
-        onDraftSelectionChange?: (selection: AgentModelSelection) => void;
-      };
+  modelPicker?: {
+    render: ComposerModelPickerRenderer;
+    draftSelection?: AgentModelSelection;
+    onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+  };
   /** Show the active DSH permission preset as a switchable composer pill. */
   approvalModePicker?: boolean;
   /** Runtime session used to distinguish pinned permissions from new-task defaults. */
@@ -765,26 +781,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               ) : null}
               {actionsLeft}
             </div>
-            {modelPicker ? (
-              <ComposerModelPickerSlot
-                agentModels={slotAgentModels}
-                dialogSize={pickerDialogSize}
-                disabled={disabled}
-                overlayVariant={pickerOverlayVariant}
-                sessionId={permissionSessionId ?? null}
-                refreshKey={pickerRefreshKey}
-                draftSelection={
-                  typeof modelPicker === "object"
-                    ? modelPicker.draftSelection
-                    : undefined
-                }
-                onDraftSelectionChange={
-                  typeof modelPicker === "object"
-                    ? modelPicker.onDraftSelectionChange
-                    : undefined
-                }
-              />
-            ) : null}
+            {modelPicker
+              ? modelPicker.render({
+                  sessionId: permissionSessionId ?? null,
+                  draftSelection: modelPicker.draftSelection,
+                  onDraftSelectionChange: modelPicker.onDraftSelectionChange,
+                  agentModels: slotAgentModels,
+                  disabled,
+                  dialogSize: pickerDialogSize,
+                  overlayVariant: pickerOverlayVariant,
+                  refreshKey: pickerRefreshKey,
+                })
+              : null}
             {sendButtonNode}
           </div>
         </div>

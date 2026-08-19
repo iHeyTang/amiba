@@ -3,8 +3,9 @@
  * path — only the host knows which authority serves it. In the official
  * Web Shell that is the page origin itself; the desktop renderer runs
  * under the app origin and instead publishes the managed runtime
- * authority through the `data-amiba-dsh-base-url` DOM side-channel
- * (same contract family as the other data-amiba-dsh-* attributes).
+ * authority through the `data-amiba-dsh-base-url` DOM side-channel — the
+ * one remaining data-amiba-dsh-* attribute (the former slot-marker family
+ * was replaced by official renderSlot render props).
  */
 export function absoluteInboundEndpoint(endpoint: string): string {
   if (!endpoint.startsWith("/")) return endpoint;

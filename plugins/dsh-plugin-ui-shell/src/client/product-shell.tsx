@@ -398,8 +398,13 @@ function ProductShellInner({
               onOpenChat={() => {}}
               onOpenSettings={() => setView("settings")}
               panelMode
+              modelPicker={(owner) =>
+                renderSlot("amiba.composer.modelPicker", owner)
+              }
             />
           ),
+          modelPicker: (owner) =>
+            renderSlot("amiba.composer.modelPicker", owner),
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),

@@ -291,12 +291,32 @@ if (
     "UI shell must own the DSH root, layout service, list-slot ledger projection, and shell construction",
   );
 }
+// One React tree, official dispatch only: contributions arrive through
+// renderSlot-backed render props. The marker/portal side-channel is gone —
+// no DOM slot scanning and no portals in the root plugin.
+for (const [body, where] of [
+  [uiShellClient, "UI shell client"],
+  [productShellSource, "product shell"],
+]) {
+  if (
+    body.includes("createPortal") ||
+    body.includes("data-amiba-dsh-slot") ||
+    body.includes("findSlotTargets") ||
+    body.includes("findComposerPickerTargets")
+  ) {
+    fail(
+      `${where} must not resurrect the marker/portal slot side-channel`,
+    );
+  }
+}
 // Id-selected list slots dispatch through the official renderSlot `only`
 // filter from the product shell — no marker scanning, no keyed registration.
+// The composer model picker rides a render prop backed by the same dispatch.
 for (const dispatch of [
   /renderSlot\(\s*"amiba\.settings\.section",[\s\S]{0,200}?\{ only: sectionId \}/u,
   /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
   /renderSlot\(\s*"amiba\.shell\.overlay"/u,
+  /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*owner\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
@@ -311,6 +331,22 @@ if (
   fail(
     "Settings children must use DSH list-slot ledger routing, not keyed dual registration",
   );
+}
+// Composer side of the picker contract: owner props are computed by the
+// Composer and handed to the host's render prop; the marker component is
+// gone for good.
+const composerSource = await text("packages/ui/src/chat/Composer.tsx");
+if (
+  !composerSource.includes("modelPicker.render({") ||
+  composerSource.includes("data-amiba-dsh-slot") ||
+  composerSource.includes("ComposerModelPickerSlot")
+) {
+  fail(
+    "Composer must render the model picker through its render prop, not a DOM slot marker",
+  );
+}
+if (await exists("packages/ui/src/chat/ComposerModelPickerSlot.tsx")) {
+  fail("retired marker component ComposerModelPickerSlot.tsx still exists");
 }
 
 const memoryManifest = await json("plugins/dsh-plugin-memory/package.json");

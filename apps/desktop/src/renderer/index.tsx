@@ -68,8 +68,10 @@ void (async () => {
     const boot = await window.amiba.dshClient.boot();
     installDshClientTransport(boot.baseUrl);
     // DSH Client plugins run under the app origin here, so `location.origin`
-    // never reaches the managed runtime authority. Publish it through the
-    // same DOM side-channel family as the other data-amiba-dsh-* contracts.
+    // never reaches the managed runtime authority. Publish it as a DOM
+    // attribute contract (read by dsh-plugin-messaging-core). This is the
+    // only data-amiba-dsh-* attribute left — the former slot-marker family
+    // was replaced by official renderSlot render props.
     document.documentElement.setAttribute(
       "data-amiba-dsh-base-url",
       boot.baseUrl,

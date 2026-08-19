@@ -1,3 +1,10 @@
+/**
+ * Amiba's stable semantic slot vocabulary. All names are declared by the
+ * ui-shell root's children table except `amiba.agentPreset.section`, whose
+ * runtime declaration lives on dsh-plugin-agent-preset's settings-section
+ * entry (see {@link AmibaAgentPresetSectionOwner}); the name stays here so
+ * the authoring vocabulary has one home.
+ */
 export const AMIBA_ROOT_SLOTS = [
   "amiba.navigation.before",
   "amiba.navigation.after",
@@ -69,11 +76,11 @@ export interface AmibaComposerModelSelection {
  * itself. `directory` resolves `null` while the session has no materialized
  * engine directory (blank/draft composers).
  *
- * Owner-prop contract: function props (this surface, selection callbacks)
- * are snapshotted when the slot marker is scanned and only refresh when the
- * serialized owner fingerprint changes — hosts MUST pass identity-stable
- * functions (memoized pass-throughs, setState-style setters), never inline
- * closures over changing state.
+ * Owner-prop contract: owner props are passed at every renderSlot dispatch,
+ * so contributions always see the current render's values — the old
+ * marker-scan snapshot rule (identity-stable functions only) no longer
+ * binds. Function props may close over current state; hosts still memoize
+ * long-lived surfaces like this one so effect dependencies stay quiet.
  */
 export interface AmibaComposerAgentModels {
   directory(sessionId: string): Promise<{
@@ -91,6 +98,12 @@ export interface AmibaComposerAgentModels {
  * picker hole. Mechanism-clean by design: engine-native selection shapes and
  * host chrome only, no model-plane catalog types (contributions bring their
  * own catalog source).
+ *
+ * Transport: the Composer computes these owner props and hands them to its
+ * `modelPicker` render prop; the product shell backs that render prop with
+ * the official `renderSlot("amiba.composer.modelPicker", owner)` dispatch.
+ * Surfaces outside a DSH plugin runtime (Quick-Ask) pass no render prop and
+ * the composer renders nothing where the chip would sit.
  */
 export interface AmibaComposerModelPickerOwner {
   /** Materialized DSH session behind the composer, or null while drafting. */
@@ -109,28 +122,6 @@ export interface AmibaComposerModelPickerOwner {
   /** Bumped when a persistent host is re-activated; reloads picker state. */
   refreshKey?: number;
 }
-
-/**
- * Marker-element side channel for `amiba.composer.modelPicker`.
- *
- * `data-*` attributes on a slot marker can only carry strings, so the
- * composer stashes a getter returning the CURRENT owner props as a plain JS
- * property on the marker node (same mechanism as the settings scaffold's
- * head-actions-host getter) and mirrors the serializable subset into
- * {@link AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR} so the ui-shell's
- * MutationObserver re-scans (and re-renders the contribution) when that
- * state changes.
- */
-export const AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP =
-  "__amibaComposerModelPickerProps" as const;
-
-/** JSON fingerprint of the owner props' serializable subset (change signal). */
-export const AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR =
-  "data-amiba-dsh-model-picker-state" as const;
-
-/** Getter stored under {@link AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP}. */
-export type AmibaComposerModelPickerPropsGetter =
-  () => AmibaComposerModelPickerOwner;
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
