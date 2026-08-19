@@ -8,7 +8,10 @@ import {
   type AgentModelSelection,
 } from "@amiba/app-runtime/platform";
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
-import type { AmibaRootSlot } from "@amiba/extension-sdk";
+import type {
+  AmibaRootSlot,
+  ConversationInputPlanOwnerProps,
+} from "@amiba/extension-sdk";
 
 import type { AmibaSessionsBridge } from "./sessions-bridge.js";
 import { useT } from "@amiba/i18n";
@@ -58,10 +61,13 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
  * vocabulary plus the official names the root declares
- * (`settings.section`, `shell.overlay`,
- * `conversation.session.header.utilities` — the session-header utilities
- * strip that replaced the retired `amiba.chat.header.after`). Two names
- * from the public vocabulary are absent on purpose:
+ * (`settings.section`, `shell.overlay`, the two session-header seats —
+ * `conversation.session.header.utilities`, the right-aligned strip that
+ * replaced the retired `amiba.chat.header.after`, and
+ * `conversation.session.header.actions`, the title-adjacent action row —
+ * and the two composer control seats, `conversation.input.model` and
+ * `conversation.input.plan`). Two names from the public vocabulary are
+ * absent on purpose:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
  *     dsh-plugin-agent-preset as a child of its own settings section;
  *   - `amiba.composer.modelPicker` is dispatched through the composer's
@@ -72,7 +78,9 @@ export type AmibaShellSlot =
   | "settings.section"
   | "shell.overlay"
   | "conversation.session.header.utilities"
-  | "conversation.input.model";
+  | "conversation.session.header.actions"
+  | "conversation.input.model"
+  | "conversation.input.plan";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
@@ -374,6 +382,17 @@ function ProductShellInner({
     [renderSlot],
   );
 
+  // The composer's plan-status control: one official seat, no vendor split
+  // (the seat is session-scoped and has no hero counterpart, so a
+  // session-less composer simply renders nothing here). Composer computes
+  // the whole owner share the contract defines — `{ locked }` — and passes
+  // it through; the shell only dispatches.
+  const renderPlanSeat = useCallback(
+    (owner: ConversationInputPlanOwnerProps) =>
+      renderSlot("conversation.input.plan", owner),
+    [renderSlot],
+  );
+
   const openSession = useCallback(
     async (sessionId: string) => {
       const target = sessionId.trim();
@@ -485,6 +504,7 @@ function ProductShellInner({
             />
           ),
           modelPicker: renderModelPickerSeat,
+          planSeat: renderPlanSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),
@@ -496,6 +516,12 @@ function ProductShellInner({
           // bridge) and renders null while none is current, so the strip is
           // empty on the home view and on a not-yet-materialized draft.
           headerAfter: renderSlot("conversation.session.header.utilities", {}),
+          // The title-adjacent counterpart, same session resolution and the
+          // same empty owner share the contract declares. The header row it
+          // lands in collapses while the seat is empty, so a session with no
+          // contributed action looks exactly as it did before the seat
+          // existed.
+          headerActions: renderSlot("conversation.session.header.actions", {}),
           contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />

@@ -31,6 +31,15 @@ counterpart.
   `amiba.chat.header.after`. Session scope means the seat renders only while
   the official current session is set (the shell's sessions bridge keeps that
   in step with Amiba's own selection); the home view renders nothing here.
+- `conversation.session.header.actions` — official name from the same
+  package: the TITLE-ADJACENT per-session action row (list, SESSION scope,
+  empty owner — the contract says an action derives everything from the
+  standard session kit and its own inject face). A separate seat from the
+  utilities strip above, exactly as upstream splits them, so an optional
+  utility cannot reorder session context. Amiba had no such region before
+  this seat; the row it added collapses (`:empty` → `display:none`) while
+  the seat is unoccupied, so an absent plugin costs neither a box nor a
+  flex gap
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker` — the session-less HERO model seat (root
   scope, list), dispatched through the composer's `modelPicker` render prop
@@ -43,6 +52,13 @@ counterpart.
   `sessionId` from the framework session kit and its engine data over the
   official `session.models`/`session.selectModel` wire — engine data no
   longer rides owner props
+- `conversation.input.plan` — official name from the same package: the named
+  plan-status seat in the composer tool row, immediately right of the
+  access-mode control (single, SESSION scope, owner
+  `InputControlOwnerProps { locked }` — the same owner share as the model
+  seat). Unoccupied in Amiba today (the official ui-plan package is
+  disabled), which is the contract's own default: an empty seat "renders
+  nothing at all — the bar paints no placeholder"
 - `settings.section` — official name and owner contract
   (`SettingsSectionOwnerProps { close }`) inherited from
   `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,

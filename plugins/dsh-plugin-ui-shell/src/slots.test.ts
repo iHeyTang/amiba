@@ -17,10 +17,20 @@ describe("Amiba root slot contract", () => {
     );
     // Official-equivalent seats use the OFFICIAL names (`settings.section`
     // from dsh-client-ui-settings, `shell.overlay` from dsh-client-ui-layout,
-    // `conversation.session.header.utilities` and `conversation.input.model`
-    // from dsh-client-ui-conversation) — the amiba.* array must not shadow
-    // them, and the retired vendor header seat must stay gone.
+    // and the four adopted conversation.* seats — header utilities, header
+    // actions, input.model, input.plan — from dsh-client-ui-conversation).
+    // The amiba.* array must not shadow any of them, and the retired vendor
+    // header seat must stay gone.
     expect(AMIBA_ROOT_SLOTS).not.toContain("amiba.chat.header.after");
+    for (const official of [
+      "conversation.session.header.utilities",
+      "conversation.session.header.actions",
+      "conversation.input.model",
+      "conversation.input.plan",
+    ]) {
+      expect(AMIBA_ROOT_SLOTS).not.toContain(`amiba.${official}`);
+      expect(AMIBA_ROOT_SLOTS).not.toContain(official);
+    }
     for (const slot of AMIBA_ROOT_SLOTS) {
       expect(slot).toMatch(/^amiba\./u);
     }

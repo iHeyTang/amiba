@@ -49,11 +49,13 @@ export type {
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
   // Official owner contracts inherited through the SDK: settings.section
-  // ({ close }) from dsh-client-ui-settings; the two conversation seats
-  // (header utilities: empty owner; input.model: { locked }) from
-  // dsh-client-ui-conversation.
+  // ({ close }) from dsh-client-ui-settings; the four conversation seats
+  // (header utilities and header actions: empty owner; input.model and
+  // input.plan: { locked }) from dsh-client-ui-conversation.
+  ConversationHeaderActionsOwnerProps,
   ConversationHeaderUtilitiesOwnerProps,
   ConversationInputModelOwnerProps,
+  ConversationInputPlanOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
 
@@ -264,6 +266,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "session",
           },
+          // Official vocabulary: the TITLE-ADJACENT per-session action row
+          // (list, session scope, EMPTY owner — the contract is explicit
+          // that an action derives sessionId and everything else from the
+          // standard session kit and its own inject face). A separate seat
+          // from the utilities strip above, exactly as upstream splits
+          // them, so an optional utility cannot reorder session context.
+          // Amiba had no such region before P3; the chat content header
+          // grew one that collapses to nothing while the seat is empty.
+          "conversation.session.header.actions": {
+            kind: "list",
+            scope: "session",
+          },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
           // The session-less hero model seat (vendor) and its official
           // session-scoped counterpart: the composer dispatches
@@ -272,6 +286,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // header utilities above.
           "amiba.composer.modelPicker": { kind: "list", scope: "root" },
           "conversation.input.model": { kind: "single", scope: "session" },
+          // Official vocabulary: the named plan-status seat in the composer
+          // tool row, immediately right of the access-mode control (single,
+          // session scope, owner InputControlOwnerProps { locked } — the
+          // same owner share as the model seat). No occupant today: the
+          // official ui-plan package is disabled, so the seat renders
+          // nothing until a plugin takes it, which is exactly the contract
+          // ("unoccupied, the seat renders nothing at all").
+          "conversation.input.plan": { kind: "single", scope: "session" },
           // Official vocabulary: the settings-page ledger seat, inherited
           // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
           "settings.section": {

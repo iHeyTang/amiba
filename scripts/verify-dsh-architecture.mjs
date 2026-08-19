@@ -300,11 +300,11 @@ if (
 // amiba.agentPreset.section is intentionally absent from this list: its
 // runtime declaration moved to dsh-plugin-agent-preset (a child of that
 // plugin's settings-section entry), asserted in the agent-preset block below.
-// `settings.section`, `shell.overlay`, and the two conversation.* seats are
+// `settings.section`, `shell.overlay`, and the four conversation.* seats are
 // OFFICIAL vocabulary names (declared by @deepseek-ai/dsh-client-ui-settings,
 // -ui-layout, and -ui-conversation; types inherited through
 // @amiba/extension-sdk) — the root children table must declare them under
-// these official names. The former vendor trio
+// these official names, with the official kind/scope. The former vendor trio
 // amiba.settings.navigation.before/assistant/after is retired outright, and
 // amiba.chat.header.after retired in favour of
 // conversation.session.header.utilities.
@@ -314,14 +314,31 @@ for (const slot of [
   "amiba.workspace.navigation",
   "amiba.workspace.view",
   "conversation.session.header.utilities",
+  "conversation.session.header.actions",
   "amiba.chat.content.overlay",
   "amiba.composer.modelPicker",
+  "conversation.input.model",
+  "conversation.input.plan",
   "settings.section",
   "amiba.settings.content.overlay",
   "shell.overlay",
 ]) {
   if (!uiShellClient.includes(`\"${slot}\"`)) {
     fail(`UI shell is missing semantic child slot ${slot}`);
+  }
+}
+// Adopting an official NAME means adopting its official DECLARATION: a
+// divergent kind/scope would hand entries written against the upstream
+// contract a seat that behaves differently at runtime.
+for (const [slot, decl] of [
+  [
+    "conversation.session.header.actions",
+    '{\n            kind: "list",\n            scope: "session",\n          }',
+  ],
+  ["conversation.input.plan", '{ kind: "single", scope: "session" }'],
+]) {
+  if (!uiShellClient.includes(`"${slot}": ${decl}`)) {
+    fail(`UI shell must declare ${slot} with the official kind/scope`);
   }
 }
 for (const retired of [
@@ -379,10 +396,16 @@ for (const dispatch of [
   /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
   /renderSlot\(\s*"shell\.overlay"/u,
   /renderSlot\(\s*"conversation\.session\.header\.utilities",\s*\{\}\s*\)/u,
+  // Title-adjacent counterpart of the utilities strip; the official owner
+  // share is EMPTY, so anything but `{}` here would be a fabricated one.
+  /renderSlot\(\s*"conversation\.session\.header\.actions",\s*\{\}\s*\)/u,
   // The composer model chip is seat-split: the official session seat while
   // the composer has a session, the vendor hero seat while drafting.
   /renderSlot\(\s*"conversation\.input\.model",\s*request\.owner\s*\)/u,
   /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*request\.owner\s*\)/u,
+  // The plan seat has no vendor counterpart: one dispatch, owner computed
+  // by the Composer (the `{ locked }` share asserted below).
+  /renderSlot\(\s*"conversation\.input\.plan",\s*owner\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
@@ -417,6 +440,35 @@ if (
 }
 if (await exists("packages/ui/src/chat/ComposerModelPickerSlot.tsx")) {
   fail("retired marker component ComposerModelPickerSlot.tsx still exists");
+}
+// Composer side of the plan seat: the official contract places it in the
+// tool row immediately right of the access-mode control, and defines the
+// owner share as `{ locked }` only. Dispatch must be a bare render call —
+// a wrapper element would spend layout on an empty seat, which the contract
+// explicitly forbids ("the bar paints no placeholder").
+if (
+  !/ComposerApprovalModePicker[\s\S]{0,600}?\{planSeat \? planSeat\(\{ locked: disabled \}\) : null\}/u.test(
+    composerSource,
+  )
+) {
+  fail(
+    "Composer must render the official conversation.input.plan seat immediately right of the access-mode control, with the locked-only owner share and no wrapper",
+  );
+}
+// Host anchor for conversation.session.header.actions: a title-adjacent row
+// that collapses (`:empty` → display:none) while the seat is unoccupied, so
+// an absent plugin costs neither a box nor a flex gap.
+const fullScreenChatSource = await text(
+  "packages/ui/src/chat/FullScreenChatView.tsx",
+);
+if (
+  !fullScreenChatSource.includes("data-content-header-actions") ||
+  !fullScreenChatSource.includes("empty:hidden") ||
+  !fullScreenChatSource.includes("actions={slots?.headerActions}")
+) {
+  fail(
+    "Chat content header must anchor the official conversation.session.header.actions seat as a title-adjacent row that collapses while empty",
+  );
 }
 
 const memoryManifest = await json("plugins/dsh-plugin-memory/package.json");

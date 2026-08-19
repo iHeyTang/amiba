@@ -10,18 +10,36 @@ Vocabulary policy: a seat with an official DSH equivalent uses the OFFICIAL
 slot name and inherits the official contract — `settings.section` (owner
 `SettingsSectionOwnerProps { close }`, re-exported here) comes from
 `@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
-`@deepseek-ai/dsh-client-ui-layout`, and the `conversation.*` family
-(`conversation.session.header.utilities` — replacing the retired
-`amiba.chat.header.after` — and `conversation.input.model`, whose owner
-contracts are re-derived here as `ConversationHeaderUtilitiesOwnerProps` and
-`ConversationInputModelOwnerProps`) from
-`@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are reserved for
+`@deepseek-ai/dsh-client-ui-layout`, and the `conversation.*` family from
+`@deepseek-ai/dsh-client-ui-conversation`. Four conversation seats are
+adopted, with their owner contracts re-derived here:
+
+| seat | kind / scope | owner | render site |
+| --- | --- | --- | --- |
+| `conversation.session.header.utilities` | list / session | `ConversationHeaderUtilitiesOwnerProps` (empty) | right-aligned strip in the chat header (replaced the retired `amiba.chat.header.after`) |
+| `conversation.session.header.actions` | list / session | `ConversationHeaderActionsOwnerProps` (empty) | title-adjacent action row in the chat header |
+| `conversation.input.model` | single / session | `ConversationInputModelOwnerProps` (`{ locked }`) | composer tool row, left of the send button |
+| `conversation.input.plan` | single / session | `ConversationInputPlanOwnerProps` (`{ locked }`) | composer tool row, immediately right of the access-mode control |
+
+Both header seats and both composer seats render NOTHING while unoccupied —
+no placeholder, no reserved space, no flex gap.
+
+`amiba.*` names are reserved for
 vendor extensions with no official counterpart; only those appear in
 `AMIBA_ROOT_SLOTS`. Importing this SDK makes the official names visible in
 `SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
-conversation.* keys type-visible while Amiba runtime-declares only the two
+conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
-with no render site. The ui-conversation members of the session standard kit
+with no render site. Four seats are deliberately NOT adopted, because their
+owner contracts cannot be supplied faithfully from Amiba's own projection —
+`conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`
+(the `InputZone` share needs the ui-conversation input machine),
+`tool.call.toolview` (`ToolCallBlock` needs raw content blocks, sub-calls,
+seq/step and raw args), `conversation.chat.turnTail` (`TurnLocation` is an
+engine-owned boundary with a business-value reader), and
+`conversation.chat.assistant-actions` (`MessageId` addresses one finalized
+assistant message; Amiba's bubble is a turn aggregate). See
+`src/slots.ts` for the field-level record. The ui-conversation members of the session standard kit
 (`useInput`/`inputActions`) are type-visible but NOT provided by Amiba's
 runtime yet (recorded Phase-2 deferral) — the framework members
 (`sessionId`/`useSession`/`useProjection`) are live.

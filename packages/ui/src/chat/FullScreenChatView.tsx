@@ -40,7 +40,10 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
-import type { ComposerModelPickerRenderer } from "./Composer";
+import type {
+  ComposerModelPickerRenderer,
+  ComposerPlanSeatRenderer,
+} from "./Composer";
 import {
   WorkspacePane,
   WorkspacePaneProvider,
@@ -144,6 +147,15 @@ export interface FullScreenChatViewProps {
         showSidebarExpandControl: boolean;
       },
     ) => ReactNode;
+    /**
+     * Title-adjacent per-session action row in the chat content header —
+     * the host's dispatch of the official
+     * `conversation.session.header.actions` seat. Rendered right of the
+     * conversation title; an empty seat collapses to nothing (`empty:hidden`
+     * on the row), so the header keeps its exact layout while no plugin
+     * contributes.
+     */
+    headerActions?: ReactNode;
     /** Additive controls in the active chat header action cluster. */
     headerAfter?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
@@ -153,6 +165,11 @@ export interface FullScreenChatViewProps {
      * ChatSurface to the internal Composer.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    /**
+     * renderSlot-backed dispatch of the official `conversation.input.plan`
+     * seat, forwarded through ChatSurface to the internal Composer.
+     */
+    planSeat?: ComposerPlanSeatRenderer;
   };
   /**
    * TabBar gear / settings row → open Settings. The optional ``tab``
@@ -716,6 +733,7 @@ function FullScreenChatViewInner({
               <ContentHeader
                 title={chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
+                actions={slots?.headerActions}
                 onRenameTitle={
                   canRenameActiveChatTitle ? renameActiveChatTitle : undefined
                 }
@@ -931,6 +949,14 @@ function SidebarHeader({
 interface ContentHeaderProps {
   title: string;
   icon: ReactNode;
+  /**
+   * Per-session action row rendered immediately right of the title. Host
+   * content only — the header neither knows nor cares that the node comes
+   * from the official `conversation.session.header.actions` seat. Nothing
+   * to render means no row: the wrapper carries `empty:hidden`, so an
+   * unoccupied seat costs neither a box nor a flex gap.
+   */
+  actions?: ReactNode;
   onRenameTitle?: (title: string) => void;
   sidebarCollapsed: boolean;
   showExpandControl?: boolean;
@@ -945,6 +971,7 @@ interface ContentHeaderProps {
 function ContentHeader({
   title,
   icon,
+  actions,
   onRenameTitle,
   sidebarCollapsed,
   showExpandControl = sidebarCollapsed,
@@ -1008,6 +1035,19 @@ function ContentHeader({
               onEditingChange={setTitleEditing}
             />
           )}
+          {/* Title-adjacent action row. `empty:hidden` is load-bearing: an
+              unoccupied seat renders no DOM inside this wrapper, and a
+              zero-child flex item would still spend one parent gap. Hidden
+              means no box AND no gap — the header is pixel-identical to a
+              build without the seat. */}
+          {actions ? (
+            <div
+              data-content-header-actions
+              className="app-no-drag flex min-w-0 shrink-0 items-center gap-0.5 empty:hidden"
+            >
+              {actions}
+            </div>
+          ) : null}
         </div>
       }
     />

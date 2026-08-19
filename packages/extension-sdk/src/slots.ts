@@ -6,8 +6,10 @@
  * `@deepseek-ai/dsh-client-ui-layout`, the `settings.*` family (most
  * importantly `settings.section`) from `@deepseek-ai/dsh-client-ui-settings`,
  * and the `conversation.*` family (Phase 2 adopts
- * `conversation.session.header.utilities` and `conversation.input.model`)
- * from `@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are
+ * `conversation.session.header.utilities` and `conversation.input.model`;
+ * Phase 3 adds `conversation.input.plan` and
+ * `conversation.session.header.actions`) from
+ * `@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are
  * reserved for vendor extensions that have no official counterpart. The
  * array below therefore lists ONLY the amiba.* vendor slots; the official
  * names reach consumers through the official packages' SlotMap merges,
@@ -32,7 +34,7 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 // Type home for the official conversation vocabulary: the same inheritance
 // pattern brings the ~20 conversation.* SlotMap keys (and the
 // ui-conversation SessionStandardProps members) into every SDK consumer.
-// Amiba's runtime declares only the two adopted keys on the ui-shell root;
+// Amiba's runtime declares only the adopted keys on the ui-shell root;
 // a registration into any other type-visible conversation.* key simply
 // waits in ctx.slots.inject with no render site — authoring implication,
 // not a hazard. CAVEAT (recorded Phase-2 deferral): the merge also makes
@@ -57,8 +59,8 @@ export type { SettingsSectionOwnerProps } from "@deepseek-ai/dsh-client-ui-setti
  * inclusions are elided at declaration emit (the settings.section lesson),
  * so a named re-export must keep `@deepseek-ai/dsh-client-ui-conversation/client`
  * on the built declaration graph. The package does not export its owner
- * interfaces, so the anchor is the header entry's injected face and the two
- * owner contracts are re-derived below via {@link OwnerOf}.
+ * interfaces, so the anchor is the header entry's injected face and every
+ * adopted owner contract is re-derived below via {@link OwnerOf}.
  */
 export type { ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
@@ -76,6 +78,55 @@ export type ConversationHeaderUtilitiesOwnerProps = OwnerOf<"conversation.sessio
  * occupant owns everything else).
  */
 export type ConversationInputModelOwnerProps = OwnerOf<"conversation.input.model">;
+
+/**
+ * Official owner contract of `conversation.input.plan`
+ * (`InputControlOwnerProps { locked: boolean }` — the SAME owner share as
+ * the model seat: the composer's chrome disable state, honoured by refusing
+ * interaction). The named plan-status seat sits in the composer tool row
+ * immediately right of the access-mode control; unoccupied it renders
+ * nothing at all, so an absent plan plugin costs no layout.
+ */
+export type ConversationInputPlanOwnerProps = OwnerOf<"conversation.input.plan">;
+
+/**
+ * Official owner contract of `conversation.session.header.actions`
+ * (`ConversationHeaderActionOwnerProps` — empty, like the utilities strip:
+ * an action derives `sessionId` and the rest from the framework session kit
+ * and its own inject face). The title-adjacent action row, ordered by
+ * ascending `order`; the right-aligned
+ * `conversation.session.header.utilities` strip stays a separate seat so an
+ * optional utility cannot reorder session context.
+ */
+export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.header.actions">;
+
+// Official seats deliberately NOT adopted (Phase 3 ruling, recorded so
+// authors know why these names resolve to no render site here). The rule:
+// an official name may only be taken when its official owner contract can
+// be supplied faithfully — an official key with a divergent owner is worse
+// than a vendor key, because entries written against the upstream types
+// would compile and then break at runtime.
+//
+//   - `conversation.input.dock` / `.composer.dock` / `.input.left` /
+//     `.input.right` take the `InputZone` owner share
+//     (`{ session: ConversationSnapshot; input: InputState }`) — both are
+//     ui-conversation store types produced by an input machine Amiba does
+//     not run (its composer state is its own). The seats wait on the
+//     `ctx.sessions.provide` work.
+//   - `tool.call.toolview` (keyed by wire tool name) takes
+//     `block: ToolCallBlock`, whose `content: readonly ContentBlock[]`,
+//     `subCalls`, `seq`, `step` and `argsRaw` members have no source in
+//     Amiba's `ToolProgress` projection (it keeps flattened result text, a
+//     parsed args object, and a flat call map with no child ownership).
+//   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
+//     engine-owned boundary carrying the raw `turn/start` / `turn/end`
+//     events, a `StepLocation[]` ring, and the `data` business-value
+//     reader — none of which Amiba's projection retains.
+//   - `conversation.chat.assistant-actions` takes `messageId: MessageId`
+//     carried from the `assistant/message` event; Amiba's assistant bubble
+//     is a TURN aggregate keyed by the turn's first seq (and a local
+//     `shortId("a")` while streaming), so no faithful message identity
+//     exists to pass.
 
 export const AMIBA_ROOT_SLOTS = [
   "amiba.navigation.before",
