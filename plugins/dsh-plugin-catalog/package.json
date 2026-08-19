@@ -36,6 +36,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@amiba/app-runtime": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.6",
@@ -55,7 +56,6 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@amiba/app-runtime": "workspace:*",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "0.1.0-rc.6",
     "@deepseek-ai/dsh-agent-presets": "0.1.0-rc.6",

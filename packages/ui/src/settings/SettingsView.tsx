@@ -61,12 +61,8 @@ function isAdvancedTab(tab: string): boolean {
 
 export interface SettingsViewProps {
   slots?: {
-    /** Additive DSH entries before the built-in settings navigation. */
-    navigationBefore?: React.ReactNode;
     /** DSH section-ledger navigation projected inside the Assistant group. */
     assistantNavigation?: (activeSection?: string) => React.ReactNode;
-    /** Additive DSH entries after the built-in settings navigation. */
-    navigationAfter?: React.ReactNode;
     /**
      * Render target for one DSH plugin-owned list section selected by id.
      * The section renders in the same React tree as the scaffold, so its
@@ -219,7 +215,6 @@ export function SettingsView({
         )}
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
-            {slots?.navigationBefore}
             {onGoHome ? (
               <NavigationRow
                 icon={<Home className="h-4 w-4 shrink-0 opacity-70" />}
@@ -287,7 +282,6 @@ export function SettingsView({
                 ))}
               </div>
             ) : null}
-            {slots?.navigationAfter}
           </nav>
         </ScrollArea>
         <div className="px-3 py-2">

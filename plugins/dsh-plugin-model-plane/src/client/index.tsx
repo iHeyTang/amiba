@@ -22,7 +22,7 @@ const SECTION_ID = "models";
 
 type ModelPlaneRemote = ClientContext["remote"]["amibaModelPlane"];
 
-type ModelPlaneSectionProps = PropsRuntime<"amiba.settings.section"> & {
+type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ModelPlaneAdapter;
 };
 
@@ -101,10 +101,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         unsetCredential: (providerId, expectedRevision) =>
           valueOf(remote.unsetCredential(providerId, expectedRevision)),
       };
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
+      return injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
-            name: "amiba.settings.section",
+            name: "settings.section",
             id: SECTION_ID,
             // Below every other plugin section (catalog/mcp start at 100)
             // so 模型与服务 stays directly after the agent-preset plugin's

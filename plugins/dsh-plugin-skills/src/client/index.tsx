@@ -19,7 +19,7 @@ function sectionLabel(): string {
     : "Skills";
 }
 
-type SkillsSectionProps = PropsRuntime<"amiba.settings.section"> & {
+type SkillsSectionProps = PropsRuntime<"settings.section"> & {
   adapter: SkillsDirectoryAdapter;
 };
 
@@ -119,11 +119,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         },
       };
       const disposeSection = injectedCtx.slots.inject(
-        "amiba.settings.section",
+        "settings.section",
         () =>
           injectedCtx.slots.register(
             {
-              name: "amiba.settings.section",
+              name: "settings.section",
               id: SECTION_ID,
               order: 200,
               label: sectionLabel,

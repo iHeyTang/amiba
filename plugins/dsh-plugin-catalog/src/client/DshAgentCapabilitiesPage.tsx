@@ -28,9 +28,27 @@ import {
   useRefetchOnFocus,
 } from "@amiba/ui/plugin";
 
+import { getPlatform } from "@amiba/app-runtime/platform";
+
 import { catalogI18n, type CatalogMessageKey } from "./i18n.js";
 import type { ToolSourceDescriptor, ToolSourceKind } from "../provenance.js";
 import type { ToolInventory, ToolSchemaView } from "../remote.js";
+
+/**
+ * Desktop window-chrome height for headers that double as the window-drag
+ * strip (the tool-detail drill-in below); `undefined` off-desktop. The
+ * official `settings.section` owner contract is `{ close }` only, so this
+ * metric no longer arrives through the section's owner props — the plugin
+ * reads the platform's chrome facts directly, the same source the product
+ * shell itself uses (`windowChrome.topBarHeightPx`, default 40). Business
+ * data still rides the DSH Remote exclusively.
+ */
+export function settingsChromeHeightPx(): number | undefined {
+  const platform = getPlatform();
+  return platform.kind === "desktop"
+    ? (platform.windowChrome?.topBarHeightPx ?? 40)
+    : undefined;
+}
 
 /**
  * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).

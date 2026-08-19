@@ -25,7 +25,7 @@ function errorOf(value: unknown): Error {
   return new Error(String(value));
 }
 
-type UsageSectionProps = PropsRuntime<"amiba.settings.section"> & {
+type UsageSectionProps = PropsRuntime<"settings.section"> & {
   list: UsageListFn;
   readToolActivity: ToolActivityReadFn;
 };
@@ -59,11 +59,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         return result.value;
       };
       const disposeSection = injectedCtx.slots.inject(
-        "amiba.settings.section",
+        "settings.section",
         () =>
           injectedCtx.slots.register(
             {
-              name: "amiba.settings.section",
+              name: "settings.section",
               id: SECTION_ID,
               order: 500,
               label: () => labels().nav,

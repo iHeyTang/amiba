@@ -9,10 +9,7 @@ import {
   resolveSlotLabel,
   type PropsRenderSlots,
   type PropsRuntime,
-  type SnapshotSelectorHook,
 } from "@deepseek-ai/dsh-client-ui-slots";
-import { NavigationRow } from "@amiba/ui/plugin";
-import { Blocks } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 
 import {
@@ -46,16 +43,18 @@ export type {
   AmibaComposerModelPickerOwner,
   AmibaComposerModelSelection,
   AmibaRootSlot,
-  AmibaSettingsNavigationOwner,
-  AmibaSettingsSectionOwner,
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
+  // The official settings-section owner contract ({ close }), inherited
+  // from @deepseek-ai/dsh-client-ui-settings through the SDK.
+  SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
 
 type AmibaRootProps = PropsRuntime<"root"> &
   PropsRenderSlots<AmibaShellSlot> & {
     dshClient: DshApiClient;
     settingsSections: SettingsSectionsSource;
+    openSettingsSection: (sectionId: string) => void;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -73,6 +72,7 @@ function AmibaRoot({
   renderSlot,
   dshClient,
   settingsSections,
+  openSettingsSection,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -83,6 +83,7 @@ function AmibaRoot({
   return (
     <AmibaProductShell
       dshClient={dshClient}
+      openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
       settingsSections={settingsSections}
     />
@@ -110,7 +111,8 @@ interface SettingsSectionRow {
  * section's `inject` face may carry `navIcon` (a thunk returning the nav
  * glyph). The registration options type cannot grow an icon field, so the
  * ledger reads it from the business face instead; sections without one
- * fall back to the generic Blocks glyph.
+ * fall back to the generic Blocks glyph. Official plugins registering into
+ * `settings.section` simply carry no icon and get the fallback.
  */
 function resolveSectionNavIcon(
   inject: ((...args: never[]) => Record<string, unknown>) | undefined,
@@ -119,34 +121,6 @@ function resolveSectionNavIcon(
   return typeof navIcon === "function"
     ? ((navIcon as () => ReactNode)() ?? undefined)
     : undefined;
-}
-
-type SettingsSectionNavigationProps =
-  PropsRuntime<"amiba.settings.navigation.assistant"> & {
-    openSettings(sectionId: string): void;
-    useSections: SnapshotSelectorHook<readonly SettingsSectionRow[]>;
-  };
-
-/**
- * Project the DSH section ledger into Amiba's existing Settings navigation.
- * Feature plugins register exactly one section entry; Electron never imports
- * or enumerates them.
- */
-function SettingsSectionNavigation({
-  activeSection,
-  openSettings,
-  useSections,
-}: SettingsSectionNavigationProps): ReactNode {
-  const sections = useSections((snapshot) => snapshot);
-  return sections.map((section) => (
-    <NavigationRow
-      active={activeSection === section.id}
-      icon={section.icon ?? <Blocks />}
-      key={section.id}
-      label={section.label}
-      onClick={() => openSettings(section.id)}
-    />
-  ));
 }
 
 declare module "@deepseek-ai/cordis" {
@@ -195,13 +169,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
     let sections: readonly SettingsSectionRow[] = [];
     const sectionsSource = {
       getSnapshot: () => {
-        const version = ctx.slots.getVersion("amiba.settings.section");
+        const version = ctx.slots.getVersion("settings.section");
         const language = document.documentElement.lang;
         if (version !== sectionsVersion || language !== sectionsLanguage) {
           sectionsVersion = version;
           sectionsLanguage = language;
           sections = ctx.slots
-            .entriesOfSlot("amiba.settings.section")
+            .entriesOfSlot("settings.section")
             .map((entry) => ({
               id: entry.options.id ?? "",
               label:
@@ -216,7 +190,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       subscribe: (listener: () => void) => {
         const disposeSlotSubscription = ctx.slots.subscribe(
-          "amiba.settings.section",
+          "settings.section",
           listener,
         );
         const languageObserver = new MutationObserver(listener);
@@ -236,10 +210,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
         name: "root",
         // Data faces only — AmibaRoot itself constructs the product shell,
         // so the one component receiving `renderSlot` is also the one that
-        // hands render props down into it.
+        // hands render props down into it. The product shell renders the
+        // section-ledger navigation directly (no slot indirection), so the
+        // nav's openSettings affordance rides this face too.
         inject: () => ({
           dshClient,
           settingsSections: sectionsSource,
+          openSettingsSection: (sectionId: string) =>
+            layout.openSettings(sectionId),
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -255,19 +233,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.chat.header.after": { kind: "list", scope: "root" },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
           "amiba.composer.modelPicker": { kind: "list", scope: "root" },
-          "amiba.settings.navigation.before": {
-            kind: "list",
-            scope: "root",
-          },
-          "amiba.settings.navigation.assistant": {
-            kind: "single",
-            scope: "root",
-          },
-          "amiba.settings.navigation.after": {
-            kind: "list",
-            scope: "root",
-          },
-          "amiba.settings.section": {
+          // Official vocabulary: the settings-page ledger seat, inherited
+          // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
+          "settings.section": {
             kind: "list",
             scope: "root",
           },
@@ -278,28 +246,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // amiba.agentPreset.section is deliberately NOT declared here:
           // dsh-plugin-agent-preset declares it as a child of its own
           // settings-section entry (the amiba.tools.panel pattern).
-          "amiba.shell.overlay": { kind: "list", scope: "root" },
+          // Official vocabulary: the frame-wide click-through floating
+          // layer, from @deepseek-ai/dsh-client-ui-layout.
+          "shell.overlay": { kind: "list", scope: "root" },
         },
       },
       AmibaRoot,
     );
-    const disposeSettingsNavigation = ctx.slots.inject(
-      "amiba.settings.navigation.assistant",
-      () =>
-        ctx.slots.register(
-          {
-            name: "amiba.settings.navigation.assistant",
-            inject: () => ({
-              hooks: { sections: sectionsSource },
-              openSettings: (sectionId: string) =>
-                layout.openSettings(sectionId),
-            }),
-          },
-          SettingsSectionNavigation,
-        ),
-    );
     return () => {
-      disposeSettingsNavigation();
       disposeRoot();
       void disposeLayout();
     };

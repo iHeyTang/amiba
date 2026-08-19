@@ -17,7 +17,7 @@ export const inject = ["slots", "remote"];
 const SECTION_ID = "messaging";
 type MessagingRemote = ClientContext["remote"]["amibaMessaging"];
 
-type MessagingSectionProps = PropsRuntime<"amiba.settings.section"> & {
+type MessagingSectionProps = PropsRuntime<"settings.section"> & {
   adapter: MessagingAdapter;
 };
 
@@ -94,10 +94,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         remove: (id) => valueOf(remote.removeChannel(id)),
         rotateSecret: (id) => valueOf(remote.rotate(id)),
       };
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
+      return injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
-            name: "amiba.settings.section",
+            name: "settings.section",
             id: SECTION_ID,
             order: 400,
             label: () =>
