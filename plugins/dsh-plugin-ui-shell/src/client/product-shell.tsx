@@ -27,6 +27,7 @@ import { Blocks } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -412,7 +413,10 @@ function ProductShellInner({
   // mirrored into the official ctx.sessions current — the session
   // resolution the official conversation.* seats render under. The bridge
   // handles the open-after-list race and echo suppression.
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: the projection must land BEFORE paint,
+  // or the already-committed render resolves the official session-scoped
+  // seats under the previous session and that stale frame is painted.
+  useLayoutEffect(() => {
     sessionsBridge?.setActive(sessions.activeId);
   }, [sessionsBridge, sessions.activeId]);
 

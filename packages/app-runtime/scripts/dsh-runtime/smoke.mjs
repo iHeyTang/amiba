@@ -628,7 +628,10 @@ try {
         signal: AbortSignal.timeout(35_000),
       });
       assert.equal(externalBundle.status, 200);
-      assert.match(await externalBundle.text(), /amiba\.chat\.header\.after/u);
+      assert.match(
+        await externalBundle.text(),
+        /conversation\.session\.header\.utilities/u,
+      );
       assert.ok(
         !ids.has("@deepseek-ai/dsh-client-ui-layout"),
         "stock DSH layout still competes for root",

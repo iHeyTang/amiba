@@ -151,18 +151,57 @@ describe("sessions selection bridge", () => {
     bridge.dispose();
   });
 
-  it("treats a restored official selection as baseline, not an external open", () => {
-    const official = officialSessionsDouble({ ids: ["s1"], current: "s1" });
+  it("does not follow the runtime's own boot selection into an empty window", () => {
+    // Faithful cold-boot double: the real list store starts EMPTY and
+    // pending — a persisted `dsh.sessions.current` only reaches
+    // `list.current` after the async `session.list` baseline lands, so the
+    // constructor can never observe it.
+    const official = officialSessionsDouble();
     const onExternalOpen = vi.fn();
     const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive(""); // the shell's mount-time projection
 
-    // Constructor saw current=s1 (the runtime's persisted restore); the
-    // per-window-empty Amiba design means it must NOT be forwarded…
+    // The baseline lands carrying the runtime's restored selection.
+    official.setIds(["s5"]);
+    official.setCurrent("s5");
+
+    // Amiba windows start empty by design: runtime policy is re-projected
+    // away, never forwarded as a user-initiated open.
     expect(onExternalOpen).not.toHaveBeenCalled();
-    // …and the shell's mount-time projection of the empty selection
-    // converges the official side onto Amiba's authority.
+    expect(official.face.clear).toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+  });
+
+  it("re-projects the empty selection when the runtime opens its initial workspace session later", () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
     bridge.setActive("");
-    expect(official.face.clear).toHaveBeenCalledTimes(1);
+
+    // `workspaces.startInitialSelection()` connects the recent workspace and
+    // opens its session — after the list has settled, with Amiba on home.
+    official.setCurrent("s1");
+    expect(onExternalOpen).not.toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+  });
+
+  it("re-defers a target whose row leaves the list before the deferred open", async () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive("draft-1");
+
+    official.setIds(["s1", "draft-1"]); // queues the deferred open…
+    official.setIds(["s1"]); // …and the row vanishes again first
+    await flushMicrotasks();
+    expect(official.current).toBeUndefined();
+
+    // The target stayed deferred instead of dropping into a silent desync.
+    official.setIds(["s1", "draft-1"]);
+    await flushMicrotasks();
+    expect(official.current).toBe("draft-1");
     bridge.dispose();
   });
 
@@ -174,6 +213,9 @@ describe("sessions selection bridge", () => {
 
     official.setCurrent(undefined); // ecosystem clear — no Amiba route today
     expect(onExternalOpen).not.toHaveBeenCalled();
+    // Amiba is authoritative: its live selection is re-projected instead of
+    // leaving the official session-scoped seats rendering nothing.
+    expect(official.current).toBe("s1");
 
     // A later external open still forwards.
     official.setCurrent("s2");
