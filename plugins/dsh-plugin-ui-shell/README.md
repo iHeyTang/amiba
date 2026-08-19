@@ -24,7 +24,13 @@ counterpart.
 - `amiba.navigation.after`
 - `amiba.workspace.navigation`
 - `amiba.workspace.view`
-- `amiba.chat.header.after`
+- `conversation.session.header.utilities` — official name from
+  `@deepseek-ai/dsh-client-ui-conversation`: the right-aligned session-header
+  utilities strip (list, SESSION scope, empty owner — utilities derive their
+  state from the framework session kit). Replaces the retired
+  `amiba.chat.header.after`. Session scope means the seat renders only while
+  the official current session is set (the shell's sessions bridge keeps that
+  in step with Amiba's own selection); the home view renders nothing here.
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker` (dispatched through the composer's
   `modelPicker` render prop)
@@ -64,10 +70,10 @@ function HeaderAction() {
 }
 
 export function apply(ctx: ClientContext): void {
-  ctx.slots.inject("amiba.chat.header.after", () =>
+  ctx.slots.inject("conversation.session.header.utilities", () =>
     ctx.slots.register(
       {
-        name: "amiba.chat.header.after",
+        name: "conversation.session.header.utilities",
         id: "my-feature.action",
         order: 100,
       },

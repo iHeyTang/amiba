@@ -488,7 +488,7 @@ try {
     ),
     writeFile(
       path.join(externalSource, "lib", "client.js"),
-      `window.__ModuleLoader__.load({ id: "${externalPackageName}", factory: () => ({\n  name: "amiba-smoke-external-client",\n  inject: ["slots"],\n  async apply(ctx) {\n    const fiber = ctx.inject(["slots"], (injected) => injected.slots.inject("amiba.chat.header.after", () => injected.slots.register({ name: "amiba.chat.header.after", id: "external-smoke", order: 999 }, function ExternalSmokeSlot() { return null; })));\n    await fiber;\n    return async () => fiber.dispose();\n  },\n}) });\n`,
+      `window.__ModuleLoader__.load({ id: "${externalPackageName}", factory: () => ({\n  name: "amiba-smoke-external-client",\n  inject: ["slots"],\n  async apply(ctx) {\n    const fiber = ctx.inject(["slots"], (injected) => injected.slots.inject("conversation.session.header.utilities", () => injected.slots.register({ name: "conversation.session.header.utilities", id: "external-smoke", order: 999 }, function ExternalSmokeSlot() { return null; })));\n    await fiber;\n    return async () => fiber.dispose();\n  },\n}) });\n`,
     ),
   ]);
   const packed = await runProcess(

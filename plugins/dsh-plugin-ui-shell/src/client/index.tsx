@@ -248,7 +248,19 @@ export async function apply(ctx: ClientContext): Promise<void> {
             },
           },
           "amiba.workspace.view": { kind: "list", scope: "root" },
-          "amiba.chat.header.after": { kind: "list", scope: "root" },
+          // Official vocabulary: the right-aligned session-header utilities
+          // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces
+          // the retired amiba.chat.header.after). SESSION scope from a
+          // root-scoped parent is legal: neither ChildrenDecl nor the
+          // runtime constrains a child's scope to its declarer's — the
+          // scope axis only selects which standard kit the ENTRY's
+          // components receive, and the renderer's StrictSessionEntry
+          // renders null while no official session is current, so the home
+          // view is unaffected.
+          "conversation.session.header.utilities": {
+            kind: "list",
+            scope: "session",
+          },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
           "amiba.composer.modelPicker": { kind: "list", scope: "root" },
           // Official vocabulary: the settings-page ledger seat, inherited

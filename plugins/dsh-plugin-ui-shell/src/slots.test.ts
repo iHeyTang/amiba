@@ -11,14 +11,16 @@ describe("Amiba root slot contract", () => {
       expect.arrayContaining([
         "amiba.workspace.navigation",
         "amiba.workspace.view",
-        "amiba.chat.header.after",
         "amiba.settings.content.overlay",
         "amiba.agentPreset.section",
       ]),
     );
     // Official-equivalent seats use the OFFICIAL names (`settings.section`
-    // from dsh-client-ui-settings, `shell.overlay` from
-    // dsh-client-ui-layout) — the amiba.* array must not shadow them.
+    // from dsh-client-ui-settings, `shell.overlay` from dsh-client-ui-layout,
+    // `conversation.session.header.utilities` and `conversation.input.model`
+    // from dsh-client-ui-conversation) — the amiba.* array must not shadow
+    // them, and the retired vendor header seat must stay gone.
+    expect(AMIBA_ROOT_SLOTS).not.toContain("amiba.chat.header.after");
     for (const slot of AMIBA_ROOT_SLOTS) {
       expect(slot).toMatch(/^amiba\./u);
     }

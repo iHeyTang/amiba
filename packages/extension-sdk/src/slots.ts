@@ -3,13 +3,16 @@
  *
  * Vocabulary policy: a seat with an official DSH equivalent uses the
  * OFFICIAL name and inherits the official contract — `shell.overlay` from
- * `@deepseek-ai/dsh-client-ui-layout` and the `settings.*` family (most
- * importantly `settings.section`) from `@deepseek-ai/dsh-client-ui-settings`.
- * `amiba.*` names are reserved for vendor extensions that have no official
- * counterpart. The array below therefore lists ONLY the amiba.* vendor
- * slots; the official names reach consumers through the official packages'
- * SlotMap merges, wired up by this module (see the import below and the
- * mirrored `shell.overlay` declaration).
+ * `@deepseek-ai/dsh-client-ui-layout`, the `settings.*` family (most
+ * importantly `settings.section`) from `@deepseek-ai/dsh-client-ui-settings`,
+ * and the `conversation.*` family (Phase 2 adopts
+ * `conversation.session.header.utilities` and `conversation.input.model`)
+ * from `@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are
+ * reserved for vendor extensions that have no official counterpart. The
+ * array below therefore lists ONLY the amiba.* vendor slots; the official
+ * names reach consumers through the official packages' SlotMap merges,
+ * wired up by this module (see the imports below and the mirrored
+ * `shell.overlay` declaration).
  *
  * All amiba.* names are declared by the ui-shell root's children table
  * except `amiba.agentPreset.section`, whose runtime declaration lives on
@@ -18,12 +21,28 @@
  * authoring vocabulary has one home.
  */
 
+import type { OwnerOf } from "@deepseek-ai/dsh-client-ui-slots";
+
 // Type home for the official settings vocabulary: importing the
 // dsh-client-ui-settings client entry merges `settings.section` (and the
 // rest of the settings.* family) into SlotMap for every consumer of this
 // SDK — plugins need no devDependency of their own. The named re-export
 // below keeps that inclusion alive in the built declaration output too.
 import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
+// Type home for the official conversation vocabulary: the same inheritance
+// pattern brings the ~20 conversation.* SlotMap keys (and the
+// ui-conversation SessionStandardProps members) into every SDK consumer.
+// Amiba's runtime declares only the two adopted keys on the ui-shell root;
+// a registration into any other type-visible conversation.* key simply
+// waits in ctx.slots.inject with no render site — authoring implication,
+// not a hazard. CAVEAT (recorded Phase-2 deferral): the merge also makes
+// `useInput`/`inputActions` type-visible on every session-scope component,
+// but amiba runs no ui-conversation runtime and registers no
+// sessions.provide bundle for them, so they are `undefined` at runtime
+// until a later phase provides an input machine. The framework members
+// (`sessionId`/`useSession`/`useProjection`) ARE live — dsh-client-runtime
+// itself binds those once a session is current.
+import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 /**
  * Official owner contract of `settings.section`
@@ -33,12 +52,39 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
  */
 export type { SettingsSectionOwnerProps } from "@deepseek-ai/dsh-client-ui-settings/client";
 
+/**
+ * Merge anchor for the official conversation vocabulary: import-type-only
+ * inclusions are elided at declaration emit (the settings.section lesson),
+ * so a named re-export must keep `@deepseek-ai/dsh-client-ui-conversation/client`
+ * on the built declaration graph. The package does not export its owner
+ * interfaces, so the anchor is the header entry's injected face and the two
+ * owner contracts are re-derived below via {@link OwnerOf}.
+ */
+export type { ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
+
+/**
+ * Official owner contract of `conversation.session.header.utilities`
+ * (empty by design: a utility derives everything from the framework session
+ * kit and its own inject face — an empty owner share means self-sufficient,
+ * not starved).
+ */
+export type ConversationHeaderUtilitiesOwnerProps = OwnerOf<"conversation.session.header.utilities">;
+
+/**
+ * Official owner contract of `conversation.input.model`
+ * (`{ locked: boolean }` — the composer bar's chrome disable state; the
+ * occupant owns everything else).
+ */
+export type ConversationInputModelOwnerProps = OwnerOf<"conversation.input.model">;
+
 export const AMIBA_ROOT_SLOTS = [
   "amiba.navigation.before",
   "amiba.navigation.after",
   "amiba.workspace.navigation",
   "amiba.workspace.view",
-  "amiba.chat.header.after",
+  // amiba.chat.header.after is RETIRED: the seat's official equivalent is
+  // `conversation.session.header.utilities` (list, session scope, empty
+  // owner), inherited from @deepseek-ai/dsh-client-ui-conversation above.
   "amiba.chat.content.overlay",
   "amiba.composer.modelPicker",
   "amiba.settings.content.overlay",
@@ -152,7 +198,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       scope: "root";
       owner: AmibaWorkspaceViewOwner;
     };
-    "amiba.chat.header.after": { kind: "list"; scope: "root" };
     "amiba.chat.content.overlay": { kind: "list"; scope: "root" };
     "amiba.composer.modelPicker": {
       kind: "list";

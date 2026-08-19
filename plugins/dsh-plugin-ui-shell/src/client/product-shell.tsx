@@ -55,9 +55,11 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
- * vocabulary plus the two official names the root declares
- * (`settings.section`, `shell.overlay`). Two names from the public
- * vocabulary are absent on purpose:
+ * vocabulary plus the official names the root declares
+ * (`settings.section`, `shell.overlay`,
+ * `conversation.session.header.utilities` — the session-header utilities
+ * strip that replaced the retired `amiba.chat.header.after`). Two names
+ * from the public vocabulary are absent on purpose:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
  *     dsh-plugin-agent-preset as a child of its own settings section;
  *   - `amiba.composer.modelPicker` is dispatched through the composer's
@@ -66,7 +68,8 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
-  | "shell.overlay";
+  | "shell.overlay"
+  | "conversation.session.header.utilities";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
@@ -473,7 +476,11 @@ function ProductShellInner({
           navigationAfter: renderSlot("amiba.navigation.after", {}),
           workspaceView: (viewId, owner) =>
             renderSlot("amiba.workspace.view", owner, { only: viewId }),
-          headerAfter: renderSlot("amiba.chat.header.after", {}),
+          // Official session-scoped seat: the renderer resolves the session
+          // from the official ctx.sessions current (kept in step by the R1
+          // bridge) and renders null while none is current, so the strip is
+          // empty on the home view and on a not-yet-materialized draft.
+          headerAfter: renderSlot("conversation.session.header.utilities", {}),
           contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />

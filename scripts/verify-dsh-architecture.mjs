@@ -300,17 +300,20 @@ if (
 // amiba.agentPreset.section is intentionally absent from this list: its
 // runtime declaration moved to dsh-plugin-agent-preset (a child of that
 // plugin's settings-section entry), asserted in the agent-preset block below.
-// `settings.section` and `shell.overlay` are OFFICIAL vocabulary names
-// (declared by @deepseek-ai/dsh-client-ui-settings and -ui-layout; types
-// inherited through @amiba/extension-sdk) — the root children table must
-// declare them under these official names. The former vendor trio
-// amiba.settings.navigation.before/assistant/after is retired outright.
+// `settings.section`, `shell.overlay`, and the two conversation.* seats are
+// OFFICIAL vocabulary names (declared by @deepseek-ai/dsh-client-ui-settings,
+// -ui-layout, and -ui-conversation; types inherited through
+// @amiba/extension-sdk) — the root children table must declare them under
+// these official names. The former vendor trio
+// amiba.settings.navigation.before/assistant/after is retired outright, and
+// amiba.chat.header.after retired in favour of
+// conversation.session.header.utilities.
 for (const slot of [
   "amiba.navigation.before",
   "amiba.navigation.after",
   "amiba.workspace.navigation",
   "amiba.workspace.view",
-  "amiba.chat.header.after",
+  "conversation.session.header.utilities",
   "amiba.chat.content.overlay",
   "amiba.composer.modelPicker",
   "settings.section",
@@ -327,6 +330,7 @@ for (const retired of [
   "amiba.settings.navigation.after",
   "amiba.settings.section",
   "amiba.shell.overlay",
+  "amiba.chat.header.after",
 ]) {
   if (uiShellClient.includes(`\"${retired}\"`)) {
     fail(`UI shell still declares retired slot name ${retired}`);
@@ -374,6 +378,7 @@ for (const dispatch of [
   /renderSlot\(\s*"settings\.section",\s*\{ close:[\s\S]{0,200}?\{ only: sectionId \}/u,
   /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
   /renderSlot\(\s*"shell\.overlay"/u,
+  /renderSlot\(\s*"conversation\.session\.header\.utilities",\s*\{\}\s*\)/u,
   /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*owner\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
@@ -934,7 +939,7 @@ if (
     "@amiba/dsh-plugin-ui-shell",
   ) ||
   !extensionTemplateClient.includes(
-    'ctx.slots.inject("amiba.chat.header.after"',
+    'ctx.slots.inject("conversation.session.header.utilities"',
   ) ||
   !extensionTemplateClient.includes("ctx.slots.register(") ||
   extensionTemplatePackage.scripts?.dev !== "amiba plugin dev" ||
