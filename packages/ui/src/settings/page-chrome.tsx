@@ -23,7 +23,26 @@ interface SettingsPageChromeValue {
   setOverride: (o: SettingsHeaderOverride | null) => void;
 }
 
-const ChromeContext = createContext<SettingsPageChromeValue | null>(null);
+/**
+ * The chrome context must be realm-shared, not module-scoped: every DSH
+ * client plugin inlines its own copy of `@amiba/ui`, so a plain module-level
+ * `createContext` would mint one context object per bundle — the scaffold
+ * (ui-shell's copy) provides on one instance while a plugin's
+ * `SettingsPageActions` reads another, and the header actions silently never
+ * render. React itself IS shared (an externalized platform module), so
+ * stashing the one context object in the realm-wide symbol registry — the
+ * same pattern `@amiba/app-runtime/platform` uses for the platform adapter —
+ * makes every copy resolve the same instance.
+ */
+const CHROME_CONTEXT_KEY = Symbol.for("@amiba/ui/settings-page-chrome");
+type ChromeContextRegistry = {
+  [CHROME_CONTEXT_KEY]?: ReturnType<
+    typeof createContext<SettingsPageChromeValue | null>
+  >;
+};
+const registry = globalThis as ChromeContextRegistry;
+const ChromeContext = (registry[CHROME_CONTEXT_KEY] ??=
+  createContext<SettingsPageChromeValue | null>(null));
 
 /** Rendered once per page by SettingsPageScaffold — pages never mount this. */
 export function SettingsPageChromeProvider({
