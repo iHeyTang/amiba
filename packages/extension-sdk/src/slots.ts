@@ -86,6 +86,8 @@ export const AMIBA_ROOT_SLOTS = [
   // `conversation.session.header.utilities` (list, session scope, empty
   // owner), inherited from @deepseek-ai/dsh-client-ui-conversation above.
   "amiba.chat.content.overlay",
+  // The session-less hero model seat; its session-scoped counterpart is the
+  // official `conversation.input.model` (see AmibaComposerModelPickerOwner).
   "amiba.composer.modelPicker",
   "amiba.settings.content.overlay",
   "amiba.agentPreset.section",
@@ -130,50 +132,33 @@ export interface AmibaComposerModelSelection {
 }
 
 /**
- * Host-wired pass-through of the engine-native agent-models surface
- * (`getPlatform().agentModels` on the host side). The composer hands this to
- * the slot contribution so the plugin never touches the platform contract
- * itself. `directory` resolves `null` while the session has no materialized
- * engine directory (blank/draft composers).
+ * Owner props of `amiba.composer.modelPicker` — the SESSION-LESS hero model
+ * seat (root scope, list), the vendor counterpart of the official
+ * `conversation.input.model` seat. The split: while the composer has a
+ * session id, it dispatches the official session-scoped seat (owner
+ * `{ locked }` only — engine data reaches the occupant over the official
+ * wire faces, `session.models` / `session.selectModel` via
+ * `ctx.get("connection").api`); while drafting (home composer, no session)
+ * it dispatches THIS seat, whose owner carries the surface-held draft
+ * selection. Architecturally consistent with the official package's own
+ * root-scoped `conversation.hero.*` seats.
  *
- * Owner-prop contract: owner props are passed at every renderSlot dispatch,
- * so contributions always see the current render's values — the old
- * marker-scan snapshot rule (identity-stable functions only) no longer
- * binds. Function props may close over current state; hosts still memoize
- * long-lived surfaces like this one so effect dependencies stay quiet.
- */
-export interface AmibaComposerAgentModels {
-  directory(sessionId: string): Promise<{
-    current: AmibaComposerModelSelection;
-    routable: boolean;
-  } | null>;
-  select(
-    sessionId: string,
-    selection: AmibaComposerModelSelection,
-  ): Promise<{ selected: AmibaComposerModelSelection }>;
-}
-
-/**
- * Owner props of `amiba.composer.modelPicker` — the chat composer's model
- * picker hole. Mechanism-clean by design: engine-native selection shapes and
- * host chrome only, no model-plane catalog types (contributions bring their
- * own catalog source).
+ * Mechanism-clean by design: engine-native selection shapes and host chrome
+ * only, no model-plane catalog types (contributions bring their own catalog
+ * source). The former `agentModels` owner pass-through is retired — engine
+ * data is no longer an owner concern on either seat.
  *
  * Transport: the Composer computes these owner props and hands them to its
  * `modelPicker` render prop; the product shell backs that render prop with
- * the official `renderSlot("amiba.composer.modelPicker", owner)` dispatch.
- * Surfaces outside a DSH plugin runtime (Quick-Ask) pass no render prop and
- * the composer renders nothing where the chip would sit.
+ * the official renderSlot dispatch of whichever seat applies. Surfaces
+ * outside a DSH plugin runtime (Quick-Ask) pass no render prop and the
+ * composer renders nothing where the chip would sit.
  */
 export interface AmibaComposerModelPickerOwner {
-  /** Materialized DSH session behind the composer, or null while drafting. */
-  sessionId: string | null;
   /** Pre-session model choice held by the surface (blank composer). */
   draftSelection?: AmibaComposerModelSelection;
   /** Surface callback that stores a pre-session model choice. */
   onDraftSelectionChange?: (selection: AmibaComposerModelSelection) => void;
-  /** Engine-native surface, host-owned and passed through (never imported). */
-  agentModels: AmibaComposerAgentModels;
   disabled?: boolean;
   /** Height treatment for the picker dialog in constrained hosts. */
   dialogSize?: "default" | "tall";

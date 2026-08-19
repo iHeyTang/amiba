@@ -379,7 +379,10 @@ for (const dispatch of [
   /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
   /renderSlot\(\s*"shell\.overlay"/u,
   /renderSlot\(\s*"conversation\.session\.header\.utilities",\s*\{\}\s*\)/u,
-  /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*owner\s*\)/u,
+  // The composer model chip is seat-split: the official session seat while
+  // the composer has a session, the vendor hero seat while drafting.
+  /renderSlot\(\s*"conversation\.input\.model",\s*request\.owner\s*\)/u,
+  /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*request\.owner\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
@@ -395,17 +398,21 @@ if (
     "Settings children must use DSH list-slot ledger routing, not keyed dual registration",
   );
 }
-// Composer side of the picker contract: owner props are computed by the
-// Composer and handed to the host's render prop; the marker component is
-// gone for good.
+// Composer side of the picker contract: the Composer computes one seat
+// request per render (official session seat vs vendor hero seat) and hands
+// it to the host's render prop; the marker component and the host-wired
+// agentModels engine pass-through are gone for good.
 const composerSource = await text("packages/ui/src/chat/Composer.tsx");
 if (
-  !composerSource.includes("modelPicker.render({") ||
+  !composerSource.includes('seat: "session"') ||
+  !composerSource.includes('seat: "hero"') ||
+  !composerSource.includes("owner: { locked: disabled }") ||
+  composerSource.includes("agentModels") ||
   composerSource.includes("data-amiba-dsh-slot") ||
   composerSource.includes("ComposerModelPickerSlot")
 ) {
   fail(
-    "Composer must render the model picker through its render prop, not a DOM slot marker",
+    "Composer must dispatch the seat-split model-picker render prop (official conversation.input.model vs vendor hero seat), with no marker or engine pass-through",
   );
 }
 if (await exists("packages/ui/src/chat/ComposerModelPickerSlot.tsx")) {
@@ -976,6 +983,44 @@ for (const file of await sourceFiles("plugins/dsh-plugin-model-plane/src/plane")
   ) {
     fail(
       `canonical Model Plane depends on DSH in ${path.relative(root, file)}`,
+    );
+  }
+}
+// Model-plane client picker contract (R5): the plugin occupies BOTH model
+// seats — the official session-scoped conversation.input.model (sessionId
+// from the standard kit, locked from the owner, engine data over the
+// official session.models/session.selectModel wire via ctx.get("connection"))
+// and the vendor session-less hero seat (draft plumbing on the owner). The
+// former owner-props agentModels pass-through must stay gone.
+const modelPlaneClient = await text(
+  "plugins/dsh-plugin-model-plane/src/client/index.tsx",
+);
+const modelPlanePicker = await text(
+  "plugins/dsh-plugin-model-plane/src/client/DshComposerModelPicker.tsx",
+);
+if (!/slots\.inject\(\s*"conversation\.input\.model"/u.test(modelPlaneClient)) {
+  fail("model-plane client must occupy the official conversation.input.model seat");
+}
+if (!/slots\.inject\(\s*"amiba\.composer\.modelPicker"/u.test(modelPlaneClient)) {
+  fail("model-plane client must keep the vendor session-less hero seat");
+}
+if (!modelPlaneClient.includes('ctx.get("connection")')) {
+  fail(
+    "model-plane client must reach engine data over the official connection wire",
+  );
+}
+if (
+  !modelPlanePicker.includes("wire.models({ sessionId })") ||
+  !modelPlanePicker.includes("wire.selectModel({")
+) {
+  fail(
+    "model-plane picker must use the official session.models/session.selectModel wire faces",
+  );
+}
+for (const body of [modelPlaneClient, modelPlanePicker]) {
+  if (body.includes("agentModels")) {
+    fail(
+      "model-plane client must not resurrect the owner-props agentModels pass-through",
     );
   }
 }

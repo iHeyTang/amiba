@@ -1,14 +1,17 @@
+import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { PageContent, ScrollArea } from "@amiba/ui/plugin";
 import { Bot } from "lucide-react";
-import { type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { AMIBA_MODEL_PLANE_REMOTE } from "../remote.js";
 import {
   DshComposerModelPicker,
+  makeSessionModelEngine,
   type ComposerPickerCatalog,
+  type SessionModelWire,
 } from "./DshComposerModelPicker.js";
 import {
   ModelProviderConfigTab,
@@ -16,7 +19,7 @@ import {
 } from "./ModelProviderConfigTab.js";
 
 export const name = "amiba-model-plane-client";
-export const inject = ["slots", "remote"];
+export const inject = ["slots", "remote", "connection"];
 
 const SECTION_ID = "models";
 
@@ -26,8 +29,15 @@ type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ModelPlaneAdapter;
 };
 
-type ComposerPickerSlotProps = PropsRuntime<"amiba.composer.modelPicker"> & {
+/** The session-less hero seat: draft plumbing rides the owner share. */
+type DraftPickerSlotProps = PropsRuntime<"amiba.composer.modelPicker"> & {
   catalog: ComposerPickerCatalog;
+};
+
+/** The official seat: sessionId from the standard kit, locked from the owner. */
+type SessionPickerSlotProps = PropsRuntime<"conversation.input.model"> & {
+  catalog: ComposerPickerCatalog;
+  wire: SessionModelWire;
 };
 
 function remoteError(value: unknown): Error {
@@ -60,16 +70,16 @@ function ModelPlaneSettings({ adapter }: ModelPlaneSectionProps): ReactNode {
 }
 
 /**
- * `amiba.composer.modelPicker` contribution: the composer's model chip. The
- * catalog comes from the plugin's own typed Remote; the engine-native
- * `agentModels` surface arrives host-wired through the slot's owner props.
+ * `amiba.composer.modelPicker` contribution: the session-less hero model
+ * chip (home/draft composer). The catalog comes from the plugin's own typed
+ * Remote; the surface-held draft selection and picker chrome ride the owner
+ * share. No engine — there is no session to talk to yet.
  */
-function ComposerModelPickerContribution(
-  props: ComposerPickerSlotProps,
+function DraftModelPickerContribution(
+  props: DraftPickerSlotProps,
 ): ReactNode {
   return (
     <DshComposerModelPicker
-      agentModels={props.agentModels}
       catalog={props.catalog}
       dialogSize={props.dialogSize}
       disabled={props.disabled}
@@ -77,15 +87,45 @@ function ComposerModelPickerContribution(
       onDraftSelectionChange={props.onDraftSelectionChange}
       overlayVariant={props.overlayVariant}
       refreshKey={props.refreshKey}
-      sessionId={props.sessionId}
+    />
+  );
+}
+
+/**
+ * `conversation.input.model` contribution: the official session model seat.
+ * `sessionId` arrives from the framework session kit, `locked` from the
+ * owner share, and engine data over the official wire
+ * (`session.models` / `session.selectModel`) — the same calls the official
+ * ui-model-selection plugin makes. Dialog chrome is self-managed (defaults):
+ * the constrained-host accommodations (dialogSize/overlayVariant/refreshKey)
+ * were Quick-Ask concerns, and Quick-Ask has no DSH runtime — no dispatch
+ * site of this seat passes them.
+ */
+function SessionModelPickerContribution(
+  props: SessionPickerSlotProps,
+): ReactNode {
+  const engine = useMemo(
+    () => makeSessionModelEngine(props.wire, props.sessionId),
+    [props.wire, props.sessionId],
+  );
+  return (
+    <DshComposerModelPicker
+      catalog={props.catalog}
+      disabled={props.locked}
+      engine={engine}
     />
   );
 }
 
 /** Publish the typed Model Plane Remote, the 模型与服务 ("Models & services")
- *  Settings section, and the composer picker contribution. */
+ *  Settings section, and the two composer picker contributions (official
+ *  session seat + vendor hero seat). */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_MODEL_PLANE_REMOTE);
+  // The official session wire faces, captured once from the connection
+  // service (the agent-preset plugin's ctx.get("connection").api precedent).
+  const wire: SessionModelWire = (ctx.get("connection") as ConnectionHandle)
+    .api.sessions;
   const sectionFiber = ctx.inject(
     ["slots", "remote.amibaModelPlane"],
     (injectedCtx) => {
@@ -128,17 +168,34 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       const catalog: ComposerPickerCatalog = {
         snapshot: () => valueOf(remote.snapshot()),
       };
-      return injectedCtx.slots.inject("amiba.composer.modelPicker", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.composer.modelPicker",
-            id: "model-plane",
-            order: 100,
-            inject: () => ({ catalog }),
-          },
-          ComposerModelPickerContribution,
-        ),
+      const disposeDraftSeat = injectedCtx.slots.inject(
+        "amiba.composer.modelPicker",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.composer.modelPicker",
+              id: "model-plane",
+              order: 100,
+              inject: () => ({ catalog }),
+            },
+            DraftModelPickerContribution,
+          ),
       );
+      const disposeSessionSeat = injectedCtx.slots.inject(
+        "conversation.input.model",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "conversation.input.model",
+              inject: () => ({ catalog, wire }),
+            },
+            SessionModelPickerContribution,
+          ),
+      );
+      return () => {
+        disposeSessionSeat();
+        disposeDraftSeat();
+      };
     },
   );
   await sectionFiber;

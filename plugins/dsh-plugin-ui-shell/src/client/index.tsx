@@ -43,14 +43,17 @@ if (
 
 export type {
   AmibaAgentPresetSectionOwner,
-  AmibaComposerAgentModels,
   AmibaComposerModelPickerOwner,
   AmibaComposerModelSelection,
   AmibaRootSlot,
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
-  // The official settings-section owner contract ({ close }), inherited
-  // from @deepseek-ai/dsh-client-ui-settings through the SDK.
+  // Official owner contracts inherited through the SDK: settings.section
+  // ({ close }) from dsh-client-ui-settings; the two conversation seats
+  // (header utilities: empty owner; input.model: { locked }) from
+  // dsh-client-ui-conversation.
+  ConversationHeaderUtilitiesOwnerProps,
+  ConversationInputModelOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
 
@@ -262,7 +265,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
             scope: "session",
           },
           "amiba.chat.content.overlay": { kind: "list", scope: "root" },
+          // The session-less hero model seat (vendor) and its official
+          // session-scoped counterpart: the composer dispatches
+          // conversation.input.model while it has a session id, the hero
+          // seat otherwise. Same root-declares-session-child shape as the
+          // header utilities above.
           "amiba.composer.modelPicker": { kind: "list", scope: "root" },
+          "conversation.input.model": { kind: "single", scope: "session" },
           // Official vocabulary: the settings-page ledger seat, inherited
           // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
           "settings.section": {

@@ -41,21 +41,40 @@ import { routeSubmit } from "./composer/command-routing";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
-import { getPlatform } from "@amiba/app-runtime/platform";
 import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 import type {
-  AmibaComposerAgentModels,
   AmibaComposerModelPickerOwner,
+  ConversationInputModelOwnerProps,
 } from "@amiba/extension-sdk";
 
 /**
- * Renders the composer's model-picker chip from the owner props Composer
+ * One model-picker dispatch request, computed by the Composer per render.
+ * Two seats back the same chip position:
+ *
+ *   - `seat: "session"` — the composer has a session id: the OFFICIAL
+ *     `conversation.input.model` seat (single, session scope, owner
+ *     `{ locked }`). The occupant reads `sessionId` from the framework
+ *     session kit and its engine data over the official wire; the seat
+ *     renders nothing until the official current session catches up with a
+ *     freshly minted draft (the shell's sessions bridge opens it once the
+ *     DSH session materializes).
+ *   - `seat: "hero"` — no session (home/draft composer): the vendor
+ *     `amiba.composer.modelPicker` hero seat, whose owner carries the
+ *     surface-held draft selection and picker chrome.
+ */
+export type ComposerModelPickerRequest =
+  | { seat: "session"; owner: ConversationInputModelOwnerProps }
+  | { seat: "hero"; owner: AmibaComposerModelPickerOwner };
+
+/**
+ * Renders the composer's model-picker chip from the seat request Composer
  * computes. The host builds this from the official DSH dispatch —
- * `(owner) => renderSlot("amiba.composer.modelPicker", owner)` — and threads
- * it down; Composer itself has ZERO model-plane knowledge.
+ * `renderSlot("conversation.input.model" | "amiba.composer.modelPicker",
+ * request.owner)` — and threads it down; Composer itself has ZERO
+ * model-plane knowledge.
  */
 export type ComposerModelPickerRenderer = (
-  owner: AmibaComposerModelPickerOwner,
+  request: ComposerModelPickerRequest,
 ) => ReactNode;
 
 /**
@@ -187,11 +206,13 @@ export interface ComposerProps {
   /**
    * Show a compact DSH inference-model selector beside the send controls.
    * The picker NODE comes from `render` — the host's renderSlot-backed
-   * dispatch of `amiba.composer.modelPicker`; Composer computes the owner
-   * props (engine-native `agentModels` pass-through, session id, picker
-   * chrome) and hands them over. Surfaces without a DSH plugin runtime
-   * (Quick-Ask) pass nothing and Composer renders nothing where the chip
-   * would sit.
+   * dispatch of the seat Composer picks per render: the official
+   * session-scoped `conversation.input.model` while `permissionSessionId`
+   * is set (owner `{ locked }` — engine data is the occupant's own wire
+   * concern), the vendor session-less `amiba.composer.modelPicker` hero
+   * seat otherwise (owner carries the surface-held draft selection and
+   * picker chrome). Surfaces without a DSH plugin runtime (Quick-Ask) pass
+   * nothing and Composer renders nothing where the chip would sit.
    */
   modelPicker?: {
     render: ComposerModelPickerRenderer;
@@ -380,25 +401,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ref,
   ) {
     const innerRef = useRef<RichComposerHandle>(null);
-
-    // Host-wired engine-native pass-through for the model-picker slot. The
-    // Composer IS the host here, so reaching for `getPlatform()` is allowed —
-    // but only lazily, inside the calls, so rendering never requires the
-    // platform and the object identity stays stable across renders.
-    const slotAgentModels = useMemo<AmibaComposerAgentModels>(
-      () => ({
-        directory: async (sessionId) => {
-          const models = getPlatform().agentModels;
-          return models ? models.directory(sessionId) : null;
-        },
-        select: async (sessionId, selection) => {
-          const models = getPlatform().agentModels;
-          if (!models) throw new Error("agentModels adapter unavailable");
-          return models.select(sessionId, selection);
-        },
-      }),
-      [],
-    );
 
     const effectiveMentionProviders = useMemo(
       () => mentionProviders ?? [],
@@ -782,16 +784,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {actionsLeft}
             </div>
             {modelPicker
-              ? modelPicker.render({
-                  sessionId: permissionSessionId ?? null,
-                  draftSelection: modelPicker.draftSelection,
-                  onDraftSelectionChange: modelPicker.onDraftSelectionChange,
-                  agentModels: slotAgentModels,
-                  disabled,
-                  dialogSize: pickerDialogSize,
-                  overlayVariant: pickerOverlayVariant,
-                  refreshKey: pickerRefreshKey,
-                })
+              ? permissionSessionId
+                ? modelPicker.render({
+                    seat: "session",
+                    owner: { locked: disabled },
+                  })
+                : modelPicker.render({
+                    seat: "hero",
+                    owner: {
+                      draftSelection: modelPicker.draftSelection,
+                      onDraftSelectionChange: modelPicker.onDraftSelectionChange,
+                      disabled,
+                      dialogSize: pickerDialogSize,
+                      overlayVariant: pickerOverlayVariant,
+                      refreshKey: pickerRefreshKey,
+                    },
+                  })
               : null}
             {sendButtonNode}
           </div>

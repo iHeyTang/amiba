@@ -18,6 +18,7 @@ import {
   SettingsView,
   makeWorkspaceFilesProvider,
   type ChatSurfaceCapabilities,
+  type ComposerModelPickerRequest,
   type PendingPromptAttachment,
   type PendingPromptResult,
 } from "@amiba/ui";
@@ -69,7 +70,8 @@ export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
   | "shell.overlay"
-  | "conversation.session.header.utilities";
+  | "conversation.session.header.utilities"
+  | "conversation.input.model";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
@@ -359,6 +361,18 @@ function ProductShellInner({
       window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
   }, [platform.storage]);
 
+  // The composer's model-picker chip, seat-split (R5): the official
+  // session-scoped conversation.input.model while the composer has a
+  // session (owner { locked } — the occupant reads engine data over the
+  // official wire), the vendor session-less hero seat while drafting.
+  const renderModelPickerSeat = useCallback(
+    (request: ComposerModelPickerRequest) =>
+      request.seat === "session"
+        ? renderSlot("conversation.input.model", request.owner)
+        : renderSlot("amiba.composer.modelPicker", request.owner),
+    [renderSlot],
+  );
+
   const openSession = useCallback(
     async (sessionId: string) => {
       const target = sessionId.trim();
@@ -463,13 +477,10 @@ function ProductShellInner({
               onOpenChat={() => {}}
               onOpenSettings={() => setView("settings")}
               panelMode
-              modelPicker={(owner) =>
-                renderSlot("amiba.composer.modelPicker", owner)
-              }
+              modelPicker={renderModelPickerSeat}
             />
           ),
-          modelPicker: (owner) =>
-            renderSlot("amiba.composer.modelPicker", owner),
+          modelPicker: renderModelPickerSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),

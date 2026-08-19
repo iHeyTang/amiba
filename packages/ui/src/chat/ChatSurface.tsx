@@ -248,10 +248,11 @@ export interface ChatSurfaceProps {
     emptyState?: ReactNode;
     /**
      * renderSlot-backed model-picker renderer, forwarded to the internal
-     * ``<Composer modelPicker>``. Hosts inside a DSH plugin runtime pass
-     * ``(owner) => renderSlot("amiba.composer.modelPicker", owner)``;
-     * hosts without one (Quick-Ask) omit it and the composer renders
-     * nothing where the chip would sit.
+     * ``<Composer modelPicker>``. Hosts inside a DSH plugin runtime back it
+     * with the seat-split official dispatch (`conversation.input.model`
+     * for session requests, the vendor `amiba.composer.modelPicker` hero
+     * seat for draft requests); hosts without one (Quick-Ask) omit it and
+     * the composer renders nothing where the chip would sit.
      */
     modelPicker?: ComposerModelPickerRenderer;
   };

@@ -39,6 +39,7 @@ export {
   type ComposerDensity,
   type ComposerHandle,
   type ComposerModelPickerRenderer,
+  type ComposerModelPickerRequest,
   type ComposerPickerOverlayVariant,
   type ComposerProps,
 } from "./Composer";
