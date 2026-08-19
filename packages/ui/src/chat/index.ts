@@ -84,6 +84,16 @@ export {
 } from "./bubble/chips";
 export { ToolChip, ToolProgressChips } from "./bubble/tool-chip";
 export {
+  ToolCallSeatProvider,
+  useToolCallSeat,
+  type ToolCallSeatRenderer,
+  type ToolCallSeatRequest,
+} from "./bubble/tool-call-seat";
+export {
+  toolCallBlockFromProgress,
+  toolCallBlockName,
+} from "./bubble/tool-call-block";
+export {
   ApprovalBanner,
   ApprovalCountdownBar,
   ApprovalRecordChip,

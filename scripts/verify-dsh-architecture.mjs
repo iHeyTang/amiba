@@ -419,8 +419,19 @@ for (const dispatch of [
     );
   }
 }
+// Keyed dispatch is legal for exactly ONE declaration here: the official
+// `tool.call.toolview`, whose key domain IS the wire tool name. Everything
+// else — Settings sections above all — must keep using the list-slot ledger,
+// so the exception is pinned BY NAME rather than the word being banned
+// outright, and a `kind: "keyed"` not attached to a named child declaration
+// still fails.
+const keyedChildDeclarations = [
+  ...uiShellClient.matchAll(/"([\w.-]+)":\s*\{\s*kind:\s*"keyed"/gu),
+].map((match) => match[1]);
 if (
-  uiShellClient.includes('kind: "keyed"') ||
+  keyedChildDeclarations.some((slot) => slot !== "tool.call.toolview") ||
+  (uiShellClient.match(/kind:\s*"keyed"/gu) ?? []).length !==
+    keyedChildDeclarations.length ||
   uiShellClient.includes("data-amiba-dsh-slot-key")
 ) {
   fail(

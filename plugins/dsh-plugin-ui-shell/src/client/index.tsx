@@ -294,6 +294,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // nothing until a plugin takes it, which is exactly the contract
           // ("unoccupied, the seat renders nothing at all").
           "conversation.input.plan": { kind: "single", scope: "session" },
+          // Official vocabulary: the KEYED per-tool call row, from
+          // @deepseek-ai/dsh-client-ui-tool (keyed, session scope, owner
+          // ToolCallOwnerProps). Registration key = the wire tool name, an
+          // OPEN domain, so this is the one seat whose occupants are not a
+          // fixed list. DECLARATION-ANCHOR divergence, recorded once here and
+          // in the SDK: upstream declares it from `conversation.chat.node`'s
+          // `tool-call` entry (the Chat Node that owns the whole call tree),
+          // which Amiba has no equivalent of — its conversation is its own
+          // projection. Declaring it on this root instead is legal and the
+          // same pattern the adopted conversation.* seats use; only the
+          // declaration site differs, never the key/kind/scope/owner.
+          "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Official vocabulary: the settings-page ledger seat, inherited
           // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
           "settings.section": {

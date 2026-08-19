@@ -44,6 +44,7 @@ import type {
   ComposerModelPickerRenderer,
   ComposerPlanSeatRenderer,
 } from "./Composer";
+import type { ToolCallSeatRenderer } from "./bubble/tool-call-seat";
 import {
   WorkspacePane,
   WorkspacePaneProvider,
@@ -170,6 +171,13 @@ export interface FullScreenChatViewProps {
      * seat, forwarded through ChatSurface to the internal Composer.
      */
     planSeat?: ComposerPlanSeatRenderer;
+    /**
+     * renderSlot-backed dispatch of the official keyed `tool.call.toolview`
+     * seat, forwarded through ChatSurface to every tool row in the
+     * conversation. Omit it (Quick-Ask, any host outside a DSH plugin
+     * runtime) and every row renders Amiba's own tool chip.
+     */
+    toolView?: ToolCallSeatRenderer;
   };
   /**
    * TabBar gear / settings row → open Settings. The optional ``tab``

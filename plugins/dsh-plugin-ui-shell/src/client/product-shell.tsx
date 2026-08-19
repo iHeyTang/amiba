@@ -24,6 +24,7 @@ import {
   type ComposerModelPickerRequest,
   type PendingPromptAttachment,
   type PendingPromptResult,
+  type ToolCallSeatRequest,
 } from "@amiba/ui";
 import { NavigationRow } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
@@ -72,6 +73,10 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
  *     dsh-plugin-agent-preset as a child of its own settings section;
  *   - `amiba.composer.modelPicker` is dispatched through the composer's
  *     `modelPicker` render prop rather than by the shell markup directly.
+ *
+ * `tool.call.toolview` is the one KEYED member: it rides the chat surface's
+ * `toolView` render prop, dispatched once per tool row with the row's wire
+ * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
@@ -80,7 +85,8 @@ export type AmibaShellSlot =
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
   | "conversation.input.model"
-  | "conversation.input.plan";
+  | "conversation.input.plan"
+  | "tool.call.toolview";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
@@ -393,6 +399,21 @@ function ProductShellInner({
     [renderSlot],
   );
 
+  // The official KEYED tool-call row. Dispatched once per tool row with the
+  // row's WIRE TOOL NAME as `entryKey`, and with Amiba's own `ToolSpec`-driven
+  // chip as `fallback` — so an unclaimed name renders exactly what it always
+  // did and a registered name takes over that one row only. Both options are
+  // load-bearing: without `entryKey` nothing keyed can ever match, without
+  // `fallback` an unclaimed tool would render nothing at all.
+  const renderToolViewSeat = useCallback(
+    (request: ToolCallSeatRequest) =>
+      renderSlot("tool.call.toolview", request.owner, {
+        entryKey: request.owner.toolName,
+        fallback: request.fallback,
+      }),
+    [renderSlot],
+  );
+
   const openSession = useCallback(
     async (sessionId: string) => {
       const target = sessionId.trim();
@@ -505,6 +526,7 @@ function ProductShellInner({
           ),
           modelPicker: renderModelPickerSeat,
           planSeat: renderPlanSeat,
+          toolView: renderToolViewSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),
