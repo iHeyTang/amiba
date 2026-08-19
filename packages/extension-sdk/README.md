@@ -11,9 +11,10 @@ slot name and inherits the official contract — `settings.section` (owner
 `SettingsSectionOwnerProps { close }`, re-exported here) comes from
 `@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
 `@deepseek-ai/dsh-client-ui-layout`, the `conversation.*` family from
-`@deepseek-ai/dsh-client-ui-conversation`, and `tool.call.toolview` from
-`@deepseek-ai/dsh-client-ui-tool`. Five seats are adopted from those last two
-packages, with their owner contracts re-derived here:
+`@deepseek-ai/dsh-client-ui-conversation`, `tool.call.toolview` from
+`@deepseek-ai/dsh-client-ui-tool`, and `conversation.input.overlay` from
+`@deepseek-ai/dsh-client-ui-input-trigger`. Six seats are adopted from those
+three packages, with their owner contracts re-derived here:
 
 | seat | kind / scope | owner | render site |
 | --- | --- | --- | --- |
@@ -21,10 +22,41 @@ packages, with their owner contracts re-derived here:
 | `conversation.session.header.actions` | list / session | `ConversationHeaderActionsOwnerProps` (empty) | title-adjacent action row in the chat header |
 | `conversation.input.model` | single / session | `ConversationInputModelOwnerProps` (`{ locked }`) | composer tool row, left of the send button |
 | `conversation.input.plan` | single / session | `ConversationInputPlanOwnerProps` (`{ locked }`) | composer tool row, immediately right of the access-mode control |
+| `conversation.input.overlay` | list / session | `ConversationInputOverlayOwnerProps` (empty) | floating layer anchored to the composer card (`[data-composer-card]`) |
 | `tool.call.toolview` | **keyed** / session | `ToolCallToolviewOwnerProps` (= the official `ToolCallOwnerProps`) | one tool call row inside a turn, dispatched by the wire tool name |
 
-Both header seats and both composer seats render NOTHING while unoccupied —
-no placeholder, no reserved space, no flex gap. `tool.call.toolview` is
+`conversation.input.overlay` is where a `/`-command popup or an `@`-reference
+menu goes. Its owner share is empty *by declaration* — the official SlotMap
+entry has no `owner` key — so an occupant reads its own store and renders
+`null` while closed; the host dispatches `{}` and nothing else would be
+honest. Two facts about the anchor are contract rather than styling: the seat
+renders inside the element carrying `data-composer-card` (which also contains
+the editor), and occupants position themselves against that box, typically
+`position: absolute; bottom: calc(100% + 4px); left: 0`, and call
+`closest("[data-composer-card]")` on themselves to tell a pointerdown inside
+the composer apart from one outside it.
+
+```tsx
+ctx.slots.inject("conversation.input.overlay", () =>
+  ctx.slots.register(
+    { name: "conversation.input.overlay", id: "my-popup", order: 2 },
+    // props: the (empty) owner share + the session standard kit
+    ({ sessionId }) => <MyPopup sessionId={sessionId} />,
+  ),
+)
+```
+
+Amiba composes NO `inputTriggers` service today (the official
+`ui-input-trigger` row stays disabled — see
+`docs/2026-08-15-dsh-native-architecture.md` for why), so `ctx.inputTriggers`
+and `ctx.commandUi` are type-visible and `undefined` at runtime, and
+`InputTriggerSource` / `PickOutcome` (re-exported here for authors) have no
+pipeline to join yet. The overlay SEAT itself is live: an occupant that brings
+its own store renders today.
+
+Both header seats and both composer control seats render NOTHING while
+unoccupied — no placeholder, no reserved space, no flex gap; so does an
+unoccupied `conversation.input.overlay`. `tool.call.toolview` is
 different in kind: it is KEYED and never empty. Register `key: "<wire tool
 name>"` to own how that one tool's calls render; every name no plugin claimed
 keeps Amiba's own tool chip, which the host passes as the dispatch

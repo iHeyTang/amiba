@@ -78,8 +78,9 @@ Electron WebView，也没有 preload 特权。
 `@deepseek-ai/dsh-client-ui-conversation`（session scope 的官方 seat 依赖
 ui-shell 的 sessions bridge 把官方 `ctx.sessions` 选中态与 Amiba 自己的
 activeId 保持同步），`tool.call.toolview` 来自
-`@deepseek-ai/dsh-client-ui-tool`；`amiba.*` 前缀只用于没有官方对应位的 vendor
-扩展。
+`@deepseek-ai/dsh-client-ui-tool`，`conversation.input.overlay` 来自
+`@deepseek-ai/dsh-client-ui-input-trigger`；`amiba.*` 前缀只用于没有官方对应位的
+vendor 扩展。
 root 声明：
 
 - `amiba.navigation.before`
@@ -99,6 +100,19 @@ root 声明：
 - `conversation.input.plan`（官方名，single，session scope，owner
   `{ locked }`；位于 composer tool row 中 access-mode 控件的紧右侧，与官方契约
   一致。Amiba 目前没有占位者——官方 ui-plan 未启用——空 seat 不渲染任何东西）
+- `conversation.input.overlay`（官方名，来自
+  `@deepseek-ai/dsh-client-ui-input-trigger`，list，session scope，**owner 为
+  空**）。composer 的浮层锚点：官方那边 `/` 命令弹窗与 `@` 候选菜单都渲染在
+  这里。owner 为空是"声明本身就是空"而不是 Amiba 少给了东西 —— 官方 SlotMap
+  条目没有 `owner` 字段，占位者读自己的 store、关闭时渲染 `null`，所以
+  `renderSlot("conversation.input.overlay", {})` 是唯一忠实的派发（与上游
+  ui-conversation composer entry 的派发逐字一致）。
+  渲染点：`@amiba/ui` 的 Composer 卡片内，作为 `[data-composer-card]` 这个
+  frame 的最后一个子节点，**裸派发、不包 wrapper**。锚点的两半都是契约不是装饰
+  —— 占位者用 `position: absolute; bottom: calc(100% + 4px)` 相对这张卡片定位，
+  并对自己调用 `closest("[data-composer-card]")` 来区分"点在 composer 里"和
+  "点在外面"（后者才关闭浮层）；wrapper 会抢走定位祖先的角色，也会让空 seat 占
+  box。Quick-Ask 等没有插件运行时的界面不传 renderer，逐字节不变
 - `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
   face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
 - `amiba.settings.content.overlay`
@@ -187,6 +201,60 @@ Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方
   的卡点在渲染位：Amiba 把一个 turn 的所有 `assistant/message` 折成一个气泡，N 个
   模型步就有 N 个 MessageId 却只有一条操作行，任选其一都是武断。采纳前提是按消息
   拆气泡，与协议无关。
+
+### 4.1 `conversation.input.overlay` 的席位采纳，与 inputTriggers / commandUi 的暂缓
+
+Phase-4.3 采纳了 `conversation.input.overlay` 这个**席位**（声明 + 派发，见上），
+但**没有**启用两个官方行 `ui-input-trigger`（`ctx.inputTriggers`）与 `ui-commands`
+（`ctx.commandUi`）。原因是审计出的三条硬事实，记录在这里以免下次重新踩：
+
+1. **`ui-commands` 强依赖 `inputTriggers`。** 它的 `inject` 列表首项就是
+   `"inputTriggers"`，`CommandUiRuntime` 构造函数里 `ctx.get("inputTriggers")`
+   为空时直接抛 `ui-commands: slash service unavailable`，随后用
+   `registerSource({ trigger: "/", name: "command", … })` 把自己挂进触发管线。
+   所以两行必须一起上，而且必须先有 driver：没有 driver 时
+   `commandUi.register` 会成功却永远不被查询 —— 这正是"沉默的谎言"，比缺席更糟。
+2. **官方 driver 的所有权是全有或全无。** `InputTriggerServiceContract` 只暴露
+   `registerSource` 与 `sessionOf`，source roster 是 controller 私有的；要让
+   插件注册的 source 出现在任何菜单里，宿主就必须调
+   `controller.track(draft, caret, guard, draftRev)` 并渲染
+   `controller.menu`，同时在会话 scope 上注册四个 `@mode bail` 输入事件
+   （`slash/input-begin-command` / `-insert-reference` / `-consume-token` /
+   `-insert-text`），每个监听器**只有编辑器真的改了**才返回 `true`。做一半的
+   driver 等于一半的谎言。
+3. **两个官方占位者在 Amiba 里没有样式。** `ui-input-trigger` 的 `MenuView` 与
+   `ui-commands` 的 `PopupSelectView` 都用 CSS module，其规则整篇写在
+   `--dsw-*` 设计令牌层之上（`--dsw-specific-menu`、`--dsw-alias-border-inverted`、
+   `--dsw-shadow-lv3`…）。全仓库源码里 `--dsw-` 出现 0 次；定义这批令牌的只有
+   `@deepseek-ai/dsh-client-ui-theme`（Amiba 明确不装，smoke 里有断言：它的
+   host 半边会往 served index 写一套跟 Amiba 自己调色板打架的开机配色）和官方
+   `dsh-web-frontend` 的产物（Amiba 不用它的 index）。直接启用，这两个浮层会
+   渲染成透明无边框的框。
+
+由此得到的 menu owner 结论：**Amiba 自己的 `TriggerMenu` 必须继续是 `/` 与 `@`
+的菜单**，官方 `MenuView` 不能同时渲染。而 list slot 的派发没有"排除某个
+registrant"的选项（`RenderOpts` 只有 `only`），所以"声明并派发 overlay 席位 +
+启用 ui-input-trigger"必然让 MenuView 也渲染出来 —— 两个 owner。
+
+下次做的前置条件（按顺序）：
+
+- **同 `id` 低 `priority` 遮蔽**是官方认可的机制：list 的 cell 就是 `id`，
+  同一 cell 内按 priority 升序取第一个存活 entry（同 priority 才 fail-loud）。
+  Amiba 用 `id: "slash-menu"` + `priority: -1` 注册自己的 `TriggerMenu`，就能
+  在官方机制内让唯一一个 owner 胜出，而不是靠屏蔽别人。
+- `ui-commands` 的 `PopupSelectView` 没有同等替身（搜索框、确认闸门、错误重试
+  都在里面），要它可用就得补一层 `--dsw-*` → Amiba 调色板的令牌桥（这两个组件
+  用到的是一个封闭集合，约 14 个别名），或者自建 popup。
+- driver 侧还欠：Lexical 的 draft/caret/draftRev/guard 推导、span↔Lexical 的
+  双向映射、四个 bail 监听器的"真的改了才 true"、命令模式的 token 完整性监视与
+  Enter 经 `claim.submit` 的路由，以及 `PickOutcome.insert` 与 Amiba
+  MentionNode/`serialize.ts` 的 codec 往返对齐。
+- 会话尚未物化的草稿（Amiba 先本地建会话、首次提交才物化 DSH 会话）没有官方
+  session scope，session scope 的 overlay 席位渲染为空；那种状态下菜单只能由
+  Amiba 自己出，这一点不随上面任何一条改变。
+
+同批仍未启用、且现在服务已存在的候选：`session-log-download`、`ui-skill`、
+`ui-subagent`、`ui-cordis`。
 
 曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
 before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染

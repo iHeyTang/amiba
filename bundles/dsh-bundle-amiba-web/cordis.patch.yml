@@ -57,6 +57,32 @@
 - id: ui-workspace
   disabled: true
 
+# These two rows stay disabled TOGETHER and for one reason, audited in
+# Phase 4.3 (full record: docs/2026-08-15-dsh-native-architecture.md §4.1).
+# The SEAT they render into — `conversation.input.overlay` — IS declared and
+# dispatched by amiba-ui-shell; what is missing is an honest driver.
+#   - `ui-commands` cannot run without `ui-input-trigger`: `inputTriggers` is
+#     the first entry of its `inject` list, its service constructor throws
+#     `ui-commands: slash service unavailable` when the service is absent, and
+#     it publishes its `/command` rows through `registerSource`.
+#   - `ui-input-trigger` only tells the truth if the HOST owns the driver: the
+#     service face exposes `registerSource`/`sessionOf` alone, so a registered
+#     source is consulted only once the host drives
+#     `controller.track/arbitrate/onSpace/adjudicate` AND answers the four
+#     scoped `@mode bail` input events (begin-command / insert-reference /
+#     consume-token / insert-text) with `true` ONLY when its editor actually
+#     mutated. Amiba's composer is Lexical, not the official input machine, so
+#     that driver is real work — and half of it would make `registerSource`
+#     succeed while never being consulted, a silent lie to plugin authors.
+#   - Both packages' overlay components (`MenuView`, `PopupSelectView`) are
+#     styled from CSS modules written against the `--dsw-*` token layer, which
+#     ONLY `dsh-client-ui-theme` defines — the one row Amiba must keep out (its
+#     host half writes a boot palette that fights Amiba's own). Enabled as-is
+#     they would paint transparent, border-less boxes. A list dispatch has no
+#     "exclude this registrant" option (`RenderOpts` carries `only`, not its
+#     inverse), so enabling ui-input-trigger while Amiba's own `TriggerMenu`
+#     still renders would put TWO menus on screen; the sanctioned way out is a
+#     same-`id`, lower-`priority` shadow of `slash-menu`.
 - id: ui-input-trigger
   disabled: true
 
