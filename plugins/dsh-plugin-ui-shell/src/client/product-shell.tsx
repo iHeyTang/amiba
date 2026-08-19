@@ -9,6 +9,8 @@ import {
 } from "@amiba/app-runtime/platform";
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type { AmibaRootSlot } from "@amiba/extension-sdk";
+
+import type { AmibaSessionsBridge } from "./sessions-bridge.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -254,11 +256,13 @@ export function AmibaProductShell({
   dshClient,
   openSettingsSection,
   renderSlot,
+  sessionsBridge,
   settingsSections,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
+  sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
   return (
@@ -267,6 +271,7 @@ export function AmibaProductShell({
         dshClient={dshClient}
         openSettingsSection={openSettingsSection}
         renderSlot={renderSlot}
+        sessionsBridge={sessionsBridge}
         settingsSections={settingsSections}
       />
     </SessionsProvider>
@@ -277,11 +282,13 @@ function ProductShellInner({
   dshClient,
   openSettingsSection,
   renderSlot,
+  sessionsBridge,
   settingsSections,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
+  sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
   const { t } = useT();
@@ -381,6 +388,16 @@ function ProductShellInner({
     pendingOpenSessionRef.current = null;
     void openSession(target);
   }, [openSession, sessions.ready]);
+
+  // R1 amiba→official selection projection: every activeId transition
+  // (including the mount-time empty selection, which converges a restored
+  // official selection onto this window's per-window-empty design) is
+  // mirrored into the official ctx.sessions current — the session
+  // resolution the official conversation.* seats render under. The bridge
+  // handles the open-after-list race and echo suppression.
+  useEffect(() => {
+    sessionsBridge?.setActive(sessions.activeId);
+  }, [sessionsBridge, sessions.activeId]);
 
   if (view === "settings") {
     return (

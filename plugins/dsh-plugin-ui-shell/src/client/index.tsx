@@ -17,10 +17,14 @@ import {
   type AmibaShellSlot,
   type SettingsSectionsSource,
 } from "./product-shell.js";
+import {
+  createSessionsBridge,
+  type AmibaSessionsBridge,
+} from "./sessions-bridge.js";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
-export const inject = ["slots"];
+export const inject = ["slots", "sessions"];
 
 const PACKAGE_ID = "@amiba/dsh-plugin-ui-shell";
 const STYLE_ID = `${PACKAGE_ID}/product-shell.css`;
@@ -55,6 +59,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     dshClient: DshApiClient;
     settingsSections: SettingsSectionsSource;
     openSettingsSection: (sectionId: string) => void;
+    sessionsBridge: AmibaSessionsBridge;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -73,6 +78,7 @@ function AmibaRoot({
   dshClient,
   settingsSections,
   openSettingsSection,
+  sessionsBridge,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -85,6 +91,7 @@ function AmibaRoot({
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
+      sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
     />
   );
@@ -205,6 +212,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
+    // R1 selection bridge: keep the official ctx.sessions selection (the
+    // session resolution every official session-scoped slot renders under)
+    // in lock-step with Amiba's own per-window sessions store. The official
+    // side's external switches route through the existing Amiba
+    // open-session path.
+    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId) => {
+      window.dispatchEvent(
+        new CustomEvent("amiba:open-session", { detail: { sessionId } }),
+      );
+    });
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -218,6 +235,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           settingsSections: sectionsSource,
           openSettingsSection: (sectionId: string) =>
             layout.openSettings(sectionId),
+          sessionsBridge,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -255,6 +273,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     return () => {
       disposeRoot();
+      sessionsBridge.dispose();
       void disposeLayout();
     };
   }, "amiba-ui-shell: root and semantic child slots");
