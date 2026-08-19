@@ -1,23 +1,32 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import { DshPluginInventoryView } from "../DshPluginInventory";
+import {
+  SettingsPageChromeProvider,
+  useSettingsPageChrome,
+} from "../page-chrome";
+
+/** Reproduces the scaffold's head-actions host: the section renders in the
+ *  same tree as the scaffold, so SettingsPageActions resolves the host from
+ *  plain React context. */
+function ActionsHost() {
+  const { setActionsHost } = useSettingsPageChrome();
+  return <div data-testid="actions-host" ref={setActionsHost} />;
+}
+
+function Chrome({ children }: { children: ReactNode }) {
+  return (
+    <SettingsPageChromeProvider>
+      <ActionsHost />
+      {children}
+    </SettingsPageChromeProvider>
+  );
+}
 
 describe("DshPluginInventoryView", () => {
-  let headerActionsHostEl: HTMLDivElement;
-
-  beforeEach(() => {
-    headerActionsHostEl = document.createElement("div");
-    document.body.appendChild(headerActionsHostEl);
-  });
-
-  afterEach(() => {
-    headerActionsHostEl.remove();
-  });
-
-  const headerActionsHost = () => headerActionsHostEl;
-
   it("renders the actual DSH loader snapshot and filters by ownership", async () => {
     document.documentElement.lang = "zh-CN";
     const list = vi.fn().mockResolvedValue({
@@ -38,7 +47,9 @@ describe("DshPluginInventoryView", () => {
     });
 
     render(
-      <DshPluginInventoryView adapter={{ list }} headerActionsHost={headerActionsHost} />,
+      <Chrome>
+        <DshPluginInventoryView adapter={{ list }} />
+      </Chrome>,
     );
 
     expect(await screen.findByText("dsh-plugin-memory")).toBeInTheDocument();
@@ -110,12 +121,13 @@ describe("DshPluginInventoryView", () => {
   it("follows the document language contract after the DSH slot is mounted", async () => {
     document.documentElement.lang = "en";
     render(
-      <DshPluginInventoryView
-        adapter={{
-          list: vi.fn().mockResolvedValue({ entries: [] }),
-        }}
-        headerActionsHost={headerActionsHost}
-      />,
+      <Chrome>
+        <DshPluginInventoryView
+          adapter={{
+            list: vi.fn().mockResolvedValue({ entries: [] }),
+          }}
+        />
+      </Chrome>,
     );
 
     expect(

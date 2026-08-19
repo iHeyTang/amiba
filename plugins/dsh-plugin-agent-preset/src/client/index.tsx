@@ -1,7 +1,10 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import { resolveSlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
-import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type {
+  PropsRenderSlots,
+  PropsRuntime,
+} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { UserRound } from "lucide-react";
 import { type ReactNode } from "react";
@@ -32,24 +35,27 @@ function sectionLabel(): string {
     : "Agent presets";
 }
 
-type AgentPresetsSectionProps = PropsRuntime<"amiba.settings.section"> & {
-  adapter: AgentPresetsAdapter;
-  presetSections: SnapshotSource<readonly PresetSectionRow[]>;
-  refreshSignal: SnapshotSource<number>;
-};
+type AgentPresetsSectionProps = PropsRuntime<"amiba.settings.section"> &
+  PropsRenderSlots<"amiba.agentPreset.section"> & {
+    adapter: AgentPresetsAdapter;
+    presetSections: SnapshotSource<readonly PresetSectionRow[]>;
+    refreshSignal: SnapshotSource<number>;
+  };
 
 function AgentPresetsSettings({
   adapter,
-  headerActionsHost,
   presetSections,
   refreshSignal,
+  renderSlot,
 }: AgentPresetsSectionProps): ReactNode {
   return (
     <DshAgentPresetsPage
       adapter={adapter}
-      headerActionsHost={headerActionsHost}
       presetSections={presetSections}
       refreshSignal={refreshSignal}
+      renderPresetSection={(sectionId, owner) =>
+        renderSlot("amiba.agentPreset.section", owner, { only: sectionId })
+      }
     />
   );
 }
@@ -147,6 +153,13 @@ export function apply(ctx: ClientContext): void {
           // merged into this page.
           order: 5,
           label: sectionLabel,
+          // This plugin — not the ui-shell root — owns the preset-detail tab
+          // slot: other plugins (catalog/memory/skills) register into it and
+          // the detail page dispatches it with renderSlot, scoped per tab id
+          // (the amiba.tools.panel pattern).
+          children: {
+            "amiba.agentPreset.section": { kind: "list", scope: "root" },
+          },
           inject: () => ({
             adapter,
             presetSections,

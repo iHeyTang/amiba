@@ -47,14 +47,8 @@ type InventorySectionProps = PropsRuntime<"amiba.settings.section"> & {
 
 function RuntimeInventorySection({
   adapter,
-  headerActionsHost,
 }: InventorySectionProps): ReactNode {
-  return (
-    <DshPluginInventoryView
-      adapter={adapter}
-      headerActionsHost={headerActionsHost}
-    />
-  );
+  return <DshPluginInventoryView adapter={adapter} />;
 }
 
 export async function apply(ctx: ClientContext): Promise<void> {

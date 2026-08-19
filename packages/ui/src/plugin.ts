@@ -49,10 +49,16 @@ export {
   NavigationRow,
 } from "./navigation/NavigationRow";
 export { SidebarExpandControl } from "./navigation/SidebarExpandControl";
+// SettingsPageChromeProvider/useSettingsPageChrome are the scaffold-side
+// half of the actions contract. Plugins normally render only
+// SettingsPageActions (the SettingsView scaffold provides the context), but
+// plugin test suites mount them to reproduce the scaffold's head host.
 export {
   SettingsPageActionButton,
   SettingsPageActions,
+  SettingsPageChromeProvider,
   SettingsPageDescription,
+  useSettingsPageChrome,
 } from "./settings/page-chrome";
 export {
   MODEL_SETTINGS_SECTION_CLASS,

@@ -14,6 +14,7 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 
 import {
@@ -54,6 +55,16 @@ export interface PresetSectionRow {
   id: string;
   label: string;
 }
+
+/**
+ * Render one ledger tab's contribution, scoped to the preset it was opened
+ * under. The plugin's section entry backs this with the official
+ * `renderSlot("amiba.agentPreset.section", owner, { only: sectionId })`.
+ */
+export type RenderPresetSection = (
+  sectionId: string,
+  owner: { profileId: string },
+) => ReactNode;
 
 /** External-store contract for ledger rows and the roster refresh signal. */
 export interface SnapshotSource<T> {
@@ -109,7 +120,6 @@ function ProfileListRow({
 function AgentPresetList({
   defaultProfile,
   error,
-  headerActionsHost,
   loading,
   onCreate,
   onOpen,
@@ -122,7 +132,6 @@ function AgentPresetList({
    */
   defaultProfile: AgentPreset | null;
   error: string | null;
-  headerActionsHost?: () => HTMLElement | null;
   loading: boolean;
   onCreate: () => void;
   onOpen: (name: string) => void;
@@ -133,7 +142,7 @@ function AgentPresetList({
   const { t } = useT();
   return (
     <>
-      <SettingsPageActions host={headerActionsHost}>
+      <SettingsPageActions>
         <SettingsPageActionButton
           aria-label={t("common.refresh")}
           icon
@@ -216,7 +225,6 @@ function AgentPresetList({
 function AgentPresetDetail({
   adapter,
   error,
-  headerActionsHost,
   isActive,
   onActivate,
   onBack,
@@ -224,11 +232,11 @@ function AgentPresetDetail({
   onRename,
   presetSections,
   profile,
+  renderPresetSection,
   saving,
 }: {
   adapter: AgentPresetsAdapter;
   error: string | null;
-  headerActionsHost?: () => HTMLElement | null;
   isActive: boolean;
   onActivate: () => void;
   onBack: () => void;
@@ -236,6 +244,7 @@ function AgentPresetDetail({
   onRename: (newName: string) => void;
   presetSections: readonly PresetSectionRow[];
   profile: AgentPreset;
+  renderPresetSection?: RenderPresetSection;
   saving: boolean;
 }) {
   const { t } = useT();
@@ -276,7 +285,7 @@ function AgentPresetDetail({
 
   return (
     <>
-      <SettingsPageActions host={headerActionsHost}>
+      <SettingsPageActions>
         {isActive ? (
           <Badge className="rounded-full" variant="success">
             {t("options.agents.defaultShort")}
@@ -400,15 +409,11 @@ function AgentPresetDetail({
           sourceEditable={profile.trust !== "system" && !isActive}
         />
       ) : ledgerIds.has(section) ? (
-        /* Marker the ui-shell root scanner portals the owning plugin's
-           `amiba.agentPreset.section` contribution into (the same DOM
-           contract the retired host detail page emitted). */
-        <span
-          className="contents"
-          data-amiba-dsh-profile-id={profile.name}
-          data-amiba-dsh-slot="amiba.agentPreset.section"
-          data-amiba-dsh-slot-only={section}
-        />
+        /* Official renderSlot dispatch: the plugin's own section entry
+           declares `amiba.agentPreset.section` as its child, so the owning
+           plugin's contribution renders here in the same React tree, scoped
+           to this preset via the owner props. */
+        renderPresetSection?.(section, { profileId: profile.name })
       ) : null}
     </>
   );
@@ -416,16 +421,17 @@ function AgentPresetDetail({
 
 export function DshAgentPresetsPage({
   adapter,
-  headerActionsHost,
   presetSections,
   refreshSignal,
+  renderPresetSection,
 }: {
   adapter: AgentPresetsAdapter;
-  headerActionsHost?: () => HTMLElement | null;
   /** Live ledger of plugin-owned preset-detail tabs. */
   presetSections: SnapshotSource<readonly PresetSectionRow[]>;
   /** Bumped when the host `agent-presets` settings document changes. */
   refreshSignal?: SnapshotSource<number>;
+  /** renderSlot-backed dispatch for one ledger tab's contribution. */
+  renderPresetSection?: RenderPresetSection;
 }) {
   const { t } = useT();
   const [profiles, setProfiles] = useState<AgentPreset[]>([]);
@@ -578,7 +584,6 @@ export function DshAgentPresetsPage({
       <AgentPresetDetail
         adapter={adapter}
         error={error}
-        headerActionsHost={headerActionsHost}
         isActive={selected.name === active}
         onActivate={() => void activateProfile()}
         onBack={() => setDetail(null)}
@@ -586,6 +591,7 @@ export function DshAgentPresetsPage({
         onRename={(newName) => void renameProfile(newName)}
         presetSections={sections}
         profile={selected}
+        renderPresetSection={renderPresetSection}
         saving={saving}
       />
     );
@@ -596,7 +602,6 @@ export function DshAgentPresetsPage({
       <AgentPresetList
         defaultProfile={defaultProfile}
         error={error}
-        headerActionsHost={headerActionsHost}
         loading={loading}
         onCreate={() => setCreateOpen(true)}
         onOpen={(name) => setDetail(name)}

@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
+import {
+  SettingsPageChromeProvider,
+  useSettingsPageChrome,
+} from "@amiba/ui/plugin";
 
 import { DshSkillsPage } from "../DshSkillsPage";
 
@@ -133,29 +137,34 @@ describe("DshSkillsPage visual contract", () => {
     expect(await screen.findByText(/Built-in workflow\./)).toBeVisible();
   });
 
-  it("portals the Create action into the settings page's header actions host", async () => {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+  it("lands the Create action in the settings head through the chrome context", async () => {
+    // The section renders in the same React tree as the settings scaffold
+    // (renderSlot dispatch), so SettingsPageActions resolves the head host
+    // from plain context — reproduce the scaffold half here.
+    function ActionsHost() {
+      const { setActionsHost } = useSettingsPageChrome();
+      return <div data-testid="actions-host" ref={setActionsHost} />;
+    }
     render(
-      <DshSkillsPage
-        adapter={{
-          list: listSkills,
-          read: vi.fn(),
-          listFiles,
-          readFile: readSkillFile,
-          save: vi.fn(),
-          remove: vi.fn(),
-        }}
-        headerActionsHost={() => host}
-        sessionId="session-1"
-      />,
+      <SettingsPageChromeProvider>
+        <ActionsHost />
+        <DshSkillsPage
+          adapter={{
+            list: listSkills,
+            read: vi.fn(),
+            listFiles,
+            readFile: readSkillFile,
+            save: vi.fn(),
+            remove: vi.fn(),
+          }}
+          sessionId="session-1"
+        />
+      </SettingsPageChromeProvider>,
     );
 
     const createButton = await screen.findByRole("button", {
       name: "Create skill",
     });
-    expect(host).toContainElement(createButton);
-
-    host.remove();
+    expect(screen.getByTestId("actions-host")).toContainElement(createButton);
   });
 });

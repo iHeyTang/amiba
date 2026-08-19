@@ -114,7 +114,6 @@ export function DshAgentCapabilitiesPage({
   adapter,
   embedded = false,
   chromeHeightPx,
-  headerActionsHost,
   children,
 }: {
   adapter: ToolsDirectoryAdapter;
@@ -122,7 +121,6 @@ export function DshAgentCapabilitiesPage({
   /** Still needed for the tool-detail drill-in's own back+title header,
    *  which stays local (see the `selectedTool` branch below). */
   chromeHeightPx?: number;
-  headerActionsHost?: () => HTMLElement | null;
   /** DSH child-slot contributions owned by the Tools feature plugin. */
   children?: ReactNode;
 }) {

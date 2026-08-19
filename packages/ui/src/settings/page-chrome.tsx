@@ -72,29 +72,19 @@ export function useSettingsPageHeader(
 }
 
 /**
- * Mounts its children into the head's right-side actions cluster.
- * In-tree pages resolve the host from context; DSH plugin sections render
- * in a separate React root (context cannot cross) and pass an explicit
- * `host` getter instead — createPortal works across roots.
+ * Mounts its children into the head's right-side actions cluster, resolved
+ * from the scaffold's chrome context. DSH plugin sections render in the same
+ * React tree as the scaffold (the ui-shell dispatches them with the official
+ * `renderSlot` inside `SettingsPageScaffold`), so the plain context path
+ * covers every page — in-tree registry pages and plugin sections alike.
  */
 export function SettingsPageActions({
   children,
-  host,
 }: {
   children: ReactNode;
-  host?: () => HTMLElement | null;
 }): ReactNode {
   const context = useContext(ChromeContext);
-  const [externalHost, setExternalHost] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!host) return;
-    setExternalHost(host());
-    // The head mounts before section content, but re-resolve on a frame in
-    // case this root hydrated first.
-    const raf = requestAnimationFrame(() => setExternalHost(host()));
-    return () => cancelAnimationFrame(raf);
-  }, [host]);
-  const target = host ? externalHost : (context?.actionsHost ?? null);
+  const target = context?.actionsHost ?? null;
   if (!target) return null;
   return createPortal(children, target);
 }

@@ -19,12 +19,15 @@ export type AmibaRootSlot = (typeof AMIBA_ROOT_SLOTS)[number];
 
 export interface AmibaSettingsSectionOwner {
   chromeHeightPx?: number;
-  /** Getter for the settings head's right-side actions container. Section
-   *  content renders in its own React root; portal into this node via
-   *  SettingsPageActions' `host` prop. */
-  headerActionsHost?: () => HTMLElement | null;
 }
 
+/**
+ * Owner props of `amiba.agentPreset.section`. The TYPE lives here so every
+ * contributing plugin shares one contract, but the runtime declaration is
+ * NOT on the ui-shell root: dsh-plugin-agent-preset declares this slot as a
+ * child of its own `amiba.settings.section` entry and dispatches it with
+ * `renderSlot` (the same pattern as the catalog plugin's `amiba.tools.panel`).
+ */
 export interface AmibaAgentPresetSectionOwner {
   /** The agent preset (profile) whose detail tab strip this section renders
    *  under — scopes the section's content to that preset. */

@@ -81,9 +81,6 @@ export function DshSettingsMessaging({
 }: {
   adapter: MessagingAdapter;
   sessionsAdapter: Pick<AgentSessionsAdapter, "list">;
-  /** Section-hosted head has no action buttons for this pane today; the
-   *  prop is accepted for API parity with the other DSH section views. */
-  headerActionsHost?: () => HTMLElement | null;
 }) {
   const { t } = useT();
   const [snapshot, setSnapshot] = useState<MessageCenterSnapshot | null>(

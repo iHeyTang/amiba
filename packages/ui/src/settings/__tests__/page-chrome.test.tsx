@@ -52,18 +52,6 @@ describe("settings page chrome", () => {
     expect(screen.queryByRole("button", { name: "Orphan" })).toBeNull();
   });
 
-  it("supports an explicit host getter across React roots", () => {
-    const external = document.createElement("div");
-    document.body.appendChild(external);
-    render(
-      <SettingsPageActions host={() => external}>
-        <button type="button">Ext</button>
-      </SettingsPageActions>,
-    );
-    expect(external.textContent).toContain("Ext");
-    external.remove();
-  });
-
   it("registers and clears the header override with the hook", async () => {
     function DrillIn() {
       const [on, setOn] = useState(true);

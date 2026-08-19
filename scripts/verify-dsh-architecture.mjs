@@ -254,6 +254,9 @@ if (
     "UI shell styles must be inlined as DSH plugin-owned CSS, not delegated to a host page",
   );
 }
+// amiba.agentPreset.section is intentionally absent from this list: its
+// runtime declaration moved to dsh-plugin-agent-preset (a child of that
+// plugin's settings-section entry), asserted in the agent-preset block below.
 for (const slot of [
   "amiba.navigation.before",
   "amiba.navigation.after",
@@ -267,25 +270,39 @@ for (const slot of [
   "amiba.settings.navigation.after",
   "amiba.settings.section",
   "amiba.settings.content.overlay",
-  "amiba.agentPreset.section",
   "amiba.shell.overlay",
 ]) {
   if (!uiShellClient.includes(`\"${slot}\"`)) {
     fail(`UI shell is missing semantic child slot ${slot}`);
   }
 }
+const productShellSource = await text(
+  "plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx",
+);
 if (
   !uiShellClient.includes('name: "root"') ||
-  !uiShellClient.includes("createPortal(") ||
   !uiShellClient.includes('ctx.reflect.provide("layout"') ||
   !uiShellClient.includes('entriesOfSlot("amiba.settings.section")') ||
   !uiShellClient.includes("resolveSlotLabel(") ||
-  !uiShellClient.includes("only: target.filterId") ||
-  !uiShellClient.includes('kind: "list"')
+  !uiShellClient.includes('kind: "list"') ||
+  !uiShellClient.includes("<AmibaProductShell")
 ) {
   fail(
-    "UI shell must own the DSH root, layout service, list-slot ledger projection, and portals",
+    "UI shell must own the DSH root, layout service, list-slot ledger projection, and shell construction",
   );
+}
+// Id-selected list slots dispatch through the official renderSlot `only`
+// filter from the product shell — no marker scanning, no keyed registration.
+for (const dispatch of [
+  /renderSlot\(\s*"amiba\.settings\.section",[\s\S]{0,200}?\{ only: sectionId \}/u,
+  /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
+  /renderSlot\(\s*"amiba\.shell\.overlay"/u,
+]) {
+  if (!dispatch.test(productShellSource)) {
+    fail(
+      `Product shell must dispatch id-selected slots through renderSlot's official only-filter (${dispatch})`,
+    );
+  }
 }
 if (
   uiShellClient.includes('kind: "keyed"') ||
@@ -417,18 +434,13 @@ if (
   );
 }
 const slotsSdk = await text("packages/extension-sdk/src/slots.ts");
-const productShell = await text(
-  "plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx",
-);
+const productShell = productShellSource;
 if (
   !slotsSdk.includes("activeSection?: string") ||
-  !uiShellClient.includes('getAttribute("data-amiba-dsh-active-section")') ||
   !uiShellClient.includes("active={activeSection === section.id}") ||
   uiShellClient.includes("useActiveSettingsSection") ||
   !settingsView.includes("assistantNavigation?.(dshSection)") ||
-  !productShell.includes(
-    "data-amiba-dsh-active-section={activeSettingsSection}",
-  )
+  !productShell.includes('renderSlot("amiba.settings.navigation.assistant"')
 ) {
   fail(
     "Settings Shell must be the single selection source for built-in and DSH slot navigation",
@@ -538,6 +550,12 @@ for (const required of [
   // AP3: ONE merged section leading the Assistant group (the former
   // separate 行为与人设 section at 5 folded into the roster page).
   "order: 5,",
+  // The preset-detail tab slot is declared by THIS plugin as a child of its
+  // settings-section entry (not by the ui-shell root) and dispatched with
+  // the official renderSlot — the amiba.tools.panel ownership pattern.
+  '"amiba.agentPreset.section": { kind: "list", scope: "root" }',
+  'renderSlot("amiba.agentPreset.section"',
+  "{ only: sectionId }",
 ]) {
   if (!agentPresetClient.includes(required)) {
     fail(`Agent-preset Client plugin is missing ${required}`);
@@ -553,16 +571,20 @@ for (const retired of ["DshAgentBehaviorSettingsPage", "BEHAVIOR_SECTION_ID"]) {
 const agentPresetPage = await text(
   "plugins/dsh-plugin-agent-preset/src/client/DshAgentPresetsPage.tsx",
 );
+// The detail tab strip renders other plugins' preset sections through the
+// renderSlot-backed render prop, scoped per preset via the owner argument —
+// no DOM slot markers.
 for (const required of [
-  // The detail tab strip keeps emitting the ledger slot marker the ui-shell
-  // root scanner portals other plugins' preset sections into.
-  'data-amiba-dsh-slot="amiba.agentPreset.section"',
-  "data-amiba-dsh-slot-only",
-  "data-amiba-dsh-profile-id",
+  "renderPresetSection?.(section, { profileId: profile.name })",
 ]) {
   if (!agentPresetPage.includes(required)) {
-    fail(`Agent-preset detail page is missing slot marker contract ${required}`);
+    fail(`Agent-preset detail page is missing renderSlot dispatch ${required}`);
   }
+}
+if (agentPresetPage.includes("data-amiba-dsh-slot")) {
+  fail(
+    "Agent-preset detail page must dispatch contributions with renderSlot, not DOM slot markers",
+  );
 }
 for (const body of [agentPresetClient, agentPresetPage]) {
   if (body.includes("getPlatform") || body.includes("ipc")) {

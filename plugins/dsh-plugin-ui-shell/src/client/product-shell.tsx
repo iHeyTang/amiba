@@ -7,6 +7,8 @@ import {
   getPlatform,
   type AgentModelSelection,
 } from "@amiba/app-runtime/platform";
+import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
+import type { AmibaRootSlot } from "@amiba/extension-sdk";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -42,74 +44,20 @@ export interface SettingsSectionsSource {
   subscribe: (listener: () => void) => () => void;
 }
 
-/** Same shape as SettingsSectionsSource — kept as a distinct alias since the
- *  agent-preset ledger and the settings-section ledger are separate slots. */
-export type PresetSectionsSource = SettingsSectionsSource;
-
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
- * data-* attributes on the slot marker element can only carry strings, so
- * they can't hand the settings-section plugin a live function reference
- * (the scaffold's head-actions-host getter). Stash it as a plain JS
- * property on the marker node instead — `findSlotTargets` in ./index.tsx
- * reads it back off the same element after the DOM-attribute scan.
+ * Root child slots the product shell dispatches itself. Two names from the
+ * public vocabulary are absent on purpose:
+ *   - `amiba.agentPreset.section` is declared (and dispatched) by
+ *     dsh-plugin-agent-preset as a child of its own settings section;
+ *   - `amiba.composer.modelPicker` is dispatched through the composer's
+ *     `modelPicker` render prop rather than by the shell markup directly.
  */
-export const SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP =
-  "__amibaSettingsHeaderActionsHost" as const;
+export type AmibaShellSlot = Exclude<AmibaRootSlot, "amiba.agentPreset.section">;
 
-export type SlotMarkerElement = HTMLElement & {
-  [SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP]?: () => HTMLElement | null;
-};
-
-function SlotTarget({
-  name,
-  filterId,
-  chromeHeightPx,
-  activeView,
-  activeSettingsSection,
-  topBarLeftInset,
-  sidebarCollapsed,
-  showSidebarExpandControl,
-  headerActionsHost,
-  profileId,
-}: {
-  name: string;
-  filterId?: string;
-  chromeHeightPx?: number;
-  activeView?: string;
-  activeSettingsSection?: string;
-  topBarLeftInset?: number;
-  sidebarCollapsed?: boolean;
-  showSidebarExpandControl?: boolean;
-  headerActionsHost?: () => HTMLElement | null;
-  /** Plain string — rides the data-attribute channel like activeView/
-   *  activeSection, unlike headerActionsHost which needs the property
-   *  side-channel because functions can't serialize into an attribute. */
-  profileId?: string;
-}): ReactElement {
-  const markerRef = useCallback(
-    (el: SlotMarkerElement | null) => {
-      if (el) el[SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP] = headerActionsHost;
-    },
-    [headerActionsHost],
-  );
-  return (
-    <span
-      ref={markerRef}
-      className="contents"
-      data-amiba-dsh-chrome-height={chromeHeightPx}
-      data-amiba-dsh-active-view={activeView}
-      data-amiba-dsh-active-section={activeSettingsSection}
-      data-amiba-dsh-top-bar-left-inset={topBarLeftInset}
-      data-amiba-dsh-sidebar-collapsed={sidebarCollapsed}
-      data-amiba-dsh-show-sidebar-expand={showSidebarExpandControl}
-      data-amiba-dsh-profile-id={profileId}
-      data-amiba-dsh-slot={name}
-      data-amiba-dsh-slot-only={filterId}
-    />
-  );
-}
+/** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
+export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
 
 function coerceKind(value: unknown): PendingPromptAttachment["kind"] {
   if (value === "image" || value === "text" || value === "pdf") return value;
@@ -265,19 +213,19 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 
 export function AmibaProductShell({
   dshClient,
+  renderSlot,
   settingsSections,
-  presetSections,
 }: {
   dshClient: DshApiClient;
+  renderSlot: AmibaShellRenderSlot;
   settingsSections?: SettingsSectionsSource;
-  presetSections?: PresetSectionsSource;
 }): ReactElement {
   return (
     <SessionsProvider>
       <ProductShellInner
         dshClient={dshClient}
+        renderSlot={renderSlot}
         settingsSections={settingsSections}
-        presetSections={presetSections}
       />
     </SessionsProvider>
   );
@@ -285,12 +233,12 @@ export function AmibaProductShell({
 
 function ProductShellInner({
   dshClient,
+  renderSlot,
   settingsSections,
-  presetSections,
 }: {
   dshClient: DshApiClient;
+  renderSlot: AmibaShellRenderSlot;
   settingsSections?: SettingsSectionsSource;
-  presetSections?: PresetSectionsSource;
 }): ReactElement {
   const { t } = useT();
   const platform = getPlatform();
@@ -300,10 +248,6 @@ function ProductShellInner({
   const sections = useSyncExternalStore(
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
-  );
-  const presetSectionRows = useSyncExternalStore(
-    presetSections?.subscribe ?? (() => () => {}),
-    presetSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
   );
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
@@ -399,38 +343,23 @@ function ProductShellInner({
       <div data-amiba-product-shell className="h-screen w-full">
         <SettingsView
           dshSections={sections}
-          dshPresetSections={presetSectionRows}
           slots={{
-            navigationBefore: (
-              <SlotTarget name="amiba.settings.navigation.before" />
+            navigationBefore: renderSlot(
+              "amiba.settings.navigation.before",
+              {},
             ),
-            assistantNavigation: (activeSection) => (
-              <SlotTarget
-                name="amiba.settings.navigation.assistant"
-                activeSettingsSection={activeSection}
-              />
-            ),
-            navigationAfter: (
-              <SlotTarget name="amiba.settings.navigation.after" />
-            ),
-            section: (sectionId, owner) => (
-              <SlotTarget
-                name="amiba.settings.section"
-                filterId={sectionId}
-                chromeHeightPx={desktop ? topBarHeightPx : undefined}
-                headerActionsHost={owner.actionsHost}
-              />
-            ),
-            presetSection: (sectionId, owner) => (
-              <SlotTarget
-                name="amiba.agentPreset.section"
-                filterId={sectionId}
-                profileId={owner.profileId}
-              />
-            ),
-            contentOverlay: (
-              <SlotTarget name="amiba.settings.content.overlay" />
-            ),
+            assistantNavigation: (activeSection) =>
+              renderSlot("amiba.settings.navigation.assistant", {
+                activeSection,
+              }),
+            navigationAfter: renderSlot("amiba.settings.navigation.after", {}),
+            section: (sectionId) =>
+              renderSlot(
+                "amiba.settings.section",
+                desktop ? { chromeHeightPx: topBarHeightPx } : {},
+                { only: sectionId },
+              ),
+            contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
           }}
           onGoHome={() => setView("chat")}
           sidebarHeaderLeftInset={topBarLeftInset}
@@ -471,30 +400,18 @@ function ProductShellInner({
               panelMode
             />
           ),
-          navigationBefore: <SlotTarget name="amiba.navigation.before" />,
-          workspaceNavigation: (activeView) => (
-            <SlotTarget
-              name="amiba.workspace.navigation"
-              activeView={activeView}
-            />
-          ),
-          navigationAfter: <SlotTarget name="amiba.navigation.after" />,
-          workspaceView: (viewId, owner) => (
-            <SlotTarget
-              name="amiba.workspace.view"
-              filterId={viewId}
-              chromeHeightPx={owner.chromeHeightPx}
-              topBarLeftInset={owner.topBarLeftInset}
-              sidebarCollapsed={owner.sidebarCollapsed}
-              showSidebarExpandControl={owner.showSidebarExpandControl}
-            />
-          ),
-          headerAfter: <SlotTarget name="amiba.chat.header.after" />,
-          contentOverlay: <SlotTarget name="amiba.chat.content.overlay" />,
+          navigationBefore: renderSlot("amiba.navigation.before", {}),
+          workspaceNavigation: (activeView) =>
+            renderSlot("amiba.workspace.navigation", { activeView }),
+          navigationAfter: renderSlot("amiba.navigation.after", {}),
+          workspaceView: (viewId, owner) =>
+            renderSlot("amiba.workspace.view", owner, { only: viewId }),
+          headerAfter: renderSlot("amiba.chat.header.after", {}),
+          contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />
       <div className="pointer-events-none absolute inset-0 z-[100]">
-        <SlotTarget name="amiba.shell.overlay" />
+        {renderSlot("amiba.shell.overlay", {})}
       </div>
       <span className="sr-only" aria-live="polite">
         {t("app.initializing")}
