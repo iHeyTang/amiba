@@ -19,6 +19,8 @@ import {
   type PendingPromptAttachment,
   type PendingPromptResult,
 } from "@amiba/ui";
+import { NavigationRow } from "@amiba/ui/plugin";
+import { Blocks } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -27,6 +29,7 @@ import {
   useState,
   useSyncExternalStore,
   type ReactElement,
+  type ReactNode,
 } from "react";
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
@@ -37,6 +40,8 @@ type View = "chat" | "settings";
 export interface SettingsSectionRow {
   id: string;
   label: string;
+  /** Nav glyph resolved from the section's `navIcon` inject-face convention. */
+  icon?: ReactNode;
 }
 
 export interface SettingsSectionsSource {
@@ -47,17 +52,51 @@ export interface SettingsSectionsSource {
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
- * Root child slots the product shell dispatches itself. Two names from the
- * public vocabulary are absent on purpose:
+ * Root child slots the product shell dispatches itself: the amiba.* vendor
+ * vocabulary plus the two official names the root declares
+ * (`settings.section`, `shell.overlay`). Two names from the public
+ * vocabulary are absent on purpose:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
  *     dsh-plugin-agent-preset as a child of its own settings section;
  *   - `amiba.composer.modelPicker` is dispatched through the composer's
  *     `modelPicker` render prop rather than by the shell markup directly.
  */
-export type AmibaShellSlot = Exclude<AmibaRootSlot, "amiba.agentPreset.section">;
+export type AmibaShellSlot =
+  | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
+  | "settings.section"
+  | "shell.overlay";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
+
+/**
+ * Project the DSH `settings.section` ledger into Amiba's Settings
+ * navigation. Rendered DIRECTLY by the product shell (the shell owns both
+ * the component and the ledger source, so the former
+ * `amiba.settings.navigation.assistant` slot indirection bought nothing);
+ * SettingsView's `assistantNavigation` render prop stays the host mechanism
+ * receiving the node, and the Settings Shell stays the single selection
+ * source through `activeSection`.
+ */
+function SettingsSectionNavigation({
+  activeSection,
+  openSettings,
+  sections,
+}: {
+  activeSection?: string;
+  openSettings(sectionId: string): void;
+  sections: readonly SettingsSectionRow[];
+}): ReactNode {
+  return sections.map((section) => (
+    <NavigationRow
+      active={activeSection === section.id}
+      icon={section.icon ?? <Blocks />}
+      key={section.id}
+      label={section.label}
+      onClick={() => openSettings(section.id)}
+    />
+  ));
+}
 
 function coerceKind(value: unknown): PendingPromptAttachment["kind"] {
   if (value === "image" || value === "text" || value === "pdf") return value;
@@ -213,10 +252,12 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 
 export function AmibaProductShell({
   dshClient,
+  openSettingsSection,
   renderSlot,
   settingsSections,
 }: {
   dshClient: DshApiClient;
+  openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
@@ -224,6 +265,7 @@ export function AmibaProductShell({
     <SessionsProvider>
       <ProductShellInner
         dshClient={dshClient}
+        openSettingsSection={openSettingsSection}
         renderSlot={renderSlot}
         settingsSections={settingsSections}
       />
@@ -233,10 +275,12 @@ export function AmibaProductShell({
 
 function ProductShellInner({
   dshClient,
+  openSettingsSection,
   renderSlot,
   settingsSections,
 }: {
   dshClient: DshApiClient;
+  openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
   settingsSections?: SettingsSectionsSource;
 }): ReactElement {
@@ -344,19 +388,20 @@ function ProductShellInner({
         <SettingsView
           dshSections={sections}
           slots={{
-            navigationBefore: renderSlot(
-              "amiba.settings.navigation.before",
-              {},
+            assistantNavigation: (activeSection) => (
+              <SettingsSectionNavigation
+                activeSection={activeSection}
+                openSettings={openSettingsSection}
+                sections={sections}
+              />
             ),
-            assistantNavigation: (activeSection) =>
-              renderSlot("amiba.settings.navigation.assistant", {
-                activeSection,
-              }),
-            navigationAfter: renderSlot("amiba.settings.navigation.after", {}),
+            // Official settings.section owner contract: `close` is the one
+            // shell affordance a section receives, wired to the same
+            // leave-Settings path as the sidebar's Home row (onGoHome).
             section: (sectionId) =>
               renderSlot(
-                "amiba.settings.section",
-                desktop ? { chromeHeightPx: topBarHeightPx } : {},
+                "settings.section",
+                { close: () => setView("chat") },
                 { only: sectionId },
               ),
             contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
@@ -416,7 +461,7 @@ function ProductShellInner({
         }}
       />
       <div className="pointer-events-none absolute inset-0 z-[100]">
-        {renderSlot("amiba.shell.overlay", {})}
+        {renderSlot("shell.overlay", {})}
       </div>
       <span className="sr-only" aria-live="polite">
         {t("app.initializing")}

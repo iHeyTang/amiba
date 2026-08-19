@@ -8,5 +8,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The guard is typecheck-only: it imports the official ui-layout client
+  // types, whose cordis Context merge must never reach published output.
+  "exclude": ["src/slot-vocabulary-guard.ts"]
 }

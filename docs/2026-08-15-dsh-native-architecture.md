@@ -68,7 +68,13 @@ Electron WebView，也没有 preload 特权。
 ## 4. Root children slots
 
 当前公共契约由 `@amiba/extension-sdk` 导出（其中 `amiba.agentPreset.section`
-的运行时声明在 dsh-plugin-agent-preset 自己的 settings section entry 上），root 声明：
+的运行时声明在 dsh-plugin-agent-preset 自己的 settings section entry 上）。
+
+词汇表策略：有官方等价物的 seat 使用官方 slot 名并继承官方契约 ——
+`settings.section`（owner `SettingsSectionOwnerProps { close }`）类型来自
+`@deepseek-ai/dsh-client-ui-settings`，`shell.overlay` 来自
+`@deepseek-ai/dsh-client-ui-layout`；`amiba.*` 前缀只用于没有官方对应位的
+vendor 扩展。root 声明：
 
 - `amiba.navigation.before`
 - `amiba.navigation.after`
@@ -77,13 +83,15 @@ Electron WebView，也没有 preload 特权。
 - `amiba.chat.header.after`
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker`
-- `amiba.settings.navigation.before`
-- `amiba.settings.navigation.assistant`
-- `amiba.settings.navigation.after`
-- `amiba.settings.section`
+- `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
+  face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
-- `amiba.shell.overlay`
+- `shell.overlay`（官方名）
+
+曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
+before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染
+（组件与 ledger source 本就归 ui-shell 所有，slot 间接层没有价值）。
 
 `workspace.navigation` 注入 `openWorkspace(viewId)`；`workspace.view` 与
 `settings.section` 使用官方 list-slot ledger，并按 entry `id` 选择对应 contribution。

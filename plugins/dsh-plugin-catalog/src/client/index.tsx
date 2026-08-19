@@ -10,6 +10,7 @@ import { type ReactNode } from "react";
 import { AMIBA_TOOLS_REMOTE } from "../remote.js";
 import {
   DshAgentCapabilitiesPage,
+  settingsChromeHeightPx,
   type ToolsDirectoryAdapter,
 } from "./DshAgentCapabilitiesPage.js";
 
@@ -43,15 +44,16 @@ function sectionLabel(): string {
     : "Tools";
 }
 
-type ToolsSectionProps = PropsRuntime<"amiba.settings.section"> & {
+type ToolsSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ToolsDirectoryAdapter;
 } & PropsRenderSlots<"amiba.tools.panel">;
 
-function ToolsSettings({
-  adapter,
-  chromeHeightPx,
-  renderSlot,
-}: ToolsSectionProps): ReactNode {
+function ToolsSettings({ adapter, renderSlot }: ToolsSectionProps): ReactNode {
+  // The official settings.section owner is `{ close }` only; the drill-in
+  // header's chrome metric comes from the platform's window-chrome facts
+  // instead (see settingsChromeHeightPx). The vendor amiba.tools.panel
+  // owner keeps carrying it unchanged.
+  const chromeHeightPx = settingsChromeHeightPx();
   return (
     <DshAgentCapabilitiesPage
       adapter={adapter}
@@ -109,11 +111,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         },
       };
       const disposeSection = injectedCtx.slots.inject(
-        "amiba.settings.section",
+        "settings.section",
         () =>
           injectedCtx.slots.register(
             {
-              name: "amiba.settings.section",
+              name: "settings.section",
               id: SECTION_ID,
               order: 100,
               children: {

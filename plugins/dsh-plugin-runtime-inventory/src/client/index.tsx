@@ -41,7 +41,7 @@ async function valueOf<T>(
   return result.value;
 }
 
-type InventorySectionProps = PropsRuntime<"amiba.settings.section"> & {
+type InventorySectionProps = PropsRuntime<"settings.section"> & {
   adapter: DshPluginInventoryAdapter;
 };
 
@@ -84,10 +84,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
             }
           : {}),
       };
-      return injectedCtx.slots.inject("amiba.settings.section", () =>
+      return injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
-            name: "amiba.settings.section",
+            name: "settings.section",
             id: SECTION_ID,
             order: 300,
             label: () =>

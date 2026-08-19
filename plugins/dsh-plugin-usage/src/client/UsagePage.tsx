@@ -4,7 +4,7 @@
  * surgery the section owns two views, Tokens (provider-reported token
  * usage) and Tools (the tool-activity ledger), switched by a chip strip.
  *
- * The Settings shell (`amiba.settings.section` scaffold) still owns the
+ * The Settings shell (`settings.section` scaffold) still owns the
  * page title and scroll host; each tab supplies its own ScrollArea and
  * all content, so the switcher stays pinned while the view scrolls.
  */

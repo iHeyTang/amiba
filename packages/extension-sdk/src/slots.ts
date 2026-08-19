@@ -1,10 +1,38 @@
 /**
- * Amiba's stable semantic slot vocabulary. All names are declared by the
- * ui-shell root's children table except `amiba.agentPreset.section`, whose
- * runtime declaration lives on dsh-plugin-agent-preset's settings-section
- * entry (see {@link AmibaAgentPresetSectionOwner}); the name stays here so
- * the authoring vocabulary has one home.
+ * Amiba's stable semantic slot vocabulary.
+ *
+ * Vocabulary policy: a seat with an official DSH equivalent uses the
+ * OFFICIAL name and inherits the official contract — `shell.overlay` from
+ * `@deepseek-ai/dsh-client-ui-layout` and the `settings.*` family (most
+ * importantly `settings.section`) from `@deepseek-ai/dsh-client-ui-settings`.
+ * `amiba.*` names are reserved for vendor extensions that have no official
+ * counterpart. The array below therefore lists ONLY the amiba.* vendor
+ * slots; the official names reach consumers through the official packages'
+ * SlotMap merges, wired up by this module (see the import below and the
+ * mirrored `shell.overlay` declaration).
+ *
+ * All amiba.* names are declared by the ui-shell root's children table
+ * except `amiba.agentPreset.section`, whose runtime declaration lives on
+ * dsh-plugin-agent-preset's settings-section entry (see
+ * {@link AmibaAgentPresetSectionOwner}); the name stays here so the
+ * authoring vocabulary has one home.
  */
+
+// Type home for the official settings vocabulary: importing the
+// dsh-client-ui-settings client entry merges `settings.section` (and the
+// rest of the settings.* family) into SlotMap for every consumer of this
+// SDK — plugins need no devDependency of their own. The named re-export
+// below keeps that inclusion alive in the built declaration output too.
+import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
+
+/**
+ * Official owner contract of `settings.section`
+ * (`{ close: () => void }` — the one shell affordance a section receives,
+ * for flows that leave Settings altogether), re-exported so plugin authors
+ * type against the SDK without reaching into the official package.
+ */
+export type { SettingsSectionOwnerProps } from "@deepseek-ai/dsh-client-ui-settings/client";
+
 export const AMIBA_ROOT_SLOTS = [
   "amiba.navigation.before",
   "amiba.navigation.after",
@@ -13,37 +41,23 @@ export const AMIBA_ROOT_SLOTS = [
   "amiba.chat.header.after",
   "amiba.chat.content.overlay",
   "amiba.composer.modelPicker",
-  "amiba.settings.navigation.before",
-  "amiba.settings.navigation.assistant",
-  "amiba.settings.navigation.after",
-  "amiba.settings.section",
   "amiba.settings.content.overlay",
   "amiba.agentPreset.section",
-  "amiba.shell.overlay",
 ] as const;
 
 export type AmibaRootSlot = (typeof AMIBA_ROOT_SLOTS)[number];
-
-export interface AmibaSettingsSectionOwner {
-  chromeHeightPx?: number;
-}
 
 /**
  * Owner props of `amiba.agentPreset.section`. The TYPE lives here so every
  * contributing plugin shares one contract, but the runtime declaration is
  * NOT on the ui-shell root: dsh-plugin-agent-preset declares this slot as a
- * child of its own `amiba.settings.section` entry and dispatches it with
+ * child of its own `settings.section` entry and dispatches it with
  * `renderSlot` (the same pattern as the catalog plugin's `amiba.tools.panel`).
  */
 export interface AmibaAgentPresetSectionOwner {
   /** The agent preset (profile) whose detail tab strip this section renders
    *  under — scopes the section's content to that preset. */
   profileId: string;
-}
-
-export interface AmibaSettingsNavigationOwner {
-  /** The Settings Shell owns selection; plugin navigation only renders it. */
-  activeSection?: string;
 }
 
 export interface AmibaWorkspaceViewOwner {
@@ -145,24 +159,25 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       scope: "root";
       owner: AmibaComposerModelPickerOwner;
     };
-    "amiba.settings.navigation.before": { kind: "list"; scope: "root" };
-    "amiba.settings.navigation.assistant": {
-      kind: "single";
-      scope: "root";
-      owner: AmibaSettingsNavigationOwner;
-    };
-    "amiba.settings.navigation.after": { kind: "list"; scope: "root" };
-    "amiba.settings.section": {
-      kind: "list";
-      scope: "root";
-      owner: AmibaSettingsSectionOwner;
-    };
     "amiba.settings.content.overlay": { kind: "list"; scope: "root" };
     "amiba.agentPreset.section": {
       kind: "list";
       scope: "root";
       owner: AmibaAgentPresetSectionOwner;
     };
-    "amiba.shell.overlay": { kind: "list"; scope: "root" };
+    /**
+     * MIRROR of the official `shell.overlay` declaration
+     * (`@deepseek-ai/dsh-client-ui-layout@0.1.0-rc.6`, `/client` types
+     * entry): the frame-wide click-through floating layer, identical kind
+     * (list), scope (root), and empty owner. Re-declared here structurally
+     * identically instead of imported because that package's `/client`
+     * entry also merges `layout: ILayout` into the cordis Context, which
+     * collides (TS2717) with Amiba's richer `ctx.layout` face declared by
+     * dsh-plugin-ui-shell. Identical duplicate declarations merge cleanly,
+     * so a program loading both declarers stays green;
+     * `slot-vocabulary-guard.ts` trips this SDK's own typecheck if the
+     * official shape ever drifts.
+     */
+    "shell.overlay": { kind: "list"; scope: "root" };
   }
 }

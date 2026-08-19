@@ -35,7 +35,7 @@ function sectionLabel(): string {
     : "Agent presets";
 }
 
-type AgentPresetsSectionProps = PropsRuntime<"amiba.settings.section"> &
+type AgentPresetsSectionProps = PropsRuntime<"settings.section"> &
   PropsRenderSlots<"amiba.agentPreset.section"> & {
     adapter: AgentPresetsAdapter;
     presetSections: SnapshotSource<readonly PresetSectionRow[]>;
@@ -143,10 +143,10 @@ export function apply(ctx: ClientContext): void {
       },
     );
 
-    const disposeSection = ctx.slots.inject("amiba.settings.section", () =>
+    const disposeSection = ctx.slots.inject("settings.section", () =>
       ctx.slots.register(
         {
-          name: "amiba.settings.section",
+          name: "settings.section",
           id: SECTION_ID,
           // Leads the Assistant group, ahead of Models & services (50) —
           // the position the retired 行为与人设 section (5) held before it

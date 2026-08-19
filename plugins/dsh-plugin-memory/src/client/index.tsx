@@ -309,7 +309,7 @@ function MemoryView({
   );
 }
 
-type MemorySectionProps = PropsRuntime<"amiba.settings.section"> & {
+type MemorySectionProps = PropsRuntime<"settings.section"> & {
   listMemory: MemoryRemote["list"];
   listPresets: MemoryRemote["presets"];
 };
@@ -414,11 +414,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       const listMemory: MemoryRemote["list"] = (preset) => remote.list(preset);
       const listPresets: MemoryRemote["presets"] = () => remote.presets();
       const disposeSection = injectedCtx.slots.inject(
-        "amiba.settings.section",
+        "settings.section",
         () =>
           injectedCtx.slots.register(
             {
-              name: "amiba.settings.section",
+              name: "settings.section",
               id: SECTION_ID,
               order: 300,
               label: () => labels().nav,

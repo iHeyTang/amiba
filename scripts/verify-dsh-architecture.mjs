@@ -257,6 +257,11 @@ if (
 // amiba.agentPreset.section is intentionally absent from this list: its
 // runtime declaration moved to dsh-plugin-agent-preset (a child of that
 // plugin's settings-section entry), asserted in the agent-preset block below.
+// `settings.section` and `shell.overlay` are OFFICIAL vocabulary names
+// (declared by @deepseek-ai/dsh-client-ui-settings and -ui-layout; types
+// inherited through @amiba/extension-sdk) — the root children table must
+// declare them under these official names. The former vendor trio
+// amiba.settings.navigation.before/assistant/after is retired outright.
 for (const slot of [
   "amiba.navigation.before",
   "amiba.navigation.after",
@@ -265,15 +270,23 @@ for (const slot of [
   "amiba.chat.header.after",
   "amiba.chat.content.overlay",
   "amiba.composer.modelPicker",
+  "settings.section",
+  "amiba.settings.content.overlay",
+  "shell.overlay",
+]) {
+  if (!uiShellClient.includes(`\"${slot}\"`)) {
+    fail(`UI shell is missing semantic child slot ${slot}`);
+  }
+}
+for (const retired of [
   "amiba.settings.navigation.before",
   "amiba.settings.navigation.assistant",
   "amiba.settings.navigation.after",
   "amiba.settings.section",
-  "amiba.settings.content.overlay",
   "amiba.shell.overlay",
 ]) {
-  if (!uiShellClient.includes(`\"${slot}\"`)) {
-    fail(`UI shell is missing semantic child slot ${slot}`);
+  if (uiShellClient.includes(`\"${retired}\"`)) {
+    fail(`UI shell still declares retired slot name ${retired}`);
   }
 }
 const productShellSource = await text(
@@ -282,7 +295,7 @@ const productShellSource = await text(
 if (
   !uiShellClient.includes('name: "root"') ||
   !uiShellClient.includes('ctx.reflect.provide("layout"') ||
-  !uiShellClient.includes('entriesOfSlot("amiba.settings.section")') ||
+  !uiShellClient.includes('entriesOfSlot("settings.section")') ||
   !uiShellClient.includes("resolveSlotLabel(") ||
   !uiShellClient.includes('kind: "list"') ||
   !uiShellClient.includes("<AmibaProductShell")
@@ -312,10 +325,12 @@ for (const [body, where] of [
 // Id-selected list slots dispatch through the official renderSlot `only`
 // filter from the product shell — no marker scanning, no keyed registration.
 // The composer model picker rides a render prop backed by the same dispatch.
+// The settings.section dispatch must pass the OFFICIAL owner contract:
+// `close` wired to the shell's leave-Settings path.
 for (const dispatch of [
-  /renderSlot\(\s*"amiba\.settings\.section",[\s\S]{0,200}?\{ only: sectionId \}/u,
+  /renderSlot\(\s*"settings\.section",\s*\{ close:[\s\S]{0,200}?\{ only: sectionId \}/u,
   /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
-  /renderSlot\(\s*"amiba\.shell\.overlay"/u,
+  /renderSlot\(\s*"shell\.overlay"/u,
   /renderSlot\(\s*"amiba\.composer\.modelPicker",\s*owner\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
@@ -368,7 +383,7 @@ const memoryClient = await text(
 );
 for (const required of [
   "ctx.remote.$mount(AMIBA_MEMORY_REMOTE)",
-  '"amiba.settings.section"',
+  '"settings.section"',
   "id: SECTION_ID",
   "label: () => labels().nav",
   // Trailing comma on purpose: the inject face also carries the section's
@@ -379,7 +394,7 @@ for (const required of [
     fail(`memory Client plugin is missing ${required}`);
   }
 }
-if (memoryClient.includes('"amiba.settings.navigation.assistant"')) {
+if (memoryClient.includes("settings.navigation")) {
   fail(
     "memory must register one settings section; navigation comes from the DSH slot ledger",
   );
@@ -427,7 +442,7 @@ const messagingClient = await text(
 for (const required of [
   "ctx.remote.$mount(AMIBA_MESSAGING_REMOTE)",
   '"remote.amibaMessaging"',
-  '"amiba.settings.section"',
+  '"settings.section"',
   "id: SECTION_ID",
   "DshSettingsMessaging",
 ]) {
@@ -471,15 +486,39 @@ if (
 }
 const slotsSdk = await text("packages/extension-sdk/src/slots.ts");
 const productShell = productShellSource;
+// The section-ledger navigation is rendered DIRECTLY by the product shell
+// (the former amiba.settings.navigation.assistant slot indirection is
+// retired); SettingsView's assistantNavigation render prop stays the host
+// mechanism, and the Settings Shell stays the single selection source.
 if (
-  !slotsSdk.includes("activeSection?: string") ||
-  !uiShellClient.includes("active={activeSection === section.id}") ||
+  !productShell.includes("active={activeSection === section.id}") ||
+  !productShell.includes("<SettingsSectionNavigation") ||
   uiShellClient.includes("useActiveSettingsSection") ||
   !settingsView.includes("assistantNavigation?.(dshSection)") ||
-  !productShell.includes('renderSlot("amiba.settings.navigation.assistant"')
+  productShell.includes('renderSlot("amiba.settings.navigation')
 ) {
   fail(
     "Settings Shell must be the single selection source for built-in and DSH slot navigation",
+  );
+}
+// Official-vocabulary type home: the SDK inherits settings.section (and the
+// settings.* family) from the official declarer instead of re-declaring it,
+// and mirrors shell.overlay identically (see the guard for why no import).
+if (
+  !slotsSdk.includes('from "@deepseek-ai/dsh-client-ui-settings/client"') ||
+  !slotsSdk.includes('"shell.overlay": { kind: "list"; scope: "root" }') ||
+  slotsSdk.includes('"settings.section":')
+) {
+  fail(
+    "extension-sdk must inherit the official settings vocabulary and mirror shell.overlay, not re-declare settings.section",
+  );
+}
+const slotsGuard = await text(
+  "packages/extension-sdk/src/slot-vocabulary-guard.ts",
+);
+if (!slotsGuard.includes('"@deepseek-ai/dsh-client-ui-layout/client"')) {
+  fail(
+    "extension-sdk slot-vocabulary guard must load the official ui-layout declaration beside the shell.overlay mirror",
   );
 }
 const webhookManifest = await json(
@@ -501,7 +540,7 @@ const catalogClient = await text(
 );
 for (const required of [
   "ctx.remote.$mount(AMIBA_TOOLS_REMOTE)",
-  '"amiba.settings.section"',
+  '"settings.section"',
   '"amiba.tools.panel"',
   "PropsRenderSlots",
   "children: {",
@@ -545,7 +584,7 @@ const skillsClient = await text(
 for (const required of [
   "ctx.remote.$mount(AMIBA_SKILLS_REMOTE)",
   '"remote.amibaSkills"',
-  '"amiba.settings.section"',
+  '"settings.section"',
   "DshSkillsPage",
 ]) {
   if (!skillsClient.includes(required)) {
@@ -581,7 +620,7 @@ for (const required of [
   'ctx.get("connection")',
   "ctx.remote.$on(",
   '"settings/document-updated"',
-  '"amiba.settings.section"',
+  '"settings.section"',
   "id: SECTION_ID",
   // AP3: ONE merged section leading the Assistant group (the former
   // separate 行为与人设 section at 5 folded into the roster page).

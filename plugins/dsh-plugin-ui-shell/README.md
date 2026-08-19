@@ -15,7 +15,10 @@ reverse.
 
 ## Stable children
 
-Declared on the root's children table:
+Declared on the root's children table. Vocabulary policy: seats with an
+official DSH equivalent carry the OFFICIAL slot name and contract;
+`amiba.*` names are reserved for vendor extensions with no official
+counterpart.
 
 - `amiba.navigation.before`
 - `amiba.navigation.after`
@@ -25,18 +28,26 @@ Declared on the root's children table:
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker` (dispatched through the composer's
   `modelPicker` render prop)
-- `amiba.settings.navigation.before`
-- `amiba.settings.navigation.assistant`
-- `amiba.settings.navigation.after`
-- `amiba.settings.section`
+- `settings.section` — official name and owner contract
+  (`SettingsSectionOwnerProps { close }`) inherited from
+  `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,
+  `label`) drive the Settings navigation ledger, and the vendor `navIcon`
+  inject-face convention still supplies the nav glyph (official plugins
+  without one fall back to the generic Blocks icon)
 - `amiba.settings.content.overlay`
-- `amiba.shell.overlay`
+- `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
+  the frame-wide click-through floating layer
 
 `amiba.agentPreset.section` remains part of the public vocabulary
 (`@amiba/extension-sdk`) but its runtime declaration lives on
 `dsh-plugin-agent-preset`'s settings-section entry, which dispatches it with
 `renderSlot` — the same feature-owned child-slot pattern as
 `amiba.tools.panel`.
+
+The former `amiba.settings.navigation.before/assistant/after` trio is
+retired: the section-ledger navigation is rendered directly by the product
+shell (it owns both the component and the ledger source), and the
+before/after seats had no registrants.
 
 Every contributing client plugin declares `@amiba/dsh-plugin-ui-shell` in its
 `dsh.client.inject` list, imports the slot contract types, and registers through
