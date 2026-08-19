@@ -641,13 +641,28 @@ try {
         "stock DSH conversation tree was not disabled",
       );
       for (const replacedClientPackage of [
+        // ui-theme stays out: providing `theme` without a presenter would
+        // promise repaints Amiba cannot deliver, and its host half taps the
+        // served index to write a boot palette that fights Amiba's own.
         "@deepseek-ai/dsh-client-ui-theme",
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-settings",
       ]) {
         assert.ok(
           !ids.has(replacedClientPackage),
           `${replacedClientPackage} still competes with Amiba-owned UI state`,
+        );
+      }
+      // Deliberately PRESENT (renderless here, and every disabled row's
+      // client half injects them — see the web bundle patch header):
+      // `ui-settings` for `settingsScope`, `locale` for `locale` + the
+      // framework `t` seat. Without them the auto-mounted directory-picker
+      // browse client hangs the whole boot on chooser-less hosts.
+      for (const requiredServiceProvider of [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale",
+      ]) {
+        assert.ok(
+          ids.has(requiredServiceProvider),
+          `${requiredServiceProvider} must stay in the client graph: its service is injected by official client plugins`,
         );
       }
       const uiShell = graph.entries.find(

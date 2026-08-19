@@ -1,5 +1,23 @@
 # Amiba owns the product layout while retaining DSH's Web kernel, connection,
 # Remote transport, and client module graph.
+#
+# Two official client rows stay ENABLED on purpose even though Amiba replaces
+# the UI they belong to, because both are renderless here and every disabled
+# row's client half injects them:
+#   - `ui-settings` provides `settingsScope` and nothing else (its whole client
+#     apply is `new SettingsScopeBinder(ctx)`; its host apply is empty). The
+#     `settings.*` SlotMap keys it owns are types only — Amiba declares
+#     `settings.section` itself.
+#   - `locale` provides `locale` AND installs the framework `t` seat
+#     (`slots.installLocale`, boot-once). Without it, ANY entry registering
+#     with `locale: <ns>` throws SlotAssemblyError past the render boundary —
+#     an app-level crash — and 24 of the rows below cannot activate at all.
+#     Its only registration targets `settings.general.item`, declared by the
+#     still-disabled `ui-settings-general`, so it renders nothing here.
+# Keeping them also stops the auto-mounted directory-picker client half
+# (`-browse`, injected `locale`) from hanging the whole boot on hosts where
+# the native chooser is unavailable: non-loopback `--host`, SSH sessions, or
+# a Linux desktop without zenity/kdialog.
 - id: session-log-download
   disabled: true
 
@@ -9,16 +27,10 @@
 - id: ui-theme
   disabled: true
 
-- id: locale
-  disabled: true
-
 - id: ui-layout
   disabled: true
 
 - id: ui-sidebar
-  disabled: true
-
-- id: ui-settings
   disabled: true
 
 - id: ui-settings-general
