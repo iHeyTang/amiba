@@ -32,6 +32,8 @@ import { createPortal } from "react-dom";
 import {
   AmibaProductShell,
   SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP,
+  type PresetSectionsSource,
+  type SettingsSectionsSource,
   type SlotMarkerElement,
 } from "./product-shell.js";
 import shellCss from "./styles.css?inline";
@@ -67,7 +69,11 @@ export type {
 } from "@amiba/extension-sdk";
 
 type AmibaRootProps = PropsRuntime<"root"> &
-  PropsRenderSlots<AmibaRootSlot> & { shell: ReactNode };
+  PropsRenderSlots<AmibaRootSlot> & {
+    dshClient: DshApiClient;
+    settingsSections: SettingsSectionsSource;
+    presetSections: PresetSectionsSource;
+  };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
 const SLOT_NAMES: readonly AmibaRootSlot[] = AMIBA_ROOT_SLOTS;
@@ -220,7 +226,12 @@ function sameTargets(
   return true;
 }
 
-function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
+function AmibaRoot({
+  renderSlot,
+  dshClient,
+  settingsSections,
+  presetSections,
+}: AmibaRootProps): ReactNode {
   const [targets, setTargets] = useState<ReadonlyMap<string, SlotTarget>>(
     () => new Map(),
   );
@@ -274,7 +285,11 @@ function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
 
   return (
     <>
-      {shell}
+      <AmibaProductShell
+        dshClient={dshClient}
+        settingsSections={settingsSections}
+        presetSections={presetSections}
+      />
       {portals}
     </>
   );
@@ -467,14 +482,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
+        // Data faces only — AmibaRoot itself constructs the product shell,
+        // so the one component receiving `renderSlot` is also the one that
+        // hands render props down into it.
         inject: () => ({
-          shell: (
-            <AmibaProductShell
-              dshClient={dshClient}
-              settingsSections={sectionsSource}
-              presetSections={presetSectionsSource}
-            />
-          ),
+          dshClient,
+          settingsSections: sectionsSource,
+          presetSections: presetSectionsSource,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
