@@ -19,7 +19,7 @@ function record(overrides: Partial<AmibaUsageRecord> & { ts: number }): AmibaUsa
   };
 }
 
-describe("TokensTab (list-injected — no getPlatform().agentUsage)", () => {
+describe("TokensTab (list-injected via the plugin remote)", () => {
   beforeEach(() => {
     document.documentElement.lang = "en";
   });

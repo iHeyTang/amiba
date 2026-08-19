@@ -160,6 +160,49 @@ for (const packageName of pluginPackages) {
   }
 }
 
+// Feature plugin clients must not reach the host platform adapter — domain
+// data flows through each plugin's own DSH Remote. The sole exception is
+// mechanism-level ENVIRONMENT facts, member-allowlisted here: window-chrome
+// geometry and the UI-preference storage mechanism. This sweep covers every
+// file of every dsh.client plugin's client directory (the old per-file
+// substring checks let a helper in a sibling file slip through unscanned).
+// dsh-plugin-ui-shell is exempt: it IS the shell boot and owns setPlatform.
+const PLUGIN_CLIENT_PLATFORM_ALLOWLIST = new Set([
+  "kind",
+  "windowChrome",
+  "storage",
+]);
+for (const packageName of pluginPackages) {
+  if (packageName === "@amiba/dsh-plugin-ui-shell") continue;
+  const clientDir = `plugins/${packageName.slice("@amiba/".length)}/src/client`;
+  if (!(await exists(clientDir))) continue;
+  for (const file of await sourceFiles(clientDir)) {
+    const body = await readFile(file, "utf8");
+    const rel = path.relative(root, file);
+    if (body.includes("ipc")) {
+      fail(`${rel} must not route UI through Electron IPC`);
+    }
+    const memberless = body
+      .replace(/getPlatform\(\)\s*\.\s*(\w+)/gu, (whole, member) => {
+        if (!PLUGIN_CLIENT_PLATFORM_ALLOWLIST.has(member)) {
+          fail(
+            `${rel} reads getPlatform().${member} — feature plugin clients ` +
+              `may only read mechanism facts (${[...PLUGIN_CLIENT_PLATFORM_ALLOWLIST].join(", ")}); ` +
+              `domain data must ride the plugin's own DSH Remote`,
+          );
+        }
+        return "";
+      })
+      .includes("getPlatform(");
+    if (memberless) {
+      fail(
+        `${rel} uses getPlatform without an allowlisted member access — ` +
+          `not permitted in feature plugin clients`,
+      );
+    }
+  }
+}
+
 const corePatch = patches[0];
 for (const desktopOrWebOnly of [
   "@amiba/dsh-plugin-browser-provider-electron",
@@ -450,12 +493,6 @@ for (const required of [
     fail(`messaging-core Client plugin is missing ${required}`);
   }
 }
-if (
-  messagingClient.includes("getPlatform") ||
-  messagingClient.includes("ipc")
-) {
-  fail("messaging-core Client plugin must not route its UI through Electron");
-}
 const messagingHost = await text(
   "plugins/dsh-plugin-messaging-core/src/remote-service.ts",
 );
@@ -552,9 +589,6 @@ for (const required of [
     );
   }
 }
-if (catalogClient.includes("getPlatform") || catalogClient.includes("ipc")) {
-  fail("catalog Client plugin must not route Tools UI through Electron");
-}
 
 const skillsManifest = await json("plugins/dsh-plugin-skills/package.json");
 if (
@@ -590,9 +624,6 @@ for (const required of [
   if (!skillsClient.includes(required)) {
     fail(`Skills Client plugin is missing ${required}`);
   }
-}
-if (skillsClient.includes("getPlatform") || skillsClient.includes("ipc")) {
-  fail("Skills Client plugin must not route its UI through Electron");
 }
 
 const agentPresetManifest = await json(
@@ -661,13 +692,6 @@ if (agentPresetPage.includes("data-amiba-dsh-slot")) {
     "Agent-preset detail page must dispatch contributions with renderSlot, not DOM slot markers",
   );
 }
-for (const body of [agentPresetClient, agentPresetPage]) {
-  if (body.includes("getPlatform") || body.includes("ipc")) {
-    fail(
-      "Agent-preset Client plugin must not route its UI through the host platform adapter",
-    );
-  }
-}
 
 const mcpManifest = await json("plugins/dsh-plugin-mcp-manager/package.json");
 if (
@@ -694,9 +718,6 @@ for (const required of [
   if (!mcpClient.includes(required)) {
     fail(`MCP Client plugin is missing child contribution ${required}`);
   }
-}
-if (mcpClient.includes("getPlatform") || mcpClient.includes("ipc")) {
-  fail("MCP Client plugin must not route its UI through Electron");
 }
 const mcpHost = await text("plugins/dsh-plugin-mcp-manager/src/manager.ts");
 if (
@@ -739,9 +760,6 @@ for (const slot of ["amiba.workspace.navigation", "amiba.workspace.view"]) {
   if (!new RegExp(`slots\\.inject\\(\\s*"${slot}"`, "u").test(scheduleClient)) {
     fail(`Schedule Client plugin is missing workspace contribution ${slot}`);
   }
-}
-if (scheduleClient.includes("getPlatform") || scheduleClient.includes("ipc")) {
-  fail("Schedule Client plugin must not route its UI through Electron");
 }
 const scheduleHost = await text(
   "plugins/dsh-plugin-schedule-adapter/src/manager.ts",

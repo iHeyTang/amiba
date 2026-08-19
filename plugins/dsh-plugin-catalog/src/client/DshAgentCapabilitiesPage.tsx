@@ -44,9 +44,11 @@ import type { ToolInventory, ToolSchemaView } from "../remote.js";
  * data still rides the DSH Remote exclusively.
  */
 export function settingsChromeHeightPx(): number | undefined {
-  const platform = getPlatform();
-  return platform.kind === "desktop"
-    ? (platform.windowChrome?.topBarHeightPx ?? 40)
+  // Direct-chain member reads only: the architecture verifier allowlists
+  // mechanism facts per direct platform member access, so the platform
+  // handle must not be stored in a variable.
+  return getPlatform().kind === "desktop"
+    ? (getPlatform().windowChrome?.topBarHeightPx ?? 40)
     : undefined;
 }
 
