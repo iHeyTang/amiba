@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import { useT } from "@amiba/i18n";
 
@@ -16,7 +16,6 @@ export interface SettingsPageScaffoldProps {
   headerClassName?: string;
   headerHeightPx?: number;
   scroll?: "page" | "self";
-  onActionsHostChange?: (el: HTMLElement | null) => void;
   children: ReactNode;
 }
 
@@ -40,18 +39,10 @@ function ScaffoldBody({
   headerClassName,
   headerHeightPx = 40,
   scroll = "page",
-  onActionsHostChange,
   children,
 }: SettingsPageScaffoldProps) {
   const { t } = useT();
   const { setActionsHost, override } = useSettingsPageChrome();
-  const hostRef = useCallback(
-    (el: HTMLElement | null) => {
-      setActionsHost(el);
-      onActionsHostChange?.(el);
-    },
-    [setActionsHost, onActionsHostChange],
-  );
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <PaneHeaderBar
@@ -82,7 +73,7 @@ function ScaffoldBody({
           <div
             data-settings-page-actions
             className="flex items-center gap-1.5"
-            ref={hostRef}
+            ref={setActionsHost}
           />
         }
       />

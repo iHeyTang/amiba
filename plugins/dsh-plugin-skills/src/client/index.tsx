@@ -25,7 +25,6 @@ type SkillsSectionProps = PropsRuntime<"amiba.settings.section"> & {
 
 function SkillsSettings({
   adapter,
-  headerActionsHost,
   useSessions,
 }: SkillsSectionProps): ReactNode {
   const sessionState = useSessions((state) => state);
@@ -37,11 +36,7 @@ function SkillsSettings({
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.id;
   }, [sessionState]);
   return (
-    <DshSkillsPage
-      adapter={adapter}
-      headerActionsHost={headerActionsHost}
-      sessionId={current}
-    />
+    <DshSkillsPage adapter={adapter} sessionId={current} />
   );
 }
 

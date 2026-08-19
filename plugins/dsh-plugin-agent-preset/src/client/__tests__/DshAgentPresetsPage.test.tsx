@@ -2,6 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  SettingsPageChromeProvider,
+  useSettingsPageChrome,
+} from "@amiba/ui/plugin";
+
 const mocks = vi.hoisted(() => ({
   behaviorProps: vi.fn(),
 }));
@@ -16,6 +21,7 @@ vi.mock("../AgentPresetBehaviorEditor.js", () => ({
 import {
   DshAgentPresetsPage,
   type PresetSectionRow,
+  type RenderPresetSection,
   type SnapshotSource,
 } from "../DshAgentPresetsPage.js";
 import type { AgentPreset, AgentPresetsAdapter } from "../data.js";
@@ -67,22 +73,28 @@ function sectionsSource(
 }
 
 let adapter = makeAdapter();
-let actionsHost: HTMLElement | null = null;
+
+/** Reproduces the settings scaffold's chrome half: the page renders in the
+ *  same React tree as the scaffold, so SettingsPageActions resolves the
+ *  head-actions host from plain context. */
+function ActionsHost() {
+  const { setActionsHost } = useSettingsPageChrome();
+  return <div data-testid="actions-host" ref={setActionsHost} />;
+}
 
 function renderPage(options?: {
   presetSections?: readonly PresetSectionRow[];
+  renderPresetSection?: RenderPresetSection;
 }) {
-  // The DSH-section scaffold hands the page a head-actions host getter
-  // (`owner.headerActionsHost`); SettingsPageActions portals into it across
-  // React roots. Recreate that contract with a plain DOM node.
-  actionsHost = document.createElement("div");
-  document.body.appendChild(actionsHost);
   return render(
-    <DshAgentPresetsPage
-      adapter={adapter as unknown as AgentPresetsAdapter}
-      headerActionsHost={() => actionsHost}
-      presetSections={sectionsSource(options?.presetSections)}
-    />,
+    <SettingsPageChromeProvider>
+      <ActionsHost />
+      <DshAgentPresetsPage
+        adapter={adapter as unknown as AgentPresetsAdapter}
+        presetSections={sectionsSource(options?.presetSections)}
+        renderPresetSection={options?.renderPresetSection}
+      />
+    </SettingsPageChromeProvider>,
   );
 }
 
@@ -106,8 +118,6 @@ describe("DshAgentPresetsPage", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    actionsHost?.remove();
-    actionsHost = null;
   });
 
   it("pins the current default preset as the first row with the Default badge", async () => {
@@ -154,21 +164,30 @@ describe("DshAgentPresetsPage", () => {
     expect(screen.getByText("Default")).toBeVisible();
   });
 
-  it("emits the ledger slot marker scoped to the default preset's wire id", async () => {
-    const { container } = renderPage({
+  it("dispatches the ledger tab's render prop scoped to the default preset's wire id", async () => {
+    const renderPresetSection = vi.fn<RenderPresetSection>(
+      (sectionId, owner) => (
+        <div
+          data-testid="preset-section"
+          data-section={sectionId}
+          data-profile={owner.profileId}
+        />
+      ),
+    );
+    renderPage({
       presetSections: [{ id: "skills", label: "Skills" }],
+      renderPresetSection,
     });
     await drillIn("standard");
 
     await screen.findByTestId("behavior-editor");
     await userEvent.click(screen.getByRole("button", { name: "Skills" }));
 
-    await waitFor(() => {
-      const marker = container.querySelector(
-        '[data-amiba-dsh-slot="amiba.agentPreset.section"]',
-      );
-      expect(marker).not.toBeNull();
-      expect(marker).toHaveAttribute("data-amiba-dsh-profile-id", "standard");
+    const section = await screen.findByTestId("preset-section");
+    expect(section).toHaveAttribute("data-section", "skills");
+    expect(section).toHaveAttribute("data-profile", "standard");
+    expect(renderPresetSection).toHaveBeenLastCalledWith("skills", {
+      profileId: "standard",
     });
   });
 
@@ -347,9 +366,19 @@ describe("DshAgentPresetsPage", () => {
     );
   });
 
-  it("renders a tab per ledger section and emits the slot marker scoped to the preset", async () => {
-    const { container } = renderPage({
+  it("renders a tab per ledger section and dispatches its render prop scoped to the preset", async () => {
+    const renderPresetSection = vi.fn<RenderPresetSection>(
+      (sectionId, owner) => (
+        <div
+          data-testid="preset-section"
+          data-section={sectionId}
+          data-profile={owner.profileId}
+        />
+      ),
+    );
+    renderPage({
       presetSections: [{ id: "skills", label: "Skills" }],
+      renderPresetSection,
     });
     await drillIn();
 
@@ -357,25 +386,25 @@ describe("DshAgentPresetsPage", () => {
     const tab = screen.getByRole("button", { name: "Skills" });
     await userEvent.click(tab);
 
-    // The plugin does not render ledger content itself: it emits the marker
-    // the ui-shell root scanner portals the owning contribution into.
-    await waitFor(() => {
-      const marker = container.querySelector(
-        '[data-amiba-dsh-slot="amiba.agentPreset.section"]',
-      );
-      expect(marker).not.toBeNull();
-      expect(marker).toHaveAttribute("data-amiba-dsh-slot-only", "skills");
-      expect(marker).toHaveAttribute(
-        "data-amiba-dsh-profile-id",
-        "researcher",
-      );
+    // The plugin does not render ledger content itself: the owning
+    // contribution arrives through the renderSlot-backed render prop, scoped
+    // to this preset by the owner argument.
+    const section = await screen.findByTestId("preset-section");
+    expect(section).toHaveAttribute("data-section", "skills");
+    expect(section).toHaveAttribute("data-profile", "researcher");
+    expect(renderPresetSection).toHaveBeenLastCalledWith("skills", {
+      profileId: "researcher",
     });
     expect(screen.queryByTestId("behavior-editor")).not.toBeInTheDocument();
   });
 
   it("ignores a ledger section claiming the reserved 'behavior' id", async () => {
-    const { container } = renderPage({
+    const renderPresetSection = vi.fn<RenderPresetSection>(() => (
+      <div data-testid="preset-section" />
+    ));
+    renderPage({
       presetSections: [{ id: "behavior", label: "Ledger Behavior" }],
+      renderPresetSection,
     });
     await drillIn();
 
@@ -388,8 +417,7 @@ describe("DshAgentPresetsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Ledger Behavior" }),
     ).not.toBeInTheDocument();
-    expect(
-      container.querySelector('[data-amiba-dsh-slot="amiba.agentPreset.section"]'),
-    ).toBeNull();
+    expect(renderPresetSection).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("preset-section")).not.toBeInTheDocument();
   });
 });

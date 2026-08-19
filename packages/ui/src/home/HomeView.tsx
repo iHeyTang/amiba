@@ -26,6 +26,7 @@ import {
   WallpaperCredit,
   WorkspaceControl,
   type ComposerHandle,
+  type ComposerModelPickerRenderer,
 } from "../chat";
 import { getPlatform, type AgentModelSelection } from "@amiba/app-runtime/platform";
 import { shortId } from "@amiba/app-runtime/utils";
@@ -68,6 +69,13 @@ export interface HomeViewProps {
    * wants to show "the home-page composer" while nothing's selected.
    */
   panelMode?: boolean;
+  /**
+   * renderSlot-backed composer model-picker renderer, forwarded to
+   * ``<Composer modelPicker>`` together with HomeView's own draft-selection
+   * state. Hosts without a DSH plugin runtime omit it; the composer then
+   * renders nothing where the chip would sit.
+   */
+  modelPicker?: ComposerModelPickerRenderer;
 }
 
 export default function HomeView(props: HomeViewProps) {
@@ -86,6 +94,7 @@ function Home({
   headerClassName,
   hideInternalHeader,
   panelMode,
+  modelPicker,
 }: HomeViewProps) {
   const { t, language } = useT();
   const sessions = useSessions();
@@ -383,10 +392,15 @@ function Home({
             attachments={att}
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
-            modelPicker={{
-              draftSelection: draftModelSelection,
-              onDraftSelectionChange: setDraftModelSelection,
-            }}
+            modelPicker={
+              modelPicker
+                ? {
+                    render: modelPicker,
+                    draftSelection: draftModelSelection,
+                    onDraftSelectionChange: setDraftModelSelection,
+                  }
+                : undefined
+            }
             approvalModePicker
             agentPicker={{
               value: agent,

@@ -11,28 +11,14 @@ import {
   type PropsRuntime,
   type SnapshotSelectorHook,
 } from "@deepseek-ai/dsh-client-ui-slots";
-import {
-  AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP,
-  AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
-  AMIBA_ROOT_SLOTS,
-  type AmibaAgentPresetSectionOwner,
-  type AmibaComposerModelPickerOwner,
-  type AmibaComposerModelPickerPropsGetter,
-  type AmibaRootSlot,
-  type AmibaSettingsNavigationOwner,
-  type AmibaSettingsSectionOwner,
-  type AmibaWorkspaceNavigationOwner,
-  type AmibaWorkspaceViewOwner,
-} from "@amiba/extension-sdk";
 import { NavigationRow } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, type ReactNode } from "react";
 
 import {
   AmibaProductShell,
-  SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP,
-  type SlotMarkerElement,
+  type AmibaShellSlot,
+  type SettingsSectionsSource,
 } from "./product-shell.js";
 import shellCss from "./styles.css?inline";
 
@@ -67,216 +53,39 @@ export type {
 } from "@amiba/extension-sdk";
 
 type AmibaRootProps = PropsRuntime<"root"> &
-  PropsRenderSlots<AmibaRootSlot> & { shell: ReactNode };
+  PropsRenderSlots<AmibaShellSlot> & {
+    dshClient: DshApiClient;
+    settingsSections: SettingsSectionsSource;
+  };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
-const SLOT_NAMES: readonly AmibaRootSlot[] = AMIBA_ROOT_SLOTS;
 
-interface SlotTarget {
-  element: Element;
-  filterId?: string;
-  /** Per-mount marker id — lets several composers carry the same slot name. */
-  instanceId?: string;
-  name: AmibaRootSlot;
-  /**
-   * Serialized subset of rich marker props (composer model picker). Rich
-   * props travel by element property, which MutationObserver cannot watch;
-   * this attribute string is their change signal, compared in
-   * {@link sameTargets} so a draft-selection change re-renders the portal.
-   */
-  stateFingerprint?: string;
-  owner: AmibaSettingsSectionOwner &
-    AmibaSettingsNavigationOwner &
-    AmibaWorkspaceNavigationOwner &
-    AmibaWorkspaceViewOwner &
-    Partial<AmibaAgentPresetSectionOwner> &
-    Partial<AmibaComposerModelPickerOwner>;
-}
-
-function isRootSlot(value: string): value is AmibaRootSlot {
-  return (SLOT_NAMES as readonly string[]).includes(value);
-}
-
-/** Marker node carrying the composer model picker's rich-props getter. */
-type ComposerPickerMarkerElement = Element & {
-  [AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP]?: AmibaComposerModelPickerPropsGetter;
-};
-
-function findSlotTargets(): Map<string, SlotTarget> {
-  const targets = new Map<string, SlotTarget>();
-  for (const element of document.querySelectorAll("[data-amiba-dsh-slot]")) {
-    const name = element.getAttribute("data-amiba-dsh-slot") ?? "";
-    if (!isRootSlot(name)) continue;
-    const filterId =
-      element.getAttribute("data-amiba-dsh-slot-only")?.trim() || undefined;
-    if (
-      (name === "amiba.settings.section" ||
-        name === "amiba.workspace.view" ||
-        name === "amiba.agentPreset.section") &&
-      !filterId
-    )
-      continue;
-    const rawChromeHeight = element.getAttribute(
-      "data-amiba-dsh-chrome-height",
-    );
-    const parsedChromeHeight = rawChromeHeight
-      ? Number.parseInt(rawChromeHeight, 10)
-      : Number.NaN;
-    const rawTopBarLeftInset = element.getAttribute(
-      "data-amiba-dsh-top-bar-left-inset",
-    );
-    const parsedTopBarLeftInset = rawTopBarLeftInset
-      ? Number.parseInt(rawTopBarLeftInset, 10)
-      : Number.NaN;
-    const rawActiveView = element
-      .getAttribute("data-amiba-dsh-active-view")
-      ?.trim();
-    const rawActiveSection = element
-      .getAttribute("data-amiba-dsh-active-section")
-      ?.trim();
-    const rawProfileId = element
-      .getAttribute("data-amiba-dsh-profile-id")
-      ?.trim();
-    const headerActionsHost = (element as SlotMarkerElement)[
-      SETTINGS_SECTION_HEADER_ACTIONS_HOST_PROP
-    ];
-    const instanceId =
-      element.getAttribute("data-amiba-dsh-slot-instance")?.trim() || undefined;
-    const pickerProps =
-      name === "amiba.composer.modelPicker"
-        ? (element as ComposerPickerMarkerElement)[
-            AMIBA_COMPOSER_MODEL_PICKER_PROPS_PROP
-          ]?.()
-        : undefined;
-    const stateFingerprint =
-      element.getAttribute(AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR) ?? undefined;
-    const owner: SlotTarget["owner"] = {
-      ...(pickerProps ?? {}),
-      ...(Number.isFinite(parsedChromeHeight)
-        ? { chromeHeightPx: parsedChromeHeight }
-        : {}),
-      ...(headerActionsHost ? { headerActionsHost } : {}),
-      ...(Number.isFinite(parsedTopBarLeftInset)
-        ? { topBarLeftInset: parsedTopBarLeftInset }
-        : {}),
-      ...(rawActiveView ? { activeView: rawActiveView } : {}),
-      ...(rawActiveSection ? { activeSection: rawActiveSection } : {}),
-      ...(rawProfileId ? { profileId: rawProfileId } : {}),
-      ...(element.hasAttribute("data-amiba-dsh-sidebar-collapsed")
-        ? {
-            sidebarCollapsed:
-              element.getAttribute("data-amiba-dsh-sidebar-collapsed") ===
-              "true",
-          }
-        : {}),
-      ...(element.hasAttribute("data-amiba-dsh-show-sidebar-expand")
-        ? {
-            showSidebarExpandControl:
-              element.getAttribute("data-amiba-dsh-show-sidebar-expand") ===
-              "true",
-          }
-        : {}),
-    };
-    const id = filterId
-      ? `${name}:${filterId}`
-      : instanceId
-        ? `${name}@${instanceId}`
-        : name;
-    targets.set(id, {
-      element,
-      filterId,
-      instanceId,
-      name,
-      owner,
-      stateFingerprint,
-    });
-  }
-  return targets;
-}
-
-function sameTargets(
-  left: ReadonlyMap<string, SlotTarget>,
-  right: ReadonlyMap<string, SlotTarget>,
-): boolean {
-  if (left.size !== right.size) return false;
-  for (const [id, target] of left) {
-    const candidate = right.get(id);
-    if (
-      candidate?.element !== target.element ||
-      candidate.filterId !== target.filterId ||
-      candidate.stateFingerprint !== target.stateFingerprint ||
-      candidate.owner.chromeHeightPx !== target.owner.chromeHeightPx ||
-      candidate.owner.topBarLeftInset !== target.owner.topBarLeftInset ||
-      candidate.owner.activeView !== target.owner.activeView ||
-      candidate.owner.activeSection !== target.owner.activeSection ||
-      candidate.owner.sidebarCollapsed !== target.owner.sidebarCollapsed ||
-      candidate.owner.showSidebarExpandControl !==
-        target.owner.showSidebarExpandControl ||
-      candidate.owner.profileId !== target.owner.profileId
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function AmibaRoot({ renderSlot, shell }: AmibaRootProps): ReactNode {
-  const [targets, setTargets] = useState<ReadonlyMap<string, SlotTarget>>(
-    () => new Map(),
-  );
-
+/**
+ * The one component registered into the official DSH `root` slot. It
+ * constructs the whole product shell and hands `renderSlot` down as render
+ * props — every plugin contribution renders in this one React tree through
+ * the official dispatch. No DOM marker scanning, no portals: the former
+ * data-amiba-dsh-* side-channel is gone (the only surviving data-amiba-dsh-*
+ * attribute is `data-amiba-dsh-base-url`, a different contract owned by the
+ * desktop renderer bootstrap).
+ */
+function AmibaRoot({
+  renderSlot,
+  dshClient,
+  settingsSections,
+}: AmibaRootProps): ReactNode {
   useEffect(() => {
-    const scan = () => {
-      const next = findSlotTargets();
-      setTargets((current) => (sameTargets(current, next) ? current : next));
-    };
-    const observer = new MutationObserver(scan);
-    observer.observe(document.documentElement, {
-      attributeFilter: [
-        "data-amiba-dsh-slot",
-        "data-amiba-dsh-slot-only",
-        "data-amiba-dsh-chrome-height",
-        "data-amiba-dsh-top-bar-left-inset",
-        "data-amiba-dsh-active-view",
-        "data-amiba-dsh-active-section",
-        "data-amiba-dsh-sidebar-collapsed",
-        "data-amiba-dsh-show-sidebar-expand",
-        "data-amiba-dsh-profile-id",
-        AMIBA_COMPOSER_MODEL_PICKER_STATE_ATTR,
-      ],
-      attributes: true,
-      childList: true,
-      subtree: true,
-    });
-    scan();
+    // Boot handshake: the desktop renderer waits for this (or for the
+    // [data-amiba-product-shell] node) before flushing queued deep links.
     window.dispatchEvent(new CustomEvent(ROOT_READY_EVENT));
-    return () => observer.disconnect();
   }, []);
 
-  const portals = useMemo(
-    () =>
-      [...targets.entries()].map(([id, target]) =>
-        createPortal(
-          (target.name === "amiba.settings.section" ||
-            target.name === "amiba.workspace.view" ||
-            target.name === "amiba.agentPreset.section") &&
-            target.filterId
-            ? renderSlot(target.name, target.owner, {
-                only: target.filterId,
-              })
-            : renderSlot(target.name, target.owner),
-          target.element,
-          `amiba-dsh-slot:${id}`,
-        ),
-      ),
-    [renderSlot, targets],
-  );
-
   return (
-    <>
-      {shell}
-      {portals}
-    </>
+    <AmibaProductShell
+      dshClient={dshClient}
+      renderSlot={renderSlot}
+      settingsSections={settingsSections}
+    />
   );
 }
 
@@ -421,60 +230,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
         };
       },
     };
-    let presetSectionsVersion = -1;
-    let presetSectionsLanguage = "";
-    let presetSections: readonly SettingsSectionRow[] = [];
-    const presetSectionsSource = {
-      getSnapshot: () => {
-        const version = ctx.slots.getVersion("amiba.agentPreset.section");
-        const language = document.documentElement.lang;
-        if (
-          version !== presetSectionsVersion ||
-          language !== presetSectionsLanguage
-        ) {
-          presetSectionsVersion = version;
-          presetSectionsLanguage = language;
-          presetSections = ctx.slots
-            .entriesOfSlot("amiba.agentPreset.section")
-            .map((entry) => ({
-              id: entry.options.id ?? "",
-              label:
-                resolveSlotLabel(entry.options.label) ?? entry.options.id ?? "",
-              order: entry.options.order ?? 0,
-            }))
-            .filter((entry) => entry.id.length > 0)
-            .sort((left, right) => left.order - right.order);
-        }
-        return presetSections;
-      },
-      subscribe: (listener: () => void) => {
-        const disposeSlotSubscription = ctx.slots.subscribe(
-          "amiba.agentPreset.section",
-          listener,
-        );
-        const languageObserver = new MutationObserver(listener);
-        languageObserver.observe(document.documentElement, {
-          attributeFilter: ["lang"],
-          attributes: true,
-        });
-        return () => {
-          languageObserver.disconnect();
-          disposeSlotSubscription();
-        };
-      },
-    };
     const disposeLayout = ctx.reflect.provide("layout", layout);
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
+        // Data faces only — AmibaRoot itself constructs the product shell,
+        // so the one component receiving `renderSlot` is also the one that
+        // hands render props down into it.
         inject: () => ({
-          shell: (
-            <AmibaProductShell
-              dshClient={dshClient}
-              settingsSections={sectionsSource}
-              presetSections={presetSectionsSource}
-            />
-          ),
+          dshClient,
+          settingsSections: sectionsSource,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -510,10 +275,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "root",
           },
-          "amiba.agentPreset.section": {
-            kind: "list",
-            scope: "root",
-          },
+          // amiba.agentPreset.section is deliberately NOT declared here:
+          // dsh-plugin-agent-preset declares it as a child of its own
+          // settings-section entry (the amiba.tools.panel pattern).
           "amiba.shell.overlay": { kind: "list", scope: "root" },
         },
       },

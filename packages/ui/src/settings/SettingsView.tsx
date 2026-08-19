@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Home } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getPlatform } from "@amiba/app-runtime/platform";
 
 import { useT } from "@amiba/i18n";
@@ -67,22 +67,13 @@ export interface SettingsViewProps {
     assistantNavigation?: (activeSection?: string) => React.ReactNode;
     /** Additive DSH entries after the built-in settings navigation. */
     navigationAfter?: React.ReactNode;
-    /** Render target for one DSH plugin-owned list section selected by id. */
-    section?: (
-      sectionId: string,
-      owner: { actionsHost: () => HTMLElement | null },
-    ) => React.ReactNode;
     /**
-     * Render target for one DSH plugin-owned agent-preset detail section,
-     * scoped to the preset the ledger tab was opened under. Forwarded to
-     * the active page as `renderPresetSection`; no registry page reads it
-     * today (the agents page moved to dsh-plugin-agent-preset, which emits
-     * the same slot marker itself) — kept as the generic mechanism.
+     * Render target for one DSH plugin-owned list section selected by id.
+     * The section renders in the same React tree as the scaffold, so its
+     * head actions ride SettingsPageActions' plain context path — no owner
+     * side-channel is needed.
      */
-    presetSection?: (
-      sectionId: string,
-      owner: { profileId: string },
-    ) => React.ReactNode;
+    section?: (sectionId: string) => React.ReactNode;
     /** Settings content overlay; entries opt into pointer events. */
     contentOverlay?: React.ReactNode;
   };
@@ -134,12 +125,6 @@ export interface SettingsViewProps {
    * back to their raw id.
    */
   dshSections?: readonly { id: string; label: string }[];
-  /**
-   * Ledger of DSH plugin-owned agent-preset detail sections. Passed through
-   * to every registry page as `presetSections`; no registry page consumes
-   * it since the agents page moved to dsh-plugin-agent-preset.
-   */
-  dshPresetSections?: readonly { id: string; label: string }[];
 }
 
 export function SettingsView({
@@ -151,7 +136,6 @@ export function SettingsView({
   paneHeaderClassName,
   paneHeaderChromeHeightPx,
   dshSections,
-  dshPresetSections,
 }: SettingsViewProps = {}) {
   useResolvedTheme();
   const { t } = useT();
@@ -204,7 +188,6 @@ export function SettingsView({
     ? route.tab.slice("dsh:".length)
     : undefined;
   const activePage = dshSection ? undefined : settingsPageById(route.tab);
-  const actionsHostRef = useRef<HTMLElement | null>(null);
 
   return (
     <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
@@ -323,13 +306,8 @@ export function SettingsView({
             headerClassName={paneHeaderClassName}
             headerHeightPx={paneHeaderChromeHeightPx ?? 40}
             scroll="self"
-            onActionsHostChange={(el) => {
-              actionsHostRef.current = el;
-            }}
           >
-            {slots?.section?.(dshSection, {
-              actionsHost: () => actionsHostRef.current,
-            })}
+            {slots?.section?.(dshSection)}
           </SettingsPageScaffold>
         ) : activePage ? (
           <SettingsPageScaffold
@@ -343,8 +321,6 @@ export function SettingsView({
             <activePage.component
               detail={route.detail}
               onOpenDetail={(id) => navigate(activePage.id, id ?? undefined)}
-              presetSections={dshPresetSections}
-              renderPresetSection={slots?.presetSection}
             />
           </SettingsPageScaffold>
         ) : null}

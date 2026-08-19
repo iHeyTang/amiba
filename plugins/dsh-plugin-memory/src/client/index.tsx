@@ -202,13 +202,11 @@ type MemoryRemote = ClientContext["remote"]["amibaMemory"];
  */
 function MemoryView({
   embedded = false,
-  headerActionsHost,
   listMemory,
   preset,
   presetControl,
 }: {
   embedded?: boolean;
-  headerActionsHost?: () => HTMLElement | null;
   listMemory: MemoryRemote["list"];
   preset: string;
   /** Interactive replacement for the read-only preset value cell — only the
@@ -259,9 +257,7 @@ function MemoryView({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {embedded ? null : (
-        <SettingsPageActions host={headerActionsHost}>
-          {refreshButton}
-        </SettingsPageActions>
+        <SettingsPageActions>{refreshButton}</SettingsPageActions>
       )}
       <ScrollArea className="min-h-0 flex-1">
         <PageContent
@@ -321,7 +317,6 @@ type MemorySectionProps = PropsRuntime<"amiba.settings.section"> & {
 /** Top-level Settings section: adds the preset switcher driving which
  *  preset's memory `MemoryView` displays. */
 function MemorySettings({
-  headerActionsHost,
   listMemory,
   listPresets,
 }: MemorySectionProps): ReactNode {
@@ -364,7 +359,6 @@ function MemorySettings({
 
   return (
     <MemoryView
-      headerActionsHost={headerActionsHost}
       listMemory={listMemory}
       preset={preset}
       presetControl={

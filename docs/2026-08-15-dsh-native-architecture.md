@@ -50,11 +50,15 @@ flowchart LR
    命令的安装边界；它不提供插件发现、注册或 UI contribution API。
 3. renderer 请求 DSH client graph，加载官方 Web Shell 的 styles/scripts。
 4. `@amiba/dsh-plugin-ui-shell` 通过官方 Slot service 注册唯一 `root`。
-5. root 输出 `#amiba-dsh-root-container`，现有 Amiba React App 挂载到该容器。
-6. feature Client Plugins 注册到 root 声明的 children slots；root plugin 把 contribution
-   portal 到现有 UI 的语义锚点。
+5. root 组件（AmibaRoot）自己构造 Amiba 产品 Shell，整个产品运行在官方 Web Shell 的
+   同一棵 React 树里，没有第二个 React root。
+6. feature Client Plugins 注册到声明的 children slots；产品 Shell 把官方 `renderSlot`
+   作为 render prop 向下传递，contribution 直接在语义位置就地渲染（`only` 过滤按
+   entry id 选择）。没有 DOM marker 扫描、没有 portal 侧信道；唯一保留的
+   `data-amiba-dsh-*` attribute 是 `data-amiba-dsh-base-url`（renderer 启动契约，
+   由 messaging-core 读取）。
 
-DOM 锚点只描述“这个视觉位置在哪里”，不描述“有哪些插件”。插件清单、排序、作用域、
+渲染位置由 render prop 的调用点决定，不描述“有哪些插件”。插件清单、排序、作用域、
 注入、卸载仍来自 DSH Slot ledger。因此这不是 Desktop Host 反向提供 plugin。
 
 Electron 的 `webviewTag` 仅用于 Amiba 内置可见浏览器，main 会拒绝任何不是
@@ -63,7 +67,8 @@ Electron WebView，也没有 preload 特权。
 
 ## 4. Root children slots
 
-当前公共契约由 `@amiba/extension-sdk` 导出，root 声明：
+当前公共契约由 `@amiba/extension-sdk` 导出（其中 `amiba.agentPreset.section`
+的运行时声明在 dsh-plugin-agent-preset 自己的 settings section entry 上），root 声明：
 
 - `amiba.navigation.before`
 - `amiba.navigation.after`
@@ -86,8 +91,10 @@ Electron WebView，也没有 preload 特权。
 
 DSH 的 children 并不限于官方预定义位置。任何注册了 UI entry 的 Client Plugin 都可以在
 自己的 `children` 字段继续声明更深的 slot。Amiba 已使用这一模式：Tools 设置 section
-声明 `amiba.tools.panel`，MCP manager 再作为其 child contribution 注入。新增 slot 的原则
-是语义稳定、归属清晰、具备实际扩展需求，不能为单个临时组件制造全局 API。
+声明 `amiba.tools.panel`，MCP manager 再作为其 child contribution 注入；agent-preset
+section 声明 `amiba.agentPreset.section`，catalog/memory/skills 注入各自的预设详情
+tab。新增 slot 的原则是语义稳定、归属清晰、具备实际扩展需求，不能为单个临时组件制造
+全局 API。
 
 ## 5. 插件项目与依赖
 

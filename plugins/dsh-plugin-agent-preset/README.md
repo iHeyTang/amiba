@@ -54,11 +54,12 @@ the api-remotes assembly mounts only `commands`, `dynamicCordisRunner`,
 The detail's first tab (行为与人设) is native to this plugin; every other tab
 comes from the `amiba.agentPreset.section` ledger. The reserved id
 `behavior` is filtered — a ledger entry claiming it is ignored rather than
-allowed to shadow the native tab. For a ledger tab the page renders the slot
-marker (`data-amiba-dsh-slot` + `data-amiba-dsh-slot-only` +
-`data-amiba-dsh-profile-id`); the ui-shell root's document-wide scanner
-portals the owning plugin's contribution into it, exactly as it did when the
-host settings page emitted the same marker.
+allowed to shadow the native tab. The slot itself is declared by THIS
+plugin's settings-section entry (`children: { "amiba.agentPreset.section" }`,
+the `amiba.tools.panel` ownership pattern) and dispatched with the official
+`renderSlot(..., { only: tabId })`, scoped to the open preset through the
+owner props (`profileId`) — the owning plugin's contribution renders in the
+same React tree, no DOM markers involved.
 
 ## i18n
 

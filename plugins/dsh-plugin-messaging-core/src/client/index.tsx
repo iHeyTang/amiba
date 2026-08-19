@@ -42,7 +42,6 @@ async function valueOf<T>(
 
 function MessagingSettings({
   adapter,
-  headerActionsHost,
   useSessions,
 }: MessagingSectionProps): ReactNode {
   const sessionState = useSessions((state) => state);
@@ -71,11 +70,7 @@ function MessagingSettings({
     [sessions],
   );
   return (
-    <DshSettingsMessaging
-      adapter={adapter}
-      headerActionsHost={headerActionsHost}
-      sessionsAdapter={sessionsAdapter}
-    />
+    <DshSettingsMessaging adapter={adapter} sessionsAdapter={sessionsAdapter} />
   );
 }
 

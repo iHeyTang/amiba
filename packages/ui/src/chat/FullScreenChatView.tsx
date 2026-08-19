@@ -40,6 +40,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import ChatSurface from "./ChatSurface";
+import type { ComposerModelPickerRenderer } from "./Composer";
 import {
   WorkspacePane,
   WorkspacePaneProvider,
@@ -147,6 +148,11 @@ export interface FullScreenChatViewProps {
     headerAfter?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
     contentOverlay?: ReactNode;
+    /**
+     * renderSlot-backed composer model-picker renderer, forwarded through
+     * ChatSurface to the internal Composer.
+     */
+    modelPicker?: ComposerModelPickerRenderer;
   };
   /**
    * TabBar gear / settings row → open Settings. The optional ``tab``

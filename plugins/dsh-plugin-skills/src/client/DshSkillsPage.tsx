@@ -557,12 +557,10 @@ export function DshSkillsPage({
   adapter,
   sessionId,
   embedded = false,
-  headerActionsHost,
 }: {
   adapter: SkillsDirectoryAdapter;
   sessionId?: string;
   embedded?: boolean;
-  headerActionsHost?: () => HTMLElement | null;
 }) {
   const { t } = useT();
   const [skills, setSkills] = useState<AgentSkillEntry[]>([]);
@@ -739,7 +737,7 @@ export function DshSkillsPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {!embedded ? (
-        <SettingsPageActions host={headerActionsHost}>
+        <SettingsPageActions>
           <SettingsPageActionButton type="button" onClick={() => setEditing({})}>
             <Plus />
             {t("options.skills.dsh.create")}

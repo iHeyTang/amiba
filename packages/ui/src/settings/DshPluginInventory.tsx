@@ -177,10 +177,8 @@ function phaseLabel(
 
 export function DshPluginInventoryView({
   adapter,
-  headerActionsHost,
 }: {
   adapter: DshPluginInventoryAdapter;
-  headerActionsHost?: () => HTMLElement | null;
 }) {
   const { language } = usePluginT();
   const labels = copy(language);
@@ -291,7 +289,7 @@ export function DshPluginInventoryView({
   return (
     <ScrollArea className="min-h-0 flex-1">
       <PageContent size="lg">
-        <SettingsPageActions host={headerActionsHost}>
+        <SettingsPageActions>
           <SettingsPageActionButton
             aria-label={labels.refresh}
             disabled={loading}

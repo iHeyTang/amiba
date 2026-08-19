@@ -69,6 +69,7 @@ import {
   Composer,
   type ComposerDensity,
   type ComposerHandle,
+  type ComposerModelPickerRenderer,
   type ComposerPickerOverlayVariant,
 } from "./Composer";
 import { ConversationTurnRail } from "./ConversationTurnRail";
@@ -245,6 +246,14 @@ export interface ChatSurfaceProps {
      * centred in the main area.
      */
     emptyState?: ReactNode;
+    /**
+     * renderSlot-backed model-picker renderer, forwarded to the internal
+     * ``<Composer modelPicker>``. Hosts inside a DSH plugin runtime pass
+     * ``(owner) => renderSlot("amiba.composer.modelPicker", owner)``;
+     * hosts without one (Quick-Ask) omit it and the composer renders
+     * nothing where the chip would sit.
+     */
+    modelPicker?: ComposerModelPickerRenderer;
   };
 
   /**
@@ -1784,7 +1793,9 @@ export default function ChatSurface({
         { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
         { keys: "⇧⏎", label: t("sidepanel.composer.kbd.newline") },
       ]}
-      modelPicker
+      modelPicker={
+        slots?.modelPicker ? { render: slots.modelPicker } : undefined
+      }
       approvalModePicker
       permissionSessionId={sessions.activeId}
       topAffordance={

@@ -45,14 +45,4 @@ describe("SettingsPageScaffold", () => {
     );
     expect(screen.getByText("Fill").closest(".max-w-3xl")).toBeNull();
   });
-
-  it("reports the actions host node outward", () => {
-    const spy = vi.fn();
-    render(
-      <SettingsPageScaffold title="T" onActionsHostChange={spy}>
-        x
-      </SettingsPageScaffold>,
-    );
-    expect(spy).toHaveBeenCalledWith(expect.any(HTMLElement));
-  });
 });

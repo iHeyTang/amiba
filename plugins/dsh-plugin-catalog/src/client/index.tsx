@@ -50,14 +50,12 @@ type ToolsSectionProps = PropsRuntime<"amiba.settings.section"> & {
 function ToolsSettings({
   adapter,
   chromeHeightPx,
-  headerActionsHost,
   renderSlot,
 }: ToolsSectionProps): ReactNode {
   return (
     <DshAgentCapabilitiesPage
       adapter={adapter}
       chromeHeightPx={chromeHeightPx}
-      headerActionsHost={headerActionsHost}
     >
       {renderSlot("amiba.tools.panel", {
         chromeHeightPx,

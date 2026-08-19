@@ -271,14 +271,17 @@ describe("SettingsView DSH navigation", () => {
     expect(screen.getByTestId("section-content")).toBeInTheDocument();
   });
 
-  it("portals a DSH section's actions into the scaffold head via owner.actionsHost", async () => {
+  it("lands a DSH section's actions in the scaffold head through the plain context path", async () => {
+    // Section content renders in the same React tree as the scaffold (the
+    // ui-shell dispatches it with renderSlot inside SettingsPageScaffold),
+    // so SettingsPageActions needs no host side-channel: context reaches it.
     window.history.replaceState(null, "", "/#dsh:skills");
     const { container } = render(
       <SettingsView
         dshSections={[{ id: "skills", label: "Skills" }]}
         slots={{
-          section: (_sectionId, owner) => (
-            <SettingsPageActions host={owner.actionsHost}>
+          section: () => (
+            <SettingsPageActions>
               <button type="button">Act</button>
             </SettingsPageActions>
           ),
