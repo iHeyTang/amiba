@@ -1,9 +1,10 @@
 # @amiba/dsh-plugin-agent-preset
 
-DSH plugin owning Amiba's agent-preset management UI: the 智能体预设 ("Agent
-presets") settings section — preset roster, drill-in detail with the native
-行为与人设 ("Behavior & identity") tab, create/rename/delete/set-default, and
-the `amiba.agentPreset.section` tab strip other plugins contribute detail tabs
+DSH plugin owning Amiba's agent-preset management UI: the ONE 智能体预设
+("Agent presets") settings section — a roster led by a pinned row for the
+current default preset (its read-only drill-in is the former 行为与人设 page),
+the independent presets below with create/rename/delete/set-default, and the
+`amiba.agentPreset.section` tab strip other plugins contribute detail tabs
 into.
 
 ## Shape
@@ -12,12 +13,26 @@ into.
   engine-native — the official `@deepseek-ai/dsh-agent-presets` host row and
   its `agentPreset.*` wire face. This entry only lets DSH discover the
   package's `dsh.client` declaration (the `dsh-plugin-ui-shell` precedent).
-- **Client half** (`src/client/`): registers two `amiba.settings.section`
-  entries — `behavior` (order 5, the 行为与人设 page: read-only default-preset
-  description + SOUL) and `agents` (order 10, the roster + drill-in), so the
-  Assistant group reads behavior → agents → Models & services (50). Both ids
-  preserve the retired registry ids so `#behavior` and `#agents` deep links
-  keep resolving through SettingsView's `dsh:<id>` ledger fallback.
+- **Client half** (`src/client/`): registers ONE `amiba.settings.section`
+  entry — `agents` (order 5, leading the Assistant group ahead of Models &
+  services at 50). The id preserves the retired registry id so `#agents` deep
+  links keep resolving through SettingsView's `dsh:<id>` ledger fallback. The
+  former sibling `behavior` section merged into this page (its content is the
+  pinned default row's drill-in); an old `#behavior` link still takes the same
+  generic fallback and simply finds no section claiming the id.
+
+## Roster
+
+The list's first row is always the wire roster's current default preset (the
+`isDefault` entry `agentPreset.list` reports — the shipped `standard` preset
+unless the user defaulted a copy), pinned with a 默认/Default badge. Its
+drill-in is the merged 行为与人设 content: the same detail layout, behavior
+tab read-only (`sourceEditable` off), ledger tabs scoped to the default's
+preset id, and no rename/delete/set-default — the default slot is managed,
+not edited. A preset holding the default slot appears only as the pinned row
+(one preset, one row); every other user-authored preset lists below it with
+full CRUD, and the empty state below the pinned row speaks only about those
+independent presets.
 
 ## Data plane
 
@@ -49,6 +64,6 @@ host settings page emitted the same marker.
 
 Plugin-local overlay dictionaries (`src/client/i18n.ts`, en/zh-CN parity
 tested). The entire host `options.agents.*` family — including the
-behavior-editor keys, whose host page moved here too — was purged from
-`packages/i18n`; only shared vocabulary such as `common.*` stays host-side
-(resolved through `usePluginT`'s host-catalog fallback).
+behavior-editor keys, which still render inside the drill-in's behavior tab —
+was purged from `packages/i18n`; only shared vocabulary such as `common.*`
+stays host-side (resolved through `usePluginT`'s host-catalog fallback).

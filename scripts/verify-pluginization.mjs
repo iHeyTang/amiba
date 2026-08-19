@@ -271,13 +271,16 @@ const MODULES = [
     // and the app-runtime core roster read (`getAgentPresets`) still back
     // the host agent pickers (composer/home/chat) and are NOT forbidden
     // here. The preset UI is fully plugin-owned (dsh-plugin-agent-preset):
-    // the management roster + drill-in detail (AP) and the assistant-level
-    // 行为与人设 (Behavior & identity) settings page (AP2).
+    // the management roster + drill-in detail (AP), the assistant-level
+    // 行为与人设 settings page (AP2), then both merged into the ONE 智能体
+    // 预设 section whose roster pins the default preset (AP3 — the interim
+    // DshAgentBehaviorSettingsPage wrapper is gone entirely).
     text: [
       { label: "SettingsAgentsPage host component", pattern: boundary("SettingsAgentsPage") },
       { label: "AgentPresetList moved component", pattern: boundary("AgentPresetList") },
       { label: "AgentPresetDetail moved component", pattern: boundary("AgentPresetDetail") },
       { label: "DshAgentPresetsPage plugin component", pattern: boundary("DshAgentPresetsPage") },
+      { label: "DshAgentBehaviorSettingsPage retired plugin component", pattern: boundary("DshAgentBehaviorSettingsPage") },
       { label: "AgentBehaviorEditor retired host component", pattern: boundary("AgentBehaviorEditor") },
       { label: "SettingsAssistantBehavior retired host component", pattern: boundary("SettingsAssistantBehavior") },
       { label: "options.nav.agents retired nav key", pattern: /options\.nav\.agents/u },

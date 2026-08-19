@@ -29,14 +29,20 @@ function profile(
   return { name, is_default: isDefault, description, trust };
 }
 
+/**
+ * The deployment's real wire shape: the shipped `standard` preset carries
+ * `system` trust and `isDefault` (the api-proxy stamps `isDefault:
+ * preset.id === defaultId`, and the shipped config sets `default:
+ * standard`), plus one independent user copy.
+ */
 function response(name: string, description?: string) {
   return {
     ok: true,
     profiles: [
-      profile("default", "Root assistant", false, "system"),
-      profile(name, description, true),
+      profile("standard", "Root assistant", true, "system"),
+      profile(name, description),
     ],
-    active: name,
+    active: "standard",
   };
 }
 
@@ -104,6 +110,101 @@ describe("DshAgentPresetsPage", () => {
     actionsHost = null;
   });
 
+  it("pins the current default preset as the first row with the Default badge", async () => {
+    renderPage();
+
+    const defaultRow = await screen.findByRole("button", {
+      name: /standard/,
+    });
+    // Badge idiom shared with the detail head — the wire's `isDefault`
+    // entry is surfaced, not a hardcoded id.
+    expect(within(defaultRow).getByText("Default")).toBeVisible();
+    const copyRow = screen.getByRole("button", { name: /researcher/ });
+    expect(within(copyRow).queryByText("Default")).not.toBeInTheDocument();
+    expect(
+      defaultRow.compareDocumentPosition(copyRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("drills into the pinned default row read-only: no rename, no delete, no set-default", async () => {
+    renderPage();
+    await drillIn("standard");
+
+    expect(await screen.findByTestId("behavior-editor")).toBeInTheDocument();
+    // The folded-in 行为与人设 contract: the default preset's behavior
+    // projection, Edit-source affordance suppressed.
+    expect(mocks.behaviorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        description: "Root assistant",
+        profileId: "standard",
+        sourceEditable: false,
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Rename agent preset" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Make default task preset" }),
+    ).not.toBeInTheDocument();
+    // It already IS the default — the actions area shows the badge instead.
+    expect(screen.getByText("Default")).toBeVisible();
+  });
+
+  it("emits the ledger slot marker scoped to the default preset's wire id", async () => {
+    const { container } = renderPage({
+      presetSections: [{ id: "skills", label: "Skills" }],
+    });
+    await drillIn("standard");
+
+    await screen.findByTestId("behavior-editor");
+    await userEvent.click(screen.getByRole("button", { name: "Skills" }));
+
+    await waitFor(() => {
+      const marker = container.querySelector(
+        '[data-amiba-dsh-slot="amiba.agentPreset.section"]',
+      );
+      expect(marker).not.toBeNull();
+      expect(marker).toHaveAttribute("data-amiba-dsh-profile-id", "standard");
+    });
+  });
+
+  it("pins a user copy holding the default slot exactly once and guards its drill-in", async () => {
+    adapter.getAgentPresets.mockResolvedValue({
+      ok: true,
+      profiles: [
+        profile("standard", "Root assistant", false, "system"),
+        profile("researcher", "Verifies product claims", true),
+      ],
+      active: "researcher",
+    });
+    renderPage();
+
+    // One preset, one row: the defaulted copy appears only as the pinned
+    // row, never duplicated in the independent list below.
+    const rows = await screen.findAllByRole("button", { name: /researcher/ });
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText("Default")).toBeVisible();
+
+    await userEvent.click(rows[0]);
+    await screen.findByTestId("behavior-editor");
+    expect(mocks.behaviorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        profileId: "researcher",
+        sourceEditable: false,
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Rename agent preset" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("lists presets and drills into the detail on click", async () => {
     renderPage();
     await drillIn();
@@ -121,17 +222,18 @@ describe("DshAgentPresetsPage", () => {
     ).toBeVisible();
   });
 
-  it("shows the empty state when there are no custom presets and lets create from it", async () => {
+  it("keeps the pinned default row above the independent empty state and lets create from it", async () => {
     adapter.getAgentPresets.mockResolvedValue({
       ok: true,
-      profiles: [profile("default", "Root assistant", false, "system")],
-      active: "default",
+      profiles: [profile("standard", "Root assistant", true, "system")],
+      active: "standard",
     });
     renderPage();
 
-    expect(
-      await screen.findByText("No independent agent presets"),
-    ).toBeVisible();
+    // The empty state refers only to the independent presets below the
+    // pinned default row — the default preset is still present and shown.
+    expect(await screen.findByRole("button", { name: /standard/ })).toBeVisible();
+    expect(screen.getByText("No independent agent presets")).toBeVisible();
     const [createButton] = screen.getAllByRole("button", {
       name: "New agent preset",
     });
@@ -162,14 +264,6 @@ describe("DshAgentPresetsPage", () => {
   });
 
   it("activates a non-default preset from the detail actions", async () => {
-    adapter.getAgentPresets.mockResolvedValue({
-      ok: true,
-      profiles: [
-        profile("default", "Root assistant", false, "system"),
-        profile("researcher"),
-      ],
-      active: "default",
-    });
     renderPage();
     await drillIn();
 
@@ -183,14 +277,6 @@ describe("DshAgentPresetsPage", () => {
   });
 
   it("surfaces a failed preset action inline on the detail page without navigating away", async () => {
-    adapter.getAgentPresets.mockResolvedValue({
-      ok: true,
-      profiles: [
-        profile("default", "Root assistant", false, "system"),
-        profile("researcher"),
-      ],
-      active: "default",
-    });
     adapter.setDefaultAgentPreset.mockResolvedValue({
       ok: false,
       error: "Could not reach the DSH settings service.",
@@ -209,7 +295,7 @@ describe("DshAgentPresetsPage", () => {
     expect(screen.getByTestId("behavior-editor")).toBeInTheDocument();
   });
 
-  it("renames the preset from the detail page and stays on the renamed detail", async () => {
+  it("renames a non-default copy from the detail page and stays on the renamed detail", async () => {
     renderPage();
     await drillIn();
 
@@ -232,14 +318,6 @@ describe("DshAgentPresetsPage", () => {
   });
 
   it("deletes the preset from the detail page and returns to the list", async () => {
-    adapter.getAgentPresets.mockResolvedValue({
-      ok: true,
-      profiles: [
-        profile("default", "Root assistant", false, "system"),
-        profile("researcher"),
-      ],
-      active: "default",
-    });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await drillIn();
@@ -255,7 +333,7 @@ describe("DshAgentPresetsPage", () => {
     ).toBeVisible();
   });
 
-  it("scopes the embedded behavior editor to the selected preset", async () => {
+  it("scopes the embedded behavior editor to the selected copy with the Edit affordance intact", async () => {
     renderPage();
     await drillIn();
 
@@ -264,6 +342,7 @@ describe("DshAgentPresetsPage", () => {
       expect.objectContaining({
         description: "Verifies product claims",
         profileId: "researcher",
+        sourceEditable: true,
       }),
     );
   });

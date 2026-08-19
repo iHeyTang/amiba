@@ -107,8 +107,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             name: "amiba.settings.section",
             id: SECTION_ID,
             // Below every other plugin section (catalog/mcp start at 100)
-            // so 模型与服务 stays directly after the built-in 行为与人设
-            // entry, reproducing its old second-position registry slot.
+            // so 模型与服务 stays directly after the agent-preset plugin's
+            // 智能体预设 entry (5), keeping its old registry position.
             order: 50,
             label: () =>
               document.documentElement.lang.toLowerCase().startsWith("zh")
