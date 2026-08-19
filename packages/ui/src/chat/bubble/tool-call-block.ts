@@ -40,8 +40,15 @@ function wireValue<T>(value: unknown): T {
  *
  * `subCalls` is `[]` because that is the runtime's value for every ROOT call.
  * Children come only from `tool/code-dispatch-start` / `tool/code-dispatch`,
- * which exist only under Code Mode's `run_code` transport; Amiba's bundles
- * mount no `ctx.codeRuntime`, so its sessions emit neither event.
+ * which exist only under Code Mode's `run_code` transport, and no Amiba
+ * bundle or plugin manifest composes a `ctx.codeRuntime` — so no session
+ * Amiba itself assembles emits either event. The scope of that claim is
+ * Amiba's own composition: the managed profile's `cordis.patch.yml` is
+ * user-owned (seeded once, never overwritten), so an operator who mounts a
+ * code runtime there and selects a code preset WOULD see those events flow.
+ * Amiba's own tool row has never rendered sub-calls either, so that
+ * configuration loses nothing relative to the pre-seat behaviour; it is
+ * simply outside what this `[]` speaks for.
  *
  * @param event - one Amiba tool row.
  * @returns the running-or-settled call node, or null when unavailable.

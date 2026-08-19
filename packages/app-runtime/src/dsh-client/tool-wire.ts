@@ -53,7 +53,16 @@ function toolResultBlock(
   return first?.type === "tool-result" ? first : null
 }
 
-/** `{ name, code }` when the event reported a tool-internal failure identity. */
+/**
+ * `{ name, code }` when the event reported a tool-internal failure identity.
+ *
+ * BOTH members are required by the official `error` shape, so a frame that
+ * carries only one of them yields `undefined` rather than a half-built
+ * object: the alternative is inventing the missing half, and an official
+ * owner member must be honest or absent. Upstream's untyped JS spreads
+ * whatever arrived; typed retention cannot, and a wire that violates the
+ * declared contract is exactly where fabricating would do harm.
+ */
 function failureIdentity(
   value: unknown,
 ): { name: string; code: string } | undefined {

@@ -134,7 +134,16 @@ Phase-2 记录的诚实裁剪：继承 ui-conversation 类型后，session 标�
 `[]`，子调用只来自 `tool/code-dispatch-start`/`tool/code-dispatch`。这两类事件
 只在 Code Mode 下产生，而 Code Mode 的 `run_code` transport 需要挂载
 `ctx.codeRuntime`；Amiba 的 bundle 没有组装任何 code runtime、也没有插件申请，
-所以它的会话不会产生这两类事件，每个调用都是根调用。
+所以 Amiba 自己组装出的会话不会产生这两类事件，每个调用都是根调用。这句话的
+适用范围就是 Amiba 自己的 composition：受管 profile 的 `cordis.patch.yml` 归用户
+所有（只在缺失时种一次，之后永不覆写），运维者若在那里挂一个 code runtime 并
+选用 code preset，这两类事件是会流动的 —— 但 Amiba 自己的工具行本来也从不展示
+子调用，所以那种配置相对采纳前没有任何回退，只是不在这句 `[]` 的承诺范围内。
+
+第三方占位者的前置条件（记录一次）：上游自己的 toolview 注册带
+`locale: CONVERSATION_NS`，而缺少官方 `locale` 行时，任何带 locale 命名空间的注册
+都会在渲染边界外抛 `SlotAssemblyError`。所以照上游模式写的 `tool.call.toolview`
+占位插件，依赖 web bundle 保留 `locale` 行（见该 bundle patch 头部说明）才能激活。
 
 声明锚点（declaration anchor）的偏差，只有这一个席位有：官方是从
 `conversation.chat.node` 的 `tool-call` entry 声明它的（那个 Chat Node 拥有整棵
