@@ -114,19 +114,31 @@ export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.
 //     not run (its composer state is its own). The seats wait on the
 //     `ctx.sessions.provide` work.
 //   - `tool.call.toolview` (keyed by wire tool name) takes
-//     `block: ToolCallBlock`, whose `content: readonly ContentBlock[]`,
-//     `subCalls`, `seq`, `step` and `argsRaw` members have no source in
-//     Amiba's `ToolProgress` projection (it keeps flattened result text, a
-//     parsed args object, and a flat call map with no child ownership).
+//     `block: ToolCallBlock`. NOT structurally impossible — the honest
+//     record: every member except `subCalls` has a wire source Amiba's
+//     projection already touches and then drops (`argsRaw` = `data.arguments`,
+//     parsed and discarded; `seq`/`step`/`turn` = the same tool events;
+//     `content: readonly ContentBlock[]` = the result message's blocks,
+//     flattened to text; `error {name,code}` = collapsed to a boolean;
+//     `callView`/`resultView` = the event view already read). Upstream's own
+//     builder emits `subCalls: []` for every root call and fills children
+//     only from `tool/code-dispatch-start` / `tool/code-dispatch`, which
+//     Amiba ignores. So adoption is scoped work — a lossless `ToolProgress`
+//     projection, consuming those two event types, and turning the tool row
+//     into a keyed dispatch site with the existing generic row as
+//     `fallback` — not a contract Amiba cannot satisfy. It is the
+//     ecosystem's highest-value seat; deferred, not refused.
 //   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
 //     engine-owned boundary carrying the raw `turn/start` / `turn/end`
 //     events, a `StepLocation[]` ring, and the `data` business-value
 //     reader — none of which Amiba's projection retains.
-//   - `conversation.chat.assistant-actions` takes `messageId: MessageId`
-//     carried from the `assistant/message` event; Amiba's assistant bubble
-//     is a TURN aggregate keyed by the turn's first seq (and a local
-//     `shortId("a")` while streaming), so no faithful message identity
-//     exists to pass.
+//   - `conversation.chat.assistant-actions` takes `messageId: MessageId`.
+//     The wire does carry it (Amiba's own user-message branch reads
+//     `message.id`), and only finalized messages reach this seat — the
+//     blocker is the RENDER SITE: Amiba folds every `assistant/message` of a
+//     turn into one bubble, so a turn with N model steps has N MessageIds
+//     and a single action row; any one id would be arbitrary. Adoption waits
+//     on a per-message bubble, not on the protocol.
 
 export const AMIBA_ROOT_SLOTS = [
   "amiba.navigation.before",

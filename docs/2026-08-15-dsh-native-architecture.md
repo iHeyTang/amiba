@@ -115,17 +115,23 @@ Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方
 - `conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`：
   owner 是 `InputZone { session: ConversationSnapshot; input: InputState }`，
   两者都是 ui-conversation store 类型，需要 Phase-4 的 `ctx.sessions.provide`。
-- `tool.call.toolview`（keyed by wire tool name）：owner 的 `block: ToolCallBlock`
-  需要 `content: readonly ContentBlock[]`、`subCalls`、`seq`、`step`、`argsRaw`，
-  而 Amiba 的 `ToolProgress` 投影只保留扁平化结果文本、解析后的 args 对象和一张
-  没有父子关系的 call map。
+- `tool.call.toolview`（keyed by wire tool name）：**不是结构性做不到**，而是
+  有工作量。`block: ToolCallBlock` 除 `subCalls` 外的每个成员，线上都有来源、
+  且 Amiba 的投影已经读到过又丢弃了（`argsRaw` = `data.arguments` 解析后丢弃、
+  `seq`/`step`/`turn` 同批工具事件、`content` = result 消息的原始 block 被拍平成
+  文本、`error{name,code}` 被压成布尔、`callView`/`resultView` = 已读的事件 view）。
+  官方自己的 builder 对根调用也只发 `subCalls: []`，子调用只来自
+  `tool/code-dispatch-start`/`tool/code-dispatch` 两类事件（Amiba 未消费）。所以
+  采纳 = 无损投影 + 消费那两类事件 + 把工具行改成 keyed 分发（现有通用行做
+  `fallback`）。这是生态价值最高的席位，属于**延后**而非拒绝。
 - `conversation.chat.turnTail`：owner 的 `turn: TurnLocation` 是 engine-owned
   边界，携带原始 `turn/start`/`turn/end` 事件、`StepLocation[]` 与业务数据
   reader，Amiba 的投影三样都没有保留。
-- `conversation.chat.assistant-actions`：owner 的 `messageId: MessageId` 来自
-  `assistant/message` 事件；Amiba 的 assistant bubble 是按 TURN 聚合的
-  （`uiId: dsh:turn:<firstSeq>`，流式期间是本地 `shortId("a")`），没有可忠实
-  对应的 message 身份。
+- `conversation.chat.assistant-actions`：`messageId: MessageId` 线上有（Amiba 自己
+  的 user 消息分支就在读 `message.id`），且只有 finalized 消息会进这个席位——真正
+  的卡点在渲染位：Amiba 把一个 turn 的所有 `assistant/message` 折成一个气泡，N 个
+  模型步就有 N 个 MessageId 却只有一条操作行，任选其一都是武断。采纳前提是按消息
+  拆气泡，与协议无关。
 
 曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
 before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染

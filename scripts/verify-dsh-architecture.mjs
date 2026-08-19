@@ -330,14 +330,20 @@ for (const slot of [
 // Adopting an official NAME means adopting its official DECLARATION: a
 // divergent kind/scope would hand entries written against the upstream
 // contract a seat that behaves differently at runtime.
-for (const [slot, decl] of [
-  [
-    "conversation.session.header.actions",
-    '{\n            kind: "list",\n            scope: "session",\n          }',
-  ],
-  ["conversation.input.plan", '{ kind: "single", scope: "session" }'],
+// Whitespace-insensitive so a prettier reflow cannot break the pin, and
+// applied to EVERY adopted conversation seat (an unpinned membership check
+// alone is satisfiable by a mention in a comment).
+for (const [slot, kind, scope] of [
+  ["conversation.session.header.actions", "list", "session"],
+  ["conversation.session.header.utilities", "list", "session"],
+  ["conversation.input.model", "single", "session"],
+  ["conversation.input.plan", "single", "session"],
 ]) {
-  if (!uiShellClient.includes(`"${slot}": ${decl}`)) {
+  const declaration = new RegExp(
+    `"${slot.replace(/\./gu, "\\.")}":\\s*\\{\\s*kind:\\s*"${kind}",\\s*scope:\\s*"${scope}",?\\s*\\}`,
+    "u",
+  );
+  if (!declaration.test(uiShellClient)) {
     fail(`UI shell must declare ${slot} with the official kind/scope`);
   }
 }
@@ -463,7 +469,8 @@ const fullScreenChatSource = await text(
 );
 if (
   !fullScreenChatSource.includes("data-content-header-actions") ||
-  !fullScreenChatSource.includes("empty:hidden") ||
+  // Pinned inside the className (the bare string also occurs in prose).
+  !fullScreenChatSource.includes("gap-0.5 empty:hidden") ||
   !fullScreenChatSource.includes("actions={slots?.headerActions}")
 ) {
   fail(

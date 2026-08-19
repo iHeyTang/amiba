@@ -30,16 +30,19 @@ vendor extensions with no official counterpart; only those appear in
 `SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
 conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
-with no render site. Four seats are deliberately NOT adopted, because their
-owner contracts cannot be supplied faithfully from Amiba's own projection —
+with no render site. Four seats are NOT adopted yet, for two different
+reasons. Contract Amiba genuinely cannot supply today:
 `conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`
-(the `InputZone` share needs the ui-conversation input machine),
-`tool.call.toolview` (`ToolCallBlock` needs raw content blocks, sub-calls,
-seq/step and raw args), `conversation.chat.turnTail` (`TurnLocation` is an
-engine-owned boundary with a business-value reader), and
-`conversation.chat.assistant-actions` (`MessageId` addresses one finalized
-assistant message; Amiba's bubble is a turn aggregate). See
-`src/slots.ts` for the field-level record. The ui-conversation members of the session standard kit
+(the `InputZone` share needs the ui-conversation input machine) and
+`conversation.chat.turnTail` (`TurnLocation` is an engine-owned boundary with
+a business-value reader over machinery Amiba does not run). Scoped work, not
+a contract mismatch: `tool.call.toolview` — every `ToolCallBlock` member
+except `subCalls` has a wire source Amiba's projection already reads and
+drops, so adoption means a lossless projection, consuming the two
+`tool/code-dispatch*` events, and a keyed dispatch site; and
+`conversation.chat.assistant-actions`, whose `MessageId` is on the wire but
+whose render site folds a whole turn into one bubble. See `src/slots.ts` for
+the field-level record. The ui-conversation members of the session standard kit
 (`useInput`/`inputActions`) are type-visible but NOT provided by Amiba's
 runtime yet (recorded Phase-2 deferral) — the framework members
 (`sessionId`/`useSession`/`useProjection`) are live.
