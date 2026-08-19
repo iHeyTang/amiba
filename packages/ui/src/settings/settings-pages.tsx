@@ -74,9 +74,10 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     desktopOnly: true,
   },
   // The Assistant group's rows are all DSH plugin-owned settings sections
-  // now (行为与人设 and 智能体预设 from dsh-plugin-agent-preset, 模型与服务
-  // from dsh-plugin-model-plane, …) — projected through the section ledger,
-  // not registered here.
+  // now (智能体预设 from dsh-plugin-agent-preset — the 行为与人设 page merged
+  // into it as the pinned default-preset row — 模型与服务 from
+  // dsh-plugin-model-plane, …) — projected through the section ledger, not
+  // registered here.
   {
     id: "status",
     icon: Activity,

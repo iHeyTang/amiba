@@ -535,10 +535,19 @@ for (const required of [
   '"settings/document-updated"',
   '"amiba.settings.section"',
   "id: SECTION_ID",
-  "order: 10,",
+  // AP3: ONE merged section leading the Assistant group (the former
+  // separate 行为与人设 section at 5 folded into the roster page).
+  "order: 5,",
 ]) {
   if (!agentPresetClient.includes(required)) {
     fail(`Agent-preset Client plugin is missing ${required}`);
+  }
+}
+for (const retired of ["DshAgentBehaviorSettingsPage", "BEHAVIOR_SECTION_ID"]) {
+  if (agentPresetClient.includes(retired)) {
+    fail(
+      `Agent-preset Client plugin must register ONE settings section — found retired ${retired}`,
+    );
   }
 }
 const agentPresetPage = await text(

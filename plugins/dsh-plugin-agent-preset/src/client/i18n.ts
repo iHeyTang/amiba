@@ -9,13 +9,14 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * copies were purged in the same commits — the management-UI keys with the
  * AP move, the behavior-editor family (`role.*`, `soul.*`, `loadFailed`,
  * `soulLoadFailed`, `saveFailed`, `section.behavior`) with the AP2 move of
- * the 行为与人设 settings page. This dictionary is now the only owner of the
+ * the 行为与人设 settings page (AP3 then folded that page into the roster as
+ * the pinned default-preset row, so the behavior-editor keys now render
+ * inside the drill-in only). This dictionary is now the only owner of the
  * whole `options.agents.*` family (enforced by verify-pluginization's
  * agent-preset-ui module). `common.*` stays host-side by convention.
  */
 export const agentPresetI18n: PluginCatalogOverlay = {
   en: {
-    "options.agents.nav": "Agent presets",
     "options.agents.defaultShort": "Default",
     "options.agents.setActive": "Make default task preset",
     "options.agents.create": "New agent preset",
@@ -28,7 +29,7 @@ export const agentPresetI18n: PluginCatalogOverlay = {
     "options.agents.noDescription": "No description",
     "options.agents.customEmptyTitle": "No independent agent presets",
     "options.agents.customEmptyDescription":
-      "Assistant pages manage the default configuration. Create an agent here when it needs its own behavior, skills, tools, or memory.",
+      "The default preset above carries the standard configuration. Create an agent here when it needs its own behavior, skills, tools, or memory.",
     "options.agents.cloneDefault": "Amiba",
     "options.agents.section.behavior": "Behavior & identity",
     "options.agents.role.title": "Description",
@@ -51,7 +52,6 @@ export const agentPresetI18n: PluginCatalogOverlay = {
     "options.agents.deleteFailed": "Couldn't delete the preset",
   },
   "zh-CN": {
-    "options.agents.nav": "智能体预设",
     "options.agents.defaultShort": "默认",
     "options.agents.setActive": "设为默认任务预设",
     "options.agents.create": "新建智能体预设",
@@ -64,7 +64,7 @@ export const agentPresetI18n: PluginCatalogOverlay = {
     "options.agents.noDescription": "未添加描述",
     "options.agents.customEmptyTitle": "还没有独立智能体预设",
     "options.agents.customEmptyDescription":
-      "助手一级入口管理默认配置；在这里新建需要独立行为、技能、工具或记忆的智能体。",
+      "上方的默认预设承载默认配置；在这里新建需要独立行为、技能、工具或记忆的智能体。",
     "options.agents.cloneDefault": "Amiba",
     "options.agents.section.behavior": "行为与人设",
     "options.agents.role.title": "描述",

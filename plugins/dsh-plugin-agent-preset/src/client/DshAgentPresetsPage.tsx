@@ -66,11 +66,12 @@ function useT() {
 }
 
 function ProfileListRow({
-  active,
+  isDefault = false,
   onClick,
   profile,
 }: {
-  active: boolean;
+  /** Pinned default-preset row: primary icon tint plus the 默认 badge. */
+  isDefault?: boolean;
   onClick: () => void;
   profile: AgentPreset;
 }) {
@@ -84,7 +85,7 @@ function ProfileListRow({
       <Fingerprint
         className={cn(
           "h-3.5 w-3.5 shrink-0",
-          active ? "text-primary" : "text-muted-foreground/55",
+          isDefault ? "text-primary" : "text-muted-foreground/55",
         )}
         strokeWidth={1.8}
       />
@@ -96,17 +97,17 @@ function ProfileListRow({
           {profile.description || t("options.agents.noDescription")}
         </span>
       </span>
-      {active ? (
-        <span className="text-[10px] text-muted-foreground">
+      {isDefault ? (
+        <Badge className="rounded-full" variant="success">
           {t("options.agents.defaultShort")}
-        </span>
+        </Badge>
       ) : null}
     </button>
   );
 }
 
 function AgentPresetList({
-  activeName,
+  defaultProfile,
   error,
   headerActionsHost,
   loading,
@@ -115,13 +116,18 @@ function AgentPresetList({
   onRefresh,
   profiles,
 }: {
-  activeName: string;
+  /**
+   * The current default preset per the wire roster (`isDefault`), pinned as
+   * the always-first row. Null only when the roster is empty or unreadable.
+   */
+  defaultProfile: AgentPreset | null;
   error: string | null;
   headerActionsHost?: () => HTMLElement | null;
   loading: boolean;
   onCreate: () => void;
   onOpen: (name: string) => void;
   onRefresh: () => void;
+  /** Independent (user-authored, non-default) presets below the pinned row. */
   profiles: AgentPreset[];
 }) {
   const { t } = useT();
@@ -152,41 +158,54 @@ function AgentPresetList({
               {error}
             </p>
           ) : null}
-          {loading && profiles.length === 0 ? (
+          {loading && !defaultProfile && profiles.length === 0 ? (
             Array.from({ length: 3 }, (_, index) => (
               <div
                 className="h-14 animate-pulse rounded-xl bg-muted/60"
                 key={index}
               />
             ))
-          ) : profiles.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-16 text-center">
-              <Fingerprint className="h-6 w-6 text-muted-foreground/55" />
-              <p className="mt-3 text-sm font-medium">
-                {t("options.agents.customEmptyTitle")}
-              </p>
-              <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                {t("options.agents.customEmptyDescription")}
-              </p>
-              <Button
-                className="mt-4"
-                onClick={onCreate}
-                size="sm"
-                type="button"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t("options.agents.create")}
-              </Button>
-            </div>
           ) : (
-            profiles.map((profile) => (
-              <ProfileListRow
-                active={profile.name === activeName}
-                key={profile.name}
-                onClick={() => onOpen(profile.name)}
-                profile={profile}
-              />
-            ))
+            <>
+              {defaultProfile ? (
+                <ProfileListRow
+                  isDefault
+                  onClick={() => onOpen(defaultProfile.name)}
+                  profile={defaultProfile}
+                />
+              ) : null}
+              {profiles.length === 0 ? (
+                /* Refers only to the INDEPENDENT presets — the pinned default
+                   row above stays, so the copy never claims the page is
+                   empty when the default preset is present. */
+                <div className="flex flex-col items-center px-6 py-16 text-center">
+                  <Fingerprint className="h-6 w-6 text-muted-foreground/55" />
+                  <p className="mt-3 text-sm font-medium">
+                    {t("options.agents.customEmptyTitle")}
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    {t("options.agents.customEmptyDescription")}
+                  </p>
+                  <Button
+                    className="mt-4"
+                    onClick={onCreate}
+                    size="sm"
+                    type="button"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("options.agents.create")}
+                  </Button>
+                </div>
+              ) : (
+                profiles.map((profile) => (
+                  <ProfileListRow
+                    key={profile.name}
+                    onClick={() => onOpen(profile.name)}
+                    profile={profile}
+                  />
+                ))
+              )}
+            </>
           )}
         </PageContent>
       </ScrollArea>
@@ -328,7 +347,7 @@ function AgentPresetDetail({
               }}
               value={renameDraft}
             />
-          ) : profile.trust !== "system" ? (
+          ) : profile.trust !== "system" && !isActive ? (
             <button
               aria-label={t("options.agents.rename")}
               className="group/name -ml-1 flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted/55"
@@ -370,12 +389,15 @@ function AgentPresetDetail({
       </div>
 
       {section === "behavior" ? (
+        /* The default row's drill-in is the folded-in 行为与人设 page:
+           read-only, exactly as the retired assistant-level page rendered
+           it (`sourceEditable` off). Copies keep the Edit affordance. */
         <AgentPresetBehaviorEditor
           adapter={adapter}
           description={profile.description}
           key={profile.name}
           profileId={profile.name}
-          sourceEditable={profile.trust !== "system"}
+          sourceEditable={profile.trust !== "system" && !isActive}
         />
       ) : ledgerIds.has(section) ? (
         /* Marker the ui-shell root scanner portals the owning plugin's
@@ -426,16 +448,29 @@ export function DshAgentPresetsPage({
     refreshSignal?.getSnapshot ?? (() => 0),
   );
 
+  // The wire roster's current default (`isDefault` → the adapter's `active`
+  // id) is the pinned first row — usually the shipped `standard` preset, but
+  // honestly whichever entry the deployment reports as default.
+  const defaultProfile = useMemo(
+    () => profiles.find((profile) => profile.name === active) ?? null,
+    [active, profiles],
+  );
+  // Independent presets: user-authored copies, minus the one currently
+  // holding the default slot (it is already the pinned row above — one
+  // preset, one row).
   const namedProfiles = useMemo(
-    () => profiles.filter((profile) => profile.trust === "user"),
-    [profiles],
+    () =>
+      profiles.filter(
+        (profile) => profile.trust === "user" && profile.name !== active,
+      ),
+    [active, profiles],
   );
   const selected = useMemo(
     () =>
       detail
-        ? (namedProfiles.find((profile) => profile.name === detail) ?? null)
+        ? (profiles.find((profile) => profile.name === detail) ?? null)
         : null,
-    [detail, namedProfiles],
+    [detail, profiles],
   );
 
   const refresh = useCallback(
@@ -559,7 +594,7 @@ export function DshAgentPresetsPage({
   return (
     <>
       <AgentPresetList
-        activeName={active}
+        defaultProfile={defaultProfile}
         error={error}
         headerActionsHost={headerActionsHost}
         loading={loading}

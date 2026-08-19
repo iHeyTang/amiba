@@ -47,8 +47,9 @@ describe("SettingsView DSH navigation", () => {
       />,
     );
 
-    // The 行为与人设 page migrated to dsh-plugin-agent-preset with the rest
-    // of the assistant group — no built-in registry row remains for it.
+    // The 行为与人设 page migrated to dsh-plugin-agent-preset (and later
+    // merged into its 智能体预设 section) — no built-in registry row, and
+    // no dedicated nav entry, remains for it.
     expect(
       screen.queryByRole("button", { name: "Behavior & identity" }),
     ).not.toBeInTheDocument();
@@ -206,12 +207,12 @@ describe("SettingsView DSH navigation", () => {
     ).toBeVisible();
   });
 
-  it("resolves the migrated #behavior id against the DSH section ledger and titles it from there", () => {
+  it("routes the retired #behavior id through the generic ledger fallback, which no section claims anymore", () => {
     window.history.replaceState(null, "", "/#behavior");
     const seen: Array<string | undefined> = [];
     render(
       <SettingsView
-        dshSections={[{ id: "behavior", label: "Behavior & identity" }]}
+        dshSections={[{ id: "agents", label: "Agent presets" }]}
         slots={{
           assistantNavigation: (activeSection) => {
             seen.push(activeSection);
@@ -223,16 +224,17 @@ describe("SettingsView DSH navigation", () => {
         }}
       />,
     );
-    // The registry no longer claims "behavior" — the route falls through to
-    // the dsh-section surface owned by dsh-plugin-agent-preset, keeping the
-    // old deep link addressable, and the scaffold titles it from the ledger.
+    // dsh-plugin-agent-preset merged its 行为与人设 section into 智能体预设
+    // ("agents"), so "behavior" is a dead id now: the route still resolves
+    // through the same `dsh:<id>` fallback every unknown id gets — no
+    // special-casing — and with no ledger entry the scaffold titles the
+    // bare id over whatever the section slot renders for it (nothing, in
+    // the real shell).
     expect(seen).toContain("behavior");
+    expect(screen.getByRole("heading", { name: "behavior" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Behavior & identity" }),
-    ).toBeVisible();
-    expect(screen.getByTestId("section-content")).toHaveTextContent(
-      "behavior",
-    );
+      screen.getByRole("button", { name: "Appearance" }),
+    ).not.toHaveAttribute("aria-current", "page");
   });
 
   it("resolves the migrated #agents id (with or without a detail segment) against the DSH section ledger", () => {
