@@ -2,10 +2,15 @@ import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
 import { ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatToolDuration } from "../internal/helpers";
 import { useWorkspacePane } from "../WorkspacePane";
+import {
+  toolCallBlockFromProgress,
+  toolCallBlockName,
+} from "./tool-call-block";
+import { useToolCallSeat } from "./tool-call-seat";
 import {
   describeToolCall,
   hasToolDetail,
@@ -59,8 +64,13 @@ function ToolTarget({
 /**
  * One quiet execution row. The conversation exposes the semantic action and
  * its target; only calls with useful evidence can be opened.
+ *
+ * Amiba's OWN row, driven by the closed `ToolSpec` table. It is also the
+ * `fallback` of the official `tool.call.toolview` dispatch in
+ * {@link ToolChip}, so an unclaimed tool name renders exactly this and
+ * nothing else.
  */
-export function ToolChip({ event }: { event: ToolProgress }) {
+function ToolChipRow({ event }: { event: ToolProgress }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
   const [expanded, setExpanded] = useState(false);
@@ -169,6 +179,47 @@ export function ToolChip({ event }: { event: ToolProgress }) {
       )}
     </div>
   );
+}
+
+/**
+ * One tool call row, dispatched through the official keyed
+ * `tool.call.toolview` seat when the host provides one.
+ *
+ * The seat is keyed by the WIRE TOOL NAME, so a plugin registering `"bash"`
+ * owns how bash calls render and changes nothing else. With no host renderer
+ * (Quick-Ask, any surface outside a DSH plugin runtime) — or with no retained
+ * wire material to build a faithful `block` from — this renders
+ * {@link ToolChipRow} directly, which is also what the host's dispatch falls
+ * back to for every unclaimed name.
+ */
+export function ToolChip({ event }: { event: ToolProgress }) {
+  const seat = useToolCallSeat();
+  const workspacePane = useWorkspacePane();
+  const openFile = useCallback(
+    (path: string) => workspacePane.openFile(path),
+    [workspacePane],
+  );
+  const block = useMemo(() => toolCallBlockFromProgress(event), [event]);
+  // `inspect` is deliberately absent from the owner share: it means "inspect
+  // this call in the trajectory view", and Amiba runs no trajectory surface.
+  // The member is optional, so omitting it is the honest supply.
+  const owner = useMemo(
+    () =>
+      block
+        ? {
+            callId: event.toolCallId,
+            toolName: toolCallBlockName(block),
+            block,
+            ...(seat?.cwd ? { cwd: seat.cwd } : {}),
+            openFile,
+          }
+        : null,
+    [block, event.toolCallId, openFile, seat?.cwd],
+  );
+
+  const fallback = <ToolChipRow event={event} />;
+  if (!seat || !owner) return fallback;
+  return seat.render({ owner, fallback });
 }
 
 /** Stack-of-chips fallback for messages without an interleaved timeline. */

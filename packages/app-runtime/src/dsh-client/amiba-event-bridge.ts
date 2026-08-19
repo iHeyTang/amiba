@@ -4,6 +4,7 @@ import type {
   ToolProgress,
 } from "@amiba/app-runtime/protocol"
 import type { DshMuxEnvelope, DshSessionEvent } from "./index"
+import { toolCallWireRecord, toolResultWireRecord } from "./tool-wire"
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
@@ -178,6 +179,9 @@ export class DshAmibaEventBridge {
         label: titleFromView(view),
         args,
         startedAt: source.time,
+        // Same lossless retention as the durable-log projection: the parsed
+        // `args` above is unchanged, the raw wire material rides beside it.
+        wire: { call: toolCallWireRecord(data, source.time, view) },
       }
       this.tools.set(callId, progress)
       return [{ sessionId, event: { kind: "toolProgress", event: progress } }]
@@ -204,6 +208,13 @@ export class DshAmibaEventBridge {
           prior?.startedAt && source.time >= prior.startedAt
             ? source.time - prior.startedAt
             : undefined,
+        // The call half carries forward from the running record; a result
+        // arriving without one (reconnect mid-call) keeps `call` absent rather
+        // than inventing arguments for it.
+        wire: {
+          ...(prior?.wire?.call ? { call: prior.wire.call } : {}),
+          result: toolResultWireRecord(data, source.seq, source.time, view),
+        },
       }
       this.tools.set(callId, progress)
       return [{ sessionId, event: { kind: "toolProgress", event: progress } }]

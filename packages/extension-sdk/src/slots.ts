@@ -9,7 +9,8 @@
  * `conversation.session.header.utilities` and `conversation.input.model`;
  * Phase 3 adds `conversation.input.plan` and
  * `conversation.session.header.actions`) from
- * `@deepseek-ai/dsh-client-ui-conversation`. `amiba.*` names are
+ * `@deepseek-ai/dsh-client-ui-conversation`, and `tool.call.toolview` from
+ * `@deepseek-ai/dsh-client-ui-tool`. `amiba.*` names are
  * reserved for vendor extensions that have no official counterpart. The
  * array below therefore lists ONLY the amiba.* vendor slots; the official
  * names reach consumers through the official packages' SlotMap merges,
@@ -21,6 +22,14 @@
  * dsh-plugin-agent-preset's settings-section entry (see
  * {@link AmibaAgentPresetSectionOwner}); the name stays here so the
  * authoring vocabulary has one home.
+ *
+ * DECLARATION-ANCHOR divergence, recorded once: upstream declares
+ * `tool.call.toolview` from `conversation.chat.node`'s `tool-call` entry,
+ * the Chat Node that owns the whole call tree. Amiba has no such entry (its
+ * conversation is its own projection), so the seat is declared on Amiba's
+ * root children table instead — legal, and the same pattern the adopted
+ * `conversation.*` seats already use. Only the DECLARATION site differs; the
+ * key, kind, scope, and owner contract are the official ones.
  */
 
 import type { OwnerOf } from "@deepseek-ai/dsh-client-ui-slots";
@@ -45,6 +54,12 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 // (`sessionId`/`useSession`/`useProjection`) ARE live — dsh-client-runtime
 // itself binds those once a session is current.
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
+// Type home for the official tool vocabulary: the keyed `tool.call.toolview`
+// SlotMap key. Imported DIRECTLY (no mirror needed): the package's `/client`
+// entry exports only `apply`/`inject` and the slot prop contracts, so unlike
+// ui-layout it merges nothing into the cordis Context and cannot TS2717
+// against Amiba's own service faces.
+import type {} from "@deepseek-ai/dsh-client-ui-tool/client";
 
 /**
  * Official owner contract of `settings.section`
@@ -100,8 +115,75 @@ export type ConversationInputPlanOwnerProps = OwnerOf<"conversation.input.plan">
  */
 export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.header.actions">;
 
-// Official seats deliberately NOT adopted (Phase 3 ruling, recorded so
-// authors know why these names resolve to no render site here). The rule:
+/**
+ * Merge anchor for the official TOOL vocabulary plus the authoring types of
+ * the frozen call node its owner carries. `ToolCallBlock` is
+ * `RunningToolCall | ToolResultNode` — the DSH client runtime's own
+ * running-or-settled call node — re-exported with both arms so a registrant
+ * types its `block` against the SDK instead of reaching into the official
+ * packages. Named re-exports, not bare `import type {}` inclusions: those are
+ * elided at declaration emit (the settings.section lesson).
+ */
+export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
+export type {
+  RunningToolCall,
+  ToolCallBlock,
+  ToolResultNode,
+} from "@deepseek-ai/dsh-client-runtime/client";
+
+/**
+ * Official owner contract of `tool.call.toolview` — the keyed per-tool call
+ * row, dispatched by the WIRE TOOL NAME. The key domain is OPEN (any wire
+ * tool name, including one the registrant's own package contributed), so
+ * there is no compile-time key set to pick from and a typo simply never
+ * renders. Registering a name the host already presents REPLACES that row;
+ * an unclaimed name keeps the host's own row, which reaches the dispatch as
+ * `fallback`.
+ *
+ * How Amiba supplies each member (adoption is only legal when every one of
+ * them is honest — an official key with a divergent owner is worse than no
+ * adoption, because entries written against the upstream types compile and
+ * then break at runtime):
+ *
+ *   - `callId`   — `ToolProgress.toolCallId`: the canonical call id, which is
+ *                  `message.source.callId` on the result side.
+ *   - `toolName` — derived from the BLOCK exactly as upstream's own `callName`
+ *                  does (`block.call?.name ?? ""` settled, `block.name` while
+ *                  running), and passed as the dispatch `entryKey`. A settled
+ *                  result whose call frame fell outside the history window
+ *                  therefore keys on `""` and renders the fallback, which is
+ *                  upstream's behaviour too.
+ *   - `block`    — built at the render site from the verbatim wire material
+ *                  BOTH Amiba tool producers retain (`ToolProgress.wire`, see
+ *                  `@amiba/app-runtime/protocol`); the builder lives in
+ *                  `@amiba/ui` because that is where the official types and
+ *                  the runtime-neutral protocol meet.
+ *   - `cwd`      — the active conversation's workspace root, the same binding
+ *                  the composer and the workspace pane read
+ *                  (`platform.workspaces.getCurrent(sessionId)`).
+ *   - `openFile` — the workspace pane's `openFile(path)`, the host file-open
+ *                  path already behind Amiba's own tool rows.
+ *   - `inspect`  — deliberately OMITTED (the member is optional). It means
+ *                  "inspect this call in the TRAJECTORY view"; Amiba disables
+ *                  the official `ui-trajectory` plugin and ships no
+ *                  equivalent, so any callback here would lead nowhere.
+ *                  Amiba's own row affordances are NOT it: the workspace pane
+ *                  opens the tool's RESOURCE (a file / terminal / browser),
+ *                  and the inline detail fold belongs to the very row an
+ *                  occupant replaces.
+ *
+ * `subCalls: []` on the block is the FAITHFUL value here, not a stub:
+ * upstream's builder emits `[]` for every ROOT call and fills children only
+ * from `tool/code-dispatch-start` / `tool/code-dispatch`. Those events exist
+ * only under Code Mode, whose `run_code` transport requires a mounted
+ * `ctx.codeRuntime`; Amiba's bundles compose no code runtime and no plugin
+ * requests one, so its sessions emit neither event and every call is a root.
+ */
+export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
+
+// Official seats deliberately NOT adopted (recorded so authors know why
+// these names resolve to no render site here; `tool.call.toolview` was on
+// this list in Phase 3 and is now adopted above). The rule:
 // an official name may only be taken when its official owner contract can
 // be supplied faithfully — an official key with a divergent owner is worse
 // than a vendor key, because entries written against the upstream types
@@ -113,21 +195,6 @@ export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.
 //     ui-conversation store types produced by an input machine Amiba does
 //     not run (its composer state is its own). The seats wait on the
 //     `ctx.sessions.provide` work.
-//   - `tool.call.toolview` (keyed by wire tool name) takes
-//     `block: ToolCallBlock`. NOT structurally impossible — the honest
-//     record: every member except `subCalls` has a wire source Amiba's
-//     projection already touches and then drops (`argsRaw` = `data.arguments`,
-//     parsed and discarded; `seq`/`step`/`turn` = the same tool events;
-//     `content: readonly ContentBlock[]` = the result message's blocks,
-//     flattened to text; `error {name,code}` = collapsed to a boolean;
-//     `callView`/`resultView` = the event view already read). Upstream's own
-//     builder emits `subCalls: []` for every root call and fills children
-//     only from `tool/code-dispatch-start` / `tool/code-dispatch`, which
-//     Amiba ignores. So adoption is scoped work — a lossless `ToolProgress`
-//     projection, consuming those two event types, and turning the tool row
-//     into a keyed dispatch site with the existing generic row as
-//     `fallback` — not a contract Amiba cannot satisfy. It is the
-//     ecosystem's highest-value seat; deferred, not refused.
 //   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
 //     engine-owned boundary carrying the raw `turn/start` / `turn/end`
 //     events, a `StepLocation[]` ring, and the `data` business-value

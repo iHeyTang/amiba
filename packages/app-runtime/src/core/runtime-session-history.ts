@@ -3,6 +3,10 @@ import type {
   AgentSessionEvent,
 } from "@amiba/app-runtime/platform";
 
+import {
+  toolCallWireRecord,
+  toolResultWireRecord,
+} from "../dsh-client/tool-wire";
 import type { ToolProgress } from "./runtime-protocol";
 import type { SessionMessage } from "./sessions";
 
@@ -152,6 +156,11 @@ function applyToolCall(turn: AssistantTurn, entry: AgentSessionHistoryEntry): vo
     status: "running",
     args,
     startedAt: entry.event.time,
+    // The parsed `args` above stays what presenters read; the raw arguments
+    // string, turn/step location, and call-side render intent ride along.
+    wire: {
+      call: toolCallWireRecord(data, entry.event.time, entry.view),
+    },
   });
   turn.timeline?.push({
     kind: "tool",
@@ -182,6 +191,20 @@ function applyToolResult(turn: AssistantTurn, entry: AgentSessionHistoryEntry): 
       prior?.startedAt && entry.event.time >= prior.startedAt
         ? entry.event.time - prior.startedAt
         : undefined,
+    // The flattened text and boolean `error` above stay what presenters read.
+    // The call half is carried forward from the running record so a settled
+    // pair keeps its arguments and call-side view; a result whose call fell
+    // outside the window keeps `call` absent, exactly as the DSH runtime's own
+    // builder reports `call: null` / `callTime: null` for it.
+    wire: {
+      ...(prior?.wire?.call ? { call: prior.wire.call } : {}),
+      result: toolResultWireRecord(
+        data,
+        entry.event.seq,
+        entry.event.time,
+        entry.view,
+      ),
+    },
   });
 }
 

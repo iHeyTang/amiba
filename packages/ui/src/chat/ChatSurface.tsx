@@ -64,6 +64,10 @@ import { ApprovalBanner } from "./bubble/approval";
 import { ClarifyBanner } from "./bubble/clarify";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
+import {
+  ToolCallSeatProvider,
+  type ToolCallSeatRenderer,
+} from "./bubble/tool-call-seat";
 import { useWorkspacePane } from "./WorkspacePane";
 import {
   Composer,
@@ -264,6 +268,16 @@ export interface ChatSurfaceProps {
      * omit it and the composer's tool row is byte-identical to before.
      */
     planSeat?: ComposerPlanSeatRenderer;
+    /**
+     * renderSlot-backed dispatch of the official KEYED `tool.call.toolview`
+     * seat, published to every tool row in the conversation. Hosts inside a
+     * DSH plugin runtime back it with
+     * `renderSlot("tool.call.toolview", owner, { entryKey: owner.toolName,
+     * fallback })`; hosts without one omit it and every tool row renders
+     * Amiba's own `ToolSpec`-driven chip, which is also the `fallback` of
+     * every unclaimed tool name.
+     */
+    toolView?: ToolCallSeatRenderer;
   };
 
   /**
@@ -1976,16 +1990,28 @@ export default function ChatSurface({
                       : undefined,
                 }}
               >
-                <MessageTurns
-                  messages={messages}
-                  onReviewWorkspaceChanges={
-                    workspacePane.enabled ? workspacePane.openReview : undefined
-                  }
-                  restorableTurnOrdinals={restorableTurnOrdinals}
-                  onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
-                  onOpenAgentDestination={openAgentDestination}
-                  onBranchUserMessage={branchUserMessage}
-                />
+                {/* The keyed tool-view seat reaches the tool rows from here:
+                    the renderer arrives as an explicit render prop (like the
+                    composer seats) and this is only the last hop down to
+                    ToolChip. `cwd` is the conversation's workspace binding —
+                    the `cwd` member of the official owner share. */}
+                <ToolCallSeatProvider
+                  render={slots?.toolView}
+                  cwd={workspacePath}
+                >
+                  <MessageTurns
+                    messages={messages}
+                    onReviewWorkspaceChanges={
+                      workspacePane.enabled
+                        ? workspacePane.openReview
+                        : undefined
+                    }
+                    restorableTurnOrdinals={restorableTurnOrdinals}
+                    onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
+                    onOpenAgentDestination={openAgentDestination}
+                    onBranchUserMessage={branchUserMessage}
+                  />
+                </ToolCallSeatProvider>
 
                 {error && (
                   <ErrorBlock error={error} onOpenSettings={openSettings} />

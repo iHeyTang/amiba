@@ -62,6 +62,77 @@ export interface ToolCall {
   arguments: string;
 }
 
+/**
+ * Verbatim `tool/call` material, retained beside {@link ToolProgress}'s
+ * parsed/flattened conveniences. Present whenever the call frame itself was
+ * in the projected window; absent for a result whose call fell outside it
+ * (history pagination cuts pairs).
+ */
+export interface ToolCallWireRecord {
+  /** `tool/call` `data.arguments`: the raw JSON string exactly as the model produced it, unparsed. */
+  argsRaw: string;
+  /** `tool/call` `data.turn`. */
+  turn: number;
+  /** `tool/call` `data.step`. */
+  step: number;
+  /** `tool/call` event `time` (unix epoch ms). */
+  time: number;
+  /**
+   * The call frame's host-computed render intent: the `view` member of the
+   * accompanying tool event view when its `for` discriminant is `"call"`,
+   * else `null`. Type-erased to `unknown` because this protocol carries no
+   * adapter types (see the module header); the value is the verbatim wire
+   * payload and is re-asserted as `ToolCallView | null` at the presentation
+   * boundary that owns the DSH types.
+   */
+  callView: unknown;
+}
+
+/**
+ * Verbatim `tool/result` material. Present once the result frame arrived;
+ * absent while the call is still running.
+ */
+export interface ToolResultWireRecord {
+  /** `tool/result` event `seq`. */
+  seq: number;
+  /** `tool/result` event `time` (unix epoch ms). */
+  time: number;
+  /**
+   * The result's content blocks, verbatim and unflattened — the nested
+   * tool-result block's own `content` on the real DSH wire (a tool-result
+   * message's content is exactly one such block). Type-erased for the same
+   * reason as {@link ToolCallWireRecord.callView}: the element type is an
+   * open, merge-extensible DSH union that this protocol cannot name.
+   */
+  content: readonly unknown[];
+  /** The tool-result block's `isError` flag, uncollapsed. */
+  isError: boolean;
+  /** `tool/result` `data.error`: the tool's internal failure identity, when it reported one. */
+  error?: { name: string; code: string };
+  /** `tool/result` `data.meta`: opaque tool-private presentation payload. */
+  meta?: unknown;
+  /**
+   * The result frame's host-computed render intent: the `view` member of the
+   * accompanying tool event view when its `for` discriminant is `"result"`,
+   * else `null`. Type-erased like the call-side view.
+   */
+  resultView: unknown;
+}
+
+/**
+ * Lossless companion to one {@link ToolProgress} row. The surrounding fields
+ * stay exactly what presenters already read (parsed `args`, flattened result
+ * text, boolean `error`); this record carries the raw forms alongside so a
+ * presentation layer can rebuild the runtime's own frozen call/result node
+ * without re-reading the event log. Both producers (durable-log projection
+ * and the live mux bridge) fill it; a row without it renders through the
+ * host's own tool row and never yields a partially invented node.
+ */
+export interface ToolWireRecord {
+  call?: ToolCallWireRecord;
+  result?: ToolResultWireRecord;
+}
+
 /** Runtime-neutral presentation state for one tool invocation. */
 export interface ToolProgress {
   tool: string;
@@ -75,6 +146,8 @@ export interface ToolProgress {
   inlineDiff?: string;
   startedAt?: number;
   durationMs?: number;
+  /** Verbatim wire material behind the convenience fields above. */
+  wire?: ToolWireRecord;
 }
 
 /**

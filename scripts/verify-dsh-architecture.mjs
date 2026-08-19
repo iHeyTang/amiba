@@ -322,6 +322,7 @@ for (const slot of [
   "settings.section",
   "amiba.settings.content.overlay",
   "shell.overlay",
+  "tool.call.toolview",
 ]) {
   if (!uiShellClient.includes(`\"${slot}\"`)) {
     fail(`UI shell is missing semantic child slot ${slot}`);
@@ -338,6 +339,10 @@ for (const [slot, kind, scope] of [
   ["conversation.session.header.utilities", "list", "session"],
   ["conversation.input.model", "single", "session"],
   ["conversation.input.plan", "single", "session"],
+  // The keyed per-tool call row. A divergent kind here would be the worst
+  // case of all: entries registered with `key: "<wire tool name>"` against
+  // the upstream contract would compile and then never render.
+  ["tool.call.toolview", "keyed", "session"],
 ]) {
   const declaration = new RegExp(
     `"${slot.replace(/\./gu, "\\.")}":\\s*\\{\\s*kind:\\s*"${kind}",\\s*scope:\\s*"${scope}",?\\s*\\}`,
@@ -419,8 +424,43 @@ for (const dispatch of [
     );
   }
 }
+// The keyed tool-call dispatch. BOTH options are load-bearing and each is
+// pinned separately: without `entryKey` no keyed registration can ever match
+// (the seat becomes dead), and without `fallback` an unclaimed tool name would
+// render NOTHING instead of Amiba's own row — the visual-parity guarantee.
+// Whitespace-insensitive so a prettier reflow cannot break the pins.
+for (const [dispatch, what] of [
+  [
+    /renderSlot\(\s*"tool\.call\.toolview",\s*request\.owner,\s*\{[\s\S]{0,200}?\}\s*\)/u,
+    "dispatch the official tool.call.toolview seat with the owner share the row computed",
+  ],
+  [
+    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?entryKey:\s*request\.owner\.toolName/u,
+    "key that dispatch by the WIRE TOOL NAME (entryKey)",
+  ],
+  [
+    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?fallback:\s*request\.fallback/u,
+    "pass Amiba's own tool row as the dispatch fallback",
+  ],
+]) {
+  if (!dispatch.test(productShellSource)) {
+    fail(`Product shell must ${what}`);
+  }
+}
+
+// Keyed dispatch is legal for exactly ONE declaration here: the official
+// `tool.call.toolview`, whose key domain IS the wire tool name. Everything
+// else — Settings sections above all — must keep using the list-slot ledger,
+// so the exception is pinned BY NAME rather than the word being banned
+// outright, and a `kind: "keyed"` not attached to a named child declaration
+// still fails.
+const keyedChildDeclarations = [
+  ...uiShellClient.matchAll(/"([\w.-]+)":\s*\{\s*kind:\s*"keyed"/gu),
+].map((match) => match[1]);
 if (
-  uiShellClient.includes('kind: "keyed"') ||
+  keyedChildDeclarations.some((slot) => slot !== "tool.call.toolview") ||
+  (uiShellClient.match(/kind:\s*"keyed"/gu) ?? []).length !==
+    keyedChildDeclarations.length ||
   uiShellClient.includes("data-amiba-dsh-slot-key")
 ) {
   fail(
@@ -619,6 +659,27 @@ if (
 ) {
   fail(
     "extension-sdk must inherit the official settings vocabulary and mirror shell.overlay, not re-declare settings.section",
+  );
+}
+// The keyed tool seat inherits the official TOOL vocabulary the same way, and
+// its owner contract is re-DERIVED from the SlotMap rather than restated — a
+// hand-written copy could drift from upstream and still compile. Its record
+// must also have moved out of the not-adopted block: leaving it there while
+// the runtime declares the seat is the documentation failure this vocabulary
+// policy exists to prevent.
+// A NAMED re-export, not a bare `import type {}`: type-only inclusions are
+// elided at declaration emit, so only this form keeps the official tool
+// declaration on the built SDK's declaration graph (the settings.section
+// lesson). Whitespace-insensitive against a prettier reflow.
+if (
+  !/export type \{\s*ToolCallOwnerProps,?\s*\} from "@deepseek-ai\/dsh-client-ui-tool\/client"/u.test(
+    slotsSdk,
+  ) ||
+  !slotsSdk.includes('OwnerOf<"tool.call.toolview">') ||
+  slotsSdk.includes("//   - `tool.call.toolview`")
+) {
+  fail(
+    "extension-sdk must inherit the official tool vocabulary through a named re-export, derive the tool.call.toolview owner via OwnerOf, and drop it from the not-adopted record",
   );
 }
 const slotsGuard = await text(
