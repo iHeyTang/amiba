@@ -45,6 +45,7 @@ import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 import type {
   AmibaComposerModelPickerOwner,
   ConversationInputModelOwnerProps,
+  ConversationInputPlanOwnerProps,
 } from "@amiba/extension-sdk";
 
 /**
@@ -75,6 +76,23 @@ export type ComposerModelPickerRequest =
  */
 export type ComposerModelPickerRenderer = (
   request: ComposerModelPickerRequest,
+) => ReactNode;
+
+/**
+ * Renders the composer's plan-status control from the official
+ * `conversation.input.plan` seat (single, session scope, owner
+ * `InputControlOwnerProps { locked }`). The host backs this with
+ * `renderSlot("conversation.input.plan", owner)`; Composer computes only
+ * `locked` — the same chrome disable state the model seat's owner share
+ * carries — and owns nothing else about the affordance.
+ *
+ * The seat is UNOCCUPIED in Amiba today (the official ui-plan package is
+ * disabled), and an unoccupied seat renders nothing at all: no placeholder,
+ * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
+ * no renderer and the same nothing renders.
+ */
+export type ComposerPlanSeatRenderer = (
+  owner: ConversationInputPlanOwnerProps,
 ) => ReactNode;
 
 /**
@@ -221,6 +239,18 @@ export interface ComposerProps {
   };
   /** Show the active DSH permission preset as a switchable composer pill. */
   approvalModePicker?: boolean;
+  /**
+   * Occupant of the official `conversation.input.plan` seat, rendered in the
+   * tool row immediately right of the access-mode control (the placement the
+   * official contract names). The NODE comes from the host's
+   * renderSlot-backed dispatch; Composer passes the owner share the contract
+   * defines — `{ locked }`, the same chrome disable state the model seat
+   * gets. Pass nothing (Quick-Ask, any surface outside a DSH plugin runtime)
+   * and nothing renders where the control would sit; an empty seat renders
+   * nothing either way, so the row keeps its exact layout until a plugin
+   * takes the seat.
+   */
+  planSeat?: ComposerPlanSeatRenderer;
   /** Runtime session used to distinguish pinned permissions from new-task defaults. */
   permissionSessionId?: string;
   /** Visual treatment for the modal overlay behind model and Profile dialogs. */
@@ -371,6 +401,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       attachments,
       modelPicker,
       approvalModePicker,
+      planSeat,
       permissionSessionId,
       pickerDialogSize = "default",
       pickerOverlayVariant = "dimmed",
@@ -752,7 +783,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   1. attachment add button (auto-rendered when attachments prop set)
                   2. DSH agent preset (when enabled)
                   3. DSH approval policy (when enabled)
-                  4. surface-specific extras (actionsLeft slot)
+                  4. official conversation.input.plan seat (empty today)
+                  5. surface-specific extras (actionsLeft slot)
               */}
               {attachments ? (
                 <AttachmentButton
@@ -781,6 +813,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   refreshKey={pickerRefreshKey}
                 />
               ) : null}
+              {/* Official conversation.input.plan seat: immediately right of
+                  the access-mode control, per the seat's own contract. No
+                  wrapper element — an empty seat must cost no layout, and a
+                  flex-row wrapper would spend one gap on nothing. */}
+              {planSeat ? planSeat({ locked: disabled }) : null}
               {actionsLeft}
             </div>
             {modelPicker

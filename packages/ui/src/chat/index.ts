@@ -41,6 +41,7 @@ export {
   type ComposerModelPickerRenderer,
   type ComposerModelPickerRequest,
   type ComposerPickerOverlayVariant,
+  type ComposerPlanSeatRenderer,
   type ComposerProps,
 } from "./Composer";
 export { ComposerNotice, type ComposerNoticeProps } from "./ComposerNotice";

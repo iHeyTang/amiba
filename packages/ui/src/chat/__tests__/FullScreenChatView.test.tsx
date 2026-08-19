@@ -890,3 +890,79 @@ describe("FullScreenChatView new-chat home", () => {
     expect(mocks.sidebarFailedSessionIds).toEqual([]);
   });
 });
+
+/**
+ * Official `conversation.session.header.actions` seat (list, session scope,
+ * EMPTY owner — the contract is explicit that a header action derives its
+ * state from the standard session kit and its own inject face). The chat
+ * content header had no title-adjacent action region before this seat, so
+ * the one it grew must be invisible until a plugin contributes.
+ */
+describe("FullScreenChatView session-header action seat", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.embeddedBrowser = null;
+    mocks.storageGet.mockResolvedValue({});
+    mocks.storageSet.mockResolvedValue(undefined);
+    mocks.useSessions.mockReturnValue(makeSessions());
+  });
+
+  function renderView(headerActions?: React.ReactNode) {
+    return render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+        slots={headerActions === undefined ? undefined : { headerActions }}
+      />,
+    );
+  }
+
+  it("adds no header region while the host dispatches no seat", () => {
+    const { container } = renderView();
+
+    expect(
+      container.querySelector("[data-content-header-actions]"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collapses to nothing while the dispatched seat is empty", () => {
+    // What an entry-less official list dispatch renders: a node that
+    // produces no DOM. The row must then cost neither a box nor a flex gap.
+    const EmptySeat = () => null;
+    const { container } = renderView(<EmptySeat />);
+
+    const row = container.querySelector("[data-content-header-actions]");
+    expect(row).toBeInTheDocument();
+    expect(row!.childNodes).toHaveLength(0);
+    // `:empty` + `display:none` is what keeps the collapsed row out of the
+    // header's flex layout — an empty flex item would still spend one gap.
+    expect(row).toHaveClass("empty:hidden");
+  });
+
+  it("renders a contributed action title-adjacent, not in the utilities strip", () => {
+    const { container } = renderView(
+      <button type="button">contributed-action</button>,
+    );
+
+    const row = container.querySelector("[data-content-header-actions]");
+    const action = screen.getByRole("button", { name: "contributed-action" });
+    expect(row).toContainElement(action);
+
+    // Title-adjacent: inside the header's leading cluster, after the title.
+    const leading = container.querySelector("[data-content-header-leading]");
+    expect(leading).toContainElement(row as HTMLElement);
+    const title = container.querySelector("[data-content-header-title]");
+    expect(
+      title!.compareDocumentPosition(row as HTMLElement) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // ...and NOT in the right-aligned utilities cluster, which is the other
+    // official seat (`conversation.session.header.utilities`). Keeping the
+    // two regions apart is why upstream declares them as separate seats.
+    const utilities = container.querySelector("[data-workspace-edge-toggle]");
+    expect(utilities).not.toContainElement(action);
+  });
+});

@@ -71,6 +71,7 @@ import {
   type ComposerHandle,
   type ComposerModelPickerRenderer,
   type ComposerPickerOverlayVariant,
+  type ComposerPlanSeatRenderer,
 } from "./Composer";
 import { ConversationTurnRail } from "./ConversationTurnRail";
 import { useComposerAttachments } from "./useComposerAttachments";
@@ -255,6 +256,14 @@ export interface ChatSurfaceProps {
      * the composer renders nothing where the chip would sit.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    /**
+     * renderSlot-backed dispatch of the official `conversation.input.plan`
+     * seat, forwarded verbatim to ``<Composer planSeat>``. Hosts inside a
+     * DSH plugin runtime back it with
+     * `renderSlot("conversation.input.plan", owner)`; hosts without one
+     * omit it and the composer's tool row is byte-identical to before.
+     */
+    planSeat?: ComposerPlanSeatRenderer;
   };
 
   /**
@@ -1798,6 +1807,7 @@ export default function ChatSurface({
         slots?.modelPicker ? { render: slots.modelPicker } : undefined
       }
       approvalModePicker
+      planSeat={slots?.planSeat}
       permissionSessionId={sessions.activeId}
       topAffordance={
         editingQueueId != null ? (
