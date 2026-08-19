@@ -84,13 +84,19 @@ root 声明：
 - `amiba.navigation.after`
 - `amiba.workspace.navigation`
 - `amiba.workspace.view`
-- `conversation.session.header.utilities`（官方名，session scope，空 owner；
-  取代已退役的 `amiba.chat.header.after` —— 无会话时该 seat 渲染为空）
+- `conversation.session.header.utilities`（官方名，list，session scope，空
+  owner；取代已退役的 `amiba.chat.header.after` —— 无会话时该 seat 渲染为空）
+- `conversation.session.header.actions`（官方名，list，session scope，空
+  owner；标题旁的 per-session action row。Amiba 原本没有这个区域，P3 新建的
+  行在 seat 为空时整行 `empty:hidden` 折叠，不占 box 也不占 flex gap）
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker`（session-less hero model seat，composer 无会话
   时经 render prop 派发）
 - `conversation.input.model`（官方名，single，session scope，owner
   `{ locked }`；composer 有会话时经同一 render prop 派发）
+- `conversation.input.plan`（官方名，single，session scope，owner
+  `{ locked }`；位于 composer tool row 中 access-mode 控件的紧右侧，与官方契约
+  一致。Amiba 目前没有占位者——官方 ui-plan 未启用——空 seat 不渲染任何东西）
 - `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
   face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
 - `amiba.settings.content.overlay`
@@ -102,6 +108,24 @@ Phase-2 记录的诚实裁剪：继承 ui-conversation 类型后，session 标�
 的 input machine，也没有为它注册 `sessions.provide` bundle —— 这两个成员运行时
 为 `undefined`（Phase 4 项）。框架成员 `sessionId`/`useSession`/`useProjection`
 由 dsh-client-runtime 直接提供，可用。
+
+Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方 owner 契约，否则宁可
+不采用——用官方名配一个走样的 owner，比继续用 vendor 名更糟）：
+
+- `conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`：
+  owner 是 `InputZone { session: ConversationSnapshot; input: InputState }`，
+  两者都是 ui-conversation store 类型，需要 Phase-4 的 `ctx.sessions.provide`。
+- `tool.call.toolview`（keyed by wire tool name）：owner 的 `block: ToolCallBlock`
+  需要 `content: readonly ContentBlock[]`、`subCalls`、`seq`、`step`、`argsRaw`，
+  而 Amiba 的 `ToolProgress` 投影只保留扁平化结果文本、解析后的 args 对象和一张
+  没有父子关系的 call map。
+- `conversation.chat.turnTail`：owner 的 `turn: TurnLocation` 是 engine-owned
+  边界，携带原始 `turn/start`/`turn/end` 事件、`StepLocation[]` 与业务数据
+  reader，Amiba 的投影三样都没有保留。
+- `conversation.chat.assistant-actions`：owner 的 `messageId: MessageId` 来自
+  `assistant/message` 事件；Amiba 的 assistant bubble 是按 TURN 聚合的
+  （`uiId: dsh:turn:<firstSeq>`，流式期间是本地 `shortId("a")`），没有可忠实
+  对应的 message 身份。
 
 曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
 before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染
