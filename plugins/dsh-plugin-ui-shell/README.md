@@ -68,6 +68,27 @@ counterpart.
 - `amiba.settings.content.overlay`
 - `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
   the frame-wide click-through floating layer
+- `tool.call.toolview` — official name from
+  `@deepseek-ai/dsh-client-ui-tool`: the per-tool call row, KEYED by the wire
+  tool name (keyed, SESSION scope, owner `ToolCallOwnerProps`). The only seat
+  here whose occupants are not a fixed list — the key domain is open, so a
+  plugin registers `key: "<wire tool name>"` and owns how that tool's calls
+  render inside a turn. Every unclaimed name renders Amiba's own
+  `ToolSpec`-driven tool chip, which the shell passes as the dispatch
+  `fallback`, so with no plugin registered the conversation is byte-identical
+  to before the seat existed. Owner supply: `callId` / `toolName` / `block`
+  come from the row (the `block` is rebuilt from the verbatim wire material
+  both Amiba tool producers retain), `cwd` from the conversation's workspace
+  binding, `openFile` from the workspace pane. `inspect` is deliberately
+  omitted — it addresses the trajectory view, which Amiba does not run
+
+DECLARATION-ANCHOR divergence, for the one seat that has one: upstream
+declares `tool.call.toolview` from `conversation.chat.node`'s `tool-call`
+entry, the Chat Node that owns the whole call tree. Amiba has no such entry
+(its conversation is its own projection), so the seat is declared on this
+root instead. Legal, and the same pattern the adopted `conversation.*` seats
+already use; only the declaration SITE differs — the key, kind, scope, and
+owner contract are the official ones.
 
 `amiba.agentPreset.section` remains part of the public vocabulary
 (`@amiba/extension-sdk`) but its runtime declaration lives on

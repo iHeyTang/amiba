@@ -77,7 +77,9 @@ Electron WebView，也没有 preload 特权。
 与 `conversation.input.model` 来自
 `@deepseek-ai/dsh-client-ui-conversation`（session scope 的官方 seat 依赖
 ui-shell 的 sessions bridge 把官方 `ctx.sessions` 选中态与 Amiba 自己的
-activeId 保持同步）；`amiba.*` 前缀只用于没有官方对应位的 vendor 扩展。
+activeId 保持同步），`tool.call.toolview` 来自
+`@deepseek-ai/dsh-client-ui-tool`；`amiba.*` 前缀只用于没有官方对应位的 vendor
+扩展。
 root 声明：
 
 - `amiba.navigation.before`
@@ -102,6 +104,12 @@ root 声明：
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
 - `shell.overlay`（官方名）
+- `tool.call.toolview`（官方名，来自 `@deepseek-ai/dsh-client-ui-tool`，**keyed**，
+  session scope，owner `ToolCallOwnerProps`）。root children 里唯一的 keyed
+  seat：key 就是**线上工具名**，域是开放的，所以插件用
+  `key: "<wire tool name>"` 注册即可接管这个工具在 turn 里的调用行。没有插件
+  认领的名字渲染 Amiba 自己那张 `ToolSpec` 工具行 —— shell 把它作为 dispatch
+  的 `fallback` 传下去，所以没有任何插件注册时会话与采纳前逐字节一致
 
 Phase-2 记录的诚实裁剪：继承 ui-conversation 类型后，session 标准 kit 的
 `useInput`/`inputActions` 成员在类型上可见，但 Amiba 运行时没有 ui-conversation
@@ -109,21 +117,43 @@ Phase-2 记录的诚实裁剪：继承 ui-conversation 类型后，session 标�
 为 `undefined`（Phase 4 项）。框架成员 `sessionId`/`useSession`/`useProjection`
 由 dsh-client-runtime 直接提供，可用。
 
+`tool.call.toolview` 的采纳记录（这个席位曾在 Phase-3 被延后，理由是"有工作量"
+而非结构性做不到；后续复核确认了成本，现已采纳）。忠实提供官方 owner 是采纳的
+前提，逐成员对账：
+
+| 官方成员 | Amiba 来源 | 怎么带过去 |
+| --- | --- | --- |
+| `callId` | `ToolProgress.toolCallId` | 结果侧即 `message.source.callId`，无转换 |
+| `toolName` | 由 block 派生 | 与官方 `callName` 完全一致：settled 取 `block.call?.name ?? ""`，running 取 `block.name`；同时作为 dispatch 的 `entryKey` |
+| `block` | `ToolProgress.wire` | 两个 producer（reload 投影 + live mux bridge）都无损保留了原始 `tool/call`/`tool/result` 材料，渲染位按官方 `rootCall`/`rootResult` 逐字段重建 |
+| `cwd` | 会话的 workspace 绑定 | `platform.workspaces.getCurrent(sessionId)`，与 composer / workspace pane 读的是同一个 |
+| `openFile` | workspace pane 的 `openFile(path)` | Amiba 工具行本来就走这条打开路径 |
+| `inspect` | —— | **故意不提供**（成员是可选的）：它的语义是"在 trajectory 视图里检视这次调用"，而 Amiba 的 web bundle 禁用了官方 `ui-trajectory` 且没有等价物。Amiba 自己的两个行内affordance 都不是它：workspace pane 打开的是工具的**资源**（文件/终端/浏览器），内联详情折叠属于占位者要替换掉的那一行本身 |
+
+`subCalls: []` 在这里是**忠实值而非占位**：官方 builder 对每个 ROOT 调用也发
+`[]`，子调用只来自 `tool/code-dispatch-start`/`tool/code-dispatch`。这两类事件
+只在 Code Mode 下产生，而 Code Mode 的 `run_code` transport 需要挂载
+`ctx.codeRuntime`；Amiba 的 bundle 没有组装任何 code runtime、也没有插件申请，
+所以它的会话不会产生这两类事件，每个调用都是根调用。
+
+声明锚点（declaration anchor）的偏差，只有这一个席位有：官方是从
+`conversation.chat.node` 的 `tool-call` entry 声明它的（那个 Chat Node 拥有整棵
+调用树），Amiba 没有对应 entry —— 它的会话是自己的投影。因此这个席位声明在
+Amiba 自己的 root children table 上，与已采纳的 `conversation.*` 席位同一套做法。
+只有**声明位置**不同，key / kind / scope / owner 契约都是官方的。
+
+视觉零回归是硬要求：没有插件注册时，每个工具行渲染的就是今天那张 `ToolSpec`
+工具行 —— shell 把它当 dispatch 的 `fallback` 传下去。`entryKey` 与 `fallback`
+两个选项都是承重的（缺前者 keyed 永远匹配不上，缺后者未认领的工具会渲染成空），
+`verify:architecture` 分别 pin 住。没有插件运行时的 surface（Quick-Ask）不传
+render prop，走同一张 fallback 行。
+
 Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方 owner 契约，否则宁可
 不采用——用官方名配一个走样的 owner，比继续用 vendor 名更糟）：
 
 - `conversation.input.dock` / `.composer.dock` / `.input.left` / `.input.right`：
   owner 是 `InputZone { session: ConversationSnapshot; input: InputState }`，
   两者都是 ui-conversation store 类型，需要 Phase-4 的 `ctx.sessions.provide`。
-- `tool.call.toolview`（keyed by wire tool name）：**不是结构性做不到**，而是
-  有工作量。`block: ToolCallBlock` 除 `subCalls` 外的每个成员，线上都有来源、
-  且 Amiba 的投影已经读到过又丢弃了（`argsRaw` = `data.arguments` 解析后丢弃、
-  `seq`/`step`/`turn` 同批工具事件、`content` = result 消息的原始 block 被拍平成
-  文本、`error{name,code}` 被压成布尔、`callView`/`resultView` = 已读的事件 view）。
-  官方自己的 builder 对根调用也只发 `subCalls: []`，子调用只来自
-  `tool/code-dispatch-start`/`tool/code-dispatch` 两类事件（Amiba 未消费）。所以
-  采纳 = 无损投影 + 消费那两类事件 + 把工具行改成 keyed 分发（现有通用行做
-  `fallback`）。这是生态价值最高的席位，属于**延后**而非拒绝。
 - `conversation.chat.turnTail`：owner 的 `turn: TurnLocation` 是 engine-owned
   边界，携带原始 `turn/start`/`turn/end` 事件、`StepLocation[]` 与业务数据
   reader，Amiba 的投影三样都没有保留。

@@ -12,6 +12,7 @@ import { MessageTurns } from "../bubble/Bubble";
 import {
   ToolCallSeatProvider,
   type ToolCallSeatRenderer,
+  type ToolCallSeatRequest,
 } from "../bubble/tool-call-seat";
 import type { UiMessage } from "../internal/types";
 
@@ -34,7 +35,9 @@ function expandProcess() {
   );
 }
 
-function toolRow(overrides: Partial<ToolProgress> & { tool: string; toolCallId: string }): ToolProgress {
+function toolRow(
+  overrides: Partial<ToolProgress> & { tool: string; toolCallId: string },
+): ToolProgress {
   return {
     status: "completed",
     args: { path: "src/App.tsx" },
@@ -180,10 +183,9 @@ describe("tool.call.toolview seat", () => {
   });
 
   it("keeps the host row for a legacy row with no retained wire material", () => {
-    const dispatch = vi.fn<
-      Parameters<ToolCallSeatRenderer>,
-      ReturnType<ToolCallSeatRenderer>
-    >(({ fallback }) => fallback);
+    const dispatch = vi.fn(
+      ({ fallback }: ToolCallSeatRequest) => fallback,
+    ) satisfies ToolCallSeatRenderer;
     const messages: UiMessage[] = [
       { uiId: "user-1", role: "user", content: "Look at it" },
       {
