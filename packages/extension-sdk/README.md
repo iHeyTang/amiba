@@ -7,14 +7,62 @@ owner/injection types, and the `SlotMap` declaration merge used by DSH's
 official slot service.
 
 Vocabulary policy: a seat with an official DSH equivalent uses the OFFICIAL
-slot name and inherits the official contract — `settings.section` (owner
-`SettingsSectionOwnerProps { close }`, re-exported here) comes from
-`@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
+slot name and inherits the official contract — the `settings.*` family comes
+from `@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
 `@deepseek-ai/dsh-client-ui-layout`, the `conversation.*` family from
 `@deepseek-ai/dsh-client-ui-conversation`, `tool.call.toolview` from
 `@deepseek-ai/dsh-client-ui-tool`, and `conversation.input.overlay` from
-`@deepseek-ai/dsh-client-ui-input-trigger`. Six seats are adopted from those
-three packages, with their owner contracts re-derived here:
+`@deepseek-ai/dsh-client-ui-input-trigger`. Twelve seats are adopted from those
+four packages, with their owner contracts re-derived here.
+
+### The `settings.*` family
+
+Seven of the eight official settings seats are declared here. Every one of
+them is root-scoped, and the owner column is the whole contract — several are
+the empty marker interface, which means "self-sufficient", not "starved".
+
+| seat | kind | owner | render site in Amiba |
+| --- | --- | --- | --- |
+| `settings.trigger` | single | `SettingsTriggerOwnerProps` (`{ wide }`) | content of the sidebar's settings row; `wide` is false while the rail is collapsed |
+| `settings.header` | single | `SettingsHeaderOwnerProps` (empty) | the settings navigation heading — the node the dialog is named after |
+| `settings.action` | list | `SettingsHeaderOwnerProps` (empty) | the page header's trailing cluster, before Close |
+| `settings.close` | single | `SettingsHeaderOwnerProps` (empty) | the close button's visually-hidden label |
+| `settings.section` | list | `SettingsSectionOwnerProps` (`{ close }`) | one settings page; `id` / `order` / `label` drive the navigation ledger |
+| `settings.onboarding` | list | `SettingsOnboardingOwnerProps` (`{ stepId, complete, openSection }`) | one step at a time, layered over the whole shell |
+| `settings.general.item` | list | `SettingsGeneralItemOwnerProps` (empty) | one preference row at the bottom of the General (Appearance) page |
+
+Three of these behave differently from the rest and are worth knowing before
+you register:
+
+- **The three `single` seats (`trigger`, `header`, `close`) are UNOCCUPIED by
+  default, on purpose.** Amiba's own content rides as the dispatch `fallback`
+  rather than as a registration, because a priority-0 occupant on a single
+  slot makes the NEXT registration throw — registering Amiba's own would lock
+  every plugin out of the seat. So a plain `ctx.slots.register({ name:
+  "settings.trigger" }, …)` wins the cell and replaces Amiba's row content.
+- **`settings.onboarding` is coordinated, not additive.** The shell mounts
+  exactly one step — the first registered entry that has not completed — and
+  only while the onboarding fact is active (the session list is ready AND
+  either no session is current or the current one is blank). Your step owns
+  its own visible chrome and renders `null` while it is still deciding; the
+  shell paints nothing around it. `complete()` hands off to the next step,
+  `openSection(id)` opens the settings dialog directly on a registered
+  section. **Completion is not persisted** — leaving the active condition
+  resets the whole set, which is upstream's own behaviour, copied verbatim.
+- **`settings.general.item` gets no props at all.** The section only stacks
+  rows, so a row draws its own internals including its label, and reads and
+  writes its value through its own inject face.
+
+`settings.plugins.tab` is the one member of the family Amiba does NOT declare.
+Its type is exported (`SettingsPluginsTabOwnerProps`) so the name stays
+addressable, but the contract is a structure rather than a props shape — "the
+section owner renders localized entry labels as tabs and mounts each
+contribution inside its corresponding tab panel" — and Amiba's Plugins page is
+a single inventory list behind an `all / amiba / dsh / failed` filter, not a
+tab strip with panels. Registering there today would leave you with no render
+site; see the not-adopted record in `src/slots.ts`.
+
+### The `conversation.*` and `tool.*` seats
 
 | seat | kind / scope | owner | render site |
 | --- | --- | --- | --- |
@@ -157,8 +205,11 @@ vendor extensions with no official counterpart; only those appear in
 `SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
 conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
-with no render site. Three seats are NOT adopted yet, for two different
-reasons. Contract Amiba genuinely cannot supply today:
+with no render site. Four seats are NOT adopted, for three different
+reasons. Structure Amiba's page does not have: `settings.plugins.tab` (its
+contract is a tab strip with per-entry panels; Amiba's Plugins page is one
+inventory list behind a filter — see above). Contract Amiba genuinely cannot
+supply today:
 `conversation.chat.turnTail` (`TurnLocation` is an engine-owned boundary with
 a business-value reader over machinery Amiba does not run). Render site, not
 contract: `conversation.chat.assistant-actions`, whose `MessageId` is on the

@@ -3,8 +3,11 @@
  *
  * Vocabulary policy: a seat with an official DSH equivalent uses the
  * OFFICIAL name and inherits the official contract — `shell.overlay` from
- * `@deepseek-ai/dsh-client-ui-layout`, the `settings.*` family (most
- * importantly `settings.section`) from `@deepseek-ai/dsh-client-ui-settings`,
+ * `@deepseek-ai/dsh-client-ui-layout`, the `settings.*` family (seven of the
+ * eight declared names: `settings.section` since Phase 1, and
+ * `settings.trigger` / `.header` / `.action` / `.close` / `.onboarding` /
+ * `.general.item` since the settings-dialog phase) from
+ * `@deepseek-ai/dsh-client-ui-settings`,
  * and the `conversation.*` family (Phase 2 adopts
  * `conversation.session.header.utilities` and `conversation.input.model`;
  * Phase 3 adds `conversation.input.plan` and
@@ -25,19 +28,23 @@
  * {@link AmibaAgentPresetSectionOwner}); the name stays here so the
  * authoring vocabulary has one home.
  *
- * DECLARATION-ANCHOR divergence, recorded once for the two seats it applies
- * to: upstream declares `tool.call.toolview` from `conversation.chat.node`'s
- * `tool-call` entry (the Chat Node that owns the whole call tree) and
+ * DECLARATION-ANCHOR divergence, recorded once for the seats it applies to:
+ * upstream declares `tool.call.toolview` from `conversation.chat.node`'s
+ * `tool-call` entry (the Chat Node that owns the whole call tree),
  * `conversation.input.overlay` from `ui-conversation`'s composer entry (the
- * InputBar that owns the input machine). Amiba has neither entry — its
- * conversation and its composer are its own projections — so both seats are
- * declared on Amiba's root children table instead: legal, and the same
- * pattern the adopted `conversation.*` seats already use. Only the
+ * InputBar that owns the input machine), the six shell-level `settings.*`
+ * seats from `ui-settings-general`'s `sidebar.settings` entry (the
+ * `SettingsRoot` that owns the trigger button and the modal panel), and
+ * `settings.general.item` from that same package's General `settings.section`
+ * entry. Amiba has none of those entries — its conversation, its composer,
+ * its settings shell, and its General page are its own — so every one of
+ * those seats is declared on Amiba's root children table instead: legal, and
+ * the same pattern the adopted `conversation.*` seats already use. Only the
  * DECLARATION site differs; the key, kind, scope, and owner contract are the
  * official ones.
  */
 
-import type { OwnerOf } from "@deepseek-ai/dsh-client-ui-slots";
+import type { OwnerOf, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
 
 // Type home for the official settings vocabulary: importing the
 // dsh-client-ui-settings client entry merges `settings.section` (and the
@@ -81,6 +88,99 @@ import type {} from "@deepseek-ai/dsh-client-ui-input-trigger/client";
  * type against the SDK without reaching into the official package.
  */
 export type { SettingsSectionOwnerProps } from "@deepseek-ai/dsh-client-ui-settings/client";
+
+/**
+ * The rest of the official settings vocabulary, re-exported from the same
+ * canonical home so a plugin author types against the SDK instead of reaching
+ * into `@deepseek-ai/dsh-client-ui-settings`. Amiba declares and dispatches
+ * six of these seats on its ui-shell root (see the declaration-anchor note in
+ * the module doc); `SettingsPluginsTabOwnerProps` is exported for
+ * completeness only — the seat is NOT declared here, see the not-adopted
+ * record near the bottom of this file.
+ *
+ *   - `SettingsTriggerOwnerProps` — `{ wide: boolean }`, the sidebar column
+ *     state. Amiba's sidebar knows it (its settings row lives in the same
+ *     collapsible rail), so the share is supplied for real, not stubbed.
+ *   - `SettingsHeaderOwnerProps` — `{ children?: never }`. The marker field
+ *     is the WHOLE contract: the shell supplies nothing, and it is the owner
+ *     share of `settings.header`, `settings.action` AND `settings.close`.
+ *   - `SettingsOnboardingOwnerProps` — `{ stepId, complete, openSection }`,
+ *     the coordinator's hand-off to the one mounted step.
+ *   - `SettingsGeneralItemOwnerProps` — `{ children?: never }`. Empty by
+ *     design: "nothing projects a `label` here and the owner passes no props
+ *     at all — copy, current value, and the write path are all yours".
+ */
+export type {
+  SettingsGeneralItemOwnerProps,
+  SettingsHeaderOwnerProps,
+  SettingsOnboardingOwnerProps,
+  SettingsPluginsTabOwnerProps,
+  SettingsTriggerOwnerProps,
+} from "@deepseek-ai/dsh-client-ui-settings/client";
+
+// Same interfaces, in local scope, so the derivation proof below can compare
+// them against what the SlotMap merge actually produced. `export type { … }
+// from` re-exports do NOT bring a name into scope.
+import type {
+  SettingsGeneralItemOwnerProps as OfficialGeneralItemOwner,
+  SettingsHeaderOwnerProps as OfficialHeaderOwner,
+  SettingsOnboardingOwnerProps as OfficialOnboardingOwner,
+  SettingsTriggerOwnerProps as OfficialTriggerOwner,
+} from "@deepseek-ai/dsh-client-ui-settings/client";
+
+/** Mutual assignability of two types (`true` only when each accepts the other). */
+type Mutual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+/** Fails to compile the moment any member of the probe table is not `true`. */
+type AssertAllTrue<T extends Record<string, true>> = T;
+
+/**
+ * Owner contracts of the six shell-level settings seats Amiba adopts,
+ * RE-DERIVED from the SlotMap merge with {@link OwnerOf} rather than copied.
+ * `settings.action` and `settings.close` share `SettingsHeaderOwnerProps`
+ * with `settings.header` — that is the official table's own shape, not an
+ * approximation on Amiba's side.
+ */
+export type SettingsTriggerOwner = OwnerOf<"settings.trigger">;
+export type SettingsHeaderOwner = OwnerOf<"settings.header">;
+export type SettingsActionOwner = OwnerOf<"settings.action">;
+export type SettingsCloseOwner = OwnerOf<"settings.close">;
+export type SettingsOnboardingOwner = OwnerOf<"settings.onboarding">;
+export type SettingsGeneralItemOwner = OwnerOf<"settings.general.item">;
+
+/**
+ * Proof that the official settings vocabulary is actually MERGED here, not
+ * merely mentioned. Two independent checks, because either one alone is weak:
+ *
+ *   - key presence — `OwnerOf<K>` silently resolves to `object` for a key
+ *     that never reached `SlotMap`, and `object` compares mutually assignable
+ *     with the empty-marker owners (`{ children?: never }`), so the
+ *     assignability probe alone would pass against a missing declaration;
+ *   - mutual assignability — proves the derived share is the official
+ *     interface and not a widened stand-in, which key presence alone does not.
+ *
+ * Exported (rather than a local alias) so it stays on the declaration graph
+ * and cannot be dropped as unused.
+ */
+export type SettingsVocabularyIsDeclared = AssertAllTrue<{
+  trigger: "settings.trigger" extends keyof SlotMap ? true : false;
+  header: "settings.header" extends keyof SlotMap ? true : false;
+  action: "settings.action" extends keyof SlotMap ? true : false;
+  close: "settings.close" extends keyof SlotMap ? true : false;
+  onboarding: "settings.onboarding" extends keyof SlotMap ? true : false;
+  generalItem: "settings.general.item" extends keyof SlotMap ? true : false;
+  pluginsTab: "settings.plugins.tab" extends keyof SlotMap ? true : false;
+}>;
+
+/** @see SettingsVocabularyIsDeclared */
+export type SettingsOwnerDerivationsHold = AssertAllTrue<{
+  trigger: Mutual<SettingsTriggerOwner, OfficialTriggerOwner>;
+  header: Mutual<SettingsHeaderOwner, OfficialHeaderOwner>;
+  action: Mutual<SettingsActionOwner, OfficialHeaderOwner>;
+  close: Mutual<SettingsCloseOwner, OfficialHeaderOwner>;
+  onboarding: Mutual<SettingsOnboardingOwner, OfficialOnboardingOwner>;
+  generalItem: Mutual<SettingsGeneralItemOwner, OfficialGeneralItemOwner>;
+}>;
 
 /**
  * Merge anchor for the official conversation vocabulary: import-type-only
@@ -356,6 +456,23 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     resolved by the `conversation` service, which Amiba must not own (it
 //     bundles send/cancel/loadOlder/updateQueue/resolveImage, all of which
 //     Amiba implements through its own engine).
+//   - `settings.plugins.tab` (list, root, EMPTY owner). The owner share is
+//     trivially suppliable — that is exactly why the decision cannot rest on
+//     it. The contract is a STRUCTURE, not a props shape: "the section owner
+//     renders localized entry labels as TABS and mounts each contribution
+//     inside its CORRESPONDING TAB PANEL", with `id` the tab key, `order` the
+//     tab order and `label` the tab text. Amiba's Plugins page
+//     (`@amiba/ui`'s `DshPluginInventory`) has no tab panels to mount into:
+//     its `all / amiba / dsh / failed` control is a FILTER over one dataset —
+//     four `aria-pressed` buttons narrowing a single inventory list with a
+//     count badge each, sharing the page's one search box — so a registrant
+//     would get a tab strip whose "panel" is somebody else's filtered table.
+//     Adopting the name would hand entries written against the upstream
+//     contract a seat that behaves differently at runtime, which is the one
+//     thing this vocabulary policy forbids. The name stays type-visible
+//     (`SettingsPluginsTabOwnerProps` is re-exported above) so the day
+//     Amiba's Plugins section grows real tab panels, adoption is a
+//     declaration, not a rename.
 //   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
 //     engine-owned boundary carrying the raw `turn/start` / `turn/end`
 //     events, a `StepLocation[]` ring, and the `data` business-value
