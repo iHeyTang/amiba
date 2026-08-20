@@ -24,6 +24,25 @@ async function exists(relative) {
   );
 }
 
+/**
+ * Drop comments before pinning a source pattern.
+ *
+ * Load-bearing for any assertion whose pattern is also VOCABULARY the file's
+ * own prose uses — the settings dialog's doc block quotes `role="dialog"` and
+ * `aria-modal="true"` while explaining them, and the onboarding predicate
+ * quotes upstream's selector verbatim, so a bare `.includes`/regex over the
+ * raw source is satisfied by the explanation rather than by the code. (Same
+ * class of gap as the P3 collapsing-row check, which a prose mention slipped
+ * past three times.)
+ */
+function code(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//gu, "")
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*)/u.test(line))
+    .join("\n");
+}
+
 function pluginPattern(packageName) {
   const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   return new RegExp(`name:\\s*["']${escaped}["']`, "gu");
@@ -321,6 +340,16 @@ for (const slot of [
   "conversation.input.plan",
   "conversation.input.overlay",
   "settings.section",
+  // The six shell-level settings seats adopted with the settings dialog.
+  // Membership on the children table is what AUTHORIZES the root to render
+  // them at all — an undeclared key throws at register time for the
+  // contributor and renders nothing for the host.
+  "settings.trigger",
+  "settings.header",
+  "settings.action",
+  "settings.close",
+  "settings.onboarding",
+  "settings.general.item",
   "amiba.settings.content.overlay",
   "shell.overlay",
   "tool.call.toolview",
@@ -350,6 +379,19 @@ for (const [slot, kind, scope] of [
   // case of all: entries registered with `key: "<wire tool name>"` against
   // the upstream contract would compile and then never render.
   ["tool.call.toolview", "keyed", "session"],
+  // The settings family. `settings.section` was pinned by membership only
+  // until the dialog phase; all seven now carry the official kind/scope.
+  // The single/list split is the load-bearing half here: a `list` where
+  // upstream declares `single` would silently stack two trigger labels
+  // inside one button, and a `single` where upstream declares `list` would
+  // make the SECOND registrant throw instead of appending.
+  ["settings.section", "list", "root"],
+  ["settings.trigger", "single", "root"],
+  ["settings.header", "single", "root"],
+  ["settings.action", "list", "root"],
+  ["settings.close", "single", "root"],
+  ["settings.onboarding", "list", "root"],
+  ["settings.general.item", "list", "root"],
 ]) {
   const declaration = new RegExp(
     `"${slot.replace(/\./gu, "\\.")}":\\s*\\{\\s*kind:\\s*"${kind}",\\s*scope:\\s*"${scope}",?\\s*\\}`,
@@ -429,12 +471,158 @@ for (const dispatch of [
   // This is byte-for-byte the upstream dispatch (ui-conversation's composer
   // entry does `overlay: renderSlot("conversation.input.overlay", {})`).
   /renderSlot\(\s*"conversation\.input\.overlay",\s*\{\}\s*\)/u,
+  // The three settings seats whose official owner share is the EMPTY marker
+  // interface (`SettingsHeaderOwnerProps` / `SettingsGeneralItemOwnerProps`,
+  // both `{ children?: never }`). `{}` is the faithful dispatch; TypeScript
+  // cannot flag a fabricated extra member against an empty owner (the P3
+  // lesson), so this regex is the only thing that catches one.
+  /renderSlot\(\s*"settings\.header",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"settings\.action",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"settings\.general\.item",\s*\{\}\s*\)/u,
+  // Same empty owner share, and the dispatch that names the dialog's close
+  // button. Amiba deliberately registers NO entry of its own here: a
+  // priority-0 occupant on a SINGLE slot makes the next registration throw.
+  /renderSlot\(\s*"settings\.close",\s*\{\}\s*\)/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
       `Product shell must dispatch id-selected slots through renderSlot's official only-filter (${dispatch})`,
     );
   }
+}
+// The settings trigger seat. Its owner share is NOT empty — `{ wide }`, the
+// sidebar column state — and it is a SINGLE slot, so both halves are pinned:
+// the real owner value must be forwarded (a hard-coded `true` would be a
+// fabricated one), and Amiba's own row content must ride as the dispatch
+// `fallback`, since an unoccupied single seat otherwise renders nothing and
+// the sidebar's settings row would go blank.
+for (const [dispatch, what] of [
+  [
+    /renderSlot\(\s*"settings\.trigger",\s*owner,/u,
+    "dispatch settings.trigger with the sidebar's real { wide } owner share",
+  ],
+  [
+    /renderSlot\(\s*"settings\.trigger",[\s\S]{0,200}?fallback:\s*<SettingsTriggerContent\s+wide=\{owner\.wide\}\s*\/>/u,
+    "pass Amiba's own gear + label as the settings.trigger fallback",
+  ],
+  [
+    /renderSlot\(\s*"settings\.onboarding",[\s\S]{0,900}?\{\s*only:\s*onboardingStepId\s*\}/u,
+    "render exactly ONE onboarding step through the official only-filter",
+  ],
+  [
+    /renderSlot\(\s*"settings\.onboarding",[\s\S]{0,400}?stepId:\s*onboardingStepId/u,
+    "hand the active step its own id",
+  ],
+  [
+    /renderSlot\(\s*"settings\.onboarding",[\s\S]{0,400}?complete:\s*\(\)\s*=>\s*completeOnboardingStep\(onboardingStepId\)/u,
+    "wire the step's complete() to the coordinator's hand-off",
+  ],
+  [
+    /renderSlot\(\s*"settings\.onboarding",[\s\S]{0,900}?openSection:\s*openSettingsSection/u,
+    "wire the step's openSection() to the same affordance the settings navigation uses",
+  ],
+]) {
+  if (!dispatch.test(productShellSource)) {
+    fail(`Product shell must ${what} (${dispatch})`);
+  }
+}
+// The settings CONTAINER: a modal dialog layered over the chat surface, not
+// a second top-level view. The retired `type View = "chat" | "settings"`
+// route swap is what made `settings.close` unhonest (Amiba had only a back
+// affordance), so its absence is asserted, not just the dialog's presence.
+if (/type\s+View\s*=\s*"chat"\s*\|\s*"settings"/u.test(productShellSource)) {
+  fail(
+    "Settings must be a modal dialog layered over the chat surface, not a top-level view swap",
+  );
+}
+if (
+  !/<SettingsDialog[\s\S]{0,400}?open=\{settingsOpen\}/u.test(
+    productShellSource,
+  ) ||
+  !/<SettingsDialog[\s\S]{0,400}?titleId=\{SETTINGS_TITLE_ID\}/u.test(
+    productShellSource,
+  ) ||
+  !/headerId=\{SETTINGS_TITLE_ID\}/u.test(productShellSource)
+) {
+  fail(
+    "The settings dialog must be named after the navigation heading the settings.header seat renders into (aria-labelledby)",
+  );
+}
+const settingsDialog = code(
+  await text("packages/ui/src/settings/SettingsDialog.tsx"),
+);
+for (const [pattern, what] of [
+  [/role="dialog"/u, 'carry role="dialog"'],
+  [/aria-modal="true"/u, "be modal"],
+  [/aria-labelledby=\{titleId\}/u, "name itself from the navigation heading"],
+  [/if\s*\(!open\)\s*return\s*null;/u, "render nothing at all while closed"],
+  [
+    /event\.key === "Escape"/u,
+    "close on Escape (the official shell's document-level listener)",
+  ],
+  [
+    /aria-hidden="true"[\s\S]{0,200}?onClick=\{onClose\}/u,
+    "close on an outside (mask) click",
+  ],
+  [/restoreTo\.focus\(\)/u, "return focus to the element that opened it"],
+]) {
+  if (!pattern.test(settingsDialog)) {
+    fail(`The settings dialog must ${what} (${pattern})`);
+  }
+}
+// The onboarding coordinator's rules, at the two files that own them.
+const onboardingPredicate = code(
+  await text("plugins/dsh-plugin-ui-shell/src/client/settings-onboarding.ts"),
+);
+// Rule 1, byte-faithful to upstream's selector. Whitespace-insensitive.
+if (
+  !/state\.phase\s*===\s*"ready"\s*&&\s*\(\s*state\.current\s*===\s*undefined\s*\|\|\s*state\.byId\[state\.current\]\?\.blank\s*===\s*true\s*\)/u.test(
+    onboardingPredicate,
+  )
+) {
+  fail(
+    "The onboarding active fact must be upstream's own predicate over the OFFICIAL sessions list snapshot (phase ready AND (no current OR current is blank))",
+  );
+}
+const settingsShell = code(
+  await text("plugins/dsh-plugin-ui-shell/src/client/settings-shell.ts"),
+);
+// …read through the FRAMEWORK's own useSessions standard hook, not a
+// re-derivation from Amiba's own store. This is the whole reason the seat is
+// honest: same service, same snapshot, same predicate.
+if (!/useOfficialSessions\(isOnboardingActive\)/u.test(settingsShell)) {
+  fail(
+    "The onboarding active fact must be read through the framework's useSessions standard hook",
+  );
+}
+const onboardingCoordinator = code(
+  await text("packages/ui/src/settings/onboarding.ts"),
+);
+for (const [pattern, what] of [
+  [
+    /steps\.find\(\(step\)\s*=>\s*!completed\.has\(step\.id\)\)/u,
+    "mount the FIRST registered step not yet completed (registry order)",
+  ],
+  [
+    /if\s*\(active\)\s*return;[\s\S]{0,200}?setCompleted\(/u,
+    "RESET the completed set when the active fact goes false — completion is deliberately NOT persisted",
+  ],
+]) {
+  if (!pattern.test(onboardingCoordinator)) {
+    fail(`The onboarding coordinator must ${what} (${pattern})`);
+  }
+}
+// Persistence would be the tempting "improvement" and is explicitly ruled
+// out: upstream is the authority on the flow's semantics, and a divergence
+// would make third-party steps behave differently under Amiba.
+if (
+  /localStorage|sessionStorage|platform\.storage|getPlatform/u.test(
+    onboardingCoordinator,
+  )
+) {
+  fail(
+    "The onboarding coordinator must not persist completion — upstream resets it and Amiba copies that",
+  );
 }
 // The keyed tool-call dispatch. BOTH options are load-bearing and each is
 // pinned separately: without `entryKey` no keyed registration can ever match

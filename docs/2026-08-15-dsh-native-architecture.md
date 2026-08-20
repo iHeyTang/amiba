@@ -71,7 +71,7 @@ Electron WebView，也没有 preload 特权。
 的运行时声明在 dsh-plugin-agent-preset 自己的 settings section entry 上）。
 
 词汇表策略：有官方等价物的 seat 使用官方 slot 名并继承官方契约 ——
-`settings.section`（owner `SettingsSectionOwnerProps { close }`）类型来自
+`settings.*` 家族（八个官方名里采纳了七个）类型来自
 `@deepseek-ai/dsh-client-ui-settings`，`shell.overlay` 来自
 `@deepseek-ai/dsh-client-ui-layout`，`conversation.session.header.utilities`
 与 `conversation.input.model` 来自
@@ -117,8 +117,24 @@ root 声明：
   两个官方 entry 都会注册进来；amiba-ui-shell 以**相同 `id`**（`slash-menu`、
   `command-popup`）+ `priority: -1` 注册自己的组件把它们**遮蔽**掉，每个 cell
   恰好渲染一个且是 Amiba 的。服务不被遮蔽 —— 详见 §4.1
-- `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
-  face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
+- `settings.section`（官方名，list，root scope，owner
+  `SettingsSectionOwnerProps { close }`；registrant 可用 vendor 约定 `navIcon`
+  inject face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
+- `settings.trigger`（官方名，**single**，root scope，owner
+  `{ wide }`）。侧边栏"设置"行的内容。`wide` 是侧边栏栏宽状态，Amiba 自己知道
+  （collapsed 时为 false），所以这份 owner 是真值不是占位
+- `settings.header`（官方名，**single**，root scope，空 owner）。设置导航顶部
+  的标题文本 —— 对话框用 `aria-labelledby` 指向这个节点取名
+- `settings.action`（官方名，list，root scope，空 owner）。页面 header 尾部、
+  Close 之前的 shell 级操作。它与 Amiba 自己的
+  `[data-settings-page-actions]` portal 容器**并存**：portal 是"页面自己在树内
+  挂 header 控件"的通道，seat 是"插件注册一次、每页都在"的通道
+- `settings.close`（官方名，**single**，root scope，空 owner）。关闭按钮的视觉
+  隐藏标签
+- `settings.onboarding`（官方名，list，root scope，owner
+  `{ stepId, complete, openSection }`）。协调式而非叠加式：见 §4.2
+- `settings.general.item`（官方名，list，root scope，空 owner）。General 分区
+  （Amiba 的"外观"页）底部的偏好行，追加在产品自带的行之下
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
 - `shell.overlay`（官方名）
@@ -312,6 +328,74 @@ session scope，`controllerFor` 返回 `undefined`，session scope 的 overlay �
 
 同批仍未启用、且现在服务已存在的候选：`session-log-download`、`ui-skill`、
 `ui-subagent`、`ui-cordis`。
+
+### 4.2 `settings.*` 全家族的采纳：Settings 从「视图」变成「对话框」
+
+官方设置壳是 `@deepseek-ai/dsh-client-ui-settings-general` 的 `SettingsRoot`
+（占据 `sidebar.settings`）。它的结构是：一个带
+`aria-haspopup="dialog"` / `aria-expanded` 的触发按钮（内容 =
+`settings.trigger`），打开后是 mask + `role="dialog" aria-modal="true"` 面板；
+面板左列 nav 顶部是 `settings.header`，nav 列表由宿主按 `settings.section`
+ledger 自绘；右列 header 里依次是 `settings.action` 与关闭按钮（其无障碍名
+= `settings.close`），下方是 `renderSlot("settings.section", { close }, { only })`；
+`settings.onboarding` 渲染在面板之外。
+
+Amiba 采纳了这个**结构**，没有采纳它的像素。此前 Amiba 的设置是一个顶层视图
+（`type View = "chat" | "settings"`，整块主区替换），只有一个"返回"入口 ——
+在那种容器里把返回按钮映射成 `settings.close` 是不诚实的，所以容器先改成对话框：
+
+- Settings 现在是浮在聊天界面之上的模态层（`@amiba/ui` 的 `SettingsDialog`），
+  聊天树保持挂载。Escape 关闭（监听器生命周期 = 面板的）、点 mask 关闭、
+  `aria-modal` / `aria-labelledby` 指向 nav 标题节点。
+- **Amiba 的视觉与页面框架原样保留**：`SettingsView` + `SettingsPageScaffold`
+  + `PaneHeaderBar` + 页面注册表都没有重写，只是换了容器。
+- **hash 深链保持有效**：分区寻址仍然只有一个来源 —— URL hash。
+  `open-settings` layout action 先 `replaceState` 写 hash 再打开对话框：对话框
+  关闭时 `SettingsView` 未挂载，会在挂载时读到新的 hash；已经打开时靠同步派发的
+  `hashchange` 移动（`replaceState` 自己不发事件）。所以侧边栏 section 行、
+  `ctx.layout.openSettings(id)`、ErrorBlock 的恢复目标、onboarding 的
+  `openSection(id)` 是同一条路径。
+- 焦点：面板打开时自身取得焦点，关闭时把焦点还给打开它的元素。这一点与上游不同
+  （上游 mount 时聚焦关闭按钮、关闭时不归还）——因为 Amiba 的设置页每次导航都会
+  重挂，自动聚焦页级控件会在每次点击导航时抢焦点。
+
+三个 `single` 席位（`trigger` / `header` / `close`）**Amiba 自己不注册**：
+single slot 上 priority 0 已被占用时，下一个注册会 throw，Amiba 注册自己的就等于
+把插件挡在门外。Amiba 自己的内容改走 dispatch 的 `fallback`，效果与上游那三条
+自注册一致，但席位仍然是空的、可被任何插件拿走。
+
+`settings.action` 与 Amiba 既有的 `[data-settings-page-actions]` portal 容器并存，
+顺序是 seat → portal → 关闭按钮，对应上游「actions 在 Close 之前」。
+
+**onboarding 协调器**（`settings.onboarding`）逐条复制上游 `SettingsRoot`：
+
+1. `onboardingActive` = 会话列表 `phase === "ready"` 且（没有当前会话 或
+   当前会话 `blank === true`）。Amiba 直接读**官方** sessions store —— 框架标准
+   kit 的 `useSessions`（`GlobalStandardProps`，每个 slot 组件都有），谓词与上游
+   逐字一致（`plugins/dsh-plugin-ui-shell/src/client/settings-onboarding.ts`）。
+   这不是"近似映射"：R1 sessions bridge 已经让官方 `current` 跟随 Amiba 自己的
+   `activeId`，Amiba 的首页（`activeId === ""`）就是 `current === undefined`，
+   而 `blank` 是宿主自己的空日志位（新建但未提交的任务），首条 prompt 被接受时
+   翻转为 false。
+2. 当前步骤 = 注册顺序里第一个未完成的。
+3. 用 `{ only: stepId }` 只渲染那一个。
+4. `complete()` 标记完成并交棒给下一个。
+5. `openSection(id)` 直接打开设置对话框到该分区（即上面那条统一路径）。
+6. **完成状态不持久化**：`onboardingActive` 变 false 时整个集合重置。这一条是
+   照抄，不是设计选择 —— 上游是流程语义的权威，改这里会让按官方壳编写的第三方
+   步骤在 Amiba 下表现不同。
+
+Amiba 本阶段不提供自己的 onboarding 步骤：交付物是协调器 + 席位，供官方与第三方
+插件贡献步骤。
+
+`settings.plugins.tab` 是家族里**唯一没有采纳**的名字。它的 owner 是空的（供给
+毫无难度），但契约是**结构**而非 props：「section owner 把 entry label 渲染成
+tab，并把每个 contribution 挂进对应的 tab panel」。Amiba 的插件页
+（`@amiba/ui` 的 `DshPluginInventory`）没有 tab panel：它的
+`全部 / Amiba / DSH / 异常` 是四个 `aria-pressed` 按钮，对**同一份**清单做过滤、
+各带一个计数徽章，共用页面唯一的搜索框。采纳这个名字会让按上游契约编写的 entry
+通过类型检查、然后在运行时落进别人的过滤表格里 —— 正是词汇表策略要防的那种偏差。
+类型仍然导出，等 Amiba 的插件页真的长出 tab panel 再声明。
 
 曾经的 `amiba.settings.navigation.before/assistant/after` 三个 slot 已退役：
 before/after 从无注册者；assistant 的 ledger 导航组件改由产品 Shell 直接渲染

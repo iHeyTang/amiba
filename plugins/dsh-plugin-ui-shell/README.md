@@ -85,7 +85,32 @@ counterpart.
   `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,
   `label`) drive the Settings navigation ledger, and the vendor `navIcon`
   inject-face convention still supplies the nav glyph (official plugins
-  without one fall back to the generic Blocks icon)
+  without one fall back to the generic Blocks icon). `close` now closes the
+  settings DIALOG, the same path as its header button and Escape
+- `settings.trigger` — official name, **single**, root scope, owner
+  `SettingsTriggerOwnerProps { wide }`. The content of the sidebar's settings
+  row. `wide` is the sidebar column state, which the chat view knows, so the
+  owner share is a real value rather than a constant. Amiba registers NO
+  entry here (a priority-0 occupant on a single slot makes the next
+  registration throw); its own gear + label ride as the dispatch `fallback`
+- `settings.header` — official name, **single**, root scope, EMPTY owner. The
+  settings navigation heading. The dialog names itself after this node
+  (`aria-labelledby`). Same fallback treatment as the trigger
+- `settings.action` — official name, list, root scope, EMPTY owner.
+  Shell-level actions in the page header, before Close. It COEXISTS with
+  Amiba's own `[data-settings-page-actions]` portal container in the same
+  trailing cluster (order: seat, portal, close button): the portal is the
+  in-tree channel a page uses for its own head controls, the seat is the
+  out-of-tree one a plugin registers once for every page
+- `settings.close` — official name, **single**, root scope, EMPTY owner. The
+  close button's visually-hidden label; the button itself is shell chrome.
+  Same fallback treatment as the trigger, so the button is never nameless
+- `settings.onboarding` — official name, list, root scope, owner
+  `SettingsOnboardingOwnerProps { stepId, complete, openSection }`.
+  COORDINATED, not additive — see "The onboarding coordinator" below
+- `settings.general.item` — official name, list, root scope, EMPTY owner. One
+  preference row at the bottom of the General section (Amiba's Appearance
+  page), appended below the product's own rows
 - `amiba.settings.content.overlay`
 - `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
   the frame-wide click-through floating layer
@@ -103,13 +128,79 @@ counterpart.
   binding, `openFile` from the workspace pane. `inspect` is deliberately
   omitted — it addresses the trajectory view, which Amiba does not run
 
-DECLARATION-ANCHOR divergence, for the one seat that has one: upstream
-declares `tool.call.toolview` from `conversation.chat.node`'s `tool-call`
-entry, the Chat Node that owns the whole call tree. Amiba has no such entry
-(its conversation is its own projection), so the seat is declared on this
-root instead. Legal, and the same pattern the adopted `conversation.*` seats
+DECLARATION-ANCHOR divergence, recorded once for the seats that have one:
+upstream declares `tool.call.toolview` from `conversation.chat.node`'s
+`tool-call` entry (the Chat Node that owns the whole call tree), the six
+shell-level `settings.*` seats from `ui-settings-general`'s `sidebar.settings`
+entry (the `SettingsRoot` that owns the trigger button and the modal panel),
+and `settings.general.item` from that package's General `settings.section`
+entry. Amiba has none of those entries (its conversation, its settings shell
+and its General page are its own), so the seats are declared on this root
+instead. Legal, and the same pattern the adopted `conversation.*` seats
 already use; only the declaration SITE differs — the key, kind, scope, and
 owner contract are the official ones.
+
+## Settings is a dialog, not a view
+
+`product-shell.tsx` no longer swaps the main area for a settings route. The
+chat surface stays mounted and `@amiba/ui`'s `SettingsDialog` layers over it
+with the official shell's structure: mask + `role="dialog" aria-modal="true"`
+panel, `aria-labelledby` pointing at the navigation heading (the
+`settings.header` seat), Escape and mask-click close paths, and
+`aria-haspopup="dialog"` + a live `aria-expanded` on the sidebar trigger.
+Amiba's own `SettingsView` / `SettingsPageScaffold` / `PaneHeaderBar` /
+page-registry framework renders inside it unchanged — this is a container
+change, not a redesign.
+
+This is also what makes `settings.close` honest: before it, Amiba had only a
+back affordance, and mapping that to the official close label would have been
+a lie.
+
+**Hash deep links survive.** Section addressing still has exactly one source,
+the URL hash, and `useSettingsShell` still writes it before opening: with the
+dialog closed `SettingsView` is unmounted and reads the fresh hash as it
+mounts, and with it already open the synchronous `hashchange` moves it
+(`replaceState` fires no event of its own). Every entry path funnels through
+the same `open-settings` layout action — the sidebar's section rows,
+`ctx.layout.openSettings(id)` from any plugin, and the onboarding owner's
+`openSection(id)`.
+
+Focus is the one deliberate departure from upstream: the panel takes focus on
+open and returns it to the element that opened it on close, where upstream
+focuses its close button on mount and restores nothing. Amiba's settings pages
+remount per navigation, so auto-focusing a per-page control would steal focus
+on every nav click.
+
+## The onboarding coordinator
+
+`settings.onboarding` is coordinated, not additive: the shell mounts exactly
+ONE step at a time. The rules are upstream's `SettingsRoot`, reproduced one by
+one, split across two files by what they depend on:
+
+| rule | where |
+| --- | --- |
+| 1. active = sessions `phase === "ready"` AND (no current OR current is `blank`) | `settings-onboarding.ts`, a pure predicate over the OFFICIAL `SessionListState` |
+| 2. active step = the first REGISTERED step not yet completed | `@amiba/ui`'s `useOnboardingCoordinator` |
+| 3. render exactly that one, via `{ only: stepId }` | `product-shell.tsx` |
+| 4. `complete()` marks it done and hands off to the next | `useOnboardingCoordinator` |
+| 5. `openSection(id)` opens the dialog on that section | `ctx.layout.openSettings(id)`, the same affordance the nav uses |
+| 6. completion is NOT persisted — it resets when active goes false | `useOnboardingCoordinator` |
+
+Rule 1 is read through the framework's own `useSessions` standard hook
+(`GlobalStandardProps`, present on every slot component's props), not
+re-derived from Amiba's session store. That is what makes the seat honest
+rather than approximate: the R1 sessions bridge already keeps the official
+`current` in lock-step with Amiba's `activeId`, so Amiba's home view IS
+`current === undefined`, and `blank` is the host's own empty-log bit, which
+flips to false on the first accepted prompt.
+
+Rule 6 is copied deliberately. A user who completes step A, sends a message,
+and returns to a blank session sees step A again. Upstream owns the flow's
+semantics; diverging here would make third-party steps written against the
+official shell behave differently under Amiba.
+
+Amiba ships no onboarding steps of its own — the coordinator and the seat are
+the deliverable.
 
 ## The input-trigger driver
 
