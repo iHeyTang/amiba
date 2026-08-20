@@ -624,6 +624,129 @@ if (
     "The onboarding coordinator must not persist completion — upstream resets it and Amiba copies that",
   );
 }
+// ---------------------------------------------------------------------------
+// THE LANGUAGE AUTHORITY
+// ---------------------------------------------------------------------------
+//
+// One 语言 row, owned by `@deepseek-ai/dsh-client-locale`. Amiba's own
+// competing control (a second `settings.ui.language` preference the official
+// service could not see) is retired, and `@amiba/i18n` follows the official
+// LocaleFace instead. Three things are pinned: the mapping is TOTAL and can
+// never leak Amiba's `zh-CN` into `setLocale` (which throws on an
+// unregistered id), the no-runtime fallback still exists for Quick-Ask and
+// the notifier, and the retired control does not come back.
+const i18nCore = code(await text("packages/i18n/src/index.ts"));
+for (const [pattern, what] of [
+  [
+    /export function toOfficialLocaleId\(\s*language: ResolvedLanguage,?\s*\): OfficialLocaleId \{/u,
+    "type the Amiba -> official mapping's RESULT as the official id union, so `zh-CN` cannot reach setLocale without a compile error",
+  ],
+  [
+    /export type OfficialLocaleId = "zh" \| "en";/u,
+    "restate the official LOCALE_IDS union verbatim (zh, en — never zh-CN)",
+  ],
+  [
+    /export function fromOfficialLocaleId\(id: string\): ResolvedLanguage \{[\s\S]{0,200}?return[\s\S]{0,120}?"zh-CN" : "en";/u,
+    "map every official id back to an Amiba language TOTALLY (a single return, no throw, unknown ids land on English)",
+  ],
+  [
+    /export function detectBrowserLanguage\(\): ResolvedLanguage \{[\s\S]{0,400}?navigator\.languages/u,
+    "keep the navigator.language resolution — it is the no-runtime fallback for Quick-Ask and the notifier",
+  ],
+  [
+    /if \(source\) return fromOfficialLocaleId\(source\.getSnapshot\(\)\.active\);\s*return readDocumentLanguage\(\) \?\? detectBrowserLanguage\(\);/u,
+    "resolve the active language from the OFFICIAL snapshot when one is installed and fall back to the document/navigator chain when none is",
+  ],
+  [
+    /officialUnsubscribe = source\.subscribe\(refreshLanguage\);/u,
+    "subscribe to the official locale service so a switch re-renders Amiba copy with no reload",
+  ],
+]) {
+  if (!pattern.test(i18nCore)) {
+    fail(`@amiba/i18n must ${what} (${pattern})`);
+  }
+}
+// The mapping is the ONLY producer of a setLocale argument, and no member of
+// Amiba's own language axis may be spelled next to that call.
+const localeBridge = code(
+  await text("plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts"),
+);
+for (const [pattern, what] of [
+  [
+    /const target = toOfficialLocaleId\(preference\);/u,
+    "derive the official id through the mapping rather than passing Amiba's own tag",
+  ],
+  [
+    /locale\.setLocale\(target\);/u,
+    "hand setLocale that derived id and nothing else",
+  ],
+  [
+    /if \(snapshot\.status !== "ready"\) return;/u,
+    "treat a `loading` section as UNKNOWN, not as `never chosen`",
+  ],
+  [
+    /if \(!snapshot\.writable\) \{/u,
+    "refuse to migrate into a section it cannot persist to (memory mode would flip the user once and lose the choice)",
+  ],
+  [
+    /if \(snapshot\.value\?\.preference !== undefined\) \{/u,
+    "treat an ABSENT durable preference as the one and only `never chosen` signal",
+  ],
+  [
+    /if \(preference === "auto"\) return;/u,
+    "skip `auto` — it already maps onto the official never-chosen state",
+  ],
+  [
+    /const LOCALE_SETTINGS_NAMESPACE: typeof UpstreamLocaleNamespace = "locale";/u,
+    "read the OFFICIAL locale settings namespace, annotated with upstream's own const type",
+  ],
+]) {
+  if (!pattern.test(localeBridge)) {
+    fail(`The locale bridge must ${what} (${pattern})`);
+  }
+}
+// Repo-wide: `LocaleRuntime.setLocale` THROWS on an unregistered id, so a
+// literal argument may only ever be one of the two shipped ids. Tests are
+// scanned too — a test asserting `setLocale("zh-CN")` would be asserting the
+// throw path as if it were normal.
+for (const scanRoot of ["packages", "plugins", "apps"]) {
+  for (const file of await sourceFiles(scanRoot)) {
+    const source = await readFile(file, "utf8");
+    for (const [, literal] of source.matchAll(
+      /setLocale\(\s*["']([^"']*)["']\s*\)/gu,
+    )) {
+      if (literal !== "zh" && literal !== "en") {
+        fail(
+          `setLocale called with "${literal}" in ${path.relative(root, file)} — the official service registers only "zh" and "en" and throws on anything else`,
+        );
+      }
+    }
+  }
+}
+// The retired control must not come back: one row, one authority.
+const settingsPreferences = code(
+  await text("packages/ui/src/settings/SettingsPreferences.tsx"),
+);
+if (
+  /options\.preference\.language/u.test(settingsPreferences) ||
+  /useStoredLanguagePreference|LanguagePreference/u.test(settingsPreferences)
+) {
+  fail(
+    "Amiba must not draw a second 语言 row — the official locale plugin owns the one that exists (settings.general.item)",
+  );
+}
+for (const retired of [
+  "useStoredLanguagePreference",
+  "saveLanguagePreference",
+  "resolveLanguage",
+]) {
+  if (i18nCore.includes(`export function ${retired}`)) {
+    fail(
+      `@amiba/i18n still exports ${retired} — the Amiba-owned language preference has no writer left`,
+    );
+  }
+}
+
 // The keyed tool-call dispatch. BOTH options are load-bearing and each is
 // pinned separately: without `entryKey` no keyed registration can ever match
 // (the seat becomes dead), and without `fallback` an unclaimed tool name would

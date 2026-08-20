@@ -12,8 +12,12 @@
 #     (`slots.installLocale`, boot-once). Without it, ANY entry registering
 #     with `locale: <ns>` throws SlotAssemblyError past the render boundary —
 #     an app-level crash — and 24 of the rows below cannot activate at all.
-#     Its only registration targets `settings.general.item`, declared by the
-#     still-disabled `ui-settings-general`, so it renders nothing here.
+#     Its only registration targets `settings.general.item`. That seat used to
+#     be declared only by the still-disabled `ui-settings-general`, so the row
+#     rendered nowhere; amiba-ui-shell now declares it on its own root, so the
+#     official `LanguageRow` DOES render — and it is the product's one and only
+#     语言 control (Amiba's competing row is retired; `locale-bridge.ts` makes
+#     this service the language authority for Amiba's own copy too).
 # Keeping them also stops the auto-mounted directory-picker client half
 # (`-browse`, injected `locale`) from hanging the whole boot on hosts where
 # the native chooser is unavailable: non-loopback `--host`, SSH sessions, or

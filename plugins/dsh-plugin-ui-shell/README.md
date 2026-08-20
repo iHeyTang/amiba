@@ -110,7 +110,10 @@ counterpart.
   COORDINATED, not additive — see "The onboarding coordinator" below
 - `settings.general.item` — official name, list, root scope, EMPTY owner. One
   preference row at the bottom of the General section (Amiba's Appearance
-  page), appended below the product's own rows
+  page), appended below the product's own rows. This seat has a REAL occupant:
+  `@deepseek-ai/dsh-client-locale` registers its own `LanguageRow` here
+  (`id: "language"`, `order: 0`) and that row is the product's ONLY 语言
+  control — see "The language authority" below
 - `amiba.settings.content.overlay`
 - `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
   the frame-wide click-through floating layer
@@ -201,6 +204,49 @@ official shell behave differently under Amiba.
 
 Amiba ships no onboarding steps of its own — the coordinator and the seat are
 the deliverable.
+
+## The language authority
+
+`locale-bridge.ts`. The OFFICIAL locale service decides the language, for the
+official/plugin copy AND for Amiba's own 447-key catalog. Amiba used to own a
+second preference (`settings.ui.language`, `auto | en | zh-CN`) with its own
+row in Appearance; once `settings.general.item` was declared, upstream's
+`LanguageRow` landed on the same page and the product showed two 语言 controls
+that did not agree. Amiba's is retired. The explicit "auto" option went with
+it — official has no equivalent, and its never-chosen state already follows the
+browser.
+
+Two jobs:
+
+- **Authority.** `ctx.inject(["locale", "settingsScope", "connection",
+  "remote"], …)` hands `@amiba/i18n` the official `LocaleRuntime` through
+  `installOfficialLocale` — the same `getSnapshot`/`subscribe` LocaleFace pair
+  the framework's own `t` seat consumes via `ctx.slots.installLocale`. A switch
+  in the official row re-renders Amiba's copy in the same tick, no reload. The
+  guard is `ctx.inject` rather than the plugin's `inject` list on purpose: the
+  product shell must mount even where `locale` is absent, and without it Amiba
+  simply keeps the browser-derived fallback (what Quick-Ask does).
+- **Migration**, exactly once. See the doc block on
+  `migrateLegacyLanguagePreference` for how "never chosen" is determined — the
+  short version is that it comes from the durable section
+  (`LocaleSettings.preference` absent on a `ready`, `writable` snapshot), never
+  from the active locale, which is indistinguishable from the browser default
+  while nothing is chosen.
+
+**Id mapping.** Official ships `zh` and `en`; Amiba's catalogs are `zh-CN` and
+`en`, and `setLocale` THROWS on an unregistered id. `toOfficialLocaleId` in
+`@amiba/i18n` returns the official union, so `zh-CN` leaking into `setLocale`
+is a compile error rather than a runtime throw; `fromOfficialLocaleId` is total
+(primary subtag, unknown ids land on English). `@amiba/i18n` cannot depend on
+`@deepseek-ai/*` — Quick-Ask and the browser surfaces consume it without a DSH
+graph — so the hand-written union is tied to upstream's `LocaleId` by the
+`OfficialLocaleIdMatchesUpstream` probe in this package.
+
+**Cross-realm.** Every plugin bundle carries its own copy of `@amiba/i18n`'s
+module state, so `installOfficialLocale` here reaches none of them. The realm
+holding the official source PUBLISHES `document.documentElement.lang`; every
+other realm observes it (this package's `usePluginT`, `@amiba/i18n`'s own
+MutationObserver, the `settings.section` ledger's language cache key).
 
 ## The input-trigger driver
 
