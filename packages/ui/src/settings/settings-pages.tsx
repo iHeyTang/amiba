@@ -5,7 +5,7 @@ import {
   Palette,
   type LucideIcon,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
 import { SettingsLogs } from "./SettingsLogs";
@@ -15,6 +15,13 @@ import { SettingsStatus } from "./SettingsStatus";
 export interface SettingsPageProps {
   detail?: string;
   onOpenDetail: (id: string | null) => void;
+  /**
+   * The official `settings.general.item` seat, dispatched by the host shell
+   * and handed to whichever registry page IS the General section (today:
+   * Appearance). Every other page ignores it — the seat has exactly one
+   * render site, as upstream does.
+   */
+  generalItems?: ReactNode;
 }
 
 export interface SettingsPageDescriptor {
@@ -50,7 +57,12 @@ export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
     icon: Palette,
     titleKey: "options.nav.appearance",
     group: "general",
-    component: page(SettingsAppearance),
+    // NOT wrapped in `page()`: Appearance is Amiba's General section, so it
+    // is the one registry page that consumes a SettingsPageProps member —
+    // the `settings.general.item` seat.
+    component: function AppearancePage({ generalItems }: SettingsPageProps) {
+      return <SettingsAppearance generalItems={generalItems} />;
+    },
   },
   {
     id: "shortcuts",

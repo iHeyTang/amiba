@@ -16,6 +16,23 @@ export interface SettingsPageScaffoldProps {
   headerClassName?: string;
   headerHeightPx?: number;
   scroll?: "page" | "self";
+  /**
+   * The official `settings.action` seat — optional actions rendered in the
+   * page header before Close, whose registrants own visibility, behaviour and
+   * copy. It sits BESIDE the `data-settings-page-actions` portal container,
+   * not instead of it: the portal is Amiba's in-tree channel (a page mounts
+   * its own head controls through `SettingsPageActions`), the seat is the
+   * out-of-tree one (a plugin registers a shell-level action once and it
+   * shows on every page). Both render into the same trailing cluster; the
+   * seat is dispatched bare, so an unoccupied one adds no box of its own.
+   */
+  actions?: ReactNode;
+  /**
+   * The modal shell's close control, rendered last in the trailing cluster —
+   * the same position the official shell gives it (content-column header,
+   * after the actions). Omitted when Settings is not hosted in a dialog.
+   */
+  closeControl?: ReactNode;
   children: ReactNode;
 }
 
@@ -39,6 +56,8 @@ function ScaffoldBody({
   headerClassName,
   headerHeightPx = 40,
   scroll = "page",
+  actions,
+  closeControl,
   children,
 }: SettingsPageScaffoldProps) {
   const { t } = useT();
@@ -70,11 +89,15 @@ function ScaffoldBody({
           </>
         }
         trailing={
-          <div
-            data-settings-page-actions
-            className="flex items-center gap-1.5"
-            ref={setActionsHost}
-          />
+          <>
+            {actions}
+            <div
+              data-settings-page-actions
+              className="flex items-center gap-1.5"
+              ref={setActionsHost}
+            />
+            {closeControl}
+          </>
         }
       />
       {scroll === "page" ? (

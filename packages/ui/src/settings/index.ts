@@ -2,6 +2,13 @@ export { SettingsLogs } from "./SettingsLogs";
 export { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 export { SettingsStatus } from "./SettingsStatus";
 export { SettingsView, type SettingsViewProps } from "./SettingsView";
+export { SettingsDialog, type SettingsDialogProps } from "./SettingsDialog";
+export { SettingsTriggerContent } from "./SettingsTriggerContent";
+export {
+  useOnboardingCoordinator,
+  type OnboardingCoordinator,
+  type OnboardingStepRow,
+} from "./onboarding";
 export {
   SettingsPageScaffold,
   type SettingsPageScaffoldProps,

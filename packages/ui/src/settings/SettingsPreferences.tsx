@@ -68,12 +68,30 @@ function parseSummonHotkey(raw: unknown): SummonHotkey {
   return DEFAULT_SUMMON_HOTKEY;
 }
 
+export interface SettingsAppearanceProps {
+  /**
+   * The official `settings.general.item` seat — one preference row per
+   * registrant, contributed by the feature plugin that owns the preference
+   * (upstream: locale → Language, ui-theme → Appearance, ui-conversation →
+   * Composer Enter). This page IS Amiba's General section: it stacks the
+   * rows the product owns itself (language, theme, accent, wallpaper, message
+   * width) and this seat appends the contributed ones underneath.
+   *
+   * The owner share is empty by contract — "the section column only stacks
+   * rows, so a row draws its own internals, including its label" — so the
+   * host passes the dispatched node straight through and adds no chrome
+   * around it. Hosts outside a DSH plugin runtime (Quick-Ask, the browser
+   * extension) pass nothing and the page renders exactly as before.
+   */
+  generalItems?: ReactNode;
+}
+
 /**
  * Appearance settings — a top-level tab. Merges what used to be the
  * "Appearance" + "Chat" preference sub-tabs into one page (language, theme,
  * wallpaper, message width, quick actions).
  */
-export function SettingsAppearance() {
+export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {}) {
   const { t } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
   const [accentPref, setAccentPref] = useStoredAccentPreference();
@@ -167,6 +185,7 @@ export function SettingsAppearance() {
           });
         }}
       />
+      {generalItems}
     </div>
   );
 }

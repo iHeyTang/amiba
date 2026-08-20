@@ -184,7 +184,20 @@ export interface FullScreenChatViewProps {
      * runtime) and every row renders Amiba's own tool chip.
      */
     toolView?: ToolCallSeatRenderer;
+    /**
+     * renderSlot-backed dispatch of the official `settings.trigger` seat —
+     * the content of the sidebar's settings row. The owner share is
+     * `{ wide }`, the sidebar column state, which only this component knows,
+     * so the host supplies a renderer rather than a node.
+     */
+    settingsTrigger?: (owner: { wide: boolean }) => ReactNode;
   };
+  /**
+   * Whether the settings dialog the sidebar row opens is currently open —
+   * the sidebar trigger's `aria-expanded`, exactly as the official settings
+   * shell reports its own open state.
+   */
+  settingsOpen?: boolean;
   /**
    * TabBar gear / settings row → open Settings. The optional ``tab``
    * argument names the Settings sub-pane to land on (matches the
@@ -258,6 +271,7 @@ function FullScreenChatViewInner({
   capabilities,
   slots,
   openSettings,
+  settingsOpen = false,
   openAgentDestination,
   onGoHome,
   topBarLeftInset,
@@ -720,6 +734,9 @@ function FullScreenChatViewInner({
             historyLayout={historyLayout}
             onHistoryLayoutChange={onHistoryLayoutChange}
             onOpenSettings={() => openSettings()}
+            settingsTrigger={slots?.settingsTrigger}
+            settingsOpen={settingsOpen}
+            wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
           />
         </div>

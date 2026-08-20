@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Home } from "lucide-react";
+import { ChevronDown, ChevronRight, Home, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getPlatform } from "@amiba/app-runtime/platform";
 
@@ -72,7 +72,43 @@ export interface SettingsViewProps {
     section?: (sectionId: string) => React.ReactNode;
     /** Settings content overlay; entries opt into pointer events. */
     contentOverlay?: React.ReactNode;
+    /**
+     * The official `settings.header` seat: the panel title text, rendered in
+     * the navigation heading row. The dialog's accessible name points at that
+     * node (`aria-labelledby`), exactly as the official shell does. Hosts
+     * that pass nothing get Amiba's own title.
+     */
+    header?: React.ReactNode;
+    /**
+     * The official `settings.action` seat: shell-level actions in the page
+     * header, before Close. Forwarded to every page's scaffold.
+     */
+    action?: React.ReactNode;
+    /**
+     * The official `settings.general.item` seat: extra preference rows inside
+     * the General section (Amiba's Appearance page).
+     */
+    generalItem?: React.ReactNode;
   };
+  /**
+   * Modal close affordance. When provided, Settings is being hosted in the
+   * settings dialog: every page header gets a close button whose
+   * visually-hidden label is the `settings.close` seat (`slots.close`), and
+   * the navigation's Home row closes the dialog rather than navigating.
+   */
+  onClose?: () => void;
+  /**
+   * The official `settings.close` seat: the close button's visually-hidden
+   * label text. The button itself — icon, geometry, focus — is shell chrome.
+   * Unlike upstream, an unoccupied seat does NOT leave the button nameless:
+   * the dispatch carries Amiba's own label as its `fallback`, which is the
+   * job upstream's own `CloseLabel` registration does. Amiba cannot register
+   * that entry itself, because `settings.close` is a SINGLE slot and a
+   * priority-0 occupant would make a third-party registration throw.
+   */
+  closeLabel?: React.ReactNode;
+  /** DOM id stamped on the navigation heading, for the dialog's aria-labelledby. */
+  headerId?: string;
   /**
    * Optional — when provided, the sidebar's top-left Amiba logo + title
    * becomes a clickable button that navigates back to Home. Desktop
@@ -126,6 +162,9 @@ export interface SettingsViewProps {
 export function SettingsView({
   slots,
   onGoHome,
+  onClose,
+  closeLabel,
+  headerId,
   sidebarHeaderLeftInset = 0,
   sidebarHeaderHeightPx = 40,
   sidebarHeaderClassName,
@@ -185,34 +224,50 @@ export function SettingsView({
     : undefined;
   const activePage = dshSection ? undefined : settingsPageById(route.tab);
 
+  // The modal shell's close button. Chrome is Amiba's (icon, geometry,
+  // focus ring); the accessible name is the official `settings.close` seat,
+  // with Amiba's own copy as the dispatch fallback so the button is never
+  // nameless. Absent outside the dialog host.
+  const closeControl = onClose ? (
+    <button
+      className="app-no-drag inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+      data-settings-close
+      onClick={onClose}
+      type="button"
+    >
+      <X className="h-4 w-4" />
+      <span className="sr-only">{closeLabel ?? t("common.close")}</span>
+    </button>
+  ) : undefined;
+
   return (
-    <div className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-background text-foreground">
       <aside
         data-testid="settings-sidebar"
         className="flex min-h-0 shrink-0 flex-col bg-muted/30"
         style={{ width: APP_SIDEBAR_DEFAULT_WIDTH }}
       >
-        {onGoHome ? (
-          /*
-           * Desktop sidebar chrome remains a passive drag region. The
-           * actual Home destination belongs to the navigation list below,
-           * where it behaves like every other sidebar destination.
-           */
-          <div
-            className={`shrink-0 ${sidebarHeaderClassName ?? ""}`}
-            style={{
-              height: sidebarHeaderHeightPx,
-              paddingLeft: Math.max(sidebarHeaderLeftInset, 12),
-            }}
-          />
-        ) : (
-          <div className="flex h-14 shrink-0 items-center gap-2.5 px-3">
-            <AmibaLogo size={28} className="shrink-0" />
-            <p className="truncate text-sm font-semibold tracking-tight">
-              {t("app.title")}
-            </p>
-          </div>
-        )}
+        {/*
+         * The navigation heading row — the official `settings.header` seat's
+         * render site, and the node the settings dialog names itself after
+         * (`aria-labelledby={headerId}`). One row for every host: the logo
+         * only joins it on surfaces that render Settings standalone.
+         */}
+        <div
+          className={`flex shrink-0 items-center gap-2.5 pr-3 ${sidebarHeaderClassName ?? ""}`}
+          style={{
+            height: sidebarHeaderHeightPx,
+            paddingLeft: Math.max(sidebarHeaderLeftInset, 12),
+          }}
+        >
+          {onGoHome ? null : <AmibaLogo size={20} className="shrink-0" />}
+          <p
+            className="min-w-0 truncate text-sm font-semibold tracking-tight"
+            id={headerId}
+          >
+            {slots?.header ?? t("chat.settings")}
+          </p>
+        </div>
         <ScrollArea className="min-h-0 flex-1">
           <nav className="flex flex-col gap-0.5 p-2">
             {onGoHome ? (
@@ -300,6 +355,8 @@ export function SettingsView({
             headerClassName={paneHeaderClassName}
             headerHeightPx={paneHeaderChromeHeightPx ?? 40}
             scroll="self"
+            actions={slots?.action}
+            closeControl={closeControl}
           >
             {slots?.section?.(dshSection)}
           </SettingsPageScaffold>
@@ -311,10 +368,13 @@ export function SettingsView({
             headerClassName={paneHeaderClassName}
             headerHeightPx={paneHeaderChromeHeightPx ?? 40}
             scroll={activePage.scroll ?? "page"}
+            actions={slots?.action}
+            closeControl={closeControl}
           >
             <activePage.component
               detail={route.detail}
               onOpenDetail={(id) => navigate(activePage.id, id ?? undefined)}
+              generalItems={slots?.generalItem}
             />
           </SettingsPageScaffold>
         ) : null}

@@ -3,10 +3,14 @@
  * left-aligned button. Reused for the new-chat / search / nav / settings
  * rows so they share active-state styling and hit-target geometry.
  */
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { NavigationRow } from "../navigation/NavigationRow";
 
-export interface SidebarItemProps {
+export interface SidebarItemProps
+  extends Pick<
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    "aria-haspopup" | "aria-expanded"
+  > {
   /** Stable id — also drives the `sidebar-item-${id}` test hook. */
   id: string;
   icon: ReactNode;
@@ -18,6 +22,12 @@ export interface SidebarItemProps {
   title?: string;
   /** Optional right-aligned element (count badge, action button…). */
   trailing?: ReactNode;
+  /**
+   * Replace the icon + label pair with slot-supplied row content (see
+   * {@link NavigationRow.body}). `label` still names the button for assistive
+   * technology, so a row stays addressable whatever its content is.
+   */
+  body?: ReactNode;
 }
 
 export function SidebarItem({
@@ -28,6 +38,8 @@ export function SidebarItem({
   onClick,
   title,
   trailing,
+  body,
+  ...aria
 }: SidebarItemProps) {
   return (
     <NavigationRow
@@ -39,6 +51,8 @@ export function SidebarItem({
       label={label}
       active={active}
       trailing={trailing}
+      body={body}
+      {...aria}
     />
   );
 }

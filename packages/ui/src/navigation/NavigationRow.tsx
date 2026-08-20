@@ -8,6 +8,16 @@ export interface NavigationRowProps
   label: ReactNode;
   active?: boolean;
   trailing?: ReactNode;
+  /**
+   * Replace the icon + label pair with arbitrary row content, keeping the
+   * button chrome (hit target, selection treatment, focus ring). The one
+   * consumer today is the sidebar's Settings row, whose content is the
+   * official `settings.trigger` seat — a slot whose contract is that the
+   * whole content, icon included, arrives from the registrant. `icon` and
+   * `label` stay required so every call site still declares the row's
+   * fallback identity.
+   */
+  body?: ReactNode;
 }
 
 /**
@@ -20,6 +30,7 @@ export function NavigationRow({
   label,
   active = false,
   trailing,
+  body,
   className,
   ...props
 }: NavigationRowProps) {
@@ -37,15 +48,19 @@ export function NavigationRow({
       )}
       {...props}
     >
-      <span
-        className={cn(
-          "inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground transition-colors [&_svg]:h-4 [&_svg]:w-4",
-          active && "text-foreground/80",
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {body ?? (
+        <>
+          <span
+            className={cn(
+              "inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground transition-colors [&_svg]:h-4 [&_svg]:w-4",
+              active && "text-foreground/80",
+            )}
+          >
+            {icon}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+        </>
+      )}
       {trailing}
     </button>
   );
