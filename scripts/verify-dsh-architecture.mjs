@@ -55,6 +55,13 @@ async function sourceFiles(relative) {
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       const target = path.join(current, entry.name);
+      // Third-party code is never the subject of an architecture assertion,
+      // and `packages/app-runtime/resources/dsh-runtime` stages a full npm
+      // tree inside a scanned root. Without this the key-loss scan reports
+      // `t("SemVer")` from a vendored yarn plugin as an Amiba call site —
+      // and only on checkouts where the runtime happens to be staged, so it
+      // passes in a fresh worktree and fails on a working machine.
+      if (entry.name === "node_modules") continue;
       if (entry.isDirectory()) await visit(target);
       else if (entry.isFile() && /\.[cm]?[jt]sx?$/u.test(entry.name))
         files.push(target);
