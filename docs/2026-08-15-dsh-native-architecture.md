@@ -447,10 +447,25 @@ tab。新增 slot 的原则是语义稳定、归属清晰、具备实际扩展�
    入口调一次 `seedDocumentLanguage()`，把浏览器派生值写进 document contract，
    于是它们的 `<html lang>` 不再是 index.html 里那个写死的 `en`。
 
-`document.documentElement.lang` 依然承重：每个插件 bundle 单独构建、各自持有一份
-`@amiba/i18n` 模块状态，ui-shell 里的 `installOfficialLocale` 到不了它们。持有
-官方 source 的那个 realm **发布**这个属性，其余 realm（`@amiba/i18n` 自己的
-MutationObserver、`usePluginT`、`settings.section` ledger 的语言缓存键）**观察**它。
+**official source 是 realm 级的，不是模块级的。** 每个插件 bundle 单独构建、各自
+持有一份 `@amiba/i18n` 模块状态，而只有一个 bundle 的 `apply` 手里有 `ctx`；
+source 放在模块级 `let` 里就只有那一个 bundle 能看见它。所以它挂在 realm 符号
+注册表 `Symbol.for("@amiba/i18n/official-locale")` 上 —— 与
+`@amiba/app-runtime/platform` 共享 PlatformAdapter、`@amiba/ui` 共享 settings
+chrome context 是同一个手法。**全局的只有 source 本身和对它的那一个订阅**；
+`cachedLanguage` / `languageSubscribers` / `storeSubscribers` 刻意留在模块作用域，
+因为每份 copy 通知的是它**自己**那棵 React 树，把它们也提上去会让任意一份 copy 的
+挂载互相触发。注册表还带一份**安装通知表**（`observers`）：每份 copy 加载时把自己的
+`refreshLanguage` 挂进去，于是在 `installOfficialLocale` 之前就已经初始化完的 copy
+会被唤醒，而不是卡在无运行时回退上。守卫见
+`packages/ui/src/test/i18n-cross-bundle-locale.test.tsx`（断言全部在同一个 task 内
+完成 —— document 属性的观察者要等下一个 microtask，所以同 tick 收到变化只可能来自
+注册表）。
+
+`document.documentElement.lang` 因此**不再是 `useT` 的跨 bundle 通道**，但仍然承重
+于三件事：真正没有 DSH 图的窗口（Quick-Ask、通知窗口）；仍直接读该属性的
+`usePluginT` 与各插件里几处非 React 的 slot label 取值；以及 `<html lang>` 自身的
+正确性（`:lang()`、辅助技术）。持有官方 source 的 realm 继续**发布**它。
 
 **一次性迁移**。老用户可能已经把 `settings.ui.language` 设成了 `en` 或 `zh-CN`。
 `locale-bridge.ts` 在启动时读一次：`auto` 什么都不做（它本来就等于官方的"从未

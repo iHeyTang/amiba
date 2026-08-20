@@ -42,10 +42,33 @@ function fakeOfficialLocale(active: string) {
   };
 }
 
+/** The realm registry `@amiba/i18n` keeps the one official source on. */
+interface RealmLocaleRegistry {
+  source: unknown;
+  unsubscribe: (() => void) | null;
+  observers: Set<() => void>;
+}
+
 const disposers: Array<() => void> = [];
 
 afterEach(() => {
   for (const dispose of disposers.splice(0).reverse()) dispose();
+  // The official source is realm state now, so a failed test must not be able
+  // to leave one installed for the next. The `observers` list is left in
+  // place: it holds THIS module copy's refresh hook, and dropping the whole
+  // registry object would orphan it.
+  const registry = (
+    globalThis as unknown as Record<
+      PropertyKey,
+      RealmLocaleRegistry | undefined
+    >
+  )[Symbol.for("@amiba/i18n/official-locale")];
+  if (registry?.source) {
+    registry.unsubscribe?.();
+    registry.unsubscribe = null;
+    registry.source = null;
+    for (const observer of [...registry.observers]) observer();
+  }
   document.documentElement.lang = "en";
   vi.restoreAllMocks();
 });
@@ -97,7 +120,7 @@ describe("with a DSH plugin runtime (official locale installed)", () => {
     expect(screen.getByTestId("copy")).toHaveTextContent("保存");
   });
 
-  it("publishes the cross-realm document contract every other bundle observes", () => {
+  it("keeps `<html lang>` truthful for the surfaces that read it directly", () => {
     const official = fakeOfficialLocale("zh");
     disposers.push(installOfficialLocale(official.source));
     expect(document.documentElement.lang).toBe("zh-CN");
@@ -140,10 +163,11 @@ describe("with NO plugin runtime (Quick-Ask, the notifier)", () => {
     expect(screen.getByTestId("copy")).toHaveTextContent("保存");
   });
 
-  it("follows the document contract published by whoever owns the runtime", async () => {
-    // This is the case of every OTHER plugin bundle: its own copy of
-    // `@amiba/i18n` never sees `installOfficialLocale`, so the document
-    // attribute is how the official switch reaches it.
+  it("follows the document contract when no official source exists at all", async () => {
+    // Other PLUGIN BUNDLES no longer depend on this path — the official
+    // source is realm-wide now (see `i18n-cross-bundle-locale.test.tsx`).
+    // What is left is the genuinely runtime-less window: a surface whose
+    // `<html lang>` was seeded at boot and can still change under it.
     document.documentElement.lang = "en";
     render(<LanguageProbe />);
     expect(screen.getByTestId("language")).toHaveTextContent("en");

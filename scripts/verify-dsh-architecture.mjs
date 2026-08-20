@@ -664,12 +664,69 @@ for (const [pattern, what] of [
     "resolve the active language from the OFFICIAL snapshot when one is installed and fall back to the document/navigator chain when none is",
   ],
   [
-    /officialUnsubscribe = source\.subscribe\(refreshLanguage\);/u,
-    "subscribe to the official locale service so a switch re-renders Amiba copy with no reload",
+    /registry\.unsubscribe = source\.subscribe\(notifyRealm\);/u,
+    "subscribe to the official locale service ONCE for the realm and fan the change out to every bundled copy, so a switch re-renders Amiba copy with no reload",
+  ],
+  [
+    /const OFFICIAL_LOCALE_KEY = Symbol\.for\("@amiba\/i18n\/official-locale"\);/u,
+    "keep the official source on the realm-wide symbol registry — a module-level `let` is set only in the ONE bundle whose `apply` holds a `ctx`",
+  ],
+  [
+    /officialLocaleRegistry\(\)\.observers\.add\(refreshLanguage\);/u,
+    "join the realm's install-notification list at load, so a copy that finished loading BEFORE installOfficialLocale is woken rather than left on the no-runtime fallback",
   ],
 ]) {
   if (!pattern.test(i18nCore)) {
     fail(`@amiba/i18n must ${what} (${pattern})`);
+  }
+}
+// The global/not-global boundary. The SOURCE is realm-singular; the language
+// cache and the two subscriber sets are NOT — each bundled copy notifies its
+// own React trees, and hoisting those onto the realm would make every copy's
+// `useSyncExternalStore` fire for every other copy's mount.
+const localeRegistryShape =
+  /interface OfficialLocaleRegistry \{([\s\S]*?)\n\}/u.exec(i18nCore);
+if (!localeRegistryShape) {
+  fail(
+    "@amiba/i18n must declare the realm registry as `interface OfficialLocaleRegistry` so its membership can be checked",
+  );
+} else {
+  const members = localeRegistryShape[1];
+  if (!/\bsource\b/u.test(members) || !/\bobservers\b/u.test(members)) {
+    fail(
+      "The realm locale registry must carry the official `source` and the `observers` install-notification list",
+    );
+  }
+  for (const perCopy of [
+    "cachedLanguage",
+    "languageSubscribers",
+    "storeSubscribers",
+  ]) {
+    if (members.includes(perCopy)) {
+      fail(
+        `${perCopy} must NOT live on the realm-wide locale registry — each bundled copy of @amiba/i18n notifies its OWN React trees, and sharing it would cross-trigger every other copy`,
+      );
+    }
+  }
+}
+for (const [pattern, what] of [
+  [
+    /^const languageSubscribers = new Set<LanguageSubscriber>\(\);$/mu,
+    "keep the non-React language subscribers per bundle copy",
+  ],
+  [
+    /^const storeSubscribers = new Set<\(\) => void>\(\);$/mu,
+    "keep the useSyncExternalStore listeners per bundle copy",
+  ],
+  [
+    /^let cachedLanguage: ResolvedLanguage = resolveActiveLanguage\(\);$/mu,
+    "keep the resolved-language cache per bundle copy",
+  ],
+]) {
+  if (!pattern.test(i18nCore)) {
+    fail(
+      `@amiba/i18n must ${what} — module scope, never the realm registry (${pattern})`,
+    );
   }
 }
 // The mapping is the ONLY producer of a setLocale argument, and no member of

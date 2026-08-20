@@ -25,24 +25,26 @@ import { zhCN } from "./zh-CN";
  *  1. **A DSH client runtime is present.** Whoever owns the plugin context
  *     (today `@amiba/dsh-plugin-ui-shell`) calls {@link installOfficialLocale}
  *     with the official `LocaleRuntime`'s `getSnapshot`/`subscribe` pair. That
- *     source is then AUTHORITATIVE: `useT` re-renders synchronously on every
- *     official switch, and the resolved language is mirrored onto
- *     `document.documentElement.lang` so the surfaces that cannot see this
- *     module instance still follow (see below).
+ *     source is then AUTHORITATIVE for the whole RENDERER, not just for the
+ *     bundle that installed it: it is kept on the realm-wide symbol registry,
+ *     so every independently-bundled copy of this module resolves the same
+ *     instance and `useT` re-renders synchronously on every official switch.
  *  2. **No plugin runtime** — Quick-Ask, the notifier window, the browser
  *     surfaces. Nothing installs a source, and the language resolves from the
  *     document contract, falling back to `navigator.language`. Those entries
  *     publish that fallback once via {@link seedDocumentLanguage} so the
  *     window carries a truthful `lang` attribute from its first paint.
  *
- * ## Why `document.documentElement.lang` is still load-bearing
+ * ## What `document.documentElement.lang` is still for
  *
- * Every plugin bundle is built separately and therefore carries its OWN copy
- * of this module's state; `installOfficialLocale` in the ui-shell bundle can
- * never reach them. The document `lang` attribute is the deliberately tiny
- * cross-realm projection of the active language: the realm holding the
- * official source publishes it, and every other realm (this module's
- * MutationObserver, and `./plugin.ts`'s `usePluginT`) observes it.
+ * It is no longer the cross-bundle channel for `useT` — the realm registry
+ * below is. It remains load-bearing for:
+ *
+ *  - the **runtime-less windows** (Quick-Ask, the notifier), which have no DSH
+ *    plugin graph at all and therefore no official source to resolve;
+ *  - `./plugin.ts`'s `usePluginT`, and the handful of non-React slot-label
+ *    readers in the plugins, which observe the attribute directly;
+ *  - `<html lang>` being CORRECT in its own right (`:lang()`, assistive tech).
  *
  * `useT()` returns a `t(key, params?)` function bound to the active language.
  */
@@ -183,13 +185,75 @@ function readDocumentLanguage(): ResolvedLanguage | null {
 
 type LanguageSubscriber = (language: ResolvedLanguage) => void;
 
-let officialSource: OfficialLocaleSource | null = null;
-let officialUnsubscribe: (() => void) | null = null;
+// ---------------------------------------------------------------------------
+// The realm-wide official-source registry
+// ---------------------------------------------------------------------------
+//
+// Every DSH client plugin bundle inlines its own copy of this module, so a
+// module-scoped `let officialSource` could only ever be set in the ONE bundle
+// whose `apply` holds the `ctx` (ui-shell's). Every other copy stayed on the
+// no-runtime fallback and had to be reached through `document.documentElement
+// .lang`. The source is realm-singular by nature — there is exactly one
+// official `LocaleRuntime` per renderer — so it lives on the realm-wide symbol
+// registry, the same way `@amiba/app-runtime/platform` shares the
+// PlatformAdapter and `@amiba/ui`'s settings chrome shares its React context.
+//
+// ## What is global and what is deliberately NOT
+//
+// GLOBAL — the official source and the ONE subscription to it. State that must
+// be singular for every copy to agree on the active language.
+//
+// NOT GLOBAL — `cachedLanguage`, `languageSubscribers`, `storeSubscribers`
+// below. Each bundle copy notifies its OWN React trees and its own non-React
+// observers; hoisting those sets onto the realm would make every copy's
+// `useSyncExternalStore` fire for every other copy's mount, and would collapse
+// N independent `useT` stores into one shared list of listeners belonging to
+// whichever copy happened to load first.
+//
+// ## Waking copies that were already initialised
+//
+// A copy that loaded BEFORE `installOfficialLocale` ran has already resolved
+// `cachedLanguage` from the no-runtime chain. A bare slot on the registry
+// would leave it stuck there, so the registry also carries an install-
+// notification list: every copy adds its own `refreshLanguage` on load, and
+// installing (or disposing) a source runs all of them.
+
+const OFFICIAL_LOCALE_KEY = Symbol.for("@amiba/i18n/official-locale");
+
+interface OfficialLocaleRegistry {
+  /** The realm's one official locale service; null until a `ctx` owner installs. */
+  source: OfficialLocaleSource | null;
+  /** Disposer for the registry's single subscription to `source`. */
+  unsubscribe: (() => void) | null;
+  /** One `refreshLanguage` per bundled copy of this module. */
+  readonly observers: Set<() => void>;
+}
+
+function officialLocaleRegistry(): OfficialLocaleRegistry {
+  const realm = globalThis as unknown as Record<PropertyKey, unknown>;
+  const existing = realm[OFFICIAL_LOCALE_KEY] as
+    | OfficialLocaleRegistry
+    | undefined;
+  if (existing) return existing;
+  const created: OfficialLocaleRegistry = {
+    source: null,
+    unsubscribe: null,
+    observers: new Set(),
+  };
+  realm[OFFICIAL_LOCALE_KEY] = created;
+  return created;
+}
+
+/** Wake every bundle copy in this realm — the install-notification fan-out. */
+function notifyRealm(): void {
+  for (const observer of [...officialLocaleRegistry().observers]) observer();
+}
+
 const languageSubscribers = new Set<LanguageSubscriber>();
 const storeSubscribers = new Set<() => void>();
 
 function resolveActiveLanguage(): ResolvedLanguage {
-  const source = officialSource;
+  const source = officialLocaleRegistry().source;
   if (source) return fromOfficialLocaleId(source.getSnapshot().active);
   return readDocumentLanguage() ?? detectBrowserLanguage();
 }
@@ -203,15 +267,23 @@ function publishDocumentLanguage(language: ResolvedLanguage): void {
 }
 
 function refreshLanguage(): void {
-  // The realm that owns the official source is the one that PUBLISHES the
-  // cross-realm document contract; every other realm only observes it.
-  if (officialSource) publishDocumentLanguage(resolveActiveLanguage());
+  // `<html lang>` is no longer how the official switch reaches the other
+  // bundles — the registry is — but it stays truthful for the surfaces that
+  // still read the attribute directly (see the header doc block).
+  if (officialLocaleRegistry().source) {
+    publishDocumentLanguage(resolveActiveLanguage());
+  }
   const next = resolveActiveLanguage();
   if (next === cachedLanguage) return;
   cachedLanguage = next;
   for (const listener of [...storeSubscribers]) listener();
   for (const listener of [...languageSubscribers]) listener(next);
 }
+
+// This copy joins the realm's install-notification list at load, so a source
+// installed later by ANY bundle wakes it, and a source installed earlier is
+// already visible through `resolveActiveLanguage` above.
+officialLocaleRegistry().observers.add(refreshLanguage);
 
 // Started eagerly, not on first subscription: a realm whose document language
 // is published before its first `useT` mount would otherwise render one frame
@@ -223,27 +295,33 @@ if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") 
   });
 }
 
-/** True when this realm holds the official locale source (case 1 of the two). */
+/** True when this REALM holds the official locale source (case 1 of the two). */
 export function hasOfficialLocale(): boolean {
-  return officialSource !== null;
+  return officialLocaleRegistry().source !== null;
 }
 
 /**
  * Adopt the official DSH locale service as the authority for Amiba's own UI
- * copy. Called once per realm by whoever owns a DSH client context; the
- * returned disposer restores the no-runtime resolution.
+ * copy. Called once per REALM by whoever owns a DSH client context; every
+ * bundled copy of this module in that realm follows, including the copies
+ * that finished loading before the call. The returned disposer restores the
+ * no-runtime resolution for all of them.
  */
-export function installOfficialLocale(source: OfficialLocaleSource): () => void {
-  officialUnsubscribe?.();
-  officialSource = source;
-  officialUnsubscribe = source.subscribe(refreshLanguage);
-  refreshLanguage();
+export function installOfficialLocale(
+  source: OfficialLocaleSource,
+): () => void {
+  const registry = officialLocaleRegistry();
+  registry.unsubscribe?.();
+  registry.source = source;
+  // ONE subscription for the whole realm, fanned out to every copy.
+  registry.unsubscribe = source.subscribe(notifyRealm);
+  notifyRealm();
   return () => {
-    if (officialSource !== source) return;
-    officialUnsubscribe?.();
-    officialUnsubscribe = null;
-    officialSource = null;
-    refreshLanguage();
+    if (registry.source !== source) return;
+    registry.unsubscribe?.();
+    registry.unsubscribe = null;
+    registry.source = null;
+    notifyRealm();
   };
 }
 
@@ -254,7 +332,9 @@ export function installOfficialLocale(source: OfficialLocaleSource): () => void 
  * literal. A no-op once an official source is installed.
  */
 export function seedDocumentLanguage(): ResolvedLanguage {
-  if (!officialSource) publishDocumentLanguage(detectBrowserLanguage());
+  if (!officialLocaleRegistry().source) {
+    publishDocumentLanguage(detectBrowserLanguage());
+  }
   refreshLanguage();
   return cachedLanguage;
 }
