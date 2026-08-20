@@ -1,4 +1,8 @@
+import { getPlatform } from "@amiba/app-runtime/platform";
 import { useEffect, useRef, type ReactNode } from "react";
+
+/** The `p-4` inset the mask uses on every edge the OS does not own. */
+const BASE_INSET_PX = 16;
 
 export interface SettingsDialogProps {
   /** Shell-owned open state (Settings is a modal layer, not a route). */
@@ -70,6 +74,18 @@ export function SettingsDialog({
       className="fixed inset-0 z-[120] flex items-center justify-center p-4"
       data-amiba-settings-dialog
       role="presentation"
+      // The OS owns the top strip on desktop (macOS traffic lights under a
+      // hidden native title bar), so the panel must start below it instead of
+      // sliding under the buttons. `windowChrome` is the platform's own fact
+      // about that reserve — the same one SettingsView and HomeView use for
+      // their header geometry — and it is absent on web, where the mask keeps
+      // its plain `p-4` inset on all four edges.
+      style={{
+        paddingTop: Math.max(
+          BASE_INSET_PX,
+          getPlatform().windowChrome?.topBarHeightPx ?? 0,
+        ),
+      }}
     >
       <div
         aria-hidden="true"
