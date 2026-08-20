@@ -4,13 +4,13 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * Plugin-local i18n catalog for the Usage plugin's Tools activity view.
  *
  * M2 doctrine: a plugin owns its own strings instead of depending on the
- * host `en.ts` / `zh-CN.ts` bundles, which T11 will purge of per-plugin
+ * host catalogs, which T11 will purge of per-plugin
  * keys once every plugin has migrated. Same mechanism as the exemplar
  * `plugins/dsh-plugin-skills/src/client/i18n.ts` — the overlay is passed
  * to `usePluginT` and its keys take precedence over the host catalog.
  *
  * Every `usage.*` value below was copied verbatim from the host catalogs
- * at migration time (`packages/i18n/src/en.ts` / `zh-CN.ts`). The host
+ * at migration time (the host catalogs). The host
  * keys are intentionally NOT deleted yet — T11 removes them only after
  * all plugins have migrated off the shared bundles. The `usage.tab.*`
  * keys are new plugin-owned copy for the section's Tokens/Tools switch.

@@ -484,6 +484,82 @@ chrome context 是同一个手法。**全局的只有 source 本身和对它的�
 语言却存不下、下次启动又丢；`value.preference !== undefined` 则官方胜出、迁移
 自行退役。
 
+### 4.5 文案：字典归各自的 owner，注册只有一个 namespace
+
+4.4 说的是**语言由谁决定**，这一节说的是**字符串从哪里来**。两件事分开，是因为
+它们的失效方式不同：前者错了会"切换语言没反应"，后者错了会"整个界面显示
+`sidepanel.xxx.yyy` 这种原始 key"。
+
+**为什么必须拆。** `@amiba/i18n` 过去把 `en.ts` / `zh-CN.ts` 编译进自己，而
+`@amiba/ui` 依赖它、十个插件 bundle 又各自内联一份 `@amiba/ui`。结果是十一个
+`plugins/<id>/lib/client.js` 每一个都带着 Amiba 全部文案（两种语言约 82 KB），
+包括**一行 `useT` 文案都不渲染**的 `dsh-plugin-runtime-inventory`。同一时期的
+统计还显示 753 条 key 里有 255 条在整棵树上没有任何生产调用点 —— 那 255 条已经
+删掉（含 114 条 `options.extensions.*`，其唯一可能的消费者是已退役的
+out-of-tree knowledge-base 扩展），剩 498 条，每一条都有调用点。
+
+**owner 表按真实调用点划分**，不按前缀：
+
+| owner | 条数 | 入口 |
+| --- | --- | --- |
+| `@amiba/ui` 的组件文案 + 共享词汇 | 488 | `@amiba/ui/locales` |
+| app shell 自己的文案 | 1 | `plugins/dsh-plugin-ui-shell/src/client/locales/` |
+| 无插件图的 Electron 窗口（通知窗口、Quick-Ask） | 9 | `apps/desktop/src/renderer/locales/` |
+
+**注册是集中的、单 owner 的。** `LocaleRuntime.register` 明确规定重复
+`(ns, locale)` 抛异常（"single occupant; a namespace's texts have one owner"），
+而 `useT()` **不带 namespace**、调用点横跨三个 owner。所以做法是：owner 各自持有
+字典，**注册只发生在一处** —— `plugins/dsh-plugin-ui-shell/src/client/messages.ts`
+合并各 owner 的字典，用**一个** namespace `amiba` 调
+`ctx.locale.register(NS, toOfficialCatalog(amibaMessages))`，再把
+`ctx.locale.bind(NS)` 安装成这个 realm 的模板来源。879 个 `t("…")` 调用点、77 个
+`useT()` 调用点**一个都没有改**。
+
+locale id 的重新键值化复用 4.4 那套映射：`toOfficialCatalog` 用
+`fromOfficialLocaleId("zh"|"en")` 去问"这个官方 id 指的是 Amiba 哪本目录"，
+字面量 `zh` / `en` 必须穷尽 `OfficialLocaleId`，而后者又被
+`OfficialLocaleIdMatchesUpstream` 绑到上游 `LocaleId`。
+
+**运行时的会合点是第二个 realm 槽位**：`Symbol.for("@amiba/i18n/messages")`
+（`packages/i18n/src/messages.ts`）。它与 4.4 的 official-locale 槽位分开，因为
+两件事的安装者不同 —— Quick-Ask 安装字典但没有 locale service。这个注册表上
+`resolve` / `epoch` / `observers` **全部是 realm 级的**，与 4.4 刻意保持模块级的
+那三个量相反：那边每份 copy 各自遍历自己的订阅表，共享会造成"一次切换、每份 copy
+各通知一遍"；这边发布者只有一个（一次 install / dispose），一次通知就是一次。
+
+`epoch` 是承重的：shell 在 `ctx.inject(["locale"], …)` 里注册，而这个 fiber 何时
+resolve 取决于 locale service 何时提供 —— **完全可能晚于产品外壳第一次渲染**。快照
+里只有语言的话，install 前后 `Object.is` 相等，React 会跳过重渲染，已挂载的树就会
+永远显示原始 key。上游 `LocaleRuntime.register` 自己 bump `revision` 也正是这个
+原因。
+
+**两次安装，顺序固定。** `apply` 里先无条件 `installAmibaMessageCatalog()`（编译期
+目录），再由 `ctx.inject(["locale"])` 装上官方 binding 覆盖它。第一次安装不是"第二套
+机制"，而是把 Quick-Ask 那条**无运行时路径**用在一个恰好没有该服务的 realm 上：
+产品外壳的注释早就写明"没有 locale / settingsScope 时外壳仍必须挂载"，而没有第一次
+安装，一个缺 `dsh-client-locale` 的组合会把每一个字符串渲染成原始 key。
+`installMessages` 的 disposer 恢复的是**上一个** source，所以官方 fiber 被销毁时
+回落到目录而不是回落到空。
+
+**entry point 必须分开。** 这是唯一一个"做了等于没做"的陷阱：只要组件文件与字典
+文件能经由同一条 import 路径到达，tree-shaking 就会保留字典，它又会回到每一个
+bundle 里。所以 `@amiba/ui` 的字典只作为 `@amiba/ui/locales` 暴露，`src/index.ts`
+与 `src/plugin.ts` 只以 `import type {} from "./locales/keys"` 触碰它 —— 那是
+**类型侧**的声明合并（`declare module "@amiba/i18n" { interface AmibaMessages … }`，
+与上游 `LocaleNamespaceMap`、`SlotMap` 同一手法），编译后什么都不剩，却让 879 个
+`t("…")` 保持有 key 校验。看不到任何 owner 的程序里 `MessageKey` 收敛成 `never`，
+于是每个调用点都是编译错误，而不是悄悄放宽成 `string`。
+
+**必须保留的例外**：Quick-Ask 与通知窗口没有 DSH 插件图，却渲染 `@amiba/ui` 组件。
+它们是唯二合法直接 import 字典的入口（`installWindowMessages()`），它们的 bundle
+里**确实**带着字典 —— 纯净性要求覆盖的是十个插件 bundle，不是 `apps/desktop`。
+
+**证据取自构建产物，不是源码。** `scripts/verify-dsh-architecture.mjs` 在
+`plugins/<id>/lib/client.js` 上找一个只在字典里出现的**值**（不是 key —— key 字面量
+在调用点也有）：ui-shell 的 bundle **必须**含有它（正向对照，否则整条断言可以空过），
+其余每一个都**不得**含有。实测 `dsh-plugin-runtime-inventory` 273,884 -> 192,280 字节
+（−81,604，−29.8%）。
+
 ## 5. 插件项目与依赖
 
 仓库物理边界固定为四个根级目录：`apps/` 放产品入口，`packages/` 放普通共享库与公共

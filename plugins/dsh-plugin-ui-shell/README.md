@@ -208,7 +208,7 @@ the deliverable.
 ## The language authority
 
 `locale-bridge.ts`. The OFFICIAL locale service decides the language, for the
-official/plugin copy AND for Amiba's own 447-key catalog. Amiba used to own a
+official/plugin copy AND for Amiba's own. Amiba used to own a
 second preference (`settings.ui.language`, `auto | en | zh-CN`) with its own
 row in Appearance; once `settings.general.item` was declared, upstream's
 `LanguageRow` landed on the same page and the product showed two 语言 controls
@@ -243,10 +243,45 @@ graph — so the hand-written union is tied to upstream's `LocaleId` by the
 `OfficialLocaleIdMatchesUpstream` probe in this package.
 
 **Cross-realm.** Every plugin bundle carries its own copy of `@amiba/i18n`'s
-module state, so `installOfficialLocale` here reaches none of them. The realm
-holding the official source PUBLISHES `document.documentElement.lang`; every
-other realm observes it (this package's `usePluginT`, `@amiba/i18n`'s own
-MutationObserver, the `settings.section` ledger's language cache key).
+module state, so a module-level source would reach none of them. It lives on
+`Symbol.for("@amiba/i18n/official-locale")` instead — one source, one
+subscription, fanned out to every copy in the realm. The realm holding it still
+PUBLISHES `document.documentElement.lang`, but as a projection rather than as
+the transport: the attribute is what this package's `usePluginT`, the
+non-React slot-label readers, and the `settings.section` ledger's cache key
+observe, plus `<html lang>` being correct in its own right.
+
+## The dictionary
+
+`messages.ts`. Separate from the bridge above on purpose: that one decides
+WHICH LANGUAGE, this one decides WHERE THE STRINGS COME FROM.
+
+`@amiba/i18n` ships no catalogs. The dictionaries live with their owners —
+`@amiba/ui/locales` (the component copy and the shared vocabulary), this
+package's own `./locales` (the app-shell copy), and `apps/desktop`'s window
+copy for the two Electron windows that boot no plugin graph. `messages.ts`
+merges the first two and registers the result as ONE namespace, `amiba`, with
+`ctx.locale.register` — upstream binds a namespace to a single owner, so one
+namespace registered in one place is what lets `useT()` keep taking no
+namespace and every call site stay byte-identical.
+
+Two installs, in order:
+
+1. `installAmibaMessageCatalog()`, unconditionally in `apply`. `ctx.locale` is
+   optional here (see the bridge's `ctx.inject` note), and without this a
+   composition missing `dsh-client-locale` would render every Amiba string as
+   its raw dotted key. It is the runtime-less path Quick-Ask takes, applied to
+   a realm where the service happens to be absent.
+2. `registerAmibaMessages(scope.locale)`, on its own `ctx.inject(["locale"])`
+   fiber — registering the dictionary needs the locale service and nothing
+   else, so it must not wait on `settingsScope`. It supersedes step 1, and its
+   disposer restores it.
+
+The payoff is measured on built output, not argued: this bundle is the only
+`plugins/<id>/lib/client.js` that carries Amiba's copy. The others dropped
+~82 KB each (`dsh-plugin-runtime-inventory`: 273,884 -> 192,280 bytes).
+`scripts/verify-dsh-architecture.mjs` asserts both halves — the sentinel is
+present here and absent everywhere else.
 
 ## The input-trigger driver
 

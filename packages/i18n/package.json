@@ -2,7 +2,7 @@
   "name": "@amiba/i18n",
   "version": "0.1.0",
   "private": true,
-  "description": "Locale catalogs + useT() hook. The official DSH locale service is the authority, shared across bundle copies through the realm symbol registry; navigator/document fallback for windows with no DSH graph.",
+  "description": "The i18n MECHANISM — useT()/usePluginT plus the two realm registries (which language is active, and where the templates come from). Ships no dictionary: the catalogs live with their owners (@amiba/ui/locales, the ui-shell's own locales, apps/desktop's window copy) and are registered as one official namespace by the shell.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

@@ -1,8 +1,13 @@
 import { getPlatform } from "@amiba/app-runtime/platform";
 import { useMemo, useSyncExternalStore } from "react";
 
-import { en, type MessageKey } from "./en";
-import { zhCN } from "./zh-CN";
+import {
+  interpolate,
+  messagesEpoch,
+  resolveMessage,
+  subscribeMessages,
+  type MessageLanguage,
+} from "./messages";
 
 /**
  * Runtime i18n for Amiba UI surfaces.
@@ -46,10 +51,48 @@ import { zhCN } from "./zh-CN";
  *    readers in the plugins, which observe the attribute directly;
  *  - `<html lang>` being CORRECT in its own right (`:lang()`, assistive tech).
  *
+ * ## Where the STRINGS come from
+ *
+ * Not from here. This package owns the mechanism — which language is active,
+ * and how a key becomes rendered text — while each dictionary lives with the
+ * surface whose copy it is (`@amiba/ui/locales`, the ui-shell's own
+ * `./locales`, `apps/desktop`'s window copy). They meet at runtime through
+ * `./messages.ts`'s realm slot, which is what keeps the eleven plugin bundles
+ * free of ~82 KB of catalog each. `useT()` never names a namespace: the shell
+ * registers the merged owner dictionaries as ONE official namespace and
+ * installs that namespace's bound translate, so the binding is made once, in
+ * one place, and every call site stays exactly as it was.
+ *
  * `useT()` returns a `t(key, params?)` function bound to the active language.
  */
 
-export type ResolvedLanguage = "en" | "zh-CN";
+export type ResolvedLanguage = MessageLanguage;
+
+/**
+ * The registry of Amiba message keys, filled by DECLARATION MERGING from each
+ * dictionary owner — the same idiom upstream uses for its own
+ * `LocaleNamespaceMap` and `SlotMap`, and for the same reason: the owners
+ * cannot be imported from here (`apps/desktop` is an Electron app, and
+ * `@amiba/ui` already depends on this package), but their key unions still
+ * have to reach the 879 `t("…")` call sites.
+ *
+ * Each owner contributes one type-only augmentation next to its catalog:
+ *
+ * ```ts
+ * declare module "@amiba/i18n" {
+ *   interface AmibaMessages extends Record<UiMessageKey, string> {}
+ * }
+ * ```
+ *
+ * A program that has no owner in it resolves {@link MessageKey} to `never`,
+ * which makes every `t("…")` in that program a compile error rather than a
+ * silent widening to `string`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface AmibaMessages {}
+
+/** Every message key declared by an owner reachable from this program. */
+export type MessageKey = keyof AmibaMessages & string;
 
 /**
  * The official locale identifiers, exactly as
@@ -83,6 +126,29 @@ export function fromOfficialLocaleId(id: string): ResolvedLanguage {
  */
 export function toOfficialLocaleId(language: ResolvedLanguage): OfficialLocaleId {
   return language === "zh-CN" ? "zh" : "en";
+}
+
+/**
+ * Re-key a per-language table by the OFFICIAL locale ids — the shape
+ * `LocaleRuntime.register(ns, dicts)` takes, since upstream's dictionary table
+ * is `Record<LocaleId, …>`.
+ *
+ * The pairing is DERIVED, not asserted: each official id asks
+ * {@link fromOfficialLocaleId} which Amiba language it names, which is exactly
+ * the question a table keyed by official id poses. The literal `zh` / `en`
+ * keys must exhaust {@link OfficialLocaleId} for the return type to hold, and
+ * that union is tied to upstream's `LocaleId` by
+ * `OfficialLocaleIdMatchesUpstream` in the ui-shell locale bridge — so a new
+ * upstream locale is a compile error on both sides rather than a silently
+ * unregistered language.
+ */
+export function toOfficialCatalog<T>(
+  byLanguage: Record<ResolvedLanguage, T>,
+): Record<OfficialLocaleId, T> {
+  return {
+    zh: byLanguage[fromOfficialLocaleId("zh")],
+    en: byLanguage[fromOfficialLocaleId("en")],
+  };
 }
 
 /** The half of the official `LocaleSnapshot` this package consumes. */
@@ -119,11 +185,6 @@ export type LanguagePreference = "auto" | "en" | "zh-CN";
 
 export const LANG_PREF_STORAGE_KEY = "settings.ui.language";
 export const DEFAULT_LANGUAGE_PREFERENCE: LanguagePreference = "auto";
-
-const CATALOG: Record<ResolvedLanguage, Record<string, string>> = {
-  en: { ...en },
-  "zh-CN": { ...zhCN },
-};
 
 function normalizeStoredLang(v: unknown): LanguagePreference {
   if (v === "en" || v === "zh-CN" || v === "auto") return v;
@@ -259,6 +320,42 @@ function resolveActiveLanguage(): ResolvedLanguage {
 }
 
 let cachedLanguage: ResolvedLanguage = resolveActiveLanguage();
+let cachedMessagesEpoch: number = messagesEpoch();
+
+/**
+ * This copy's `useSyncExternalStore` snapshot: the active language AND the
+ * realm's message-registry revision, joined.
+ *
+ * The epoch belongs in the snapshot because the dictionary can arrive AFTER
+ * the first paint — the shell registers its namespace inside
+ * `ctx.inject(["locale"], …)`, which resolves whenever the service does. A
+ * snapshot carrying only the language would be `Object.is`-equal across that
+ * install and React would bail out of the re-render, leaving already-mounted
+ * trees showing raw keys forever.
+ */
+type LanguageStoreSnapshot = `${ResolvedLanguage}#${number}`;
+
+function composeStoreSnapshot(
+  language: ResolvedLanguage,
+  epoch: number,
+): LanguageStoreSnapshot {
+  return `${language}#${epoch}`;
+}
+
+/**
+ * The language half of a snapshot. Total and cast-free — the primary subtag
+ * decides, exactly as {@link fromOfficialLocaleId} does.
+ */
+function languageOfStoreSnapshot(
+  snapshot: LanguageStoreSnapshot,
+): ResolvedLanguage {
+  return snapshot.startsWith("zh") ? "zh-CN" : "en";
+}
+
+let storeSnapshot: LanguageStoreSnapshot = composeStoreSnapshot(
+  cachedLanguage,
+  cachedMessagesEpoch,
+);
 
 function publishDocumentLanguage(language: ResolvedLanguage): void {
   if (typeof document === "undefined") return;
@@ -274,16 +371,28 @@ function refreshLanguage(): void {
     publishDocumentLanguage(resolveActiveLanguage());
   }
   const next = resolveActiveLanguage();
-  if (next === cachedLanguage) return;
+  const nextEpoch = messagesEpoch();
+  if (next === cachedLanguage && nextEpoch === cachedMessagesEpoch) return;
+  const languageChanged = next !== cachedLanguage;
   cachedLanguage = next;
+  cachedMessagesEpoch = nextEpoch;
+  storeSnapshot = composeStoreSnapshot(next, nextEpoch);
   for (const listener of [...storeSubscribers]) listener();
-  for (const listener of [...languageSubscribers]) listener(next);
+  // A dictionary arriving is not a language change: `subscribeLanguage`
+  // observers are told about the LANGUAGE and must not see a spurious
+  // notification carrying the value they already hold.
+  if (languageChanged) {
+    for (const listener of [...languageSubscribers]) listener(next);
+  }
 }
 
 // This copy joins the realm's install-notification list at load, so a source
 // installed later by ANY bundle wakes it, and a source installed earlier is
 // already visible through `resolveActiveLanguage` above.
 officialLocaleRegistry().observers.add(refreshLanguage);
+// The same for the dictionary: a catalog or namespace binding installed by
+// ANY bundle after this copy loaded must repaint this copy's trees.
+subscribeMessages(refreshLanguage);
 
 // Started eagerly, not on first subscription: a realm whose document language
 // is published before its first `useT` mount would otherwise render one frame
@@ -359,16 +468,8 @@ function subscribeLanguageStore(onStoreChange: () => void): () => void {
   };
 }
 
-function languageStoreSnapshot(): ResolvedLanguage {
-  return cachedLanguage;
-}
-
-function interpolate(template: string, params?: Record<string, unknown>) {
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (_, k: string) => {
-    const v = params[k];
-    return v === undefined || v === null ? `{${k}}` : String(v);
-  });
+function languageStoreSnapshot(): LanguageStoreSnapshot {
+  return storeSnapshot;
 }
 
 export type TranslateFn = (
@@ -376,25 +477,39 @@ export type TranslateFn = (
   params?: Record<string, unknown>,
 ) => string;
 
+/**
+ * The one translation hook for Amiba's own surfaces. It takes NO namespace:
+ * the shell registers every owner's dictionary as a single official namespace
+ * and installs that namespace's bound translate into the realm, so the binding
+ * is made once rather than at each of the 879 call sites.
+ */
 export function useT(): {
   t: TranslateFn;
   language: ResolvedLanguage;
 } {
-  const language = useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     subscribeLanguageStore,
     languageStoreSnapshot,
     languageStoreSnapshot,
   );
+  const language = languageOfStoreSnapshot(snapshot);
 
-  const t = useMemo<TranslateFn>(() => {
-    const catalog = CATALOG[language] ?? en;
-    return (key, params) => {
-      const template = catalog[key] ?? en[key] ?? key;
-      return interpolate(template, params);
-    };
-  }, [language]);
+  const t = useMemo<TranslateFn>(
+    () => (key, params) => interpolate(resolveMessage(key, language), params),
+    // `snapshot` is the dep that matters: it advances on a language switch AND
+    // on a dictionary install, and `language` is derived from it.
+    [snapshot, language],
+  );
 
   return { t, language };
 }
 
-export type { MessageKey } from "./en";
+export {
+  hasMessages,
+  installMessageCatalog,
+  installMessages,
+  messagesEpoch,
+  resolveMessage,
+  type MessageCatalog,
+  type MessageResolver,
+} from "./messages";

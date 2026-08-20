@@ -6,9 +6,11 @@
  *
  *  1. **Authority.** `@amiba/i18n` subscribes to the official `LocaleRuntime`
  *     (`getSnapshot` + `subscribe`, the same LocaleFace pair the framework's
- *     own `t` seat consumes through `ctx.slots.installLocale`), so Amiba's
- *     447-key catalog and the official/plugin copy switch together, in the
- *     same tick, with no reload.
+ *     own `t` seat consumes through `ctx.slots.installLocale`), so Amiba's own
+ *     copy and the official/plugin copy switch together, in the same tick,
+ *     with no reload. Which STRINGS those are is a separate concern with a
+ *     separate module — see `./messages.ts`, which registers every owner's
+ *     dictionary as one official namespace.
  *  2. **Migration.** Amiba used to persist its own `settings.ui.language`
  *     tri-state and drew its own 语言 row. That row is gone; a user who had
  *     already chosen `en` or `zh-CN` there is carried over to the official

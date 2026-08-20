@@ -810,6 +810,350 @@ for (const retired of [
   }
 }
 
+// ---------------------------------------------------------------------------
+// THE DICTIONARY: OWNED BY ITS SURFACE, REGISTERED ONCE, ABSENT FROM BUNDLES
+// ---------------------------------------------------------------------------
+//
+// `@amiba/i18n` used to compile both catalogs in, so every one of the eleven
+// DSH client plugin bundles inlined all of Amiba's copy (~82 KB each) —
+// including `dsh-plugin-runtime-inventory`, which renders no `useT` copy at
+// all. The dictionaries now live with their owners, meet the mechanism at
+// RUNTIME through the realm message registry, and are registered with the
+// official locale service as ONE namespace by the shell.
+//
+// Four things are pinned, in the order they can break:
+//   1. the mechanism package ships no dictionary and no compile-time catalog;
+//   2. `@amiba/ui`'s dictionary is reachable ONLY as its own entry point (the
+//      trap: reachable through the component graph and tree-shaking keeps it,
+//      putting all of it back into every bundle);
+//   3. there is exactly ONE `locale.register` call site and ONE namespace;
+//   4. the BUILT plugin bundles really are free of the copy.
+for (const gone of ["packages/i18n/src/en.ts", "packages/i18n/src/zh-CN.ts"]) {
+  if (await exists(gone)) {
+    fail(
+      `${gone} is back — the message catalogs belong to their owning surfaces (@amiba/ui/locales, the ui-shell's own locales, apps/desktop's window copy), not to the mechanism package`,
+    );
+  }
+}
+const i18nMessages = code(await text("packages/i18n/src/messages.ts"));
+const i18nPlugin = code(await text("packages/i18n/src/plugin.ts"));
+for (const [source, name] of [
+  [i18nCore, "packages/i18n/src/index.ts"],
+  [i18nPlugin, "packages/i18n/src/plugin.ts"],
+]) {
+  if (/from "\.\/(en|zh-CN)"/u.test(source)) {
+    fail(
+      `${name} imports a compile-time catalog — the dictionary reaches this package through the realm message registry, and a static import would put all of it back into every plugin bundle`,
+    );
+  }
+}
+for (const [pattern, what] of [
+  [
+    /const MESSAGES_KEY = Symbol\.for\("@amiba\/i18n\/messages"\);/u,
+    "keep the template source on the realm-wide symbol registry, so every bundled copy of @amiba/i18n resolves the ONE dictionary the shell registered",
+  ],
+  [
+    /export function installMessages\(resolve: MessageResolver\): \(\) => void \{[\s\S]{0,400}?const superseded = registry\.resolve;/u,
+    "let a later install SUPERSEDE an earlier one and restore it on dispose — the shell installs its compile-time catalogs first and the official namespace binding on top",
+  ],
+  [
+    /if \(registry\.resolve !== resolve\) return;/u,
+    "make an out-of-order dispose a no-op instead of clobbering somebody else's install",
+  ],
+  [
+    /registry\.epoch \+= 1;/u,
+    "bump the registry revision on every install, so a dictionary that arrives after the first paint still repaints mounted trees (the shell registers inside ctx.inject, which resolves whenever the locale service does)",
+  ],
+  [
+    /return messageRegistry\(\)\.resolve\?\.\(key, language\) \?\? key;/u,
+    "answer an unknown key with the key itself — fail loud, the same last resort upstream's LocaleRuntime.translate takes",
+  ],
+]) {
+  if (!pattern.test(i18nMessages)) {
+    fail(`@amiba/i18n's message registry must ${what} (${pattern})`);
+  }
+}
+// The epoch has to reach React, or a late registration repaints nothing.
+if (!/messagesEpoch\(\)/u.test(i18nCore) || !/subscribeMessages\(refreshLanguage\)/u.test(i18nCore)) {
+  fail(
+    "packages/i18n/src/index.ts must fold the message-registry epoch into its store snapshot and join the registry's observer list — otherwise a dictionary installed after mount leaves already-rendered trees showing raw keys",
+  );
+}
+if (!/useSyncExternalStore\(\s*subscribeMessages,/u.test(i18nPlugin)) {
+  fail(
+    "usePluginT must observe the message registry too — its host-vocabulary fallback has the same late-registration problem useT does",
+  );
+}
+if (!/resolveMessage\(key, language\)\s*\);/u.test(i18nPlugin)) {
+  fail(
+    "usePluginT's fallback chain must end at the realm's host template resolver (overlay -> overlay English -> realm -> key)",
+  );
+}
+// Entry-point separation. `@amiba/ui`'s components are inlined into ten plugin
+// bundles; the dictionary must not be reachable from the same module graph.
+const uiPackage = await json("packages/ui/package.json");
+if (uiPackage.exports?.["./locales"] !== "./src/locales/index.ts") {
+  fail(
+    "@amiba/ui must expose its dictionary as the separate `./locales` entry point — that separation is what keeps it out of the ten plugin bundles",
+  );
+}
+for (const file of await sourceFiles("packages/ui/src")) {
+  const relative = path.relative(root, file);
+  if (relative.startsWith(path.join("packages", "ui", "src", "locales"))) continue;
+  if (/(__tests__|\.test\.|[\\/]test[\\/])/u.test(relative)) continue;
+  const source = code(await readFile(file, "utf8"));
+  // Deliberately NOT anchored to a whole line: `import { en } from "./locales";
+  // void en;` is a value import too, and an assertion that only recognised a
+  // tidy one-import-per-line file would miss it (it did, until a mutation
+  // caught the gap). The specifier is found first, then the statement it
+  // belongs to is reconstructed backwards to decide whether it is type-only.
+  for (const specifier of [
+    ...source.matchAll(/from\s+"(\.[^"]*locales[^"]*)"/gu),
+    ...source.matchAll(/import\s*\(\s*"(\.[^"]*locales[^"]*)"/gu),
+  ]) {
+    const before = source.slice(0, specifier.index);
+    const keyword = Math.max(
+      before.lastIndexOf("import"),
+      before.lastIndexOf("export"),
+    );
+    const statement = keyword < 0 ? specifier[0] : source.slice(keyword, specifier.index + specifier[0].length);
+    if (/^(?:import|export)\s+type\b/u.test(statement)) continue;
+    fail(
+      `${relative} reaches @amiba/ui's dictionary through the component graph (${statement.replace(/\s+/gu, " ").trim()}). Only \`import type\` may, and only for the key union — a value import puts all ~82 KB of copy back into every plugin bundle that renders one Amiba component.`,
+    );
+  }
+}
+// ONE namespace, ONE registration site. Upstream throws on a duplicate
+// (ns, locale): "single occupant; a namespace's texts have one owner".
+const shellMessages = code(
+  await text("plugins/dsh-plugin-ui-shell/src/client/messages.ts"),
+);
+for (const [pattern, what] of [
+  [
+    /export const AMIBA_LOCALE_NS = "amiba";/u,
+    "name the ONE namespace as a single exported constant",
+  ],
+  [
+    /locale\.register\(\s*AMIBA_LOCALE_NS,\s*toOfficialCatalog\(amibaMessages\),?\s*\)/u,
+    "register the merged owner dictionaries through the TYPED overload, re-keyed by the official locale ids through the existing mapping",
+  ],
+  [
+    /const untypedNamespace: string = AMIBA_LOCALE_NS;\s*const translate = locale\.bind\(untypedNamespace\);/u,
+    "bind through a string-typed namespace, which selects upstream's untyped bind overload — the realm resolver is handed keys that are SUPPOSED to miss (usePluginT consults it before its own overlay's English)",
+  ],
+  [
+    /amiba: AmibaLocaleKey;/u,
+    "declare the namespace in upstream's LocaleNamespaceMap, which is what makes the typed register check the dictionary key-for-key in both languages",
+  ],
+]) {
+  if (!pattern.test(shellMessages)) {
+    fail(`The Amiba locale namespace module must ${what} (${pattern})`);
+  }
+}
+for (const scanRoot of ["packages", "plugins", "apps"]) {
+  for (const file of await sourceFiles(scanRoot)) {
+    const relative = path.relative(root, file);
+    if (relative.includes(`${path.sep}lib${path.sep}`)) continue;
+    if (relative.includes(`${path.sep}out${path.sep}`)) continue;
+    const source = code(await readFile(file, "utf8"));
+    for (const [, namespace] of source.matchAll(
+      /\blocale\.register\(\s*([A-Za-z_$][\w$]*|"[^"]*")/gu,
+    )) {
+      if (
+        relative ===
+          path.join(
+            "plugins",
+            "dsh-plugin-ui-shell",
+            "src",
+            "client",
+            "messages.ts",
+          ) &&
+        namespace === "AMIBA_LOCALE_NS"
+      ) {
+        continue;
+      }
+      fail(
+        `${relative} registers a locale namespace (${namespace}). Amiba has exactly ONE, registered from the ui-shell's messages.ts — a second one would need useT to walk a lookup chain Amiba invented on top of upstream's.`,
+      );
+    }
+  }
+}
+// The shell must still render real strings in a composition with no locale
+// service at all: the compile-time catalogs go in unconditionally, and the
+// official registration is guarded by `locale` ALONE (not by the
+// settingsScope-bearing fiber that owns the authority and the migration).
+const shellClient = code(
+  await text("plugins/dsh-plugin-ui-shell/src/client/index.tsx"),
+);
+if (!/^\s*const disposeMessageCatalog = installAmibaMessageCatalog\(\);$/mu.test(shellClient)) {
+  fail(
+    "amiba-ui-shell must install the compile-time catalogs unconditionally in apply — `ctx.locale` is optional in this composition, and without them a graph missing dsh-client-locale renders every Amiba string as its raw dotted key",
+  );
+}
+if (
+  !/ctx\.inject\(\["locale"\],\s*\(scope\) => \{[\s\S]{0,300}?registerAmibaMessages\(scope\.locale\)/u.test(
+    shellClient,
+  )
+) {
+  fail(
+    "the Amiba namespace registration must ride its own ctx.inject([\"locale\"]) fiber — folding it into the authority fiber would make real strings depend on settingsScope, which the dictionary does not need",
+  );
+}
+// The EXCEPTION the purity rule must not break: Quick-Ask and the notifier
+// boot no DSH plugin graph at all, so no `ctx.locale` exists in their realm and
+// nothing would ever fill the message registry for them. They render
+// `@amiba/ui` components that call `useT()`, so they are the one place outside
+// the shell that legitimately imports the dictionaries.
+const windowLocales = code(
+  await text("apps/desktop/src/renderer/locales/index.ts"),
+);
+for (const [pattern, what] of [
+  [
+    /from "@amiba\/ui\/locales"/u,
+    "take the UI components' copy from its own entry point — those windows render @amiba/ui components with no shell to register anything for them",
+  ],
+  [
+    /en: \{ \.\.\.uiEn, \.\.\.en \}/u,
+    "merge the UI copy with this app's own window copy (the notifier and Quick-Ask strings no plugin realm can render)",
+  ],
+]) {
+  if (!pattern.test(windowLocales)) {
+    fail(
+      `apps/desktop's runtime-less window catalog must ${what} (${pattern})`,
+    );
+  }
+}
+for (const entry of [
+  "apps/desktop/src/renderer/quick-ask/index.tsx",
+  "apps/desktop/src/renderer/notifier/index.tsx",
+]) {
+  const source = code(await text(entry));
+  if (!/installWindowMessages\(\)/u.test(source)) {
+    fail(
+      `${entry} must call installWindowMessages() before it renders — it boots no plugin graph, so nothing else will ever put a dictionary in its realm and every string would render as its raw dotted key`,
+    );
+  }
+  if (!/seedDocumentLanguage\(\)/u.test(source)) {
+    fail(
+      `${entry} must still call seedDocumentLanguage() — the other half of the runtime-less contract`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BUNDLE PURITY, MEASURED ON THE BUILT OUTPUT
+// ---------------------------------------------------------------------------
+//
+// The source-level assertions above are necessary and not sufficient: a
+// type-only import that stops being type-only, a barrel re-export, or a
+// bundler change would each put the copy back while every pattern above still
+// matched. This one reads the emitted `lib/client.js` files.
+//
+// The sentinels are dictionary VALUES, not keys: a key literal also appears at
+// its call site, which legitimately IS in the plugin bundles.
+const LOCALE_SENTINELS = [
+  ["packages/ui/src/locales/en.ts", "Unable to send your answer."],
+  ["packages/ui/src/locales/zh-CN.ts", "无法发送你的回答。"],
+];
+for (const [file, sentinel] of LOCALE_SENTINELS) {
+  if (!(await text(file)).includes(sentinel)) {
+    fail(
+      `the bundle-purity probe string ${JSON.stringify(sentinel)} is no longer in ${file}, so the purity assertion below proves nothing. Pick another value-side string only that catalog carries and update both.`,
+    );
+  }
+}
+const SHELL_CLIENT_BUNDLE = "plugins/dsh-plugin-ui-shell/lib/client.js";
+if (!(await exists(SHELL_CLIENT_BUNDLE))) {
+  console.warn(
+    "[dsh-architecture] SKIPPED the bundle-purity assertion: no built plugin client bundles found. Run `pnpm -r build` first — this check is only meaningful on emitted output.",
+  );
+} else {
+  const shellBundle = await text(SHELL_CLIENT_BUNDLE);
+  for (const [, sentinel] of LOCALE_SENTINELS) {
+    if (!shellBundle.includes(sentinel)) {
+      fail(
+        `${SHELL_CLIENT_BUNDLE} does NOT carry ${JSON.stringify(sentinel)}. The ui-shell is the ONE bundle that must — it imports every owner's dictionary to register it. Either the registration stopped importing the catalogs (the whole realm would render raw keys) or the probe is looking at the wrong artifact, and either way the purity assertion below would pass vacuously.`,
+      );
+    }
+  }
+  for (const entry of await readdir(path.join(root, "plugins"), {
+    withFileTypes: true,
+  })) {
+    if (!entry.isDirectory()) continue;
+    const relative = path.join("plugins", entry.name, "lib", "client.js");
+    if (relative === SHELL_CLIENT_BUNDLE) continue;
+    if (!(await exists(relative))) continue;
+    const bundle = await text(relative);
+    for (const [owner, sentinel] of LOCALE_SENTINELS) {
+      if (bundle.includes(sentinel)) {
+        fail(
+          `${relative} carries ${JSON.stringify(sentinel)} from ${owner} — Amiba's dictionary is back in a plugin bundle (~82 KB of copy per bundle). Look for a value import of @amiba/ui/locales, or a re-export that made the dictionary reachable from the component graph.`,
+        );
+      }
+    }
+  }
+}
+// ---------------------------------------------------------------------------
+// ZERO KEY LOSS
+// ---------------------------------------------------------------------------
+//
+// With the dictionaries split across owners, "no surface renders a raw key" is
+// no longer something the compiler alone can promise for every call site (a
+// program that cannot see an owner's augmentation resolves MessageKey to
+// `never`, which IS a compile error — but a plugin overlay key is typed
+// `string` on purpose). So the cross-reference runs here: every `t("…")`
+// literal in the tree must be defined by some dictionary.
+//
+// Test files are excluded: their fixtures deliberately name keys that exist
+// nowhere, to pin the missing-key behaviour.
+const dictionaryKeys = new Set();
+const DICTIONARY_FILE =
+  /(locales[\\/](en|zh-CN)\.ts|src[\\/]client[\\/]i18n[^\\/]*\.ts)$/u;
+let dictionaryFileCount = 0;
+for (const scanRoot of ["packages", "plugins", "apps"]) {
+  for (const file of await sourceFiles(scanRoot)) {
+    const relative = path.relative(root, file);
+    if (relative.includes(`${path.sep}lib${path.sep}`)) continue;
+    if (!DICTIONARY_FILE.test(relative)) continue;
+    if (/\.test\.tsx?$/u.test(relative)) continue;
+    dictionaryFileCount += 1;
+    for (const [, key] of (await readFile(file, "utf8")).matchAll(
+      /^\s+"([^"]+)":\s*["`]/gmu,
+    )) {
+      dictionaryKeys.add(key);
+    }
+  }
+}
+if (dictionaryFileCount < 3 || dictionaryKeys.size < 400) {
+  fail(
+    `the zero-key-loss cross-reference found only ${dictionaryKeys.size} keys across ${dictionaryFileCount} dictionary files — the dictionary discovery pattern has drifted and the check below would pass by finding nothing to check`,
+  );
+}
+let translationCallSites = 0;
+for (const scanRoot of ["packages", "plugins", "apps"]) {
+  for (const file of await sourceFiles(scanRoot)) {
+    const relative = path.relative(root, file);
+    if (relative.includes(`${path.sep}lib${path.sep}`)) continue;
+    if (relative.includes(`${path.sep}out${path.sep}`)) continue;
+    if (/(__tests__|\.test\.tsx?$|[\\/]test[\\/])/u.test(relative)) continue;
+    for (const [, key] of code(await readFile(file, "utf8")).matchAll(
+      /\bt\(\s*"([^"]+)"/gu,
+    )) {
+      translationCallSites += 1;
+      if (!dictionaryKeys.has(key)) {
+        fail(
+          `${relative} renders t(${JSON.stringify(key)}), which no dictionary defines. After the owner split a missing key renders as the raw dotted string in the product.`,
+        );
+      }
+    }
+  }
+}
+if (translationCallSites < 700) {
+  fail(
+    `the zero-key-loss cross-reference matched only ${translationCallSites} t("…") call sites — the call-site pattern has drifted and the check above is no longer covering the tree`,
+  );
+}
+
 // The keyed tool-call dispatch. BOTH options are load-bearing and each is
 // pinned separately: without `entryKey` no keyed registration can ever match
 // (the seat becomes dead), and without `fallback` an unclaimed tool name would

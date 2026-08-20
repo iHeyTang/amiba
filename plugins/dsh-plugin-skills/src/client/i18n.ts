@@ -4,13 +4,13 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * Plugin-local i18n catalog for `DshSkillsPage`.
  *
  * M2 doctrine: a plugin owns its own `options.<domain>.*` strings instead of
- * depending on the host `en.ts` / `zh-CN.ts` bundles, which T11 will purge of
+ * depending on the host catalogs, which T11 will purge of
  * per-plugin keys once every plugin has migrated. This is the exemplar
  * migration referenced by `usePluginT`'s overlay mechanism in
  * `@amiba/i18n/plugin` — see that hook's doc comment for the full contract.
  *
  * Every value below was copied verbatim from the host catalogs at migration
- * time (`packages/i18n/src/en.ts` / `zh-CN.ts`, `options.skills.*` keys).
+ * time (the host catalogs, `options.skills.*` keys).
  * The host keys are intentionally NOT deleted yet — T11 removes them only
  * after all plugins have migrated off the shared bundles.
  */

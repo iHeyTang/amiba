@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { en, type MessageKey } from "./en";
-import { zhCN } from "./zh-CN";
+import {
+  interpolate,
+  messagesEpoch,
+  resolveMessage,
+  subscribeMessages,
+  type MessageLanguage,
+} from "./messages";
+import type { MessageKey } from "./index";
 
-export type PluginLanguage = "en" | "zh-CN";
+export type PluginLanguage = MessageLanguage;
 
 // `MessageKey` keeps autocomplete/typo-checking for the (currently large)
 // set of still-shared host keys a plugin might reach for, while `string &
@@ -24,24 +30,11 @@ export type PluginTranslateFn = (
  */
 export type PluginCatalogOverlay = Record<PluginLanguage, Record<string, string>>;
 
-const CATALOG: Record<PluginLanguage, Record<string, string>> = {
-  en: { ...en },
-  "zh-CN": { ...zhCN },
-};
-
 function currentLanguage(): PluginLanguage {
   const declared = document.documentElement.lang.toLowerCase();
   if (declared.startsWith("zh")) return "zh-CN";
   if (declared.startsWith("en")) return "en";
   return navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
-}
-
-function interpolate(template: string, params?: Record<string, unknown>) {
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => {
-    const value = params[key];
-    return value === undefined || value === null ? `{${key}}` : String(value);
-  });
 }
 
 /**
@@ -53,22 +46,30 @@ function interpolate(template: string, params?: Record<string, unknown>) {
  * Resolution order for a given key, highest precedence first:
  *   1. `overlay[language][key]`     — the plugin's own catalog, active language
  *   2. `overlay.en[key]`            — the plugin's own catalog, English fallback
- *   3. host catalog[language][key]  — `en.ts` / `zh-CN.ts`, active language
- *   4. host catalog.en[key]         — `en.ts`, English fallback
- *   5. `key` itself                 — last resort, same as today's `useT()`
+ *   3. the realm's host template    — `./messages.ts`, which is the official
+ *                                     namespace binding when a locale service
+ *                                     exists and the owners' compile-time
+ *                                     catalogs otherwise. Steps 3 and 4 of the
+ *                                     old chain (active language, then English)
+ *                                     both live inside that resolver now.
+ *   4. `key` itself                 — last resort, same as `useT()`
+ *
+ * Step 3 is where this hook stopped compiling the host catalogs in. The
+ * `language` argument is still what the OVERLAY is read at; the host resolver
+ * is handed it too, and honours it in the runtime-less case. When the official
+ * locale service is the source it reads its own active locale instead — the
+ * two agree except for the one observer tick between an official switch and
+ * the `<html lang>` projection this hook watches.
  */
 export function resolvePluginTemplate(
   key: string,
   language: PluginLanguage,
   overlay?: PluginCatalogOverlay,
 ): string {
-  const hostCatalog = CATALOG[language] ?? CATALOG.en;
   return (
     overlay?.[language]?.[key] ??
     overlay?.en[key] ??
-    hostCatalog[key] ??
-    CATALOG.en[key] ??
-    key
+    resolveMessage(key, language)
   );
 }
 
@@ -94,8 +95,10 @@ export function createPluginTranslator(
  *
  * ## Plugin catalog overlay (M2 mechanism of record)
  *
- * `usePluginT` builds its base catalog from the HOST bundles (`en.ts` /
- * `zh-CN.ts`). That's fine for the handful of truly shared strings
+ * `usePluginT` reads the host vocabulary through the realm's message registry
+ * (`./messages.ts`) rather than from compiled-in catalogs — that indirection
+ * is what keeps ~82 KB of Amiba copy out of every plugin bundle. That base is
+ * fine for the handful of truly shared strings
  * (`common.*`), but the M2 pluginization doctrine is "plugin-local dicts":
  * a plugin's own `options.<domain>.*` strings should live in the plugin,
  * not depend on host keys that get purged once every plugin has migrated
@@ -121,6 +124,16 @@ export function usePluginT(overlay?: PluginCatalogOverlay): {
   language: PluginLanguage;
 } {
   const [language, setLanguage] = useState<PluginLanguage>(currentLanguage);
+  // The host dictionary can arrive AFTER this tree mounted (the shell
+  // registers its namespace inside `ctx.inject(["locale"], …)`). Keying the
+  // memo on the realm's message-registry revision repaints the host-vocabulary
+  // labels when it does; without it a plugin that rendered first would keep
+  // showing raw `common.*` keys.
+  const epoch = useSyncExternalStore(
+    subscribeMessages,
+    messagesEpoch,
+    messagesEpoch,
+  );
 
   useEffect(() => {
     const observer = new MutationObserver(() => setLanguage(currentLanguage()));
@@ -133,10 +146,10 @@ export function usePluginT(overlay?: PluginCatalogOverlay): {
 
   const t = useMemo<PluginTranslateFn>(
     () => createPluginTranslator(language, overlay),
-    [language, overlay],
+    [epoch, language, overlay],
   );
 
   return { t, language };
 }
 
-export type { MessageKey } from "./en";
+export type { MessageKey };

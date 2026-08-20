@@ -14,7 +14,16 @@
  * root re-exports the lot so consumers always say
  * ``import { … } from "@amiba/ui"`` regardless of which domain a
  * symbol comes from. Tree-shaking handles the unused branches.
+ *
+ * ``./locales`` is deliberately NOT re-exported here. It is its own entry
+ * point (``@amiba/ui/locales``) because the dictionary must not be reachable
+ * from the component graph — see that folder's header. The line below is the
+ * one thing this barrel takes from it, and it is ``import type``: the key
+ * union, so ``t("…")`` stays typo-checked wherever ``@amiba/ui`` is on the
+ * program. It is erased before any bundler sees it.
  */
+import type {} from "./locales/keys"
+
 export * from "./primitives"
 export * from "./theme"
 export * from "./models"

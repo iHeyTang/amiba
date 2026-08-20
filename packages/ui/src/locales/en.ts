@@ -1,12 +1,31 @@
 /**
- * English message catalog.
+ * English message catalog for the Amiba UI components in this package — the
+ * copy `@amiba/ui`'s own surfaces render through `useT()`, plus the shared
+ * vocabulary (`common.*`) that plugin components reach for through
+ * `usePluginT`'s host fallback.
  *
- * Keys use dot-notation grouped by surface (options.*, sidepanel.*, etc.).
- * Use `{name}` placeholders for interpolation — see `t()` in `./index.ts`.
+ * ## This module is a SEPARATE ENTRY POINT on purpose
+ *
+ * It is reachable only as `@amiba/ui/locales`. Nothing under
+ * `packages/ui/src` may import it except `./keys.ts` (type-only) — if a
+ * component file could reach the dictionary through the same import graph as
+ * the components, every plugin bundle that renders one Amiba component would
+ * inline all ~82 KB of it again, which is the whole cost this split removes.
+ * `scripts/verify-dsh-architecture.mjs` enforces the isolation, and a
+ * bundle-purity assertion over every built plugin `lib/client.js` proves it
+ * on the emitted output rather than on the source.
+ *
+ * The ONE importer inside the plugin graph is
+ * `@amiba/dsh-plugin-ui-shell`, which merges this with its own dictionary and
+ * registers the result with the official locale service under a single
+ * namespace. The runtime-less windows (Quick-Ask, the notifier) import it too
+ * — they have no locale service to register with.
  *
  * To add a string:
  *   1. Add the key here.
- *   2. Add the same key to `zh-CN.ts` (TypeScript enforces this).
+ *   2. Add the same key to `zh-CN.ts` (TypeScript enforces this through
+ *      `UiMessages`, and `ctx.locale.register`'s typed overload enforces it
+ *      a second time at the registration site).
  *   3. Use `t("your.key")` in components via `useT()`.
  */
 export const en = {
@@ -28,13 +47,6 @@ export const en = {
 
   // Heads-up notifier
   "notifier.dismiss": "Dismiss notification",
-  "notifier.chat.status": "Conversation completed",
-  "notifier.chat.fallbackTitle": "Amiba finished this task",
-  "notifier.chat.open": "Open conversation",
-  "notifier.approval.status": "Your approval is needed",
-  "notifier.plugin.status": "Notification",
-  "notifier.plugin.fallbackTitle": "Amiba notification",
-  "notifier.plugin.dismiss": "Got it",
 
   // Conversation turn navigation
   "conversationRail.label": "Conversation navigation",
@@ -170,7 +182,6 @@ export const en = {
 
   // App shell
   "app.title": "Amiba",
-  "app.initializing": "Waking your local agent",
 
   // Options nav
   "options.nav.appearance": "Appearance",
@@ -444,8 +455,6 @@ export const en = {
   "sidepanel.composer.kbd.send": "send",
   "sidepanel.composer.kbd.newline": "newline",
   "quickAsk.selectionFrom": "Selection from",
-  "quickAsk.actions.newConversation": "New conversation",
-  "quickAsk.actions.openInMain": "Open in main window",
   "sidepanel.permission.allowOnce": "Allow once",
   "sidepanel.permission.allowOnce.desc":
     "Allow this time only; ask again next time",
@@ -616,5 +625,7 @@ export const en = {
   "sidepanel.clarify.sendFailed": "Unable to send your answer.",
 } as const;
 
-export type MessageKey = keyof typeof en;
-export type Messages = Record<MessageKey, string>;
+/** Every key this package's own copy defines. */
+export type UiMessageKey = keyof typeof en;
+/** Both-language parity, compile-enforced: `zh-CN.ts` is typed as this. */
+export type UiMessages = Record<UiMessageKey, string>;

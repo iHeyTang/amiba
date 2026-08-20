@@ -4,6 +4,16 @@ import {
   setPlatform,
   type PlatformAdapter,
 } from "@amiba/app-runtime/platform";
+import { installMessageCatalog } from "@amiba/i18n";
+import { en, zhCN } from "@amiba/ui/locales";
+
+// `ModelPickerDialog` and friends come from `@amiba/ui/plugin` and call
+// `useT()`, which resolves against the realm's message registry. In the
+// product the shell fills that registry from the official locale namespace; a
+// test realm has no shell, so it plays the runtime-less part and installs the
+// host catalogs directly — the same entry point Quick-Ask uses. Without it the
+// assertions would read raw dotted keys.
+installMessageCatalog({ en, "zh-CN": zhCN });
 
 // cmdk (and some Radix primitives) use ResizeObserver and scrollIntoView
 // internally; jsdom does not implement them, so provide minimal no-op stubs

@@ -6,6 +6,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 import { createElectronAdapter } from "../platform/electron";
+import { installWindowMessages } from "../locales";
 import { installDshClientTransport } from "../dsh-client-transport";
 import "../styles/globals.css";
 import { QuickAskView } from "./QuickAskView";
@@ -35,6 +36,11 @@ void (async () => {
     // so the window carries a truthful `lang` from its first paint instead of
     // index.html's static `lang="en"`.
     seedDocumentLanguage();
+    // …and the other half of the runtime-less contract: with no `ctx.locale`
+    // in this realm nothing would ever register Amiba's copy, so this window
+    // installs the catalogs itself. The dictionary IS in this bundle, by
+    // design — that exception is what the plugin bundles no longer pay for.
+    installWindowMessages();
     createRoot(root).render(
       <React.StrictMode>
         <SessionsProvider>

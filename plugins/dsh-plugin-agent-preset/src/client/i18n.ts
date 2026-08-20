@@ -4,7 +4,7 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * Plugin-local i18n catalog for the agent-preset management UI.
  *
  * M2 doctrine: the plugin owns its own `options.agents.*` strings instead of
- * depending on the host `en.ts` / `zh-CN.ts` bundles. Every value below was
+ * depending on the host catalogs. Every value below was
  * copied verbatim from the host catalogs at migration time, and the host
  * copies were purged in the same commits — the management-UI keys with the
  * AP move, the behavior-editor family (`role.*`, `soul.*`, `loadFailed`,

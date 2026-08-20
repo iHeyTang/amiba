@@ -5,12 +5,12 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * "Models & services" settings section).
  *
  * M2 doctrine: a plugin owns its own strings instead of depending on the
- * host `en.ts` / `zh-CN.ts` bundles. Same mechanism as the exemplar
+ * host catalogs. Same mechanism as the exemplar
  * `plugins/dsh-plugin-skills/src/client/i18n.ts` — the overlay is passed
  * to `usePluginT` and its keys take precedence over the host catalog.
  *
  * Every value below was copied verbatim from the host catalogs at
- * migration time (`packages/i18n/src/en.ts` / `zh-CN.ts`). Shared
+ * migration time (the host catalogs). Shared
  * `common.*` vocabulary intentionally stays host-side and is NOT copied.
  * `sidepanel.modelPicker.reasoningEffort` is duplicated here because this
  * settings pane reuses that label for its default-model effort selector;

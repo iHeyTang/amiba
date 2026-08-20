@@ -1,10 +1,11 @@
-import type { Messages } from "./en";
+import type { UiMessages } from "./en";
 
 /**
- * Simplified Chinese message catalog. Keys must match `./en.ts` exactly —
- * `Messages` enforces this at compile time.
+ * Simplified Chinese catalog for the Amiba UI components in this package.
+ * Keys must match `./en.ts` exactly — `UiMessages` enforces this at compile
+ * time.
  */
-export const zhCN: Messages = {
+export const zhCN: UiMessages = {
   // Generic
   "common.add": "添加",
   "common.cancel": "取消",
@@ -23,13 +24,6 @@ export const zhCN: Messages = {
 
   // 桌面悬浮通知
   "notifier.dismiss": "关闭通知",
-  "notifier.chat.status": "对话已完成",
-  "notifier.chat.fallbackTitle": "Amiba 已完成本次任务",
-  "notifier.chat.open": "查看对话",
-  "notifier.approval.status": "需要你的确认",
-  "notifier.plugin.status": "通知",
-  "notifier.plugin.fallbackTitle": "Amiba 通知",
-  "notifier.plugin.dismiss": "知道了",
 
   // 会话轮次导航
   "conversationRail.label": "会话导航",
@@ -163,7 +157,6 @@ export const zhCN: Messages = {
 
   // App shell
   "app.title": "Amiba",
-  "app.initializing": "正在唤醒本地智能体",
 
   // Options nav
   "options.nav.appearance": "外观",
@@ -422,8 +415,6 @@ export const zhCN: Messages = {
   "sidepanel.composer.kbd.send": "发送",
   "sidepanel.composer.kbd.newline": "换行",
   "quickAsk.selectionFrom": "选自",
-  "quickAsk.actions.newConversation": "新对话",
-  "quickAsk.actions.openInMain": "转到主窗口",
   "sidepanel.permission.allowOnce": "仅本次允许",
   "sidepanel.permission.allowOnce.desc": "仅此次允许；下次仍会询问",
   "sidepanel.permission.allowSession": "本会话允许",

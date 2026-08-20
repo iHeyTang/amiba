@@ -31,6 +31,10 @@ import {
   connectOfficialLocale,
   LOCALE_SETTINGS_NAMESPACE,
 } from "./locale-bridge.js";
+import {
+  installAmibaMessageCatalog,
+  registerAmibaMessages,
+} from "./messages.js";
 import type { LocaleSettings } from "@deepseek-ai/dsh-client-locale/client";
 import {
   AmibaCommandPopupSeat,
@@ -197,6 +201,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // plugin makes for its own provisional locale — and it is replaced the
   // moment `connectOfficialLocale` installs the official service below.
   seedDocumentLanguage();
+  // Amiba's product copy, before anything can render it. The OFFICIAL
+  // registration happens further down, guarded by `ctx.inject(["locale"], …)`
+  // and superseding this one; this unconditional install is what keeps the
+  // shell rendering real strings in a composition where `locale` never
+  // resolves — the same runtime-less path Quick-Ask takes.
+  const disposeMessageCatalog = installAmibaMessageCatalog();
   document.title = "Amiba";
   const layout: AmibaLayoutService = {
     toggleSidebar: () => dispatchLayoutAction("toggle-sidebar"),
@@ -333,6 +343,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // `connection` and `remote` are injected because `settingsScope.bind`
     // binds the namespace to the settings transport and the forwarded
     // settings invalidation on the CALLER's fiber.
+    // Amiba's copy as ONE official namespace. Deliberately a SEPARATE fiber
+    // from the authority/migration one below: registering the dictionary needs
+    // `locale` and nothing else, so a composition without `settingsScope`
+    // still gets real strings instead of raw keys.
+    const messagesFiber = ctx.inject(["locale"], (scope) => {
+      scope.effect(
+        () => registerAmibaMessages(scope.locale),
+        "amiba-ui-shell: Amiba locale namespace",
+      );
+    });
     const localeFiber = ctx.inject(
       ["locale", "settingsScope", "connection", "remote"],
       (scope) => {
@@ -535,6 +555,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeCommandPopup();
       disposeSlashMenu();
       void localeFiber.dispose();
+      void messagesFiber.dispose();
+      disposeMessageCatalog();
       void sourcesFiber.dispose();
       disposeRoot();
       sessionsBridge.dispose();

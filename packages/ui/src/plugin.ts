@@ -4,7 +4,17 @@
  * Keep this entry free of platform adapters, Electron bridges, and Amiba's
  * application React contexts. DSH Client plugins run in the official Web
  * Shell React tree and may only share visual primitives and DOM contracts.
+ *
+ * The one line below the barrel is `import type`: several components exported
+ * here (`ModelSummary`, `ModelPickerDialog`, `ModelInfoCard`) call `useT()`
+ * for their built-in strings, and `MessageKey` is the union of exactly the
+ * dictionary owners a program can see. Without the merge those calls would
+ * not compile in a plugin's program. It is erased before any bundler sees it,
+ * so it does not put the dictionary in a plugin bundle — see
+ * `./locales/index.ts`.
  */
+import type {} from "./locales/keys";
+
 export {
   usePluginT,
   type MessageKey,

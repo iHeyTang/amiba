@@ -11,7 +11,7 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * rest of the `sidepanel.modelPicker.*` family belongs to the shared
  * `ModelPickerDialog` in `@amiba/ui` and stays host-side (MP-T4 owns the
  * host-key purge). Values copied verbatim from the host catalogs
- * (`packages/i18n/src/en.ts` / `zh-CN.ts`) at migration time.
+ * (the host catalogs) at migration time.
  *
  * NOTE: deliberately NOT named `i18n.ts` — a parallel migration owns that
  * filename for the settings surface's dictionary.
