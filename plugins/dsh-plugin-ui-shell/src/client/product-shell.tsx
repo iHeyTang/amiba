@@ -600,7 +600,16 @@ function ProductShellInner({
           // CloseLabel registration does — Amiba cannot register it, because
           // a priority-0 occupant on a SINGLE slot makes the next
           // registration throw.
-          closeLabel={renderSlot("settings.close", {})}
+          // `fallback` is the ONLY way to supply Amiba's own copy for a
+          // SINGLE seat: Amiba cannot register into it (a priority-0
+          // occupant makes the first third-party registration throw), and a
+          // `??` on the dispatch result never fires — renderSlot returns a
+          // real `<div data-slot>` element for an EMPTY seat, not nullish.
+          closeLabel={renderSlot(
+            "settings.close",
+            {},
+            { fallback: t("common.close") },
+          )}
           slots={{
             assistantNavigation: (activeSection) => (
               <SettingsSectionNavigation
@@ -621,15 +630,29 @@ function ProductShellInner({
             // The three remaining shell-level seats. All three take the
             // EMPTY owner share their contract declares, so `{}` is the
             // faithful dispatch and anything else would be fabricated.
-            header: renderSlot("settings.header", {}),
+            // Same fallback rule as `settings.close` above. This one is
+            // load-bearing beyond the pixels: the dialog names itself
+            // through this node (`aria-labelledby`), so an empty seat with
+            // no fallback leaves the dialog with a BLANK accessible name.
+            header: renderSlot(
+              "settings.header",
+              {},
+              { fallback: t("chat.settings") },
+            ),
             action: renderSlot("settings.action", {}),
             generalItem: renderSlot("settings.general.item", {}),
             contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
           }}
-          onGoHome={closeSettings}
-          sidebarHeaderLeftInset={topBarLeftInset}
+          // No OS-chrome reserve inside the dialog. `topBarLeftInset` /
+          // `topBarHeightPx` still go to the chat surface above (which does
+          // own the window's top strip), but Settings is a centred panel
+          // floating BELOW the traffic lights now — SettingsDialog keeps it
+          // clear of them — so reserving a second time in here would just
+          // indent the navigation heading into empty space.
+          // `onGoHome` is gone for the same reason: the dialog's own close
+          // button is the escape hatch, which is also what upstream's
+          // SettingsRoot gives its panel.
           sidebarHeaderHeightPx={topBarHeightPx}
-          paneHeaderChromeHeightPx={desktop ? topBarHeightPx : undefined}
         />
       </SettingsDialog>
       <div className="pointer-events-none absolute inset-0 z-[100]">

@@ -476,13 +476,19 @@ for (const dispatch of [
   // both `{ children?: never }`). `{}` is the faithful dispatch; TypeScript
   // cannot flag a fabricated extra member against an empty owner (the P3
   // lesson), so this regex is the only thing that catches one.
-  /renderSlot\(\s*"settings\.header",\s*\{\}\s*\)/u,
-  /renderSlot\(\s*"settings\.action",\s*\{\}\s*\)/u,
-  /renderSlot\(\s*"settings\.general\.item",\s*\{\}\s*\)/u,
+  // These end at `[,)]`, NOT `)`: the owner share must stay `{}`, but a
+  // third `RenderOpts` argument is legitimate and load-bearing here. The
+  // two SINGLE seats below carry `fallback` — the only way Amiba can supply
+  // its own copy for a seat it must not register into, since a `??` on the
+  // dispatch result never fires (renderSlot returns a real `<div data-slot>`
+  // for an EMPTY seat, not nullish). Pinning `)` once froze that bug in.
+  /renderSlot\(\s*"settings\.header",\s*\{\}\s*[,)]/u,
+  /renderSlot\(\s*"settings\.action",\s*\{\}\s*[,)]/u,
+  /renderSlot\(\s*"settings\.general\.item",\s*\{\}\s*[,)]/u,
   // Same empty owner share, and the dispatch that names the dialog's close
   // button. Amiba deliberately registers NO entry of its own here: a
   // priority-0 occupant on a SINGLE slot makes the next registration throw.
-  /renderSlot\(\s*"settings\.close",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"settings\.close",\s*\{\}\s*[,)]/u,
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(
