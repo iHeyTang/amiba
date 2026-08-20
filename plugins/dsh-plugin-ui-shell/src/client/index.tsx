@@ -266,9 +266,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // Amiba's own `/` and `@` sources, published through the official
     // registry rather than a private one — so a plugin's `registerSource`
     // and Amiba's own land in the same menu, ranked by the same `order`.
-    const disposeSources = triggerRuntime.registerSources(
-      officialTriggerSources(),
-    );
+    //
+    // Guarded by `ctx.inject`, not registered eagerly: `apply` may well run
+    // before `ui-input-trigger` has provided the service, and an eager call
+    // would silently register nothing at all — the built-in skills and
+    // session groups would simply never appear in-session.
+    const sourcesFiber = ctx.inject(["inputTriggers"], (scope) => {
+      scope.effect(
+        () => triggerRuntime.registerSources(officialTriggerSources()),
+        "amiba-ui-shell: built-in trigger sources",
+      );
+    });
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -424,7 +432,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       disposeCommandPopup();
       disposeSlashMenu();
-      disposeSources();
+      void sourcesFiber.dispose();
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();
