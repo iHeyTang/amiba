@@ -253,6 +253,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ctx.sessions.scope(sessionId as never) as unknown as
           | ClientContext
           | undefined,
+      subscribeSessions: (listener) => ctx.sessions.list.subscribe(listener),
       inputTriggers: () =>
         ctx.get("inputTriggers") as unknown as ReturnType<
           Parameters<typeof createInputTriggerBridge>[0]["inputTriggers"]

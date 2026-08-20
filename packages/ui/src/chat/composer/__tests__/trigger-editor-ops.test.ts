@@ -17,6 +17,7 @@ import {
 } from "lexical";
 import { describe, expect, it } from "vitest";
 import { MentionNode } from "../MentionNode";
+import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "../triggers/claim";
 import {
   DraftRevision,
@@ -56,16 +57,16 @@ function draftOf(editor: ReturnType<typeof makeEditor>): string {
 }
 
 /** The single mention chip in the tree, or null. */
-function onlyMention(editor: ReturnType<typeof makeEditor>) {
-  let found: ReturnType<MentionNode["getMention"]> | null = null;
+function onlyMention(editor: ReturnType<typeof makeEditor>): MentionData | null {
+  const found: MentionData[] = [];
   editor.getEditorState().read(() => {
     const walk = (node: LexicalNode): void => {
-      if (node instanceof MentionNode) found = node.getMention();
+      if (node instanceof MentionNode) found.push(node.getMention());
       else if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
     };
     walk($getRoot());
   });
-  return found;
+  return found[0] ?? null;
 }
 
 function setup(initial: string) {

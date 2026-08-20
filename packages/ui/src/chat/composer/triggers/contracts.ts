@@ -126,6 +126,16 @@ export interface ComposerTriggerRuntime {
    */
   controllerFor(sessionId: string): ComposerTriggerController | undefined;
   /**
+   * Notify when a previously unresolvable session may now resolve.
+   *
+   * This is not a nicety: Amiba mints a session locally and the DSH session
+   * materializes on first submit, so the FIRST turn of every new task starts
+   * with `controllerFor` answering `undefined`. Without a re-resolve signal
+   * the composer would stay on the session-less path for that whole session
+   * — the official pipeline would silently never engage.
+   */
+  subscribe?(listener: () => void): () => void;
+  /**
    * Register the four scoped bail listeners for one session, delegating to
    * `ops`. Listeners exist EXACTLY while an editor is bound: no editor, no
    * listener, and the controller's `execute` correctly reports "not applied".

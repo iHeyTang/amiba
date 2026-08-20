@@ -81,7 +81,17 @@ export function useComposerTriggers(
       setController(undefined);
       return;
     }
-    setController(runtime.controllerFor(sessionId));
+    const resolve = (): void => {
+      setController((previous) => {
+        const next = runtime.controllerFor(sessionId);
+        return next === previous ? previous : next;
+      });
+    };
+    resolve();
+    // Re-resolve when the official session roster moves: a freshly minted
+    // Amiba draft has no DSH session yet, and without this the composer would
+    // stay on the session-less path for that entire session.
+    return runtime.subscribe?.(resolve);
   }, [runtime, sessionId]);
 
   // A session switch abandons any command mode: the claim belonged to the

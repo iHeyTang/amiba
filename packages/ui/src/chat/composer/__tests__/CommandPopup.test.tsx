@@ -47,8 +47,8 @@ function controller(overrides: Partial<PopupState> = {}) {
     ...overrides,
   };
   const calls = {
-    select: vi.fn<[number], Promise<void>>(async () => {}),
-    confirm: vi.fn<[], Promise<void>>(async () => {}),
+    select: vi.fn(async (_index: number) => {}),
+    confirm: vi.fn(async () => {}),
     acknowledge: vi.fn(),
     cancelConfirmation: vi.fn(),
     setSearch: vi.fn(),

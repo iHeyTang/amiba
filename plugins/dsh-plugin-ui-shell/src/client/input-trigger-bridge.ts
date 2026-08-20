@@ -48,6 +48,11 @@ export interface InputTriggerBridgeDeps {
     registerSource(source: InputTriggerSource): () => void;
     sessionOf(actx: ClientContext): ComposerTriggerController;
   } | undefined;
+  /**
+   * Subscribe to official session-roster changes — the signal that a
+   * previously unresolvable session may now have a scope.
+   */
+  subscribeSessions(listener: () => void): () => void;
   /** The official `ctx.commandUi` face, absent when the row is disabled. */
   commandUi():
     | {
@@ -103,6 +108,10 @@ export function createInputTriggerBridge(
         // error — the seat is simply empty until it does.
         return undefined;
       }
+    },
+
+    subscribe(listener) {
+      return deps.subscribeSessions(listener);
     },
 
     popupFor(sessionId) {

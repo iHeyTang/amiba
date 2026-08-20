@@ -60,6 +60,7 @@ const CLAIM = { token: "/goal ", submit: async () => ({ kind: "success" as const
 function bridgeOver(scope: ReturnType<typeof scopeDouble>) {
   return createInputTriggerBridge({
     scopeOf: () => scope.ctx as never,
+    subscribeSessions: () => () => {},
     inputTriggers: () => undefined,
     commandUi: () => undefined,
   });
@@ -129,6 +130,7 @@ describe("the four scoped bail listeners", () => {
   it("binds nothing for a session with no live scope", () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => undefined,
+      subscribeSessions: () => () => {},
       inputTriggers: () => undefined,
       commandUi: () => undefined,
     });
@@ -140,6 +142,7 @@ describe("service resolution", () => {
   it("reports no controller and no popup while the official rows are absent", () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => ({}) as never,
+      subscribeSessions: () => () => {},
       inputTriggers: () => undefined,
       commandUi: () => undefined,
     });
@@ -154,6 +157,7 @@ describe("service resolution", () => {
     const registerSource = vi.fn(() => disposers[index++]);
     const bridge = createInputTriggerBridge({
       scopeOf: () => ({}) as never,
+      subscribeSessions: () => () => {},
       inputTriggers: () => ({ registerSource, sessionOf: () => ({}) as never }),
       commandUi: () => undefined,
     });
@@ -170,6 +174,7 @@ describe("service resolution", () => {
   it("treats a scope-less session as an empty seat, not an error", () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => ({}) as never,
+      subscribeSessions: () => () => {},
       inputTriggers: () => ({
         registerSource: () => () => {},
         sessionOf: () => {
@@ -186,6 +191,7 @@ describe("service resolution", () => {
     const submit = vi.fn(async () => ({ kind: "success" as const }));
     const bridge = createInputTriggerBridge({
       scopeOf: () => actx as never,
+      subscribeSessions: () => () => {},
       inputTriggers: () => undefined,
       commandUi: () => undefined,
     });
@@ -196,6 +202,7 @@ describe("service resolution", () => {
   it("rejects a claim submit for a session with no scope", async () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => undefined,
+      subscribeSessions: () => () => {},
       inputTriggers: () => undefined,
       commandUi: () => undefined,
     });
