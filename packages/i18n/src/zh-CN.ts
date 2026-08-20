@@ -420,10 +420,6 @@ export const zhCN: Messages = {
   "options.preference.accent.cyan": "电光青",
   "options.preference.accent.lime": "酸性黄绿",
   "options.preference.accent.graphite": "石墨灰",
-  "options.preference.language": "语言",
-  "options.preference.language.auto": "自动",
-  "options.preference.language.en": "English",
-  "options.preference.language.zh-CN": "简体中文",
   "options.preference.newtab.wallpaper.label": "每日壁纸",
 
   // Models / DSH model config

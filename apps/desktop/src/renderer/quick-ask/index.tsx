@@ -1,6 +1,7 @@
 import { SessionsProvider } from "@amiba/app-runtime/core";
 import { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { setPlatform } from "@amiba/app-runtime/platform";
+import { seedDocumentLanguage } from "@amiba/i18n";
 import React from "react";
 import { createRoot } from "react-dom/client";
 
@@ -27,6 +28,13 @@ void (async () => {
     installDshClientTransport(boot.baseUrl);
     const dshClient = new DshApiClient({ baseUrl: boot.baseUrl });
     setPlatform(createElectronAdapter(dshClient));
+    // Quick Ask boots NO DSH Client plugin graph — no Web Shell scripts, so
+    // no `ctx.locale` and no official locale service in this window. It is
+    // the runtime-ABSENT case of the two `@amiba/i18n` documents: the
+    // browser-derived language is published into the document contract here
+    // so the window carries a truthful `lang` from its first paint instead of
+    // index.html's static `lang="en"`.
+    seedDocumentLanguage();
     createRoot(root).render(
       <React.StrictMode>
         <SessionsProvider>

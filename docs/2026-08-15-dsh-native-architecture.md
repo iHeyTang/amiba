@@ -134,7 +134,10 @@ root 声明：
 - `settings.onboarding`（官方名，list，root scope，owner
   `{ stepId, complete, openSection }`）。协调式而非叠加式：见 §4.2
 - `settings.general.item`（官方名，list，root scope，空 owner）。General 分区
-  （Amiba 的"外观"页）底部的偏好行，追加在产品自带的行之下
+  （Amiba 的"外观"页）底部的偏好行，追加在产品自带的行之下。**这个席位上有一个
+  真实占位者**：官方 `@deepseek-ai/dsh-client-locale` 在这里注册它自己的
+  `LanguageRow`（`id: "language"`, `order: 0`）—— 也就是产品里唯一那一行"语言"，
+  见 §4.4
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
 - `shell.overlay`（官方名）
@@ -411,6 +414,60 @@ DSH 的 children 并不限于官方预定义位置。任何注册了 UI entry �
 section 声明 `amiba.agentPreset.section`，catalog/memory/skills 注入各自的预设详情
 tab。新增 slot 的原则是语义稳定、归属清晰、具备实际扩展需求，不能为单个临时组件制造
 全局 API。
+
+### 4.4 语言：官方 locale 服务是唯一权威
+
+采纳 `settings.general.item` 之后，官方 `@deepseek-ai/dsh-client-locale` 的
+`LanguageRow` 出现在"外观"页底部，而 Amiba 自己在同一页顶部还画着一行"语言"
+（写 `settings.ui.language`，`auto | en | zh-CN`，走 PlatformAdapter 持久化）。
+两行互不同步：官方那行只改官方/插件文案，Amiba 那行只改 Amiba 自己的 447 条
+文案。**Amiba 那行已经退役**，官方那行成为唯一入口 —— 官方服务是整个 DSH 插件
+生态的 `t` 席位读的那一个，第二个权威只能意味着"官方文案和 Amiba 文案不一致"。
+显式的"自动（跟随系统）"选项随之取消：官方没有等价项，它在"从未选过"时本来就
+跟随浏览器语言。
+
+**id 映射**。两条轴不共享词汇：官方是 `zh` / `en`（`LOCALE_IDS`），Amiba 的目录
+键是 `zh-CN` / `en`。`LocaleRuntime.setLocale` 对未注册 id **抛异常**，所以
+`zh-CN` 永远不能到达它。映射写在 `@amiba/i18n`（`toOfficialLocaleId` /
+`fromOfficialLocaleId`）：前者的**返回类型就是官方那个联合**，所以泄漏是编译
+错误而不是运行时抛异常；后者按主子标签匹配（`zh-Hans-CN` -> `zh-CN`，其余落到
+`en`），是全函数，不会在 render 里抛。`@amiba/i18n` 不能依赖 `@deepseek-ai/*`
+（Quick-Ask 和浏览器端要用它），所以这个手写联合与上游 `LocaleId` 的绑定是一个
+编译期探针：`plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts` 里的
+`OfficialLocaleIdMatchesUpstream`。
+
+**有运行时 / 没运行时，调用方怎么区分**。`hasOfficialLocale()`。恰好两种情况：
+
+1. **有 DSH client 运行时**：持有插件 context 的那一方（今天是
+   `@amiba/dsh-plugin-ui-shell`）用官方 `LocaleRuntime` 的
+   `getSnapshot` + `subscribe` 调 `installOfficialLocale`。这个 source 是权威，
+   官方那行一改，Amiba 的文案同一 tick 重渲染，不需要 reload。
+2. **没有插件运行时**（Quick-Ask、通知窗口、浏览器端）：没人安装 source，语言按
+   `document.documentElement.lang` -> `navigator.language` 解析。这两个窗口的
+   入口调一次 `seedDocumentLanguage()`，把浏览器派生值写进 document contract，
+   于是它们的 `<html lang>` 不再是 index.html 里那个写死的 `en`。
+
+`document.documentElement.lang` 依然承重：每个插件 bundle 单独构建、各自持有一份
+`@amiba/i18n` 模块状态，ui-shell 里的 `installOfficialLocale` 到不了它们。持有
+官方 source 的那个 realm **发布**这个属性，其余 realm（`@amiba/i18n` 自己的
+MutationObserver、`usePluginT`、`settings.section` ledger 的语言缓存键）**观察**它。
+
+**一次性迁移**。老用户可能已经把 `settings.ui.language` 设成了 `en` 或 `zh-CN`。
+`locale-bridge.ts` 在启动时读一次：`auto` 什么都不做（它本来就等于官方的"从未
+选过"）；`en` / `zh-CN` 则在官方**确实还没有持久选择**时映射成官方 id 调一次
+`setLocale`，然后把 `settings.ui.language` 盖回 `auto` —— 那既是迁移后的真实
+状态，也是"已迁移"标记，所以下次启动不会再跑。
+
+"从未选过"取自官方持久 section 本身，而不是当前 active locale（后者在没选过时
+就等于浏览器派生值，"active 是 en"和"用户选了 en"不可区分）。
+`LocaleSettings.preference` 的语义是"显式选择；缺席则委托给浏览器"，`setLocale`
+是它唯一的写入者，上游自己的 `adopt` 读的也是
+`section.preference ?? this.provisional`。所以 `ready` 快照上 `preference` 缺席
+就精确等于"官方无话可说"，而且**没有一个 fallback 值会与缺席混淆**（域是
+`"zh" | "en"`，从来没有 `"auto"`）。三道闸门：`status !== "ready"` 视为"还不
+知道"而不是"没选过"；`!writable`（memory 模式）不迁移也不打标记，免得改一次
+语言却存不下、下次启动又丢；`value.preference !== undefined` 则官方胜出、迁移
+自行退役。
 
 ## 5. 插件项目与依赖
 

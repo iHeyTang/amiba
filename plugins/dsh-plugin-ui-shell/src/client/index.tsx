@@ -4,7 +4,7 @@ import {
   createWebPlatformAdapter,
 } from "@amiba/app-runtime/dsh-client";
 import { hasPlatform, setPlatform } from "@amiba/app-runtime/platform";
-import { loadLanguagePreference, resolveLanguage } from "@amiba/i18n";
+import { seedDocumentLanguage } from "@amiba/i18n";
 import {
   resolveSlotLabel,
   type PropsRenderSlots,
@@ -27,6 +27,11 @@ import {
   createInputTriggerBridge,
   type AmibaInputTriggerBridge,
 } from "./input-trigger-bridge.js";
+import {
+  connectOfficialLocale,
+  LOCALE_SETTINGS_NAMESPACE,
+} from "./locale-bridge.js";
+import type { LocaleSettings } from "@deepseek-ai/dsh-client-locale/client";
 import {
   AmibaCommandPopupSeat,
   AmibaSlashMenuSeat,
@@ -185,9 +190,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
       : window.location.origin;
   const dshClient = new DshApiClient({ baseUrl });
   if (!hasPlatform()) setPlatform(createWebPlatformAdapter(dshClient));
-  document.documentElement.lang = resolveLanguage(
-    await loadLanguagePreference(),
-  );
+  // A provisional language for the window, published BEFORE any DSH Client
+  // plugin registers so their initial labels never inherit index.html's
+  // fallback language and then become stuck in a slot snapshot cache. It is
+  // the browser-derived value — the same derivation the official locale
+  // plugin makes for its own provisional locale — and it is replaced the
+  // moment `connectOfficialLocale` installs the official service below.
+  seedDocumentLanguage();
   document.title = "Amiba";
   const layout: AmibaLayoutService = {
     toggleSidebar: () => dispatchLayoutAction("toggle-sidebar"),
@@ -313,6 +322,34 @@ export async function apply(ctx: ClientContext): Promise<void> {
         "amiba-ui-shell: built-in trigger sources",
       );
     });
+    // THE language authority. `@amiba/i18n` follows the official locale
+    // service, and the retired `settings.ui.language` preference is carried
+    // over to it once. Guarded by `ctx.inject` rather than the plugin's own
+    // `inject` list for the same reason the trigger sources are: `apply` may
+    // run before `locale` / `settingsScope` are provided, and the product
+    // shell must mount either way (without them Amiba simply keeps the
+    // browser-derived fallback, exactly as Quick-Ask does).
+    //
+    // `connection` and `remote` are injected because `settingsScope.bind`
+    // binds the namespace to the settings transport and the forwarded
+    // settings invalidation on the CALLER's fiber.
+    const localeFiber = ctx.inject(
+      ["locale", "settingsScope", "connection", "remote"],
+      (scope) => {
+        scope.effect(
+          () =>
+            connectOfficialLocale({
+              locale: scope.locale,
+              localeSettings: scope.settingsScope.bind<LocaleSettings>({
+                namespace: LOCALE_SETTINGS_NAMESPACE,
+              }),
+              onError: (error) =>
+                console.error("[amiba-ui-shell] locale bridge:", error),
+            }),
+          "amiba-ui-shell: official locale authority",
+        );
+      },
+    );
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -497,6 +534,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       disposeCommandPopup();
       disposeSlashMenu();
+      void localeFiber.dispose();
       void sourcesFiber.dispose();
       disposeRoot();
       sessionsBridge.dispose();

@@ -1,6 +1,6 @@
 import { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { setPlatform } from "@amiba/app-runtime/platform";
-import { loadLanguagePreference, resolveLanguage } from "@amiba/i18n";
+import { seedDocumentLanguage } from "@amiba/i18n";
 
 import { installDshClientTransport } from "./dsh-client-transport";
 import { createElectronAdapter } from "./platform/electron";
@@ -78,12 +78,14 @@ void (async () => {
     );
     const dshApiClient = new DshApiClient({ baseUrl: boot.baseUrl });
     setPlatform(createElectronAdapter(dshApiClient));
-    // DSH Client plugins register before Amiba's React root mounts. Publish the
-    // persisted locale first so their initial labels never inherit index.html's
-    // fallback language and then become stuck in a slot snapshot cache.
-    document.documentElement.lang = resolveLanguage(
-      await loadLanguagePreference(),
-    );
+    // DSH Client plugins register before Amiba's React root mounts. Publish a
+    // provisional locale first so their initial labels never inherit
+    // index.html's fallback language and then become stuck in a slot snapshot
+    // cache. It is the browser-derived value, the same derivation the official
+    // locale plugin makes for its own provisional locale; the OFFICIAL service
+    // replaces it once `amiba-ui-shell` installs it (see
+    // `plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts`).
+    seedDocumentLanguage();
     (
       globalThis as typeof globalThis & { __DSH_BOOT__?: unknown }
     ).__DSH_BOOT__ = boot.graph;
