@@ -69,11 +69,17 @@ counterpart.
   of that anchor are contract, not decoration — occupants position themselves
   `absolute; bottom: calc(100% + 4px)` against the card and probe it with
   `closest("[data-composer-card]")` to tell a pointerdown inside the composer
-  apart from one outside it. Unoccupied in Amiba today: the two official
-  packages that take this seat upstream (`ui-input-trigger`'s `MenuView` and
-  `ui-commands`' popup shell) are not enabled here, so Amiba's own
-  `TriggerMenu` remains the `/` and `@` menu — see the record in
-  `docs/2026-08-15-dsh-native-architecture.md`
+  apart from one outside it. OCCUPANCY: both official packages that take this
+  seat upstream are ENABLED (`ui-input-trigger` for `inputTriggers`,
+  `ui-commands` for `commandUi`) and this plugin SHADOWS both of their entries
+  — same ids (`slash-menu`, `command-popup`), `priority: -1` against their
+  implicit `0`, so `entriesOfSlot` elects exactly one entry per cell and it is
+  Amiba's. What is shadowed is the pixels only (the official components are
+  styled from `--dsw-*`, which only the excluded `ui-theme` defines, and the
+  popup's risk gate comes from `ui-primitives`, whose CSS modules ship stubbed
+  to `{}`); the pipeline is the official one, driven from this plugin's
+  `input-trigger-bridge.ts` and `@amiba/ui`'s `OfficialTriggerPlugin` — see
+  `docs/2026-08-15-dsh-native-architecture.md` §4.1
 - `settings.section` — official name and owner contract
   (`SettingsSectionOwnerProps { close }`) inherited from
   `@deepseek-ai/dsh-client-ui-settings`; registrant options (`id`, `order`,
@@ -104,6 +110,37 @@ entry, the Chat Node that owns the whole call tree. Amiba has no such entry
 root instead. Legal, and the same pattern the adopted `conversation.*` seats
 already use; only the declaration SITE differs — the key, kind, scope, and
 owner contract are the official ones.
+
+## The input-trigger driver
+
+`input-trigger-bridge.ts` is what makes `ctx.inputTriggers.registerSource(...)`
+honest here. The service face is `registerSource` / `sessionOf` alone, so a
+registered source is consulted only if the HOST drives the per-session
+controller and answers the four scoped `@mode bail` input events. This plugin
+supplies both halves and `@amiba/ui`'s composer supplies the editor side:
+
+| official member | driven from |
+| --- | --- |
+| `track(draft, caret, guard, draftRev)` | `OfficialTriggerPlugin`, inside `registerUpdateListener` (read-only) |
+| `onSpace()` | `OfficialTriggerPlugin`, a NATIVE keydown listener on the editor root |
+| `adjudicate(line, signal)` | `Composer.handleSend`, the Enter path |
+| `pick` / `dismiss` | `OfficialTriggerMenu`, from the shadowed seat |
+| `serializeReference` | submit-time chip expansion |
+| the four `slash/input-*` bail events | `bindEditor`, delegating to the Lexical verbs |
+| `CommandClaim.submit(args, actx)` | `submitClaim`, with the REAL session-scope ctx |
+
+`onSpace` rides a native listener rather than a Lexical command on purpose: a
+command handler runs inside `editor.update`, and Lexical DEFERS a nested
+update — the verbs could not report applied-truth from there.
+
+Each bail listener returns `true` only when its verb reports an OBSERVED
+mutation (a re-scan of the draft, or a checked post-condition), and the
+listeners exist exactly while an editor is bound, so "no composer for this
+session" is reported by the absence of a listener rather than by a guess.
+
+`arbitrate` is deliberately NOT driven: it is a menu-internal keyboard helper
+with no source-facing callback behind it, and Amiba's `TriggerMenu` owns the
+keyboard identically on both of its mount paths.
 
 `amiba.agentPreset.section` remains part of the public vocabulary
 (`@amiba/extension-sdk`) but its runtime declaration lives on

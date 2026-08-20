@@ -46,13 +46,76 @@ ctx.slots.inject("conversation.input.overlay", () =>
 )
 ```
 
-Amiba composes NO `inputTriggers` service today (the official
-`ui-input-trigger` row stays disabled — see
-`docs/2026-08-15-dsh-native-architecture.md` for why), so `ctx.inputTriggers`
-and `ctx.commandUi` are type-visible and `undefined` at runtime, and
-`InputTriggerSource` / `PickOutcome` (re-exported here for authors) have no
-pipeline to join yet. The overlay SEAT itself is live: an occupant that brings
-its own store renders today.
+### `inputTriggers` and `commandUi` are LIVE
+
+Both official rows are enabled and Amiba owns the driver, so the two service
+faces do what their contracts say:
+
+```ts
+// A `@` reference source. Every callback below is actually consulted.
+ctx.effect(() =>
+  ctx.inputTriggers.registerSource({
+    trigger: "@",
+    name: "my-docs",          // menu group heading; unique per trigger
+    order: 10,
+    candidates: async (session, req) => search(req.query, req.signal),
+    onPick: (pick) => ({
+      insert: {
+        source: "my-docs",
+        ref: pick.candidate.name,
+        label: pick.candidate.name,
+        clipboardText: `@${pick.candidate.name}`,
+      },
+    }),
+    // REQUIRED for `{ insert }` sources: this is what reaches the model.
+    codec: {
+      clipboardText: (ref) => `@${ref}`,
+      serialize: async (ref, signal) => `<doc>${await resolve(ref, signal)}</doc>`,
+    },
+  }),
+)
+
+// A `/` command with a popup. The popup shell, the option filter, and the
+// shared confirmation gate are all provided for you.
+ctx.effect(() =>
+  ctx.commandUi.register({
+    name: "pick-model",
+    description: "Choose an inference model",
+    available: () => true,
+    ui: {
+      kind: "popupSelect",
+      options: async (session, signal) => listModels(session, signal),
+      onSelect: async (option, session) => selectModel(option.id, session),
+    },
+  }),
+)
+```
+
+What that buys, concretely: your group appears in Amiba's trigger menu; a pick
+inserts a real chip; `codec.serialize` output — not the clipboard text — is
+what the model receives on submit; a serialization failure BLOCKS the send with
+a visible reason rather than downgrading silently; `matchSpace` / `matchEnter`
+are polled on space and Enter; `warm` fires at session-scope birth.
+
+Two honest caveats:
+
+- **`arbitrate` is not driven.** It is a menu-internal keyboard helper with no
+  source-facing callback behind it; Amiba's own menu owns the keyboard on both
+  of its mount paths. No `InputTriggerSource` member is reachable only through
+  it.
+- **The overlay COMPONENTS are shadowed.** Amiba registers its own
+  `slash-menu` and `command-popup` entries at `priority: -1`, so the official
+  `MenuView` and `PopupSelectView` never render — they are styled from
+  `--dsw-*`, which only the excluded `ui-theme` defines, and the popup's risk
+  gate comes from `ui-primitives`, whose CSS modules ship stubbed to `{}`.
+  Registration contracts are unaffected; only the pixels are Amiba's. To take
+  the seat yourself, register a DIFFERENT `id` and bring your own store.
+  Registering `slash-menu` or `command-popup` at `priority: -1` would collide
+  with Amiba's entry and throw at registration.
+
+A source registered with `('/', "command")` will THROW: `ui-commands` owns that
+identity. Amiba's own `/` sources are `skill` and (session-less surfaces only)
+`command`; its `@` source is `session`.
 
 Both header seats and both composer control seats render NOTHING while
 unoccupied — no placeholder, no reserved space, no flex gap; so does an

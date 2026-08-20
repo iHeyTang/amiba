@@ -656,9 +656,29 @@ try {
       // `ui-settings` for `settingsScope`, `locale` for `locale` + the
       // framework `t` seat. Without them the auto-mounted directory-picker
       // browse client hangs the whole boot on chooser-less hosts.
+      //
+      // Also deliberately PRESENT since Phase 4.3 (completion), and for a
+      // different reason — these two are wanted for their SERVICES, and Amiba
+      // owns the driver that makes them honest:
+      //   - `ui-input-trigger` provides `inputTriggers` (source registry +
+      //     per-session controller). Amiba's composer drives
+      //     track/onSpace/adjudicate/pick/dismiss/serializeReference and
+      //     answers the four scoped `slash/input-*` bail events, so a
+      //     plugin's `registerSource` is actually consulted.
+      //   - `ui-commands` provides `commandUi` (the `/` catalog source over
+      //     `remote.commands`, client contributions, the popupSelect shell).
+      //     It hard-depends on `inputTriggers` (`inject[0]`; its constructor
+      //     throws `ui-commands: slash service unavailable`), so the two rows
+      //     are present or absent together.
+      // Their overlay COMPONENTS are shadowed by amiba-ui-shell at the same
+      // ids with `priority: -1` — the official pixels need `--dsw-*`, which
+      // only the excluded `ui-theme` defines, and the popup's risk gate comes
+      // from `ui-primitives`, whose CSS modules ship stubbed to `{}`.
       for (const requiredServiceProvider of [
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@deepseek-ai/dsh-client-ui-commands",
       ]) {
         assert.ok(
           ids.has(requiredServiceProvider),

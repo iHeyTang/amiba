@@ -112,7 +112,11 @@ root 声明：
   —— 占位者用 `position: absolute; bottom: calc(100% + 4px)` 相对这张卡片定位，
   并对自己调用 `closest("[data-composer-card]")` 来区分"点在 composer 里"和
   "点在外面"（后者才关闭浮层）；wrapper 会抢走定位祖先的角色，也会让空 seat 占
-  box。Quick-Ask 等没有插件运行时的界面不传 renderer，逐字节不变
+  box。Quick-Ask 等没有插件运行时的界面不传 renderer，逐字节不变。
+  **占位情况（Phase-4.3 完成后）**：`ui-input-trigger` 与 `ui-commands` 都已启用，
+  两个官方 entry 都会注册进来；amiba-ui-shell 以**相同 `id`**（`slash-menu`、
+  `command-popup`）+ `priority: -1` 注册自己的组件把它们**遮蔽**掉，每个 cell
+  恰好渲染一个且是 Amiba 的。服务不被遮蔽 —— 详见 §4.1
 - `settings.section`（官方名；registrant 可用 vendor 约定 `navIcon` inject
   face 提供导航图标，官方插件没有图标时回退到通用 Blocks 图标）
 - `amiba.settings.content.overlay`
@@ -202,56 +206,109 @@ Phase-3 记录的诚实裁剪（采用官方名的前提是能忠实提供官方
   模型步就有 N 个 MessageId 却只有一条操作行，任选其一都是武断。采纳前提是按消息
   拆气泡，与协议无关。
 
-### 4.1 `conversation.input.overlay` 的席位采纳，与 inputTriggers / commandUi 的暂缓
+### 4.1 `conversation.input.overlay` 席位 + inputTriggers / commandUi 的采纳
 
-Phase-4.3 采纳了 `conversation.input.overlay` 这个**席位**（声明 + 派发，见上），
-但**没有**启用两个官方行 `ui-input-trigger`（`ctx.inputTriggers`）与 `ui-commands`
-（`ctx.commandUi`）。原因是审计出的三条硬事实，记录在这里以免下次重新踩：
+Phase-4.3 分两步落地：先采纳 `conversation.input.overlay` **席位**（声明 + 派发），
+再启用两个官方行 `ui-input-trigger`（`ctx.inputTriggers`）与 `ui-commands`
+（`ctx.commandUi`），由 Amiba 自己拥有 driver。两行必须一起启用：`ui-commands`
+的 `inject[0]` 就是 `"inputTriggers"`，`CommandUiRuntime` 构造函数里
+`ctx.get("inputTriggers")` 为空时直接抛 `ui-commands: slash service unavailable`。
 
-1. **`ui-commands` 强依赖 `inputTriggers`。** 它的 `inject` 列表首项就是
-   `"inputTriggers"`，`CommandUiRuntime` 构造函数里 `ctx.get("inputTriggers")`
-   为空时直接抛 `ui-commands: slash service unavailable`，随后用
-   `registerSource({ trigger: "/", name: "command", … })` 把自己挂进触发管线。
-   所以两行必须一起上，而且必须先有 driver：没有 driver 时
-   `commandUi.register` 会成功却永远不被查询 —— 这正是"沉默的谎言"，比缺席更糟。
-2. **官方 driver 的所有权是全有或全无。** `InputTriggerServiceContract` 只暴露
-   `registerSource` 与 `sessionOf`，source roster 是 controller 私有的；要让
-   插件注册的 source 出现在任何菜单里，宿主就必须调
-   `controller.track(draft, caret, guard, draftRev)` 并渲染
-   `controller.menu`，同时在会话 scope 上注册四个 `@mode bail` 输入事件
-   （`slash/input-begin-command` / `-insert-reference` / `-consume-token` /
-   `-insert-text`），每个监听器**只有编辑器真的改了**才返回 `true`。做一半的
-   driver 等于一半的谎言。
-3. **两个官方占位者在 Amiba 里没有样式。** `ui-input-trigger` 的 `MenuView` 与
-   `ui-commands` 的 `PopupSelectView` 都用 CSS module，其规则整篇写在
-   `--dsw-*` 设计令牌层之上（`--dsw-specific-menu`、`--dsw-alias-border-inverted`、
-   `--dsw-shadow-lv3`…）。全仓库源码里 `--dsw-` 出现 0 次；定义这批令牌的只有
-   `@deepseek-ai/dsh-client-ui-theme`（Amiba 明确不装，smoke 里有断言：它的
-   host 半边会往 served index 写一套跟 Amiba 自己调色板打架的开机配色）和官方
-   `dsh-web-frontend` 的产物（Amiba 不用它的 index）。直接启用，这两个浮层会
-   渲染成透明无边框的框。
+**为什么"启用服务"必须配"自己写 driver"。** `InputTriggerServiceContract` 只暴露
+`registerSource` 与 `sessionOf`，source roster 是 controller 私有的；插件注册的
+source 只有在宿主真的驱动 controller、并且真的回答四个作用域 `@mode bail` 输入
+事件时才会被查询。做一半的 driver 会让 `registerSource` 成功却永不被调用 ——
+那是沉默的谎言，比缺席更糟。Amiba 的驱动点（逐条可查）：
 
-由此得到的 menu owner 结论：**Amiba 自己的 `TriggerMenu` 必须继续是 `/` 与 `@`
-的菜单**，官方 `MenuView` 不能同时渲染。而 list slot 的派发没有"排除某个
-registrant"的选项（`RenderOpts` 只有 `only`），所以"声明并派发 overlay 席位 +
-启用 ui-input-trigger"必然让 MenuView 也渲染出来 —— 两个 owner。
+| 官方成员 | Amiba 驱动位置 |
+| --- | --- |
+| `track(draft, caret, guard, draftRev)` | `OfficialTriggerPlugin`，`registerUpdateListener` 内（只读，安全） |
+| `onSpace()` | `OfficialTriggerPlugin`，编辑器 root 上的**原生** keydown 监听 |
+| `adjudicate(line, signal)` | `Composer.handleSend` 的 Enter 路径 |
+| `pick(source, index)` / `dismiss()` | 被遮蔽席位里的 `OfficialTriggerMenu` |
+| `serializeReference(source, ref, signal)` | 提交期 `expandMentionsAsync` 的 chip 展开 |
+| `slash/input-{begin-command,insert-reference,consume-token,insert-text}` | `input-trigger-bridge.bindEditor`，代理到 Lexical 四个动词 |
 
-下次做的前置条件（按顺序）：
+`onSpace` 走原生监听而不是 Lexical command 是**结论性的**：command handler 运行在
+`editor.update` 内部，而嵌套的 `editor.update` 会被 Lexical 延后执行，四个动词就
+无法在返回前观测到"真的改了"。上游走的是同一结论的另一条路（它监听 textarea）。
 
-- **同 `id` 低 `priority` 遮蔽**是官方认可的机制：list 的 cell 就是 `id`，
-  同一 cell 内按 priority 升序取第一个存活 entry（同 priority 才 fail-loud）。
-  Amiba 用 `id: "slash-menu"` + `priority: -1` 注册自己的 `TriggerMenu`，就能
-  在官方机制内让唯一一个 owner 胜出，而不是靠屏蔽别人。
-- `ui-commands` 的 `PopupSelectView` 没有同等替身（搜索框、确认闸门、错误重试
-  都在里面），要它可用就得补一层 `--dsw-*` → Amiba 调色板的令牌桥（这两个组件
-  用到的是一个封闭集合，约 14 个别名），或者自建 popup。
-- driver 侧还欠：Lexical 的 draft/caret/draftRev/guard 推导、span↔Lexical 的
-  双向映射、四个 bail 监听器的"真的改了才 true"、命令模式的 token 完整性监视与
-  Enter 经 `claim.submit` 的路由，以及 `PickOutcome.insert` 与 Amiba
-  MentionNode/`serialize.ts` 的 codec 往返对齐。
-- 会话尚未物化的草稿（Amiba 先本地建会话、首次提交才物化 DSH 会话）没有官方
-  session scope，session scope 的 overlay 席位渲染为空；那种状态下菜单只能由
-  Amiba 自己出，这一点不随上面任何一条改变。
+唯一**故意不驱动**的成员是 `arbitrate`：它整段实现只碰 menu store 与 `pick`，
+背后没有任何 source 侧回调；而 Amiba 自己的 `TriggerMenu` 在**两个挂载路径**上都
+拥有键盘（↑↓/Tab 分组/Enter/Esc）。把方向键接到 `arbitrate` 会让会话内菜单的高亮
+模型与首页 composer 不一致 —— 那正是这套设计要避免的分叉。
+
+**"真的改了"是被观测的事实，不是假设。** 四个动词都在
+`editor.update(…, { discrete: true })` 里跑，然后从事后重扫的 draft（或一条被检查
+的后置条件）得出答案。因此：draftRev 过期的 span CAS 未命中 → false，且不碰树；
+结果逐字节相同的 splice → false；嵌套 update（闭包被延后）→ false。比上游更严
+（上游的 `adopt()` 无条件自增 draftRev），这是刻意的。
+
+**为什么官方像素被遮蔽（而不是采纳，也不是加令牌桥）。**
+`ui-input-trigger` 的 `MenuView` 与 `ui-commands` 的 `PopupSelectView` 的 CSS
+module 整篇写在 `--dsw-*` 设计令牌层之上；定义这批令牌的只有
+`@deepseek-ai/dsh-client-ui-theme`（Amiba 明确不装：它的 host 半边会往 served
+index 写一套跟 Amiba 调色板打架的开机配色）和官方 `dsh-web-frontend` 产物。
+popup 更进一步：它的风险闸门是 `dsh-client-ui-primitives` 的 `RiskConfirmation`，
+而该包的 **23 个 CSS module 全部以 `\0dsh-css-stub` 形式发布，每个导出都是
+`{}`** —— 规则只存在于官方 web frontend bundle 里。所以令牌桥根本救不了 popup：
+令牌只是缺口的一半，确认弹窗连规则都没有。评估结论是**遮蔽**。
+
+遮蔽用的是官方认可的机制：list 的 cell 就是 `id`，`SlotCore.entriesOfSlot` 在同一
+cell 内按 priority 升序取第一个存活 entry。amiba-ui-shell 以
+`id: "slash-menu"` / `id: "command-popup"` + `priority: -1` 注册自己的组件，官方
+两个 entry 的隐式 `0` 因此被遮住 —— 每个 cell 恰好渲染一个，且是 Amiba 的。
+被遮蔽的只有像素：`inputTriggers` / `commandUi` 服务、`PopupSelectController` 的
+单飞选择/本地过滤/确认闸门/token 消费/焦点回归，全部是官方逻辑。
+
+**一份实现，两个挂载点。** `TriggerMenu` 是唯一的菜单组件：
+- 会话内 → 被遮蔽的席位里 `OfficialTriggerMenu` 订阅 `controller.menu`；
+- 会话外（首页草稿 / Quick-Ask / 浏览器扩展）→ `TriggerMenuPlugin` 走
+  surface-local provider registry。
+`RichComposerEditor` 里的 `TriggerMounts` 是**唯一**做这个二选一的地方，且是互斥
+的 —— "会话内恰好一个菜单"因此是构造性成立的，并有断言（文档里只有一个
+`[data-composer-overlay]`）。两边的 source 是同一批 `InputTriggerSource` 对象，
+两边的 pick 走同一批 Lexical 动词，两边的分组标题来自同一张 `TRIGGER_SOURCE_LABELS`。
+
+**PickOutcome → Lexical 映射**（从 `dsh-client-ui-conversation/lib/client.js` 与
+`dsh-client-ui-input-trigger/lib/client.js` 推导）：
+
+| outcome | 事件 | draft 变换 | Amiba 实现 |
+| --- | --- | --- | --- |
+| `{ claim }` | `slash/input-begin-command` | `claim.token + draft.slice(span.end)`，phase→claimed | 替换 `[0, span.end)`；后置条件 `draft.startsWith(token)`；写入 `CommandClaimStore` |
+| `{ insert }` | `slash/input-insert-reference` | `[span)` → 一个 U+FFFC 占位 + 必要的分隔空格，并铸造 occurrence | `[span)` → 一个 `MentionNode`（chip 本身就是占位符）+ 同规则空格 |
+| `{ text }` | `slash/input-insert-text` | CAS 后 `[span)` → 字面文本 | 同 |
+| （业务成功后）| `slash/input-consume-token` | span：CAS 后剪掉；bare-token：`draft.trim() === token` 才清空 | 同 |
+| `'handled'` / `undefined` | 不派发 | 无 | `applyPickOutcome` 直接返回 false |
+
+`{ insert }` 的 codec 往返：新 chip 的 mention 类型是 `dsh.reference`，payload 为
+`{ source, ref, label, clipboardText }`，提交时经拥有它的 source 的
+`ReferenceCodec.serialize` 得到模型形态。旧 `@[skill:…]` / `@[session:…]` token 也
+被映射到同一批 codec（`legacyReferenceOf`），而不是保留第二套 serializer。
+序列化失败**阻塞发送**并显示原因，绝不静默降级为 clipboard 文本。
+
+**draft 投影。** 交给管线的 draft 里，一个 chip 只占 **一个 U+FFFC**（官方占位符
+约定），而 Amiba 持久化的 `value` 仍是 `@[type:body]` token。这不是装饰：把
+`@[…]` 喂给官方 detector 会让每个 chip 自己重新触发菜单（detector 向左扫会找到
+token 开头的那个 `@`）。用单字符占位后，紧跟 chip 输入触发字符能正常开菜单，
+chip 在前也能正确判成 `inline`。
+
+**detector 的镜像。** `detectTrigger` 没有被官方包导出（`files` 只发
+`lib/{index,invariant,client}.js` 与声明），会话内路径用的是 controller 里的真身，
+会话外路径用 `triggers/detect.ts` 的逐字节镜像（沿用 P1 `shell.overlay` 的
+"镜像 + 引用来源"模式）。**行为差异记录**：官方 detector 不是行首锚定的，所以
+行中 `/` 现在也算命中（`position: "inline"`）；Amiba 自己的两个 `/` source 对
+inline 位置一律返回空候选，用户可见行为因此不变，而 `ui-commands` 按上游策略
+自行决定——那是新启用插件的行为，不是内建行为的变更。
+
+**`command` source 的归属。** 会话内 `('/', "command")` 归 `ui-commands`
+（重复注册会抛，且会出现两个同名分组）；Amiba 只在**会话外**注册自己的
+`makeCommandSource()`。`officialTriggerSources()` 因此只发布 `skill` 与
+`session`，verify 有断言。
+
+**未物化草稿**：Amiba 先本地建会话、首次提交才物化 DSH 会话，此时没有官方
+session scope，`controllerFor` 返回 `undefined`，session scope 的 overlay 席位为
+空 —— 那种状态下菜单由 Amiba 自己的会话外路径出，与上面任何一条无关。
 
 同批仍未启用、且现在服务已存在的候选：`session-log-download`、`ui-skill`、
 `ui-subagent`、`ui-cordis`。

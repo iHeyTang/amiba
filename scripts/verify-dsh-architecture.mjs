@@ -539,6 +539,152 @@ if (
     "Composer must anchor the official conversation.input.overlay seat as a bare last-child dispatch inside the [data-composer-card] frame",
   );
 }
+// ---------------------------------------------------------------------------
+// The official input-trigger pipeline (Phase 4.3 completion). Three groups of
+// facts, each of which turns a lie into a compile-time-invisible runtime bug
+// if it drifts.
+// ---------------------------------------------------------------------------
+
+// 1. THE SHADOW. Both official overlay entries must be shadowed at the SAME id
+//    with a STRICTLY LOWER priority — that is the whole mechanism by which the
+//    official services stay live while Amiba owns the pixels. A missing or
+//    non-negative priority silently puts TWO menus on screen (and the official
+//    one paints transparent, because `--dsw-*` is undefined here).
+const triggerSeatsSource = await text(
+  "plugins/dsh-plugin-ui-shell/src/client/trigger-seats.tsx",
+);
+if (
+  !/SLASH_MENU_ENTRY_ID\s*=\s*"slash-menu"/u.test(triggerSeatsSource) ||
+  !/COMMAND_POPUP_ENTRY_ID\s*=\s*"command-popup"/u.test(triggerSeatsSource) ||
+  !/SHADOW_PRIORITY\s*=\s*-1\b/u.test(triggerSeatsSource)
+) {
+  fail(
+    "ui-shell must shadow the official conversation.input.overlay entries at their exact ids (slash-menu, command-popup) with priority -1",
+  );
+}
+const shellClientSource = await text(
+  "plugins/dsh-plugin-ui-shell/src/client/index.tsx",
+);
+for (const entry of ["SLASH_MENU_ENTRY_ID", "COMMAND_POPUP_ENTRY_ID"]) {
+  const registration = new RegExp(
+    String.raw`name: "conversation\.input\.overlay",\s*id: ${entry},\s*priority: SHADOW_PRIORITY,`,
+    "u",
+  );
+  if (!registration.test(shellClientSource)) {
+    fail(
+      `ui-shell must register ${entry} into conversation.input.overlay at the shadowing priority`,
+    );
+  }
+}
+
+// 2. THE FOUR BAIL LISTENERS. Each scoped `slash/input-*` event must be
+//    answered, and each answer must be `true` ONLY when the editor verb
+//    reported an applied mutation — the ternary is the load-bearing part. A
+//    listener returning a bare `true` lies to every source author.
+const triggerBridgeSource = await text(
+  "plugins/dsh-plugin-ui-shell/src/client/input-trigger-bridge.ts",
+);
+const bailListeners = [
+  ["slash/input-begin-command", "ops.beginCommand(request.claim, request.span)"],
+  [
+    "slash/input-insert-reference",
+    "ops.insertReference(request.reference, request.span)",
+  ],
+  ["slash/input-consume-token", "ops.consumeToken(request.guard)"],
+  ["slash/input-insert-text", "ops.insertText(request.text, request.span)"],
+];
+for (const [event, call] of bailListeners) {
+  const wiring = new RegExp(
+    String.raw`actx\.on\("${event}", \(request\) =>\s*${call
+      .replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)
+      .replace(/\\\(/gu, String.raw`\(`)} \? true : undefined`,
+    "u",
+  );
+  if (!wiring.test(triggerBridgeSource)) {
+    fail(
+      `input-trigger bridge must answer ${event} with true ONLY when the editor verb reports an applied mutation`,
+    );
+  }
+}
+// The claim submit must carry the REAL session-scope ctx. `@amiba/ui` has no
+// access to one; fabricating it is the exact half-honest member this adoption
+// refuses.
+if (!/claim\.submit\(args, actx\)/u.test(triggerBridgeSource)) {
+  fail(
+    "input-trigger bridge must run CommandClaim.submit against the resolved session-scope context",
+  );
+}
+
+// 3. THE DRIVER CALL SITES. Without these, `registerSource` succeeds and is
+//    never consulted. `track` feeds candidates, `onSpace` reaches
+//    `matchSpace`, `adjudicate` reaches `matchEnter`, `serializeReference`
+//    reaches `codec`. `onSpace` must ride a NATIVE root keydown listener, not
+//    a Lexical command: a command handler runs inside `editor.update`, where a
+//    nested update is deferred and the verbs could not report applied-truth.
+const driverSource = await text(
+  "packages/ui/src/chat/composer/plugins/OfficialTriggerPlugin.tsx",
+);
+for (const [pattern, what] of [
+  [/runtime\.bindEditor\(/u, "bindEditor (the four scoped bail listeners)"],
+  [/controller\.track\(/u, "controller.track on every editor update"],
+  [/controller\.onSpace\(\)/u, "controller.onSpace"],
+  [/registerRootListener/u, "a native root keydown listener for onSpace"],
+  [/claims\.watch\(/u, "the claim token integrity watch"],
+]) {
+  if (!pattern.test(driverSource)) {
+    fail(`OfficialTriggerPlugin must drive ${what}`);
+  }
+}
+if (/registerCommand[\s\S]{0,200}onSpace/u.test(driverSource)) {
+  fail(
+    "onSpace must not ride a Lexical command: a nested editor.update is deferred, so the bail verbs could not report applied-truth",
+  );
+}
+const composerTriggerSource = composerSource;
+for (const [pattern, what] of [
+  [/controller\.adjudicate\(/u, "controller.adjudicate on the Enter path"],
+  // Pinned inside the expansion CALL, not as a bare identifier: the same
+  // string appears in the prose above it, and a prose-satisfiable check let
+  // an earlier mutation slip past.
+  [
+    /expandMentionsAsync\(\s*value,\s*providerRegistry\.all,\s*trigger\.resolver,/u,
+    "reference serialization through the source codec at submit time",
+  ],
+  [/useComposerTriggers\(/u, "the composer trigger session"],
+]) {
+  if (!pattern.test(composerTriggerSource)) {
+    fail(`Composer must drive ${what}`);
+  }
+}
+// The two mount paths must stay exclusive: one menu per composer.
+const richComposerSource = await text(
+  "packages/ui/src/chat/composer/RichComposerEditor.tsx",
+);
+if (
+  !/if \(session\.official\) return <OfficialTriggerPlugin trigger=\{session\} \/>/u.test(
+    richComposerSource,
+  ) ||
+  !/<TriggerMenuPlugin/u.test(richComposerSource)
+) {
+  fail(
+    "RichComposerEditor must mount EXACTLY ONE trigger path: the official driver when a controller exists, the surface-local menu otherwise",
+  );
+}
+// Amiba must not register a second ('/', "command") source: `ui-commands`
+// owns that identity in-session and the service throws on duplicates.
+const dshSourcesSource = await text(
+  "packages/ui/src/chat/composer/providers/dsh-sources.ts",
+);
+if (
+  !/export function officialTriggerSources\(\): InputTriggerSource\[\] \{\s*return \[makeSkillSource\(\), makeSessionSource\(\)\];/u.test(
+    dshSourcesSource,
+  )
+) {
+  fail(
+    "officialTriggerSources must publish exactly the skill and session sources — ui-commands owns ('/', \"command\") in-session",
+  );
+}
+
 // Host anchor for conversation.session.header.actions: a title-adjacent row
 // that collapses (`:empty` → display:none) while the seat is unoccupied, so
 // an absent plugin costs neither a box nor a flex gap.
