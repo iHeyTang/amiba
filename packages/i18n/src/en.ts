@@ -443,10 +443,11 @@ export const en = {
   "options.preference.accent.cyan": "Electric Cyan",
   "options.preference.accent.lime": "Acid Lime",
   "options.preference.accent.graphite": "Graphite",
-  "options.preference.language": "Language",
-  "options.preference.language.auto": "Auto",
-  "options.preference.language.en": "English",
-  "options.preference.language.zh-CN": "简体中文",
+  // No `options.preference.language*` keys: the 语言 row is the official
+  // locale plugin's own, registered into `settings.general.item` and
+  // localized from its `settings.locale` namespace. Amiba's competing row
+  // was retired when the official locale service became the single language
+  // authority.
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
 
   // Models / DSH model config

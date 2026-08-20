@@ -4,11 +4,7 @@ import { Label } from "../primitives";
 import { Switch } from "../primitives";
 import { Input } from "../primitives";
 import { Button } from "../primitives";
-import {
-  type LanguagePreference,
-  useStoredLanguagePreference,
-  useT,
-} from "@amiba/i18n";
+import { useT } from "@amiba/i18n";
 import type { MessageKey, TranslateFn } from "@amiba/i18n";
 import { getPlatform } from "@amiba/app-runtime/platform";
 import {
@@ -74,8 +70,14 @@ export interface SettingsAppearanceProps {
    * registrant, contributed by the feature plugin that owns the preference
    * (upstream: locale → Language, ui-theme → Appearance, ui-conversation →
    * Composer Enter). This page IS Amiba's General section: it stacks the
-   * rows the product owns itself (language, theme, accent, wallpaper, message
-   * width) and this seat appends the contributed ones underneath.
+   * rows the product owns itself (theme, accent, wallpaper, message width)
+   * and this seat appends the contributed ones underneath.
+   *
+   * 语言 is NOT one of Amiba's own rows any more. The official locale plugin
+   * registers its `LanguageRow` into this very seat, and Amiba's competing
+   * control — a second `settings.ui.language` preference the official service
+   * could not see — has been retired: one row, one authority. See
+   * `plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts`.
    *
    * The owner share is empty by contract — "the section column only stacks
    * rows, so a row draws its own internals, including its label" — so the
@@ -88,14 +90,14 @@ export interface SettingsAppearanceProps {
 
 /**
  * Appearance settings — a top-level tab. Merges what used to be the
- * "Appearance" + "Chat" preference sub-tabs into one page (language, theme,
- * wallpaper, message width, quick actions).
+ * "Appearance" + "Chat" preference sub-tabs into one page (theme, accent,
+ * wallpaper, message width). 语言 lives in the official locale plugin's row,
+ * dispatched through `generalItems`.
  */
 export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {}) {
   const { t } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
   const [accentPref, setAccentPref] = useStoredAccentPreference();
-  const [langPref, setLangPref] = useStoredLanguagePreference();
   // Default `true` matches the new-tab page's runtime default (see
   // `useWallpaper`).
   const [wallpaperEnabled, setWallpaperEnabled] = useState(true);
@@ -103,12 +105,6 @@ export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {
     DEFAULT_MESSAGES_WIDTH,
   );
   const isDesktop = getPlatform().kind === "desktop";
-
-  const languageOptions: { value: LanguagePreference; label: string }[] = [
-    { value: "auto", label: t("options.preference.language.auto") },
-    { value: "en", label: t("options.preference.language.en") },
-    { value: "zh-CN", label: t("options.preference.language.zh-CN") },
-  ];
 
   const themeOptions: { value: ThemePreference; label: string }[] = [
     { value: "auto", label: t("options.preference.theme.auto") },
@@ -154,12 +150,9 @@ export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {
       </SettingsPageDescription>
       <AppearanceSection
         t={t}
-        langPref={langPref}
         themePref={themePref}
         accentPref={accentPref}
-        languageOptions={languageOptions}
         themeOptions={themeOptions}
-        onLangChange={(v) => void setLangPref(v)}
         onThemeChange={(v) => void setThemePref(v)}
         onAccentChange={(v) => void setAccentPref(v)}
         // Wallpaper backdrop is rendered by the extension's new-tab
@@ -241,12 +234,9 @@ export function SettingsShortcuts() {
 
 function AppearanceSection({
   t,
-  langPref,
   themePref,
   accentPref,
-  languageOptions,
   themeOptions,
-  onLangChange,
   onThemeChange,
   onAccentChange,
   showWallpaper,
@@ -254,12 +244,9 @@ function AppearanceSection({
   onWallpaperChange,
 }: {
   t: TranslateFn;
-  langPref: LanguagePreference;
   themePref: ThemePreference;
   accentPref: AccentPreference;
-  languageOptions: { value: LanguagePreference; label: string }[];
   themeOptions: { value: ThemePreference; label: string }[];
-  onLangChange: (v: LanguagePreference) => void;
   onThemeChange: (v: ThemePreference) => void;
   onAccentChange: (v: AccentPreference) => void;
   showWallpaper: boolean;
@@ -268,13 +255,6 @@ function AppearanceSection({
 }) {
   return (
     <div className="space-y-3">
-      <SegmentedRow
-        label={t("options.preference.language")}
-        ariaLabel={t("options.preference.language")}
-        value={langPref}
-        options={languageOptions}
-        onChange={onLangChange}
-      />
       <SegmentedRow
         label={t("options.preference.theme")}
         ariaLabel={t("options.preference.theme")}

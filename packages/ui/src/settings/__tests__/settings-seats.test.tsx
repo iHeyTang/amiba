@@ -115,12 +115,26 @@ describe("adopted settings.* seats", () => {
     // The seat is the LAST child of the page's row stack, so contributed
     // rows append below the product's own instead of interleaving.
     expect(rows!.lastElementChild).toBe(item);
-    // Same stack as the language/theme rows.
+    // Same stack as the product's own theme row.
     expect(
       within(rows as HTMLElement).getByRole("radiogroup", {
-        name: "Language",
+        name: "Theme",
       }),
     ).toBeVisible();
+  });
+
+  it("draws NO language row of its own — the seat's occupant is the only one", () => {
+    // Amiba used to stack its own 语言 control at the top of this page while
+    // the official locale plugin registered `LanguageRow` into the seat
+    // below it: two rows, two authorities, no sync. The product's row is
+    // retired, so the page contributes nothing named Language at all.
+    render(<SettingsView />);
+    expect(
+      screen.queryByRole("radiogroup", { name: "Language" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radiogroup", { name: "语言" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not leak the general-item seat onto other pages", () => {
