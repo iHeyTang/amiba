@@ -50,6 +50,18 @@ export const SESSION_SOURCE = "session";
  */
 export const COMMAND_SOURCE = "command";
 
+/**
+ * Menu group headings, keyed by source name. ONE table for both mounts, so
+ * the in-session menu and the home composer's cannot drift apart — and the
+ * strings are the exact literals Amiba's providers carried in their `group`
+ * field before the migration, so nothing the user reads changed.
+ */
+export const TRIGGER_SOURCE_LABELS: Record<string, string> = {
+  [SKILL_SOURCE]: "Skills",
+  [COMMAND_SOURCE]: "Commands",
+  [SESSION_SOURCE]: "Sessions",
+};
+
 async function resolveSessionId(
   preferred: string | undefined,
 ): Promise<string | undefined> {

@@ -1,0 +1,165 @@
+/**
+ * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
+ * input-trigger pipeline (`ctx.inputTriggers`, `ctx.commandUi`) — the piece
+ * that makes `registerSource` honest rather than a silent no-op.
+ *
+ * The composer cannot reach a cordis context and must not fabricate one, so
+ * everything context-shaped lives here:
+ *
+ *   - `controllerFor(sessionId)` resolves the session scope
+ *     (`ctx.sessions.scope`) and hands back the official per-session
+ *     `InputTriggerController`. `undefined` while the DSH session has not
+ *     materialized — Amiba mints sessions locally and the real one appears on
+ *     first submit — which is exactly when the session-scoped overlay seat is
+ *     empty anyway.
+ *   - `bindEditor(sessionId, ops)` mounts the four scoped `@mode bail`
+ *     listeners on that session scope, each returning `true` iff the Lexical
+ *     verb it delegates to actually mutated the editor. The listeners exist
+ *     EXACTLY while an editor is bound, so "no composer for this session" is
+ *     reported by the ABSENCE of a listener (the controller's `execute` sees
+ *     `bail` return undefined) rather than by a listener that lies.
+ *   - `submitClaim(...)` runs `CommandClaim.submit(args, actx)` with the real
+ *     session-scope context. The composer has no `actx` and passing a fake
+ *     one would be precisely the half-honest contract member this adoption
+ *     refuses.
+ *   - `bindComposerFocus(...)` forwards to `commandUi.bindComposerFocus`, the
+ *     hook the official popup shell uses to return focus after a settle.
+ */
+
+import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type {
+  CommandPopupController,
+  ComposerTriggerController,
+  ComposerTriggerRuntime,
+  TriggerEditorOps,
+} from "@amiba/ui";
+import type {
+  CommandClaim,
+  InputTriggerSource,
+  SubmitOutcome,
+} from "@amiba/extension-sdk";
+
+/** Everything the bridge needs from the client root context. */
+export interface InputTriggerBridgeDeps {
+  /** Resolve a session-scope ctx, or undefined for an unmaterialized session. */
+  scopeOf(sessionId: string): ClientContext | undefined;
+  /** The official `ctx.inputTriggers` face, absent when the row is disabled. */
+  inputTriggers(): {
+    registerSource(source: InputTriggerSource): () => void;
+    sessionOf(actx: ClientContext): ComposerTriggerController;
+  } | undefined;
+  /** The official `ctx.commandUi` face, absent when the row is disabled. */
+  commandUi():
+    | {
+        bindComposerFocus(id: never, focus: () => void): () => void;
+        popupFor(actx: ClientContext): unknown;
+      }
+    | undefined;
+}
+
+/**
+ * The official `PopupSelectController` members the shadow popup needs beyond
+ * the ones `CommandPopupController` already names. `popupFor` is typed
+ * `unknown` on the published contract, so this is the one place the concrete
+ * shape is asserted — and it is asserted against the class's own declaration
+ * in `dsh-client-ui-commands/lib/types/client/popup.d.ts`, not invented.
+ */
+export type OfficialPopupController = CommandPopupController & {
+  retry(): void;
+};
+
+export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  /** Publish Amiba's own sources; returns the aggregate disposer. */
+  registerSources(sources: readonly InputTriggerSource[]): () => void;
+  /** Resolve the official controller for a session (seat + composer share it). */
+  controllerFor(sessionId: string): ComposerTriggerController | undefined;
+  /** Resolve the official popupSelect controller for a session. */
+  popupFor(sessionId: string): OfficialPopupController | undefined;
+}
+
+export function createInputTriggerBridge(
+  deps: InputTriggerBridgeDeps,
+): AmibaInputTriggerBridge {
+  return {
+    registerSources(sources) {
+      const service = deps.inputTriggers();
+      if (service === undefined) return () => {};
+      const offs = sources.map((source) => service.registerSource(source));
+      return () => {
+        for (const off of offs) off();
+      };
+    },
+
+    controllerFor(sessionId) {
+      const service = deps.inputTriggers();
+      if (service === undefined || !sessionId) return undefined;
+      const actx = deps.scopeOf(sessionId);
+      if (actx === undefined) return undefined;
+      try {
+        return service.sessionOf(actx);
+      } catch {
+        // `sessionOf` throws for a ctx with no session scope. A draft whose
+        // DSH session has not materialized is exactly that, and it is not an
+        // error — the seat is simply empty until it does.
+        return undefined;
+      }
+    },
+
+    popupFor(sessionId) {
+      const command = deps.commandUi();
+      if (command === undefined || !sessionId) return undefined;
+      const actx = deps.scopeOf(sessionId);
+      if (actx === undefined) return undefined;
+      try {
+        return command.popupFor(actx) as OfficialPopupController;
+      } catch {
+        return undefined;
+      }
+    },
+
+    bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
+      const actx = deps.scopeOf(sessionId);
+      if (actx === undefined) return () => {};
+      // Each listener answers `true` ONLY when its verb reports an observed
+      // mutation; `undefined` is the bail protocol's "not handled here", so
+      // an unapplied outcome falls through exactly as it must.
+      const offs = [
+        actx.on("slash/input-begin-command", (request) =>
+          ops.beginCommand(request.claim, request.span) ? true : undefined,
+        ),
+        actx.on("slash/input-insert-reference", (request) =>
+          ops.insertReference(request.reference, request.span) ? true : undefined,
+        ),
+        actx.on("slash/input-consume-token", (request) =>
+          ops.consumeToken(request.guard) ? true : undefined,
+        ),
+        actx.on("slash/input-insert-text", (request) =>
+          ops.insertText(request.text, request.span) ? true : undefined,
+        ),
+      ];
+      return () => {
+        for (const off of offs) off();
+      };
+    },
+
+    bindComposerFocus(sessionId: string, focus: () => void): () => void {
+      const command = deps.commandUi();
+      if (command === undefined) return () => {};
+      return command.bindComposerFocus(sessionId as never, focus);
+    },
+
+    submitClaim(
+      sessionId: string,
+      claim: CommandClaim,
+      args: string,
+    ): Promise<SubmitOutcome> {
+      const actx = deps.scopeOf(sessionId);
+      if (actx === undefined) {
+        return Promise.reject(
+          new Error(`command: session "${sessionId}" resolved no scope`),
+        );
+      }
+      return Promise.resolve().then(() => claim.submit(args, actx));
+    },
+  };
+}

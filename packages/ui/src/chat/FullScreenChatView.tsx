@@ -27,6 +27,7 @@ import {
 
 import { useSessions, type ChatEngineClient } from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
+import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import { useT } from "@amiba/i18n";
 import { getPlatform, type StorageChangeMap } from "@amiba/app-runtime/platform";
 import { useResolvedTheme } from "../theme";
@@ -222,6 +223,12 @@ export interface FullScreenChatViewProps {
    */
   mentionProviders?: TriggerProvider[];
   /**
+   * The OFFICIAL input-trigger pipeline, supplied by the DSH plugin host.
+   * Forwarded verbatim to the inner `<ChatSurface triggerRuntime>` and on to
+   * the composer, which drives the per-session `InputTriggerController`.
+   */
+  triggerRuntime?: ComposerTriggerRuntime;
+  /**
    * Restore the last selected sidebar destination on mount. Desktop disables
    * this so every app launch lands on the id-less chat home; other hosts keep
    * the existing persisted-navigation behaviour by default.
@@ -257,6 +264,7 @@ function FullScreenChatViewInner({
   topBarHeightPx,
   topBarClassName,
   mentionProviders,
+  triggerRuntime,
   restoreSidebarViewOnMount = true,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
@@ -771,6 +779,7 @@ function FullScreenChatViewInner({
                   openSettings={openSettings}
                   openAgentDestination={openAgentDestination}
                   mentionProviders={mentionProviders}
+                  triggerRuntime={triggerRuntime}
                 />
               </main>
             </PrimaryWorkspaceView>

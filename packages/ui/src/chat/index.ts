@@ -131,7 +131,30 @@ export { insertMentionAtTrigger } from "./composer/providers/skills";
 export { makeWorkspaceFilesProvider } from "./workspace-files-provider";
 export type {
   TriggerProvider,
+  TriggerHitContext,
   MenuItem,
   MentionData,
   MentionType,
 } from "./composer/providers/types";
+
+// The OFFICIAL input-trigger pipeline, as the DSH plugin host consumes it.
+//
+// `officialTriggerSources()` is what the host registers with
+// `ctx.inputTriggers.registerSource`; `OfficialTriggerMenu` and
+// `CommandPopup` are the two components the host puts into the shadowed
+// `conversation.input.overlay` cells (`slash-menu` and `command-popup`,
+// `priority: -1`). `ComposerTriggerRuntime` is the face the host implements
+// and hands back to `<Composer triggerRuntime={…}>`.
+export { OfficialTriggerMenu } from "./composer/triggers/OfficialTriggerMenu";
+export { CommandPopup, filterOptions } from "./composer/triggers/CommandPopup";
+export type { CommandPopupController } from "./composer/triggers/CommandPopup";
+export {
+  TRIGGER_SOURCE_LABELS,
+  localTriggerSources,
+  officialTriggerSources,
+} from "./composer/providers/dsh-sources";
+export type {
+  ComposerTriggerController,
+  ComposerTriggerRuntime,
+  TriggerEditorOps,
+} from "./composer/triggers/contracts";

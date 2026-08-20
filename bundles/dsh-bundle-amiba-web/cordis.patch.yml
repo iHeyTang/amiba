@@ -57,37 +57,54 @@
 - id: ui-workspace
   disabled: true
 
-# These two rows stay disabled TOGETHER and for one reason, audited in
-# Phase 4.3 (full record: docs/2026-08-15-dsh-native-architecture.md §4.1).
-# The SEAT they render into — `conversation.input.overlay` — IS declared and
-# dispatched by amiba-ui-shell; what is missing is an honest driver.
-#   - `ui-commands` cannot run without `ui-input-trigger`: `inputTriggers` is
-#     the first entry of its `inject` list, its service constructor throws
-#     `ui-commands: slash service unavailable` when the service is absent, and
-#     it publishes its `/command` rows through `registerSource`.
-#   - `ui-input-trigger` only tells the truth if the HOST owns the driver: the
-#     service face exposes `registerSource`/`sessionOf` alone, so a registered
-#     source is consulted only once the host drives
-#     `controller.track/arbitrate/onSpace/adjudicate` AND answers the four
-#     scoped `@mode bail` input events (begin-command / insert-reference /
-#     consume-token / insert-text) with `true` ONLY when its editor actually
-#     mutated. Amiba's composer is Lexical, not the official input machine, so
-#     that driver is real work — and half of it would make `registerSource`
-#     succeed while never being consulted, a silent lie to plugin authors.
-#   - Both packages' overlay components (`MenuView`, `PopupSelectView`) are
-#     styled from CSS modules written against the `--dsw-*` token layer, which
-#     ONLY `dsh-client-ui-theme` defines — the one row Amiba must keep out (its
-#     host half writes a boot palette that fights Amiba's own). Enabled as-is
-#     they would paint transparent, border-less boxes. A list dispatch has no
-#     "exclude this registrant" option (`RenderOpts` carries `only`, not its
-#     inverse), so enabling ui-input-trigger while Amiba's own `TriggerMenu`
-#     still renders would put TWO menus on screen; the sanctioned way out is a
-#     same-`id`, lower-`priority` shadow of `slash-menu`.
-- id: ui-input-trigger
-  disabled: true
-
-- id: ui-commands
-  disabled: true
+# ENABLED in Phase 4.3 (completion). Full record:
+# docs/2026-08-15-dsh-native-architecture.md §4.1.
+#
+# These two rows are the `/` and `@` pipeline: `ui-input-trigger` provides
+# `inputTriggers` (source registry + per-session controller) and `ui-commands`
+# provides `commandUi` (the `/` command source over `remote.commands`, client
+# contributions, and the popupSelect shell). `ui-commands` hard-depends on
+# `ui-input-trigger` — `inputTriggers` is `inject[0]` and its constructor
+# throws `ui-commands: slash service unavailable` — so they enable together.
+#
+# WHAT MAKES `registerSource` HONEST HERE. The service face is
+# `registerSource`/`sessionOf` alone, so a registered source is consulted only
+# if the HOST drives the controller and answers the four scoped `@mode bail`
+# input events. amiba-ui-shell does both:
+#   - `packages/ui/src/chat/composer/plugins/OfficialTriggerPlugin.tsx` drives
+#     `track` on every editor update and `onSpace` from a native keydown
+#     listener (a Lexical command handler runs inside `editor.update`, where a
+#     nested update would be DEFERRED and could not report applied-truth);
+#     `Composer.handleSend` drives `adjudicate`; the shadowed menu drives
+#     `pick`/`dismiss`; submit-time chip expansion drives
+#     `serializeReference`.
+#   - `plugins/dsh-plugin-ui-shell/src/client/input-trigger-bridge.ts` mounts
+#     `slash/input-{begin-command,insert-reference,consume-token,insert-text}`
+#     on the session scope, each returning `true` ONLY when the Lexical verb
+#     reports an OBSERVED mutation (re-scanned draft / checked post-condition),
+#     never "we called update so it worked".
+#   The ONE controller member Amiba does not drive is `arbitrate`: it is a
+#   menu-internal keyboard helper with no source-facing callback behind it,
+#   and Amiba's own `TriggerMenu` owns the keyboard identically on both of its
+#   mount paths — routing arrows through `arbitrate` would give the in-session
+#   menu a different highlight model than the home composer's.
+#
+# WHY THE OFFICIAL PIXELS ARE SHADOWED. Both packages' overlay components
+# (`MenuView`, `PopupSelectView`) are styled from CSS modules written against
+# the `--dsw-*` token layer, which ONLY `dsh-client-ui-theme` defines — the one
+# row Amiba must keep out (its host half writes a boot palette that fights
+# Amiba's own). The popup is worse: its risk gate is `RiskConfirmation` from
+# `dsh-client-ui-primitives`, whose 23 CSS modules ship STUBBED
+# (`\0dsh-css-stub`, every export `{}`) because their rules live in the
+# official web frontend bundle Amiba does not serve — so no `--dsw-*` bridge
+# could have styled it. amiba-ui-shell therefore registers CELL SHADOWS at the
+# same ids (`slash-menu`, `command-popup`) with `priority: -1`, the sanctioned
+# mechanism: `SlotCore.entriesOfSlot` elects the lowest-priority entry per
+# cell, so exactly one renders and it is Amiba's.
+#
+# (No rows here on purpose: both entries are absent from this patch list,
+# which is what "enabled" means. `scripts/dsh-runtime/smoke.mjs` pins their
+# absence so a re-disabling cannot land silently.)
 
 - id: ui-skill
   disabled: true

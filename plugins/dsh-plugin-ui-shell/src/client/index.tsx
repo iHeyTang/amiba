@@ -21,6 +21,18 @@ import {
   createSessionsBridge,
   type AmibaSessionsBridge,
 } from "./sessions-bridge.js";
+import {
+  createInputTriggerBridge,
+  type AmibaInputTriggerBridge,
+} from "./input-trigger-bridge.js";
+import {
+  AmibaCommandPopupSeat,
+  AmibaSlashMenuSeat,
+  COMMAND_POPUP_ENTRY_ID,
+  SHADOW_PRIORITY,
+  SLASH_MENU_ENTRY_ID,
+} from "./trigger-seats.js";
+import { TRIGGER_SOURCE_LABELS, officialTriggerSources } from "@amiba/ui";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
@@ -68,6 +80,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     settingsSections: SettingsSectionsSource;
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
+    triggerRuntime: AmibaInputTriggerBridge;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -87,6 +100,7 @@ function AmibaRoot({
   settingsSections,
   openSettingsSection,
   sessionsBridge,
+  triggerRuntime,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -101,6 +115,7 @@ function AmibaRoot({
       renderSlot={renderSlot}
       sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
+      triggerRuntime={triggerRuntime}
     />
   );
 }
@@ -230,6 +245,29 @@ export async function apply(ctx: ClientContext): Promise<void> {
         new CustomEvent("amiba:open-session", { detail: { sessionId } }),
       );
     });
+    // The OFFICIAL input-trigger pipeline. Services are resolved lazily on
+    // every call (`ctx.get`) so boot order stays free and a disabled row is
+    // simply an absent service rather than a crash.
+    const triggerRuntime = createInputTriggerBridge({
+      scopeOf: (sessionId) =>
+        ctx.sessions.scope(sessionId as never) as unknown as
+          | ClientContext
+          | undefined,
+      inputTriggers: () =>
+        ctx.get("inputTriggers") as unknown as ReturnType<
+          Parameters<typeof createInputTriggerBridge>[0]["inputTriggers"]
+        >,
+      commandUi: () =>
+        ctx.get("commandUi") as unknown as ReturnType<
+          Parameters<typeof createInputTriggerBridge>[0]["commandUi"]
+        >,
+    });
+    // Amiba's own `/` and `@` sources, published through the official
+    // registry rather than a private one — so a plugin's `registerSource`
+    // and Amiba's own land in the same menu, ranked by the same `order`.
+    const disposeSources = triggerRuntime.registerSources(
+      officialTriggerSources(),
+    );
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -244,6 +282,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           openSettingsSection: (sectionId: string) =>
             layout.openSettings(sectionId),
           sessionsBridge,
+          triggerRuntime,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -346,7 +385,45 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaRoot,
     );
+    // CELL SHADOWS of the two official `conversation.input.overlay` entries.
+    // Same ids, `priority: -1` against their implicit `0`, so the ledger
+    // elects Amiba's component per cell while the official SERVICES stay
+    // live. Registered after the root because the root's children table is
+    // what declares the seat.
+    const disposeSlashMenu = ctx.slots.register(
+      {
+        name: "conversation.input.overlay",
+        id: SLASH_MENU_ENTRY_ID,
+        priority: SHADOW_PRIORITY,
+        order: 0,
+        inject: (sessionId) => ({
+          controller: triggerRuntime.controllerFor(String(sessionId)),
+          labels: TRIGGER_SOURCE_LABELS,
+          loadingLabel: undefined,
+        }),
+      },
+      AmibaSlashMenuSeat,
+    );
+    const disposeCommandPopup = ctx.slots.register(
+      {
+        name: "conversation.input.overlay",
+        id: COMMAND_POPUP_ENTRY_ID,
+        priority: SHADOW_PRIORITY,
+        order: 1,
+        inject: (sessionId) => {
+          const popup = triggerRuntime.popupFor(String(sessionId));
+          return {
+            popup,
+            retry: popup === undefined ? undefined : () => popup.retry(),
+          };
+        },
+      },
+      AmibaCommandPopupSeat,
+    );
     return () => {
+      disposeCommandPopup();
+      disposeSlashMenu();
+      disposeSources();
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();

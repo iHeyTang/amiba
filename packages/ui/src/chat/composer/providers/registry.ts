@@ -1,7 +1,7 @@
 import type { TriggerProvider } from "./types"
 import { CommandClaimStore } from "../triggers/claim"
 import { DraftRevision } from "../triggers/editor-ops"
-import { localTriggerSources } from "./dsh-sources"
+import { TRIGGER_SOURCE_LABELS, localTriggerSources } from "./dsh-sources"
 import { sourceToProvider } from "./source-adapter"
 
 export interface ProviderRegistry {
@@ -52,7 +52,8 @@ export function buildProviderRegistry(
           sessionId: context.sessionId,
           claims,
           revision,
-          label: context.labels?.[source.name],
+          label:
+            context.labels?.[source.name] ?? TRIGGER_SOURCE_LABELS[source.name],
         }),
       )
   const all = [...builtin, ...extra]

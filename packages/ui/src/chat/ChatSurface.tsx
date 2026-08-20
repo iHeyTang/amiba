@@ -98,6 +98,7 @@ import type {
   ChatSurfaceCapabilities,
 } from "./internal/capabilities";
 import type { TriggerProvider } from "./composer/providers/types";
+import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import { PendingQueueRail } from "./internal/PendingQueueRail";
 import { useApprovals } from "./internal/useApprovals";
 import { useConversationWorkspace } from "./internal/useConversationWorkspace";
@@ -297,6 +298,14 @@ export interface ChatSurfaceProps {
    * personas / channels providers.
    */
   mentionProviders?: TriggerProvider[];
+  /**
+   * The OFFICIAL input-trigger pipeline, supplied by the DSH plugin host.
+   * With it the composer drives the per-session `InputTriggerController` and
+   * its menu renders from the shadowed `conversation.input.overlay` seat;
+   * without it (Quick-Ask, the browser extension) the composer keeps its
+   * surface-local provider registry over the same sources.
+   */
+  triggerRuntime?: ComposerTriggerRuntime;
 
   /**
    * Open Settings, optionally at the recovery pane chosen by ErrorBlock.
@@ -380,6 +389,7 @@ export default function ChatSurface({
   capabilities = {},
   slots,
   mentionProviders,
+  triggerRuntime,
   openSettings,
   openAgentDestination,
 }: ChatSurfaceProps) {
@@ -1853,6 +1863,7 @@ export default function ChatSurface({
       }
       attachments={att}
       mentionProviders={mentionProviders}
+      triggerRuntime={triggerRuntime}
       agentPicker={{
         value: effectiveAgent,
         profileLocked,

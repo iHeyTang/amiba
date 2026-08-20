@@ -22,6 +22,7 @@ import {
   makeWorkspaceFilesProvider,
   type ChatSurfaceCapabilities,
   type ComposerModelPickerRequest,
+  type ComposerTriggerRuntime,
   type PendingPromptAttachment,
   type PendingPromptResult,
   type ToolCallSeatRequest,
@@ -280,12 +281,14 @@ export function AmibaProductShell({
   renderSlot,
   sessionsBridge,
   settingsSections,
+  triggerRuntime,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
   sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
+  triggerRuntime?: ComposerTriggerRuntime;
 }): ReactElement {
   return (
     <SessionsProvider>
@@ -295,6 +298,7 @@ export function AmibaProductShell({
         renderSlot={renderSlot}
         sessionsBridge={sessionsBridge}
         settingsSections={settingsSections}
+        triggerRuntime={triggerRuntime}
       />
     </SessionsProvider>
   );
@@ -306,12 +310,14 @@ function ProductShellInner({
   renderSlot,
   sessionsBridge,
   settingsSections,
+  triggerRuntime,
 }: {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
   sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
+  triggerRuntime?: ComposerTriggerRuntime;
 }): ReactElement {
   const { t } = useT();
   const platform = getPlatform();
@@ -508,6 +514,7 @@ function ProductShellInner({
         client={client}
         capabilities={capabilities}
         mentionProviders={mentionProviders}
+        triggerRuntime={triggerRuntime}
         openSettings={(tab) => {
           if (tab) window.location.hash = tab;
           setView("settings");
