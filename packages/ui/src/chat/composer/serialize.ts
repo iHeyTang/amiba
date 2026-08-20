@@ -1,11 +1,21 @@
 import type { BuiltinMentionType, MentionData } from "./providers/types"
 
 // Built-in mention types: payload field order for the colon/pipe body.
+//
+// `skill` and `session` are LEGACY: chips minted before the official
+// input-trigger adoption carry them, and a draft persisted then must still
+// rehydrate and still serialize to the same model form. New chips from a
+// `/` or `@` pick are `dsh.reference` (below) — one shape for every source,
+// Amiba's own and any plugin's.
 const BUILTIN_FIELDS: Record<BuiltinMentionType, string[]> = {
   skill: ["name"],
   session: ["id", "title"],
   file: ["path"],
   page: ["tabId", "title"], // page may have no fields -> "@[page:]"
+  // The official reference occurrence: which source owns it, the
+  // source-scoped id its `codec.serialize` resolves, and the two user-facing
+  // projections the owner supplied at insert time.
+  "dsh.reference": ["source", "ref", "label", "clipboardText"],
 }
 
 // Dynamic mention types contributed by managed extension providers, keyed by

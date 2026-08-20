@@ -15,7 +15,9 @@ import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ImperativeHandlePlugin, type RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
 import { MentionSerializePlugin } from "./plugins/MentionSerializePlugin"
+import { OfficialTriggerPlugin } from "./plugins/OfficialTriggerPlugin"
 import { TriggerMenuPlugin } from "./plugins/TriggerMenuPlugin"
+import { useComposerTriggers, type ComposerTriggerSession } from "./triggers/session"
 import type { TriggerProvider } from "./providers/types"
 
 export type { RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
@@ -46,6 +48,21 @@ export interface RichComposerEditorProps {
   mentionProviders?: TriggerProvider[]
   /** Active runtime session used for scoped DSH Skill/Command discovery. */
   sessionId?: string
+  /**
+   * The composer's trigger session (`useComposerTriggers`). Decides which of
+   * the TWO mount paths runs — and only one of them ever does, so exactly one
+   * menu exists per composer:
+   *
+   *   - `trigger.official` → `OfficialTriggerPlugin` drives the official
+   *     per-session controller and the menu renders from the shadowed
+   *     `conversation.input.overlay` seat (outside this editor);
+   *   - otherwise → `TriggerMenuPlugin` detects locally and renders the same
+   *     `TriggerMenu` from the surface-local provider registry.
+   *
+   * Absent entirely (older embedders) the local path runs with a throwaway
+   * session, exactly as before the adoption.
+   */
+  trigger?: ComposerTriggerSession
 }
 
 export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEditorProps>(
@@ -64,6 +81,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
       children,
       mentionProviders,
       sessionId,
+      trigger,
     } = props
     return (
       <LexicalComposer initialConfig={baseEditorConfig({ editable: !disabled })}>
@@ -112,10 +130,45 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
           <ImperativeHandlePlugin handleRef={ref} />
-          <TriggerMenuPlugin extraProviders={mentionProviders} sessionId={sessionId} />
+          <TriggerMounts
+            mentionProviders={mentionProviders}
+            sessionId={sessionId}
+            trigger={trigger}
+          />
           {children}
         </div>
       </LexicalComposer>
     )
   },
 )
+
+/**
+ * Mount EXACTLY ONE of the two trigger paths.
+ *
+ * This is the single place the choice is made, and it is exclusive by
+ * construction — which is what acceptance-tests as "exactly one menu renders
+ * in-session". The official path contributes no menu of its own here: the
+ * menu for that path lives in the shadowed `conversation.input.overlay` seat,
+ * rendered by the host from the same `TriggerMenu` component.
+ */
+function TriggerMounts({
+  mentionProviders,
+  sessionId,
+  trigger,
+}: {
+  mentionProviders?: TriggerProvider[]
+  sessionId?: string
+  trigger?: ComposerTriggerSession
+}) {
+  // Always called (hooks rule); used only when the embedder passed none.
+  const fallback = useComposerTriggers({ sessionId })
+  const session = trigger ?? fallback
+  if (session.official) return <OfficialTriggerPlugin trigger={session} />
+  return (
+    <TriggerMenuPlugin
+      extraProviders={mentionProviders}
+      sessionId={sessionId}
+      trigger={session}
+    />
+  )
+}

@@ -138,23 +138,71 @@ export type ConversationHeaderActionsOwnerProps = OwnerOf<"conversation.session.
  * type-visible to every SDK consumer.
  *
  * `InputTriggerSource` and the `PickOutcome` family are exported for authors
- * writing `/` and `@` sources. NOTE the runtime caveat recorded below on
- * {@link ConversationInputOverlayOwnerProps}: Amiba declares and DISPATCHES
- * the overlay seat, but composes NO `inputTriggers` service today (the
- * official `ui-input-trigger` row stays disabled), so `ctx.inputTriggers` is
- * type-visible and `undefined` at runtime. A source registration therefore
- * has no pipeline to join yet; the seat itself is live for any occupant that
- * brings its own store.
+ * writing `/` and `@` sources. As of Phase 4.3 (completion) the official
+ * `ui-input-trigger` row is ENABLED in Amiba's web bundle and Amiba owns the
+ * driver, so `ctx.inputTriggers.registerSource(...)` is LIVE: a registered
+ * source's `candidates` / `onPick` / `matchSpace` / `matchEnter` / `warm` /
+ * `lexicon` / `codec` are all actually consulted by the composer. The
+ * one contract member Amiba deliberately does NOT drive is
+ * `InputTriggerController.arbitrate` — see
+ * {@link ConversationInputOverlayOwnerProps} for why (it is a menu-internal
+ * keyboard helper with no source-facing callback behind it, and Amiba's own
+ * menu owns the keyboard on both of its mount paths).
  */
 export type {
+  ArbitrateKey,
+  ArbitrateOutcome,
+  BeginCommandRequest,
+  CandidateRequest,
+  ClientSessionContext,
   CommandClaim,
+  ConsumeTokenRequest,
   InputTriggerCandidate,
   InputTriggerPick,
+  InputTriggerServiceContract,
   InputTriggerSource,
+  InsertReferenceRequest,
+  MenuState,
   PickOutcome,
   ReferenceCodec,
   ReferenceInsert,
+  SubmitOutcome,
+  TokenSpan,
+  TriggerChar,
+  TriggerGuard,
+  TriggerPosition,
 } from "@deepseek-ai/dsh-client-ui-input-trigger/client";
+
+/**
+ * The engine's minimal observable-snapshot face. Re-exported because every
+ * store an overlay occupant reads (`InputTriggerController.menu`,
+ * `PopupSelectController.state`) is one of these, and an Amiba-side mirror of
+ * the shape would be a second definition of an official contract.
+ */
+export type { ObservableSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+
+/**
+ * Merge anchor for the official COMMAND-UI vocabulary (`ctx.commandUi`, from
+ * `@deepseek-ai/dsh-client-ui-commands`). Enabled in Amiba's web bundle as of
+ * Phase 4.3, so `commandUi.register({ name, ui: { kind: "popupSelect", … } })`
+ * is live for plugin authors. The named re-exports keep the package on the
+ * built declaration graph (the settings.section lesson) so the `commandUi`
+ * Context merge reaches every SDK consumer.
+ *
+ * Amiba SHADOWS the official `command-popup` overlay entry with its own
+ * popup — see {@link ConversationInputOverlayOwnerProps}. The registration
+ * contract (`CommandContribution` / `CommandUiSpec` / `SelectOption` /
+ * `SelectConfirmation`) is unchanged; only the pixels are Amiba's.
+ */
+export type {
+  CommandContribution,
+  CommandDecoration,
+  CommandUiContract,
+  CommandUiSpec,
+  PopupState,
+  SelectConfirmation,
+  SelectOption,
+} from "@deepseek-ai/dsh-client-ui-commands/client";
 
 /**
  * Official owner contract of `conversation.input.overlay` — the composer's
@@ -175,15 +223,38 @@ export type {
  * decide whether an outside pointerdown should dismiss them. An unoccupied
  * seat renders literally nothing — no wrapper, no box, no flex gap.
  *
- * RUNTIME CAVEAT (recorded honestly, Phase 4.3): the two official packages
- * that occupy this seat upstream — `ui-input-trigger`'s `MenuView` and
- * `ui-commands`' popup shell — are NOT enabled in Amiba's bundles, so the
- * seat is unoccupied by official code and Amiba's own `TriggerMenu` remains
- * the `/` and `@` menu. Both official occupants style themselves from CSS
- * modules written against the `--dsw-*` design-token layer, which ONLY
- * `@deepseek-ai/dsh-client-ui-theme` defines and which Amiba deliberately
- * keeps out of the client graph (it would fight Amiba's own palette). See
- * `docs/2026-08-15-dsh-native-architecture.md` for the full record.
+ * OCCUPANCY (Phase 4.3 completion): `ui-input-trigger` and `ui-commands` are
+ * both ENABLED, so both official packages register their overlay entries here
+ * — and Amiba SHADOWS both of them through the sanctioned cell-shadowing
+ * mechanism: same `id` (`slash-menu`, `command-popup`), `priority: -1`
+ * against their implicit `0`. `SlotCore.entriesOfSlot` keeps the first entry
+ * per cell in ascending-priority order, so exactly ONE entry renders per cell
+ * and it is Amiba's.
+ *
+ * Why shadow rather than adopt the official pixels: both official components
+ * are styled from CSS modules written against the `--dsw-*` design-token
+ * layer, which ONLY `@deepseek-ai/dsh-client-ui-theme` defines — the one row
+ * Amiba must keep out (its host half writes a boot palette that fights
+ * Amiba's own). Worse for the popup: its risk gate is
+ * `RiskConfirmation` from `@deepseek-ai/dsh-client-ui-primitives`, whose CSS
+ * modules ship STUBBED (`\0dsh-css-stub`, every export `{}`) — 23 of them,
+ * zero rules, zero class names. Their styling lives only in the official web
+ * frontend bundle, which Amiba does not serve. A `--dsw-*` token bridge
+ * therefore could not have made the popup coherent: the tokens are only half
+ * the gap, and the confirmation modal has no rules to receive them.
+ *
+ * What Amiba does NOT shadow is the pipeline: `ctx.inputTriggers` and
+ * `ctx.commandUi` are the official services, and Amiba's composer drives the
+ * official `InputTriggerController` (`track` / `onSpace` / `adjudicate` /
+ * `pick` / `dismiss` / `serializeReference`) and answers the four scoped
+ * `slash/input-*` bail events. The single deliberate omission is
+ * `arbitrate`: it is a menu-internal keyboard helper (its whole body touches
+ * only the menu store and `pick`) with no source-facing callback behind it,
+ * and Amiba's own `TriggerMenu` owns the keyboard identically on both of its
+ * mount paths — routing arrows through `arbitrate` would give the in-session
+ * menu a different highlight model than the home composer's.
+ *
+ * See `docs/2026-08-15-dsh-native-architecture.md` §4.1 for the full record.
  */
 export type ConversationInputOverlayOwnerProps = OwnerOf<"conversation.input.overlay">;
 

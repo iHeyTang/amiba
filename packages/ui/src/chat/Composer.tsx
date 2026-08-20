@@ -38,6 +38,8 @@ import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types";
 import { buildProviderRegistry } from "./composer/providers/registry";
 import { expandMentionsAsync } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
+import { useComposerTriggers } from "./composer/triggers/session";
+import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
@@ -390,6 +392,21 @@ export interface ComposerProps {
    * otherwise it falls through to a normal send.
    */
   slashUiActions?: SlashUiActionContext;
+  /**
+   * The OFFICIAL input-trigger pipeline, supplied by the DSH plugin host.
+   *
+   * With it (and a `permissionSessionId` whose DSH session has materialized)
+   * the composer drives the official per-session `InputTriggerController`:
+   * every plugin's `inputTriggers.registerSource(...)` group appears in the
+   * menu, `/`-commands enter command mode, and reference chips serialize
+   * through their source's `codec` on submit. The menu itself renders from
+   * the shadowed `conversation.input.overlay` seat.
+   *
+   * Without it (Quick-Ask, the browser extension, the home/draft composer
+   * before its session materializes) the composer keeps its surface-local
+   * provider registry — same sources, same menu component, same editor verbs.
+   */
+  triggerRuntime?: ComposerTriggerRuntime;
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
@@ -442,6 +459,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       wrapperProps,
       mentionProviders,
       slashUiActions,
+      triggerRuntime,
     },
     ref,
   ) {
@@ -452,37 +470,127 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       [mentionProviders],
     );
 
-    // Active provider list (built-in @ skills + / commands, plus the resolved
-    // mention providers). Used both for the trigger menu and send-time
-    // `@[...]` expansion.
+    // The official trigger pipeline for this composer (or the session-less
+    // fallback). Owns command mode, the draft revision every span CAS is
+    // checked against, and reference resolution at submit time.
+    const trigger = useComposerTriggers({
+      runtime: triggerRuntime,
+      sessionId: permissionSessionId,
+      disabled,
+    });
+
+    // Provider list used ONLY for send-time `@[...]` expansion of chips whose
+    // model form is provider-owned (host-contributed mention providers). The
+    // built-ins no longer serialize here — a reference chip resolves through
+    // its source's official `codec`, routed by `trigger.resolver`.
     const providerRegistry = useMemo(
       () =>
         buildProviderRegistry(effectiveMentionProviders, {
           sessionId: permissionSessionId,
+          omitBuiltins: true,
         }),
       [effectiveMentionProviders, permissionSessionId],
     );
 
-    // Single normal-send path. Slash UI-action commands with a wired handler
-    // are performed and NOT sent; everything else expands `@[...]` mention
-    // tokens to text (a no-op for plain messages) and submits. Abort / stop /
-    // queue branches do NOT route through here.
+    // A command-mode submit failure, or a reference serialization failure.
+    // Never a silent downgrade: the draft is kept and the reason is shown.
+    const [commandNotice, setCommandNotice] = useState<string | null>(null);
+
+    // Single normal-send path. Order mirrors upstream's `onEnter`:
+    //   1. command mode (a claim owns Enter),
+    //   2. slash UI-actions with a wired handler,
+    //   3. official Enter adjudication for a `/`-leading draft,
+    //   4. ordinary send with `@[...]` expansion.
+    // Abort / stop / queue branches do NOT route through here.
     const resolvingMentionRef = useRef(false);
     const handleSend = useCallback(async () => {
-      if (routeSubmit(value, { send: () => {}, ctx: slashUiActions ?? {} }))
-        return; // UI action handled, don't send
+      const handled = routeSubmit(value, {
+        send: () => {},
+        ctx: slashUiActions ?? {},
+        claim: {
+          current: trigger.claims.get(),
+          run: (claim, args) => {
+            setCommandNotice(null);
+            const submit = trigger.submitClaim;
+            if (submit === null) {
+              setCommandNotice(
+                `/${claim.token.trim().slice(1)}: no command runtime on this surface`,
+              );
+              return;
+            }
+            trigger.setAttemptInFlight(true);
+            void submit(claim, args)
+              .then(
+                (outcome) => {
+                  trigger.setAttemptInFlight(false);
+                  if (outcome.kind === "success") {
+                    trigger.claims.release();
+                    onChange("");
+                    if (outcome.text) setCommandNotice(outcome.text);
+                    return;
+                  }
+                  setCommandNotice(outcome.text ?? "command failed");
+                },
+                (error: unknown) => {
+                  trigger.setAttemptInFlight(false);
+                  setCommandNotice(
+                    error instanceof Error ? error.message : String(error),
+                  );
+                },
+              );
+          },
+        },
+      });
+      if (handled) return; // command claim or UI action took it, don't send
       if (resolvingMentionRef.current) return;
       resolvingMentionRef.current = true;
       try {
-        const finalText = await expandMentionsAsync(
-          value,
-          providerRegistry.all,
-        );
+        // Enter adjudication: give every registered source its `matchEnter`
+        // turn before the draft becomes an ordinary message. Only the
+        // `{ claim }` arm and `undefined` act, exactly as upstream's
+        // `onAdjudicated` does — `'handled'` means the source dealt with it.
+        const controller = trigger.controller;
+        const trimmed = value.trim();
+        if (controller !== undefined && trimmed.startsWith("/")) {
+          const attempt = new AbortController();
+          trigger.setAttemptInFlight(true);
+          let outcome;
+          try {
+            outcome = await controller.adjudicate(trimmed, attempt.signal);
+          } catch (error) {
+            setCommandNotice(
+              error instanceof Error ? error.message : String(error),
+            );
+            return;
+          } finally {
+            trigger.setAttemptInFlight(false);
+          }
+          if (outcome !== undefined) {
+            if (outcome !== "handled" && "claim" in outcome) {
+              trigger.claims.begin(outcome.claim);
+            }
+            return;
+          }
+        }
+        let finalText: string;
+        try {
+          finalText = await expandMentionsAsync(
+            value,
+            providerRegistry.all,
+            trigger.resolver,
+          );
+        } catch (error) {
+          setCommandNotice(
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+        setCommandNotice(null);
         onSubmit(finalText);
       } finally {
         resolvingMentionRef.current = false;
       }
-    }, [value, slashUiActions, providerRegistry, onSubmit]);
+    }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger]);
 
     useImperativeHandle(
       ref,
@@ -771,6 +879,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             }}
             mentionProviders={effectiveMentionProviders}
             sessionId={permissionSessionId}
+            trigger={trigger}
             onKeyDownExtra={onKeyDownExtra}
             onPaste={handlePaste}
             className={cn(
@@ -874,12 +983,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             the wrapper so the picker click-fallback path works on
             browsers without `showOpenFilePicker`. */}
         {attachments ? <input {...attachments.fileInputProps} /> : null}
-        {floatingNotice ? (
+        {floatingNotice || commandNotice ? (
           <div
-            className="pointer-events-none absolute inset-x-2 top-full z-30 flex justify-center pt-2"
+            className="pointer-events-none absolute inset-x-2 top-full z-30 flex flex-col items-center gap-1 pt-2"
             data-composer-floating-notice=""
           >
             {floatingNotice}
+            {/* Command-mode / reference-serialization failures. Upstream
+                surfaces these through the input machine's notice channel;
+                Amiba has no such channel, so the composer owns this one
+                strip. The draft is ALWAYS retained — a failed command or a
+                failed `codec.serialize` must never silently downgrade into
+                an ordinary message. */}
+            {commandNotice ? (
+              <span
+                data-composer-command-notice=""
+                className="pointer-events-auto rounded-md border border-destructive/40 bg-background px-2 py-1 text-xs text-destructive shadow-sm"
+                role="status"
+              >
+                {commandNotice}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {extrasBelow ? (

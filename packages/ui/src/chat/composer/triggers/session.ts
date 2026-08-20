@@ -1,0 +1,123 @@
+/**
+ * The composer's trigger session: everything one composer instance needs to
+ * speak the official pipeline, resolved once per (runtime, session) pair.
+ *
+ * Two mounts, one model:
+ *   - `official: true` — the host runtime resolved a per-session
+ *     `InputTriggerController`. The composer DRIVES it (track / onSpace /
+ *     adjudicate / serializeReference) and the menu renders from the
+ *     shadowed `conversation.input.overlay` seat.
+ *   - `official: false` — no plugin runtime, or a draft whose DSH session has
+ *     not materialized yet. The composer's own provider registry serves the
+ *     menu, over the SAME sources and through the SAME editor verbs.
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReferenceResolver } from "../expandMentions";
+import {
+  localReferenceResolver,
+  localTriggerSources,
+} from "../providers/dsh-sources";
+import { CommandClaimStore } from "./claim";
+import type {
+  CommandClaim,
+  ComposerTriggerController,
+  ComposerTriggerRuntime,
+  SubmitOutcome,
+  TriggerGuard,
+} from "./contracts";
+import { DraftRevision } from "./editor-ops";
+
+export interface ComposerTriggerSession {
+  readonly claims: CommandClaimStore;
+  readonly revision: DraftRevision;
+  /** The official controller, when the host runtime resolved one. */
+  readonly controller?: ComposerTriggerController;
+  /** True exactly when the official pipeline owns this composer's menu. */
+  readonly official: boolean;
+  readonly runtime?: ComposerTriggerRuntime;
+  readonly sessionId?: string;
+  /** Model-form resolution for reference chips at submit time. */
+  readonly resolver: ReferenceResolver;
+  /**
+   * Run a command claim's submit transaction against the session scope, or
+   * `null` on a surface with no plugin runtime (where a claim cannot occur —
+   * Amiba's own sources never return one).
+   */
+  readonly submitClaim:
+    | ((claim: CommandClaim, args: string) => Promise<SubmitOutcome>)
+    | null;
+  /** The availability tier handed to `track` (upstream's `guardOf(phase)`). */
+  guard(): TriggerGuard;
+  /** Mark a submit attempt in flight: `'frozen'` suppresses both triggers. */
+  setAttemptInFlight(inFlight: boolean): void;
+}
+
+export interface UseComposerTriggersOptions {
+  runtime?: ComposerTriggerRuntime;
+  sessionId?: string;
+  /** The composer is not editable: upstream freezes the triggers too. */
+  disabled?: boolean;
+}
+
+export function useComposerTriggers(
+  options: UseComposerTriggersOptions,
+): ComposerTriggerSession {
+  const { runtime, sessionId, disabled = false } = options;
+  const claims = useMemo(() => new CommandClaimStore(), []);
+  const revision = useMemo(() => new DraftRevision(), []);
+  const attemptRef = useRef(false);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+
+  // The controller is resolved in an effect, not during render: on a freshly
+  // minted draft the DSH session materializes later, so the first answer is
+  // legitimately `undefined` and the seat is legitimately empty.
+  const [controller, setController] = useState<
+    ComposerTriggerController | undefined
+  >(undefined);
+  useEffect(() => {
+    if (runtime === undefined || !sessionId) {
+      setController(undefined);
+      return;
+    }
+    setController(runtime.controllerFor(sessionId));
+  }, [runtime, sessionId]);
+
+  // A session switch abandons any command mode: the claim belonged to the
+  // draft that just went away.
+  useEffect(() => {
+    claims.release();
+  }, [claims, sessionId]);
+
+  const resolver = useMemo<ReferenceResolver>(() => {
+    if (controller !== undefined) return controller;
+    return localReferenceResolver(localTriggerSources(sessionId));
+  }, [controller, sessionId]);
+
+  return useMemo<ComposerTriggerSession>(
+    () => ({
+      claims,
+      revision,
+      controller,
+      official: controller !== undefined,
+      runtime,
+      sessionId,
+      resolver,
+      submitClaim:
+        runtime?.submitClaim !== undefined && sessionId
+          ? (claim: CommandClaim, args: string): Promise<SubmitOutcome> =>
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              runtime.submitClaim!(sessionId, claim, args)
+          : null,
+      guard(): TriggerGuard {
+        if (attemptRef.current || disabledRef.current) return { tier: "frozen" };
+        return { tier: claims.get() !== null ? "claimed" : "plain" };
+      },
+      setAttemptInFlight(inFlight: boolean) {
+        attemptRef.current = inFlight;
+      },
+    }),
+    [claims, controller, resolver, revision, runtime, sessionId],
+  );
+}

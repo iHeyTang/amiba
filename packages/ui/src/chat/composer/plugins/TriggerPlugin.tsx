@@ -1,41 +1,53 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
-import { $getSelection, $isRangeSelection } from "lexical"
 import { useEffect } from "react"
+import { detectTrigger, type TriggerHit } from "../triggers/detect"
+import { $caretOffset, $scanDraft } from "../triggers/lexical-draft"
+import type { ComposerTriggerSession } from "../triggers/session"
 
-export interface TriggerState {
-  trigger: "/" | "@"
-  query: string
-  start: number // index of the trigger char within the current text run
-}
+/**
+ * A live trigger token, in TRIGGER-DRAFT coordinates (chips count as one
+ * U+FFFC each — see `triggers/lexical-draft.ts`). Identical in shape and
+ * meaning to the official `TriggerHit`, so a pick routed through this state
+ * carries the same `TokenSpan` an in-session pick does.
+ */
+export type TriggerState = TriggerHit
 
-/** Pure detector: given the text before the caret, find an open trigger.
- *  Slash is line-anchored and its query spans the whole line (so multi-word
- *  subcommands like "/reasoning low" keep the menu open). @ stops at whitespace. */
-export function detectTrigger(textToCaret: string, _caret: number): TriggerState | null {
-  const slashLine = /^\/([^\n]*)$/.exec(textToCaret)
-  if (slashLine) {
-    return { trigger: "/", query: slashLine[1], start: 0 }
-  }
-  const m = /(^|\s)(@)([^\s]*)$/.exec(textToCaret)
-  if (!m) return null
-  const query = m[3]
-  const start = textToCaret.length - query.length - 1
-  return { trigger: "@", query, start }
-}
+export { detectTrigger }
 
-export function TriggerPlugin({ onTrigger }: { onTrigger: (s: TriggerState | null) => void }) {
+/**
+ * Surface-local detection for composers with no official controller (home /
+ * draft composer, Quick-Ask, the browser extension). The in-session composer
+ * does NOT mount this: there `InputTriggerController.track` runs the real
+ * upstream detector.
+ */
+export function TriggerPlugin({
+  onTrigger,
+  trigger,
+}: {
+  onTrigger: (s: TriggerState | null) => void
+  trigger: ComposerTriggerSession
+}) {
   const [editor] = useLexicalComposerContext()
   useEffect(() => {
+    let lastDraft: string | null = null
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
-        const sel = $getSelection()
-        if (!$isRangeSelection(sel) || !sel.isCollapsed()) { onTrigger(null); return }
-        const node = sel.anchor.getNode()
-        const offset = sel.anchor.offset
-        const textToCaret = node.getTextContent().slice(0, offset)
-        onTrigger(detectTrigger(textToCaret, offset))
+        const scan = $scanDraft()
+        const caret = $caretOffset(scan)
+        if (scan.draft !== lastDraft) {
+          lastDraft = scan.draft
+          trigger.revision.bump()
+          trigger.claims.watch(scan.draft)
+        }
+        if (caret === null) {
+          onTrigger(null)
+          return
+        }
+        onTrigger(
+          detectTrigger(scan.draft, caret, trigger.guard(), trigger.revision.value),
+        )
       })
     })
-  }, [editor, onTrigger])
+  }, [editor, onTrigger, trigger])
   return null
 }

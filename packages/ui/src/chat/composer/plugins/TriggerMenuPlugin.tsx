@@ -4,20 +4,41 @@ import { useT } from "@amiba/i18n";
 import { TriggerMenu } from "../TriggerMenu";
 import { TriggerPlugin, type TriggerState } from "./TriggerPlugin";
 import { buildProviderRegistry } from "../providers/registry";
-import type { MenuGroup, MenuItem, TriggerProvider } from "../providers/types";
+import type { ComposerTriggerSession } from "../triggers/session";
+import type {
+  MenuGroup,
+  MenuItem,
+  TriggerHitContext,
+  TriggerProvider,
+} from "../providers/types";
 
+/**
+ * The SESSION-LESS mount of Amiba's trigger menu: local detection, the local
+ * provider registry, and the shared `TriggerMenu`.
+ *
+ * The in-session composer mounts `OfficialTriggerPlugin` instead and its menu
+ * comes from the shadowed `conversation.input.overlay` seat — so exactly one
+ * menu exists per composer, and both render the same component.
+ */
 export function TriggerMenuPlugin({
   extraProviders,
   sessionId,
+  trigger,
 }: {
   extraProviders?: TriggerProvider[];
   sessionId?: string;
+  trigger: ComposerTriggerSession;
 }) {
   const [editor] = useLexicalComposerContext();
   const { t } = useT();
   const registry = useMemo(
-    () => buildProviderRegistry(extraProviders ?? [], { sessionId }),
-    [extraProviders, sessionId],
+    () =>
+      buildProviderRegistry(extraProviders ?? [], {
+        sessionId,
+        claims: trigger.claims,
+        revision: trigger.revision,
+      }),
+    [extraProviders, sessionId, trigger],
   );
   const [state, setState] = useState<TriggerState | null>(null);
   const [groups, setGroups] = useState<MenuGroup[]>([]);
@@ -25,6 +46,9 @@ export function TriggerMenuPlugin({
   const [error, setError] = useState<string | null>(null);
   // item -> owning provider, for routing onSelect. Rebuilt per result set.
   const providerByItem = useRef(new Map<MenuItem, TriggerProvider>());
+  // The hit the current result set was fetched for; a pick replaces exactly
+  // that span, the same CAS material an in-session pick carries.
+  const hitRef = useRef<TriggerHitContext | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,9 +56,19 @@ export function TriggerMenuPlugin({
       setGroups([]);
       setError(null);
       setLoading(false);
+      hitRef.current = null;
       return;
     }
     const query = state.query;
+    const hit: TriggerHitContext = {
+      position: state.position,
+      span: {
+        start: state.span.start,
+        end: state.span.end,
+        draftRev: state.span.draftRev,
+      },
+    };
+    hitRef.current = hit;
     const providers = registry
       .forTrigger(state.trigger)
       .filter((p) => p.match(query) !== false);
@@ -54,23 +88,23 @@ export function TriggerMenuPlugin({
         // A provider whose search needs a query but has none: surface its
         // empty-state hint instead of searching (which would return nothing).
         if (!query && p.requiresQuery) {
-          const hint = p.emptyHint || t("composer.mention.typeToSearch");
+          const emptyHint = p.emptyHint || t("composer.mention.typeToSearch");
           return Promise.resolve({
             provider: p,
             label,
             items: [] as MenuItem[],
-            hint,
+            hint: emptyHint,
           });
         }
-        return p.search(query).then(
+        return p.search(query, hit).then(
           (items) => {
             // Persistent categories stay in the menu with no results — show a
             // "no results" empty state rather than dropping the group.
-            const hint =
+            const emptyHint =
               items.length === 0 && p.persistent
                 ? t("composer.mention.noResults")
                 : undefined;
-            return { provider: p, label, items, hint };
+            return { provider: p, label, items, hint: emptyHint };
           },
           () => {
             throw p.id;
@@ -117,14 +151,16 @@ export function TriggerMenuPlugin({
   }, [state, registry, t]);
 
   function handleSelect(item: MenuItem) {
-    providerByItem.current.get(item)?.onSelect(item, editor);
+    providerByItem.current
+      .get(item)
+      ?.onSelect(item, editor, hitRef.current ?? undefined);
     setState(null);
     setGroups([]);
   }
 
   return (
     <>
-      <TriggerPlugin onTrigger={setState} />
+      <TriggerPlugin onTrigger={setState} trigger={trigger} />
       {state && (
         <TriggerMenu
           groups={groups}

@@ -1,22 +1,60 @@
 import type { TriggerProvider } from "./types"
-import { makeSkillsProvider } from "./skills"
-import { makeSlashProvider } from "./slash"
-import { makeSessionsProvider } from "./sessions"
+import { CommandClaimStore } from "../triggers/claim"
+import { DraftRevision } from "../triggers/editor-ops"
+import { localTriggerSources } from "./dsh-sources"
+import { sourceToProvider } from "./source-adapter"
 
 export interface ProviderRegistry {
   all: TriggerProvider[]
   forTrigger(trigger: "/" | "@"): TriggerProvider[]
 }
 
+export interface ProviderRegistryContext {
+  /** Session the built-in sources are asked about. */
+  sessionId?: string
+  /**
+   * Shared command-mode store and draft revision. The composer passes its
+   * own so a `{ claim }` pick on the home composer enters the same command
+   * mode the in-session path enters; omitted (tests, send-time expansion)
+   * they default to throwaway instances.
+   */
+  claims?: CommandClaimStore
+  revision?: DraftRevision
+  /**
+   * Drop Amiba's own `/` and `@` sources. The IN-SESSION composer sets this:
+   * there the same sources are registered with the official
+   * `ctx.inputTriggers` service and rendered from the shadowed overlay seat,
+   * so a second surface-local copy would mean two menus.
+   */
+  omitBuiltins?: boolean
+  /** Menu group labels by source name. */
+  labels?: Record<string, string>
+}
+
+/**
+ * The SESSION-LESS trigger registry: Amiba's own sources adapted to the
+ * surface-local provider shape, plus whatever the host contributed.
+ *
+ * There is no second definition of the built-ins here — `localTriggerSources`
+ * returns the very `InputTriggerSource` objects the in-session path registers
+ * with the official service, and `sourceToProvider` only re-shapes them.
+ */
 export function buildProviderRegistry(
   extra: TriggerProvider[] = [],
-  context: { sessionId?: string } = {},
+  context: ProviderRegistryContext = {},
 ): ProviderRegistry {
-  const builtin: TriggerProvider[] = [
-    makeSkillsProvider(context.sessionId),
-    makeSlashProvider(context.sessionId),
-    makeSessionsProvider(),
-  ]
+  const claims = context.claims ?? new CommandClaimStore()
+  const revision = context.revision ?? new DraftRevision()
+  const builtin = context.omitBuiltins
+    ? []
+    : localTriggerSources(context.sessionId).map((source) =>
+        sourceToProvider(source, {
+          sessionId: context.sessionId,
+          claims,
+          revision,
+          label: context.labels?.[source.name],
+        }),
+      )
   const all = [...builtin, ...extra]
   return {
     all,
@@ -29,7 +67,7 @@ export function buildProviderRegistry(
  */
 export async function buildProviderRegistryAsync(
   extra: TriggerProvider[] = [],
-  context: { sessionId?: string } = {},
+  context: ProviderRegistryContext = {},
 ): Promise<ProviderRegistry> {
   return buildProviderRegistry(extra, context)
 }

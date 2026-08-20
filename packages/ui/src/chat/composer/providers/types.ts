@@ -1,7 +1,18 @@
 import type { ReactNode } from "react"
 import type { LexicalEditor } from "lexical"
 
-export type BuiltinMentionType = "skill" | "session" | "file" | "page"
+export type BuiltinMentionType =
+  | "skill"
+  | "session"
+  | "file"
+  | "page"
+  /**
+   * The official reference occurrence minted from an `{ insert }`
+   * `PickOutcome`. Its payload names the owning `InputTriggerSource`, so the
+   * model form comes from that source's `ReferenceCodec` — never from a
+   * per-type serializer duplicated in the composer.
+   */
+  | "dsh.reference"
 
 // Built-in types plus dynamic registry keys (`<integration>.<type>`, e.g.
 // "amiba.extension") contributed by managed extension providers. The
@@ -26,14 +37,28 @@ export interface MenuItem {
   subcommands?: string[]          // slash：进入二级补全
 }
 
+/**
+ * The trigger-hit context a surface-local search / pick runs under. Carries
+ * the two facts the OFFICIAL `CandidateRequest` and `InputTriggerPick` carry
+ * that a bare query string cannot: where the token sits, and which draft
+ * range the pick must replace. Optional so the ~dozen existing external
+ * providers (host-supplied `mentionProviders`) keep compiling untouched.
+ */
+export interface TriggerHitContext {
+  /** leading = the trimmed draft starts with the token; else inline. */
+  position: "leading" | "inline"
+  /** Trigger-draft range of the token, and the revision it was read at. */
+  span: { start: number; end: number; draftRev: number }
+}
+
 export interface TriggerProvider {
   trigger: "/" | "@"
   id: string
   group?: string
   ownsType?: MentionType
   match(query: string): boolean | number
-  search(query: string): Promise<MenuItem[]>
-  onSelect(item: MenuItem, editor: LexicalEditor): void
+  search(query: string, hit?: TriggerHitContext): Promise<MenuItem[]>
+  onSelect(item: MenuItem, editor: LexicalEditor, hit?: TriggerHitContext): void
   serialize?(mention: MentionData): string
   /** Resolve a selected Resource at send time and inject its current content. */
   resolveMention?(mention: MentionData): Promise<string>
