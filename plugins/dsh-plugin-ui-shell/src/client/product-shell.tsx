@@ -7,22 +7,33 @@ import {
   getPlatform,
   type AgentModelSelection,
 } from "@amiba/app-runtime/platform";
-import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
+import type { SessionListState } from "@deepseek-ai/dsh-client-runtime/client";
+import type {
+  PropsRenderSlots,
+  SnapshotSelectorHook,
+} from "@deepseek-ai/dsh-client-ui-slots";
 import type {
   AmibaRootSlot,
   ConversationInputPlanOwnerProps,
 } from "@amiba/extension-sdk";
 
 import type { AmibaSessionsBridge } from "./sessions-bridge.js";
+import {
+  useSettingsShell,
+  type SettingsOnboardingStepsSource,
+} from "./settings-shell.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
   HomeView,
+  SettingsDialog,
+  SettingsTriggerContent,
   SettingsView,
   makeWorkspaceFilesProvider,
   type ChatSurfaceCapabilities,
   type ComposerModelPickerRequest,
   type ComposerTriggerRuntime,
+  type OnboardingStepRow,
   type PendingPromptAttachment,
   type PendingPromptResult,
   type ToolCallSeatRequest,
@@ -35,7 +46,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
   type ReactElement,
   type ReactNode,
@@ -43,8 +53,8 @@ import {
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
-
-type View = "chat" | "settings";
+/** Names the settings dialog after its navigation heading (aria-labelledby). */
+const SETTINGS_TITLE_ID = "amiba-settings-title";
 
 export interface SettingsSectionRow {
   id: string;
@@ -58,12 +68,16 @@ export interface SettingsSectionsSource {
   subscribe: (listener: () => void) => () => void;
 }
 
+export type { OnboardingStepRow, SettingsOnboardingStepsSource };
+
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
  * vocabulary plus the official names the root declares
- * (`settings.section`, `shell.overlay`, the two session-header seats —
+ * (the whole adopted `settings.*` family — `settings.section` plus the six
+ * shell-level seats `settings.trigger` / `.header` / `.action` / `.close` /
+ * `.onboarding` / `.general.item` — `shell.overlay`, the two session-header seats —
  * `conversation.session.header.utilities`, the right-aligned strip that
  * replaced the retired `amiba.chat.header.after`, and
  * `conversation.session.header.actions`, the title-adjacent action row —
@@ -83,6 +97,12 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
+  | "settings.trigger"
+  | "settings.header"
+  | "settings.action"
+  | "settings.close"
+  | "settings.onboarding"
+  | "settings.general.item"
   | "shell.overlay"
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
@@ -275,31 +295,34 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
   });
 }
 
-export function AmibaProductShell({
-  dshClient,
-  openSettingsSection,
-  renderSlot,
-  sessionsBridge,
-  settingsSections,
-  triggerRuntime,
-}: {
+interface ProductShellProps {
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
   sessionsBridge?: AmibaSessionsBridge;
   settingsSections?: SettingsSectionsSource;
+  settingsOnboardingSteps?: SettingsOnboardingStepsSource;
   triggerRuntime?: ComposerTriggerRuntime;
-}): ReactElement {
+  /**
+   * The framework's `useSessions` standard hook (`GlobalStandardProps`),
+   * handed down from the root entry. It is the OFFICIAL sessions list store —
+   * the same one upstream's settings shell reads — and the only thing the
+   * onboarding coordinator's active fact depends on.
+   *
+   * REQUIRED, and a hook, so it is called unconditionally: the framework puts
+   * it on every slot component's props, so the one construction site
+   * (`AmibaRoot`) always has it. Making it optional would mean either a
+   * conditional hook call or a fabricated `SessionListState` standing in for
+   * the real store — the second is exactly the kind of invention this
+   * adoption forbids.
+   */
+  useOfficialSessions: SnapshotSelectorHook<SessionListState>;
+}
+
+export function AmibaProductShell(props: ProductShellProps): ReactElement {
   return (
     <SessionsProvider>
-      <ProductShellInner
-        dshClient={dshClient}
-        openSettingsSection={openSettingsSection}
-        renderSlot={renderSlot}
-        sessionsBridge={sessionsBridge}
-        settingsSections={settingsSections}
-        triggerRuntime={triggerRuntime}
-      />
+      <ProductShellInner {...props} />
     </SessionsProvider>
   );
 }
@@ -310,15 +333,10 @@ function ProductShellInner({
   renderSlot,
   sessionsBridge,
   settingsSections,
+  settingsOnboardingSteps,
   triggerRuntime,
-}: {
-  dshClient: DshApiClient;
-  openSettingsSection: (sectionId: string) => void;
-  renderSlot: AmibaShellRenderSlot;
-  sessionsBridge?: AmibaSessionsBridge;
-  settingsSections?: SettingsSectionsSource;
-  triggerRuntime?: ComposerTriggerRuntime;
-}): ReactElement {
+  useOfficialSessions,
+}: ProductShellProps): ReactElement {
   const { t } = useT();
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
@@ -328,6 +346,17 @@ function ProductShellInner({
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
   );
+  // Settings is a MODAL LAYER, not a route: the chat surface stays mounted
+  // behind it, exactly as the official settings shell layers its panel over
+  // the app frame. The section a given open lands on stays hash-owned, so
+  // every existing deep link keeps working — it now opens the dialog on that
+  // section instead of swapping the whole main area. The same hook runs the
+  // official onboarding coordinator.
+  const settings = useSettingsShell({
+    steps: settingsOnboardingSteps,
+    useOfficialSessions,
+  });
+  const { open: settingsOpen, close: closeSettings } = settings;
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
   const sessions = useSessions();
@@ -345,7 +374,6 @@ function ProductShellInner({
         : [],
     [platform.workspaceFiles],
   );
-  const [view, setView] = useState<View>("chat");
   const pendingOpenSessionRef = useRef<string | null>(null);
 
   useEffect(() => () => client.dispose(), [client]);
@@ -354,13 +382,16 @@ function ProductShellInner({
     const onLayoutAction = (event: Event) => {
       const detail = (event as CustomEvent<Record<string, unknown>>).detail;
       const action = detail?.action;
+      // `open-settings` is handled by useSettingsShell (it owns the dialog's
+      // open state and the hash addressing); the three actions below are the
+      // ones that LEAVE settings, so they close it.
       if (action === "open-chat") {
-        setView("chat");
+        closeSettings();
         return;
       }
       if (action === "open-workspace" && typeof detail.viewId === "string") {
         void platform.storage.set({ [SIDEBAR_VIEW_KEY]: detail.viewId });
-        setView("chat");
+        closeSettings();
         return;
       }
       if (action === "toggle-sidebar") {
@@ -369,20 +400,12 @@ function ProductShellInner({
           const current = await platform.storage.get(key);
           await platform.storage.set({ [key]: current[key] !== true });
         })();
-        return;
       }
-      if (action !== "open-settings") return;
-      if (typeof detail.sectionId === "string") {
-        const base = window.location.pathname + window.location.search;
-        window.history.replaceState(null, "", `${base}#dsh:${detail.sectionId}`);
-        window.dispatchEvent(new HashChangeEvent("hashchange"));
-      }
-      setView("settings");
     };
     window.addEventListener("amiba:dsh-layout-action", onLayoutAction);
     return () =>
       window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
-  }, [platform.storage]);
+  }, [closeSettings, platform.storage]);
 
   // The composer's model-picker chip, seat-split (R5): the official
   // session-scoped conversation.input.model while the composer has a
@@ -422,6 +445,23 @@ function ProductShellInner({
     [renderSlot],
   );
 
+  // The official `settings.trigger` seat. Owner share = `{ wide }`, the
+  // sidebar column state, which only the chat view knows — hence a renderer
+  // rather than a node. Amiba's own gear + label rides as the dispatch
+  // `fallback`, so an unoccupied SINGLE seat leaves the row exactly as it
+  // was. Amiba deliberately registers no entry of its own here: a priority-0
+  // occupant on a single slot makes the next registration THROW, which would
+  // lock every third-party plugin out of the seat.
+  const renderSettingsTrigger = useCallback(
+    (owner: { wide: boolean }) =>
+      renderSlot("settings.trigger", owner, {
+        fallback: <SettingsTriggerContent wide={owner.wide} />,
+      }),
+    [renderSlot],
+  );
+
+  const { onboardingStepId, completeOnboardingStep } = settings;
+
   const openSession = useCallback(
     async (sessionId: string) => {
       const target = sessionId.trim();
@@ -433,9 +473,15 @@ function ProductShellInner({
       await sessions.refresh();
       await sessions.openTab(target);
       await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
-      setView("chat");
+      closeSettings();
     },
-    [platform.storage, sessions.openTab, sessions.ready, sessions.refresh],
+    [
+      closeSettings,
+      platform.storage,
+      sessions.openTab,
+      sessions.ready,
+      sessions.refresh,
+    ],
   );
 
   useEffect(() => {
@@ -468,43 +514,6 @@ function ProductShellInner({
     sessionsBridge?.setActive(sessions.activeId);
   }, [sessionsBridge, sessions.activeId]);
 
-  if (view === "settings") {
-    return (
-      <div data-amiba-product-shell className="h-screen w-full">
-        <SettingsView
-          dshSections={sections}
-          slots={{
-            assistantNavigation: (activeSection) => (
-              <SettingsSectionNavigation
-                activeSection={activeSection}
-                openSettings={openSettingsSection}
-                sections={sections}
-              />
-            ),
-            // Official settings.section owner contract: `close` is the one
-            // shell affordance a section receives, wired to the same
-            // leave-Settings path as the sidebar's Home row (onGoHome).
-            section: (sectionId) =>
-              renderSlot(
-                "settings.section",
-                { close: () => setView("chat") },
-                { only: sectionId },
-              ),
-            contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
-          }}
-          onGoHome={() => setView("chat")}
-          sidebarHeaderLeftInset={topBarLeftInset}
-          sidebarHeaderHeightPx={topBarHeightPx}
-          sidebarHeaderClassName={desktop ? "app-drag-region" : undefined}
-          paneHeaderClassName={desktop ? "app-drag-region" : undefined}
-          paneHeaderChromeHeightPx={
-            desktop ? topBarHeightPx : undefined
-          }
-        />
-      </div>
-    );
-  }
-
   return (
     <div
       data-amiba-product-shell
@@ -515,9 +524,14 @@ function ProductShellInner({
         capabilities={capabilities}
         mentionProviders={mentionProviders}
         triggerRuntime={triggerRuntime}
+        settingsOpen={settingsOpen}
         openSettings={(tab) => {
+          // ErrorBlock's recovery targets are registry hash ids
+          // (`models`/`connection`/`logs`), not `settings.section` ids, so
+          // they are written raw — SettingsView's own routing resolves an
+          // unknown bare id against the section ledger.
           if (tab) window.location.hash = tab;
-          setView("settings");
+          settings.openAt();
         }}
         openAgentDestination={(url) => platform.shell.openExternal(url)}
         topBarLeftInset={topBarLeftInset}
@@ -528,11 +542,12 @@ function ProductShellInner({
           emptyState: (
             <HomeView
               onOpenChat={() => {}}
-              onOpenSettings={() => setView("settings")}
+              onOpenSettings={() => settings.openAt()}
               panelMode
               modelPicker={renderModelPickerSeat}
             />
           ),
+          settingsTrigger: renderSettingsTrigger,
           modelPicker: renderModelPickerSeat,
           planSeat: renderPlanSeat,
           // The official composer overlay anchor. The seat declares NO owner
@@ -563,9 +578,85 @@ function ProductShellInner({
           contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />
+      {/*
+        Settings, as a modal dialog layered over the chat surface above.
+        The structure is the official shell's (mask + `role="dialog"
+        aria-modal="true"` panel named through `aria-labelledby`, Escape and
+        mask-click close paths); the pixels, the navigation, the page
+        registry and the scaffold are Amiba's, unchanged.
+      */}
+      <SettingsDialog
+        onClose={closeSettings}
+        open={settingsOpen}
+        titleId={SETTINGS_TITLE_ID}
+      >
+        <SettingsView
+          dshSections={sections}
+          headerId={SETTINGS_TITLE_ID}
+          onClose={closeSettings}
+          // The official `settings.close` seat: the close button's
+          // visually-hidden label. Empty owner share by contract. Amiba's own
+          // copy rides as the fallback, which is the job upstream's own
+          // CloseLabel registration does — Amiba cannot register it, because
+          // a priority-0 occupant on a SINGLE slot makes the next
+          // registration throw.
+          closeLabel={renderSlot("settings.close", {})}
+          slots={{
+            assistantNavigation: (activeSection) => (
+              <SettingsSectionNavigation
+                activeSection={activeSection}
+                openSettings={openSettingsSection}
+                sections={sections}
+              />
+            ),
+            // Official settings.section owner contract: `close` is the one
+            // shell affordance a section receives, wired to the same
+            // close-the-dialog path as the header button and Escape.
+            section: (sectionId) =>
+              renderSlot(
+                "settings.section",
+                { close: closeSettings },
+                { only: sectionId },
+              ),
+            // The three remaining shell-level seats. All three take the
+            // EMPTY owner share their contract declares, so `{}` is the
+            // faithful dispatch and anything else would be fabricated.
+            header: renderSlot("settings.header", {}),
+            action: renderSlot("settings.action", {}),
+            generalItem: renderSlot("settings.general.item", {}),
+            contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
+          }}
+          onGoHome={closeSettings}
+          sidebarHeaderLeftInset={topBarLeftInset}
+          sidebarHeaderHeightPx={topBarHeightPx}
+          paneHeaderChromeHeightPx={desktop ? topBarHeightPx : undefined}
+        />
+      </SettingsDialog>
       <div className="pointer-events-none absolute inset-0 z-[100]">
         {renderSlot("shell.overlay", {})}
       </div>
+      {/*
+        The onboarding coordinator's single mounted step. Rendered OUTSIDE
+        the dialog, exactly as upstream renders it beside the panel: a step
+        owns its own visible chrome (including `#root` inert ownership) and
+        paints nothing while it is still deciding, so the shell wraps it in
+        nothing at all. `{ only: activeStepId }` is what makes "one at a
+        time" structural rather than a convention.
+      */}
+      {onboardingStepId !== undefined &&
+        renderSlot(
+          "settings.onboarding",
+          {
+            stepId: onboardingStepId,
+            complete: () => completeOnboardingStep(onboardingStepId),
+            // Rule 5: "open the settings panel directly on one registered
+            // section". Deliberately the SAME affordance the settings
+            // navigation uses (`ctx.layout.openSettings(id)`), so a step's
+            // deep link and a nav click cannot diverge.
+            openSection: openSettingsSection,
+          },
+          { only: onboardingStepId },
+        )}
       <span className="sr-only" aria-live="polite">
         {t("app.initializing")}
       </span>

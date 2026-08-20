@@ -15,6 +15,8 @@ import { useEffect, type ReactNode } from "react";
 import {
   AmibaProductShell,
   type AmibaShellSlot,
+  type OnboardingStepRow,
+  type SettingsOnboardingStepsSource,
   type SettingsSectionsSource,
 } from "./product-shell.js";
 import {
@@ -78,6 +80,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
   PropsRenderSlots<AmibaShellSlot> & {
     dshClient: DshApiClient;
     settingsSections: SettingsSectionsSource;
+    settingsOnboardingSteps: SettingsOnboardingStepsSource;
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
     triggerRuntime: AmibaInputTriggerBridge;
@@ -98,9 +101,11 @@ function AmibaRoot({
   renderSlot,
   dshClient,
   settingsSections,
+  settingsOnboardingSteps,
   openSettingsSection,
   sessionsBridge,
   triggerRuntime,
+  useSessions,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -115,7 +120,9 @@ function AmibaRoot({
       renderSlot={renderSlot}
       sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
+      settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
+      useOfficialSessions={useSessions}
     />
   );
 }
@@ -234,6 +241,35 @@ export async function apply(ctx: ClientContext): Promise<void> {
         };
       },
     };
+    // The onboarding ledger, projected exactly as upstream's shell projects
+    // it (`ctx.slots.getVersion` cache key, `id` + `order`, ascending sort,
+    // `ctx.slots.subscribe` as the change channel). ONE deviation, and it is
+    // the same one Amiba's `settings.section` projection already makes:
+    // `entriesOfSlot` instead of the raw `entries`, so a shadowed cell
+    // contributes its winner once instead of every registration at that id.
+    // The coordinator addresses steps by id and dispatches with
+    // `{ only: stepId }`, which renders the elected entry either way.
+    let stepsVersion = -1;
+    let steps: readonly OnboardingStepRow[] = [];
+    const onboardingSource = {
+      getSnapshot: () => {
+        const version = ctx.slots.getVersion("settings.onboarding");
+        if (version !== stepsVersion) {
+          stepsVersion = version;
+          steps = ctx.slots
+            .entriesOfSlot("settings.onboarding")
+            .map((entry) => ({
+              id: entry.options.id ?? "",
+              order: entry.options.order ?? 0,
+            }))
+            .filter((entry) => entry.id.length > 0)
+            .sort((left, right) => left.order - right.order);
+        }
+        return steps;
+      },
+      subscribe: (listener: () => void) =>
+        ctx.slots.subscribe("settings.onboarding", listener),
+    };
     const disposeLayout = ctx.reflect.provide("layout", layout);
     // R1 selection bridge: keep the official ctx.sessions selection (the
     // session resolution every official session-scoped slot renders under)
@@ -288,6 +324,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         inject: () => ({
           dshClient,
           settingsSections: sectionsSource,
+          settingsOnboardingSteps: onboardingSource,
           openSettingsSection: (sectionId: string) =>
             layout.openSettings(sectionId),
           sessionsBridge,
@@ -380,6 +417,34 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "root",
           },
+          // The rest of the official `settings.*` family, all six of them,
+          // all root-scoped, all inherited from
+          // @deepseek-ai/dsh-client-ui-settings. DECLARATION-ANCHOR
+          // divergence, the same one recorded for tool.call.toolview and
+          // conversation.input.overlay: upstream declares these from
+          // ui-settings-general's `sidebar.settings` entry (its SettingsRoot
+          // owns the trigger button and the modal panel) and declares
+          // settings.general.item from that package's General settings.section
+          // entry. Amiba runs neither — its settings shell and its General
+          // page are its own — so the seats are declared on this root.
+          // Key, kind, scope and owner contract are the official ones.
+          //
+          // The trigger content of the sidebar's settings row; owner
+          // { wide } is the sidebar column state, which the chat view knows.
+          "settings.trigger": { kind: "single", scope: "root" },
+          // The panel title text; the dialog is named after this node.
+          "settings.header": { kind: "single", scope: "root" },
+          // Shell-level actions in the page header, before Close.
+          "settings.action": { kind: "list", scope: "root" },
+          // The close button's visually-hidden label text.
+          "settings.close": { kind: "single", scope: "root" },
+          // Onboarding steps: the coordinator mounts exactly ONE at a time,
+          // in registration order, and the step owns all of its own chrome.
+          "settings.onboarding": { kind: "list", scope: "root" },
+          // One preference row inside the General section (Amiba's
+          // Appearance page). Empty owner by contract — a row draws its own
+          // internals, including its label.
+          "settings.general.item": { kind: "list", scope: "root" },
           "amiba.settings.content.overlay": {
             kind: "list",
             scope: "root",
