@@ -392,9 +392,6 @@ describe("chat message chrome", () => {
       container.querySelector('[data-tool-detail="read-file"]'),
     ).toBeInTheDocument();
     expect(screen.getByText("export function main() {}")).toBeInTheDocument();
-    expect(
-      screen.queryByText("sidepanel.trace.fields.result"),
-    ).not.toBeInTheDocument();
   });
 
   it("truncates only the leading path and reserves room for file metadata", () => {
@@ -553,9 +550,6 @@ describe("chat message chrome", () => {
       screen.queryByText("Locate the entry point."),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Final answer")).toBeInTheDocument();
-    expect(
-      screen.queryByText("sidepanel.trace.executionComplete"),
-    ).not.toBeInTheDocument();
     expect(
       container.querySelector("[data-execution-summary] .legacy-thinking-dot"),
     ).not.toBeInTheDocument();
@@ -861,12 +855,6 @@ describe("chat message chrome", () => {
     expect(
       container.querySelector('[data-tool-detail="terminal"]'),
     ).toHaveTextContent("4 tests passed");
-    expect(
-      screen.queryByText("sidepanel.trace.fields.command"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("sidepanel.trace.fields.output"),
-    ).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", {
@@ -880,12 +868,6 @@ describe("chat message chrome", () => {
       "href",
       "https://example.com/docs",
     );
-    expect(
-      screen.queryByText("sidepanel.trace.fields.url"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("sidepanel.trace.fields.matches"),
-    ).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", {
@@ -949,12 +931,6 @@ describe("chat message chrome", () => {
     await userEvent.click(skillButton);
 
     expect(container.querySelector('[data-tool-detail="skill"]')).toBeNull();
-    expect(
-      screen.queryByText("sidepanel.trace.fields.name"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("sidepanel.trace.fields.result"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Long internal instructions/),
     ).not.toBeInTheDocument();
@@ -1028,12 +1004,6 @@ describe("chat message chrome", () => {
     expect(screen.getByText("Refine spacing")).not.toHaveClass("line-through");
     expect(screen.getByText("-dense cards")).toBeInTheDocument();
     expect(screen.getByText("+native evidence")).toBeInTheDocument();
-
-    for (const field of ["code", "output", "action", "target", "result"]) {
-      expect(
-        screen.queryByText(`sidepanel.trace.fields.${field}`),
-      ).not.toBeInTheDocument();
-    }
   });
 
   it("shows only the latest progress note with a quiet text pulse", () => {

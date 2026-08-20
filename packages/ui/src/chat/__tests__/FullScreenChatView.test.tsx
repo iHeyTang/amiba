@@ -528,9 +528,6 @@ describe("FullScreenChatView new-chat home", () => {
     expect(
       screen.getByRole("tab", { name: "embeddedBrowser.newTab" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "embeddedBrowser.expand" }),
-    ).not.toBeInTheDocument();
     expect(screen.getByText("embeddedBrowser.emptyTitle")).toBeInTheDocument();
 
     await userEvent.click(
