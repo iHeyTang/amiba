@@ -57,7 +57,7 @@ Electron main
 
 CLI、Web 与 Electron 不发现系统 DSH，也不使用系统 Node 执行 DSH；公共 Runtime 固定为：
 
-- DSH `0.1.0-rc.6`
+- DSH `0.1.1-rc.2`
 - 源码提交 `47f943859bef60e4160492346772ded9b24f765a`
 - Node.js `22.22.0`
 - Amiba 插件修订 `2026-08-16.2`

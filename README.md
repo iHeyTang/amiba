@@ -64,7 +64,7 @@ The physical application-runtime consolidation is audited in
 CLI, Web, and Electron do not discover a system DSH or use system Node to run
 DSH. Their shared runtime is pinned to:
 
-- DSH `0.1.0-rc.6`
+- DSH `0.1.1-rc.2`
 - source commit `47f943859bef60e4160492346772ded9b24f765a`
 - Node.js `22.22.0`
 - Amiba plugin revision `2026-08-16.2`

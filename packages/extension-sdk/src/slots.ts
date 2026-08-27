@@ -605,7 +605,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     };
     /**
      * MIRROR of the official `shell.overlay` declaration
-     * (`@deepseek-ai/dsh-client-ui-layout@0.1.0-rc.6`, `/client` types
+     * (`@deepseek-ai/dsh-client-ui-layout@0.1.1-rc.2`, `/client` types
      * entry): the frame-wide click-through floating layer, identical kind
      * (list), scope (root), and empty owner. Re-declared here structurally
      * identically instead of imported because that package's `/client`

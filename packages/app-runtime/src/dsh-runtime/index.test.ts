@@ -12,7 +12,7 @@ import {
 
 test("pins one immutable DSH release, and claims nothing it cannot verify", () => {
   assert.doesNotThrow(() => assertValidManagedDshRuntimeManifest())
-  assert.equal(MANAGED_DSH_RUNTIME.version, "0.1.0-rc.6")
+  assert.equal(MANAGED_DSH_RUNTIME.version, "0.1.1-rc.2")
   // The manifest used to carry the upstream commit SHA. Nothing ever checked
   // it against the installed release — npm publishes no `gitHead` for these
   // packages, so it could not be derived from the artifact and could only be
@@ -104,7 +104,7 @@ test("resolves shared, configured, and packaged runtime roots", () => {
 test("build marker contains every runtime compatibility dimension", () => {
   assert.deepEqual(expectedManagedDshRuntimeMarker("linux", "x64"), {
     schemaVersion: 7,
-    dshVersion: "0.1.0-rc.6",
+    dshVersion: "0.1.1-rc.2",
     nodeVersion: "22.22.0",
     amibaPluginRevision: "2026-08-16.2",
     platform: "linux",

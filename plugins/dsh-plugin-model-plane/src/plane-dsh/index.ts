@@ -27,6 +27,23 @@ export function apiForDshProvider(provider: ModelProviderProfile): string {
     : provider.protocol;
 }
 
+/**
+ * The modalities DSH can actually express, or undefined when there are none.
+ *
+ * Both adapters accept only `text` and `image`, and both schemas require a
+ * NON-EMPTY list, so a model whose modalities survive no filtering must carry
+ * no claim at all rather than an empty array or a guessed default.
+ */
+function expressibleModalities(
+  model: ModelDefinition,
+): ("text" | "image")[] | undefined {
+  const modalities = (model.inputModalities ?? []).filter(
+    (modality): modality is "text" | "image" =>
+      modality === "text" || modality === "image",
+  );
+  return modalities.length ? modalities : undefined;
+}
+
 function commonModelRow(model: ModelDefinition) {
   return {
     id: model.id,
@@ -76,7 +93,19 @@ function reasoningEfforts(
 
 /** Model rows for DSH's dedicated DeepSeek adapter. */
 export function deepSeekModelRows(models: readonly ModelDefinition[]) {
-  return models.filter((model) => model.enabled !== false).map(commonModelRow);
+  return models
+    .filter((model) => model.enabled !== false)
+    .map((model) => {
+      // `inputModalities` only became expressible on this route in DSH 0.1.1;
+      // before that the adapter hardcoded `["text"]` for every model, so no
+      // DeepSeek vision model could accept an image whatever Model Plane knew.
+      // The adapter spells the field `inputModalities`; pi-ai spells it `input`.
+      const inputModalities = expressibleModalities(model);
+      return {
+        ...commonModelRow(model),
+        ...(inputModalities ? { inputModalities } : {}),
+      };
+    });
 }
 
 /** Model rows for DSH's generic pi-ai adapter, including exact capabilities. */
@@ -85,13 +114,8 @@ export function piAiModelRows(models: readonly ModelDefinition[]) {
     .filter((model) => model.enabled !== false)
     .map((model) => ({
       ...commonModelRow(model),
-      ...(model.inputModalities?.length
-        ? {
-            input: model.inputModalities.filter(
-              (modality): modality is "text" | "image" =>
-                modality === "text" || modality === "image",
-            ),
-          }
+      ...(expressibleModalities(model)
+        ? { input: expressibleModalities(model) }
         : {}),
       reasoningEfforts: reasoningEfforts(model),
     }));

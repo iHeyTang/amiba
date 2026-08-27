@@ -127,6 +127,11 @@ export function applyCommandsHttp(
             ).commands.execute(
               agent,
               body.line,
+              // DSH 0.1.1 inserted composer image attachments before the
+              // signal. This endpoint takes a command line over HTTP and has
+              // no attachment channel, so it carries none rather than
+              // inventing one.
+              [],
               AbortSignal.timeout(5 * 60_000),
             );
             json(res, 200, { ok: true, value: execution ?? null });

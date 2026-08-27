@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   apiForDshProvider,
   bindingForDshProvider,
+  deepSeekModelRows,
   piAiModelRows,
 } from "./index";
 
@@ -72,5 +73,33 @@ describe("Model Plane DSH adapter", () => {
         },
       ]),
     ).toThrow("cannot project reasoning effort ultra");
+  });
+  it("carries input modalities into the dedicated DeepSeek adapter", () => {
+    // Until DSH 0.1.1 the llm-deepseek catalog had no modality field and the
+    // adapter reported `["text"]` for every model, so a DeepSeek vision model
+    // could not accept an image no matter what Model Plane stored. The field
+    // exists now; this projection is what actually reaches it.
+    expect(
+      deepSeekModelRows([
+        { id: "vision-exp", name: "Vision", inputModalities: ["text", "image"] },
+      ]),
+    ).toEqual([
+      { id: "vision-exp", name: "Vision", inputModalities: ["text", "image"] },
+    ]);
+  });
+
+  it("omits modalities the DeepSeek adapter cannot express, and empty sets", () => {
+    // The upstream schema is `.min(1)`, so an all-unknown list must not become
+    // an empty array — and a model nobody has described must stay undescribed
+    // rather than acquire a guessed default.
+    expect(
+      deepSeekModelRows([
+        { id: "odd", name: "Odd", inputModalities: ["audio"] },
+        { id: "bare", name: "Bare" },
+      ]),
+    ).toEqual([
+      { id: "odd", name: "Odd" },
+      { id: "bare", name: "Bare" },
+    ]);
   });
 });

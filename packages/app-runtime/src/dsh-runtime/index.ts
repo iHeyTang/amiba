@@ -38,7 +38,12 @@ export function assertValidManagedDshRuntimeManifest(
   if (!/^\d{4}-\d{2}-\d{2}\.\d+$/u.test(manifest.amibaPluginRevision)) {
     throw new Error("Managed Amiba DSH plugin revision is invalid")
   }
-  if (!/^0\.1\.0-rc\.\d+$/u.test(manifest.version)) {
+  // An exact release candidate, not a range — DSH has shipped nothing but
+  // prereleases, and semver will not match one against a range whose
+  // major/minor/patch tuple differs. The minor version is deliberately NOT
+  // baked in here: this check is about the SHAPE of the pin, and hard-coding
+  // `0.1.0` made a routine upstream bump fail a format validator.
+  if (!/^\d+\.\d+\.\d+-rc\.\d+$/u.test(manifest.version)) {
     throw new Error("Managed DSH version must pin an exact release candidate")
   }
   if (!/^22\.\d+\.\d+$/u.test(manifest.nodeVersion)) {

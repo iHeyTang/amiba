@@ -196,7 +196,11 @@ describe("service resolution", () => {
       commandUi: () => undefined,
     });
     await bridge.submitClaim!("s1", { token: "/goal ", submit }, "ship it");
-    expect(submit).toHaveBeenCalledWith("ship it", actx);
+    // DSH 0.1.1 added composer images as a third `submit` argument. Amiba's
+    // composer does not forward attachments to slash commands, so the bridge
+    // passes an empty list rather than inventing one — pin that it is passed
+    // explicitly, not left undefined.
+    expect(submit).toHaveBeenCalledWith("ship it", actx, []);
   });
 
   it("rejects a claim submit for a session with no scope", async () => {

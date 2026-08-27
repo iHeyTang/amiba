@@ -1,7 +1,7 @@
 # Amiba → DSH 迁移审计
 
 更新：2026-08-16  
-基线：DeepSeek Harness `0.1.0-rc.6`。
+基线：DeepSeek Harness `0.1.1-rc.2`。
 
 ## 当前结论
 

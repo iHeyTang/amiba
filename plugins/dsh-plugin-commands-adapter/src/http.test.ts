@@ -121,9 +121,13 @@ describe("Amiba DSH command catalog route", () => {
       }),
       res,
     );
+    // DSH 0.1.1 inserted composer image attachments BEFORE the signal. This
+    // route has no attachment channel, so it must pass an explicit empty list
+    // rather than shifting the signal into the images position.
     expect(execute).toHaveBeenCalledWith(
       agent,
       "/plan investigate",
+      [],
       expect.any(AbortSignal),
     );
     expect(res.result()).toEqual({

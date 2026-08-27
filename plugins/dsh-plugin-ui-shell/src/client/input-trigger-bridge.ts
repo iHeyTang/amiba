@@ -18,7 +18,7 @@
  *     EXACTLY while an editor is bound, so "no composer for this session" is
  *     reported by the ABSENCE of a listener (the controller's `execute` sees
  *     `bail` return undefined) rather than by a listener that lies.
- *   - `submitClaim(...)` runs `CommandClaim.submit(args, actx)` with the real
+ *   - `submitClaim(...)` runs `CommandClaim.submit(args, actx, [])` with the real
  *     session-scope context. The composer has no `actx` and passing a fake
  *     one would be precisely the half-honest contract member this adoption
  *     refuses.
@@ -168,7 +168,12 @@ export function createInputTriggerBridge(
           new Error(`command: session "${sessionId}" resolved no scope`),
         );
       }
-      return Promise.resolve().then(() => claim.submit(args, actx));
+      // DSH 0.1.1 added a third `submit` argument: composer images to carry
+      // into the command. Amiba's composer does not forward its attachments
+      // to slash commands, so the honest value is none — passing a fabricated
+      // list would be worse than passing nothing. Threading real attachments
+      // through is a feature, gated upstream on `CommandClaim.images`.
+      return Promise.resolve().then(() => claim.submit(args, actx, []));
     },
   };
 }

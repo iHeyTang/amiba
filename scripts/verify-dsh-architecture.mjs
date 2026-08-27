@@ -1334,7 +1334,10 @@ for (const [event, call] of bailListeners) {
 // The claim submit must carry the REAL session-scope ctx. `@amiba/ui` has no
 // access to one; fabricating it is the exact half-honest member this adoption
 // refuses.
-if (!/claim\.submit\(args, actx\)/u.test(triggerBridgeSource)) {
+// Arity is upstream's business — DSH 0.1.1 appended composer images — so the
+// check ends at `actx` and tolerates further arguments. What it must keep
+// pinning is that `actx` is the resolved scope in the ctx position.
+if (!/claim\.submit\(args, actx[,)]/u.test(triggerBridgeSource)) {
   fail(
     "input-trigger bridge must run CommandClaim.submit against the resolved session-scope context",
   );

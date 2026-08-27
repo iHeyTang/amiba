@@ -363,7 +363,7 @@ describe("command mode", () => {
       ...runtimeFor(controller),
       submitClaim: async (_sessionId, next, args) => {
         runs.push({ claim: next, args });
-        return next.submit(args, undefined as never);
+        return next.submit(args, undefined as never, []);
       },
     };
     // Enter command mode the way the pipeline does — through the bail verb.
