@@ -311,7 +311,6 @@ export const zhCN: UiMessages = {
     "确定重启 DeepSeek Harness 吗？运行中的任务会被中断，但持久化会话会保留。",
   "options.status.dsh.runtime": "受管运行时",
   "options.status.dsh.version": "DSH 版本",
-  "options.status.dsh.commit": "上游 Commit",
   "options.status.dsh.node": "内置 Node.js",
   "options.status.dsh.process": "进程",
   "options.status.dsh.sessions": "活动 / 持久化会话",

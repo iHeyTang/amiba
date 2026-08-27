@@ -14,7 +14,6 @@ describe("DshSettingsStatus visual contract", () => {
       healthy: true,
       state: "running",
       version: "0.1.0-rc.6",
-      commit: "47f9438",
       nodeVersion: "22.22.0",
       pid: 1234,
       startedAt: Date.now() - 10_000,

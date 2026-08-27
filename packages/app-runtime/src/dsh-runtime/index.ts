@@ -19,7 +19,6 @@ export interface ManagedDshRuntimeManifest {
   bundleSchemaVersion: number
   amibaPluginRevision: string
   repository: string
-  commit: string
   version: string
   nodeVersion: string
 }
@@ -38,9 +37,6 @@ export function assertValidManagedDshRuntimeManifest(
   }
   if (!/^\d{4}-\d{2}-\d{2}\.\d+$/u.test(manifest.amibaPluginRevision)) {
     throw new Error("Managed Amiba DSH plugin revision is invalid")
-  }
-  if (!/^[0-9a-f]{40}$/u.test(manifest.commit)) {
-    throw new Error("Managed DSH commit must be a full 40-character SHA")
   }
   if (!/^0\.1\.0-rc\.\d+$/u.test(manifest.version)) {
     throw new Error("Managed DSH version must pin an exact release candidate")
@@ -260,7 +256,6 @@ export function resolveManagedDshPaths(
 
 export interface ManagedDshRuntimeMarker {
   schemaVersion: number
-  dshCommit: string
   dshVersion: string
   nodeVersion: string
   amibaPluginRevision: string
@@ -278,7 +273,6 @@ export function expectedManagedDshRuntimeMarker(
 ): ManagedDshRuntimeMarker {
   return {
     schemaVersion: manifest.bundleSchemaVersion,
-    dshCommit: manifest.commit,
     dshVersion: manifest.version,
     nodeVersion: manifest.nodeVersion,
     amibaPluginRevision: manifest.amibaPluginRevision,

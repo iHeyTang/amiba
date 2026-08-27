@@ -253,9 +253,6 @@ export function DshSettingsStatus() {
               <StatusLine label={t("options.status.dsh.version")}>
                 <span className="font-mono">{status.version}</span>
               </StatusLine>
-              <StatusLine label={t("options.status.dsh.commit")}>
-                <span className="font-mono text-[10px]">{status.commit}</span>
-              </StatusLine>
               <StatusLine label={t("options.status.dsh.node")}>
                 <span className="font-mono">{status.nodeVersion}</span>
               </StatusLine>

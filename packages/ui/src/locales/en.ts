@@ -348,7 +348,6 @@ export const en = {
     "Restart DeepSeek Harness? Running tasks will be interrupted, but their durable sessions are preserved.",
   "options.status.dsh.runtime": "Managed runtime",
   "options.status.dsh.version": "DSH version",
-  "options.status.dsh.commit": "Upstream commit",
   "options.status.dsh.node": "Bundled Node.js",
   "options.status.dsh.process": "Process",
   "options.status.dsh.sessions": "Live / durable sessions",

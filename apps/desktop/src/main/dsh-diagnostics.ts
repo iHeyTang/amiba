@@ -27,7 +27,6 @@ async function status(start = true): Promise<AgentRuntimeStatus> {
     healthy: runtime.state === "running" && !startupError,
     state: startupError ? "failed" : runtime.state,
     version: MANAGED_DSH_RUNTIME.version,
-    commit: MANAGED_DSH_RUNTIME.commit,
     nodeVersion: MANAGED_DSH_RUNTIME.nodeVersion,
     ...(runtime.pid === undefined ? {} : { pid: runtime.pid }),
     ...(runtime.startedAt === undefined ? {} : { startedAt: runtime.startedAt }),

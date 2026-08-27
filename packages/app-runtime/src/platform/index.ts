@@ -373,7 +373,6 @@ export interface AgentRuntimeStatus {
   healthy: boolean;
   state: "stopped" | "starting" | "running" | "failed";
   version: string;
-  commit: string;
   nodeVersion: string;
   pid?: number;
   startedAt?: number;

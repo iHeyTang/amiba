@@ -40,7 +40,7 @@ try {
 console.log(
   [
     "[desktop:dev] Amiba shared Runtime — managed DSH",
-    `  DSH       ${marker.dshVersion} (${String(marker.dshCommit).slice(0, 12)})`,
+    `  DSH       ${marker.dshVersion}`,
     `  Bundle    ${marker.platform}-${marker.arch} · schema ${marker.schemaVersion}`,
     `  Toolchain Node ${marker.nodeVersion}`,
     `  Source    ${marker.nodeSource ?? "manifest-pinned download"}`,

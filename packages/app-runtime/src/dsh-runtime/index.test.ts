@@ -10,13 +10,19 @@ import {
   resolvePackagedManagedDshRuntimeDir,
 } from "./index"
 
-test("pins one immutable DSH release and upstream commit", () => {
+test("pins one immutable DSH release, and claims nothing it cannot verify", () => {
   assert.doesNotThrow(() => assertValidManagedDshRuntimeManifest())
   assert.equal(MANAGED_DSH_RUNTIME.version, "0.1.0-rc.6")
-  assert.equal(
-    MANAGED_DSH_RUNTIME.commit,
-    "47f943859bef60e4160492346772ded9b24f765a",
-  )
+  // The manifest used to carry the upstream commit SHA. Nothing ever checked
+  // it against the installed release — npm publishes no `gitHead` for these
+  // packages, so it could not be derived from the artifact and could only be
+  // hand-entered. It was shown as provenance in the dev banner, the runtime
+  // diagnostics and the settings status page, which made it a claim that was
+  // guaranteed to go stale on the next bump. Identity is already enforced by
+  // two facts that ARE verifiable: prepare.mjs asks the installed runtime for
+  // its own version and fails on mismatch, and the lockfile carries a content
+  // integrity hash.
+  assert.equal("commit" in MANAGED_DSH_RUNTIME, false)
 })
 
 test("resolves a shared Node-only runtime for the desktop surface", () => {
@@ -98,7 +104,6 @@ test("resolves shared, configured, and packaged runtime roots", () => {
 test("build marker contains every runtime compatibility dimension", () => {
   assert.deepEqual(expectedManagedDshRuntimeMarker("linux", "x64"), {
     schemaVersion: 7,
-    dshCommit: "47f943859bef60e4160492346772ded9b24f765a",
     dshVersion: "0.1.0-rc.6",
     nodeVersion: "22.22.0",
     amibaPluginRevision: "2026-08-16.2",

@@ -195,7 +195,6 @@ function fail(message) {
 function expectedMarker() {
   return {
     schemaVersion: declaration.bundleSchemaVersion,
-    dshCommit: declaration.commit,
     dshVersion: declaration.version,
     nodeVersion: declaration.nodeVersion,
     amibaPluginRevision: declaration.amibaPluginRevision,
