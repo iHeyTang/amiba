@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  BrowserWindow,
+  type BrowserWindow,
   ipcMain,
   webContents,
   type InputEvent as ElectronInputEvent,
@@ -218,6 +218,24 @@ class EmbeddedBrowserController {
   >();
   private activeKey: string | null = null;
   private ipcRegistered = false;
+  private hostWindowResolver: (() => BrowserWindow | null) | null = null;
+
+  /**
+   * Name the one window whose renderer mounts the workbench.
+   *
+   * Quick-Ask and the notifier also report `getType() === "window"`, so
+   * resolving the create-tab target by "focused window, else first window"
+   * could address a renderer with no `embedded-browser:create-tab` listener —
+   * which surfaces as a 5s timeout instead of a browser tab.
+   */
+  setHostWindowResolver(resolve: () => BrowserWindow | null): void {
+    this.hostWindowResolver = resolve;
+  }
+
+  private hostWindow(): BrowserWindow | null {
+    const designated = this.hostWindowResolver?.() ?? null;
+    return designated && !designated.isDestroyed() ? designated : null;
+  }
 
   private key(ownerId: number, tabId: string): string {
     return `${ownerId}:${tabId}`;
@@ -255,12 +273,7 @@ class EmbeddedBrowserController {
     try {
       return this.activeEntry();
     } catch {
-      const owner =
-        BrowserWindow.getFocusedWindow() ??
-        BrowserWindow.getAllWindows().find(
-          (window) =>
-            !window.isDestroyed() && window.webContents.getType() === "window",
-        );
+      const owner = this.hostWindow();
       if (!owner || owner.isDestroyed()) {
         throw new Error(
           "No Amiba window is available for the built-in browser.",

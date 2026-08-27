@@ -95,11 +95,14 @@ function BrowserWebView({
     if (!container) return;
 
     const webview = document.createElement("webview") as WebViewElement;
+    // `nodeintegration` and `allowpopups` are Electron BOOLEAN attributes:
+    // presence is the value, so `setAttribute(name, "false")` turns them ON.
+    // Electron reports `nodeintegration: true, allowpopups: true` for the
+    // spelled-out-false form. Omitting them is the only way to say false.
+    // `sandbox` and `contextIsolation` are not <webview> attributes at all and
+    // were silently ignored — the guest's real webPreferences are enforced in
+    // main's `will-attach-webview`, keyed on this partition.
     webview.setAttribute("src", tab.url || "about:blank");
-    webview.setAttribute("nodeintegration", "false");
-    webview.setAttribute("contextIsolation", "true");
-    webview.setAttribute("sandbox", "true");
-    webview.setAttribute("allowpopups", "false");
     webview.setAttribute("partition", "persist:amiba-browser");
     webview.style.width = "100%";
     webview.style.height = "100%";

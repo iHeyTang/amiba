@@ -357,6 +357,37 @@ function registerQuickAskIpcHandlers(summon: () => void): void {
   );
 }
 
+/**
+ * Surface renderer failures in the terminal.
+ *
+ * A renderer that dies takes the whole window to blank white with no other
+ * signal: main logs nothing, and the user has to know to reach for DevTools to
+ * find out anything at all. These handlers make the failure self-reporting.
+ */
+function installRendererDiagnostics(win: BrowserWindow): void {
+  win.webContents.on("render-process-gone", (_event, details) => {
+    console.error(
+      `[main] renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+  });
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error(`[main] preload failed (${preloadPath}):`, error);
+  });
+  win.on("unresponsive", () => {
+    console.error("[main] renderer is unresponsive");
+  });
+  // Renderer console errors never reach this terminal otherwise. Dev only:
+  // a packaged build should not narrate page logs to stdout.
+  if (!isDev) return;
+  win.webContents.on(
+    "console-message",
+    (_event, level, message, line, sourceId) => {
+      if (level < 3) return; // 3 = error
+      console.error(`[renderer] ${message} (${sourceId}:${line})`);
+    },
+  );
+}
+
 function createWindow() {
   const startupPalette =
     startupWindowTheme === "dark"
@@ -418,6 +449,10 @@ function createWindow() {
   });
 
   mainWindow = win;
+  installRendererDiagnostics(win);
+  // Only this renderer mounts the workbench, so it is the only valid target
+  // for the Agent's create-tab request.
+  embeddedBrowserController.setHostWindowResolver(() => mainWindow);
   win.webContents.on(
     "will-attach-webview",
     (event, webPreferences, params) => {
