@@ -256,6 +256,51 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sessions.createNew).not.toHaveBeenCalled();
   });
 
+  it("shows no workbench at all on the id-less home, even when it was left open", async () => {
+    const sessions = makeSessions();
+    sessions.activeId = "";
+    sessions.openTabIds = [];
+    sessions.openTabs = [];
+    mocks.useSessions.mockReturnValue(sessions);
+    mocks.embeddedBrowser = {
+      registerTab: vi.fn().mockResolvedValue({}),
+      unregisterTab: vi.fn().mockResolvedValue(undefined),
+      setActiveTab: vi.fn().mockResolvedValue({}),
+      command: vi.fn().mockResolvedValue({}),
+      detectDevServers: vi.fn().mockResolvedValue([]),
+      onCreateRequested: vi.fn(() => () => {}),
+      onFocusRequested: vi.fn(() => () => {}),
+      onAgentActivity: vi.fn(() => () => {}),
+    };
+    // The pane's open state is persisted, so a task that left it open must not
+    // resurrect a workbench on a surface that has no task to act on.
+    mocks.storageGet.mockImplementation(async (key: string | string[]) => {
+      if (key === "settings.chat.sidebarView") return { [key]: "chats" };
+      const keys = Array.isArray(key) ? key : [key];
+      if (keys.includes("settings.chat.workspacePaneOpen")) {
+        return { "settings.chat.workspacePaneOpen": true };
+      }
+      return {};
+    });
+
+    const { container } = render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+    await act(async () => {});
+
+    expect(
+      container.querySelector("[data-workspace-tabbar]"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "workspacePane.title" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the empty task header visually silent", () => {
     const sessions = makeSessions();
     sessions.activeId = "";
@@ -286,9 +331,20 @@ describe("FullScreenChatView new-chat home", () => {
       container.querySelector("[data-content-header-title]"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Amiba")).not.toBeInTheDocument();
+    // The workbench acts on a task. With no task open there is nothing for the
+    // edge controls to target, so the whole row stays off the chat home.
+    expect(
+      container.querySelector("[data-workspace-edge-toggle]"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "embeddedBrowser.open" }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "workspacePane.openTerminal" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "workspacePane.open" }),
+    ).not.toBeInTheDocument();
   });
 
   it("edits the active conversation title directly in the content header", async () => {
@@ -529,6 +585,44 @@ describe("FullScreenChatView new-chat home", () => {
       screen.getByRole("tab", { name: "embeddedBrowser.newTab" }),
     ).toBeInTheDocument();
     expect(screen.getByText("embeddedBrowser.emptyTitle")).toBeInTheDocument();
+
+    // The edge-control row floats over the tab strip at z-50. The strip must
+    // reserve the row's MEASURED width — a fixed padding drifts every time a
+    // control is added, and `conversation.session.header.utilities` is an open
+    // plugin seat, so the width is not knowable here at all.
+    const edgeRow = document.querySelector<HTMLElement>(
+      "[data-workspace-edge-toggle]",
+    );
+    const tabBar = document.querySelector<HTMLElement>(
+      "[data-workspace-tabbar]",
+    );
+    expect(edgeRow).not.toBeNull();
+    expect(tabBar).not.toBeNull();
+    expect(tabBar?.className).not.toMatch(/\bpr-\d/);
+    expect(tabBar?.style.paddingRight).toBe(
+      "var(--amiba-workbench-controls-inset, 2.75rem)",
+    );
+    const section = edgeRow?.parentElement;
+    const inset = Number.parseInt(
+      section?.style.getPropertyValue("--amiba-workbench-controls-inset") ?? "",
+      10,
+    );
+    // jsdom reports zero-width boxes, so this pins the wiring and the gutter
+    // rather than a pixel count the layout engine would supply.
+    expect(Number.isNaN(inset)).toBe(false);
+    expect(inset).toBeGreaterThanOrEqual(20);
+
+    // Electron boolean attributes are presence-valued: `allowpopups="false"`
+    // ENABLES popups, and only `will-attach-webview` saves `nodeintegration`.
+    // Absence is the only way to say false, so pin absence.
+    const webview = document.querySelector("webview");
+    expect(webview).not.toBeNull();
+    expect(webview?.hasAttribute("nodeintegration")).toBe(false);
+    expect(webview?.hasAttribute("allowpopups")).toBe(false);
+    // Not <webview> attributes at all; the guest's prefs are enforced in main.
+    expect(webview?.hasAttribute("sandbox")).toBe(false);
+    expect(webview?.hasAttribute("contextIsolation")).toBe(false);
+    expect(webview?.getAttribute("partition")).toBe("persist:amiba-browser");
 
     await userEvent.click(
       screen.getByRole("button", { name: "embeddedBrowser.close" }),

@@ -93,6 +93,7 @@ import {
 } from "../primitives";
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
+import { useHorizontalWheelScroll } from "../hooks/useHorizontalWheelScroll";
 import { useDocumentTheme } from "../theme";
 import {
   compactWorkspacePath,
@@ -527,10 +528,13 @@ function WorkspaceTabButton({
     <div
       ref={tabRef}
       className={cn(
-        "group/tab flex h-8 max-w-[210px] shrink-0 items-center rounded-[10px] px-1.5 transition-colors duration-150",
+        // A pill, not a rounded box: `rounded-full` with asymmetric padding —
+        // roomy on the icon side, tight on the close side so the × sits just
+        // inside the curve instead of floating in a gutter.
+        "group/tab flex h-7 max-w-[184px] shrink-0 items-center rounded-full pl-2 pr-1 transition-colors duration-150",
         selected
-          ? "bg-muted/65 text-foreground"
-          : "text-muted-foreground/82 hover:bg-muted/30 hover:text-foreground/85",
+          ? "bg-muted/70 text-foreground"
+          : "text-muted-foreground/80 hover:bg-muted/35 hover:text-foreground/85",
       )}
     >
       <button
@@ -538,22 +542,19 @@ function WorkspaceTabButton({
         role="tab"
         aria-selected={selected}
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 px-1"
+        className="flex min-w-0 flex-1 items-center gap-1.5 pr-0.5"
         title={
           tab.resource.kind === "file" ? tab.resource.path : labels.primary
         }
       >
-        <WorkspaceTabIcon
-          resource={tab.resource}
-          className="h-4 w-4 shrink-0"
-        />
+        <WorkspaceTabIcon resource={tab.resource} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate text-[11px] font-medium tracking-[-0.01em]">
           {labels.primary}
         </span>
         {labels.context && (
           <span
             className={cn(
-              "shrink truncate text-[9.5px] font-normal text-muted-foreground/58",
+              "shrink truncate text-[9px] font-normal text-muted-foreground/55",
               selected ? "max-w-[42px]" : "max-w-[60px]",
             )}
           >
@@ -567,11 +568,11 @@ function WorkspaceTabButton({
         title={t("common.close")}
         aria-label={t("common.close")}
         className={cn(
-          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-[color,background-color,opacity] hover:bg-foreground/[0.06] hover:text-foreground focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+          "inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-[color,background-color,opacity] hover:bg-foreground/[0.06] hover:text-foreground focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
           selected ? "opacity-65" : "opacity-0 group-hover/tab:opacity-65",
         )}
       >
-        <X className="h-3.5 w-3.5" />
+        <X className="h-3 w-3" />
       </button>
     </div>
   );
@@ -4102,6 +4103,7 @@ export function WorkspacePane({
   const widthRef = useRef(pane.width);
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLElement>(null);
+  const tabRailRef = useHorizontalWheelScroll<HTMLDivElement>();
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   widthRef.current = pane.width;
 
@@ -4224,13 +4226,29 @@ export function WorkspacePane({
       >
         <div
           data-workspace-tabbar
-          className="flex h-11 shrink-0 items-center bg-background pl-2 pr-11"
+          className="flex h-11 shrink-0 items-center bg-background pl-2"
+          // The edge-control row floats over this strip at z-50 and its width
+          // is not fixed (it also hosts an open plugin seat), so it publishes
+          // its measured width and the tabs reserve exactly that.
+          style={{
+            paddingRight:
+              "var(--amiba-workbench-controls-inset, 2.75rem)",
+          }}
         >
           {pane.sessionId || pane.tabs.length > 0 ? (
             <div
+              ref={tabRailRef}
               role="tablist"
               aria-label={t("workspacePane.tabs")}
-              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+              // `self-stretch` is what separates the hairline from the pills,
+              // and it needs no padding to do it: the rail fills the 44px
+              // strip, the scrollbar takes 3px off the bottom of the padding
+              // box, and `items-center` then centres the 28px pills in the
+              // remaining 41px — which leaves 6.5px of clearance above the
+              // hairline for free. Adding padding instead would push the pills
+              // off the strip's optical centre, since the gap would be counted
+              // as content to centre around.
+              className="amiba-tab-rail flex min-w-0 flex-1 self-stretch items-center gap-1.5 overflow-x-auto"
             >
               {pane.sessionId
                 ? [
@@ -4247,7 +4265,7 @@ export function WorkspacePane({
                       aria-selected={mode === id}
                       onClick={() => setMode(id)}
                       className={cn(
-                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[10.5px] transition-colors",
+                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10.5px] transition-colors",
                         mode === id
                           ? "bg-secondary text-foreground"
                           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",

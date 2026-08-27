@@ -20,6 +20,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type TransitionEvent as ReactTransitionEvent,
@@ -70,6 +71,22 @@ const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
 const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
 const SIDEBAR_TRANSITION_FALLBACK_MS = 240;
+
+/**
+ * Space the workbench edge controls need on top of their own width: the row's
+ * own `right-3` offset (12px) plus a gap so the last workbench tab does not
+ * butt against the first control.
+ */
+const EDGE_CONTROLS_GUTTER_PX = 20;
+/** Fallback until the row is measured, and the reservation when it is absent. */
+const EDGE_CONTROLS_FALLBACK_PX = 44;
+/**
+ * Published on the content section so the workbench tab strip can reserve
+ * exactly the width the controls occupy. It cannot be a constant: the row
+ * also renders `conversation.session.header.utilities`, an open plugin seat,
+ * so its width is not knowable when this file is written.
+ */
+const EDGE_CONTROLS_INSET_VAR = "--amiba-workbench-controls-inset";
 
 type SidebarMotion = "idle" | "collapsing" | "expanding";
 
@@ -647,6 +664,39 @@ function FullScreenChatViewInner({
     }
   }, [sessions.activeId, sidebarView]);
 
+  // The workbench belongs to a task: its files, terminal and browser all act
+  // on one. The id-less chat home has no task, so the whole workbench — pane,
+  // terminal drawer and edge controls alike — stays off there. Gating only the
+  // controls would be worse than not gating at all: the pane's open state is
+  // persisted, so a task that left it open would resurrect a 520px panel on
+  // the home surface with no control left to close it.
+  const workbenchVisible = sidebarView === "chats" && Boolean(sessions.activeId);
+
+  // Measure the edge-control row so the workbench tab strip can reserve its
+  // width. The row floats over the pane at `z-50`; without this the tabs
+  // scroll underneath the controls.
+  const edgeControlsRef = useRef<HTMLDivElement>(null);
+  const [edgeControlsInset, setEdgeControlsInset] = useState(
+    EDGE_CONTROLS_FALLBACK_PX,
+  );
+  // Layout effect: the strip must never paint one frame at the wrong padding.
+  useLayoutEffect(() => {
+    const node = edgeControlsRef.current;
+    if (!node) {
+      setEdgeControlsInset((current) => (current === 0 ? current : 0));
+      return;
+    }
+    const measure = () => {
+      const next =
+        Math.ceil(node.getBoundingClientRect().width) + EDGE_CONTROLS_GUTTER_PX;
+      setEdgeControlsInset((current) => (current === next ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [workbenchVisible]);
+
   const onSidebarWidthTransitionEnd = useCallback(
     (event: ReactTransitionEvent<HTMLElement>) => {
       if (
@@ -758,7 +808,14 @@ function FullScreenChatViewInner({
       >
         <div className="absolute inset-y-0 right-0 w-px bg-border/35 transition-colors group-hover:bg-foreground/[0.07] group-active:bg-foreground/[0.10]" />
       </div>
-      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <section
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+        style={
+          {
+            [EDGE_CONTROLS_INSET_VAR]: `${edgeControlsInset}px`,
+          } as CSSProperties
+        }
+      >
         <div
           data-workspace-main-row
           className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
@@ -812,15 +869,16 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
-          <WorkspacePane visible={sidebarView === "chats"} />
+          <WorkspacePane visible={workbenchVisible} />
         </div>
         <WorkspaceTerminalPanel
-          visible={sidebarView === "chats"}
+          visible={workbenchVisible}
           open={terminalOpen}
           onClose={() => setTerminalOpen(false)}
         />
-        {sidebarView === "chats" && (
+        {workbenchVisible && (
           <div
+            ref={edgeControlsRef}
             data-workspace-edge-toggle
             className="app-no-drag absolute right-3 top-0 z-50 flex items-center gap-0.5"
             style={{ height: topBarHeightPx ?? 40 }}
@@ -853,7 +911,7 @@ function FullScreenChatViewInner({
         {slots?.contentOverlay ? (
           <div
             data-amiba-slot="amiba.chat.content.overlay"
-            className="pointer-events-none absolute inset-0 z-[60]"
+            className="pointer-events-none absolute inset-0 z-[var(--z-app-overlay)]"
           >
             {slots.contentOverlay}
           </div>
