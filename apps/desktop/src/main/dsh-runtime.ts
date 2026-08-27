@@ -188,6 +188,10 @@ export class DshRuntimeController {
         "127.0.0.1",
         "--port",
         "0",
+        // DSH 0.1.1 opens the user's default browser when it starts serving.
+        // The desktop app IS the client; a second, unauthenticated tab is not
+        // wanted and startled the user on first launch.
+        "--no-open",
       ],
       {
         cwd: app.getPath("userData"),

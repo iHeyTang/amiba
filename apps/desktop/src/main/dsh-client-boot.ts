@@ -39,7 +39,12 @@ interface DshRuntimeSource {
 }
 
 const BOOT_SCRIPT_PATTERN =
-  /<script>window\.__DSH_BOOT__\s*=\s*([\s\S]*?)<\/script>/u;
+  // DSH's webserver renders the boot payload from an index-injection row, and
+  // how it SPELLS the assignment is upstream's business: 0.1.0 emitted
+  // `window.__DSH_BOOT__ =`, 0.1.1 emits `globalThis["__DSH_BOOT__"] =`.
+  // Match either, and keep pinning the only part that is our contract — the
+  // payload is published under the name `__DSH_BOOT__`.
+  /<script>(?:window\.__DSH_BOOT__|globalThis\[\s*["']__DSH_BOOT__["']\s*\])\s*=\s*([\s\S]*?)<\/script>/u;
 const SCRIPT_TAG_PATTERN = /<script\b([^>]*)><\/script>/gu;
 const LINK_TAG_PATTERN = /<link\b([^>]*)>/gu;
 

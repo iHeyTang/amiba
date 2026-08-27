@@ -568,7 +568,10 @@ try {
         assert.equal(response.status, 200);
         html = await response.text();
         const manifestMatch =
-          /<script>window\.__DSH_BOOT__\s*=\s*([\s\S]*?)<\/script>/u.exec(html);
+          // Either spelling — see BOOT_SCRIPT_PATTERN in dsh-client-boot.ts.
+          /<script>(?:window\.__DSH_BOOT__|globalThis\[\s*["']__DSH_BOOT__["']\s*\])\s*=\s*([\s\S]*?)<\/script>/u.exec(
+            html,
+          );
         assert.ok(manifestMatch?.[1], "DSH Web Shell omitted __DSH_BOOT__");
         graph = JSON.parse(manifestMatch[1]);
         ids = new Set(graph.entries.map((entry) => entry.id));

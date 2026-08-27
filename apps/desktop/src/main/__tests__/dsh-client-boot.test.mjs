@@ -8,7 +8,7 @@ import {
 } from "../dsh-client-boot.ts";
 
 test("extracts and absolutizes the host-composed DSH client graph", () => {
-  const html = `<html><head><script>window.__DSH_BOOT__ = ${JSON.stringify({
+  const html = `<html><head><script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({
     rev: "graph-rev",
     entries: [
       {
@@ -39,6 +39,26 @@ test("extracts only same-runtime DSH Web Shell assets", () => {
       styles: ["http://127.0.0.1:43123/assets/index-abc.css"],
     },
   );
+});
+
+test("accepts either spelling of the boot assignment", () => {
+  // The webserver renders this row itself: 0.1.0 emitted `window.__DSH_BOOT__`,
+  // 0.1.1 emits `globalThis["__DSH_BOOT__"]`. Reading only the first spelling
+  // is what broke desktop boot on the 0.1.1 upgrade with "did not publish
+  // __DSH_BOOT__" — a fixture written in a spelling upstream no longer used
+  // kept the suite green while the real app could not start.
+  const graph = { rev: "r", entries: [] };
+  for (const assignment of [
+    'window.__DSH_BOOT__ = ',
+    'globalThis["__DSH_BOOT__"] = ',
+    "globalThis['__DSH_BOOT__'] = ",
+  ]) {
+    const html = `<script>${assignment}${JSON.stringify(graph)}</script>`;
+    assert.deepEqual(
+      extractDshClientBootGraph(html, "http://127.0.0.1:43123").entries,
+      [],
+    );
+  }
 });
 
 test("rejects a client bundle outside the managed runtime origin", () => {
