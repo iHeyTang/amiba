@@ -3,7 +3,6 @@ import type { ModelDefinition } from "@amiba/app-runtime/platform";
 import type { ModelProviderProfile } from "./types.js";
 
 import { asObject } from "./core.js";
-import { applyModelProviderCapabilities } from "./drivers.js";
 
 export function modelDiscoveryUrl(provider: ModelProviderProfile): URL {
   const defaultBase =
@@ -51,6 +50,17 @@ export function discoveredModels(
         ...(typeof row.max_output_tokens === "number"
           ? { maxTokens: row.max_output_tokens }
           : {}),
+        // The provider's own answer outranks anything a driver table or an
+        // earlier discovery left behind. Without this the row was read for
+        // context window and output tokens but not for what the model can
+        // actually be fed, so a stale `["text"]` survived every re-discovery.
+        ...(Array.isArray(row.input_modalities)
+          ? {
+              inputModalities: row.input_modalities.filter(
+                (item): item is string => typeof item === "string" && !!item,
+              ),
+            }
+          : {}),
       },
     ];
   });
@@ -62,7 +72,7 @@ export interface DiscoverModelsOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-/** Discover provider rows while preserving driver-owned capability metadata. */
+/** Discover provider rows straight from the provider's own /models response. */
 export async function discoverModelsFromProvider(
   provider: ModelProviderProfile,
   options: DiscoverModelsOptions = {},
@@ -100,8 +110,5 @@ export async function discoverModelsFromProvider(
         : `Provider model discovery failed with HTTP ${response.status}`;
     throw new Error(message);
   }
-  return applyModelProviderCapabilities({
-    ...provider,
-    models: discoveredModels(body, provider.models),
-  }).models;
+  return discoveredModels(body, provider.models);
 }

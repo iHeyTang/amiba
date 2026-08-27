@@ -23,7 +23,6 @@ import {
 } from "./core.js";
 import { discoverModelsFromProvider } from "./discovery.js";
 import {
-  applyModelProviderCapabilities,
   builtInModelProviders,
 } from "./drivers.js";
 
@@ -102,7 +101,7 @@ export class ModelPlaneService implements ModelPlaneAdapter {
     if (!registry) return this.bootstrapRegistry();
     return {
       ...registry,
-      providers: registry.providers.map(applyModelProviderCapabilities),
+      providers: registry.providers,
     };
   }
 
@@ -224,10 +223,8 @@ export class ModelPlaneService implements ModelPlaneAdapter {
         await this.options.vault.set(credentialRef, input.apiKey);
       }
       const provider = normalizeProvider({
-        ...applyModelProviderCapabilities({
-          ...input.provider,
-          source: existing?.source ?? "user",
-        }),
+        ...input.provider,
+        source: existing?.source ?? "user",
         ...(credentialRef ? { credentialRef } : {}),
       });
       if (!provider)
