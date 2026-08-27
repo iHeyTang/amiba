@@ -37,9 +37,9 @@
   },
   "peerDependencies": {
     "@amiba/extension-sdk": "^0.1.0",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
@@ -51,10 +51,10 @@
   },
   "devDependencies": {
     "@amiba/extension-sdk": "workspace:*",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-client-locale": "catalog:",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "@testing-library/react": "^16.0.1",
     "@types/node": "22.9.0",
     "@types/react": "18.3.12",

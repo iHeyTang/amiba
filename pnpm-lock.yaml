@@ -4,6 +4,90 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@deepseek-ai/cordis':
+      specifier: ^4.0.1
+      version: 4.0.1
+    '@deepseek-ai/dsh':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-agent':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-agent-presets':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-api-remotes':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-attachment':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-locale':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-runtime':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-commands':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-conversation':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-input-trigger':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-layout':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-settings':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-slots':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-client-ui-tool':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-commands':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-credentials':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-host-plugin-inventory':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-llm':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-mcp-client':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-session':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-session-query':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-settings':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-skill':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-tools':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/dsh-typert-protocol':
+      specifier: 0.1.0-rc.6
+      version: 0.1.0-rc.6
+    '@deepseek-ai/schemastery':
+      specifier: ^3.0.0
+      version: 3.18.1
+
 importers:
 
   .:
@@ -64,7 +148,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(46dapgz6cjdfvkjuks5cdqcyre)
       '@radix-ui/react-checkbox':
         specifier: ^1.3.3
@@ -273,31 +357,31 @@ importers:
   packages/extension-sdk:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-commands':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(neyffinds5ilqy76rw7fn4gk3u)
       '@deepseek-ai/dsh-client-ui-conversation':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(yxzsnpju3tblgoiynnluh6eami)
       '@deepseek-ai/dsh-client-ui-input-trigger':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-locale@0.1.0-rc.6(qezodrjrw4wxu53s3zb3g5hxqy))(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i))(@deepseek-ai/dsh-client-ui-primitives@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-layout':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.6(5kowdlacnnlvevfhhzx25pynzm))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-settings':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq))(@deepseek-ai/dsh-client-connection@0.1.0-rc.6)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i))(@deepseek-ai/dsh-client-schema-form@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-settings@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1))(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-client-ui-tool':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq))(@deepseek-ai/dsh-client-locale@0.1.0-rc.6(qezodrjrw4wxu53s3zb3g5hxqy))(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i))(@deepseek-ai/dsh-client-ui-conversation@0.1.0-rc.6(yxzsnpju3tblgoiynnluh6eami))(@deepseek-ai/dsh-client-ui-primitives@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
       typescript:
         specifier: 5.6.3
@@ -519,16 +603,16 @@ importers:
         version: 0.460.0(react@18.3.1)
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -573,10 +657,10 @@ importers:
         specifier: workspace:*
         version: link:../dsh-plugin-catalog
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       pdfjs-dist:
         specifier: 6.1.200
@@ -586,10 +670,10 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
       '@types/node':
         specifier: 22.9.0
@@ -607,14 +691,14 @@ importers:
         specifier: workspace:*
         version: link:../dsh-plugin-catalog
       '@deepseek-ai/dsh-attachment':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@types/node':
         specifier: 22.9.0
@@ -632,11 +716,11 @@ importers:
         specifier: workspace:*
         version: link:../dsh-plugin-browser-core
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@types/node':
         specifier: 22.9.0
@@ -658,7 +742,7 @@ importers:
         version: link:../dsh-plugin-runtime-gateway
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@types/node':
         specifier: 22.9.0
@@ -682,10 +766,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -695,25 +779,25 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-agent-presets':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(7ttnmsmz52dcx7i4stgl3of264)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -755,20 +839,20 @@ importers:
   plugins/dsh-plugin-commands-adapter:
     dependencies:
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-commands':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-agent@0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy))(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-scope@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-session@0.1.0-rc.6(d7gccyf6bsc5n3avojaaw5u2pm))(@deepseek-ai/dsh-typert-protocol@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))
       '@types/node':
         specifier: 22.9.0
@@ -792,10 +876,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -808,19 +892,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/app-runtime
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-mcp-client':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(cmayiebjwzik73qhez3lakhesi)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -871,10 +955,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -884,22 +968,22 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
       '@types/node':
         specifier: 22.9.0
@@ -933,7 +1017,7 @@ importers:
         version: link:../dsh-plugin-messaging-core
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@types/node':
         specifier: 22.9.0
@@ -957,19 +1041,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -979,16 +1063,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-llm':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-attachment@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-timeout@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))
       '@deepseek-ai/dsh-session':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(d7gccyf6bsc5n3avojaaw5u2pm)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -1042,16 +1126,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-credentials':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-settings':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1)
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -1061,16 +1145,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -1116,7 +1200,7 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@types/node':
         specifier: 22.9.0
@@ -1137,17 +1221,17 @@ importers:
         specifier: workspace:*
         version: link:../dsh-plugin-notification-hub
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-attachment':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
       '@types/node':
         specifier: 22.9.0
@@ -1175,19 +1259,19 @@ importers:
         version: 0.460.0(react@18.3.1)
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-host-plugin-inventory':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis-plugin-loader@1.0.2)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-typert-protocol@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))
       '@types/node':
         specifier: 22.9.0
@@ -1226,10 +1310,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -1239,25 +1323,25 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-session':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(d7gccyf6bsc5n3avojaaw5u2pm)
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(b6nzleejznykjypjubilix76n4)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -1308,13 +1392,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-skill':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-llm@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-attachment@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-brand@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-timeout@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))))(@deepseek-ai/dsh-scope@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -1324,19 +1408,19 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-agent':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(ztsqhou56uttaxm3iogf36zcqy)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -1394,16 +1478,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/extension-sdk
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-client-locale':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(qezodrjrw4wxu53s3zb3g5hxqy)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@testing-library/react':
         specifier: ^16.0.1
@@ -1457,10 +1541,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/schemastery':
-        specifier: ^3.0.0
+        specifier: 'catalog:'
         version: 3.18.1
       lucide-react:
         specifier: ^0.460.0
@@ -1470,22 +1554,22 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(z6bivqvrskwp6iw7voemrvupoq)
       '@deepseek-ai/dsh-client-runtime':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(mjhrivborez33vd23tqwl6id7i)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-session':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(d7gccyf6bsc5n3avojaaw5u2pm)
       '@deepseek-ai/dsh-session-query':
-        specifier: 0.1.0-rc.6
+        specifier: 'catalog:'
         version: 0.1.0-rc.6(54igwdqnb3lgu6botd46svypb4)
       '@testing-library/jest-dom':
         specifier: ^6.6.3

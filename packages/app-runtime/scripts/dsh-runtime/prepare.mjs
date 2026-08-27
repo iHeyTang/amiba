@@ -25,6 +25,45 @@ const declaration = JSON.parse(
     "utf8",
   ),
 );
+
+/**
+ * The workspace catalog, as `name -> concrete version`.
+ *
+ * The runtime is assembled by writing a package.json and installing it with
+ * NPM, which does not understand pnpm's `catalog:` protocol
+ * (`EUNSUPPORTEDPROTOCOL`). Plugin manifests are copied into that file
+ * verbatim, so every `catalog:` specifier has to be resolved on the way out —
+ * the same way `workspace:` specifiers are dropped.
+ *
+ * Parsed with a regex rather than a YAML dependency: this script has no
+ * node_modules of its own, and the catalog block is flat `key: value` pairs.
+ */
+const catalogVersions = await (async () => {
+  const source = await fsp.readFile(
+    path.join(workspaceDir, "pnpm-workspace.yaml"),
+    "utf8",
+  );
+  const block = source.match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
+  if (!block) return new Map();
+  const entries = new Map();
+  for (const line of block[1].split("\n")) {
+    const entry = line.match(/^\s+["']?([^"':]+)["']?:\s*(.+?)\s*$/u);
+    if (entry) entries.set(entry[1], entry[2].replace(/^["']|["']$/gu, ""));
+  }
+  return entries;
+})();
+
+/** Replace a `catalog:` specifier with the version the catalog declares. */
+function resolveCatalogSpecifier(name, version) {
+  if (version !== "catalog:") return version;
+  const resolved = catalogVersions.get(name);
+  if (!resolved) {
+    throw new Error(
+      `[dsh:runtime] ${name} uses "catalog:" but pnpm-workspace.yaml declares no catalog entry for it`,
+    );
+  }
+  return resolved;
+}
 const bundlePackages = await Promise.all(
   bundleSourceDirs.map(async (directory) =>
     JSON.parse(await fsp.readFile(path.join(directory, "package.json"), "utf8")),
@@ -483,12 +522,17 @@ try {
           pnpm: managedPnpmVersion,
           ...Object.fromEntries(
             pluginPackages.flatMap((manifest) =>
-              Object.entries(manifest.dependencies ?? {}).filter(
-                ([name, version]) =>
-                  !name.startsWith("@amiba/") &&
-                  typeof version === "string" &&
-                  !version.startsWith("workspace:"),
-              ),
+              Object.entries(manifest.dependencies ?? {})
+                .filter(
+                  ([name, version]) =>
+                    !name.startsWith("@amiba/") &&
+                    typeof version === "string" &&
+                    !version.startsWith("workspace:"),
+                )
+                .map(([name, version]) => [
+                  name,
+                  resolveCatalogSpecifier(name, version),
+                ]),
             ),
           ),
         },

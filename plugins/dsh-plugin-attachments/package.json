@@ -15,18 +15,18 @@
   },
   "dependencies": {
     "@amiba/dsh-plugin-catalog": "workspace:*",
-    "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.0.0",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
+    "@deepseek-ai/schemastery": "catalog:",
     "pdfjs-dist": "6.1.200",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
     "vitest": "^2.1.4"

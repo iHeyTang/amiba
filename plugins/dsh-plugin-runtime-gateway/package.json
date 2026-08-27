@@ -12,17 +12,17 @@
   "dependencies": {
     "@amiba/dsh-plugin-catalog": "workspace:*",
     "@amiba/dsh-plugin-notification-hub": "workspace:*",
-    "@deepseek-ai/schemastery": "^3.0.0"
+    "@deepseek-ai/schemastery": "catalog:"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-attachment": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-attachment": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
     "vitest": "^2.1.4"
