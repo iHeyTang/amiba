@@ -20,6 +20,14 @@ const DSH_CLIENT_EXTERNALS = [
 
 export default defineConfig({
   build: {
+    // Match the TypeScript target. Vite's default ("modules") includes
+    // safari14, which makes esbuild LOWER optional chaining — and its
+    // lowering is wrong inside a default parameter, where it cannot hoist a
+    // `var` temporary and resorts to IIFEs whose scopes it then gets wrong:
+    // `a?.b?.()` emitted `(r => ... r.call(e))()` with `e` declared in an
+    // inner arrow, throwing `ReferenceError: e is not defined` at runtime.
+    // ES2022 has optional chaining natively, so nothing is lowered.
+    target: "es2022",
     outDir: "lib",
     emptyOutDir: false,
     sourcemap: true,
