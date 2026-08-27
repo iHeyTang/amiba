@@ -381,7 +381,7 @@ export function SettingsView({
         {slots?.contentOverlay ? (
           <div
             data-amiba-slot="amiba.settings.content.overlay"
-            className="pointer-events-none absolute inset-0 z-[60]"
+            className="pointer-events-none absolute inset-0 z-[var(--z-app-overlay)]"
           >
             {slots.contentOverlay}
           </div>

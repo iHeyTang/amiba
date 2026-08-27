@@ -71,7 +71,7 @@ export function SettingsDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4"
       data-amiba-settings-dialog
       role="presentation"
       // The OS owns the top strip on desktop (macOS traffic lights under a

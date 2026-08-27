@@ -655,7 +655,7 @@ function ProductShellInner({
           sidebarHeaderHeightPx={topBarHeightPx}
         />
       </SettingsDialog>
-      <div className="pointer-events-none absolute inset-0 z-[100]">
+      <div className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)]">
         {renderSlot("shell.overlay", {})}
       </div>
       {/*

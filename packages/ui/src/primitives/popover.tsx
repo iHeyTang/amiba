@@ -74,7 +74,7 @@ const PopoverContent = React.forwardRef<
         sideOffset={sideOffset}
         data-ui-overlay="popover"
         className={cn(
-          "z-50 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-popover outline-none",
+          "z-[var(--z-popover)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-popover outline-none",
           "origin-[var(--radix-popover-content-transform-origin)] duration-150 ease-out",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           "data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",

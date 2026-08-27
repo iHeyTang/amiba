@@ -135,6 +135,37 @@
   }
 }
 
+/*
+ * Overlay layering. One scale, so "which number wins" stops being folklore
+ * passed around in comments. Theme-independent, hence its own block.
+ *
+ * The load-bearing idea: Radix portals every overlay to the END of <body>,
+ * after the app root. Surfaces that must stack in the order the user opens
+ * them therefore SHARE a layer and let DOM order decide. That is what lets a
+ * dialog opened from inside the settings dialog land on top of it instead of
+ * underneath — they are both `--z-modal`, and the later one paints last.
+ *
+ * A surface only needs its own layer when it must beat something it did NOT
+ * open after. Popovers/selects/tooltips get one because they are opened FROM
+ * a modal and would otherwise tie with it while sitting earlier in the DOM.
+ */
+@layer base {
+  :root {
+    /* In-pane chrome floating over content, never over a modal. */
+    --z-workbench: 50;
+    /* Full-surface overlays owned by a single view (chat, settings). */
+    --z-app-overlay: 60;
+    /* The product shell's own overlay seat, above any single view. */
+    --z-shell-overlay: 100;
+    /* Every modal surface. Shared on purpose — see the note above. */
+    --z-modal: 120;
+    /* Controls that must stay reachable above a modal surface. */
+    --z-modal-chrome: 130;
+    /* Opened from inside modals, so they have to clear them. */
+    --z-popover: 200;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

@@ -219,8 +219,9 @@ function ImagePreviewDialog({
               // Pinned to the viewport's top-right (the overlay covers the
               // whole viewport, so this anchors against the overlay corner,
               // not the image — feels more like a real lightbox close).
-              // z-[60] sits above DialogContent's z-50.
-              "fixed right-4 top-4 z-[60] inline-flex h-9 w-9 items-center justify-center",
+              // Must clear the DialogContent it is pinned over, hence the
+              // dedicated modal-chrome layer rather than a hand-picked number.
+              "fixed right-4 top-4 z-[var(--z-modal-chrome)] inline-flex h-9 w-9 items-center justify-center",
               // Resting state stays subtle so it doesn't fight the image
               // for attention; hover/focus pops it to full contrast.
               "rounded-full bg-black/25 text-white/80 shadow-md backdrop-blur-sm",
