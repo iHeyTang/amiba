@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  projectRuntimeSessionHistory,
-  splitAttachmentEnvelope,
-} from "../runtime-session-history";
+import { projectRuntimeSessionHistory } from "../runtime-session-history";
+import { splitFileAttachmentsFromPrompt } from "../attachments/format";
 
 describe("projectRuntimeSessionHistory", () => {
   it("folds a DSH event log into one assistant row per turn", () => {
@@ -188,7 +186,7 @@ describe("projectRuntimeSessionHistory", () => {
       "",
       "这是什么",
     ].join("\n");
-    const { text, badges } = splitAttachmentEnvelope(envelope);
+    const { text, badges } = splitFileAttachmentsFromPrompt(envelope);
     expect(text).toBe("这是什么");
     expect(badges).toEqual([
       {
@@ -206,11 +204,11 @@ describe("projectRuntimeSessionHistory", () => {
     // A user legitimately PASTING the marker must not have their words eaten.
     const pasted =
       "look at this: <file-attachment>\nnot the real shape\n</file-attachment> ok?";
-    expect(splitAttachmentEnvelope(pasted)).toEqual({
+    expect(splitFileAttachmentsFromPrompt(pasted)).toEqual({
       text: pasted,
       badges: [],
     });
-    expect(splitAttachmentEnvelope("这是什么")).toEqual({
+    expect(splitFileAttachmentsFromPrompt("这是什么")).toEqual({
       text: "这是什么",
       badges: [],
     });
