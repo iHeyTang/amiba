@@ -58,12 +58,25 @@ function CronNavigation({
 
 type CronViewProps = PropsRuntime<"amiba.workspace.view"> & {
   adapter: CronAdapter;
+  expandSidebar(): void;
 };
 
-function CronView({ adapter }: CronViewProps): ReactNode {
+function CronView({
+  adapter,
+  chromeHeightPx,
+  expandSidebar,
+  showSidebarExpandControl = false,
+  sidebarCollapsed = false,
+  topBarLeftInset,
+}: CronViewProps): ReactNode {
   return (
     <DshCronPage
       adapter={adapter}
+      topBarHeightPx={chromeHeightPx}
+      topBarLeftInset={topBarLeftInset}
+      sidebarCollapsed={sidebarCollapsed}
+      showSidebarExpandControl={showSidebarExpandControl}
+      onExpandSidebar={expandSidebar}
       onOpenSession={(sessionId) => {
         // The host's open-by-id seam: FullScreenChatView routes this to the
         // sessions store, which admits any valid DSH session id.
@@ -110,7 +123,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             id: VIEW_ID,
             order: 100,
             label: copy,
-            inject: () => ({ adapter }),
+            inject: () => ({
+              adapter,
+              expandSidebar: () => injectedCtx.layout.toggleSidebar(),
+            }),
           },
           CronView,
         ),

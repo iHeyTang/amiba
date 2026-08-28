@@ -1,12 +1,15 @@
 import {
   CalendarClock,
   Loader2,
+  Newspaper,
+  NotebookPen,
   Play,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Dialog,
@@ -18,8 +21,14 @@ import {
   Label,
   PageContent,
   ScrollArea,
+  SidebarExpandControl,
   Switch,
   Textarea,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  cn,
   usePluginT,
 } from "@amiba/ui/plugin";
 
@@ -38,15 +47,22 @@ function useT() {
 export interface CronAdapter {
   list(): Promise<CronTaskView[]>;
   create(input: CronTaskCreateInput): Promise<CronTaskView>;
-  update(
-    id: string,
-    patch: { enabled?: boolean },
-  ): Promise<CronTaskView>;
+  update(id: string, patch: { enabled?: boolean }): Promise<CronTaskView>;
   removeTask(id: string): Promise<void>;
   runNow(id: string): Promise<CronTaskView>;
 }
 
 type RuleMode = CronRule["kind"];
+type TaskFilter = "all" | "enabled" | "disabled";
+
+/** Prefill handed from a suggestion card into the create dialog. */
+interface CreatePrefill {
+  name: string;
+  prompt: string;
+  mode: RuleMode;
+  dailyTime?: string;
+  everyMinutes?: string;
+}
 
 function formatInstant(instant: number, language: string): string {
   return new Intl.DateTimeFormat(language, {
@@ -58,26 +74,46 @@ function formatInstant(instant: number, language: string): string {
   }).format(new Date(instant));
 }
 
+/** "19小时后" / "3分钟前" — the Codex-style row subtitle vocabulary. */
+function relativeTime(
+  instant: number,
+  now: number,
+  t: ReturnType<typeof useT>["t"],
+): string {
+  const delta = instant - now;
+  const magnitude = Math.abs(delta);
+  const unit =
+    magnitude < 3_600_000
+      ? ([Math.max(1, Math.round(magnitude / 60_000)), "Minutes"] as const)
+      : magnitude < 86_400_000
+        ? ([Math.round(magnitude / 3_600_000), "Hours"] as const)
+        : ([Math.round(magnitude / 86_400_000), "Days"] as const);
+  const key = `cron.time.in${unit[1]}${delta < 0 ? "Ago" : ""}` as never;
+  return t(key, { count: unit[0] });
+}
+
 function ruleLabel(
   rule: CronRule,
   t: ReturnType<typeof useT>["t"],
   language: string,
 ): string {
   if (rule.kind === "at") {
-    return t("cron.rule.at", { time: formatInstant(Date.parse(rule.at), language) });
+    return t("cron.rule.at", {
+      time: formatInstant(Date.parse(rule.at), language),
+    });
   }
   if (rule.kind === "daily") return t("cron.rule.daily", { time: rule.time });
-  return t("cron.rule.every", {
-    minutes: Math.round(rule.everySeconds / 60),
-  });
+  return t("cron.rule.every", { minutes: Math.round(rule.everySeconds / 60) });
 }
 
 function CreateDialog({
   open,
+  prefill,
   onClose,
   onCreate,
 }: {
   open: boolean;
+  prefill: CreatePrefill | null;
   onClose(): void;
   onCreate(input: CronTaskCreateInput): Promise<void>;
 }) {
@@ -91,6 +127,16 @@ function CreateDialog({
   const [catchUp, setCatchUp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // A suggestion card seeds the form; the user still reviews and confirms.
+  useEffect(() => {
+    if (!open || !prefill) return;
+    setName(prefill.name);
+    setPrompt(prefill.prompt);
+    setMode(prefill.mode);
+    if (prefill.dailyTime) setDailyTime(prefill.dailyTime);
+    if (prefill.everyMinutes) setEveryMinutes(prefill.everyMinutes);
+  }, [open, prefill]);
 
   const submit = async () => {
     const rule: CronRule =
@@ -215,91 +261,157 @@ function CreateDialog({
 
 function TaskRow({
   task,
+  now,
   onToggle,
   onRunNow,
   onRemove,
   onOpenSession,
 }: {
   task: CronTaskView;
+  now: number;
   onToggle(enabled: boolean): void;
   onRunNow(): void;
   onRemove(): void;
   onOpenSession(sessionId: string): void;
 }) {
   const { t, language } = useT();
-  const timing = !task.enabled
-    ? t("cron.row.disabled")
-    : task.nextRunAt === null
-      ? t("cron.row.exhausted")
-      : `${t("cron.row.nextRun")} ${formatInstant(task.nextRunAt, language)}`;
+  const subtitle = [
+    ruleLabel(task.rule, t, language),
+    !task.enabled
+      ? t("cron.row.disabled")
+      : task.nextRunAt === null
+        ? t("cron.row.exhausted")
+        : t("cron.row.nextRunIn", {
+            when: relativeTime(task.nextRunAt, now, t),
+          }),
+    ...(task.lastRunAt
+      ? [t("cron.row.lastRunAt", { when: relativeTime(task.lastRunAt, now, t) })]
+      : []),
+  ].join(" · ");
   return (
-    <div
+    <li
       data-cron-task={task.id}
-      className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2.5"
+      className="group/task flex items-center gap-3 border-b border-border/40 py-3 last:border-b-0"
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{task.name}</span>
-          <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            {ruleLabel(task.rule, t, language)}
-          </span>
+      <span
+        aria-hidden
+        className={cn(
+          "h-2 w-2 shrink-0 rounded-full",
+          !task.enabled
+            ? "bg-muted-foreground/30"
+            : task.nextRunAt === null
+              ? "bg-muted-foreground/50"
+              : "bg-emerald-500/80",
+        )}
+      />
+      <button
+        type="button"
+        className="min-w-0 flex-1 text-left"
+        disabled={!task.lastSessionId}
+        title={task.lastSessionId ? t("cron.row.openLastRun") : undefined}
+        onClick={() => task.lastSessionId && onOpenSession(task.lastSessionId)}
+      >
+        <div className="truncate text-sm font-medium text-foreground">
+          {task.name}
         </div>
         <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {timing}
-          {" · "}
-          {task.lastRunAt
-            ? `${t("cron.row.lastRun")} ${formatInstant(task.lastRunAt, language)}`
-            : t("cron.row.never")}
+          {subtitle}
         </div>
+      </button>
+      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/task:opacity-100 group-focus-within/task:opacity-100">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+              aria-label={t("cron.row.runNow")}
+              onClick={onRunNow}
+            >
+              <Play />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("cron.row.runNow")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+              aria-label={t("cron.row.delete")}
+              onClick={onRemove}
+            >
+              <Trash2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("cron.row.delete")}</TooltipContent>
+        </Tooltip>
       </div>
-      {task.lastSessionId && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onOpenSession(task.lastSessionId!)}
-        >
-          {t("cron.row.openLastRun")}
-        </Button>
-      )}
-      <Button
-        variant="ghost"
-        size="sm"
-        title={t("cron.row.runNow")}
-        aria-label={t("cron.row.runNow")}
-        onClick={onRunNow}
-      >
-        <Play className="h-3.5 w-3.5" />
-      </Button>
       <Switch
         checked={task.enabled}
         aria-label={t("cron.row.enable")}
         onCheckedChange={onToggle}
+        className="shrink-0"
       />
-      <Button
-        variant="ghost"
-        size="sm"
-        title={t("cron.row.delete")}
-        aria-label={t("cron.row.delete")}
-        onClick={onRemove}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+    </li>
   );
+}
+
+/** Honest templates: only shapes the rule set actually supports. */
+function suggestions(t: ReturnType<typeof useT>["t"]): Array<
+  CreatePrefill & { icon: typeof Newspaper; schedule: string; description: string }
+> {
+  return [
+    {
+      icon: Newspaper,
+      name: t("cron.suggest.news.name"),
+      schedule: t("cron.suggest.news.schedule"),
+      description: t("cron.suggest.news.description"),
+      prompt: t("cron.suggest.news.prompt"),
+      mode: "daily",
+      dailyTime: "09:00",
+    },
+    {
+      icon: NotebookPen,
+      name: t("cron.suggest.digest.name"),
+      schedule: t("cron.suggest.digest.schedule"),
+      description: t("cron.suggest.digest.description"),
+      prompt: t("cron.suggest.digest.prompt"),
+      mode: "daily",
+      dailyTime: "18:00",
+    },
+  ];
+}
+
+export interface DshCronPageProps {
+  adapter: CronAdapter;
+  onOpenSession(sessionId: string): void;
+  topBarHeightPx?: number;
+  topBarLeftInset?: number;
+  sidebarCollapsed?: boolean;
+  showSidebarExpandControl?: boolean;
+  onExpandSidebar?(): void;
 }
 
 export function DshCronPage({
   adapter,
   onOpenSession,
-}: {
-  adapter: CronAdapter;
-  onOpenSession(sessionId: string): void;
-}) {
+  topBarHeightPx = 40,
+  topBarLeftInset = 0,
+  sidebarCollapsed = false,
+  showSidebarExpandControl = sidebarCollapsed,
+  onExpandSidebar,
+}: DshCronPageProps) {
   const { t } = useT();
   const [tasks, setTasks] = useState<CronTaskView[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [prefill, setPrefill] = useState<CreatePrefill | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<TaskFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const now = Date.now();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -317,70 +429,186 @@ export function DshCronPage({
     void refresh();
   }, [refresh]);
 
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return tasks.filter((task) => {
+      if (filter === "enabled" && !task.enabled) return false;
+      if (filter === "disabled" && task.enabled) return false;
+      if (!needle) return true;
+      return `${task.name}\n${task.prompt}`.toLowerCase().includes(needle);
+    });
+  }, [tasks, query, filter]);
+
+  const act = (work: Promise<unknown>) =>
+    void work.then(refresh).catch((cause) => setError(String(cause)));
+
+  const openCreate = (seed: CreatePrefill | null) => {
+    setPrefill(seed);
+    setCreating(true);
+  };
+
+  const filters: Array<{ id: TaskFilter; label: string }> = [
+    { id: "all", label: t("cron.filter.all") },
+    { id: "enabled", label: t("cron.filter.enabled") },
+    { id: "disabled", label: t("cron.filter.disabled") },
+  ];
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <ScrollArea className="min-h-0 flex-1">
-        <PageContent title={t("cron.title")}>
-          <div className="mb-3 flex items-center justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => void refresh()}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              {t("cron.refresh")}
-            </Button>
-            <Button size="sm" onClick={() => setCreating(true)}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
+    <TooltipProvider delayDuration={250}>
+      <div className="flex min-h-0 flex-1 flex-col bg-background">
+        {/* Same head geometry as the chat surface: drag strip, OS-chrome
+            inset, expand control on the left, actions on the right. */}
+        <header
+          className="app-drag flex shrink-0 items-center bg-background pr-2"
+          style={{
+            height: topBarHeightPx,
+            paddingLeft: sidebarCollapsed ? Math.max(topBarLeftInset, 12) : 10,
+          }}
+        >
+          {onExpandSidebar ? (
+            <SidebarExpandControl
+              collapsed={sidebarCollapsed}
+              onExpand={onExpandSidebar}
+              visible={showSidebarExpandControl}
+            />
+          ) : null}
+          <div className="app-no-drag ml-auto flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+                  disabled={loading}
+                  aria-label={t("cron.refresh")}
+                  onClick={() => void refresh()}
+                >
+                  <RefreshCw className={cn(loading && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t("cron.refresh")}</TooltipContent>
+            </Tooltip>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none [&_svg]:size-3.5"
+              onClick={() => openCreate(null)}
+            >
+              <Plus />
               {t("cron.new")}
             </Button>
           </div>
-          {error && <p className="mb-3 text-xs text-destructive">{error}</p>}
-          {loading ? (
-            <p className="text-sm text-muted-foreground">{t("cron.loading")}</p>
-          ) : tasks.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <CalendarClock className="h-8 w-8 stroke-[1.5] text-muted-foreground/50" />
-              <p className="text-sm font-medium">{t("cron.empty.title")}</p>
-              <p className="max-w-sm text-xs text-muted-foreground">
-                {t("cron.empty.description")}
-              </p>
+        </header>
+        <ScrollArea className="min-h-0 flex-1">
+          <PageContent title={t("cron.title")}>
+            <p className="-mt-2 mb-5 text-sm text-muted-foreground">
+              {t("cron.subtitle")}
+            </p>
+            <div className="relative min-w-0">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70"
+              />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("cron.searchPlaceholder")}
+                className="h-10 pl-9"
+              />
             </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onToggle={(enabled) =>
-                    void adapter
-                      .update(task.id, { enabled })
-                      .then(refresh)
-                      .catch((cause) => setError(String(cause)))
-                  }
-                  onRunNow={() =>
-                    void adapter
-                      .runNow(task.id)
-                      .then(refresh)
-                      .catch((cause) => setError(String(cause)))
-                  }
-                  onRemove={() =>
-                    void adapter
-                      .removeTask(task.id)
-                      .then(refresh)
-                      .catch((cause) => setError(String(cause)))
-                  }
-                  onOpenSession={onOpenSession}
-                />
+            <div className="mt-3 flex items-center gap-1">
+              {filters.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={filter === id}
+                  onClick={() => setFilter(id)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs transition-colors",
+                    filter === id
+                      ? "bg-secondary font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
               ))}
             </div>
-          )}
-        </PageContent>
-      </ScrollArea>
-      <CreateDialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreate={async (input) => {
-          await adapter.create(input);
-          await refresh();
-        }}
-      />
-    </div>
+            {error && (
+              <p className="mt-3 text-xs text-destructive">{error}</p>
+            )}
+            {loading ? (
+              <p className="mt-6 text-sm text-muted-foreground">
+                {t("cron.loading")}
+              </p>
+            ) : visible.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-14 text-center">
+                <CalendarClock className="h-8 w-8 stroke-[1.5] text-muted-foreground/50" />
+                <p className="text-sm font-medium">{t("cron.empty.title")}</p>
+                <p className="max-w-sm text-xs text-muted-foreground">
+                  {t("cron.empty.description")}
+                </p>
+              </div>
+            ) : (
+              <ul className="mt-2">
+                {visible.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    now={now}
+                    onToggle={(enabled) =>
+                      act(adapter.update(task.id, { enabled }))
+                    }
+                    onRunNow={() => act(adapter.runNow(task.id))}
+                    onRemove={() => act(adapter.removeTask(task.id))}
+                    onOpenSession={onOpenSession}
+                  />
+                ))}
+              </ul>
+            )}
+            <h2 className="mb-2 mt-10 text-sm font-semibold text-foreground">
+              {t("cron.suggest.title")}
+            </h2>
+            <ul>
+              {suggestions(t).map((suggestion) => (
+                <li key={suggestion.name}>
+                  <button
+                    type="button"
+                    onClick={() => openCreate(suggestion)}
+                    className="group/suggest flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <suggestion.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0">
+                      <span className="flex items-baseline gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {suggestion.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {suggestion.schedule}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {suggestion.description}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </PageContent>
+        </ScrollArea>
+        <CreateDialog
+          open={creating}
+          prefill={prefill}
+          onClose={() => setCreating(false)}
+          onCreate={async (input) => {
+            await adapter.create(input);
+            await refresh();
+          }}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
