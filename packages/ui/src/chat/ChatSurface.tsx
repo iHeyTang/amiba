@@ -1782,10 +1782,11 @@ export default function ChatSurface({
       onAbort={stop}
       autoFocus={composerAutoFocus}
       canSubmit={
-        (input.trim().length > 0 ||
-          attachments.some((a) => a.attachmentId && !a.uploading)) &&
-        !attachmentUploading &&
-        !attachmentBusy
+        // Text is required, with or without attachments: an attachment-only
+        // send has no user words to anchor the turn, and rather than the app
+        // inventing a stand-in downstream, sending is simply not enabled
+        // until something is typed.
+        input.trim().length > 0 && !attachmentUploading && !attachmentBusy
       }
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (

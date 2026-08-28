@@ -303,17 +303,14 @@ export class DshChatEngineClient implements ChatEngineClient {
           this.options.attachments,
           payload.attachments,
         );
-        const typed = lastUserText(payload);
         const textParts: DshPromptContentPart[] = [
           // Attachment metadata rides its own part; the user's words ride
-          // theirs. An attachment-only send (no typed text) still needs at
-          // least one text part, which the metadata part then provides.
+          // theirs. The composer requires typed text to enable sending, so
+          // the engine does not compensate for its absence.
           ...(payload.attachmentPrompt
             ? [{ type: "text" as const, text: payload.attachmentPrompt }]
             : []),
-          ...(typed || !payload.attachmentPrompt
-            ? [{ type: "text" as const, text: typed }]
-            : []),
+          { type: "text" as const, text: lastUserText(payload) },
         ];
         const response = await client.prompt(
           sessionId,
