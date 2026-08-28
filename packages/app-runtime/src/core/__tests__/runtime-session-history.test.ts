@@ -252,4 +252,40 @@ describe("projectRuntimeSessionHistory", () => {
       "image.png",
     ]);
   });
+
+  it("projects the two-part wire format: metadata part to badges, text part to words", () => {
+    const messages = projectRuntimeSessionHistory([
+      {
+        event: {
+          type: "user/message",
+          seq: 1,
+          time: 2,
+          data: {
+            id: "u1",
+            source: { kind: "user" },
+            content: [
+              {
+                type: "text",
+                text:
+                  "<file-attachment>\n" +
+                  'Name: "image.png"\n' +
+                  'Kind: "image"\n' +
+                  'Mime: "image/png"\n' +
+                  "Size: 49242 bytes\n" +
+                  'Attachment-ID: "att_1"\n' +
+                  "</file-attachment>",
+              },
+              { type: "text", text: "这是什么" },
+              { type: "image", attachment: { attachmentId: "sha256:x" } },
+            ],
+          },
+        },
+      },
+    ] as never);
+    const user = messages.find((message) => message.role === "user");
+    expect(user?.content).toBe("这是什么");
+    expect(user?.attachmentBadges?.map((badge) => badge.name)).toEqual([
+      "image.png",
+    ]);
+  });
 });

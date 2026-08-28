@@ -275,9 +275,23 @@ export function projectRuntimeSessionHistory(
       const message = messageFromEvent(event);
       const source = record(message?.source);
       if (source?.kind && source.kind !== "user") continue;
-      const { text: userText, badges } = splitFileAttachmentsFromPrompt(
-        contentText(message?.content),
-      );
+      // Text parts are processed one by one: since the two-part wire format,
+      // the attachment metadata is its own part (splits to badges and empty
+      // text); legacy sessions carry one merged part, which the same call
+      // splits in place.
+      const parts = Array.isArray(message?.content) ? message.content : [];
+      const badges: AttachmentBadge[] = [];
+      const texts: string[] = [];
+      for (const part of parts) {
+        const item = record(part);
+        if (item?.type !== "text" || typeof item.text !== "string") continue;
+        const split = splitFileAttachmentsFromPrompt(item.text);
+        badges.push(...split.badges);
+        if (split.text) texts.push(split.text);
+      }
+      const userText = parts.length
+        ? texts.join("\n")
+        : contentText(message?.content);
       output.push({
         role: "user",
         content: userText,

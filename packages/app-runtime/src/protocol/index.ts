@@ -232,6 +232,13 @@ export interface SubmitPayload {
   history: ChatMessage[];
   /** Attachments belonging to the final user message in history. */
   attachments?: RuntimeAttachment[];
+  /**
+   * `<file-attachment>` metadata blocks for those attachments, sent as their
+   * OWN text part ahead of the user's text instead of being concatenated
+   * into it. Keeping the wire copy separate is what lets a reloaded
+   * transcript render the user's words without regex surgery.
+   */
+  attachmentPrompt?: string;
   agent?: AgentExecutionContext;
   /** Draft choice applied after session.create and before the first prompt. */
   modelSelection?: RuntimeModelSelection;

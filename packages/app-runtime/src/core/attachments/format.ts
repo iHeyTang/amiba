@@ -19,18 +19,12 @@ export function formatFileAttachmentsForPrompt(
 ): string {
   const ready = atts.filter((a) => a.attachmentId && !a.uploading);
   if (ready.length === 0) return "";
-  const intro =
-    ready.length === 1
-      ? [
-          "The user attached the following file. Raster image bytes are included",
-          "as native image content. For text or PDF content, use the matching",
-          "attachment_read_text / attachment_read_pdf tool when relevant.",
-        ]
-      : [
-          `The user attached ${ready.length} files. Raster image bytes are included`,
-          "as native image content. For text or PDF content, use the matching",
-          "attachment_read_text / attachment_read_pdf tool when relevant.",
-        ];
+  // Blocks only — no per-message usage preamble. The attachments plugin
+  // already injects the how-to-read guidance into the system prompt every
+  // turn (`ctx.systemPrompt.context`, order 55), so repeating it here only
+  // padded every attachment-bearing message with boilerplate. The block
+  // itself stays: it is how the model learns each file's Attachment-ID for
+  // the id-based read tools.
   const blocks = ready.map((att, i) => {
     const indexAttr = ready.length > 1 ? ` index="${i + 1}"` : "";
     const lines: string[] = [
@@ -46,7 +40,7 @@ export function formatFileAttachmentsForPrompt(
     lines.push("</file-attachment>");
     return lines.join("\n");
   });
-  return [...intro, "", blocks.join("\n\n")].join("\n");
+  return blocks.join("\n\n");
 }
 
 /**
@@ -62,7 +56,9 @@ export function formatFileAttachmentsForPrompt(
  * lived elsewhere, was reverse-engineered from a single-file log sample, and
  * silently missed the multi-file shape (`N files` preamble, `index="…"`
  * attribute) the builder two screens up was emitting. A round-trip test now
- * pins them together. Splitting engages only when a well-formed block parses;
+ * pins them together. The preamble strip covers messages persisted before
+ * the builder stopped emitting one. Splitting engages only when a
+ * well-formed block parses;
  * any other text passes through byte-for-byte.
  */
 export function splitFileAttachmentsFromPrompt(text: string): {

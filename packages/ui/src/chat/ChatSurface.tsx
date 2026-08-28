@@ -1499,20 +1499,16 @@ export default function ChatSurface({
       content: m.content,
       ...(m.name ? { name: m.name } : {}),
     }));
-    // Inline page-context and file-attachment blocks into the final user
-    // message content. Context first, user's typed question last — the
-    // model focuses on the most recent tokens, so the actual question
-    // staying at the tail keeps instruction-following clean. The version
-    // saved on `userMsg` (rendered in the bubble) stays as the raw typed
-    // text; only the wire copy carries the inlined blocks.
-    const wireUserContent = [fileAttachmentBlock, userMsg.content]
-      .filter((s) => s && s.length > 0)
-      .join("\n\n");
+    // The attachment blocks no longer merge into the user's text: they
+    // travel as `attachmentPrompt` and become their own prompt part in the
+    // engine, so what history stores as the user message IS what the user
+    // typed. (The merged form survives in old sessions; the reload path
+    // still splits it.)
     const history: ChatMessage[] = [
       ...baseMessages,
       {
         role: userMsg.role,
-        content: wireUserContent,
+        content: userMsg.content,
       },
     ];
 
@@ -1539,6 +1535,9 @@ export default function ChatSurface({
             )?.title,
             assistantUiId: assistantMsg.uiId,
             history,
+            ...(fileAttachmentBlock
+              ? { attachmentPrompt: fileAttachmentBlock }
+              : {}),
             ...(attachmentsForSend.length > 0
               ? {
                   attachments: attachmentsForSend.map((attachment) => ({

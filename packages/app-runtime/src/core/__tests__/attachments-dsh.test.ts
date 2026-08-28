@@ -38,7 +38,10 @@ describe("DSH attachment contract", () => {
         textPreview: "do not leak this duplicate preview",
       },
     ]);
-    expect(prompt).toContain("attachment_read_text / attachment_read_pdf");
+    // Blocks only: the how-to-read guidance is injected once per turn by the
+    // attachments plugin's system-prompt context, not repeated per message.
+    expect(prompt.startsWith("<file-attachment>")).toBe(true);
+    expect(prompt).not.toContain("The user attached");
     expect(prompt).toContain(
       'Attachment-ID: "att_0123456789abcdef0123456789abcdef"',
     );
