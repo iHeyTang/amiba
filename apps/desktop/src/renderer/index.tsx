@@ -10,6 +10,10 @@ const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("root element missing");
 const root: HTMLElement = rootElement;
 
+function removeStartupScreen(): void {
+  document.getElementById("amiba-startup")?.remove();
+}
+
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
 let shellReady = false;
 const pendingSessionIds: string[] = [];
@@ -38,6 +42,7 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (): void => {
       shellReady = true;
+      removeStartupScreen();
       window.clearTimeout(timeout);
       observer.disconnect();
       window.removeEventListener(ROOT_READY_EVENT, finish);
@@ -151,6 +156,8 @@ void (async () => {
     await waitForAmibaRoot();
   } catch (error) {
     console.error("[renderer] DSH Client Web Shell boot failed:", error);
+    // The overlay is opaque and fixed; it must go or it hides the failure.
+    removeStartupScreen();
     root.replaceChildren();
     const failure = document.createElement("pre");
     failure.className = "p-6 text-sm text-destructive whitespace-pre-wrap";

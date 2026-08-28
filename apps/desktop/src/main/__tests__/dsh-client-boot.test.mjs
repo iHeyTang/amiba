@@ -92,6 +92,39 @@ test("carries the inline bootstrap facade, and not the boot global", () => {
   ]);
 });
 
+test("drops the unreachable HMR dev channel, unless something injects it", () => {
+  const graphHtml = (entries) =>
+    `<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: "r", entries })}</script>`;
+  const hmr = {
+    id: "@deepseek-ai/dsh-client-hmr",
+    url: "/plugins/@deepseek-ai/dsh-client-hmr/client.js?rev=a",
+    rev: "a",
+    immediately: true,
+  };
+  const shell = {
+    id: "@amiba/dsh-plugin-ui-shell",
+    url: "/plugins/@amiba/dsh-plugin-ui-shell/client.js?rev=b",
+    rev: "b",
+  };
+  // Its SSE endpoint is a relative URL that resolves against OUR document
+  // origin, never the runtime — an endless 404 loop, so it is dropped ...
+  assert.deepEqual(
+    extractDshClientBootGraph(graphHtml([hmr, shell]), "http://127.0.0.1:43123")
+      .entries.map((entry) => entry.id),
+    ["@amiba/dsh-plugin-ui-shell"],
+  );
+  // ... but never out from under an entry that injects it, which would strand
+  // that entry waiting on a service instead.
+  const dependent = { ...shell, inject: ["@deepseek-ai/dsh-client-hmr"] };
+  assert.deepEqual(
+    extractDshClientBootGraph(
+      graphHtml([hmr, dependent]),
+      "http://127.0.0.1:43123",
+    ).entries.map((entry) => entry.id),
+    ["@deepseek-ai/dsh-client-hmr", "@amiba/dsh-plugin-ui-shell"],
+  );
+});
+
 test("rejects a client bundle outside the managed runtime origin", () => {
   const html = `<script>window.__DSH_BOOT__ = ${JSON.stringify({
     rev: "x",

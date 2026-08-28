@@ -211,8 +211,31 @@ export function extractDshClientBootGraph(
   }
   return {
     rev: graph.rev,
-    entries: graph.entries.map((entry) => parseEntry(entry, baseUrl)),
+    entries: withoutUnreachableDevChannels(
+      graph.entries.map((entry) => parseEntry(entry, baseUrl)),
+    ),
   };
+}
+
+/**
+ * `@deepseek-ai/dsh-client-hmr` is DSH's plugin hot-reload channel. It opens
+ * `new EventSource("/plugins/events")` — a RELATIVE url, resolved against the
+ * document origin. On DSH's own page that is the runtime origin and it works;
+ * this renderer's document lives on the dev server (file:// when packaged),
+ * so the channel structurally cannot reach the runtime: an endless 404 retry
+ * loop in dev, a thrown constructor under file://. A plugin that can never
+ * function here is dropped rather than loaded for its noise.
+ *
+ * Guarded: if some future entry injects it, dropping it would strand that
+ * entry waiting on a service ("did not activate"), which is worse than 404
+ * noise — so in that case it is kept.
+ */
+function withoutUnreachableDevChannels(
+  entries: DshWebBootEntry[],
+): DshWebBootEntry[] {
+  const HMR = "@deepseek-ai/dsh-client-hmr";
+  if (entries.some((entry) => entry.inject?.includes(HMR))) return entries;
+  return entries.filter((entry) => entry.id !== HMR);
 }
 
 /** Start DSH and return its own client composition to the Electron renderer. */

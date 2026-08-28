@@ -200,7 +200,14 @@
     <title>Amiba</title>
   </head>
   <body class="h-full bg-background text-foreground">
-    <div id="root" class="h-screen">
+    <!-- #root stays EMPTY: DSH's web frontend mounts into it and, since
+         0.1.1, hydrates when the container has children. Markup inside it
+         (the old startup-screen placement) made hydration mismatch — React
+         errors #418/#423 — before recovering via a client render. The
+         startup screen is a fixed-position overlay, so it works identically
+         as a sibling; index.tsx removes it once the product shell exists. -->
+    <div id="root" class="h-screen"></div>
+    <div id="amiba-startup">
       <div class="amiba-startup-screen" aria-hidden="true">
         <div class="amiba-startup-content">
           <div class="amiba-startup-mark">
