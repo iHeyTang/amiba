@@ -81,6 +81,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-browser-provider-cdp",
       "@amiba/dsh-plugin-catalog",
       "@amiba/dsh-plugin-commands-adapter",
+      "@amiba/dsh-plugin-cron",
       "@amiba/dsh-plugin-mcp-manager",
       "@amiba/dsh-plugin-memory",
       "@amiba/dsh-plugin-messaging-core",

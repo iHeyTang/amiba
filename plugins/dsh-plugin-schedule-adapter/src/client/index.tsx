@@ -17,9 +17,13 @@ const VIEW_ID = "scheduled";
 type SchedulesRemote = ClientContext["remote"]["amibaSchedules"];
 
 function copy() {
+  // "定时任务/cron" now belongs to @amiba/dsh-plugin-cron (spawn a fresh task
+  // session on schedule). This surface is the read-only face of the official
+  // dsh-schedule REMINDERS — session-local follow-ups created by asking the
+  // agent in conversation.
   return document.documentElement.lang.toLowerCase().startsWith("zh")
-    ? "定时任务"
-    : "Scheduled tasks";
+    ? "会话提醒"
+    : "Session reminders";
 }
 
 function errorOf(value: unknown): Error {
@@ -43,7 +47,7 @@ function ScheduleNavigation({
   openWorkspace,
 }: PropsRuntime<"amiba.workspace.navigation">): ReactNode {
   const { language } = usePluginT();
-  const label = language === "zh-CN" ? "定时任务" : "Scheduled tasks";
+  const label = language === "zh-CN" ? "会话提醒" : "Session reminders";
   return (
     <NavigationRow
       active={activeView === VIEW_ID}
@@ -125,7 +129,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             {
               name: "amiba.workspace.navigation",
               id: VIEW_ID,
-              order: 100,
+              order: 110,
               label: copy,
             },
             ScheduleNavigation,
@@ -136,7 +140,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           {
             name: "amiba.workspace.view",
             id: VIEW_ID,
-            order: 100,
+            order: 110,
             label: copy,
             inject: () => ({
               adapter,

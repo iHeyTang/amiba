@@ -73,9 +73,12 @@ describe("DshScheduledTasksPage DSH reminders", () => {
     expect(screen.getByText("Project session")).toBeVisible();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "New reminder" }));
+    // Creation is the agent's capability, exercised in conversation; this
+    // surface is the read-only face of the official reminders, so no create
+    // affordance exists here. Cron tasks — "start a fresh task on schedule" —
+    // live in @amiba/dsh-plugin-cron.
     expect(
-      screen.getByRole("combobox", { name: "Owning conversation" }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: "New reminder" }),
+    ).not.toBeInTheDocument();
   });
 });

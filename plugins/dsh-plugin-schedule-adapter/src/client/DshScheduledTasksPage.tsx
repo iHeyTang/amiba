@@ -457,16 +457,6 @@ export function DshScheduledTasksPage({
                 {t("options.cron.refresh")}
               </TooltipContent>
             </Tooltip>
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none [&_svg]:size-3.5"
-              disabled={selectable.length === 0}
-              onClick={() => setCreating(true)}
-            >
-              <Plus />
-              {t("options.cron.dsh.new")}
-            </Button>
           </div>
         </header>
         <ScrollArea className="min-h-0 flex-1">
@@ -612,15 +602,6 @@ export function DshScheduledTasksPage({
             )}
           </PageContent>
         </ScrollArea>
-        <ReminderDialog
-          open={creating}
-          busy={busy}
-          sessions={selectable}
-          sessionId={dialogSessionId}
-          onOpenChange={setCreating}
-          onSessionChange={setDialogSessionId}
-          onSubmit={create}
-        />
       </div>
     </TooltipProvider>
   );

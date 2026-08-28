@@ -70,6 +70,11 @@
       config:
         apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
 
+    - id: amiba-cron
+      name: "@amiba/dsh-plugin-cron"
+      config:
+        root: !!js dshHomePath('amiba-cron')
+
     - id: amiba-schedule-adapter
       name: "@amiba/dsh-plugin-schedule-adapter"
       config:
