@@ -89,6 +89,19 @@ void (async () => {
     (
       globalThis as typeof globalThis & { __DSH_BOOT__?: unknown }
     ).__DSH_BOOT__ = boot.graph;
+    // The Web Shell's module entry consumes `window.__ModuleLoader__` and
+    // throws "bootstrap facade is missing" without it. Since DSH 0.1.1 that
+    // facade arrives as an inline head script rather than being installed by
+    // the frontend bundle, and this renderer composes its own document, so it
+    // has to execute those inline scripts itself — before the module entry.
+    for (const [index, code] of boot.shell.bootstrap.entries()) {
+      const marker = `bootstrap-${index}`;
+      if (document.querySelector(`script[data-dsh-shell="${marker}"]`)) continue;
+      const script = document.createElement("script");
+      script.dataset.dshShell = marker;
+      script.textContent = code;
+      document.head.append(script);
+    }
     for (const href of boot.shell.styles) {
       if (
         document.querySelector(`link[data-dsh-shell=${JSON.stringify(href)}]`)

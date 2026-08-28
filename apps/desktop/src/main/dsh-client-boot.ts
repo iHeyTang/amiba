@@ -15,6 +15,16 @@ export interface DshClientBootPayload {
   baseUrl: string;
   graph: DshWebBootGraph;
   shell: {
+    /**
+     * Inline head scripts the Web Shell needs run before its module entry.
+     *
+     * DSH 0.1.0's frontend bundle INSTALLED `window.__ModuleLoader__` itself;
+     * 0.1.1 inverted that — the facade now ships as an inline bootstrap script
+     * in the document head and the frontend only consumes it, failing with
+     * "bootstrap facade is missing" when it is absent. The desktop renderer
+     * builds the document itself, so it has to carry these across too.
+     */
+    bootstrap: string[];
     scripts: string[];
     styles: string[];
   };
@@ -46,6 +56,9 @@ const BOOT_SCRIPT_PATTERN =
   // payload is published under the name `__DSH_BOOT__`.
   /<script>(?:window\.__DSH_BOOT__|globalThis\[\s*["']__DSH_BOOT__["']\s*\])\s*=\s*([\s\S]*?)<\/script>/u;
 const SCRIPT_TAG_PATTERN = /<script\b([^>]*)><\/script>/gu;
+/** Inline (src-less) script elements, with their body. */
+const INLINE_SCRIPT_PATTERN =
+  /<script\b(?![^>]*\bsrc\s*=)([^>]*)>([\s\S]*?)<\/script>/gu;
 const LINK_TAG_PATTERN = /<link\b([^>]*)>/gu;
 
 function attribute(attributes: string, name: string): string | undefined {
@@ -70,8 +83,19 @@ export function extractDshShellAssets(
   baseUrlValue: string,
 ): DshClientBootPayload["shell"] {
   const baseUrl = new URL(baseUrlValue);
+  const bootstrap: string[] = [];
   const scripts: string[] = [];
   const styles: string[] = [];
+  for (const match of html.matchAll(INLINE_SCRIPT_PATTERN)) {
+    const body = match[2] ?? "";
+    // The boot graph is published as an inline global too, but the renderer
+    // already installs it from the parsed payload — re-running it would just
+    // assign the same value from unparsed text.
+    if (!body.trim() || BOOT_SCRIPT_PATTERN.test(`<script>${body}</script>`)) {
+      continue;
+    }
+    bootstrap.push(body);
+  }
   for (const match of html.matchAll(SCRIPT_TAG_PATTERN)) {
     const attributes = match[1] ?? "";
     const src = attribute(attributes, "src");
@@ -90,7 +114,7 @@ export function extractDshShellAssets(
   if (scripts.length === 0) {
     throw new Error("Managed DSH Web Shell did not publish a module entry.");
   }
-  return { scripts, styles };
+  return { bootstrap, scripts, styles };
 }
 
 function parseEntry(value: unknown, baseUrl: URL): DshWebBootEntry {

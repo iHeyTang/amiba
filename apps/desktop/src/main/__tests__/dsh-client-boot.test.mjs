@@ -35,6 +35,7 @@ test("extracts only same-runtime DSH Web Shell assets", () => {
   assert.deepEqual(
     extractDshShellAssets(html, "http://127.0.0.1:43123"),
     {
+      bootstrap: [],
       scripts: ["http://127.0.0.1:43123/assets/index-abc.js"],
       styles: ["http://127.0.0.1:43123/assets/index-abc.css"],
     },
@@ -59,6 +60,30 @@ test("accepts either spelling of the boot assignment", () => {
       [],
     );
   }
+});
+
+test("carries the inline bootstrap facade, and not the boot global", () => {
+  // Shape taken from a live 0.1.1 runtime's document head, in order:
+  //   1. inline  — installs window.__ModuleLoader__
+  //   2. src     — plugin bundle, fetched by the loader from the graph
+  //   3. inline  — globalThis["__DSH_BOOT__"] = {...}
+  //   4. module  — the Web Shell entry, which CONSUMES the facade
+  // 0.1.0's frontend installed the facade itself; 0.1.1 only consumes it and
+  // dies with "bootstrap facade is missing" when nobody ran script 1. The
+  // renderer builds its own document, so main has to hand these across.
+  const html = [
+    "<html><head>",
+    '<script>window.__ModuleLoader__={mode:"queue"}</script>',
+    '<script src="/plugins/@deepseek-ai/dsh-client-modules/client.js?rev=a"></script>',
+    `<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: "r", entries: [] })}</script>`,
+    '<script type="module" crossorigin src="/assets/index-abc.js"></script>',
+    "</head></html>",
+  ].join("");
+  const shell = extractDshShellAssets(html, "http://127.0.0.1:43123");
+  assert.deepEqual(shell.bootstrap, ['window.__ModuleLoader__={mode:"queue"}']);
+  assert.deepEqual(shell.scripts, [
+    "http://127.0.0.1:43123/assets/index-abc.js",
+  ]);
 });
 
 test("rejects a client bundle outside the managed runtime origin", () => {

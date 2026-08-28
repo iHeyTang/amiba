@@ -38,6 +38,8 @@ interface AmibaBridgeApi {
         }>;
       };
       shell: {
+        /** Inline head scripts to run before the module entry (see main). */
+        bootstrap: string[];
         scripts: string[];
         styles: string[];
       };
