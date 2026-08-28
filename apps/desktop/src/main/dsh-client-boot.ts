@@ -25,6 +25,14 @@ export interface DshClientBootPayload {
      * builds the document itself, so it has to carry these across too.
      */
     bootstrap: string[];
+    /**
+     * Classic `src` scripts the head loads between the facade and the module
+     * entry. They register plugin bundles via `__ModuleLoader__.load(...)`;
+     * the facade's `create()` refuses to run when a graph entry it expects
+     * was not preloaded ("client-modules: HTML did not preload ..."), so the
+     * renderer must load these, in order, before the module entry.
+     */
+    preload: string[];
     scripts: string[];
     styles: string[];
   };
@@ -70,9 +78,13 @@ function attribute(attributes: string, name: string): string | undefined {
   return match?.[1] ?? match?.[2] ?? match?.[3];
 }
 
-function shellAssetUrl(value: string, baseUrl: URL): string {
+function shellAssetUrl(
+  value: string,
+  baseUrl: URL,
+  prefix: "/assets/" | "/plugins/" = "/assets/",
+): string {
   const target = new URL(value, baseUrl);
-  if (target.origin !== baseUrl.origin || !target.pathname.startsWith("/assets/")) {
+  if (target.origin !== baseUrl.origin || !target.pathname.startsWith(prefix)) {
     throw new Error("DSH Web Shell advertised an asset outside its runtime origin.");
   }
   return target.href;
@@ -84,6 +96,7 @@ export function extractDshShellAssets(
 ): DshClientBootPayload["shell"] {
   const baseUrl = new URL(baseUrlValue);
   const bootstrap: string[] = [];
+  const preload: string[] = [];
   const scripts: string[] = [];
   const styles: string[] = [];
   for (const match of html.matchAll(INLINE_SCRIPT_PATTERN)) {
@@ -99,10 +112,15 @@ export function extractDshShellAssets(
   for (const match of html.matchAll(SCRIPT_TAG_PATTERN)) {
     const attributes = match[1] ?? "";
     const src = attribute(attributes, "src");
-    if (!src || attribute(attributes, "type")?.toLowerCase() !== "module") {
-      continue;
+    if (!src) continue;
+    const type = attribute(attributes, "type")?.toLowerCase();
+    if (type === "module") {
+      scripts.push(shellAssetUrl(src, baseUrl));
+    } else if (type === undefined || type === "text/javascript") {
+      // Classic head scripts — the plugin-bundle preloads (see the payload
+      // type). They ride the /plugins/ route, same as the graph entries.
+      preload.push(shellAssetUrl(src, baseUrl, "/plugins/"));
     }
-    scripts.push(shellAssetUrl(src, baseUrl));
   }
   for (const match of html.matchAll(LINK_TAG_PATTERN)) {
     const attributes = match[1] ?? "";
@@ -114,7 +132,7 @@ export function extractDshShellAssets(
   if (scripts.length === 0) {
     throw new Error("Managed DSH Web Shell did not publish a module entry.");
   }
-  return { bootstrap, scripts, styles };
+  return { bootstrap, preload, scripts, styles };
 }
 
 function parseEntry(value: unknown, baseUrl: URL): DshWebBootEntry {

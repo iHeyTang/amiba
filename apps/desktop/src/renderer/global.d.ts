@@ -40,6 +40,8 @@ interface AmibaBridgeApi {
       shell: {
         /** Inline head scripts to run before the module entry (see main). */
         bootstrap: string[];
+        /** Classic plugin-bundle preloads to load before the module entry. */
+        preload: string[];
         scripts: string[];
         styles: string[];
       };

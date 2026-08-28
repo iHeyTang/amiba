@@ -36,6 +36,7 @@ test("extracts only same-runtime DSH Web Shell assets", () => {
     extractDshShellAssets(html, "http://127.0.0.1:43123"),
     {
       bootstrap: [],
+      preload: [],
       scripts: ["http://127.0.0.1:43123/assets/index-abc.js"],
       styles: ["http://127.0.0.1:43123/assets/index-abc.css"],
     },
@@ -81,6 +82,11 @@ test("carries the inline bootstrap facade, and not the boot global", () => {
   ].join("");
   const shell = extractDshShellAssets(html, "http://127.0.0.1:43123");
   assert.deepEqual(shell.bootstrap, ['window.__ModuleLoader__={mode:"queue"}']);
+  // The classic src script is a plugin-bundle preload, not the module entry.
+  // create() refuses to run when it was skipped, so it must be carried too.
+  assert.deepEqual(shell.preload, [
+    "http://127.0.0.1:43123/plugins/@deepseek-ai/dsh-client-modules/client.js?rev=a",
+  ]);
   assert.deepEqual(shell.scripts, [
     "http://127.0.0.1:43123/assets/index-abc.js",
   ]);

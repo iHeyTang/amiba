@@ -102,6 +102,26 @@ void (async () => {
       script.textContent = code;
       document.head.append(script);
     }
+    // The plugin-bundle preloads (classic head scripts). Each one calls the
+    // facade's `load(...)`; `create()` inside the module entry refuses to run
+    // for a graph entry nothing preloaded, so these must finish first, in
+    // document order — exactly what a browser walking the real head does.
+    for (const src of boot.shell.preload) {
+      if (document.querySelector(`script[data-dsh-shell=${JSON.stringify(src)}]`))
+        continue;
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.dataset.dshShell = src;
+        script.addEventListener("load", () => resolve(), { once: true });
+        script.addEventListener(
+          "error",
+          () => reject(new Error(`Failed to load DSH preload: ${src}`)),
+          { once: true },
+        );
+        document.head.append(script);
+      });
+    }
     for (const href of boot.shell.styles) {
       if (
         document.querySelector(`link[data-dsh-shell=${JSON.stringify(href)}]`)
