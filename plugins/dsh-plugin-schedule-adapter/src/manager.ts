@@ -1,4 +1,5 @@
 import type { Agent } from "@deepseek-ai/dsh-agent";
+import { foldScheduleEvents, scheduleView } from "@deepseek-ai/dsh-schedule";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
 import type { AgentScheduleCreateInput, AgentScheduleView } from "./types.js";
@@ -39,6 +40,18 @@ export class DshScheduleManager {
     const live = this.ctx.agents.get(id as never);
     if (live) return live;
 
+    // A session can be held live by subscribers alone — an open chat panel —
+    // with no live agent to carry the Schedule tools. Resume is only for
+    // retired sessions (its prepare refuses a live one), and DSH has no
+    // attach-an-agent-to-a-live-session entry point, so this state cannot run
+    // a management mutation. Refuse it legibly rather than letting the
+    // persistence layer's "cannot prepare session while it is live" surface.
+    if (this.ctx.sessions.get(id as never) !== undefined) {
+      throw new Error(
+        `session "${id}" is open without a live agent; send it a message (or close it) before managing its schedules`,
+      );
+    }
+
     // The Schedule tools intentionally exist only on live root Agents. A UI
     // management call therefore resumes the persisted owner through DSH's
     // official Agent factory; Electron is not involved in feature lifecycle.
@@ -77,6 +90,25 @@ export class DshScheduleManager {
   }
 
   async list(sessionId: string): Promise<AgentScheduleView[]> {
+    const id = sessionIdOf(sessionId);
+    const session = this.ctx.sessions.get(id as never) as
+      | { events: readonly unknown[]; header: { seedLength?: number } }
+      | undefined;
+    if (session) {
+      // Listing is a pure read, and the session event log — not the agent —
+      // owns schedule state. Folding the live log directly serves every live
+      // session, including one held live by an open chat panel with no agent,
+      // where the tool path could only fail.
+      const folded = foldScheduleEvents(
+        session.events as never,
+        session.header.seedLength ?? 0,
+      );
+      const now = Date.now();
+      return folded.active.map((record) => ({
+        ...scheduleView(record, now),
+        sessionId,
+      }));
+    }
     const value = valueOrThrow<Array<Omit<AgentScheduleView, "sessionId">>>(
       await this.execute(
         await this.liveAgent(sessionId),

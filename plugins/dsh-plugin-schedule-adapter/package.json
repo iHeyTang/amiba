@@ -48,6 +48,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-schedule": "catalog:",
     "@deepseek-ai/dsh-session": "catalog:",
     "@deepseek-ai/dsh-tools": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
@@ -59,6 +60,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-schedule": "catalog:",
     "@deepseek-ai/dsh-session": "catalog:",
     "@deepseek-ai/dsh-tools": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
