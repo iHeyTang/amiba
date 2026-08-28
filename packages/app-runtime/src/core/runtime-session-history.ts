@@ -10,8 +10,12 @@ import {
 import type { ToolProgress } from "./runtime-protocol";
 import type { SessionMessage } from "./sessions";
 
+import type { AttachmentBadge } from "./attachments/types";
+
 type RuntimeSessionMessage = SessionMessage & {
   reasoning?: string;
+  /** Rebuilt from the message's `<file-attachment>` envelope on reload. */
+  attachmentBadges?: AttachmentBadge[];
   /** Wall-clock duration of the reasoning stream, from durable event times. */
   reasoningMs?: number;
   /** Wall-clock span of the process phase, from durable event times. */
@@ -46,6 +50,53 @@ function contentText(value: unknown): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Split DSH's attachment envelope out of a user message's text.
+ *
+ * The api-proxy's admission path prepends a model-facing preamble and one
+ * `<file-attachment>` block per file INTO THE SAME text block as what the
+ * user typed. That is wire format, not what the user said: rendering it
+ * verbatim shows "The user attached the following file…" as if the user
+ * wrote it. The envelope's fields rebuild the same attachment badges the
+ * live bubble carries, and the remaining text is the user's own.
+ *
+ * Applied only when at least one well-formed block is present; any other
+ * text passes through byte-for-byte.
+ */
+export function splitAttachmentEnvelope(text: string): {
+  text: string;
+  badges: AttachmentBadge[];
+} {
+  const badges: AttachmentBadge[] = [];
+  const BLOCK = /<file-attachment>\n([\s\S]*?)\n<\/file-attachment>/gu;
+  const stripped = text.replace(BLOCK, (whole, body: string) => {
+    const field = (name: string): string | undefined =>
+      new RegExp(`^${name}: "([^"]*)"$`, "mu").exec(body)?.[1];
+    const size = /^Size: (\d+) bytes$/mu.exec(body)?.[1];
+    const name = field("Name");
+    if (name === undefined) return whole; // not the shape we know — keep it
+    const attachmentId = field("Attachment-ID");
+    badges.push({
+      uiId: attachmentId ?? `att:${badges.length}:${name}`,
+      name,
+      mime: field("Mime") ?? "application/octet-stream",
+      size: size === undefined ? 0 : Number(size),
+      kind: (field("Kind") ?? "file") as AttachmentBadge["kind"],
+      ...(attachmentId === undefined ? {} : { attachmentId }),
+    });
+    return "";
+  });
+  if (badges.length === 0) return { text, badges };
+  return {
+    text: stripped
+      // The fixed preamble travels with the blocks; it is not user text.
+      .replace(/^The user attached the following files?\.[\s\S]*?attachment_read_pdf tool when relevant\.\n*/u, "")
+      .replace(/\n{3,}/gu, "\n\n")
+      .trim(),
+    badges,
+  };
 }
 
 /**
@@ -269,9 +320,13 @@ export function projectRuntimeSessionHistory(
       const message = messageFromEvent(event);
       const source = record(message?.source);
       if (source?.kind && source.kind !== "user") continue;
+      const { text: userText, badges } = splitAttachmentEnvelope(
+        contentText(message?.content),
+      );
       output.push({
         role: "user",
-        content: contentText(message?.content),
+        content: userText,
+        ...(badges.length ? { attachmentBadges: badges } : {}),
         uiId:
           typeof message?.id === "string"
             ? `dsh:${message.id}`

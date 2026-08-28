@@ -287,6 +287,12 @@ describe("WorkspacePane responsive behavior", () => {
     expect(
       document.querySelector("[data-workspace-file-preview]"),
     ).not.toBeNull();
+    // The tree starts CLOSED: the pane opens to show a preview, and a
+    // directory listing unfolding beside it by default read as clutter.
+    expect(document.querySelector("[data-workspace-file-tree]")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.showFileTree" }),
+    );
     expect(document.querySelector("[data-workspace-file-tree]")).not.toBeNull();
     expect(screen.getAllByText("src/App.tsx").length).toBeGreaterThan(0);
 
@@ -349,6 +355,10 @@ describe("WorkspacePane responsive behavior", () => {
 
     await userEvent.click(
       screen.getByRole("button", { name: "toggle workspace" }),
+    );
+    // The project strip lives in the file tree, which now starts closed.
+    await userEvent.click(
+      await screen.findByRole("button", { name: "workspacePane.showFileTree" }),
     );
     const projectMenu = await screen.findByRole("button", {
       name: "workspacePane.switchProject",

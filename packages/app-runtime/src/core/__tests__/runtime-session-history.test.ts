@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { projectRuntimeSessionHistory } from "../runtime-session-history";
+import {
+  projectRuntimeSessionHistory,
+  splitAttachmentEnvelope,
+} from "../runtime-session-history";
 
 describe("projectRuntimeSessionHistory", () => {
   it("folds a DSH event log into one assistant row per turn", () => {
@@ -162,6 +165,93 @@ describe("projectRuntimeSessionHistory", () => {
     expect(messages).toEqual([
       expect.objectContaining({ role: "user", content: "/plan inspect auth" }),
       expect.objectContaining({ role: "assistant", content: "Plan mode enabled" }),
+    ]);
+  });
+
+  it("strips the attachment envelope back into badges and the user's own text", () => {
+    // Byte-shape taken from a real session log: DSH's admission path prepends
+    // this preamble and block into the SAME text block as what the user typed
+    // ("这是什么"), so a reloaded transcript showed the wire format as if the
+    // user had written it.
+    const envelope = [
+      "The user attached the following file. Raster image bytes are included",
+      "as native image content. For text or PDF content, use the matching",
+      "attachment_read_text / attachment_read_pdf tool when relevant.",
+      "",
+      "<file-attachment>",
+      'Name: "image.png"',
+      'Kind: "image"',
+      'Mime: "image/png"',
+      "Size: 49242 bytes",
+      'Attachment-ID: "att_f0412054e4db47489595189f8ae8d916"',
+      "</file-attachment>",
+      "",
+      "这是什么",
+    ].join("\n");
+    const { text, badges } = splitAttachmentEnvelope(envelope);
+    expect(text).toBe("这是什么");
+    expect(badges).toEqual([
+      {
+        uiId: "att_f0412054e4db47489595189f8ae8d916",
+        name: "image.png",
+        mime: "image/png",
+        size: 49242,
+        kind: "image",
+        attachmentId: "att_f0412054e4db47489595189f8ae8d916",
+      },
+    ]);
+  });
+
+  it("passes text without a well-formed envelope through byte-for-byte", () => {
+    // A user legitimately PASTING the marker must not have their words eaten.
+    const pasted =
+      "look at this: <file-attachment>\nnot the real shape\n</file-attachment> ok?";
+    expect(splitAttachmentEnvelope(pasted)).toEqual({
+      text: pasted,
+      badges: [],
+    });
+    expect(splitAttachmentEnvelope("这是什么")).toEqual({
+      text: "这是什么",
+      badges: [],
+    });
+  });
+
+  it("projects a reloaded attachment message as badges plus the typed text", () => {
+    const messages = projectRuntimeSessionHistory([
+      {
+        event: {
+          type: "user/message",
+          seq: 1,
+          time: 2,
+          data: {
+            id: "u1",
+            source: { kind: "user" },
+            content: [
+              {
+                type: "text",
+                text:
+                  "The user attached the following file. Raster image bytes are included\n" +
+                  "as native image content. For text or PDF content, use the matching\n" +
+                  "attachment_read_text / attachment_read_pdf tool when relevant.\n\n" +
+                  "<file-attachment>\n" +
+                  'Name: "image.png"\n' +
+                  'Kind: "image"\n' +
+                  'Mime: "image/png"\n' +
+                  "Size: 49242 bytes\n" +
+                  'Attachment-ID: "att_1"\n' +
+                  "</file-attachment>\n\n" +
+                  "这是什么",
+              },
+              { type: "image", attachment: { attachmentId: "sha256:x" } },
+            ],
+          },
+        },
+      },
+    ] as never);
+    const user = messages.find((message) => message.role === "user");
+    expect(user?.content).toBe("这是什么");
+    expect(user?.attachmentBadges?.map((badge) => badge.name)).toEqual([
+      "image.png",
     ]);
   });
 });

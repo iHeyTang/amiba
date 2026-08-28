@@ -4088,7 +4088,10 @@ export function WorkspacePane({
   const pane = useWorkspacePane();
   const { t } = useT();
   const [mode, setMode] = useState<WorkbenchMode>("files");
-  const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  // Closed until asked for: the pane usually opens to show a PREVIEW (a
+  // browser tab, a diff, a file the agent touched), and a directory tree
+  // unfolding beside it on every open reads as clutter, not orientation.
+  const [fileTreeOpen, setFileTreeOpen] = useState(false);
   const active = pane.activeTab;
   const browserTabs = pane.tabs
     .map((tab) => tab.resource)
