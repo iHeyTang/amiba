@@ -218,6 +218,7 @@ export function Bubble({
                   ? compactProgressNote(trace.reasoningText)
                   : ""
               }
+              liveReasoning={m.streaming ? trace.reasoningText : ""}
               processMs={m.processMs}
             />
             {awaitingAnswerOnly && (
@@ -549,17 +550,62 @@ type TurnTraceDetail =
 /**
  * One compact disclosure for a consecutive execution segment.
  */
+/**
+ * The full thinking text, live, while the model is still reasoning.
+ *
+ * The collapsed summary used to show only `compactProgressNote` — the LAST
+ * newline-separated fragment of the reasoning, replaced whenever a new one
+ * began. The accumulated text existed all along (every layer appends); only
+ * the presentation dropped it. This pane shows the whole accumulating trace
+ * in a bounded scroll area, pinned to the newest line unless the reader has
+ * scrolled back up to study something.
+ */
+function LiveReasoningPane({ text }: { text: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pinnedRef = useRef(true);
+
+  useLayoutEffect(() => {
+    const node = scrollRef.current;
+    if (node && pinnedRef.current) node.scrollTop = node.scrollHeight;
+  }, [text]);
+
+  return (
+    <div
+      ref={scrollRef}
+      data-live-reasoning
+      onScroll={() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        pinnedRef.current =
+          node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+      }}
+      className="ml-[7px] max-h-40 overflow-y-auto border-l border-border/60 py-1 pl-3 pr-1"
+    >
+      <Streamdown
+        mode="static"
+        parseIncompleteMarkdown
+        className="chat-md chat-md--reasoning break-words px-1.5 text-xs text-muted-foreground/85"
+      >
+        {text}
+      </Streamdown>
+    </div>
+  );
+}
+
 function ExecutionDisclosure({
   details,
   tools,
   streaming,
   latestProgress = "",
+  liveReasoning = "",
   processMs,
 }: {
   details: TurnTraceDetail[];
   tools: ToolProgress[];
   streaming: boolean;
   latestProgress?: string;
+  /** Full accumulated reasoning while streaming; renders the live pane. */
+  liveReasoning?: string;
   processMs?: number;
 }) {
   const { t } = useT();
@@ -594,12 +640,17 @@ function ExecutionDisclosure({
         : tools.length > 0
           ? t("sidepanel.trace.toolCount", { count: tools.length })
           : latestProgress || t("sidepanel.trace.executionDetails");
+  const showLiveReasoning = streaming && !expanded && liveReasoning.length > 0;
   const summaryLabel = summaryTool
     ? [summaryPresentation?.action, summaryPresentation?.target]
         .filter(Boolean)
         .join(" · ")
     : streaming
-      ? latestProgress || t("sidepanel.trace.thinking")
+      ? // With the live pane open the full text is already on screen; a
+        // one-line ticker above it would just repeat its last fragment.
+        showLiveReasoning
+        ? t("sidepanel.trace.thinking")
+        : latestProgress || t("sidepanel.trace.thinking")
       : completedLabel;
 
   return (
@@ -642,6 +693,7 @@ function ExecutionDisclosure({
           />
         )}
       </button>
+      {showLiveReasoning && <LiveReasoningPane text={liveReasoning} />}
       {expanded && hasDetails && (
         <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
           {details.map((detail) => {
@@ -697,11 +749,13 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
   const seenToolIds = new Set<string>();
   const seenApprovalIds = new Set<string>();
   let latestProgress = "";
+  let liveReasoning = "";
 
   for (const message of messages) {
     const trace = resolveAssistantTrace(message);
     if (message.streaming && trace.reasoningText) {
       latestProgress = compactProgressNote(trace.reasoningText);
+      liveReasoning = trace.reasoningText;
     } else if (trace.reasoningText && !trace.bodyText) {
       // Body-carrying messages render their own inline thought fold via
       // the Bubble trace; the aggregate only owns execution-only bubbles.
@@ -743,6 +797,7 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
         tools={tools}
         streaming={messages.some((message) => message.streaming)}
         latestProgress={latestProgress}
+        liveReasoning={liveReasoning}
         processMs={messages.reduce(
           (total, message) => total + (message.processMs ?? 0),
           0,

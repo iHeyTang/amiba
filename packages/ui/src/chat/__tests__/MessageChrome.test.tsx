@@ -1006,7 +1006,12 @@ describe("chat message chrome", () => {
     expect(screen.getByText("+native evidence")).toBeInTheDocument();
   });
 
-  it("shows only the latest progress note with a quiet text pulse", () => {
+  it("labels the streaming summary quietly while the live pane holds the text", () => {
+    // This test used to pin the OPPOSITE: only the latest fragment on
+    // screen, earlier thoughts gone. That presentation read as "the thinking
+    // display replaces itself" and was reported as a bug — the accumulated
+    // text always existed and is now shown live, so the summary row carries
+    // a quiet static label instead of a self-replacing ticker.
     const { container } = render(
       <MessageTurns
         messages={
@@ -1028,10 +1033,12 @@ describe("chat message chrome", () => {
       />,
     );
 
-    expect(screen.getByText("Checking the project structure.")).toHaveClass(
+    expect(screen.getByText("sidepanel.trace.thinking")).toHaveClass(
       "agent-thinking-text",
     );
-    expect(screen.queryByText("Starting the task.")).not.toBeInTheDocument();
+    const pane = container.querySelector("[data-live-reasoning]");
+    expect(pane?.textContent).toContain("Starting the task.");
+    expect(pane?.textContent).toContain("Checking the project structure.");
     expect(
       container.querySelector("[data-execution-summary] .agent-thinking-dot"),
     ).not.toBeInTheDocument();
@@ -1133,5 +1140,54 @@ describe("chat message chrome", () => {
     expect(
       screen.queryByRole("button", { name: "workspace.clearFolder" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps every earlier thought on screen while the model is still thinking", () => {
+    // The live symptom this pins: the collapsed summary used to render only
+    // compactProgressNote — the LAST newline-separated fragment — so each new
+    // reasoning paragraph REPLACED the previous one on screen even though
+    // every accumulator underneath was appending. The full text must be
+    // visible while streaming, without expanding anything.
+    const reasoning =
+      "First I look at the image.\n\nThen I translate each item.\n\nNow the answer.";
+    const { rerender } = render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "assistant-1",
+              role: "assistant",
+              content: "",
+              streaming: true,
+              reasoning,
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+    const pane = document.querySelector("[data-live-reasoning]");
+    expect(pane).not.toBeNull();
+    expect(pane?.textContent).toContain("First I look at the image.");
+    expect(pane?.textContent).toContain("Then I translate each item.");
+    expect(pane?.textContent).toContain("Now the answer.");
+
+    // Once the turn completes the pane folds away into the summary row.
+    rerender(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "assistant-1",
+              role: "assistant",
+              content: "Answer",
+              streaming: false,
+              reasoning,
+              reasoningMs: 2000,
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+    expect(document.querySelector("[data-live-reasoning]")).toBeNull();
   });
 });
