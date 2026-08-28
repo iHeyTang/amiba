@@ -161,6 +161,39 @@ export class CronService {
     await this.arm();
   }
 
+  /** Spawn one fresh session seeded with a user message; retire it on idle. */
+  private async spawnSession(prompt: string, rpcTag: string): Promise<string> {
+    const sessionId = `session-${randomUUID()}`;
+    const handle = await this.ctx.agents.create({
+      sessionId: SessionId(sessionId) as never,
+    });
+    handle.agent.followup(
+      createUserMessage({
+        content: [{ type: "text", text: prompt }],
+        source: { kind: "user", rpcId: `${rpcTag}:${randomUUID()}` },
+      } as never) as never,
+    );
+    // Let the run finish, then retire the session normally. Never keep the
+    // handle around indefinitely — a leaked live agent was exactly the
+    // defect the schedule adapter's resume cache had.
+    void handle.agent
+      .whenIdle()
+      .then(() => handle.dispose())
+      .catch(() => handle.dispose().catch(() => undefined));
+    return sessionId;
+  }
+
+  /**
+   * Conversational creation: a fresh session whose seed asks the agent to
+   * interview the user and finish with `cron_create` — the real tool, so the
+   * conversation can actually deliver what it promises.
+   */
+  async startCreationChat(seedPrompt: string): Promise<{ sessionId: string }> {
+    const seed = seedPrompt.trim();
+    if (!seed) throw new Error("cron: a creation seed prompt is required");
+    return { sessionId: await this.spawnSession(seed, "cron-create-chat") };
+  }
+
   /** Spawn the fresh session for one task and record the run. */
   private async fire(id: string): Promise<CronTask> {
     const task = (await this.store.list()).find((entry) => entry.id === id);
@@ -168,15 +201,9 @@ export class CronService {
     if (this.running.has(id)) return task;
     this.running.add(id);
     try {
-      const sessionId = `session-${randomUUID()}`;
-      const handle = await this.ctx.agents.create({
-        sessionId: SessionId(sessionId) as never,
-      });
-      handle.agent.followup(
-        createUserMessage({
-          content: [{ type: "text", text: task.prompt }],
-          source: { kind: "user", rpcId: `cron:${task.id}:${randomUUID()}` },
-        } as never) as never,
+      const sessionId = await this.spawnSession(
+        task.prompt,
+        `cron:${task.id}`,
       );
       const ranAt = this.now();
       let recorded: CronTask = task;
@@ -188,13 +215,6 @@ export class CronService {
         }),
       );
       this.notify(recorded, sessionId);
-      // Let the run finish, then retire the session normally. Never keep the
-      // handle around indefinitely — a leaked live agent was exactly the
-      // defect the schedule adapter's resume cache had.
-      void handle.agent
-        .whenIdle()
-        .then(() => handle.dispose())
-        .catch(() => handle.dispose().catch(() => undefined));
       return recorded;
     } finally {
       this.running.delete(id);

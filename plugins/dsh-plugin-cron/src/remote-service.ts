@@ -40,6 +40,11 @@ class AmibaCronRemoteService extends TypertRemoteService {
   runNow(id: string) {
     return this.service.runNow(id);
   }
+
+  @Remote
+  startCreationChat(seedPrompt: string) {
+    return this.service.startCreationChat(seedPrompt);
+  }
 }
 
 export function applyCronRemote(ctx: Context, service: CronService): void {

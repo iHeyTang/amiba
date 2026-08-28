@@ -64,6 +64,9 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       ): Promise<RemoteResult<CronTaskView>>;
       removeTask(id: string): Promise<RemoteResult<{ id: string }>>;
       runNow(id: string): Promise<RemoteResult<CronTaskView>>;
+      startCreationChat(
+        seedPrompt: string,
+      ): Promise<RemoteResult<{ sessionId: string }>>;
     };
   }
 
@@ -80,6 +83,9 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       id: string,
     ) => Promise<RemoteResult<{ id: string }>>;
     "amibaCron/runNow": (id: string) => Promise<RemoteResult<CronTaskView>>;
+    "amibaCron/startCreationChat": (
+      seedPrompt: string,
+    ) => Promise<RemoteResult<{ sessionId: string }>>;
   }
 }
 
@@ -160,6 +166,22 @@ export const AMIBA_CRON_REMOTE: TypertRemoteContribution = {
       "runNow",
       [{ name: "id", wire: "id", source: "json", codec: stringCodec }],
       viewResult,
+    ),
+    descriptor(
+      "startCreationChat",
+      [
+        {
+          name: "seedPrompt",
+          wire: "seedPrompt",
+          source: "json",
+          codec: stringCodec,
+        },
+      ],
+      {
+        mode: "strict",
+        typeSymbol: "@amiba/cron#creation-chat",
+        schema: z.object({ sessionId: z.string() }),
+      },
     ),
   ],
 };

@@ -102,6 +102,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           await valueOf(remote.removeTask(id));
         },
         runNow: (id) => valueOf(remote.runNow(id)),
+        startCreationChat: (seedPrompt) =>
+          valueOf(remote.startCreationChat(seedPrompt)),
       };
       const disposeNavigation = injectedCtx.slots.inject(
         "amiba.workspace.navigation",

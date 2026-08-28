@@ -1,12 +1,14 @@
 import {
-  CalendarClock,
+  ChevronDown,
   Loader2,
+  MessageSquarePlus,
   Newspaper,
   NotebookPen,
   Play,
   Plus,
   RefreshCw,
   Search,
+  SquarePen,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -19,7 +21,11 @@ import {
   DialogTitle,
   Input,
   Label,
+  ChipSwitcher,
   PageContent,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   ScrollArea,
   SidebarExpandControl,
   Switch,
@@ -50,6 +56,7 @@ export interface CronAdapter {
   update(id: string, patch: { enabled?: boolean }): Promise<CronTaskView>;
   removeTask(id: string): Promise<void>;
   runNow(id: string): Promise<CronTaskView>;
+  startCreationChat(seedPrompt: string): Promise<{ sessionId: string }>;
 }
 
 type RuleMode = CronRule["kind"];
@@ -127,6 +134,7 @@ function CreateDialog({
   const [catchUp, setCatchUp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // A suggestion card seeds the form; the user still reviews and confirms.
   useEffect(() => {
@@ -143,11 +151,7 @@ function CreateDialog({
       mode === "at"
         ? { kind: "at", at: new Date(at).toISOString() }
         : mode === "daily"
-          ? {
-              kind: "daily",
-              time: dailyTime,
-              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            }
+          ? { kind: "daily", time: dailyTime, timeZone }
           : { kind: "every", everySeconds: Number(everyMinutes) * 60 };
     setBusy(true);
     setError(null);
@@ -163,93 +167,114 @@ function CreateDialog({
     }
   };
 
+  const fieldLabel = "text-xs font-medium text-muted-foreground";
+  const inlineInput =
+    "h-8 w-auto bg-transparent shadow-none focus-visible:bg-transparent";
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>{t("cron.new")}</DialogTitle>
+          <DialogTitle>{t("cron.new.manual")}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
-            <Label>{t("cron.form.name")}</Label>
+            <Label className={fieldLabel}>{t("cron.form.name")}</Label>
             <Input
+              autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={t("cron.form.namePlaceholder")}
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>{t("cron.form.prompt")}</Label>
+            <Label className={fieldLabel}>{t("cron.form.prompt")}</Label>
             <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={t("cron.form.promptPlaceholder")}
               rows={4}
+              className="resize-none"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>{t("cron.form.rule")}</Label>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          <div className="flex flex-col gap-2">
+            <Label className={fieldLabel}>{t("cron.form.rule")}</Label>
+            <div className="flex flex-wrap items-center gap-3">
+              <ChipSwitcher
+                options={["daily", "every", "at"] as const}
                 value={mode}
-                onChange={(event) => setMode(event.target.value as RuleMode)}
-              >
-                <option value="daily">{t("cron.form.rule.daily")}</option>
-                <option value="every">{t("cron.form.rule.every")}</option>
-                <option value="at">{t("cron.form.rule.at")}</option>
-              </select>
+                onChange={setMode}
+                formatLabel={(value) => t(`cron.form.rule.${value}` as never)}
+              />
+              {/* The rule reads as one sentence; only its blank changes. */}
+              {mode === "daily" && (
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {t("cron.form.dailyTime")}
+                  <Input
+                    type="time"
+                    value={dailyTime}
+                    onChange={(event) => setDailyTime(event.target.value)}
+                    className={cn(inlineInput, "w-28")}
+                  />
+                </span>
+              )}
+              {mode === "every" && (
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {t("cron.form.everyPrefix")}
+                  <Input
+                    type="number"
+                    min={5}
+                    value={everyMinutes}
+                    onChange={(event) => setEveryMinutes(event.target.value)}
+                    className={cn(inlineInput, "w-20")}
+                  />
+                  {t("cron.form.everySuffix")}
+                </span>
+              )}
+              {mode === "at" && (
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {t("cron.form.at")}
+                  <Input
+                    type="datetime-local"
+                    value={at}
+                    onChange={(event) => setAt(event.target.value)}
+                    className={cn(inlineInput, "w-52")}
+                  />
+                </span>
+              )}
             </div>
-            {mode === "at" && (
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("cron.form.at")}</Label>
-                <Input
-                  type="datetime-local"
-                  value={at}
-                  onChange={(event) => setAt(event.target.value)}
-                />
-              </div>
-            )}
             {mode === "daily" && (
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("cron.form.dailyTime")}</Label>
-                <Input
-                  type="time"
-                  value={dailyTime}
-                  onChange={(event) => setDailyTime(event.target.value)}
-                />
-              </div>
-            )}
-            {mode === "every" && (
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("cron.form.everyMinutes")}</Label>
-                <Input
-                  type="number"
-                  min={5}
-                  value={everyMinutes}
-                  onChange={(event) => setEveryMinutes(event.target.value)}
-                />
-              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                {t("cron.form.timeZoneNote", { zone: timeZone })}
+              </p>
             )}
           </div>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-foreground">{t("cron.form.catchUp")}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("cron.form.catchUpHint")}
+              </p>
+            </div>
+            <Switch
               checked={catchUp}
-              onChange={(event) => setCatchUp(event.target.checked)}
+              aria-label={t("cron.form.catchUp")}
+              onCheckedChange={setCatchUp}
             />
-            {t("cron.form.catchUp")}
-          </label>
-          <p className="text-xs text-muted-foreground">
+          </div>
+          <p className="text-[11px] text-muted-foreground/70">
             {t("cron.form.footnote")}
           </p>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
             {t("cron.form.cancel")}
           </Button>
-          <Button onClick={() => void submit()} disabled={busy}>
+          <Button
+            onClick={() => void submit()}
+            disabled={busy || !name.trim() || !prompt.trim()}
+          >
             {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
             {t("cron.form.create")}
           </Button>
@@ -411,6 +436,8 @@ export function DshCronPage({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [chatStarting, setChatStarting] = useState(false);
   const now = Date.now();
 
   const refresh = useCallback(async () => {
@@ -445,6 +472,21 @@ export function DshCronPage({
   const openCreate = (seed: CreatePrefill | null) => {
     setPrefill(seed);
     setCreating(true);
+  };
+
+  const startChat = async () => {
+    setChatStarting(true);
+    setError(null);
+    try {
+      const { sessionId } = await adapter.startCreationChat(
+        t("cron.creationSeed"),
+      );
+      onOpenSession(sessionId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setChatStarting(false);
+    }
   };
 
   const filters: Array<{ id: TaskFilter; label: string }> = [
@@ -489,15 +531,71 @@ export function DshCronPage({
               </TooltipTrigger>
               <TooltipContent side="bottom">{t("cron.refresh")}</TooltipContent>
             </Tooltip>
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none [&_svg]:size-3.5"
-              onClick={() => openCreate(null)}
-            >
-              <Plus />
-              {t("cron.new")}
-            </Button>
+            {/* Split control, Codex-style: the button itself starts the
+                conversational path (the agent has real cron_* tools); the
+                chevron opens the two explicit choices. */}
+            <div className="flex items-center">
+              <Button
+                type="button"
+                size="sm"
+                disabled={chatStarting}
+                className="h-7 gap-1.5 rounded-l-lg rounded-r-none px-2.5 text-xs shadow-none [&_svg]:size-3.5"
+                onClick={() => void startChat()}
+              >
+                {chatStarting ? <Loader2 className="animate-spin" /> : <Plus />}
+                {t("cron.new")}
+              </Button>
+              <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-label={t("cron.new")}
+                    className="h-7 rounded-l-none rounded-r-lg border-l border-primary-foreground/20 px-1.5 shadow-none [&_svg]:size-3.5"
+                  >
+                    <ChevronDown />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-1.5">
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/50"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      void startChat();
+                    }}
+                  >
+                    <MessageSquarePlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-foreground">
+                        {t("cron.new.chat")}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {t("cron.new.chatHint")}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/50"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      openCreate(null);
+                    }}
+                  >
+                    <SquarePen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-foreground">
+                        {t("cron.new.manual")}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {t("cron.new.manualHint")}
+                      </span>
+                    </span>
+                  </button>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </header>
         <ScrollArea className="min-h-0 flex-1">
@@ -515,7 +613,8 @@ export function DshCronPage({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t("cron.searchPlaceholder")}
-                className="h-10 pl-9"
+                // A quiet field: border only — no fill, no shadow.
+                className="h-10 bg-transparent pl-9 shadow-none hover:bg-transparent focus-visible:bg-transparent"
               />
             </div>
             <div className="mt-3 flex items-center gap-1">
@@ -544,13 +643,13 @@ export function DshCronPage({
                 {t("cron.loading")}
               </p>
             ) : visible.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-14 text-center">
-                <CalendarClock className="h-8 w-8 stroke-[1.5] text-muted-foreground/50" />
-                <p className="text-sm font-medium">{t("cron.empty.title")}</p>
-                <p className="max-w-sm text-xs text-muted-foreground">
-                  {t("cron.empty.description")}
-                </p>
-              </div>
+              // No hero block: one quiet line, and the suggestions below ARE
+              // the empty state — same page shape whether full or empty.
+              <p className="mt-6 text-sm text-muted-foreground">
+                {tasks.length === 0
+                  ? t("cron.empty.line")
+                  : t("cron.empty.noMatch")}
+              </p>
             ) : (
               <ul className="mt-2">
                 {visible.map((task) => (

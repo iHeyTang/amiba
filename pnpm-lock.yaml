@@ -909,6 +909,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: 'catalog:'
         version: 0.1.1-rc.2(h7tefaldx4s6kk4rcazetu47sy)
+      '@deepseek-ai/dsh-tools':
+        specifier: 'catalog:'
+        version: 0.1.1-rc.2(jyumn356pqobh7uniddzfren6m)
       '@types/node':
         specifier: 22.9.0
         version: 22.9.0

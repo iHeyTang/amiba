@@ -2,6 +2,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 
 import { applyCronRemote } from "./remote-service.js";
+import { registerCronTools } from "./tools.js";
 import { CronService } from "./service.js";
 import { DshCronStore } from "./store.js";
 
@@ -12,7 +13,7 @@ export { DshCronStore } from "./store.js";
 export { assertValidRule, missedRunAt, nextRunAt } from "./rules.js";
 
 export const name = "amiba-cron";
-export const inject = ["agents", "sessions"];
+export const inject = ["agents", "sessions", "tools"];
 
 export interface Config {
   root: string;
@@ -32,5 +33,6 @@ export function apply(ctx: Context, config: Config): void {
   const service = new CronService(ctx, new DshCronStore(config.root));
   ctx.effect(() => () => service.dispose(), "amiba-cron");
   applyCronRemote(ctx, service);
+  registerCronTools(ctx, service);
   void service.start();
 }
