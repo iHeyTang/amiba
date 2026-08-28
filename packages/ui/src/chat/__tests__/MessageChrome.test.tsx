@@ -1190,4 +1190,37 @@ describe("chat message chrome", () => {
     );
     expect(document.querySelector("[data-live-reasoning]")).toBeNull();
   });
+
+  it("opens a thought-only turn in one click, with no nested identical fold", () => {
+    // Uniform nesting degenerated here: a turn whose only detail is the
+    // thought rendered "thought for Xs" → expand → "thought for Xs" again →
+    // expand again → text. One label, two clicks, nothing else inside.
+    render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "assistant-1",
+              role: "assistant",
+              content: "Answer",
+              streaming: false,
+              reasoning: "The whole thought.",
+              reasoningMs: 1000,
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /sidepanel\.trace\.thoughtFor/ }),
+    );
+    // The text is immediately visible, and no second thought-labelled fold
+    // exists to click through.
+    expect(screen.getByText("The whole thought.")).toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("button", {
+        name: /sidepanel\.trace\.thoughtFor/,
+      }),
+    ).toHaveLength(1);
+  });
 });

@@ -708,6 +708,24 @@ function ExecutionDisclosure({
               );
             }
             if (detail.kind === "reasoning") {
+              // A reasoning-only turn degenerates under uniform nesting: the
+              // outer summary already reads "thought for Xs", so an inner
+              // fold with the SAME label demands a second click to reach the
+              // only content there is. When the thought is all the detail,
+              // lay its text flat; the inner fold earns its place only when
+              // it separates the thought from tool evidence around it.
+              if (details.length === 1) {
+                return (
+                  <Streamdown
+                    key={detail.id}
+                    mode="static"
+                    parseIncompleteMarkdown
+                    className="chat-md chat-md--reasoning break-words px-1.5 py-1 text-xs text-muted-foreground/85"
+                  >
+                    {detail.text}
+                  </Streamdown>
+                );
+              }
               return (
                 <TraceDisclosure
                   key={detail.id}
