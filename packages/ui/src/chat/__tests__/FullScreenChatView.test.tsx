@@ -1056,4 +1056,31 @@ describe("FullScreenChatView session-header action seat", () => {
     const utilities = container.querySelector("[data-workspace-edge-toggle]");
     expect(utilities).not.toContainElement(action);
   });
+
+  it("resets the stored sidebar view when landing on home without restoring it", async () => {
+    // View switches are storage-CHANGE driven: a plugin nav row's
+    // openWorkspace writes `settings.chat.sidebarView` and this component's
+    // watch reacts. Desktop mounts with restoreSidebarViewOnMount={false} so
+    // every launch lands on home — but the persisted key still held the last
+    // view, so clicking that same view wrote a no-change value and the watch
+    // never fired: the nav row "did not respond" until opening a session
+    // rewrote the key. Not restoring the view must therefore RESET it.
+    mocks.useSessions.mockReturnValue(makeSessions());
+    mocks.storageGet.mockImplementation(async (key: string | string[]) => {
+      if (key === "settings.chat.sidebarView") return { [key]: "cron" };
+      return {};
+    });
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+    await act(async () => {});
+    expect(mocks.storageSet).toHaveBeenCalledWith({
+      "settings.chat.sidebarView": "chats",
+    });
+  });
 });

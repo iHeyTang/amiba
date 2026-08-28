@@ -520,6 +520,14 @@ function FullScreenChatViewInner({
           setSidebarView(v === "tasks" ? "chats" : v);
         }
       });
+    } else {
+      // Landing on home is a decision about the STORED view too. View
+      // switches are storage-CHANGE driven (openWorkspace writes the key and
+      // this watch reacts), so a stale persisted value the UI ignored makes
+      // the first click on that same view a no-op write — nav rows that
+      // "don't respond" until something else rewrites the key. Not restoring
+      // therefore means resetting.
+      void storage.set({ [SIDEBAR_VIEW_KEY]: DEFAULT_SIDEBAR_VIEW });
     }
     const unsub = storage.watch(
       [SIDEBAR_VIEW_KEY],
