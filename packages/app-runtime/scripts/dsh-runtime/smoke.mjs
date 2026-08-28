@@ -1059,28 +1059,6 @@ try {
     },
   );
 
-  await check("DSH schedule persistence and management bridge", async () => {
-    const created = await pluginRequest(baseUrl, "/api/amiba/schedules", {
-      method: "POST",
-      body: {
-        sessionId,
-        prompt: "Amiba DSH smoke reminder",
-        afterSeconds: 86_400,
-      },
-    });
-    assert.ok(created.value?.id);
-    const listed = await pluginRequest(
-      baseUrl,
-      `/api/amiba/schedules?sessionId=${encodeURIComponent(sessionId)}`,
-    );
-    assert.ok(listed.value.some((item) => item.id === created.value.id));
-    const removed = await pluginRequest(baseUrl, "/api/amiba/schedules", {
-      method: "DELETE",
-      body: { sessionId, id: created.value.id },
-    });
-    assert.equal(removed.value.deleted, true);
-  });
-
   await check("plugin-owned memory management bridge", async () => {
     const listed = await pluginRequest(
       baseUrl,

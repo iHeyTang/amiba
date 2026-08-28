@@ -1792,8 +1792,14 @@ if (
 const scheduleManifest = await json(
   "plugins/dsh-plugin-schedule-adapter/package.json",
 );
+if (scheduleManifest.dsh !== undefined) {
+  fail(
+    "Schedule adapter is a runtime-only notification bridge and must ship no client half",
+  );
+}
+const cronManifest = await json("plugins/dsh-plugin-cron/package.json");
 if (
-  JSON.stringify(scheduleManifest.dsh?.client?.inject) !==
+  JSON.stringify(cronManifest.dsh?.client?.inject) !==
   JSON.stringify([
     "@deepseek-ai/dsh-client-runtime",
     "@deepseek-ai/dsh-api-remotes",
@@ -1801,39 +1807,44 @@ if (
   ])
 ) {
   fail(
-    "Schedule Client plugin must depend on DSH Remote and the workspace slot owner",
+    "Cron Client plugin must depend on DSH Remote and the workspace slot owner",
   );
 }
-const scheduleClient = await text(
-  "plugins/dsh-plugin-schedule-adapter/src/client/index.tsx",
-);
+// The schedule adapter is a runtime-only notification bridge now — its
+// dashboard, remote and HTTP faces were deleted with the reminder UI. The
+// workspace nav/view contribution for timed work belongs to the cron client.
+const cronClient = await text("plugins/dsh-plugin-cron/src/client/index.tsx");
 for (const required of [
-  "ctx.remote.$mount(AMIBA_SCHEDULES_REMOTE)",
-  '"remote.amibaSchedules"',
-  "ScheduleWorkspaceView",
+  "ctx.remote.$mount(AMIBA_CRON_REMOTE)",
+  '"remote.amibaCron"',
+  "DshCronPage",
 ]) {
-  if (!scheduleClient.includes(required)) {
-    fail(
-      `Schedule Client plugin is missing workspace contribution ${required}`,
-    );
+  if (!cronClient.includes(required)) {
+    fail(`Cron Client plugin is missing workspace contribution ${required}`);
   }
 }
 for (const slot of ["amiba.workspace.navigation", "amiba.workspace.view"]) {
-  if (!new RegExp(`slots\\.inject\\(\\s*"${slot}"`, "u").test(scheduleClient)) {
-    fail(`Schedule Client plugin is missing workspace contribution ${slot}`);
+  if (!new RegExp(`slots\\.inject\\(\\s*"${slot}"`, "u").test(cronClient)) {
+    fail(`Cron Client plugin is missing workspace contribution ${slot}`);
   }
 }
+// Reminder management is conversation-native (the model's own schedule_*
+// tools); the adapter keeps only the dispatch→notification bridge. Cron owns
+// timed NEW-session work and must spawn through the official registry.
 const scheduleHost = await text(
-  "plugins/dsh-plugin-schedule-adapter/src/manager.ts",
+  "plugins/dsh-plugin-schedule-adapter/src/notify.ts",
 );
+if (!scheduleHost.includes("amibaNotifications")) {
+  fail("Schedule adapter must bridge reminder dispatches into the hub");
+}
+const cronHost = await text("plugins/dsh-plugin-cron/src/service.ts");
 if (
-  !scheduleHost.includes("this.ctx.agents.resume(") ||
-  !scheduleHost.includes('"schedule_list"') ||
-  !scheduleHost.includes('"schedule_create"') ||
-  !scheduleHost.includes('"schedule_delete"')
+  !cronHost.includes("this.ctx.agents.create(") ||
+  !cronHost.includes(".followup(") ||
+  !cronHost.includes("whenIdle()")
 ) {
   fail(
-    "Schedule Host plugin must own live-agent recovery and official tool management",
+    "Cron Host plugin must spawn fresh sessions through the official registry and release them on idle",
   );
 }
 const commandsHost = await text(
