@@ -42,6 +42,10 @@ export function MentionSerializePlugin({
         }
       }
       root.append(p)
+      // Programmatic fills (drafts, hand-offs) land with the caret at the
+      // END — this branch only runs for external value sets, never for the
+      // user's own typing (which updates lastEmitted first).
+      p.selectEnd()
     })
   }, [editor, value])
 
