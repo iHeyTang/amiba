@@ -166,7 +166,7 @@ export function ApprovalBanner({
             <section
               key={req.approvalId}
               aria-label={t("sidepanel.permission.approvalNeeded")}
-              className="relative px-4 pb-2 pt-2.5">
+              className="relative px-4 pt-2.5">
               <div className="flex items-start gap-2">
                 <ApprovalCountdownBar
                   requestedAt={requestedAt}

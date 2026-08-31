@@ -119,6 +119,8 @@ const quietButton =
   "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 const quietNeutral =
   "text-muted-foreground hover:bg-muted/50 hover:text-foreground";
+const quietOutline =
+  "border border-border/60 bg-background text-foreground/70 hover:bg-muted/40 hover:text-foreground";
 const quietPrimary =
   // min-w keeps 下一个/提交 (and Next/Submit) the same footprint so the
   // footer doesn't shift when the last step swaps the label.
@@ -169,7 +171,7 @@ function PlanReviewCard({
           {review.plan}
         </Streamdown>
       </div>
-      <div className="mt-2 flex items-center gap-2 px-4 pb-1">
+      <div className="mt-2 flex items-center gap-2 px-4">
         {error ? (
           <p className="min-w-0 flex-1 truncate text-[11px] text-destructive">
             {error}
@@ -354,7 +356,9 @@ function QuestionStepper({
               {question.header}
             </p>
           ) : null}
-          <h2 className="text-[13px] font-semibold leading-snug text-foreground">
+          {/* Normal weight: questions run long, and a bold multi-line
+              header reads heavy — the progress pill already anchors it. */}
+          <h2 className="text-[13px] font-normal leading-relaxed text-foreground/90">
             {question.question}
           </h2>
         </div>
@@ -396,7 +400,7 @@ function QuestionStepper({
           {/* One question per step; the sheet owns the scroll so a long
               option list can't push the composer off-screen. */}
           <div
-            className="max-h-[min(42vh,360px)] overflow-y-auto px-4 pb-1 pt-2.5"
+            className="max-h-[min(42vh,360px)] overflow-y-auto px-4 pt-2.5"
             onKeyDown={onDigitShortcut}
           >
             <section key={`${request.requestId}:${index}`}>
@@ -519,7 +523,7 @@ function QuestionStepper({
 
           {/* Footer: back/forward for edits on the left, per-question skip
               + next/submit on the right. */}
-          <div className="flex items-center gap-2 px-4 pb-1 pt-1.5">
+          <div className="flex items-center gap-2 px-4 pt-1.5">
             {questions.length > 1 ? (
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
@@ -556,7 +560,7 @@ function QuestionStepper({
               <span className="flex-1" />
             )}
             <button
-              className={cn(quietButton, quietNeutral)}
+              className={cn(quietButton, quietOutline)}
               disabled={inFlight}
               onClick={skipQuestion}
               title={t("sidepanel.clarify.skipHint")}

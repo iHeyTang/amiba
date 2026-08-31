@@ -69,9 +69,16 @@ describe("ApprovalBanner", () => {
       "shell python"
     )
     expect(container.querySelector(".approval-code .token.number")).toHaveTextContent("1")
+    // Bottom clearance now belongs to the ComposerDockSheet container
+    // (pb-5), not to each section.
     expect(
       screen.getByRole("region", { name: "sidepanel.permission.approvalNeeded" })
-    ).toHaveClass("pb-2")
-    expect(container.firstElementChild).toHaveClass("mx-4", "-mb-2.5", "z-0")
+    ).not.toHaveClass("pb-2")
+    expect(container.firstElementChild).toHaveClass(
+      "mx-4",
+      "-mb-2.5",
+      "z-0",
+      "pb-5"
+    )
   })
 })

@@ -39,7 +39,10 @@ export function ComposerDockSheet({
   return (
     <div
       className={cn(
-        "amiba-dock-sheet relative z-0 mx-4 -mb-2.5 overflow-hidden rounded-t-[14px] border border-b-0 pb-2.5",
+        // pb-5 = the 2.5 tucked under the composer card PLUS 2.5 of visible
+        // clearance, so content never has to pad its own bottom edge to
+        // keep off the composer.
+        "amiba-dock-sheet relative z-0 mx-4 -mb-2.5 overflow-hidden rounded-t-[14px] border border-b-0 pb-5",
         "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] backdrop-blur-xl dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]",
         TONES[tone],
         className,
@@ -65,7 +68,7 @@ export function ComposerDockError({
 }) {
   return (
     <ComposerDockSheet tone="danger">
-      <div className="flex items-start justify-between gap-2 px-4 pb-1 pt-2.5 text-[11px] leading-relaxed text-destructive">
+      <div className="flex items-start justify-between gap-2 px-4 pt-2.5 text-[11px] leading-relaxed text-destructive">
         <span className="min-w-0 flex-1 break-words">{message}</span>
         <button
           type="button"
