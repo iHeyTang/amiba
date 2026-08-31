@@ -144,6 +144,56 @@ const TOOL_SPECS: Record<string, ToolSpec> = {
     actionKey: "sidepanel.trace.actions.searchFiles",
     icon: FolderSearch,
   },
+  // ── Official DSH wire names (dsh-tool-fs / fs-search / todo / web) ──
+  // Same presentation kinds as the legacy names above; the official
+  // dsh-client-ui-tool covers exactly this set (plus bash/web_search/
+  // ask_user_question, mapped elsewhere), and our fallback rows reach
+  // presentation parity through the kind table alone.
+  read: {
+    kind: "read-file",
+    actionKey: "sidepanel.trace.actions.readFile",
+    icon: FileText,
+  },
+  read_image: {
+    kind: "inspect-media",
+    actionKey: "sidepanel.trace.actions.inspectMedia",
+    icon: Eye,
+  },
+  edit: {
+    kind: "write-file",
+    actionKey: "sidepanel.trace.actions.editFile",
+    icon: FilePenLine,
+  },
+  write: {
+    kind: "write-file",
+    actionKey: "sidepanel.trace.actions.writeFile",
+    icon: FilePenLine,
+  },
+  grep: {
+    kind: "search-files",
+    actionKey: "sidepanel.trace.actions.searchFiles",
+    icon: FolderSearch,
+  },
+  glob: {
+    kind: "search-files",
+    actionKey: "sidepanel.trace.actions.searchFiles",
+    icon: FolderSearch,
+  },
+  todo_write: {
+    kind: "tasks",
+    actionKey: "sidepanel.trace.actions.updateTasks",
+    icon: ListTodo,
+  },
+  web_fetch: {
+    kind: "web",
+    actionKey: "sidepanel.trace.actions.readWeb",
+    icon: Globe,
+  },
+  skill: {
+    kind: "skill",
+    actionKey: "sidepanel.trace.actions.useSkill",
+    icon: BookOpen,
+  },
   terminal: {
     kind: "terminal",
     actionKey: "sidepanel.trace.actions.runCommand",
@@ -426,7 +476,7 @@ function targetFor(event: ToolProgress, spec: ToolSpec): string {
       );
     case "read-file":
     case "write-file": {
-      const path = stringValue(args, "path", "file", "filepath");
+      const path = stringValue(args, "path", "file", "filepath", "file_path");
       const lines = lineRange(args);
       return [path ? compactPath(path) : fallbackTarget(event), lines]
         .filter(Boolean)
@@ -472,7 +522,7 @@ function targetFor(event: ToolProgress, spec: ToolSpec): string {
     case "generate-media":
     case "inspect-media":
       return oneline(
-        stringValue(args, "prompt", "question", "text") ||
+        stringValue(args, "prompt", "question", "text", "file_path") ||
           fallbackTarget(event),
       );
     default: {
@@ -552,7 +602,7 @@ export function hasToolDetail(event: ToolProgress): boolean {
         event.result !== undefined
       );
     case "tasks":
-      if (event.tool === "todo") {
+      if (event.tool === "todo" || event.tool === "todo_write") {
         return (
           failed ||
           (Array.isArray(args.todos) && args.todos.length > 0) ||
@@ -1542,12 +1592,15 @@ export function ToolDetail({
     return (
       <DetailShell kind={presentation.kind}>
         <div className="space-y-1.5">
-          {event.tool === "todo" ? (
+          {event.tool === "todo" || event.tool === "todo_write" ? (
             <TodoEvidence value={todos} />
           ) : (
             <CollectionEvidence value={result} />
           )}
-          {(event.error || (event.tool !== "todo" && !resultCollection)) && (
+          {(event.error ||
+            (event.tool !== "todo" &&
+              event.tool !== "todo_write" &&
+              !resultCollection)) && (
             <StructuredEvidence value={result} />
           )}
         </div>
