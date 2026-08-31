@@ -120,7 +120,9 @@ const quietButton =
 const quietNeutral =
   "text-muted-foreground hover:bg-muted/50 hover:text-foreground";
 const quietPrimary =
-  "bg-primary text-primary-foreground shadow-none hover:bg-primary/90 disabled:hover:bg-primary";
+  // min-w keeps 下一个/提交 (and Next/Submit) the same footprint so the
+  // footer doesn't shift when the last step swaps the label.
+  "min-w-[4rem] bg-primary text-primary-foreground shadow-none hover:bg-primary/90 disabled:hover:bg-primary";
 
 export interface ClarifyBannerProps {
   request: UserQuestionRequest;

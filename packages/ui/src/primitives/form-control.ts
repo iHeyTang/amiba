@@ -10,7 +10,9 @@ export const FORM_CONTROL_SURFACE_CLASS =
   "placeholder:text-muted-foreground/65 hover:border-border";
 
 export const FORM_CONTROL_STATE_CLASS =
-  "focus-visible:border-ring/40 focus-visible:bg-background focus-visible:outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-ring/10 " +
-  "aria-[invalid=true]:border-destructive/50 aria-[invalid=true]:ring-destructive/10 " +
+  // Focus is the border alone — no ring halo: the glow read as a smudged
+  // shadow on light surfaces, and a hairline color change is enough in
+  // this design language.
+  "focus-visible:border-ring/50 focus-visible:bg-background focus-visible:outline-none " +
+  "aria-[invalid=true]:border-destructive/50 " +
   "disabled:cursor-not-allowed disabled:opacity-50";
