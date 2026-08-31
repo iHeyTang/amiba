@@ -442,10 +442,15 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             MemoryPresetSection,
           ),
       );
+      // slots.inject defers the registration until the seat's declarer
+      // (ui-shell's root) has published the children table — plugin load
+      // order must not matter.
       const disposeToolviews = MEMORY_TOOLVIEW_KEYS.map((key) =>
-        injectedCtx.slots.register(
-          { name: "tool.call.toolview", key },
-          MemoryToolview,
+        injectedCtx.slots.inject("tool.call.toolview", () =>
+          injectedCtx.slots.register(
+            { name: "tool.call.toolview", key },
+            MemoryToolview,
+          ),
         ),
       );
       return () => {

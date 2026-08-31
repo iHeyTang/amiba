@@ -566,16 +566,20 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // generic ToolRowFrame — the reference pattern for any plugin that wants
     // a bespoke row for its own tool. Registered after the root because the
     // root's children table is what declares the seat.
-    const disposeAskToolview = ctx.slots.register(
-      { name: "tool.call.toolview", key: "ask_user_question" },
-      AskUserQuestionToolview,
+    const disposeAskToolview = ctx.slots.inject("tool.call.toolview", () =>
+      ctx.slots.register(
+        { name: "tool.call.toolview", key: "ask_user_question" },
+        AskUserQuestionToolview,
+      ),
     );
     // Every official runtime tool's row, one occupant per wire name — the
     // presentation core deliberately does not carry (its fallback row is
     // generic by construction).
     const disposeOfficialToolviews = OFFICIAL_TOOLVIEWS.map(
       ({ key, component }) =>
-        ctx.slots.register({ name: "tool.call.toolview", key }, component),
+        ctx.slots.inject("tool.call.toolview", () =>
+          ctx.slots.register({ name: "tool.call.toolview", key }, component),
+        ),
     );
     return () => {
       for (const dispose of disposeOfficialToolviews) dispose();
