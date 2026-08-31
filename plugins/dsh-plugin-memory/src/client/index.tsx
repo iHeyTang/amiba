@@ -30,6 +30,7 @@ import type {
   AmibaMemoryTargetView,
 } from "../memory-store.js";
 import { AMIBA_MEMORY_REMOTE } from "../remote.js";
+import { MEMORY_TOOLVIEW_KEYS, MemoryToolview } from "./toolviews.js";
 
 export const name = "amiba-memory-ui";
 export const inject = ["slots", "remote"];
@@ -441,7 +442,14 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             MemoryPresetSection,
           ),
       );
+      const disposeToolviews = MEMORY_TOOLVIEW_KEYS.map((key) =>
+        injectedCtx.slots.register(
+          { name: "tool.call.toolview", key },
+          MemoryToolview,
+        ),
+      );
       return () => {
+        for (const dispose of disposeToolviews) dispose();
         disposePresetSection();
         disposeSection();
       };

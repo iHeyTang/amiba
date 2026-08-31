@@ -42,6 +42,30 @@ export {
   ToolRowFrame,
   type ToolRowFrameProps,
 } from "./chat/bubble/tool-row-frame";
+export {
+  CodeEvidence,
+  DiffEvidence,
+  EvidenceShell,
+  StructuredEvidence,
+  TerminalEvidence,
+  TodoEvidence,
+  decodeToolResult,
+  hostnameOf,
+  oneline,
+  recordOf,
+  stringValue,
+  toolResultText,
+  unwrapUntrustedToolResult,
+} from "./chat/bubble/tool-evidence";
+export {
+  toolCallArgs,
+  toolCallDurationMs,
+  toolCallErrorCode,
+  toolCallFailed,
+  toolCallResultText,
+  toolCallSettled,
+  toolCallStartedAt,
+} from "./chat/bubble/tool-call-block";
 export { ScrollArea } from "./primitives/scroll-area";
 export {
   Select,

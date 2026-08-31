@@ -91,7 +91,7 @@ export function workspaceFileTargets(event: ToolProgress): string[] {
     }
     add(result.path);
   }
-  add(firstString(args, "path", "file", "filepath"));
+  add(firstString(args, "path", "file", "filepath", "file_path"));
   return targets;
 }
 
@@ -105,7 +105,7 @@ export function workspaceReviewResourceFromEvents(
   const entries = [...latestByTool.values()]
     .filter(
       (event) =>
-        (event.tool === "write_file" || event.tool === "patch") &&
+        (event.tool === "edit" || event.tool === "write") &&
         event.status === "completed" &&
         !event.error,
     )
@@ -140,7 +140,7 @@ function diffLikeText(value: unknown): string {
 function workspaceMutationDiff(event: ToolProgress): string {
   const direct = diffLikeText(event.inlineDiff);
   if (direct) return direct;
-  if (event.tool !== "patch") return "";
+  if (event.tool !== "edit") return "";
 
   // The completed result is authoritative: apply-patch may normalize or
   // partially apply the submitted patch, so its resulting diff can differ

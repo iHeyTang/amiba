@@ -397,24 +397,24 @@ export function workspaceCodeExecution(
 }
 
 export function canInspectWorkspaceTool(event: ToolProgress): boolean {
+  // Official DSH wire names: the fs tools plus the (currently uncomposed)
+  // code runtime — the pane's own capability vocabulary, not presentation.
   return (
-    event.tool === "read_file" ||
-    event.tool === "write_file" ||
-    event.tool === "patch" ||
+    event.tool === "read" ||
+    event.tool === "edit" ||
+    event.tool === "write" ||
     event.tool === "execute_code"
   );
 }
 
 function isMutationTool(event: ToolProgress): boolean {
-  return event.tool === "write_file" || event.tool === "patch";
+  return event.tool === "edit" || event.tool === "write";
 }
 
 export function canMutateWorkspaceTool(event: ToolProgress): boolean {
   return (
     isMutationTool(event) ||
-    event.tool === "terminal" ||
-    event.tool === "process" ||
-    event.tool === "shell" ||
+    event.tool === "bash" ||
     event.tool === "execute_code"
   );
 }

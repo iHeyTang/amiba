@@ -45,6 +45,7 @@ import {
 } from "./trigger-seats.js";
 import { TRIGGER_SOURCE_LABELS, officialTriggerSources } from "@amiba/ui";
 import { AskUserQuestionToolview } from "./ask-toolview.js";
+import { OFFICIAL_TOOLVIEWS } from "./official-toolviews.js";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
@@ -569,7 +570,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "tool.call.toolview", key: "ask_user_question" },
       AskUserQuestionToolview,
     );
+    // Every official runtime tool's row, one occupant per wire name — the
+    // presentation core deliberately does not carry (its fallback row is
+    // generic by construction).
+    const disposeOfficialToolviews = OFFICIAL_TOOLVIEWS.map(
+      ({ key, component }) =>
+        ctx.slots.register({ name: "tool.call.toolview", key }, component),
+    );
     return () => {
+      for (const dispose of disposeOfficialToolviews) dispose();
       disposeAskToolview();
       disposeCommandPopup();
       disposeSlashMenu();

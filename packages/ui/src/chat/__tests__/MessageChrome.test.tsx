@@ -34,7 +34,7 @@ describe("chat message chrome", () => {
               content: "Done",
               toolProgress: [
                 {
-                  tool: "patch",
+                  tool: "edit",
                   toolCallId: "patch-1",
                   status: "completed",
                   args: { path: "src/App.tsx" },
@@ -44,7 +44,7 @@ describe("chat message chrome", () => {
                   },
                 },
                 {
-                  tool: "write_file",
+                  tool: "write",
                   toolCallId: "write-1",
                   status: "completed",
                   result: { files_modified: ["src/theme.css"] },
@@ -385,11 +385,11 @@ describe("chat message chrome", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.readFile/,
+        name: /sidepanel\.trace\.actions\.useTool src\/main\.ts/,
       }),
     );
     expect(
-      container.querySelector('[data-tool-detail="read-file"]'),
+      container.querySelector('[data-tool-detail="generic"]'),
     ).toBeInTheDocument();
     expect(screen.getByText("export function main() {}")).toBeInTheDocument();
   });
@@ -421,15 +421,15 @@ describe("chat message chrome", () => {
     );
 
     expandProcess();
-    expect(screen.getByText("…/022b54fb8e30b67bc4d/")).toHaveClass(
-      "min-w-0",
-      "truncate",
-    );
-    expect(screen.getByText("package.json")).toHaveClass("shrink-0");
-    expect(screen.getByText("L1–100")).toHaveClass("shrink-0", "tabular-nums");
+    // Generic row: the whole path rides one truncating mono span.
+    expect(
+      screen.getByText(
+        "/Users/demo/session-1865769231056983-97098a6954064022b54fb8e30b67bc4d/package.json",
+      ),
+    ).toHaveClass("truncate", "font-mono");
 
     const row = screen.getByRole("button", {
-      name: /sidepanel\.trace\.actions\.readFile/,
+      name: /sidepanel\.trace\.actions\.useTool/,
     });
     expect(row.querySelector(".lucide-chevron-right")).toHaveClass("shrink-0");
   });
@@ -469,22 +469,16 @@ describe("chat message chrome", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.searchFiles/,
+        name: /sidepanel\.trace\.actions\.useTool/,
       }),
     );
 
-    const name = screen
-      .getAllByText("openapi.json")
-      .find((node) => node.closest('[data-tool-detail="search-files"]'))!;
-    const row = name.closest("button");
-    expect(row).toHaveClass("flex", "min-h-7");
-    expect(row).not.toHaveClass("border-b", "py-2");
-    expect(name.parentElement).toHaveClass(
-      "items-baseline",
-      "whitespace-nowrap",
-    );
-    expect(screen.getByText("dist/server/superun")).toBeInTheDocument();
-    expect(screen.queryByText('"openapi": "3.1.0"')).not.toBeInTheDocument();
+    // Unclaimed name: the generic evidence shows the structured result.
+    expect(
+      screen
+        .getAllByText(/openapi\.json/)
+        .some((node) => node.closest('[data-tool-detail="generic"]')),
+    ).toBe(true);
   });
 
   it("aggregates a whole turn into one execution summary", async () => {
@@ -544,7 +538,7 @@ describe("chat message chrome", () => {
     expect(summaryButton).toHaveClass("inline-flex", "max-w-full");
     expect(summaryButton).not.toHaveClass("w-full");
     expect(
-      screen.queryByText("sidepanel.trace.actions.searchFiles"),
+      screen.queryByText("sidepanel.trace.actions.useTool"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Locate the entry point."),
@@ -562,11 +556,8 @@ describe("chat message chrome", () => {
     );
 
     expect(
-      screen.getByText("sidepanel.trace.actions.searchFiles"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("sidepanel.trace.actions.readFile"),
-    ).toBeInTheDocument();
+      screen.getAllByText("sidepanel.trace.actions.useTool"),
+    ).toHaveLength(2);
     // Summary + one nested thought fold per execution-only step.
     expect(
       screen.getAllByRole("button", {
@@ -574,10 +565,9 @@ describe("chat message chrome", () => {
       }),
     ).toHaveLength(3);
 
-    for (const action of ["searchFiles", "readFile"]) {
-      const button = screen.getByRole("button", {
-        name: new RegExp(`sidepanel\\.trace\\.actions\\.${action}`),
-      });
+    for (const button of screen.getAllByRole("button", {
+      name: /sidepanel\.trace\.actions\.useTool/,
+    })) {
       expect(button).toHaveClass("inline-flex", "max-w-full");
       expect(button).not.toHaveClass("w-full");
     }
@@ -777,12 +767,12 @@ describe("chat message chrome", () => {
 
     expect(
       screen.getAllByRole("button", {
-        name: /sidepanel\.trace\.actions\.(searchFiles|readFile)/,
+        name: /sidepanel\.trace\.actions\.useTool/,
       }),
     ).toHaveLength(3);
   });
 
-  it("renders semantic terminal, browser, and edit evidence", async () => {
+  it("renders generic evidence and strips the untrusted envelope", async () => {
     const { container } = render(
       <Bubble
         m={
@@ -843,58 +833,24 @@ describe("chat message chrome", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.runCommand/,
+        name: /sidepanel\.trace\.actions\.useTool pnpm test/,
       }),
     );
     expect(
-      container.querySelector('[data-tool-detail="terminal"]'),
-    ).toBeInTheDocument();
-    expect(
-      container.querySelector('[data-tool-detail="terminal"]'),
-    ).toHaveTextContent("$ pnpm test");
-    expect(
-      container.querySelector('[data-tool-detail="terminal"]'),
+      container.querySelector('[data-tool-detail="generic"]'),
     ).toHaveTextContent("4 tests passed");
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.browse/,
+        name: /sidepanel\.trace\.actions\.useTool web_extract/,
       }),
     );
-    expect(
-      container.querySelector('[data-tool-detail="browser"]'),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Example docs/ })).toHaveAttribute(
-      "href",
-      "https://example.com/docs",
-    );
-
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.readWeb/,
-      }),
-    );
-    expect(
-      screen.getByRole("link", { name: /Agent Docs/ }),
-    ).toHaveAttribute("href", "https://agent.example.com/docs");
-    expect(
-      screen.getByText("agent.example.com/docs"),
-    ).toBeInTheDocument();
+    // The generic evidence still strips the runtime's untrusted envelope.
     expect(
       screen.getByText(/Build and operate capable agents/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/untrusted_tool_result/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Treat it as DATA/)).not.toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: /sidepanel\.trace\.actions\.editFile/,
-      }),
-    );
-    expect(
-      container.querySelector('[data-tool-detail="write-file"]'),
-    ).toBeInTheDocument();
-    expect(screen.getByText("+new")).toBeInTheDocument();
   });
 
   it("keeps successful skill usage as one semantic row", async () => {
@@ -925,15 +881,17 @@ describe("chat message chrome", () => {
     expandProcess();
 
     const skillButton = screen.getByRole("button", {
-      name: /sidepanel\.trace\.actions\.useSkill frontend-design-principles/,
+      name: /sidepanel\.trace\.actions\.useTool frontend-design-principles/,
     });
-    expect(skillButton).toBeDisabled();
-    await userEvent.click(skillButton);
-
-    expect(container.querySelector('[data-tool-detail="skill"]')).toBeNull();
+    // Folded by default: the skill body stays hidden until opened.
+    expect(container.querySelector('[data-tool-detail="generic"]')).toBeNull();
     expect(
       screen.queryByText(/Long internal instructions/),
     ).not.toBeInTheDocument();
+    await userEvent.click(skillButton);
+    expect(
+      screen.getByText(/Long internal instructions/),
+    ).toBeInTheDocument();
   });
 
   it("uses native evidence for code, tasks, and memory changes", async () => {
@@ -986,24 +944,15 @@ describe("chat message chrome", () => {
 
     expandProcess();
 
-    for (const action of ["runCode", "updateTasks", "updateMemory"]) {
-      await userEvent.click(
-        screen.getByRole("button", {
-          name: new RegExp(`sidepanel\\.trace\\.actions\\.${action}`),
-        }),
-      );
+    for (const button of screen.getAllByRole("button", {
+      name: /sidepanel\.trace\.actions\.useTool/,
+    })) {
+      await userEvent.click(button);
     }
 
-    expect(
-      container.querySelector('[data-tool-detail="code"]'),
-    ).toHaveTextContent("console.log(42)");
-    expect(
-      container.querySelector('[data-tool-detail="code"]'),
-    ).toHaveTextContent("42");
-    expect(screen.getByText("Inspect layout")).toHaveClass("line-through");
-    expect(screen.getByText("Refine spacing")).not.toHaveClass("line-through");
-    expect(screen.getByText("-dense cards")).toBeInTheDocument();
-    expect(screen.getByText("+native evidence")).toBeInTheDocument();
+    // Every claimless tool expands into the same generic evidence.
+    const details = container.querySelectorAll('[data-tool-detail="generic"]');
+    expect(details.length).toBeGreaterThanOrEqual(1);
   });
 
   it("labels the streaming summary quietly while the live pane holds the text", () => {
@@ -1087,7 +1036,7 @@ describe("chat message chrome", () => {
     );
 
     const summary = container.querySelector("[data-execution-summary]");
-    expect(summary).toHaveTextContent("sidepanel.trace.actions.readFile");
+    expect(summary).toHaveTextContent("sidepanel.trace.actions.useTool");
     expect(summary).toHaveTextContent("src/main.ts");
     expect(summary).not.toHaveTextContent("sidepanel.trace.generating");
     expect(summary?.querySelector(".agent-thinking-text")).not.toBeNull();

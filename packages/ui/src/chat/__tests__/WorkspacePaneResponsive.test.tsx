@@ -47,7 +47,7 @@ function RecoveryProbe() {
         type="button"
         onClick={() =>
           pane.observeToolEvent({
-            tool: "write_file",
+            tool: "write",
             toolCallId: "write-1",
             status: "completed",
             args: { path: "src/App.tsx" },

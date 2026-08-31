@@ -111,7 +111,7 @@ describe("workspace review parser", () => {
     const resource = workspaceReviewResourceFromEvents(
       [
         {
-          tool: "patch",
+          tool: "edit",
           toolCallId: "patch-1",
           status: "completed",
           args: {
@@ -150,7 +150,7 @@ describe("workspace review parser", () => {
     const resource = workspaceReviewResourceFromEvents(
       [
         {
-          tool: "patch",
+          tool: "edit",
           toolCallId: "patch-2",
           status: "completed",
           args: { mode: "patch" },
@@ -183,7 +183,7 @@ describe("workspace review parser", () => {
     const resource = workspaceReviewResourceFromEvents(
       [
         {
-          tool: "patch",
+          tool: "edit",
           toolCallId: "patch-3",
           status: "completed",
           args: {

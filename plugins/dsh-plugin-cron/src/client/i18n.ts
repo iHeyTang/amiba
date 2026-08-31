@@ -7,6 +7,7 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 export const cronI18n: PluginCatalogOverlay = {
   "zh-CN": {
     "cron.title": "定时任务",
+    "cron.tool.action": "维护定时任务",
     "cron.nav": "定时任务",
     "cron.new": "新建",
     "cron.new.chat": "对话创建",
@@ -76,6 +77,7 @@ export const cronI18n: PluginCatalogOverlay = {
   },
   en: {
     "cron.title": "Cron tasks",
+    "cron.tool.action": "Manage cron tasks",
     "cron.nav": "Cron tasks",
     "cron.new": "New",
     "cron.new.chat": "Create in chat",

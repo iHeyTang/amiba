@@ -103,3 +103,65 @@ export function toolCallBlockFromProgress(
 export function toolCallBlockName(block: ToolCallBlock): string {
   return "kind" in block ? (block.call?.name ?? "") : block.name;
 }
+
+// ---------------------------------------------------------------------------
+// Occupant-side readers: a `tool.call.toolview` component receives the
+// frozen block and reads the call through these — exported with the
+// evidence components so a plugin never re-derives wire shapes itself.
+// ---------------------------------------------------------------------------
+
+/** The settled result node, or null while the call is still running. */
+export function toolCallSettled(block: ToolCallBlock): ToolResultNode | null {
+  return "kind" in block ? block : null;
+}
+
+/** Parsed call arguments; `{}` when the raw args are absent or malformed. */
+export function toolCallArgs(block: ToolCallBlock): Record<string, unknown> {
+  const raw = "kind" in block ? block.call?.argsRaw : block.argsRaw;
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Joined text content of a settled result; empty while running. */
+export function toolCallResultText(block: ToolCallBlock): string {
+  const settled = toolCallSettled(block);
+  if (!settled) return "";
+  return settled.content
+    .map((item) => {
+      const record =
+        item && typeof item === "object"
+          ? (item as { type?: unknown; text?: unknown })
+          : null;
+      return record?.type === "text" && typeof record.text === "string"
+        ? record.text
+        : "";
+    })
+    .join("");
+}
+
+export function toolCallFailed(block: ToolCallBlock): boolean {
+  return toolCallSettled(block)?.isError === true;
+}
+
+export function toolCallErrorCode(block: ToolCallBlock): string {
+  return toolCallSettled(block)?.error?.code ?? "";
+}
+
+/** Wall-clock duration of a settled call whose call frame is in-window. */
+export function toolCallDurationMs(block: ToolCallBlock): number | undefined {
+  const settled = toolCallSettled(block);
+  if (!settled || settled.callTime == null) return undefined;
+  return Math.max(0, settled.time - settled.callTime);
+}
+
+/** Epoch ms when a still-running call was logged (for live tickers). */
+export function toolCallStartedAt(block: ToolCallBlock): number | undefined {
+  return "kind" in block ? undefined : block.time;
+}

@@ -19,9 +19,9 @@ function event(
 }
 
 describe("workspace pane tool resources", () => {
-  it("opens a read_file argument at its requested path", () => {
+  it("opens a read argument at its requested path", () => {
     const toolEvent = event({
-      tool: "read_file",
+      tool: "read",
       args: { path: "src/App.tsx", offset: 20 },
     });
 
@@ -31,7 +31,7 @@ describe("workspace pane tool resources", () => {
 
   it("prefers the runtime's authoritative resolved write path", () => {
     const toolEvent = event({
-      tool: "write_file",
+      tool: "write",
       args: { path: "src/App.tsx" },
       result: {
         resolved_path: "/workspace/src/App.tsx",
@@ -47,7 +47,7 @@ describe("workspace pane tool resources", () => {
 
   it("collects every file reported by a multi-file patch", () => {
     const toolEvent = event({
-      tool: "patch",
+      tool: "edit",
       result: JSON.stringify({
         files_modified: ["/workspace/src/App.tsx", "/workspace/src/styles.css"],
       }),
@@ -61,7 +61,7 @@ describe("workspace pane tool resources", () => {
 
   it("does not treat terminal calls as workspace file resources", () => {
     const toolEvent = event({
-      tool: "terminal",
+      tool: "bash",
       args: { command: "pnpm test" },
     });
 
@@ -70,11 +70,11 @@ describe("workspace pane tool resources", () => {
   });
 
   it("treats write and command tools as potentially workspace-mutating", () => {
-    expect(canMutateWorkspaceTool(event({ tool: "write_file" }))).toBe(true);
-    expect(canMutateWorkspaceTool(event({ tool: "patch" }))).toBe(true);
-    expect(canMutateWorkspaceTool(event({ tool: "terminal" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "write" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "edit" }))).toBe(true);
+    expect(canMutateWorkspaceTool(event({ tool: "bash" }))).toBe(true);
     expect(canMutateWorkspaceTool(event({ tool: "execute_code" }))).toBe(true);
-    expect(canMutateWorkspaceTool(event({ tool: "read_file" }))).toBe(false);
+    expect(canMutateWorkspaceTool(event({ tool: "read" }))).toBe(false);
   });
 
   it("turns execute_code into a semantic workbench resource", () => {

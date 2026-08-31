@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { AMIBA_CRON_REMOTE } from "../remote.js";
 import { DshCronPage, type CronAdapter } from "./DshCronPage.js";
 import { cronI18n } from "./i18n.js";
+import { CRON_TOOLVIEW_KEYS, CronToolview } from "./toolviews.js";
 
 export const name = "amiba-cron-ui";
 export const inject = ["slots", "remote", "layout"];
@@ -136,7 +137,14 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           CronView,
         ),
       );
+      const disposeToolviews = CRON_TOOLVIEW_KEYS.map((key) =>
+        injectedCtx.slots.register(
+          { name: "tool.call.toolview", key },
+          CronToolview,
+        ),
+      );
       return () => {
+        for (const dispose of disposeToolviews) dispose();
         disposeView();
         disposeNavigation();
       };

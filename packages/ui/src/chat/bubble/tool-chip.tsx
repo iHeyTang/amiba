@@ -24,38 +24,14 @@ function ToolTarget({
   presentation: ToolCallPresentation;
   running: boolean;
 }) {
-  const textClass = cn(
-    "font-mono text-foreground/65",
-    running && "agent-thinking-text",
-  );
-  if (presentation.kind !== "read-file" && presentation.kind !== "write-file") {
-    return (
-      <span className={cn("min-w-0 max-w-56 truncate", textClass)}>
-        {presentation.target}
-      </span>
-    );
-  }
-
-  const [path, ...metaParts] = presentation.target.split(" · ");
-  const separator = path.lastIndexOf("/");
-  const parent = separator >= 0 ? path.slice(0, separator) : "";
-  const name = separator >= 0 ? path.slice(separator + 1) : path;
-  const meta = metaParts.join(" · ");
-
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 max-w-60 items-center overflow-hidden",
-        textClass,
+        "min-w-0 max-w-56 truncate font-mono text-foreground/65",
+        running && "agent-thinking-text",
       )}
     >
-      {parent && <span className="min-w-0 truncate">{parent}/</span>}
-      <span className="shrink-0">{name}</span>
-      {meta && (
-        <span className="ml-2 shrink-0 tabular-nums text-muted-foreground/75">
-          {meta}
-        </span>
-      )}
+      {presentation.target}
     </span>
   );
 }

@@ -106,7 +106,7 @@ describe("tool.call.toolview seat", () => {
     // The pre-seat world: no provider at all (Quick-Ask, any surface outside
     // a DSH plugin runtime, every existing render path).
     const baseline = renderRows();
-    expect(baseline).toContain("sidepanel.trace.actions.readFile");
+    expect(baseline).toContain("sidepanel.trace.actions.useTool");
 
     // Inside a plugin runtime with the seat wired up, an unoccupied key
     // reaches the host's dispatch and comes straight back as `fallback`.
@@ -121,8 +121,8 @@ describe("tool.call.toolview seat", () => {
     const baseline = renderRows();
     // Guard the negative assertion below against going vacuous: these are the
     // two rows' own action labels from the closed ToolSpec table.
-    expect(baseline).toContain("sidepanel.trace.actions.runCommand");
-    expect(baseline).toContain("sidepanel.trace.actions.readFile");
+    expect(baseline).toContain("sidepanel.trace.actions.useTool");
+    expect(baseline).toContain("sidepanel.trace.actions.useTool");
 
     const takenOver = renderRows({
       // Stands in for renderSlot's keyed dispatch: an entry registered under
@@ -208,6 +208,6 @@ describe("tool.call.toolview seat", () => {
     // No faithful block can be built, so the seat is never dispatched — the
     // host row renders instead of a partly invented node reaching a plugin.
     expect(dispatch).not.toHaveBeenCalled();
-    expect(container.innerHTML).toContain("sidepanel.trace.actions.readFile");
+    expect(container.innerHTML).toContain("sidepanel.trace.actions.useTool");
   });
 });
