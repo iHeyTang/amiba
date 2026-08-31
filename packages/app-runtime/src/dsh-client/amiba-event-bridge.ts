@@ -126,6 +126,22 @@ export class DshAmibaEventBridge {
             },
           },
         ]
+      case "session/projection":
+        // The runtime's session-title projection (dsh-session-title): the
+        // auto-generated title for a session, broadcast on change.
+        if (
+          frame.key === "title" &&
+          typeof frame.value === "string" &&
+          frame.value.trim()
+        ) {
+          return [
+            {
+              sessionId: frame.sessionId,
+              event: { kind: "sessionTitle", title: frame.value },
+            },
+          ]
+        }
+        return []
       default:
         return []
     }

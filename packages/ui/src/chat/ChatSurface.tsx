@@ -1210,6 +1210,12 @@ export default function ChatSurface({
     if (event.kind === "toolProgress") {
       workspacePane.observeToolEvent(event.event, sessionId);
     }
+    // Runtime-generated titles apply to ANY session's rail row, active or
+    // not; applyAutoTitle respects manual renames.
+    if (event.kind === "sessionTitle") {
+      void sessions.applyAutoTitle(sessionId, event.title);
+      return;
+    }
     if (sessionId !== sessions.activeId) {
       // Terminal events for non-active sessions still need to settle the
       // local awaiter (if any) — otherwise `runChatTurn` for a backgrounded

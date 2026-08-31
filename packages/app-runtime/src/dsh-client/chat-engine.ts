@@ -247,7 +247,8 @@ export class DshChatEngineClient implements ChatEngineClient {
               kind === "questionRequest" ||
               kind === "questionResolved" ||
               kind === "approvalRequest" ||
-              kind === "approvalResolved"
+              kind === "approvalResolved" ||
+              kind === "sessionTitle"
             ) {
               this.emit(mapped.sessionId, mapped.event);
             }

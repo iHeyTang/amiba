@@ -355,6 +355,8 @@ export type StreamEvent =
   | { kind: "approvalResolved"; approvalId: string }
   | { kind: "questionRequest"; request: UserQuestionRequest }
   | { kind: "questionResolved"; requestId: string }
+  /** The runtime's session-title projection changed (auto-generated title). */
+  | { kind: "sessionTitle"; title: string }
   | { kind: "done"; agentFinalUrl?: string; agentFinalTitle?: string }
   | { kind: "aborted" }
   | { kind: "error"; message: string; status?: number; hint?: string };

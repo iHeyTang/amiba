@@ -151,7 +151,16 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
 
   for (const current of index) {
     const before = previous.get(current.id);
-    if (before && current.title.trim() && current.title !== before.title) {
+    // Only MANUAL titles write back as a DSH rename. A rename carries the
+    // `user` source, which PINS the title server-side and permanently
+    // supersedes the runtime's automatic session-title generation — the
+    // locally derived first-sentence placeholder must never do that.
+    if (
+      before &&
+      current.titleManual &&
+      current.title.trim() &&
+      current.title !== before.title
+    ) {
       try {
         await sessionsAdapter().rename(current.id, current.title);
       } catch (error) {

@@ -105,29 +105,31 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
-  it("retries an auto-title that races DSH session creation", async () => {
-    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-    mocks.rename
-      .mockRejectedValueOnce(
-        Object.assign(new Error("not materialized yet"), {
-          code: "session-not-found",
-        }),
-      )
-      .mockResolvedValue({ title: "hello", seq: 1 });
+  it("keeps derived/auto titles local — only manual renames reach DSH", async () => {
+    // A DSH rename carries the `user` source, which pins the title
+    // server-side and supersedes the runtime's automatic session-title
+    // generation — so the locally derived first-sentence placeholder and
+    // runtime-fed auto titles must never write back.
+    mocks.rename.mockResolvedValue({ title: "My title", seq: 1 });
 
     const store = new SessionsStore();
     await store.initialize();
     const id = await store.createNew();
     await store.touchSession(id, [{ role: "user", content: "hello" }]);
-    await store.touchSession(id, [
-      { role: "user", content: "hello" },
-      { role: "assistant", content: "world" },
-    ]);
+    await store.applyAutoTitle(id, "Runtime generated title");
+    expect(mocks.rename).not.toHaveBeenCalled();
+    expect(
+      store.getSnapshot().sessions.find((session) => session.id === id)?.title,
+    ).toBe("Runtime generated title");
 
-    expect(mocks.rename).toHaveBeenCalledTimes(2);
-    expect(mocks.rename).toHaveBeenLastCalledWith(id, "hello");
-    expect(warning).not.toHaveBeenCalled();
-    warning.mockRestore();
+    await store.rename(id, "My title");
+    expect(mocks.rename).toHaveBeenCalledWith(id, "My title");
+
+    // Manual titles are pinned locally too: auto titles no longer apply.
+    await store.applyAutoTitle(id, "Late auto title");
+    expect(
+      store.getSnapshot().sessions.find((session) => session.id === id)?.title,
+    ).toBe("My title");
     store.teardown();
   });
 });
