@@ -9,6 +9,7 @@ import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
 import { Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
+import { ComposerDockSheet } from "../ComposerDockSheet"
 import { ApprovalCode } from "./approval-syntax"
 
 interface ApprovalDecisionMeta {
@@ -138,7 +139,7 @@ export function ApprovalBanner({
   const { t } = useT()
   const decisions = approvalDecisions(t)
   return (
-    <div className="relative z-0 mx-4 -mb-2.5 overflow-hidden rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 pb-2.5 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] backdrop-blur-xl dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
+    <ComposerDockSheet>
       {error && (
         <div className="mx-4 mt-3 flex items-start justify-between gap-2 rounded-lg bg-destructive/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-destructive">
           <span className="min-w-0 flex-1 break-words">{error}</span>
@@ -225,7 +226,7 @@ export function ApprovalBanner({
           )
         })}
       </div>
-    </div>
+    </ComposerDockSheet>
   )
 }
 

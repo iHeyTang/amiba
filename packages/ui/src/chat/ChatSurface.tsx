@@ -62,6 +62,7 @@ import {
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
 import { ClarifyBanner } from "./bubble/clarify";
+import { ComposerDockError } from "./ComposerDockSheet";
 import { ErrorBlock } from "./bubble/chips";
 import { MessageTurns } from "./bubble/Bubble";
 import {
@@ -2104,41 +2105,9 @@ export default function ChatSurface({
             !composerDockInEmptyHost && "mx-auto w-full max-w-3xl",
           )}
         >
-          {hasActive && (attachmentError || workspaceError) && (
-            <div className="mb-1 flex flex-col gap-1">
-              {attachmentError && (
-                <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
-                  <span className="min-w-0 flex-1 break-words">
-                    {attachmentError}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setAttachmentError(null)}
-                    className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
-              {workspaceError && (
-                <div className="flex items-start justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
-                  <span className="min-w-0 flex-1 break-words">
-                    {workspaceError}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setWorkspaceError(null)}
-                    className="shrink-0 rounded p-0.5 hover:bg-destructive/10"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {/* Approval state remains a blocking banner. Queue entries now share the
+          {/* Everything docked above the composer — errors, approvals,
+          questions — shares the ComposerDockSheet toaster chrome; sheets
+          stack and each tucks under the next. Queue entries share the
           composer's context rail with its immutable workspace tab. */}
           <div
             className={cn(
@@ -2146,6 +2115,20 @@ export default function ChatSurface({
               att.dragOver && "rounded-lg ring-2 ring-primary/30",
             )}
           >
+            {hasActive && attachmentError && (
+              <ComposerDockError
+                dismissLabel={t("sidepanel.permission.dismissError")}
+                message={attachmentError}
+                onDismiss={() => setAttachmentError(null)}
+              />
+            )}
+            {hasActive && workspaceError && (
+              <ComposerDockError
+                dismissLabel={t("sidepanel.permission.dismissError")}
+                message={workspaceError}
+                onDismiss={() => setWorkspaceError(null)}
+              />
+            )}
             {hasActive && pendingApprovals.length > 0 && (
               <ApprovalBanner
                 approvals={pendingApprovals}

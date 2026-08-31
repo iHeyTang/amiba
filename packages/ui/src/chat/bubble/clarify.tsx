@@ -19,13 +19,14 @@ import type {
 } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 
-import { Button, Input, cn } from "../../primitives";
+import { cn } from "../../primitives";
+import { ComposerDockSheet } from "../ComposerDockSheet";
 
 /**
  * The user-questions surface over DSH's ask_user_question waits. Mirrors the
  * official dsh-client-ui-user-questions SEMANTICS (that plugin is disabled in
- * our bundles — the whole conversation UI is ours) in Amiba's own design
- * language:
+ * our bundles — the whole conversation UI is ours) inside the unified
+ * composer dock sheet:
  *
  *  - one takeover, two shapes: a request narrowing to a plan review renders
  *    as a decision card; everything else takes the stepper flow;
@@ -107,6 +108,14 @@ const answered = (draft: QuestionDraft): boolean =>
 const completed = (draft: QuestionDraft): boolean =>
   answered(draft) || draft.skipped;
 
+/** Quiet action chip matching the approval banner's button language. */
+const quietButton =
+  "inline-flex h-8 select-none items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium transition-[background-color,color,opacity] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
+const quietNeutral =
+  "bg-background/65 text-foreground/70 hover:bg-background hover:text-foreground";
+const quietPrimary =
+  "bg-primary text-primary-foreground hover:bg-primary/90 disabled:hover:bg-primary";
+
 export interface ClarifyBannerProps {
   request: UserQuestionRequest;
   inFlight: boolean;
@@ -125,11 +134,7 @@ export function ClarifyBanner(props: ClarifyBannerProps) {
   return review === undefined ? (
     <QuestionStepper key={props.request.requestId} {...props} />
   ) : (
-    <PlanReviewCard
-      key={props.request.requestId}
-      review={review}
-      {...props}
-    />
+    <PlanReviewCard key={props.request.requestId} review={review} {...props} />
   );
 }
 
@@ -144,63 +149,63 @@ function PlanReviewCard({
   const decide = (label: string) =>
     onRespond([{ id: review.id, selected: [label] }]);
   return (
-    <div className="mb-2 overflow-hidden rounded-xl border border-amber-500/40 bg-background shadow-sm">
-      <div className="flex items-center gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5">
-        <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-700/90 dark:text-amber-300/90">
+    <ComposerDockSheet tone="warn">
+      <div className="flex items-center gap-2 px-4 pt-2.5">
+        <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-warning" />
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-foreground/60">
           {t("sidepanel.clarify.plan.header")}
         </p>
       </div>
-      <div className="max-h-[min(48vh,400px)] overflow-y-auto px-4 py-3">
-        <Streamdown mode="static" className="chat-md break-words text-sm">
+      <div className="mx-4 mt-2 max-h-[min(42vh,360px)] overflow-y-auto rounded-lg border border-border/40 bg-background/65 px-3 py-2.5">
+        <Streamdown mode="static" className="chat-md break-words text-xs">
           {review.plan}
         </Streamdown>
       </div>
-      <div className="flex items-center justify-end gap-2 border-t border-border/45 bg-muted/20 px-4 py-2.5">
+      <div className="mt-2 flex items-center gap-2 px-4 pb-1">
         {error ? (
-          <p className="mr-auto min-w-0 truncate text-xs text-destructive">
+          <p className="min-w-0 flex-1 truncate text-[11px] text-destructive">
             {error}
           </p>
-        ) : null}
+        ) : (
+          <span className="flex-1" />
+        )}
         {onCancel ? (
-          <Button
-            className="h-8 shrink-0 gap-1.5 text-muted-foreground"
+          <button
+            className={cn(quietButton, quietNeutral)}
             disabled={inFlight}
             onClick={onCancel}
-            size="sm"
             type="button"
-            variant="ghost"
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className="h-3 w-3" />
             {t("sidepanel.clarify.plan.discuss")}
-          </Button>
+          </button>
         ) : null}
         {review.decline ? (
-          <Button
-            className="h-8 shrink-0"
+          <button
+            className={cn(
+              quietButton,
+              "bg-background/65 text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
+            )}
             disabled={inFlight}
             onClick={() => decide(review.decline!.label)}
-            size="sm"
             title={review.decline.description}
             type="button"
-            variant="outline"
           >
             {t("sidepanel.clarify.plan.decline")}
-          </Button>
+          </button>
         ) : null}
-        <Button
-          className="h-8 shrink-0"
+        <button
+          className={cn(quietButton, quietPrimary)}
           disabled={inFlight}
           onClick={() => decide(review.approve.label)}
-          size="sm"
           title={review.approve.description}
           type="button"
         >
-          {inFlight ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {inFlight ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
           {t("sidepanel.clarify.plan.approve")}
-        </Button>
+        </button>
       </div>
-    </div>
+    </ComposerDockSheet>
   );
 }
 
@@ -223,9 +228,7 @@ function QuestionStepper({
   // remounts via the key on ClarifyBanner, so this only guards length drift.
   useEffect(() => {
     setDrafts((current) =>
-      current.length === questions.length
-        ? current
-        : questions.map(emptyDraft),
+      current.length === questions.length ? current : questions.map(emptyDraft),
     );
   }, [questions]);
 
@@ -297,9 +300,7 @@ function QuestionStepper({
 
   const skipQuestion = () => {
     const next = drafts.map((item, itemIndex) =>
-      itemIndex === index
-        ? { selected: [], custom: "", skipped: true }
-        : item,
+      itemIndex === index ? { selected: [], custom: "", skipped: true } : item,
     );
     setDrafts(next);
     setStepError(null);
@@ -313,17 +314,48 @@ function QuestionStepper({
   const feedback = stepError ?? error;
 
   return (
-    <div className="mb-2 overflow-hidden rounded-xl border border-border/60 bg-background shadow-sm">
-      {/* Fixed header strip — stays visible while the question scrolls. */}
-      <div className="flex items-center gap-2 border-b border-border/45 px-4 py-2.5">
-        <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-primary" />
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+    <ComposerDockSheet>
+      {/* Header strip: label left, pager + dismiss right. */}
+      <div className="flex items-center gap-2 px-4 pt-2.5">
+        <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+        <p className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-foreground/60">
           {t("sidepanel.clarify.label")}
         </p>
+        {questions.length > 1 ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              aria-label={t("sidepanel.clarify.prev")}
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+              disabled={index === 0 || inFlight}
+              onClick={() => {
+                setIndex(index - 1);
+                setStepError(null);
+              }}
+              type="button"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="px-0.5 text-[11px] tabular-nums text-muted-foreground/70">
+              {index + 1}/{questions.length}
+            </span>
+            <button
+              aria-label={t("sidepanel.clarify.next")}
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+              disabled={isLast || inFlight}
+              onClick={() => {
+                setIndex(index + 1);
+                setStepError(null);
+              }}
+              type="button"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
         {onCancel ? (
           <button
             aria-label={t("sidepanel.clarify.dismiss")}
-            className="ml-auto flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-50"
             disabled={inFlight}
             onClick={onCancel}
             title={t("sidepanel.clarify.dismiss")}
@@ -334,16 +366,16 @@ function QuestionStepper({
         ) : null}
       </div>
 
-      {/* One question per step; the card owns the scroll so a long option
-          list can't push the footer (and the composer below) off-screen. */}
-      <div className="max-h-[min(48vh,400px)] overflow-y-auto px-4 py-3">
+      {/* One question per step; the sheet owns the scroll so a long option
+          list can't push the composer off-screen. */}
+      <div className="max-h-[min(42vh,360px)] overflow-y-auto px-4 pb-1 pt-2">
         <section key={`${request.requestId}:${index}`}>
           {question.header ? (
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
+            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
               {question.header}
             </p>
           ) : null}
-          <p className="mt-1 text-sm font-medium leading-relaxed">
+          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-foreground/90">
             {question.question}
           </p>
           {question.detail ? (
@@ -356,7 +388,7 @@ function QuestionStepper({
 
           {hasOptions ? (
             <div
-              className="mt-2.5 grid gap-1.5"
+              className="mt-2 flex flex-col gap-1"
               role={question.multiSelect === true ? "group" : "radiogroup"}
             >
               {(question.options ?? []).map((choice, choiceIndex) => {
@@ -366,11 +398,11 @@ function QuestionStepper({
                   <button
                     aria-checked={active}
                     className={cn(
-                      "flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
+                      "flex items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
                       active
-                        ? "border-primary/45 bg-primary/[0.08]"
-                        : "border-border/60 hover:bg-accent/60",
+                        ? "bg-background text-foreground ring-1 ring-primary/35"
+                        : "bg-background/65 text-foreground/80 hover:bg-background hover:text-foreground",
                     )}
                     disabled={inFlight}
                     key={`${choice.label}-${choiceIndex}`}
@@ -380,13 +412,11 @@ function QuestionStepper({
                   >
                     <span
                       className={cn(
-                        "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border text-[10px] font-medium transition-colors",
-                        question.multiSelect
-                          ? "rounded-[5px]"
-                          : "rounded-full",
+                        "mt-px flex h-4 w-4 shrink-0 items-center justify-center border text-[10px] font-medium transition-colors",
+                        question.multiSelect ? "rounded-[5px]" : "rounded-full",
                         active
                           ? "border-primary bg-primary text-primary-foreground"
-                          : "border-muted-foreground/35 text-muted-foreground/70",
+                          : "border-muted-foreground/30 text-muted-foreground/60",
                       )}
                     >
                       {active ? (
@@ -396,7 +426,7 @@ function QuestionStepper({
                       )}
                     </span>
                     <span className="min-w-0">
-                      <span className="block leading-snug">
+                      <span className="block text-xs font-medium leading-snug">
                         {display.label}
                         {display.recommended ? (
                           <span className="ml-1.5 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">
@@ -405,7 +435,7 @@ function QuestionStepper({
                         ) : null}
                       </span>
                       {choice.description ? (
-                        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
                           {choice.description}
                         </span>
                       ) : null}
@@ -416,17 +446,16 @@ function QuestionStepper({
             </div>
           ) : null}
 
-          <Input
+          <input
             aria-label={t("sidepanel.clarify.customAnswer")}
             autoFocus={!hasOptions}
-            className="mt-2.5 h-8 border-0 bg-muted/35 text-sm shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-1"
+            className="mt-2 h-8 w-full rounded-lg bg-background/65 px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/55 hover:bg-background/80 focus:bg-background focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={inFlight}
             onChange={(event) => {
               const value = event.target.value;
               updateDraft((current) => ({
                 ...current,
-                selected:
-                  question.multiSelect === true ? current.selected : [],
+                selected: question.multiSelect === true ? current.selected : [],
                 custom: value,
                 skipped: false,
               }));
@@ -442,73 +471,33 @@ function QuestionStepper({
         </section>
       </div>
 
-      {/* Fixed footer: pager on the left, skip + next/submit on the right. */}
-      <div className="flex items-center gap-3 border-t border-border/45 bg-muted/20 px-4 py-2.5">
-        {questions.length > 1 ? (
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              aria-label={t("sidepanel.clarify.prev")}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-              disabled={index === 0 || inFlight}
-              onClick={() => {
-                setIndex(index - 1);
-                setStepError(null);
-              }}
-              type="button"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <span className="px-0.5 text-xs tabular-nums text-muted-foreground">
-              {index + 1} / {questions.length}
-            </span>
-            <button
-              aria-label={t("sidepanel.clarify.next")}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-              disabled={isLast || inFlight}
-              onClick={() => {
-                setIndex(index + 1);
-                setStepError(null);
-              }}
-              type="button"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : null}
+      {/* Footer: feedback left, skip + next/submit right. */}
+      <div className="flex items-center gap-2 px-4 pb-1 pt-1">
         {feedback ? (
-          <p className="min-w-0 flex-1 truncate text-right text-xs text-destructive">
+          <p className="min-w-0 flex-1 truncate text-[11px] text-destructive">
             {feedback}
           </p>
         ) : (
           <span className="flex-1" />
         )}
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            className="h-8"
-            disabled={inFlight}
-            onClick={skipQuestion}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("sidepanel.clarify.skip")}
-          </Button>
-          <Button
-            className="h-8"
-            disabled={inFlight || !answered(draft)}
-            onClick={continueFlow}
-            size="sm"
-            type="button"
-          >
-            {inFlight ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : null}
-            {isLast
-              ? t("sidepanel.clarify.submit")
-              : t("sidepanel.clarify.next")}
-          </Button>
-        </div>
+        <button
+          className={cn(quietButton, quietNeutral)}
+          disabled={inFlight}
+          onClick={skipQuestion}
+          type="button"
+        >
+          {t("sidepanel.clarify.skip")}
+        </button>
+        <button
+          className={cn(quietButton, quietPrimary)}
+          disabled={inFlight || !answered(draft)}
+          onClick={continueFlow}
+          type="button"
+        >
+          {inFlight ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+          {isLast ? t("sidepanel.clarify.submit") : t("sidepanel.clarify.next")}
+        </button>
       </div>
-    </div>
+    </ComposerDockSheet>
   );
 }

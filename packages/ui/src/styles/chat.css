@@ -75,6 +75,32 @@
   z-index: 1;
 }
 
+/*
+ * Docked sheets (approvals, questions, errors) slide out from behind the
+ * composer like toast from a toaster — a short rise + fade keeps the
+ * arrival legible without turning it into an alert.
+ */
+@keyframes amiba-dock-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.amiba-dock-sheet {
+  animation: amiba-dock-sheet-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amiba-dock-sheet {
+    animation: none;
+  }
+}
+
 @container amiba-chat-column (min-width: 80rem) {
   .amiba-chat-header--wide-overlay {
     display: contents;
