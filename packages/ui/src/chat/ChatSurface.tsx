@@ -810,8 +810,9 @@ export default function ChatSurface({
       }
       // Auto-send only when there's actual text to anchor the turn.
       // Attachment-only hand-offs (a snip with no OCR) need user input
-      // — auto-sending an empty user message is a footgun.
-      if (text) setPendingAutosend(true);
+      // — auto-sending an empty user message is a footgun. Draft-only
+      // payloads are suggested openings the user fires themselves.
+      if (text && !payload.draftOnly) setPendingAutosend(true);
     });
   }, [sessions.activeId, capabilities.pendingPrompt, pendingPromptTick]);
 

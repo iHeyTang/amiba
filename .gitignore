@@ -22,3 +22,4 @@ plugins/dsh-plugin-*/lib/
 plugins/dsh-plugin-*/vite.config.js
 plugins/dsh-plugin-*/vite.config.d.ts
 .dsh-runtime-build-*/
+.claude/worktrees/

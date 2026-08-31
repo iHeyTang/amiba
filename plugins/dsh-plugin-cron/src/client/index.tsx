@@ -59,6 +59,7 @@ function CronNavigation({
 type CronViewProps = PropsRuntime<"amiba.workspace.view"> & {
   adapter: CronAdapter;
   expandSidebar(): void;
+  startChat(seedPrompt: string): void;
 };
 
 function CronView({
@@ -67,6 +68,7 @@ function CronView({
   expandSidebar,
   showSidebarExpandControl = false,
   sidebarCollapsed = false,
+  startChat,
   topBarLeftInset,
 }: CronViewProps): ReactNode {
   return (
@@ -77,6 +79,7 @@ function CronView({
       sidebarCollapsed={sidebarCollapsed}
       showSidebarExpandControl={showSidebarExpandControl}
       onExpandSidebar={expandSidebar}
+      onStartChat={startChat}
       onOpenSession={(sessionId) => {
         // The host's open-by-id seam: FullScreenChatView routes this to the
         // sessions store, which admits any valid DSH session id.
@@ -102,8 +105,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           await valueOf(remote.removeTask(id));
         },
         runNow: (id) => valueOf(remote.runNow(id)),
-        startCreationChat: (seedPrompt) =>
-          valueOf(remote.startCreationChat(seedPrompt)),
       };
       const disposeNavigation = injectedCtx.slots.inject(
         "amiba.workspace.navigation",
@@ -128,6 +129,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             inject: () => ({
               adapter,
               expandSidebar: () => injectedCtx.layout.toggleSidebar(),
+              startChat: (seedPrompt: string) =>
+                injectedCtx.layout.openNewChat(seedPrompt),
             }),
           },
           CronView,

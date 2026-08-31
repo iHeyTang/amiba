@@ -238,6 +238,7 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       workspacePath,
       agent,
       modelSelection,
+      ...(value.draftOnly === true ? { draftOnly: true } : {}),
     };
   } catch {
     return null;
@@ -389,6 +390,27 @@ function ProductShellInner({
         closeSettings();
         return;
       }
+      // Fresh conversation on the empty-state home — no session is created
+      // (that happens only when the user actually sends). An optional
+      // `draft` seeds the composer through the pendingPrompt hand-off,
+      // flagged draftOnly so the drain never auto-sends it.
+      if (action === "open-new-chat") {
+        const draft =
+          typeof detail.draft === "string" && detail.draft.trim()
+            ? detail.draft
+            : undefined;
+        void (async () => {
+          if (draft) {
+            await platform.storage.set({
+              [HOME_PENDING_PROMPT_KEY]: { text: draft, draftOnly: true },
+            });
+          }
+          await sessions.deselect();
+          await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
+        })();
+        closeSettings();
+        return;
+      }
       if (action === "open-workspace" && typeof detail.viewId === "string") {
         void platform.storage.set({ [SIDEBAR_VIEW_KEY]: detail.viewId });
         closeSettings();
@@ -405,7 +427,7 @@ function ProductShellInner({
     window.addEventListener("amiba:dsh-layout-action", onLayoutAction);
     return () =>
       window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
-  }, [closeSettings, platform.storage]);
+  }, [closeSettings, platform.storage, sessions.deselect]);
 
   // The composer's model-picker chip, seat-split (R5): the official
   // session-scoped conversation.input.model while the composer has a

@@ -14,7 +14,7 @@ export const cronI18n: PluginCatalogOverlay = {
     "cron.new.manual": "手动创建",
     "cron.new.manualHint": "自己填写名称、指令和时间",
     "cron.creationSeed":
-      "我想创建一个定时任务（到点自动开启一个新会话执行指令）。请先和我确认三件事：1) 任务名称；2) 到点要执行的指令；3) 时间规则（指定时间执行一次 / 每天几点 / 每隔多少分钟）。信息确认后调用 cron_create 工具创建，并告诉我结果。",
+      "我们一起来设置一个定时任务吧。首先，简单说明定时任务在 Amiba 中是如何工作的。然后询问我需要安排什么任务，以及应该在什么时候运行。信息确认后，用 cron_create 工具创建它，并告诉我结果。",
     "cron.refresh": "刷新",
     "cron.empty.line": "还没有定时任务 — 点右上角「新建」，或从下面的建议开始。",
     "cron.empty.noMatch": "没有匹配的任务。",
@@ -83,7 +83,7 @@ export const cronI18n: PluginCatalogOverlay = {
     "cron.new.manual": "Create manually",
     "cron.new.manualHint": "Fill in name, instructions and timing yourself",
     "cron.creationSeed":
-      "I want to create a cron task (it opens a fresh session on schedule and runs instructions). Please confirm three things with me first: 1) a task name; 2) the instructions to run; 3) the timing rule (once at a time / daily at / every N minutes). Once confirmed, call the cron_create tool and tell me the result.",
+      "Let's set up a cron task together. First, briefly explain how cron tasks work in Amiba. Then ask me what I need to schedule and when it should run. Once we've confirmed the details, create it with the cron_create tool and tell me the result.",
     "cron.refresh": "Refresh",
     "cron.empty.line":
       "No cron tasks yet — hit New in the corner, or start from a suggestion below.",

@@ -141,6 +141,12 @@ export interface AmibaLayoutService {
   openDetails(): void;
   closeDetails(): void;
   openChat(): void;
+  /**
+   * Land on the empty-state home with no active session; an optional
+   * `draft` pre-fills the composer WITHOUT sending, so a real session is
+   * created only when the user actually submits.
+   */
+  openNewChat(draft?: string): void;
   openWorkspace(viewId: string): void;
   openSettings(sectionId?: string): void;
 }
@@ -213,6 +219,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
     openDetails: () => dispatchLayoutAction("open-details"),
     closeDetails: () => dispatchLayoutAction("close-details"),
     openChat: () => dispatchLayoutAction("open-chat"),
+    openNewChat: (draft) =>
+      dispatchLayoutAction("open-new-chat", draft ? { draft } : {}),
     openWorkspace: (viewId) =>
       dispatchLayoutAction("open-workspace", { viewId }),
     openSettings: (sectionId) =>

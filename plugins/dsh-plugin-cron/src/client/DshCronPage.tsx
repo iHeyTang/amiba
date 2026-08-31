@@ -56,7 +56,6 @@ export interface CronAdapter {
   update(id: string, patch: { enabled?: boolean }): Promise<CronTaskView>;
   removeTask(id: string): Promise<void>;
   runNow(id: string): Promise<CronTaskView>;
-  startCreationChat(seedPrompt: string): Promise<{ sessionId: string }>;
 }
 
 type RuleMode = CronRule["kind"];
@@ -412,6 +411,12 @@ function suggestions(t: ReturnType<typeof useT>["t"]): Array<
 export interface DshCronPageProps {
   adapter: CronAdapter;
   onOpenSession(sessionId: string): void;
+  /**
+   * Conversational creation: hand the seed prompt to the host, which lands
+   * on the empty-state home with the composer pre-filled — no session
+   * exists until the user actually sends.
+   */
+  onStartChat(seedPrompt: string): void;
   topBarHeightPx?: number;
   topBarLeftInset?: number;
   sidebarCollapsed?: boolean;
@@ -422,6 +427,7 @@ export interface DshCronPageProps {
 export function DshCronPage({
   adapter,
   onOpenSession,
+  onStartChat,
   topBarHeightPx = 40,
   topBarLeftInset = 0,
   sidebarCollapsed = false,
@@ -437,7 +443,6 @@ export function DshCronPage({
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [chatStarting, setChatStarting] = useState(false);
   const now = Date.now();
 
   const refresh = useCallback(async () => {
@@ -474,20 +479,7 @@ export function DshCronPage({
     setCreating(true);
   };
 
-  const startChat = async () => {
-    setChatStarting(true);
-    setError(null);
-    try {
-      const { sessionId } = await adapter.startCreationChat(
-        t("cron.creationSeed"),
-      );
-      onOpenSession(sessionId);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setChatStarting(false);
-    }
-  };
+  const startChat = () => onStartChat(t("cron.creationSeed"));
 
   const filters: Array<{ id: TaskFilter; label: string }> = [
     { id: "all", label: t("cron.filter.all") },
@@ -538,11 +530,10 @@ export function DshCronPage({
               <Button
                 type="button"
                 size="sm"
-                disabled={chatStarting}
                 className="h-7 gap-1.5 rounded-l-lg rounded-r-none px-2.5 text-xs shadow-none [&_svg]:size-3.5"
-                onClick={() => void startChat()}
+                onClick={startChat}
               >
-                {chatStarting ? <Loader2 className="animate-spin" /> : <Plus />}
+                <Plus />
                 {t("cron.new")}
               </Button>
               <Popover open={menuOpen} onOpenChange={setMenuOpen}>
@@ -562,7 +553,7 @@ export function DshCronPage({
                     className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/50"
                     onClick={() => {
                       setMenuOpen(false);
-                      void startChat();
+                      startChat();
                     }}
                   >
                     <MessageSquarePlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
