@@ -35,6 +35,15 @@ import { useResolvedTheme } from "../theme";
 import { AmibaLogo } from "../primitives";
 import { cn } from "../primitives";
 
+/**
+ * Draft hand-off INTO the home composer: a plain string a host queues
+ * (e.g. the shell's `open-new-chat` layout action) that pre-fills the
+ * composer WITHOUT sending — unlike `home.pendingPrompt`, whose drain
+ * auto-sends and creates the session. HomeView drains it destructively
+ * on mount and on storage change.
+ */
+export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
+
 export interface HomeViewProps {
   /** Where to send the user when they hit "Open in tab" / submit chat. */
   onOpenChat: () => void;
@@ -140,6 +149,35 @@ function Home({
   // On mount: focus the composer textarea.
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Drain a queued composer draft (see HOME_PENDING_DRAFT_KEY): fill the
+  // input, never send. Destructive read, same idiom as the pendingPrompt
+  // drain, so remounts don't re-apply a stale draft.
+  useEffect(() => {
+    const storage = getPlatform().storage;
+    let alive = true;
+    const drain = async () => {
+      try {
+        const snapshot = await storage.get(HOME_PENDING_DRAFT_KEY);
+        const raw = snapshot[HOME_PENDING_DRAFT_KEY];
+        if (typeof raw !== "string" || !raw.trim()) return;
+        await storage.remove(HOME_PENDING_DRAFT_KEY);
+        if (!alive) return;
+        setInput(raw);
+        inputRef.current?.focus();
+      } catch {
+        // Storage unavailable (e.g. runtime-less hosts): no draft to show.
+      }
+    };
+    void drain();
+    const unwatch = storage.watch([HOME_PENDING_DRAFT_KEY], (changes) => {
+      if (changes[HOME_PENDING_DRAFT_KEY]?.newValue != null) void drain();
+    });
+    return () => {
+      alive = false;
+      unwatch();
+    };
   }, []);
 
   useEffect(() => {

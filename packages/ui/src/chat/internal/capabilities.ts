@@ -27,12 +27,6 @@ export interface PendingPromptResult {
   workspacePath?: string;
   agent?: AgentExecutionContext;
   modelSelection?: AgentModelSelection;
-  /**
-   * Seed the composer but do NOT auto-send: the payload is a suggested
-   * opening the user reviews and fires themselves, so no session exists
-   * until they actually submit.
-   */
-  draftOnly?: boolean;
 }
 
 export interface PendingPromptCapability {

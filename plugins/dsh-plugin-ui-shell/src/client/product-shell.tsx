@@ -53,6 +53,9 @@ import {
 
 const SIDEBAR_VIEW_KEY = "settings.chat.sidebarView";
 const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
+// Draft-only counterpart consumed by HomeView (see HOME_PENDING_DRAFT_KEY
+// there): pre-fills the home composer without sending.
+const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 /** Names the settings dialog after its navigation heading (aria-labelledby). */
 const SETTINGS_TITLE_ID = "amiba-settings-title";
 
@@ -238,7 +241,6 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       workspacePath,
       agent,
       modelSelection,
-      ...(value.draftOnly === true ? { draftOnly: true } : {}),
     };
   } catch {
     return null;
@@ -392,8 +394,11 @@ function ProductShellInner({
       }
       // Fresh conversation on the empty-state home — no session is created
       // (that happens only when the user actually sends). An optional
-      // `draft` seeds the composer through the pendingPrompt hand-off,
-      // flagged draftOnly so the drain never auto-sends it.
+      // `draft` pre-fills the HOME composer via `home.pendingDraft` — NOT
+      // `home.pendingPrompt`, whose drain auto-sends and whose consumer
+      // (ChatSurface's composer) isn't even the surface shown on the
+      // empty-state home; HomeView owns that composer and drains the
+      // draft key itself.
       if (action === "open-new-chat") {
         const draft =
           typeof detail.draft === "string" && detail.draft.trim()
@@ -401,9 +406,7 @@ function ProductShellInner({
             : undefined;
         void (async () => {
           if (draft) {
-            await platform.storage.set({
-              [HOME_PENDING_PROMPT_KEY]: { text: draft, draftOnly: true },
-            });
+            await platform.storage.set({ [HOME_PENDING_DRAFT_KEY]: draft });
           }
           await sessions.deselect();
           await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
