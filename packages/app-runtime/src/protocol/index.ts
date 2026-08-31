@@ -300,7 +300,19 @@ export type ClientToEngineMessage =
     };
 
 export type SnapshotFrame =
-  | { type: "snapshot"; sessionId: string; kind: "absent" }
+  | {
+      type: "snapshot";
+      sessionId: string;
+      kind: "absent";
+      /**
+       * Host-owned interaction waits (ask-user questions / approvals) that
+       * outlive any in-memory turn state: DSH keeps them pending until
+       * answered, so a session opened after a reload still carries them
+       * even though the engine has no run state to snapshot.
+       */
+      pendingQuestions?: UserQuestionRequest[];
+      pendingApprovals?: ApprovalRequest[];
+    }
   | {
       type: "snapshot";
       sessionId: string;

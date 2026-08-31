@@ -68,8 +68,21 @@ function initialState(sessionId: string, assistantUiId: string): SessionState {
   };
 }
 
-function snapshotOf(sessionId: string, state?: SessionState): SnapshotFrame {
-  if (!state) return { type: "snapshot", sessionId, kind: "absent" };
+function snapshotOf(
+  sessionId: string,
+  state: SessionState | undefined,
+  pendingQuestions: UserQuestionRequest[],
+  pendingApprovals: ApprovalRequest[],
+): SnapshotFrame {
+  if (!state) {
+    return {
+      type: "snapshot",
+      sessionId,
+      kind: "absent",
+      ...(pendingQuestions.length ? { pendingQuestions } : {}),
+      ...(pendingApprovals.length ? { pendingApprovals } : {}),
+    };
+  }
   const visible: ChatRuntimeState = { ...state };
   delete (visible as Partial<SessionState>).controller;
   if (state.streaming) return { type: "snapshot", sessionId, kind: "live", state: visible };
@@ -147,18 +160,106 @@ export class DshChatEngineClient implements ChatEngineClient {
   private readonly states = new Map<string, SessionState>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly streamListeners = new Set<StreamListener>();
+  // Host-owned interaction waits, keyed session → requestId/approvalId.
+  // DSH keeps these pending server-side until answered and REPLAYS them as
+  // a baseline on every events.mux connect — this ledger mirrors that, so
+  // a session opened after a reload (when `states` is empty) still
+  // snapshots its unanswered questions/approvals.
+  private readonly questionLedger = new Map<string, Map<string, UserQuestionRequest>>();
+  private readonly approvalLedger = new Map<string, Map<string, ApprovalRequest>>();
+  private watcherStarted = false;
+  private disposed = false;
+  private readonly watchController = new AbortController();
 
   constructor(private readonly options: DshChatEngineOptions) {}
 
   private emitSnapshot(sessionId: string): void {
-    const frame = snapshotOf(sessionId, this.states.get(sessionId));
+    const frame = snapshotOf(
+      sessionId,
+      this.states.get(sessionId),
+      [...(this.questionLedger.get(sessionId)?.values() ?? [])],
+      [...(this.approvalLedger.get(sessionId)?.values() ?? [])],
+    );
     for (const listener of this.snapshotListeners) listener(frame);
   }
 
   private emit(sessionId: string, event: StreamEvent): void {
+    this.trackInteraction(sessionId, event);
     const state = this.states.get(sessionId);
     if (state) this.applyEvent(state, event);
     for (const listener of this.streamListeners) listener(sessionId, event);
+  }
+
+  private trackInteraction(sessionId: string, event: StreamEvent): void {
+    switch (event.kind) {
+      case "questionRequest": {
+        const forSession =
+          this.questionLedger.get(sessionId) ??
+          new Map<string, UserQuestionRequest>();
+        forSession.set(event.request.requestId, event.request);
+        this.questionLedger.set(sessionId, forSession);
+        break;
+      }
+      case "questionResolved":
+        this.questionLedger.get(sessionId)?.delete(event.requestId);
+        break;
+      case "approvalRequest": {
+        const forSession =
+          this.approvalLedger.get(sessionId) ??
+          new Map<string, ApprovalRequest>();
+        forSession.set(event.request.approvalId, event.request);
+        this.approvalLedger.set(sessionId, forSession);
+        break;
+      }
+      case "approvalResolved":
+        this.approvalLedger.get(sessionId)?.delete(event.approvalId);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * One long-lived events.mux consumer for interaction waits only. The
+   * per-turn loop in `run()` owns everything stream-shaped; this watcher
+   * exists for the frames that must survive OUTSIDE a turn this window is
+   * running: the baseline replay of pending questions/approvals on
+   * connect, and live asks arriving while no local turn holds the mux
+   * open (a reloaded page, a session driven from another window).
+   * Duplicate delivery during a live turn is safe — every consumer
+   * (ledger, state, ChatSurface) converges by requestId/approvalId.
+   */
+  private ensureInteractionWatcher(): void {
+    if (this.watcherStarted || this.disposed) return;
+    this.watcherStarted = true;
+    void this.watchInteractions();
+  }
+
+  private async watchInteractions(): Promise<void> {
+    const signal = this.watchController.signal;
+    while (!this.disposed) {
+      try {
+        const bridge = new DshAmibaEventBridge();
+        for await (const envelope of this.options.client.events(signal)) {
+          for (const mapped of bridge.accept(envelope)) {
+            const kind = mapped.event.kind;
+            if (
+              kind === "questionRequest" ||
+              kind === "questionResolved" ||
+              kind === "approvalRequest" ||
+              kind === "approvalResolved"
+            ) {
+              this.emit(mapped.sessionId, mapped.event);
+            }
+          }
+        }
+      } catch {
+        // Connection losses are routine (backplane restart, network blips);
+        // the retry below reconnects and DSH replays the pending baseline.
+      }
+      if (this.disposed || signal.aborted) return;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
   }
 
   private applyEvent(state: SessionState, event: StreamEvent): void {
@@ -362,6 +463,7 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   subscribe(sessionId: string): void {
+    this.ensureInteractionWatcher();
     this.emitSnapshot(sessionId);
   }
 
@@ -399,6 +501,7 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   clearApproval(sessionId: string, approvalId: string): void {
+    this.approvalLedger.get(sessionId)?.delete(approvalId);
     const state = this.states.get(sessionId);
     if (!state) return;
     state.pendingApprovals = state.pendingApprovals.filter(
@@ -463,8 +566,12 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.watchController.abort();
     for (const state of this.states.values()) state.controller?.abort();
     this.states.clear();
+    this.questionLedger.clear();
+    this.approvalLedger.clear();
     this.snapshotListeners.clear();
     this.streamListeners.clear();
   }

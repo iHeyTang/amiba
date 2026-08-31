@@ -864,7 +864,7 @@ export default function ChatSurface({
     const { sessionId, kind } = frame;
     if (sessionId !== sessions.activeId) return;
 
-    if (kind === "absent") {
+    if (frame.kind === "absent") {
       // The engine has no active run for this session. Two situations land here:
       //   1. User switched to a fresh / never-submitted session
       //      → panel-level state must drop so the composer reflects
@@ -879,6 +879,16 @@ export default function ChatSurface({
       setBusy(false);
       resetApprovals();
       resetQuestions();
+      // Interaction waits outlive turn state: DSH keeps unanswered
+      // questions/approvals pending server-side, and the engine's ledger
+      // carries them into absent snapshots — so a session reopened after
+      // a reload still shows its blocking banner.
+      if (frame.pendingApprovals?.length) {
+        setPendingApprovals(frame.pendingApprovals);
+      }
+      if (frame.pendingQuestions?.length) {
+        setPendingQuestions(frame.pendingQuestions);
+      }
       return;
     }
 
@@ -1283,15 +1293,6 @@ export default function ChatSurface({
     };
   }, [client]);
 
-  // (Re)subscribe whenever the active tab flips. The engine dedupes
-  // subscriptions; calling subscribe also re-delivers a snapshot, which is
-  // how we recover an in-flight stream when the user switches back to a tab
-  // that was streaming in the background.
-  useEffect(() => {
-    if (!sessions.ready || !sessions.activeId) return;
-    client.subscribe(sessions.activeId);
-  }, [client, sessions.ready, sessions.activeId]);
-
   // Auto-grow for the textarea now lives inside <Composer />. The
   // local effect that used to run here was duplicated logic — the
   // shared component takes care of it on every value/maxTextareaPx
@@ -1353,6 +1354,18 @@ export default function ChatSurface({
       }
     }
   }, [sessions.activeId]);
+
+  // (Re)subscribe whenever the active tab flips. The engine dedupes
+  // subscriptions; calling subscribe also re-delivers a snapshot, which is
+  // how we recover an in-flight stream when the user switches back to a tab
+  // that was streaming in the background. Deliberately AFTER the
+  // session-switch reset effect above: snapshots are delivered
+  // synchronously, so subscribing first would let the reset wipe the
+  // pending questions/approvals the snapshot just restored.
+  useEffect(() => {
+    if (!sessions.ready || !sessions.activeId) return;
+    client.subscribe(sessions.activeId);
+  }, [client, sessions.ready, sessions.activeId]);
 
   // Per-session pendingQueue persistence (load on activate, save on
   // change, hydration-guarded) is owned by `usePendingQueue`.

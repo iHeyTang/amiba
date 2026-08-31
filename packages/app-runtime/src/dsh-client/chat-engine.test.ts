@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { SubmitPayload } from "../protocol/index.js";
+import type { SnapshotFrame, SubmitPayload } from "../protocol/index.js";
 import { DshChatEngineClient } from "./chat-engine.js";
 import type { DshApiClient, DshMuxEnvelope } from "./index.js";
 
@@ -133,5 +133,43 @@ describe("DshChatEngineClient", () => {
         name: "screen.png",
       },
     ]);
+  });
+
+  it("carries DSH-pending ask-user questions into absent snapshots", async () => {
+    // DSH replays unanswered question/requested frames as a baseline on
+    // every events.mux connect; the watcher the first subscribe() starts
+    // must fold that into the ledger so a session with no run state (the
+    // post-reload case) still snapshots its blocking question.
+    const questionEnvelope = {
+      rpcId: "rpc-q1",
+      payload: {
+        type: "question/requested",
+        sessionId: "session-1",
+        questions: [{ id: "q1", question: "which one?" }],
+      },
+    } as unknown as DshMuxEnvelope;
+    const client = {
+      async *events() {
+        yield questionEnvelope;
+        // Hold the connection open like a real mux socket would.
+        await new Promise(() => {});
+      },
+    } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client });
+    const snapshots: SnapshotFrame[] = [];
+    const streamed: string[] = [];
+    engine.onSnapshot((frame) => snapshots.push(frame));
+    engine.onStreamEvent((_sessionId, event) => streamed.push(event.kind));
+
+    engine.subscribe("session-1");
+    await eventually(() => expect(streamed).toContain("questionRequest"));
+
+    engine.requestSnapshot("session-1");
+    const last = snapshots.at(-1);
+    expect(last?.kind).toBe("absent");
+    expect(
+      (last as Extract<SnapshotFrame, { kind: "absent" }>).pendingQuestions,
+    ).toHaveLength(1);
+    engine.dispose();
   });
 });
