@@ -17,6 +17,7 @@ import {
   ListTodo,
   type LucideIcon,
   MemoryStick,
+  MessageCircleQuestion,
   MousePointer2,
   Search,
   Terminal,
@@ -45,6 +46,7 @@ type ToolKind =
   | "memory"
   | "generate-media"
   | "inspect-media"
+  | "ask-user"
   | "generic";
 
 interface ToolSpec {
@@ -260,6 +262,13 @@ const TOOL_SPECS: Record<string, ToolSpec> = {
     kind: "generic",
     actionKey: "sidepanel.trace.actions.askUser",
     icon: MousePointer2,
+  },
+  // The official dsh-tool-ask-user interaction: the live Q&A happens in the
+  // composer dock sheet; this row is the timeline's audit record of it.
+  ask_user_question: {
+    kind: "ask-user",
+    actionKey: "sidepanel.trace.actions.askUser",
+    icon: MessageCircleQuestion,
   },
   project_create: {
     kind: "generic",
@@ -499,6 +508,70 @@ export interface ToolCallPresentation {
   action: string;
   target: string;
   icon: LucideIcon;
+  /**
+   * The call errored on the wire but the outcome is a USER CHOICE, not a
+   * failure (an ask wait the user dismissed) — rows render it neutral, not
+   * destructive.
+   */
+  quietFailure?: boolean;
+}
+
+/** One answer item from the ask tool's result JSON. */
+interface AskAnswer {
+  id: string;
+  selected: string[];
+  custom?: string;
+}
+
+function parseAskAnswers(value: unknown): AskAnswer[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(resultText(decodeToolResult(value)));
+  } catch {
+    return null;
+  }
+  const answers = recordOf(parsed)?.answers;
+  if (!Array.isArray(answers)) return null;
+  const items: AskAnswer[] = [];
+  for (const entry of answers) {
+    const record = recordOf(entry);
+    if (!record || typeof record.id !== "string") return null;
+    items.push({
+      id: record.id,
+      selected: Array.isArray(record.selected)
+        ? record.selected.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : [],
+      ...(typeof record.custom === "string" ? { custom: record.custom } : {}),
+    });
+  }
+  return items;
+}
+
+/** The ask wait the user dismissed — encoded as a tool error on the wire. */
+function isCancelledAskUser(event: ToolProgress): boolean {
+  return (
+    event.tool === "ask_user_question" &&
+    Boolean(event.error) &&
+    /cancelled ask_user_question/i.test(resultText(event.result))
+  );
+}
+
+function askUserTarget(event: ToolProgress, t: TranslateFn): string {
+  if (isCancelledAskUser(event)) return t("sidepanel.trace.ask.cancelled");
+  if (event.status === "running") return t("sidepanel.trace.ask.waiting");
+  if (event.error) return "";
+  const answers = parseAskAnswers(event.result);
+  if (!answers || answers.length === 0) return "";
+  const answered = answers.filter(
+    (answer) =>
+      answer.selected.length > 0 || (answer.custom ?? "").trim() !== "",
+  ).length;
+  return t("sidepanel.trace.ask.answered", {
+    answered,
+    total: answers.length,
+  });
 }
 
 export function describeToolCall(
@@ -506,6 +579,15 @@ export function describeToolCall(
   t: TranslateFn,
 ): ToolCallPresentation {
   const spec = TOOL_SPECS[event.tool] ?? GENERIC_SPEC;
+  if (spec.kind === "ask-user") {
+    return {
+      kind: spec.kind,
+      action: t(spec.actionKey),
+      target: askUserTarget(event, t),
+      icon: spec.icon,
+      ...(isCancelledAskUser(event) ? { quietFailure: true } : {}),
+    };
+  }
   return {
     kind: spec.kind,
     action: t(spec.actionKey),
@@ -567,6 +649,11 @@ export function hasToolDetail(event: ToolProgress): boolean {
     case "generate-media":
     case "inspect-media":
       return failed || Boolean(output) || collectLinks(event.result).length > 0;
+    case "ask-user":
+      // Dismissed asks say everything in the row summary; answered ones
+      // expand into the Q&A review, malformed results fall back to raw text.
+      if (isCancelledAskUser(event)) return false;
+      return failed || event.result !== undefined;
     default:
       if (QUIET_SUCCESS_TOOLS.has(event.tool) && !failed) return false;
       return failed || event.result !== undefined;
@@ -781,6 +868,72 @@ function exitCode(value: unknown): string {
   const record = recordOf(value);
   if (!record) return "";
   return stringValue(record, "exit_code", "exitCode", "code");
+}
+
+/**
+ * The answered ask reviewed as question → answer pairs: selected options as
+ * quiet chips, the custom answer as text, a skipped question marked as such.
+ * Question copy comes from the call ARGS (the result carries only ids).
+ */
+function AskUserEvidence({
+  answers,
+  args,
+  t,
+}: {
+  answers: AskAnswer[];
+  args: Record<string, unknown>;
+  t: TranslateFn;
+}) {
+  const questionById = new Map<string, string>();
+  if (Array.isArray(args.questions)) {
+    for (const entry of args.questions) {
+      const record = recordOf(entry);
+      if (
+        record &&
+        typeof record.id === "string" &&
+        typeof record.question === "string"
+      ) {
+        questionById.set(record.id, record.question);
+      }
+    }
+  }
+  return (
+    <section className="overflow-hidden rounded-lg border border-border/40 bg-muted/[0.06] px-2.5 py-2">
+      <div className="space-y-2">
+        {answers.map((answer, index) => {
+          const custom = (answer.custom ?? "").trim();
+          const skipped = answer.selected.length === 0 && custom === "";
+          return (
+            <div key={answer.id || index} className="min-w-0">
+              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                {questionById.get(answer.id) ?? answer.id}
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                {answer.selected.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-md bg-primary/[0.08] px-1.5 py-0.5 text-[11px] font-medium leading-snug text-foreground/85 ring-1 ring-primary/25"
+                  >
+                    {label}
+                  </span>
+                ))}
+                {custom !== "" && (
+                  <span className="min-w-0 break-words text-[11px] leading-relaxed text-foreground/85">
+                    {custom}
+                  </span>
+                )}
+                {skipped && (
+                  <span className="text-[11px] text-muted-foreground/60">
+                    {t("sidepanel.trace.ask.skipped")}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function DetailShell({
@@ -1452,6 +1605,22 @@ export function ToolDetail({
     return (
       <DetailShell kind={presentation.kind}>
         <CodeEvidence text={output} tone={event.error ? "error" : "default"} />
+      </DetailShell>
+    );
+  }
+
+  if (presentation.kind === "ask-user") {
+    const answers = parseAskAnswers(event.result);
+    return (
+      <DetailShell kind={presentation.kind}>
+        {answers ? (
+          <AskUserEvidence answers={answers} args={args} t={t} />
+        ) : (
+          <CodeEvidence
+            text={output}
+            tone={event.error ? "error" : "default"}
+          />
+        )}
       </DetailShell>
     );
   }

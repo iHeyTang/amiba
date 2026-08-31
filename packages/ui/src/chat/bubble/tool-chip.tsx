@@ -142,7 +142,9 @@ function ToolChipRow({ event }: { event: ToolProgress }) {
           <ToolIcon
             className={cn(
               "h-3 w-3",
-              event.error ? "text-destructive/80" : "opacity-55",
+              event.error && !presentation.quietFailure
+                ? "text-destructive/80"
+                : "opacity-55",
             )}
           />
         </span>
