@@ -1,16 +1,15 @@
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
-import { ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { formatToolDuration } from "../internal/helpers";
 import { useWorkspacePane } from "../WorkspacePane";
 import {
   toolCallBlockFromProgress,
   toolCallBlockName,
 } from "./tool-call-block";
 import { useToolCallSeat } from "./tool-call-seat";
+import { ToolRowFrame } from "./tool-row-frame";
 import {
   describeToolCall,
   hasToolDetail,
@@ -73,7 +72,6 @@ function ToolTarget({
 function ToolChipRow({ event }: { event: ToolProgress }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
-  const [expanded, setExpanded] = useState(false);
   // Force a re-render every second while running so the duration ticks
   // live. Once `completed` arrives the chip re-renders with `durationMs`
   // and this effect tears down.
@@ -87,99 +85,41 @@ function ToolChipRow({ event }: { event: ToolProgress }) {
   void tick;
 
   const presentation = describeToolCall(event, t);
-  const ToolIcon = presentation.icon;
   const hasDetail = hasToolDetail(event);
   const opensInWorkspace = workspacePane.canOpenToolEvent(event);
-  const actionable = opensInWorkspace || hasDetail;
 
-  let durationText: string | null = null;
+  let durationMs: number | undefined;
   if (!running && typeof event.durationMs === "number") {
-    durationText = formatToolDuration(event.durationMs);
+    durationMs = event.durationMs;
   } else if (running && typeof event.startedAt === "number") {
-    const elapsed = Date.now() - event.startedAt;
-    if (elapsed >= 1000) durationText = formatToolDuration(elapsed);
+    durationMs = Date.now() - event.startedAt;
   }
 
-  const detailAction = expanded
-    ? t("sidepanel.trace.collapseDetails")
-    : t("sidepanel.trace.expandDetails");
-
   return (
-    <div className="min-w-0">
-      <button
-        type="button"
-        disabled={!actionable}
-        onClick={() => {
-          if (opensInWorkspace) {
-            workspacePane.openToolEvent(event);
-          } else if (hasDetail) {
-            setExpanded((v) => !v);
-          }
-        }}
-        aria-expanded={!opensInWorkspace && hasDetail ? expanded : undefined}
-        aria-label={[presentation.action, presentation.target]
-          .filter(Boolean)
-          .join(" ")}
-        title={
-          opensInWorkspace
-            ? t("workspacePane.openToolResource")
-            : hasDetail
-              ? detailAction
-              : presentation.action
-        }
-        className={cn(
-          "group/tool inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-          actionable
-            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
-            : "cursor-default",
-          running && "text-foreground/75",
-        )}
-      >
-        <span
-          aria-hidden
-          className="inline-flex h-3 w-3 shrink-0 items-center justify-center leading-none"
-        >
-          <ToolIcon
-            className={cn(
-              "h-3 w-3",
-              event.error && !presentation.quietFailure
-                ? "text-destructive/80"
-                : "opacity-55",
-            )}
-          />
-        </span>
-        <span
-          className={cn(
-            "shrink-0 text-foreground/75",
-            running && "agent-thinking-text",
-          )}
-        >
-          {presentation.action}
-        </span>
-        {presentation.target && (
+    <ToolRowFrame
+      icon={presentation.icon}
+      action={presentation.action}
+      target={
+        presentation.target ? (
           <ToolTarget presentation={presentation} running={running} />
-        )}
-        {durationText && (
-          <span className="shrink-0 tabular-nums text-muted-foreground/65">
-            {durationText}
-          </span>
-        )}
-        {actionable ? (
-          <ChevronRight
-            aria-hidden
-            className={cn(
-              "h-3 w-3 shrink-0 opacity-45 transition-transform group-hover/tool:opacity-70",
-              !opensInWorkspace && expanded && "rotate-90",
-            )}
-          />
-        ) : null}
-      </button>
-      {!opensInWorkspace && expanded && hasDetail && (
-        <div className="ml-[7px] border-l border-border/60 pb-1.5 pl-4 pr-1">
-          <ToolDetail event={event} t={t} />
-        </div>
-      )}
-    </div>
+        ) : undefined
+      }
+      {...(durationMs === undefined ? {} : { durationMs })}
+      running={running}
+      failed={Boolean(event.error)}
+      ariaLabel={[presentation.action, presentation.target]
+        .filter(Boolean)
+        .join(" ")}
+      detail={hasDetail ? <ToolDetail event={event} t={t} /> : undefined}
+      onOpen={
+        opensInWorkspace ? () => workspacePane.openToolEvent(event) : undefined
+      }
+      title={
+        opensInWorkspace ? t("workspacePane.openToolResource") : undefined
+      }
+      expandTitle={t("sidepanel.trace.expandDetails")}
+      collapseTitle={t("sidepanel.trace.collapseDetails")}
+    />
   );
 }
 

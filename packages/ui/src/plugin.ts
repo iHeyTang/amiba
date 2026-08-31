@@ -38,6 +38,10 @@ export { Input } from "./primitives/input";
 export { Label } from "./primitives/label";
 export { PageContent } from "./primitives/page-content";
 export { PaneHeaderBar } from "./navigation/PaneHeaderBar";
+export {
+  ToolRowFrame,
+  type ToolRowFrameProps,
+} from "./chat/bubble/tool-row-frame";
 export { ScrollArea } from "./primitives/scroll-area";
 export {
   Select,

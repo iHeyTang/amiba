@@ -44,6 +44,7 @@ import {
   SLASH_MENU_ENTRY_ID,
 } from "./trigger-seats.js";
 import { TRIGGER_SOURCE_LABELS, officialTriggerSources } from "@amiba/ui";
+import { AskUserQuestionToolview } from "./ask-toolview.js";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
@@ -559,7 +560,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaCommandPopupSeat,
     );
+    // The keyed per-tool row for the official ask_user_question interaction:
+    // Amiba's first `tool.call.toolview` occupant, composed from @amiba/ui's
+    // generic ToolRowFrame — the reference pattern for any plugin that wants
+    // a bespoke row for its own tool. Registered after the root because the
+    // root's children table is what declares the seat.
+    const disposeAskToolview = ctx.slots.register(
+      { name: "tool.call.toolview", key: "ask_user_question" },
+      AskUserQuestionToolview,
+    );
     return () => {
+      disposeAskToolview();
       disposeCommandPopup();
       disposeSlashMenu();
       void localeFiber.dispose();
