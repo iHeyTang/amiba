@@ -1,11 +1,14 @@
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ClipboardCheck,
   Loader2,
   MessageCircleQuestion,
   Pencil,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Streamdown } from "streamdown";
@@ -226,6 +229,7 @@ function QuestionStepper({
     questions.map(emptyDraft),
   );
   const [stepError, setStepError] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
 
   // A same-id replay (baseline re-delivery) keeps drafts; a NEW request
   // remounts via the key on ClarifyBanner, so this only guards length drift.
@@ -316,197 +320,262 @@ function QuestionStepper({
 
   const feedback = stepError ?? error;
 
+  // Number-key shortcuts mirror the visible kbd badges on single-select
+  // rows; keystrokes inside the custom-answer input stay the input's.
+  const onDigitShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (inFlight || question.multiSelect === true) return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+    const digit = Number(event.key);
+    const options = question.options ?? [];
+    if (!Number.isInteger(digit) || digit < 1 || digit > options.length) return;
+    event.preventDefault();
+    choose(options[digit - 1].label);
+  };
+
   return (
     <ComposerDockSheet>
-      {/* Header strip: label left, pager right. Sentence case, no caps
-          tracking — the sheet should read like the agent talking, not a
-          system alert. */}
-      <div className="flex items-center gap-2 px-4 pt-2.5">
-        <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-        <p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/70">
-          {t("sidepanel.clarify.label")}
-        </p>
+      {/* Header: progress pill + the question itself as the title, with
+          collapse and close on the right — the question leads, no system
+          label above it. */}
+      <div className="flex items-start gap-2.5 px-4 pt-3">
         {questions.length > 1 ? (
-          <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              aria-label={t("sidepanel.clarify.prev")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
-              disabled={index === 0 || inFlight}
-              onClick={() => {
-                setIndex(index - 1);
-                setStepError(null);
-              }}
-              type="button"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <span className="px-0.5 text-[11px] tabular-nums text-muted-foreground/70">
-              {index + 1}/{questions.length}
-            </span>
-            <button
-              aria-label={t("sidepanel.clarify.next")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
-              disabled={isLast || inFlight}
-              onClick={() => {
-                setIndex(index + 1);
-                setStepError(null);
-              }}
-              type="button"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      {/* One question per step; the sheet owns the scroll so a long option
-          list can't push the composer off-screen. */}
-      <div className="max-h-[min(42vh,360px)] overflow-y-auto px-4 pb-1 pt-2">
-        <section key={`${request.requestId}:${index}`}>
+          <span className="mt-px shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+            {index + 1}/{questions.length}
+          </span>
+        ) : (
+          <MessageCircleQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+        )}
+        <div className="min-w-0 flex-1">
           {question.header ? (
-            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
+            <p className="text-[10px] font-medium text-muted-foreground/70">
               {question.header}
             </p>
           ) : null}
-          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-foreground/90">
+          <h2 className="text-[13px] font-semibold leading-snug text-foreground">
             {question.question}
-          </p>
-          {question.detail ? (
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              <Streamdown mode="static" className="chat-md break-words">
-                {question.detail}
-              </Streamdown>
-            </div>
-          ) : null}
-
-          {hasOptions ? (
-            <div
-              className="mt-2 flex flex-col gap-1"
-              role={question.multiSelect === true ? "group" : "radiogroup"}
-            >
-              {(question.options ?? []).map((choice, choiceIndex) => {
-                const active = draft.selected.includes(choice.label);
-                const display = parseRecommendedLabel(choice.label);
-                return (
-                  <button
-                    aria-checked={active}
-                    className={cn(
-                      "flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors",
-                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
-                      active
-                        ? "border-primary/45 bg-primary/[0.06] text-foreground"
-                        : "border-border/50 bg-transparent text-foreground/80 hover:bg-muted/40 hover:text-foreground",
-                    )}
-                    disabled={inFlight}
-                    key={`${choice.label}-${choiceIndex}`}
-                    onClick={() => choose(choice.label)}
-                    role={question.multiSelect === true ? "checkbox" : "radio"}
-                    type="button"
-                  >
-                    <span
-                      className={cn(
-                        "mt-px flex h-4 w-4 shrink-0 items-center justify-center border text-[10px] font-medium transition-colors",
-                        question.multiSelect ? "rounded-[5px]" : "rounded-full",
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-muted-foreground/30 text-muted-foreground/60",
-                      )}
-                    >
-                      {active ? (
-                        <Check className="h-3 w-3" strokeWidth={3} />
-                      ) : question.multiSelect ? null : (
-                        choiceIndex + 1
-                      )}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-xs font-medium leading-snug">
-                        {display.label}
-                        {display.recommended ? (
-                          <span className="ml-1.5 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">
-                            {t("sidepanel.clarify.recommended")}
-                          </span>
-                        ) : null}
-                      </span>
-                      {choice.description ? (
-                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
-                          {choice.description}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {/* The shared Input primitive: its form-control contract owns
-              surface + focus styling (soft border-ring/40 + faint halo), so
-              this stays in step with every other input in the product. */}
-          <Input
-            aria-label={t("sidepanel.clarify.customAnswer")}
-            autoFocus={!hasOptions}
-            className="mt-2 h-8 px-3 text-xs"
-            disabled={inFlight}
-            onChange={(event) => {
-              const value = event.target.value;
-              updateDraft((current) => ({
-                ...current,
-                selected: question.multiSelect === true ? current.selected : [],
-                custom: value,
-                skipped: false,
-              }));
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || isComposing(event)) return;
-              event.preventDefault();
-              continueFlow();
-            }}
-            placeholder={t("sidepanel.clarify.customAnswer")}
-            value={draft.custom}
-          />
-        </section>
-      </div>
-
-      {/* Footer: leave-the-whole-set on the left (labeled, not a cryptic
-          ✕), per-question skip + next/submit on the right. */}
-      <div className="flex items-center gap-2 px-4 pb-1 pt-1">
-        {onCancel ? (
+          </h2>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <button
-            className={cn(quietButton, "text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground")}
-            disabled={inFlight}
-            onClick={onCancel}
-            title={t("sidepanel.clarify.dismissHint")}
+            aria-expanded={!minimized}
+            aria-label={t(
+              minimized
+                ? "sidepanel.clarify.expand"
+                : "sidepanel.clarify.collapse",
+            )}
+            className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground"
+            onClick={() => setMinimized((current) => !current)}
             type="button"
           >
-            {t("sidepanel.clarify.dismiss")}
+            {minimized ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
           </button>
-        ) : null}
-        {feedback ? (
-          <p className="min-w-0 flex-1 truncate text-right text-[11px] text-destructive">
-            {feedback}
-          </p>
-        ) : (
-          <span className="flex-1" />
-        )}
-        <button
-          className={cn(quietButton, quietNeutral)}
-          disabled={inFlight}
-          onClick={skipQuestion}
-          title={t("sidepanel.clarify.skipHint")}
-          type="button"
-        >
-          {t("sidepanel.clarify.skip")}
-        </button>
-        <button
-          className={cn(quietButton, quietPrimary)}
-          disabled={inFlight || !answered(draft)}
-          onClick={continueFlow}
-          type="button"
-        >
-          {inFlight ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-          {isLast ? t("sidepanel.clarify.submit") : t("sidepanel.clarify.next")}
-        </button>
+          {onCancel ? (
+            <button
+              aria-label={t("sidepanel.clarify.dismiss")}
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+              disabled={inFlight}
+              onClick={onCancel}
+              title={t("sidepanel.clarify.dismissHint")}
+              type="button"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {!minimized ? (
+        <>
+          {/* One question per step; the sheet owns the scroll so a long
+              option list can't push the composer off-screen. */}
+          <div
+            className="max-h-[min(42vh,360px)] overflow-y-auto px-4 pb-1 pt-2.5"
+            onKeyDown={onDigitShortcut}
+          >
+            <section key={`${request.requestId}:${index}`}>
+              {question.detail ? (
+                <div className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                  <Streamdown mode="static" className="chat-md break-words">
+                    {question.detail}
+                  </Streamdown>
+                </div>
+              ) : null}
+
+              {hasOptions ? (
+                <div
+                  className="flex flex-col gap-1.5"
+                  role={question.multiSelect === true ? "group" : "radiogroup"}
+                >
+                  {(question.options ?? []).map((choice, choiceIndex) => {
+                    const active = draft.selected.includes(choice.label);
+                    const display = parseRecommendedLabel(choice.label);
+                    return (
+                      <button
+                        aria-checked={active}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
+                          active
+                            ? "bg-primary/[0.08] ring-1 ring-primary/35"
+                            : "bg-muted/40 hover:bg-muted/60",
+                        )}
+                        disabled={inFlight}
+                        key={`${choice.label}-${choiceIndex}`}
+                        onClick={() => choose(choice.label)}
+                        role={
+                          question.multiSelect === true ? "checkbox" : "radio"
+                        }
+                        type="button"
+                      >
+                        {question.multiSelect === true ? (
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                              active
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-muted-foreground/30",
+                            )}
+                          >
+                            {active ? (
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            ) : null}
+                          </span>
+                        ) : null}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[13px] font-medium leading-snug text-foreground">
+                            {display.label}
+                            {display.recommended ? (
+                              <span className="ml-1.5 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">
+                                {t("sidepanel.clarify.recommended")}
+                              </span>
+                            ) : null}
+                          </span>
+                          {choice.description ? (
+                            <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                              {choice.description}
+                            </span>
+                          ) : null}
+                        </span>
+                        {question.multiSelect !== true ? (
+                          <kbd
+                            className={cn(
+                              "flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] tabular-nums transition-colors",
+                              active
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border/60 bg-background text-muted-foreground/70",
+                            )}
+                          >
+                            {choiceIndex + 1}
+                          </kbd>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {/* Free-text answer, framed like one more option row; the
+                  shared Input primitive owns the focus contract so it stays
+                  in step with every other input in the product. */}
+              <div
+                className={cn(
+                  "rounded-lg bg-muted/40 p-1.5",
+                  hasOptions && "mt-1.5",
+                )}
+              >
+                <Input
+                  aria-label={t("sidepanel.clarify.customAnswer")}
+                  autoFocus={!hasOptions}
+                  className="h-8 bg-background px-3 text-xs"
+                  disabled={inFlight}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    updateDraft((current) => ({
+                      ...current,
+                      selected:
+                        question.multiSelect === true ? current.selected : [],
+                      custom: value,
+                      skipped: false,
+                    }));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || isComposing(event)) return;
+                    event.preventDefault();
+                    continueFlow();
+                  }}
+                  placeholder={t("sidepanel.clarify.customAnswer")}
+                  value={draft.custom}
+                />
+              </div>
+            </section>
+          </div>
+
+          {/* Footer: back/forward for edits on the left, per-question skip
+              + next/submit on the right. */}
+          <div className="flex items-center gap-2 px-4 pb-1 pt-1.5">
+            {questions.length > 1 ? (
+              <div className="flex shrink-0 items-center gap-0.5">
+                <button
+                  aria-label={t("sidepanel.clarify.prev")}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+                  disabled={index === 0 || inFlight}
+                  onClick={() => {
+                    setIndex(index - 1);
+                    setStepError(null);
+                  }}
+                  type="button"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  aria-label={t("sidepanel.clarify.next")}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+                  disabled={isLast || inFlight}
+                  onClick={() => {
+                    setIndex(index + 1);
+                    setStepError(null);
+                  }}
+                  type="button"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : null}
+            {feedback ? (
+              <p className="min-w-0 flex-1 truncate text-right text-[11px] text-destructive">
+                {feedback}
+              </p>
+            ) : (
+              <span className="flex-1" />
+            )}
+            <button
+              className={cn(quietButton, quietNeutral)}
+              disabled={inFlight}
+              onClick={skipQuestion}
+              title={t("sidepanel.clarify.skipHint")}
+              type="button"
+            >
+              {t("sidepanel.clarify.skip")}
+            </button>
+            <button
+              className={cn(quietButton, quietPrimary)}
+              disabled={inFlight || !answered(draft)}
+              onClick={continueFlow}
+              type="button"
+            >
+              {inFlight ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {isLast
+                ? t("sidepanel.clarify.submit")
+                : t("sidepanel.clarify.next")}
+            </button>
+          </div>
+        </>
+      ) : null}
     </ComposerDockSheet>
   );
 }

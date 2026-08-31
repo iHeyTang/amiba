@@ -563,8 +563,9 @@ export const zhCN: UiMessages = {
   "channels.local": "本地",
   "channels.unknown": "其他",
 
-  "sidepanel.clarify.label": "想和你确认一下",
   "sidepanel.clarify.customAnswer": "输入其他回答",
+  "sidepanel.clarify.collapse": "收起",
+  "sidepanel.clarify.expand": "展开",
   "sidepanel.clarify.sendFailed": "无法发送你的回答。",
   "sidepanel.clarify.prev": "上一题",
   "sidepanel.clarify.next": "下一题",

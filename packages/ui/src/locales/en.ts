@@ -617,8 +617,9 @@ export const en = {
   "channels.local": "Local",
   "channels.unknown": "Other",
 
-  "sidepanel.clarify.label": "A quick check with you",
   "sidepanel.clarify.customAnswer": "Type another answer",
+  "sidepanel.clarify.collapse": "Collapse",
+  "sidepanel.clarify.expand": "Expand",
   "sidepanel.clarify.sendFailed": "Unable to send your answer.",
   "sidepanel.clarify.prev": "Previous question",
   "sidepanel.clarify.next": "Next",
