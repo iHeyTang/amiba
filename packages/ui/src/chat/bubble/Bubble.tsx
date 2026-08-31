@@ -33,7 +33,11 @@ import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
-import { describeToolCall, hasToolDetail } from "./tool-presentation";
+import {
+  describeToolCall,
+  hasToolDetail,
+  isUserWaitTool,
+} from "./tool-presentation";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
@@ -1085,8 +1089,31 @@ function InterleavedAssistantFlow({
   // run is the result. While streaming, the current text streams in the
   // result slot and is demoted into the fold as soon as another tool call
   // proves it was narration.
-  const { head: processSegments, tail: resultSegments } =
-    splitTrailingTextRun(flow);
+  //
+  // ONE stateful exception: an open wait on the user. When the trailing
+  // execution run is blocked on user interaction — a running user-wait
+  // tool (ask_user_question and whatever joins USER_WAIT_TOOLS later) or
+  // an undecided approval — the text the agent wrote just before it is
+  // the user's BASIS for responding to the dock sheet below; folding it
+  // away hides exactly what the response needs. That text stays in the
+  // result slot while the wait is open; the call's own tool row still
+  // folds with the process like any other. Once the wait resolves and the
+  // turn moves on, the same text is ordinary narration again and demotes
+  // as usual — both natures honored, switched by state.
+  const lastSegment = flow.at(-1);
+  const awaitingUser =
+    !!message.streaming &&
+    lastSegment?.kind === "execution" &&
+    (lastSegment.tools.some(
+      (tool) => isUserWaitTool(tool.tool) && tool.status === "running",
+    ) ||
+      lastSegment.details.some(
+        (detail) => detail.kind === "approval" && !detail.record.outcome,
+      ));
+  const { head: processSegments, tail: resultSegments } = splitTrailingTextRun(
+    awaitingUser ? flow.slice(0, -1) : flow,
+  );
+  if (awaitingUser && lastSegment) processSegments.push(lastSegment);
   const processDetails: TurnTraceDetail[] = processSegments.flatMap(
     (segment) =>
       segment.kind === "execution"

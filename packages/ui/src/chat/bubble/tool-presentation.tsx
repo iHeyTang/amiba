@@ -325,6 +325,20 @@ const GENERIC_SPEC: ToolSpec = {
   icon: Wrench,
 };
 
+/**
+ * Tools whose call PAUSES the turn for the user: a dock sheet below the
+ * composer is asking for input, and the agent is blocked until it comes.
+ * While such a call is running, the narration the agent wrote just before
+ * it is the user's basis for responding — the bubble keeps that text out
+ * of the process fold until the wait resolves. Register future
+ * interaction-style tools here to give them the same treatment.
+ */
+const USER_WAIT_TOOLS = new Set(["ask_user_question"]);
+
+export function isUserWaitTool(name: string): boolean {
+  return USER_WAIT_TOOLS.has(name);
+}
+
 const QUIET_SUCCESS_TOOLS = new Set([
   "clarify",
   "focus_pane",
