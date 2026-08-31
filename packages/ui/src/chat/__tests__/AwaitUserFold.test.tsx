@@ -5,14 +5,17 @@ vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
 
-import { MessageTurns } from "../bubble/Bubble";
+import { AwaitingUserInputContext, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 
 /**
- * The stateful process/result exception: narration written right before a
- * user-wait (ask_user_question, undecided approvals) is the user's basis
- * for responding and must stay visible while the wait is open; once the
- * wait resolves it is ordinary process content and folds away.
+ * The stateful process/result exception, driven by the WAIT ITSELF rather
+ * than a tool-name registry: while the host reports an open interaction
+ * wait (pending question or approval), the narration the agent wrote just
+ * before pausing is the user's basis for responding and stays visible;
+ * once the wait resolves it is ordinary process content and folds away.
+ * Any tool pausing through the official interaction seams gets this with
+ * no registration.
  */
 
 const NARRATION = "回答前请先看这段说明";
@@ -33,53 +36,45 @@ function turn(overrides: Partial<UiMessage>): UiMessage[] {
   ];
 }
 
+function renderTurn(awaiting: boolean, overrides: Partial<UiMessage>) {
+  return render(
+    <AwaitingUserInputContext.Provider value={awaiting}>
+      <MessageTurns messages={turn(overrides)} />
+    </AwaitingUserInputContext.Provider>,
+  );
+}
+
 describe("await-user process fold", () => {
-  it("keeps the narration before a running ask_user_question visible", () => {
-    render(
-      <MessageTurns
-        messages={turn({
-          streaming: true,
-          toolProgress: [
-            { tool: "ask_user_question", toolCallId: "ask-1", status: "running" },
-          ],
-        })}
-      />,
-    );
+  it("keeps the narration before an open interaction wait visible", () => {
+    renderTurn(true, {
+      streaming: true,
+      toolProgress: [
+        { tool: "ask_user_question", toolCallId: "ask-1", status: "running" },
+      ],
+    });
     expect(screen.getByText(NARRATION)).toBeInTheDocument();
   });
 
-  it("keeps the narration before an undecided approval visible", () => {
-    render(
-      <MessageTurns
-        messages={turn({
-          streaming: true,
-          assistantTimeline: [
-            { kind: "text", id: "t1", text: NARRATION },
-            { kind: "approval", id: "ap1", approvalId: "approval-1" },
-          ],
-          approvalRecords: [
-            { approvalId: "approval-1", requestedAt: 1, command: "rm -rf x" },
-          ],
-        })}
-      />,
-    );
+  it("covers third-party tools with no registration — only the wait matters", () => {
+    renderTurn(true, {
+      streaming: true,
+      toolProgress: [
+        {
+          tool: "some_plugin_interactive_tool",
+          toolCallId: "ask-1",
+          status: "running",
+        },
+      ],
+    });
     expect(screen.getByText(NARRATION)).toBeInTheDocument();
   });
 
   it("folds the same narration once the wait resolves", () => {
-    render(
-      <MessageTurns
-        messages={turn({
-          toolProgress: [
-            {
-              tool: "ask_user_question",
-              toolCallId: "ask-1",
-              status: "completed",
-            },
-          ],
-        })}
-      />,
-    );
+    renderTurn(false, {
+      toolProgress: [
+        { tool: "ask_user_question", toolCallId: "ask-1", status: "completed" },
+      ],
+    });
     expect(screen.queryByText(NARRATION)).not.toBeInTheDocument();
   });
 });

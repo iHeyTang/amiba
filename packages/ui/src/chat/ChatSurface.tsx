@@ -64,7 +64,7 @@ import { ApprovalBanner } from "./bubble/approval";
 import { ClarifyBanner } from "./bubble/clarify";
 import { ComposerDockError } from "./ComposerDockSheet";
 import { ErrorBlock } from "./bubble/chips";
-import { MessageTurns } from "./bubble/Bubble";
+import { AwaitingUserInputContext, MessageTurns } from "./bubble/Bubble";
 import {
   ToolCallSeatProvider,
   type ToolCallSeatRenderer,
@@ -2051,18 +2051,27 @@ export default function ChatSurface({
                   render={slots?.toolView}
                   cwd={workspacePath}
                 >
-                  <MessageTurns
-                    messages={messages}
-                    onReviewWorkspaceChanges={
-                      workspacePane.enabled
-                        ? workspacePane.openReview
-                        : undefined
+                  {/* An open interaction wait keeps the narration before
+                      the pause out of the process fold — see
+                      AwaitingUserInputContext. */}
+                  <AwaitingUserInputContext.Provider
+                    value={
+                      pendingQuestions.length > 0 || pendingApprovals.length > 0
                     }
-                    restorableTurnOrdinals={restorableTurnOrdinals}
-                    onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
-                    onOpenAgentDestination={openAgentDestination}
-                    onBranchUserMessage={branchUserMessage}
-                  />
+                  >
+                    <MessageTurns
+                      messages={messages}
+                      onReviewWorkspaceChanges={
+                        workspacePane.enabled
+                          ? workspacePane.openReview
+                          : undefined
+                      }
+                      restorableTurnOrdinals={restorableTurnOrdinals}
+                      onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
+                      onOpenAgentDestination={openAgentDestination}
+                      onBranchUserMessage={branchUserMessage}
+                    />
+                  </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>
 
                 {error && (

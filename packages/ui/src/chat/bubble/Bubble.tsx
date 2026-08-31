@@ -9,6 +9,8 @@ import {
   Undo2,
 } from "lucide-react";
 import {
+  createContext,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -33,11 +35,7 @@ import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
-import {
-  describeToolCall,
-  hasToolDetail,
-  isUserWaitTool,
-} from "./tool-presentation";
+import { describeToolCall, hasToolDetail } from "./tool-presentation";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
@@ -1069,6 +1067,17 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   return flow;
 }
 
+/**
+ * "The session is currently paused on a user interaction" — an open
+ * ask-user question or an undecided approval. The HOST that owns pending
+ * state (ChatSurface) provides it; the bubble only consumes it to decide
+ * whether the narration before the pause is still the user's answering
+ * basis (kept visible) or already ordinary process content (folded).
+ * Tools never register here: pausing through the official interaction
+ * seams (ctx.userQuestions, approvals) IS the declaration.
+ */
+export const AwaitingUserInputContext = createContext(false);
+
 function InterleavedAssistantFlow({
   message,
   suppressRunBoundary = false,
@@ -1078,6 +1087,7 @@ function InterleavedAssistantFlow({
   suppressRunBoundary?: boolean;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
 }) {
+  const awaitingUserInput = useContext(AwaitingUserInputContext);
   const flow = buildAssistantFlow(message);
   const trace = resolveAssistantTrace(message);
   const runBoundary = suppressRunBoundary ? null : trace.runBoundary;
@@ -1090,26 +1100,24 @@ function InterleavedAssistantFlow({
   // result slot and is demoted into the fold as soon as another tool call
   // proves it was narration.
   //
-  // ONE stateful exception: an open wait on the user. When the trailing
-  // execution run is blocked on user interaction — a running user-wait
-  // tool (ask_user_question and whatever joins USER_WAIT_TOOLS later) or
-  // an undecided approval — the text the agent wrote just before it is
-  // the user's BASIS for responding to the dock sheet below; folding it
-  // away hides exactly what the response needs. That text stays in the
-  // result slot while the wait is open; the call's own tool row still
-  // folds with the process like any other. Once the wait resolves and the
-  // turn moves on, the same text is ordinary narration again and demotes
-  // as usual — both natures honored, switched by state.
+  // ONE stateful exception: an open wait on the user. When the session is
+  // blocked on user interaction, the text the agent wrote just before
+  // pausing is the user's BASIS for responding to the dock sheet below;
+  // folding it away hides exactly what the response needs. That text
+  // stays in the result slot while the wait is open; the pausing call's
+  // own tool row still folds with the process like any other. Once the
+  // wait resolves and the turn moves on, the same text is ordinary
+  // narration again and demotes as usual — both natures honored,
+  // switched by state.
+  //
+  // The signal is the WAIT ITSELF (AwaitingUserInputContext, fed by the
+  // host's pending questions/approvals), not a tool-name registry: any
+  // tool — first- or third-party — that pauses through the official
+  // interaction seams (ctx.userQuestions, approvals) has thereby
+  // "declared" itself, and gets this treatment with no registration.
   const lastSegment = flow.at(-1);
   const awaitingUser =
-    !!message.streaming &&
-    lastSegment?.kind === "execution" &&
-    (lastSegment.tools.some(
-      (tool) => isUserWaitTool(tool.tool) && tool.status === "running",
-    ) ||
-      lastSegment.details.some(
-        (detail) => detail.kind === "approval" && !detail.record.outcome,
-      ));
+    awaitingUserInput && !!message.streaming && lastSegment?.kind === "execution";
   const { head: processSegments, tail: resultSegments } = splitTrailingTextRun(
     awaitingUser ? flow.slice(0, -1) : flow,
   );
