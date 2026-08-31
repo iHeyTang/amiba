@@ -189,7 +189,7 @@ export function ApprovalBanner({
               {command && (
                 <pre
                   data-selection="text"
-                  className="approval-code mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/65 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
+                  className="approval-code mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/45 bg-muted/25 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
                   <ApprovalCode command={command} tool={req.tool} />
                 </pre>
               )}
@@ -206,11 +206,11 @@ export function ApprovalBanner({
                       onClick={() => onRespond(req, d.value)}
                       title={d.description}
                       className={cn(
-                        "inline-flex h-8 select-none items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium transition-[background-color,color,opacity] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+                        "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                         d.variant === "neutral" &&
-                          "bg-background/65 text-foreground/70 hover:bg-background hover:text-foreground",
+                          "border-border/50 bg-transparent text-foreground/70 hover:bg-muted/40 hover:text-foreground",
                         d.variant === "destructive" &&
-                          "ml-auto bg-background/65 text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
+                          "ml-auto border-transparent bg-transparent text-destructive/85 hover:bg-destructive/[0.06] hover:text-destructive",
                         anyPending && "cursor-not-allowed opacity-50",
                         isPending && "opacity-100"
                       )}>

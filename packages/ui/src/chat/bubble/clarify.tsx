@@ -108,13 +108,17 @@ const answered = (draft: QuestionDraft): boolean =>
 const completed = (draft: QuestionDraft): boolean =>
   answered(draft) || draft.skipped;
 
-/** Quiet action chip matching the approval banner's button language. */
+/**
+ * Slim, airy action buttons — hairline ghosts, not filled pills; only the
+ * one primary action carries the accent, and even that stays h-7/rounded-md
+ * so the sheet reads light.
+ */
 const quietButton =
-  "inline-flex h-8 select-none items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium transition-[background-color,color,opacity] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 const quietNeutral =
-  "bg-background/65 text-foreground/70 hover:bg-background hover:text-foreground";
+  "text-muted-foreground hover:bg-muted/50 hover:text-foreground";
 const quietPrimary =
-  "bg-primary text-primary-foreground hover:bg-primary/90 disabled:hover:bg-primary";
+  "bg-primary text-primary-foreground shadow-none hover:bg-primary/90 disabled:hover:bg-primary";
 
 export interface ClarifyBannerProps {
   request: UserQuestionRequest;
@@ -156,7 +160,7 @@ function PlanReviewCard({
           {t("sidepanel.clarify.plan.header")}
         </p>
       </div>
-      <div className="mx-4 mt-2 max-h-[min(42vh,360px)] overflow-y-auto rounded-lg border border-border/40 bg-background/65 px-3 py-2.5">
+      <div className="mx-4 mt-2 max-h-[min(42vh,360px)] overflow-y-auto rounded-lg border border-border/45 bg-muted/25 px-3 py-2.5">
         <Streamdown mode="static" className="chat-md break-words text-xs">
           {review.plan}
         </Streamdown>
@@ -184,7 +188,7 @@ function PlanReviewCard({
           <button
             className={cn(
               quietButton,
-              "bg-background/65 text-destructive/85 hover:bg-destructive/[0.07] hover:text-destructive",
+              "text-destructive/85 hover:bg-destructive/[0.06] hover:text-destructive",
             )}
             disabled={inFlight}
             onClick={() => decide(review.decline!.label)}
@@ -325,7 +329,7 @@ function QuestionStepper({
           <div className="flex shrink-0 items-center gap-0.5">
             <button
               aria-label={t("sidepanel.clarify.prev")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
               disabled={index === 0 || inFlight}
               onClick={() => {
                 setIndex(index - 1);
@@ -340,7 +344,7 @@ function QuestionStepper({
             </span>
             <button
               aria-label={t("sidepanel.clarify.next")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
               disabled={isLast || inFlight}
               onClick={() => {
                 setIndex(index + 1);
@@ -355,7 +359,7 @@ function QuestionStepper({
         {onCancel ? (
           <button
             aria-label={t("sidepanel.clarify.dismiss")}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground disabled:opacity-50"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
             disabled={inFlight}
             onClick={onCancel}
             title={t("sidepanel.clarify.dismiss")}
@@ -398,11 +402,11 @@ function QuestionStepper({
                   <button
                     aria-checked={active}
                     className={cn(
-                      "flex items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+                      "flex items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                       active
-                        ? "bg-background text-foreground ring-1 ring-primary/35"
-                        : "bg-background/65 text-foreground/80 hover:bg-background hover:text-foreground",
+                        ? "border-primary/45 bg-primary/[0.06] text-foreground"
+                        : "border-border/50 bg-transparent text-foreground/80 hover:bg-muted/40 hover:text-foreground",
                     )}
                     disabled={inFlight}
                     key={`${choice.label}-${choiceIndex}`}
@@ -446,10 +450,12 @@ function QuestionStepper({
             </div>
           ) : null}
 
+          {/* Explicit hairline border: DSH ships bare `input {}` element
+              rules, so an unbordered input would inherit their heavy edge. */}
           <input
             aria-label={t("sidepanel.clarify.customAnswer")}
             autoFocus={!hasOptions}
-            className="mt-2 h-8 w-full rounded-lg bg-background/65 px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/55 hover:bg-background/80 focus:bg-background focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 h-8 w-full appearance-none rounded-lg border border-border/50 bg-transparent px-3 text-xs text-foreground shadow-none outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-ring/60 focus-visible:ring-1 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={inFlight}
             onChange={(event) => {
               const value = event.target.value;

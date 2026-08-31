@@ -35,10 +35,10 @@ describe("ApprovalBanner", () => {
     ]
 
     expect(new Set(allowButtons.map((button) => button.className)).size).toBe(1)
-    expect(allowButtons[0]).toHaveClass("bg-background/65")
+    expect(allowButtons[0]).toHaveClass("bg-transparent")
     expect(allowButtons[0]).not.toHaveClass("bg-foreground")
     expect(screen.getByRole("button", { name: "sidepanel.permission.deny" })).toHaveClass(
-      "bg-background/65",
+      "bg-transparent",
       "text-destructive/85"
     )
     expect(

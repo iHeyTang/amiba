@@ -15,8 +15,11 @@ import { cn } from "../primitives";
  */
 
 const TONES = {
-  neutral: "border-border/45 bg-muted/45",
-  warn: "border-warning/40 bg-warning/[0.07]",
+  // Frosted WHITE, not muted gray: the sheet covers a large area, and a
+  // muted wash over the light canvas read as one drab slab. Inner controls
+  // provide the gray as small chips (bg-muted/45) on this bright ground.
+  neutral: "border-border/45 bg-popover/70",
+  warn: "border-warning/40 bg-warning/[0.06]",
   danger: "border-destructive/35 bg-destructive/[0.06]",
 } as const;
 
