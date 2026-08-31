@@ -180,6 +180,13 @@ export interface UserQuestionItem {
   detail?: string;
   options?: UserQuestionOption[];
   multiSelect?: boolean;
+  /**
+   * Official presentation intent (dsh-user-questions): `approve` names the
+   * option label that carries the intent's affirmative decision. Today the
+   * only kind DSH ships is "plan-review" — a single question whose `detail`
+   * is the plan under review.
+   */
+  intent?: { kind: string; approve: string };
 }
 
 /** One answerable request may contain multiple questions. */
@@ -367,6 +374,8 @@ export interface ChatEngineClient {
     request: UserQuestionRequest,
     answers: UserQuestionAnswerItem[],
   ): Promise<RuntimeActionResult>;
+  /** Reject the whole wait; DSH resolves the ask tool call as cancelled. */
+  cancelQuestions(request: UserQuestionRequest): Promise<RuntimeActionResult>;
   onSnapshot(cb: (frame: SnapshotFrame) => void): () => void;
   onStreamEvent(
     cb: (sessionId: string, event: StreamEvent) => void,

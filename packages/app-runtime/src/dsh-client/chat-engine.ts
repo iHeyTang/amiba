@@ -555,6 +555,25 @@ export class DshChatEngineClient implements ChatEngineClient {
     }
   }
 
+  async cancelQuestions(
+    request: UserQuestionRequest,
+  ): Promise<RuntimeActionResult> {
+    const sessionId = request.sessionId;
+    if (!sessionId) return { ok: false, error: "Question has no DSH session." };
+    try {
+      const receipt = await this.options.client.cancelQuestions(
+        request.requestId,
+      );
+      if (!receipt.accepted) {
+        return { ok: false, error: receipt.reason ?? "DSH rejected the response." };
+      }
+      this.emit(sessionId, { kind: "questionResolved", requestId: request.requestId });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   onSnapshot(listener: SnapshotListener): () => void {
     this.snapshotListeners.add(listener);
     return () => this.snapshotListeners.delete(listener);

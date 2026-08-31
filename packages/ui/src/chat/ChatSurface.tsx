@@ -635,6 +635,22 @@ export default function ChatSurface({
       current.filter((item) => item.requestId !== request.requestId),
     );
   }
+
+  async function cancelQuestionRequest() {
+    const request = pendingQuestions[0];
+    if (!request || clarifyInFlight) return;
+    setClarifyInFlight(true);
+    setClarifyError(null);
+    const result = await client.cancelQuestions(request);
+    setClarifyInFlight(false);
+    if (!result.ok) {
+      setClarifyError(result.error || t("sidepanel.clarify.sendFailed"));
+      return;
+    }
+    setPendingQuestions((current) =>
+      current.filter((item) => item.requestId !== request.requestId),
+    );
+  }
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
@@ -2143,6 +2159,7 @@ export default function ChatSurface({
               <ClarifyBanner
                 error={clarifyError}
                 inFlight={clarifyInFlight}
+                onCancel={() => void cancelQuestionRequest()}
                 onRespond={(answers) => void respondToQuestion(answers)}
                 request={pendingQuestions[0]}
               />

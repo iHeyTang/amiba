@@ -51,6 +51,8 @@ export interface DshQuestionItem {
   detail?: string
   options?: Array<{ label: string; description?: string }>
   multiSelect?: boolean
+  /** Presentation intent; DSH ships "plan-review" (approve names an option label). */
+  intent?: { kind: string; approve: string }
 }
 
 export interface DshMuxEnvelope {
@@ -569,13 +571,23 @@ export class DshApiClient {
     value: unknown,
     signal?: AbortSignal,
   ): Promise<{ accepted: boolean; reason?: string }> {
+    return this.respondWith(requestId, { ok: true, value }, signal)
+  }
+
+  private async respondWith(
+    requestId: string,
+    result:
+      | { ok: true; value: unknown }
+      | { ok: false; error: { code: string; message: string; details: Record<string, unknown> } },
+    signal?: AbortSignal,
+  ): Promise<{ accepted: boolean; reason?: string }> {
     const response = await this.fetchImpl(`${this.baseUrl}/api/respond`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         type: "client-response",
         rpcId: requestId,
-        result: { ok: true, value },
+        result,
       }),
       signal,
     })
@@ -599,6 +611,25 @@ export class DshApiClient {
     signal?: AbortSignal,
   ): Promise<{ accepted: boolean; reason?: string }> {
     return this.respond(requestId, payload, signal)
+  }
+
+  /** Reject a question wait outright — DSH resolves the ask tool call as cancelled. */
+  cancelQuestions(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<{ accepted: boolean; reason?: string }> {
+    return this.respondWith(
+      requestId,
+      {
+        ok: false,
+        error: {
+          code: "cancelled",
+          message: "the user closed this question request",
+          details: {},
+        },
+      },
+      signal,
+    )
   }
 
   async *events(signal?: AbortSignal): AsyncGenerator<DshMuxEnvelope> {

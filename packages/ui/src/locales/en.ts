@@ -618,10 +618,20 @@ export const en = {
   "channels.unknown": "Other",
 
   "sidepanel.clarify.label": "The agent needs your input",
-  "sidepanel.clarify.confirmSelection": "Confirm selection",
   "sidepanel.clarify.customAnswer": "Type another answer",
-  "sidepanel.clarify.send": "Send",
   "sidepanel.clarify.sendFailed": "Unable to send your answer.",
+  "sidepanel.clarify.prev": "Previous question",
+  "sidepanel.clarify.next": "Next",
+  "sidepanel.clarify.skip": "Skip",
+  "sidepanel.clarify.submit": "Submit",
+  "sidepanel.clarify.dismiss": "Dismiss these questions",
+  "sidepanel.clarify.unanswered": "Pick an option or type an answer.",
+  "sidepanel.clarify.incomplete": "Please finish this question first.",
+  "sidepanel.clarify.recommended": "Recommended",
+  "sidepanel.clarify.plan.header": "Plan review",
+  "sidepanel.clarify.plan.approve": "Approve",
+  "sidepanel.clarify.plan.decline": "Refuse",
+  "sidepanel.clarify.plan.discuss": "Chat about it",
 } as const;
 
 /** Every key this package's own copy defines. */
