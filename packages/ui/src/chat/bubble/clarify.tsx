@@ -6,7 +6,6 @@ import {
   Loader2,
   MessageCircleQuestion,
   Pencil,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Streamdown } from "streamdown";
@@ -19,7 +18,7 @@ import type {
 } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 
-import { cn } from "../../primitives";
+import { Input, cn } from "../../primitives";
 import { ComposerDockSheet } from "../ComposerDockSheet";
 
 /**
@@ -156,7 +155,7 @@ function PlanReviewCard({
     <ComposerDockSheet tone="warn">
       <div className="flex items-center gap-2 px-4 pt-2.5">
         <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-warning" />
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-foreground/60">
+        <p className="text-xs font-medium text-foreground/70">
           {t("sidepanel.clarify.plan.header")}
         </p>
       </div>
@@ -319,10 +318,12 @@ function QuestionStepper({
 
   return (
     <ComposerDockSheet>
-      {/* Header strip: label left, pager + dismiss right. */}
+      {/* Header strip: label left, pager right. Sentence case, no caps
+          tracking — the sheet should read like the agent talking, not a
+          system alert. */}
       <div className="flex items-center gap-2 px-4 pt-2.5">
         <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-        <p className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-foreground/60">
+        <p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/70">
           {t("sidepanel.clarify.label")}
         </p>
         {questions.length > 1 ? (
@@ -355,18 +356,6 @@ function QuestionStepper({
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
-        ) : null}
-        {onCancel ? (
-          <button
-            aria-label={t("sidepanel.clarify.dismiss")}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
-            disabled={inFlight}
-            onClick={onCancel}
-            title={t("sidepanel.clarify.dismiss")}
-            type="button"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         ) : null}
       </div>
 
@@ -450,12 +439,13 @@ function QuestionStepper({
             </div>
           ) : null}
 
-          {/* Explicit hairline border: DSH ships bare `input {}` element
-              rules, so an unbordered input would inherit their heavy edge. */}
-          <input
+          {/* The shared Input primitive: its form-control contract owns
+              surface + focus styling (soft border-ring/40 + faint halo), so
+              this stays in step with every other input in the product. */}
+          <Input
             aria-label={t("sidepanel.clarify.customAnswer")}
             autoFocus={!hasOptions}
-            className="mt-2 h-8 w-full appearance-none rounded-lg border border-border/50 bg-transparent px-3 text-xs text-foreground shadow-none outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-ring/60 focus-visible:ring-1 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 h-8 px-3 text-xs"
             disabled={inFlight}
             onChange={(event) => {
               const value = event.target.value;
@@ -477,10 +467,22 @@ function QuestionStepper({
         </section>
       </div>
 
-      {/* Footer: feedback left, skip + next/submit right. */}
+      {/* Footer: leave-the-whole-set on the left (labeled, not a cryptic
+          ✕), per-question skip + next/submit on the right. */}
       <div className="flex items-center gap-2 px-4 pb-1 pt-1">
+        {onCancel ? (
+          <button
+            className={cn(quietButton, "text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground")}
+            disabled={inFlight}
+            onClick={onCancel}
+            title={t("sidepanel.clarify.dismissHint")}
+            type="button"
+          >
+            {t("sidepanel.clarify.dismiss")}
+          </button>
+        ) : null}
         {feedback ? (
-          <p className="min-w-0 flex-1 truncate text-[11px] text-destructive">
+          <p className="min-w-0 flex-1 truncate text-right text-[11px] text-destructive">
             {feedback}
           </p>
         ) : (
@@ -490,6 +492,7 @@ function QuestionStepper({
           className={cn(quietButton, quietNeutral)}
           disabled={inFlight}
           onClick={skipQuestion}
+          title={t("sidepanel.clarify.skipHint")}
           type="button"
         >
           {t("sidepanel.clarify.skip")}
