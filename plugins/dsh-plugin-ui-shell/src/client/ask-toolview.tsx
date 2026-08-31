@@ -75,7 +75,11 @@ function questionTextById(argsRaw: string | undefined): Map<string, string> {
   return byId;
 }
 
-/** Question → answer review: selected options as quiet chips, custom answers as text. */
+/**
+ * Question → answer review, plain and structural: muted question line,
+ * regular-weight answer line. No chips, no accents — the split between the
+ * two lines is all the structure this needs.
+ */
 function AskAnswersReview({
   answers,
   questions,
@@ -87,36 +91,28 @@ function AskAnswersReview({
 }) {
   return (
     <div className="mt-1 w-full max-w-2xl min-w-0">
-      <section className="overflow-hidden rounded-lg border border-border/40 bg-muted/[0.06] px-2.5 py-2">
+      <section className="overflow-hidden rounded-lg border border-border/40 bg-muted/[0.06] px-3 py-2">
         <div className="space-y-2">
           {answers.map((answer, index) => {
             const custom = (answer.custom ?? "").trim();
+            const chosen = answer.selected.join(", ");
             const skipped = answer.selected.length === 0 && custom === "";
             return (
               <div key={answer.id || index} className="min-w-0">
                 <p className="text-[10.5px] leading-relaxed text-muted-foreground">
                   {questions.get(answer.id) ?? answer.id}
                 </p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                  {answer.selected.map((label) => (
-                    <span
-                      key={label}
-                      className="rounded-md bg-primary/[0.08] px-1.5 py-0.5 text-[11px] font-medium leading-snug text-foreground/85 ring-1 ring-primary/25"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  {custom !== "" && (
-                    <span className="min-w-0 break-words text-[11px] leading-relaxed text-foreground/85">
-                      {custom}
-                    </span>
-                  )}
-                  {skipped && (
-                    <span className="text-[11px] text-muted-foreground/60">
-                      {skippedLabel}
-                    </span>
-                  )}
-                </div>
+                <p
+                  className={
+                    skipped
+                      ? "mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground/60"
+                      : "mt-0.5 break-words text-[11px] leading-relaxed text-foreground/85"
+                  }
+                >
+                  {skipped
+                    ? skippedLabel
+                    : [chosen, custom].filter(Boolean).join(" · ")}
+                </p>
               </div>
             );
           })}
@@ -168,11 +164,23 @@ export function AskUserQuestionToolview({ block }: ToolCallOwnerProps) {
       ? Math.max(0, settled.time - settled.callTime)
       : undefined;
 
+  const questions = questionTextById(argsRaw ?? undefined);
+  // A dismissed set still shows WHAT was asked: synthesize an all-skipped
+  // review from the call args, so the audit record keeps the questions.
+  const cancelledReview: AskAnswer[] = cancelled
+    ? [...questions.keys()].map((id) => ({ id, selected: [] }))
+    : [];
   const detail =
     answers && answers.length > 0 ? (
       <AskAnswersReview
         answers={answers}
-        questions={questionTextById(argsRaw ?? undefined)}
+        questions={questions}
+        skippedLabel={t("shell.ask.skipped")}
+      />
+    ) : cancelledReview.length > 0 ? (
+      <AskAnswersReview
+        answers={cancelledReview}
+        questions={questions}
         skippedLabel={t("shell.ask.skipped")}
       />
     ) : failed && resultText ? (
