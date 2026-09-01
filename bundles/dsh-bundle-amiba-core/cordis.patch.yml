@@ -70,6 +70,9 @@
       config:
         root: !!js dshHomePath('amiba-connectors')
 
+    - id: amiba-connector-lark
+      name: "@amiba/dsh-plugin-connector-lark"
+
     - id: amiba-commands-adapter
       name: "@amiba/dsh-plugin-commands-adapter"
       config:
