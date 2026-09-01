@@ -16,6 +16,8 @@ import type {
   ConnectorHandle,
   ConnectorProvider,
   ConnectorRuntime,
+  OnboardHandle,
+  OnboardResult,
 } from "./types.js";
 
 // Harness copied from center.test.ts (per task-2-brief.md Step 2: "construct
@@ -153,6 +155,36 @@ function fakeProvider(
     capabilities: vi.fn(() => capabilities),
   };
   return { provider, starts, validate, start };
+}
+
+/**
+ * A `fakeProvider` plus a controllable `onboard()`, mirroring
+ * center.test.ts's own helper of the same name: the deferred promise lets a
+ * test decide exactly when the flow resolves/rejects, and the captured
+ * handle exposes `signal`/`emit` for assertions.
+ */
+function fakeOnboardingProvider(id = "fake-onboard") {
+  const base = fakeProvider(undefined, id);
+  const gate = deferred<OnboardResult>();
+  let handle: OnboardHandle | undefined;
+  const onboard = vi.fn(async (h: OnboardHandle) => {
+    handle = h;
+    return gate.promise;
+  });
+  const provider: ConnectorProvider = { ...base.provider, onboard };
+  return { ...base, provider, onboard, gate, getHandle: () => handle };
+}
+
+/** A promise plus its resolvers, exposed for tests that need to control
+ * exactly when an in-flight async operation settles. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 function fakeAppliers(mcp: ReturnType<typeof fakeMcpManager>) {
@@ -349,5 +381,102 @@ describe("AmibaConnectorsRemoteService", () => {
 
     const enabled = await service.setEnabled(created.id, true);
     expect(enabled.enabled).toBe(true);
+  });
+});
+
+describe("AmibaConnectorsRemoteService onboarding", () => {
+  it("listProviders carries supportsOnboarding true for an onboardable provider and false for a plain one", async () => {
+    const { center } = await harness();
+    const { provider: plain } = fakeProvider(undefined, "plain");
+    const { provider: onboardable } = fakeOnboardingProvider("onboardable");
+    center.registerProvider(plain);
+    center.registerProvider(onboardable);
+    const { service } = buildService(center);
+
+    const { providers } = await service.listProviders();
+    expect(providers.find((view) => view.id === "plain")?.supportsOnboarding).toBe(
+      false,
+    );
+    expect(
+      providers.find((view) => view.id === "onboardable")?.supportsOnboarding,
+    ).toBe(true);
+  });
+
+  it("beginOnboarding then pollOnboarding round-trip a pending session through the real center", async () => {
+    const { center } = await harness();
+    const { provider } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const { service } = buildService(center);
+
+    const begun = await service.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Scan me",
+      agentPreset: "restricted",
+    });
+    expect(begun.state).toBe("pending");
+    expect(begun.sessionId).toMatch(/^onboard-/);
+
+    const polled = await service.pollOnboarding(begun.sessionId);
+    expect(polled).toEqual(begun);
+  });
+
+  it("a completed OnboardingView's serialized form contains neither the fake config's secret value nor a config key", async () => {
+    const { center } = await harness();
+    const { provider, gate } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const { service } = buildService(center);
+
+    const begun = await service.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Secret test",
+      agentPreset: "restricted",
+    });
+
+    gate.resolve({ config: { clientSecret: "distinctive-secret-value-42" } });
+
+    await vi.waitFor(async () => {
+      const polled = await service.pollOnboarding(begun.sessionId);
+      expect(polled.state).toBe("completed");
+    });
+
+    const completed = await service.pollOnboarding(begun.sessionId);
+    const serialized = JSON.stringify(completed);
+    expect(serialized).not.toContain("distinctive-secret-value-42");
+    expect(serialized).not.toContain("config");
+    expect(completed).not.toHaveProperty("config");
+    expect(completed.connect).toBeDefined();
+    expect(completed.connect).not.toHaveProperty("config");
+  });
+
+  it("lets beginOnboarding's onboarding_unsupported failure surface unmapped for a provider with no onboard hook", async () => {
+    const { center } = await harness();
+    const { provider } = fakeProvider(undefined, "no-onboard");
+    center.registerProvider(provider);
+    const { service } = buildService(center);
+
+    await expect(
+      service.beginOnboarding({
+        provider: "no-onboard",
+        name: "x",
+        agentPreset: "restricted",
+      }),
+    ).rejects.toThrow("onboarding_unsupported");
+  });
+
+  it("cancelOnboarding aborts a pending session's provider signal through the real center", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const { service } = buildService(center);
+
+    const begun = await service.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Cancel me",
+      agentPreset: "restricted",
+    });
+
+    const cancelled = await service.cancelOnboarding(begun.sessionId);
+    expect(cancelled.sessionId).toBe(begun.sessionId);
+    expect(getHandle()?.signal.aborted).toBe(true);
   });
 });

@@ -11,8 +11,26 @@ const create = vi.fn();
 const setEnabled = vi.fn();
 const remove = vi.fn();
 const setOwners = vi.fn();
+// Collateral fix, same category as Task 1's `supportsOnboarding` fixture
+// update: `ConnectAdapter` (Task 2) gained the onboarding trio, so this
+// hand-built mock needs stub implementations to satisfy the interface.
+// `DshSettingsConnect` itself doesn't call these yet (that's a later task) —
+// no test below exercises them.
+const beginOnboarding = vi.fn();
+const pollOnboarding = vi.fn();
+const cancelOnboarding = vi.fn();
 
-const adapter = { listProviders, list, create, setEnabled, remove, setOwners };
+const adapter = {
+  listProviders,
+  list,
+  create,
+  setEnabled,
+  remove,
+  setOwners,
+  beginOnboarding,
+  pollOnboarding,
+  cancelOnboarding,
+};
 
 const providers: ConnectorProviderView[] = [
   {

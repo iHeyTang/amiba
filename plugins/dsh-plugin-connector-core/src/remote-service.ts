@@ -2,7 +2,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 
 import type { ConnectorCenter } from "./center.js";
-import type { CreateConnectInput } from "./remote.js";
+import type { BeginOnboardingInput, CreateConnectInput } from "./remote.js";
 
 // Exported (unlike messaging-core's private equivalent) so remote-service.test.ts
 // can construct it directly and drive its @Remote methods as plain instance
@@ -63,6 +63,24 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
   @Remote
   setOwners(id: string, owners: string[]) {
     return this.center.setOwners(id, owners);
+  }
+
+  @Remote
+  // async keeps the return type a real Promise, matching the declared
+  // TypertRemoteMap["amibaConnectors/beginOnboarding"] signature, even
+  // though ConnectorCenter#beginOnboarding() itself is synchronous.
+  async beginOnboarding(input: BeginOnboardingInput) {
+    return this.center.beginOnboarding(input);
+  }
+
+  @Remote
+  async pollOnboarding(sessionId: string) {
+    return this.center.pollOnboarding(sessionId);
+  }
+
+  @Remote
+  async cancelOnboarding(sessionId: string) {
+    return this.center.cancelOnboarding(sessionId);
   }
 }
 

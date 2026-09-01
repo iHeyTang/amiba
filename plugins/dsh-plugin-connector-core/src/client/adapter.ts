@@ -1,7 +1,11 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { RemoteResult } from "@deepseek-ai/dsh-typert-protocol";
 
-import type { ConnectorProviderView, ConnectView } from "../types.js";
+import type {
+  ConnectorProviderView,
+  ConnectView,
+  OnboardingView,
+} from "../types.js";
 
 export interface CreateConnectInput {
   provider: string;
@@ -10,11 +14,21 @@ export interface CreateConnectInput {
   config: Record<string, unknown>;
 }
 
+export interface BeginOnboardingInput {
+  provider: string;
+  name: string;
+  agentPreset: string;
+}
+
 /**
  * Client-facing surface consumed by `DshSettingsConnect` (Task 7). Method
  * names are unnamespaced (`remove`, not `removeConnect`) — only the wire
  * methods on the mounted `amibaConnectors` remote carry the `Connect` suffix
- * that disambiguates them among the remote's other namespaces.
+ * that disambiguates them among the remote's other namespaces. Same rule for
+ * the onboarding trio: the wire methods are `beginOnboarding`/
+ * `pollOnboarding`/`cancelOnboarding` (see remote.ts's wire table) and the
+ * adapter keeps those exact names since there's no other `amibaConnectors`
+ * method they'd collide with.
  */
 export interface ConnectAdapter {
   listProviders(): Promise<ConnectorProviderView[]>;
@@ -23,6 +37,9 @@ export interface ConnectAdapter {
   setEnabled(id: string, enabled: boolean): Promise<ConnectView>;
   remove(id: string): Promise<{ id: string; deleted: boolean }>;
   setOwners(id: string, owners: string[]): Promise<ConnectView>;
+  beginOnboarding(input: BeginOnboardingInput): Promise<OnboardingView>;
+  pollOnboarding(sessionId: string): Promise<OnboardingView>;
+  cancelOnboarding(sessionId: string): Promise<OnboardingView>;
 }
 
 type ConnectorsRemote = ClientContext["remote"]["amibaConnectors"];
@@ -56,5 +73,9 @@ export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
     setEnabled: (id, enabled) => valueOf(remote.setEnabled(id, enabled)),
     remove: (id) => valueOf(remote.removeConnect(id)),
     setOwners: (id, owners) => valueOf(remote.setOwners(id, owners)),
+    beginOnboarding: (input) => valueOf(remote.beginOnboarding(input)),
+    pollOnboarding: (sessionId) => valueOf(remote.pollOnboarding(sessionId)),
+    cancelOnboarding: (sessionId) =>
+      valueOf(remote.cancelOnboarding(sessionId)),
   };
 }

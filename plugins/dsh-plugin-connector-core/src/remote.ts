@@ -4,13 +4,23 @@ import type {
 } from "@deepseek-ai/dsh-typert-protocol";
 import { z } from "zod";
 
-import type { ConnectorProviderView, ConnectView } from "./types.js";
+import type {
+  ConnectorProviderView,
+  ConnectView,
+  OnboardingView,
+} from "./types.js";
 
 export interface CreateConnectInput {
   provider: string;
   name: string;
   agentPreset: string;
   config: Record<string, unknown>;
+}
+
+export interface BeginOnboardingInput {
+  provider: string;
+  name: string;
+  agentPreset: string;
 }
 
 export interface AmibaConnectorsProvidersSnapshot {
@@ -33,6 +43,7 @@ const providerViewSchema = z.object({
   name: z.string(),
   description: z.string(),
   icon: z.string().optional(),
+  supportsOnboarding: z.boolean(),
 });
 
 // No secret or config field: ConnectView never carries credential material,
@@ -56,6 +67,33 @@ const createConnectInputSchema = z.object({
   name: z.string().min(1),
   agentPreset: z.string().min(1),
   config: z.record(z.string(), z.unknown()),
+});
+
+const beginOnboardingInputSchema = z.object({
+  provider: z.string().min(1),
+  name: z.string().min(1),
+  agentPreset: z.string().min(1),
+});
+
+const onboardingStateSchema = z.enum([
+  "pending",
+  "completed",
+  "error",
+  "cancelled",
+]);
+
+// No config/credential field: an OnboardingView never carries the fake (or
+// real) provider config it was built from — only the resulting ConnectView
+// once completed, which itself carries no secret material either (see
+// connectViewSchema above). This schema must never grow one.
+const onboardingViewSchema = z.object({
+  sessionId: z.string(),
+  state: onboardingStateSchema,
+  qrUrl: z.string().optional(),
+  qrExpireIn: z.number().optional(),
+  statusNote: z.string().optional(),
+  connect: connectViewSchema.optional(),
+  error: z.string().optional(),
 });
 
 const listProvidersResultSchema = z.object({
@@ -93,6 +131,13 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
         id: string,
         owners: string[],
       ): Promise<RemoteResult<ConnectView>>;
+      beginOnboarding(
+        input: BeginOnboardingInput,
+      ): Promise<RemoteResult<OnboardingView>>;
+      pollOnboarding(sessionId: string): Promise<RemoteResult<OnboardingView>>;
+      cancelOnboarding(
+        sessionId: string,
+      ): Promise<RemoteResult<OnboardingView>>;
     };
   }
 
@@ -117,6 +162,15 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       id: string,
       owners: string[],
     ) => Promise<RemoteResult<ConnectView>>;
+    "amibaConnectors/beginOnboarding": (
+      input: BeginOnboardingInput,
+    ) => Promise<RemoteResult<OnboardingView>>;
+    "amibaConnectors/pollOnboarding": (
+      sessionId: string,
+    ) => Promise<RemoteResult<OnboardingView>>;
+    "amibaConnectors/cancelOnboarding": (
+      sessionId: string,
+    ) => Promise<RemoteResult<OnboardingView>>;
   }
 }
 
@@ -203,6 +257,45 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
         },
       ],
       codec(connectViewSchema, "@amiba/connectors#connect"),
+    ),
+    descriptor(
+      "beginOnboarding",
+      [
+        {
+          name: "input",
+          wire: "input",
+          source: "json",
+          codec: codec(
+            beginOnboardingInputSchema,
+            "@amiba/connectors#begin-onboarding-input",
+          ),
+        },
+      ],
+      codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
+    ),
+    descriptor(
+      "pollOnboarding",
+      [
+        {
+          name: "sessionId",
+          wire: "sessionId",
+          source: "json",
+          codec: stringCodec,
+        },
+      ],
+      codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
+    ),
+    descriptor(
+      "cancelOnboarding",
+      [
+        {
+          name: "sessionId",
+          wire: "sessionId",
+          source: "json",
+          codec: stringCodec,
+        },
+      ],
+      codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
     ),
   ],
 };
