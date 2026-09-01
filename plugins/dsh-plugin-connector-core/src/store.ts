@@ -156,4 +156,34 @@ export class ConnectorStore {
       return document.connects.length !== before;
     });
   }
+
+  /**
+   * Compare-and-set claim used by the pairing sender gate: atomically admits
+   * `sender` as the sole owner and clears `pairing`, but only while `pairing`
+   * is still `true` at the moment this runs inside the store's serialized
+   * mutation chain. Two concurrent calls for the same connect can never both
+   * win — the second observes `pairing: false` already and reports
+   * `claimed: false` without touching the row, so the caller can drop that
+   * message instead of racing a plain read-then-write into overwriting the
+   * first claim.
+   */
+  claimOwner(
+    id: string,
+    sender: string,
+  ): Promise<{ claimed: boolean; connect: StoredConnect }> {
+    return this.mutate((document) => {
+      const index = document.connects.findIndex((item) => item.id === id);
+      if (index < 0) throw new Error("connect_not_found");
+      const current = document.connects[index]!;
+      if (!current.pairing) return { claimed: false, connect: current };
+      const next: StoredConnect = {
+        ...current,
+        pairing: false,
+        owners: [sender],
+        updatedAt: new Date().toISOString(),
+      };
+      document.connects[index] = next;
+      return { claimed: true, connect: next };
+    });
+  }
 }

@@ -48,6 +48,22 @@ const GRANT_SCOPE = "amiba-connector-core";
 const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9-]*$/u;
 
 /**
+ * Thrown by a capability applier's `apply()` to signal a soft, recoverable
+ * "not available right now" condition (e.g. the mcp applier when
+ * `amibaMcpManager` isn't wired into this runtime) rather than a genuine
+ * application failure. `startConnect` recognizes this specific error and
+ * records it as the connect's status without hard-failing the whole start
+ * fiber — every other thrown error takes the normal hard-failure path
+ * (dispose what's applied, stop the runtime, error status, rethrow).
+ */
+export class CapabilityUnavailableError extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = "CapabilityUnavailableError";
+  }
+}
+
+/**
  * Registry, lifecycle owner and messaging bridge for connects. A connect is
  * one binding between the user and one external platform application; once
  * enabled it fans out into a messaging channel (via messaging-core) and tool
@@ -58,8 +74,8 @@ const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9-]*$/u;
  */
 export class ConnectorCenter {
   private readonly providers = new Map<string, ConnectorProvider>();
-  private readonly bridgeDisposers = new Map<string, () => void>();
   private readonly live = new Map<string, LiveConnect>();
+  private readonly starting = new Map<string, Promise<void>>();
   private readonly statuses = new Map<string, ConnectorStatus>();
   private readonly droppedSenders = new Map<string, number>();
 
@@ -88,7 +104,6 @@ export class ConnectorCenter {
         this.bridgeDeliver(channel, envelope),
     };
     const disposeBridge = this.messageCenter.registerProvider(bridge);
-    this.bridgeDisposers.set(provider.id, disposeBridge);
 
     let disposed = false;
     return () => {
@@ -96,9 +111,29 @@ export class ConnectorCenter {
       disposed = true;
       if (this.providers.get(provider.id) === provider)
         this.providers.delete(provider.id);
-      this.bridgeDisposers.delete(provider.id);
       disposeBridge();
+      // Unregistering a provider must not leave its connects orphaned
+      // (live sockets, live mcp registrations, deliveries that would fail
+      // forever once the bridge is gone). The disposer contract here is
+      // synchronous, so this is fire-and-forget — the same pattern
+      // mcp-manager's own `registerManagedServer` disposer uses.
+      void this.stopProviderConnects(provider.id);
     };
+  }
+
+  /** Stops every currently-live connect owned by `providerId`, best-effort. */
+  private async stopProviderConnects(providerId: string): Promise<void> {
+    const rows = await this.store.list();
+    const ids = rows
+      .filter((row) => row.provider === providerId && this.live.has(row.id))
+      .map((row) => row.id);
+    await Promise.all(ids.map((id) => this.stopConnect(id)));
+  }
+
+  /** Stops every currently-live connect, e.g. on plugin unload. */
+  async stop(): Promise<void> {
+    const ids = [...this.live.keys()];
+    await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
   listProviders(): ConnectorProviderView[] {
@@ -121,17 +156,23 @@ export class ConnectorCenter {
     provider: string;
     name: string;
     config: unknown;
-    agentPreset?: string;
+    agentPreset: string;
   }): Promise<ConnectView> {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
+    const agentPreset = input.agentPreset.trim();
+    // The real MessageChannelCenter.createChannel requires a non-empty
+    // sessionId or agentPreset; connects always route through agentPreset
+    // (connects have no fixed session), so an empty one must fail fast here
+    // instead of surfacing as an opaque `invalid_channel` from messaging-core.
+    if (!agentPreset) throw new Error("agent_preset_required");
     // Reject before anything is persisted.
     await provider.validate(input.config);
 
     const row = await this.store.create({
       provider: input.provider,
       name: input.name,
-      ...(input.agentPreset ? { agentPreset: input.agentPreset } : {}),
+      agentPreset,
     });
 
     let channelId: string | undefined;
@@ -139,7 +180,7 @@ export class ConnectorCenter {
       const created = await this.messageCenter.createChannel({
         provider: `connector-${provider.id}`,
         name: input.name,
-        ...(input.agentPreset ? { agentPreset: input.agentPreset } : {}),
+        agentPreset,
       });
       channelId = created.channel.id;
 
@@ -257,7 +298,27 @@ export class ConnectorCenter {
     return { config: payload.config, channelSecret: payload.channelSecret };
   }
 
-  private async startConnect(row: StoredConnect): Promise<void> {
+  /**
+   * Idempotent start dispatcher: a connect that's already live is a no-op,
+   * and a connect that's already mid-start is joined rather than started a
+   * second time. Without this guard, two concurrent `setEnabled(id, true)`
+   * calls (or a boot-time `start()` racing an admin `setEnabled`) would both
+   * observe `enabled: false → true`, both call `provider.start(handle)`, and
+   * the second `this.live.set(...)` would silently overwrite the first —
+   * leaking the first runtime (never stopped) and risking duplicate delivery.
+   */
+  private startConnect(row: StoredConnect): Promise<void> {
+    if (this.live.has(row.id)) return Promise.resolve();
+    const inFlight = this.starting.get(row.id);
+    if (inFlight) return inFlight;
+    const promise = this.performStart(row).finally(() => {
+      this.starting.delete(row.id);
+    });
+    this.starting.set(row.id, promise);
+    return promise;
+  }
+
+  private async performStart(row: StoredConnect): Promise<void> {
     this.statuses.set(row.id, { state: "connecting" });
     const provider = this.providers.get(row.provider);
     const disposers: Array<() => void> = [];
@@ -277,20 +338,17 @@ export class ConnectorCenter {
 
       for (const decl of provider.capabilities(grant.config)) {
         const applier = this.appliers.get(decl.kind);
-        if (!applier) {
-          if (decl.kind === "mcp") {
-            // The mcp applier is only ever missing because the optional
-            // amibaMcpManager dependency isn't wired into this runtime —
-            // that's a soft, recoverable condition, not a bad declaration.
-            this.statuses.set(row.id, {
-              state: "error",
-              detail: "mcp_manager_unavailable",
-            });
-            continue;
-          }
-          throw new Error(`unknown_capability_kind:${decl.kind}`);
+        if (!applier) throw new Error(`unknown_capability_kind:${decl.kind}`);
+        try {
+          disposers.push(await applier.apply(row, decl));
+        } catch (error) {
+          if (!(error instanceof CapabilityUnavailableError)) throw error;
+          // A soft, recoverable "not available right now" outcome (e.g. the
+          // mcp applier finding amibaMcpManager isn't wired into this
+          // runtime): record it and keep going instead of hard-failing the
+          // whole connect over one optional capability.
+          this.statuses.set(row.id, { state: "error", detail: error.message });
         }
-        disposers.push(await applier.apply(row, decl));
       }
 
       this.live.set(row.id, {
@@ -353,7 +411,16 @@ export class ConnectorCenter {
     }
 
     if (row.pairing) {
-      await this.store.update(connectId, { pairing: false, owners: [sender] });
+      // Compare-and-set inside the store's serialized mutation chain: two
+      // concurrent first messages can both observe `pairing: true` here, but
+      // only one `claimOwner` call wins — the loser sees `pairing: false`
+      // already and is dropped, instead of a plain read-then-write letting
+      // the second sender silently overwrite the first as owner.
+      const claim = await this.store.claimOwner(connectId, sender);
+      if (!claim.claimed) {
+        this.recordDrop(connectId);
+        return;
+      }
     } else if (!row.owners.includes(sender)) {
       this.recordDrop(connectId);
       return;

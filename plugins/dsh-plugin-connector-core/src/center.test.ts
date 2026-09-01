@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MessageChannelProvider } from "@amiba/dsh-plugin-messaging-core";
 
-import { ConnectorCenter } from "./center.js";
+import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
 import type {
   CapabilityDecl,
@@ -30,10 +30,21 @@ function fakeMessageCenter() {
   }> = [];
   const removeChannelCalls: string[] = [];
   const createChannel = vi.fn(
-    async (input: { provider: string; name: string; agentPreset?: string }) => ({
-      channel: { id: "channel-1", provider: input.provider, name: input.name },
-      secret: "s3cret",
-    }),
+    async (input: {
+      provider: string;
+      name: string;
+      agentPreset?: string;
+      sessionId?: string;
+    }) => {
+      // Mirrors the real MessageChannelCenter.createChannel, which rejects
+      // when neither a sessionId nor an agentPreset is given.
+      if (!input.agentPreset?.trim() && !input.sessionId?.trim())
+        throw new Error("invalid_channel");
+      return {
+        channel: { id: "channel-1", provider: input.provider, name: input.name },
+        secret: "s3cret",
+      };
+    },
   );
   const acceptInbound = vi.fn(
     async (channelId: string, secret: string, envelope: unknown) => {
@@ -122,7 +133,10 @@ const DEFAULT_CAPABILITIES: CapabilityDecl[] = [
   },
 ];
 
-function fakeProvider(capabilities: CapabilityDecl[] = DEFAULT_CAPABILITIES) {
+function fakeProvider(
+  capabilities: CapabilityDecl[] = DEFAULT_CAPABILITIES,
+  id = "fake",
+) {
   const starts: ConnectorHandle[] = [];
   const runtimes: Array<{
     stop: ReturnType<typeof vi.fn>;
@@ -139,7 +153,7 @@ function fakeProvider(capabilities: CapabilityDecl[] = DEFAULT_CAPABILITIES) {
     return runtime;
   });
   const provider: ConnectorProvider = {
-    id: "fake",
+    id,
     name: "Fake Connector",
     description: "Fake connector for tests",
     configSchema: {},
@@ -150,6 +164,31 @@ function fakeProvider(capabilities: CapabilityDecl[] = DEFAULT_CAPABILITIES) {
   return { provider, starts, runtimes, validate, start };
 }
 
+/**
+ * Builds a fresh appliers map mirroring index.ts's real "mcp" applier: always
+ * registered, resolving manager availability at apply time rather than at
+ * plugin-load time. `withMcpManager: false` simulates the manager not being
+ * wired into this runtime.
+ */
+function fakeAppliers(
+  mcp: ReturnType<typeof fakeMcpManager>,
+  withMcpManager: boolean,
+) {
+  const appliers = new Map<
+    string,
+    { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
+  >();
+  appliers.set("mcp", {
+    apply: async (_connect, decl) => {
+      if (decl.kind !== "mcp") throw new Error("unexpected_kind");
+      if (!withMcpManager)
+        throw new CapabilityUnavailableError("mcp_manager_unavailable");
+      return mcp.registerManagedServer(decl.spec);
+    },
+  });
+  return appliers;
+}
+
 async function harness(options?: { withMcpManager?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), "amiba-connector-center-"));
   roots.push(root);
@@ -157,18 +196,7 @@ async function harness(options?: { withMcpManager?: boolean }) {
   const messageCenter = fakeMessageCenter();
   const credentials = fakeCredentials();
   const mcp = fakeMcpManager();
-  const appliers = new Map<
-    string,
-    { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
-  >();
-  if (options?.withMcpManager !== false) {
-    appliers.set("mcp", {
-      apply: async (_connect, decl) => {
-        if (decl.kind !== "mcp") throw new Error("unexpected_kind");
-        return mcp.registerManagedServer(decl.spec);
-      },
-    });
-  }
+  const appliers = fakeAppliers(mcp, options?.withMcpManager !== false);
   const ctx = { logger: () => ({ error: vi.fn() }) };
   const center = new ConnectorCenter(
     ctx as never,
@@ -247,6 +275,24 @@ describe("ConnectorCenter", () => {
     expect(reloaded!.status).toEqual({ state: "ready" });
   });
 
+  it("createConnect rejects an empty agentPreset before anything is persisted", async () => {
+    const { center, store, credentials } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+
+    await expect(
+      center.createConnect({
+        provider: "fake",
+        name: "No preset",
+        config: {},
+        agentPreset: "   ",
+      }),
+    ).rejects.toThrow("agent_preset_required");
+
+    expect(await store.list()).toHaveLength(0);
+    expect(credentials.store.size).toBe(0);
+  });
+
   it("pairing admits the first sender as owner and drops strangers silently", async () => {
     const { center, messageCenter, store } = await harness();
     const { provider, starts } = fakeProvider();
@@ -255,6 +301,7 @@ describe("ConnectorCenter", () => {
       provider: "fake",
       name: "Pairing",
       config: {},
+      agentPreset: "restricted",
     });
     const handle = starts[0]!;
 
@@ -293,6 +340,50 @@ describe("ConnectorCenter", () => {
     expect(messageCenter.acceptInbound).toHaveBeenCalledTimes(1);
   });
 
+  it("pairing claims are atomic under concurrent first messages", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider, starts } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Pairing race",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const handle = starts[0]!;
+
+    // Two "first" senders arrive concurrently during pairing. A plain
+    // read-then-write gate would let both pass (both observe pairing: true
+    // before either writes); the compare-and-set claim must admit exactly
+    // one and drop the other.
+    await Promise.all([
+      handle.onInbound({
+        id: "m1",
+        text: "hi",
+        sender: "alice",
+        conversation: { key: "c1", kind: "p2p" },
+      }),
+      handle.onInbound({
+        id: "m2",
+        text: "hi",
+        sender: "mallory",
+        conversation: { key: "c1", kind: "p2p" },
+      }),
+    ]);
+
+    expect(messageCenter.acceptInbound).toHaveBeenCalledTimes(1);
+
+    const row = (await store.list()).find((item) => item.id === view.id);
+    expect(row?.pairing).toBe(false);
+    expect(row?.owners).toHaveLength(1);
+    expect(["alice", "mallory"]).toContain(row?.owners[0]);
+
+    const acceptedEnvelope = messageCenter.acceptInbound.mock.calls[0]?.[2] as
+      | { sender?: string }
+      | undefined;
+    expect(acceptedEnvelope?.sender).toBe(row?.owners[0]);
+  });
+
   it("bridge deliver requires a live runtime and passes the conversation ref", async () => {
     const { center, messageCenter } = await harness();
     const { provider, runtimes } = fakeProvider();
@@ -301,6 +392,7 @@ describe("ConnectorCenter", () => {
       provider: "fake",
       name: "Bridge",
       config: {},
+      agentPreset: "restricted",
     });
 
     const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
@@ -334,6 +426,7 @@ describe("ConnectorCenter", () => {
       provider: "fake",
       name: "Lifecycle",
       config: {},
+      agentPreset: "restricted",
     });
 
     expect(runtimes).toHaveLength(1);
@@ -358,6 +451,164 @@ describe("ConnectorCenter", () => {
     expect(await center.listConnects()).toHaveLength(0);
   });
 
+  it("concurrent double-enable starts the runtime only once", async () => {
+    const { center } = await harness();
+    const { provider, start } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Double enable",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+    start.mockClear();
+
+    // Two concurrent enables must not both observe enabled:false and both
+    // start a runtime — the second must join the first's in-flight start
+    // (or see it already live) instead of leaking a duplicate.
+    await Promise.all([
+      center.setEnabled(view.id, true),
+      center.setEnabled(view.id, true),
+    ]);
+
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("start() recovers enabled connects at boot, tolerating a per-connect failure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "amiba-connector-center-"));
+    roots.push(root);
+    const store = new ConnectorStore(root);
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const mcp = fakeMcpManager();
+    const appliers = fakeAppliers(mcp, true);
+    const ctx = { logger: () => ({ error: vi.fn() }) };
+    const center = new ConnectorCenter(
+      ctx as never,
+      store,
+      messageCenter as never,
+      credentials as never,
+      appliers,
+    );
+
+    // One connect whose provider declares a capability kind nothing can
+    // apply (hard failure), one that starts cleanly. The bad row is created
+    // first so an unguarded start() loop that aborts on the first failure
+    // would prove itself by never reaching the good row.
+    const { provider: badProvider, runtimes: badRuntimes } = fakeProvider(
+      [
+        {
+          kind: "cli",
+          spec: {
+            id: "x",
+            package: "y",
+            minVersion: "1.0.0",
+            pinnedVersion: "1.0.0",
+            env: {},
+            skills: [],
+          },
+        },
+      ],
+      "bad",
+    );
+    const { provider: goodProvider } = fakeProvider(undefined, "good");
+    center.registerProvider(badProvider);
+    center.registerProvider(goodProvider);
+
+    const badRow = await store.create({
+      provider: "bad",
+      name: "Bad boot",
+      agentPreset: "restricted",
+    });
+    await credentials.modifyRecord(
+      `amiba-connector-core/${badRow.id}`,
+      async () => ({
+        kind: "grant",
+        payload: { config: {}, channelSecret: "bad-secret" },
+      }),
+    );
+    await store.update(badRow.id, { channelId: "channel-bad" });
+
+    const goodRow = await store.create({
+      provider: "good",
+      name: "Good boot",
+      agentPreset: "restricted",
+    });
+    await credentials.modifyRecord(
+      `amiba-connector-core/${goodRow.id}`,
+      async () => ({
+        kind: "grant",
+        payload: { config: {}, channelSecret: "good-secret" },
+      }),
+    );
+    await store.update(goodRow.id, { channelId: "channel-good" });
+
+    await expect(center.start()).resolves.toBeUndefined();
+
+    expect(badProvider.start).toHaveBeenCalledTimes(1);
+    expect(badRuntimes[0]!.stop).toHaveBeenCalledTimes(1);
+    expect(goodProvider.start).toHaveBeenCalledTimes(1);
+
+    const views = await center.listConnects();
+    const badView = views.find((view) => view.id === badRow.id);
+    const goodView = views.find((view) => view.id === goodRow.id);
+    expect(badView?.status).toMatchObject({ state: "error" });
+    expect(goodView?.status).toEqual({ state: "connecting" });
+  });
+
+  it("unregistering a provider stops its live connects (runtimes + capability disposers)", async () => {
+    const { center, mcp } = await harness();
+    const { provider, runtimes } = fakeProvider();
+    const dispose = center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake",
+      name: "Orphan test",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    dispose();
+
+    // The disposer contract is synchronous (`() => void`); teardown of the
+    // provider's connects happens fire-and-forget behind it.
+    await vi.waitFor(() => {
+      expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
+      expect(mcp.disposers[0]).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("center.stop() stops every live connect", async () => {
+    const { center } = await harness();
+    const { provider: providerA, runtimes: runtimesA } = fakeProvider(
+      undefined,
+      "fake-a",
+    );
+    const { provider: providerB, runtimes: runtimesB } = fakeProvider(
+      undefined,
+      "fake-b",
+    );
+    center.registerProvider(providerA);
+    center.registerProvider(providerB);
+    await center.createConnect({
+      provider: "fake-a",
+      name: "A",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.createConnect({
+      provider: "fake-b",
+      name: "B",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    await center.stop();
+
+    expect(runtimesA[0]!.stop).toHaveBeenCalledTimes(1);
+    expect(runtimesB[0]!.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("an unknown capability kind fails enable and surfaces an error status", async () => {
     const { center } = await harness();
     const { provider, runtimes } = fakeProvider([
@@ -379,6 +630,7 @@ describe("ConnectorCenter", () => {
       provider: "fake",
       name: "Bad capability",
       config: {},
+      agentPreset: "restricted",
     });
 
     expect(view.status).toMatchObject({ state: "error" });
@@ -397,6 +649,7 @@ describe("ConnectorCenter", () => {
       provider: "fake",
       name: "No manager",
       config: {},
+      agentPreset: "restricted",
     });
 
     expect(view.status).toMatchObject({
@@ -404,6 +657,28 @@ describe("ConnectorCenter", () => {
       detail: "mcp_manager_unavailable",
     });
     expect(runtimes[0]!.stop).not.toHaveBeenCalled();
+  });
+
+  it("a registerManagedServer rejection hard-fails the connect (async-registration contract)", async () => {
+    const { center, mcp } = await harness();
+    const { provider, runtimes } = fakeProvider();
+    center.registerProvider(provider);
+    mcp.registerManagedServer.mockRejectedValueOnce(
+      new Error("duplicate managed MCP server conn-fake"),
+    );
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Registration fails",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    expect(view.status).toMatchObject({ state: "error" });
+    expect((view.status as { detail?: string }).detail).toContain(
+      "duplicate managed MCP server",
+    );
+    expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
   });
 
   it("rolls back the channel, grant and row when provisioning fails before the runtime starts", async () => {
@@ -414,7 +689,12 @@ describe("ConnectorCenter", () => {
     credentials.modifyRecord.mockRejectedValueOnce(new Error("disk_full"));
 
     await expect(
-      center.createConnect({ provider: "fake", name: "Doomed", config: {} }),
+      center.createConnect({
+        provider: "fake",
+        name: "Doomed",
+        config: {},
+        agentPreset: "restricted",
+      }),
     ).rejects.toThrow("disk_full");
 
     // The channel was already created before the credential write failed, so
@@ -433,7 +713,12 @@ describe("ConnectorCenter", () => {
     center.registerProvider(provider);
 
     await expect(
-      center.createConnect({ provider: "fake", name: "Bad config", config: {} }),
+      center.createConnect({
+        provider: "fake",
+        name: "Bad config",
+        config: {},
+        agentPreset: "restricted",
+      }),
     ).rejects.toThrow("invalid_config");
 
     expect(await store.list()).toHaveLength(0);
