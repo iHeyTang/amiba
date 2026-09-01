@@ -59,16 +59,16 @@
       config:
         root: !!js dshHomePath('amiba-message-center')
 
-    - id: amiba-connector-core
-      name: "@amiba/dsh-plugin-connector-core"
-      config:
-        root: !!js dshHomePath('amiba-connectors')
-
     - id: amiba-mcp-manager
       name: "@amiba/dsh-plugin-mcp-manager"
       config:
         root: !!js dshHomePath('mcp')
         apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
+
+    - id: amiba-connector-core
+      name: "@amiba/dsh-plugin-connector-core"
+      config:
+        root: !!js dshHomePath('amiba-connectors')
 
     - id: amiba-commands-adapter
       name: "@amiba/dsh-plugin-commands-adapter"

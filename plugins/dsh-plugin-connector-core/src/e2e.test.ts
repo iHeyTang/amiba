@@ -240,7 +240,7 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
     expect(providerFake.validate).toHaveBeenCalledWith({ token: "t" });
     expect(providerFake.start).toHaveBeenCalledTimes(1);
     expect(connectView.channelId).toBeTruthy();
-    expect(connectView.status).not.toMatchObject({ state: "error" });
+    expect(connectView.status).toEqual({ state: "connecting" });
 
     handle = providerFake.starts[0]!;
     runtime = providerFake.runtimes[0]!;

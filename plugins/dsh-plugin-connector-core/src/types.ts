@@ -51,7 +51,7 @@ export interface ConnectorProvider {
   readonly name: string;
   readonly description: string;
   readonly icon?: string;
-  /** zod schema driving the settings form; also the shape of `config`. */
+  /** Schema value driving the settings form; validated by the provider. */
   readonly configSchema: unknown;
   validate(config: unknown): Promise<void>;
   start(handle: ConnectorHandle): Promise<ConnectorRuntime>;

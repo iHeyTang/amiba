@@ -111,13 +111,16 @@ export class ConnectorCenter {
       disposed = true;
       if (this.providers.get(provider.id) === provider)
         this.providers.delete(provider.id);
-      disposeBridge();
-      // Unregistering a provider must not leave its connects orphaned
-      // (live sockets, live mcp registrations, deliveries that would fail
-      // forever once the bridge is gone). The disposer contract here is
-      // synchronous, so this is fire-and-forget — the same pattern
-      // mcp-manager's own `registerManagedServer` disposer uses.
-      void this.stopProviderConnects(provider.id);
+      // Unregistering a provider must not leave its connects orphaned (live
+      // sockets, live mcp registrations, deliveries that would fail forever
+      // once the bridge is gone) — and dropping the bridge first opens a
+      // worse window: messaging-core's delivery pump treats a missing
+      // provider as already-delivered and silently discards queued replies.
+      // So every connect's runtime must actually stop before the bridge
+      // disposer runs. The disposer contract here is synchronous, so this is
+      // fire-and-forget — the same pattern mcp-manager's own
+      // `registerManagedServer` disposer uses.
+      void this.stopProviderConnects(provider.id).finally(() => disposeBridge());
     };
   }
 
@@ -371,6 +374,12 @@ export class ConnectorCenter {
   }
 
   private async stopConnect(connectId: string): Promise<void> {
+    // A connect mid-start (present in `this.starting`, not yet in `live`)
+    // must be joined before inspecting/clearing `live`: otherwise a stop
+    // racing an in-flight start sees nothing to stop, the start then
+    // completes and lands its runtime in `live` *after* teardown — leaving a
+    // disabled connect with a live runtime still relaying messages.
+    await this.starting.get(connectId)?.catch(() => undefined);
     const live = this.live.get(connectId);
     if (live) {
       for (const dispose of [...live.disposers].reverse()) {
@@ -403,6 +412,14 @@ export class ConnectorCenter {
     const rows = await this.store.list();
     const row = rows.find((item) => item.id === connectId);
     if (!row || !row.channelId) return;
+    if (!row.enabled) {
+      // The connect was disabled (or is being disabled) but its runtime
+      // hasn't finished tearing down yet — drop silently, same as the
+      // sender-gate drops below, rather than relaying through a connect the
+      // store already considers off.
+      this.recordDrop(connectId);
+      return;
+    }
 
     const sender = envelope.sender;
     if (!sender) {

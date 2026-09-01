@@ -19,8 +19,7 @@
   "dependencies": {
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
-    "@deepseek-ai/schemastery": "catalog:",
-    "zod": "^4.4.3"
+    "@deepseek-ai/schemastery": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

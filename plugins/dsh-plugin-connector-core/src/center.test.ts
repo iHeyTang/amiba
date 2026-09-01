@@ -233,8 +233,13 @@ describe("ConnectorCenter", () => {
 
     dispose();
 
-    expect(messageCenter.providers.has("connector-fake")).toBe(false);
+    // The provider entry is removed synchronously, but the messaging bridge
+    // is only dropped once stopProviderConnects() resolves (fire-and-forget
+    // behind the disposer, so no live connects are orphaned mid-teardown).
     expect(center.listProviders()).toEqual([]);
+    await vi.waitFor(() => {
+      expect(messageCenter.providers.has("connector-fake")).toBe(false);
+    });
   });
 
   it("createConnect validates, persists grant + channel, and starts the runtime", async () => {
@@ -704,6 +709,106 @@ describe("ConnectorCenter", () => {
     expect(await store.list()).toHaveLength(0);
     // A provisioning failure never reaches the start fiber.
     expect(starts).toHaveLength(0);
+  });
+
+  it("stopConnect joins an in-flight start, so a disable racing a start doesn't leave a live relaying runtime", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, start, starts } = fakeProvider([]);
+    center.registerProvider(provider);
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Racey",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+    start.mockClear();
+
+    let resolveStart!: (runtime: ConnectorRuntime) => void;
+    const runtime: ConnectorRuntime = {
+      stop: vi.fn(async () => undefined),
+      deliver: vi.fn(async () => undefined),
+    } as unknown as ConnectorRuntime;
+    const deferredStart = new Promise<ConnectorRuntime>((resolve) => {
+      resolveStart = resolve;
+    });
+    start.mockImplementationOnce(async (handle: ConnectorHandle) => {
+      starts.push(handle);
+      return deferredStart;
+    });
+
+    // Re-enable, but its provider.start() is stuck mid-flight (in
+    // `this.starting`, not yet in `this.live`).
+    const enablePromise = center.setEnabled(view.id, true);
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+
+    // A concurrent disable must join that in-flight start rather than
+    // observing an empty `live` and returning early.
+    const disablePromise = center.setEnabled(view.id, false);
+
+    const acceptInboundCallsBefore = messageCenter.acceptInboundCalls.length;
+
+    resolveStart(runtime);
+    await Promise.all([enablePromise, disablePromise]);
+
+    expect(runtime.stop).toHaveBeenCalledTimes(1);
+
+    const disabledView = (await center.listConnects()).find(
+      (item) => item.id === view.id,
+    );
+    expect(disabledView?.enabled).toBe(false);
+
+    // No relaying: the joined start's handle must not still be wired to a
+    // live connect.
+    const racedHandle = starts[starts.length - 1]!;
+    await racedHandle.onInbound({
+      id: "late",
+      text: "should not relay",
+      sender: "alice",
+      conversation: { key: "c1", kind: "p2p" },
+    });
+    expect(messageCenter.acceptInboundCalls.length).toBe(
+      acceptInboundCallsBefore,
+    );
+  });
+
+  it("disposing a provider registration stops that provider's connects before dropping the messaging bridge", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes } = fakeProvider([]);
+
+    const sequence: string[] = [];
+    const originalRegisterProvider =
+      messageCenter.registerProvider.getMockImplementation()!;
+    messageCenter.registerProvider.mockImplementation(
+      (bridgeProvider: MessageChannelProvider) => {
+        const dispose = originalRegisterProvider(bridgeProvider);
+        return () => {
+          sequence.push("bridge-disposed");
+          dispose();
+        };
+      },
+    );
+
+    const dispose = center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake",
+      name: "Ordering",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const runtime = runtimes[0]!;
+    runtime.stop.mockImplementation(async () => {
+      sequence.push("runtime-stopped");
+    });
+
+    dispose();
+
+    await vi.waitFor(() => {
+      expect(sequence).toContain("bridge-disposed");
+    });
+    expect(sequence).toEqual(["runtime-stopped", "bridge-disposed"]);
   });
 
   it("createConnect rejects and persists nothing when provider.validate rejects", async () => {
