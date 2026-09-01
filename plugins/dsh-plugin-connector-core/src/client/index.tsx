@@ -1,12 +1,11 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { PageContent, usePluginT } from "@amiba/ui/plugin";
 import { Cable } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { buildConnectAdapter, type ConnectAdapter } from "./adapter.js";
-import { connectI18n } from "./i18n.js";
+import { DshSettingsConnect } from "./DshSettingsConnect.js";
 import { AMIBA_CONNECTORS_REMOTE } from "../remote.js";
 
 export const name = "amiba-connector-ui";
@@ -19,19 +18,17 @@ type ConnectSectionProps = PropsRuntime<"settings.section"> & {
 };
 
 /**
- * Placeholder for the Connect settings section. Renders a single translated
- * line so the `settings.section` registration (icon, label, ordering) can be
- * verified end to end before the real management UI lands. Task 7 replaces
- * this component with `DshSettingsConnect` — the props type is already the
- * one that component needs, so that swap is a one-line change here.
+ * Thin registration wrapper. `PropsRuntime<"settings.section">` carries
+ * framework-mandatory members (`close`, `useSessions`, `useWorkspaces`) that
+ * only the real slot runtime supplies; Connect needs none of them, so this
+ * wrapper exists only to satisfy `slots.register`'s prop contract and forward
+ * the one prop `DshSettingsConnect` actually needs. Same split
+ * `DshSettingsMessaging`/`MessagingSettings` uses in the messaging-core
+ * sibling — `DshSettingsConnect` itself stays plainly typed so it can be
+ * rendered directly in a unit test.
  */
-function ConnectSettingsPlaceholder(_props: ConnectSectionProps): ReactNode {
-  const { t } = usePluginT(connectI18n);
-  return (
-    <PageContent>
-      <p>{t("options.connect.dsh.placeholder")}</p>
-    </PageContent>
-  );
+function ConnectSettingsSection({ adapter }: ConnectSectionProps): ReactNode {
+  return <DshSettingsConnect adapter={adapter} />;
 }
 
 /** Register connector-core's management surface from the plugin's Client half. */
@@ -53,7 +50,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
                 : "Connect",
             inject: () => ({ adapter, navIcon: () => <Cable /> }),
           },
-          ConnectSettingsPlaceholder,
+          ConnectSettingsSection,
         ),
       );
     },
