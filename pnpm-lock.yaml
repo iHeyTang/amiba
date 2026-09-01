@@ -277,6 +277,9 @@ importers:
       '@amiba/dsh-plugin-commands-adapter':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-commands-adapter
+      '@amiba/dsh-plugin-connector-core':
+        specifier: workspace:*
+        version: link:../../plugins/dsh-plugin-connector-core
       '@amiba/dsh-plugin-cron':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-cron

@@ -18,6 +18,7 @@
     "@amiba/dsh-plugin-browser-provider-cdp": "workspace:*",
     "@amiba/dsh-plugin-catalog": "workspace:*",
     "@amiba/dsh-plugin-commands-adapter": "workspace:*",
+    "@amiba/dsh-plugin-connector-core": "workspace:*",
     "@amiba/dsh-plugin-cron": "workspace:*",
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
     "@amiba/dsh-plugin-memory": "workspace:*",
