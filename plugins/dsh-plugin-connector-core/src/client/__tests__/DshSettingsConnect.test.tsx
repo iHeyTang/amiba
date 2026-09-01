@@ -73,7 +73,11 @@ describe("DshSettingsConnect", () => {
 
     expect(await screen.findByText("Sales bot")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
-    expect(screen.getByText("Connecting")).toBeVisible();
+    // connect-2 is disabled (enabled: false) despite carrying a stale
+    // { state: "connecting" } status left over from before it was turned
+    // off — the badge must show a neutral "Off", not read that status.
+    expect(screen.getByText("Off")).toBeVisible();
+    expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
     expect(screen.getByText("Error: invalid token")).toBeVisible();
     expect(screen.getAllByText("Lark")).toHaveLength(2);
     expect(screen.getByText("Webhook")).toBeVisible();
@@ -155,6 +159,30 @@ describe("DshSettingsConnect", () => {
     });
     expect(list).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("trims the app secret on submit, same as the app id", async () => {
+    const user = userEvent.setup();
+    create.mockResolvedValue(connectView());
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
+    await user.type(within(dialog).getByLabelText("App ID"), "app-123");
+    await user.type(
+      within(dialog).getByLabelText("App secret"),
+      "  secret-xyz  ",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ appSecret: "secret-xyz" }),
+      }),
+    );
   });
 
   it("surfaces a translated message for a known create error, inline in the dialog", async () => {

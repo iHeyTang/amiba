@@ -180,6 +180,12 @@ interface BotInfoResponse {
   code?: number;
   msg?: string;
   bot?: { open_id?: string };
+  // This endpoint isn't in the SDK's typed surface (hence the raw
+  // `client.request<BotInfoResponse>` call below) — some Lark/Feishu
+  // gateway responses wrap the payload under `data` instead of at the top
+  // level. Hedge against both shapes rather than assuming the untyped
+  // top-level one.
+  data?: { bot?: { open_id?: string } };
 }
 
 export const realLarkDeps: LarkDeps = {
@@ -224,7 +230,7 @@ export const realLarkDeps: LarkDeps = {
           method: "GET",
           url: "/open-apis/bot/v3/info",
         });
-        const openId = res.bot?.open_id;
+        const openId = (res.bot ?? res.data?.bot)?.open_id;
         if (!openId) {
           throw new Error(res.msg ?? "lark_bot_info_missing_open_id");
         }

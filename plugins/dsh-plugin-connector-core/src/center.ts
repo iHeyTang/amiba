@@ -64,6 +64,18 @@ export class CapabilityUnavailableError extends Error {
 }
 
 /**
+ * Bare failure text for an error-status `detail`. `String(error)` on a real
+ * `Error` yields `"Error: <message>"` (via `Error.prototype.toString`) —
+ * `DshSettingsConnect`'s status badge template already prepends its own
+ * translated "Error: " prefix, so storing `String(error)` here doubles it up
+ * in the UI. This mirrors the bare-message pattern already used for
+ * `CapabilityUnavailableError` below (`error.message`, not `String(error)`).
+ */
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * Registry, lifecycle owner and messaging bridge for connects. A connect is
  * one binding between the user and one external platform application; once
  * enabled it fans out into a messaging channel (via messaging-core) and tool
@@ -78,6 +90,14 @@ export class ConnectorCenter {
   private readonly starting = new Map<string, Promise<void>>();
   private readonly statuses = new Map<string, ConnectorStatus>();
   private readonly droppedSenders = new Map<string, number>();
+  /**
+   * One in-flight teardown promise per provider id, tracked from the moment
+   * a registration is disposed until its bridge is actually dropped from
+   * messageCenter. `registerProvider` consults this to detect a reload
+   * racing its own predecessor's teardown — see its comment for why that
+   * race matters.
+   */
+  private readonly teardowns = new Map<string, Promise<void>>();
 
   constructor(
     private readonly ctx: Context,
@@ -103,16 +123,42 @@ export class ConnectorCenter {
       deliver: async (channel, envelope) =>
         this.bridgeDeliver(channel, envelope),
     };
-    const disposeBridge = this.messageCenter.registerProvider(bridge);
-
-    // A provider can (re)register while some of its connects are already
-    // enabled-but-stranded in the store — its previous registration was
-    // disposed while connects stayed enabled, or the app booted before this
-    // provider registered at all. Reconcile them now instead of waiting for
-    // an explicit setEnabled toggle to notice.
-    void this.startProviderConnects(provider.id);
 
     let disposed = false;
+    let disposeBridge: (() => void) | undefined;
+
+    // A plugin reload can dispose a provider's registration and immediately
+    // register a fresh instance under the SAME id before the old
+    // registration's teardown has actually dropped its messaging bridge
+    // entry (that teardown stops every live connect first, then disposes
+    // the bridge — see the disposer below — and both steps are async).
+    // messageCenter.registerProvider throws on a duplicate provider id, so
+    // registering the new bridge synchronously here would crash on that
+    // still-occupied "connector-<id>" slot. When a teardown for this
+    // provider id is still pending, defer this registration's bridge setup
+    // and connects reconciliation until that teardown actually settles;
+    // otherwise register synchronously, exactly as before.
+    const priorTeardown = this.teardowns.get(provider.id);
+    const registered: Promise<void> = priorTeardown
+      ? priorTeardown.then(() => {
+          // This registration was disposed before its predecessor's
+          // teardown even finished — nothing to set up.
+          if (disposed) return;
+          disposeBridge = this.messageCenter.registerProvider(bridge);
+          void this.startProviderConnects(provider.id);
+        })
+      : (() => {
+          disposeBridge = this.messageCenter.registerProvider(bridge);
+          // A provider can (re)register while some of its connects are
+          // already enabled-but-stranded in the store — its previous
+          // registration was disposed while connects stayed enabled, or the
+          // app booted before this provider registered at all. Reconcile
+          // them now instead of waiting for an explicit setEnabled toggle to
+          // notice.
+          void this.startProviderConnects(provider.id);
+          return Promise.resolve();
+        })();
+
     return () => {
       if (disposed) return;
       disposed = true;
@@ -124,10 +170,20 @@ export class ConnectorCenter {
       // worse window: messaging-core's delivery pump treats a missing
       // provider as already-delivered and silently discards queued replies.
       // So every connect's runtime must actually stop before the bridge
-      // disposer runs. The disposer contract here is synchronous, so this is
+      // disposer runs. `registered` is awaited first too: a dispose racing
+      // the deferred branch above must not start tearing down connects
+      // before that branch has even decided whether it registered a bridge
+      // to drop. The disposer contract here is synchronous, so this is
       // fire-and-forget — the same pattern mcp-manager's own
       // `registerManagedServer` disposer uses.
-      void this.stopProviderConnects(provider.id).finally(() => disposeBridge());
+      const teardown = registered.then(() =>
+        this.stopProviderConnects(provider.id).finally(() => disposeBridge?.()),
+      );
+      this.teardowns.set(provider.id, teardown);
+      void teardown.finally(() => {
+        if (this.teardowns.get(provider.id) === teardown)
+          this.teardowns.delete(provider.id);
+      });
     };
   }
 
@@ -177,7 +233,7 @@ export class ConnectorCenter {
       try {
         await this.startConnect(row);
       } catch (error) {
-        this.statuses.set(row.id, { state: "error", detail: String(error) });
+        this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
         this.ctx
           .logger("amiba-connector-core")
           .error(`Failed to start connect ${row.id}: ${String(error)}`);
@@ -293,7 +349,12 @@ export class ConnectorCenter {
   }
 
   async setOwners(id: string, owners: string[]): Promise<ConnectView> {
-    const updated = await this.store.update(id, { owners });
+    // Manual owner configuration supersedes pairing: once an operator has
+    // set the owners list explicitly, pairing's own purpose (auto-admitting
+    // whoever messages first) no longer applies — leaving `pairing: true`
+    // here would let the very next inbound sender silently reclaim/replace
+    // what was just configured (see store.ts's `claimOwner`).
+    const updated = await this.store.update(id, { owners, pairing: false });
     return this.toView(updated);
   }
 
@@ -317,7 +378,7 @@ export class ConnectorCenter {
       try {
         await this.startConnect(row);
       } catch (error) {
-        this.statuses.set(row.id, { state: "error", detail: String(error) });
+        this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
         this.ctx
           .logger("amiba-connector-core")
           .error(`Failed to start connect ${row.id}: ${String(error)}`);
@@ -423,7 +484,7 @@ export class ConnectorCenter {
         }
       }
       if (runtime) await runtime.stop().catch(() => undefined);
-      this.statuses.set(row.id, { state: "error", detail: String(error) });
+      this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
       throw error;
     }
   }

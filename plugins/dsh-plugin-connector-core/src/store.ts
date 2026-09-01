@@ -179,7 +179,13 @@ export class ConnectorStore {
       const next: StoredConnect = {
         ...current,
         pairing: false,
-        owners: [sender],
+        // Append rather than replace: defense in depth against wiping out
+        // owners a caller configured manually (setOwners now always clears
+        // `pairing` alongside its owners write — see center.ts — but this
+        // guards against a row that ends up with owners present while
+        // pairing somehow stayed true, e.g. state written outside that
+        // path).
+        owners: [...new Set([...current.owners, sender])],
         updatedAt: new Date().toISOString(),
       };
       document.connects[index] = next;

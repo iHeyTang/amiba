@@ -253,8 +253,25 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
   );
 }
 
-function ConnectStatusBadge({ status }: { status: ConnectorStatus }) {
+function ConnectStatusBadge({
+  enabled,
+  status,
+}: {
+  enabled: boolean;
+  status: ConnectorStatus;
+}) {
   const { t } = useT();
+  // A disabled connect has no live runtime — `stopConnect` deletes its
+  // status entry, so `toView` falls back to `{ state: "connecting" }` (the
+  // default for "nothing recorded yet"). Reading `status` here for a
+  // disabled connect would render a permanently-stuck "Connecting" badge
+  // next to the "Turn on" button. Show a neutral off state instead; only a
+  // live (enabled) connect's status is meaningful to show.
+  if (!enabled) {
+    return (
+      <Badge variant="outline">{t("options.connect.dsh.status.off")}</Badge>
+    );
+  }
   if (status.state === "ready") {
     return <Badge variant="default">{t("options.connect.dsh.status.ready")}</Badge>;
   }
@@ -313,7 +330,7 @@ function ConnectRow({
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{connect.name}</span>
-            <ConnectStatusBadge status={connect.status} />
+            <ConnectStatusBadge enabled={connect.enabled} status={connect.status} />
           </span>
           <span className="mt-1 block truncate text-[11px] text-muted-foreground">
             {providerName}
@@ -493,7 +510,7 @@ function CreateConnectDialog({
       if (!larkAppId.trim() || !larkAppSecret.trim()) return;
       config = {
         appId: larkAppId.trim(),
-        appSecret: larkAppSecret,
+        appSecret: larkAppSecret.trim(),
         domain: larkDomain,
       };
     } else {

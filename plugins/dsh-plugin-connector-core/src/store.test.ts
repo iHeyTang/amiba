@@ -41,4 +41,27 @@ describe("connector store", () => {
     expect(await store.remove(connect.id)).toBe(true);
     expect(await store.list()).toHaveLength(0);
   });
+
+  it("claimOwner appends the new sender to owners already present instead of replacing them", async () => {
+    const root = await mkdtemp(join(tmpdir(), "amiba-connector-store-"));
+    roots.push(root);
+    const store = new ConnectorStore(root);
+    const connect = await store.create({
+      provider: "fake",
+      name: "Pre-owned",
+      agentPreset: "restricted",
+    });
+    // A row can end up with owners already present while `pairing` is still
+    // true (defense-in-depth scenario claimOwner must never wipe out).
+    await store.update(connect.id, { owners: ["existing"], pairing: true });
+
+    const result = await store.claimOwner(connect.id, "newcomer");
+
+    expect(result.claimed).toBe(true);
+    expect(result.connect.owners).toEqual(["existing", "newcomer"]);
+    expect(result.connect.pairing).toBe(false);
+
+    const reloaded = (await store.list()).find((row) => row.id === connect.id);
+    expect(reloaded?.owners).toEqual(["existing", "newcomer"]);
+  });
 });

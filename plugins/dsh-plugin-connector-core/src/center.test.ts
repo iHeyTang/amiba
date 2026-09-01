@@ -65,6 +65,13 @@ function fakeMessageCenter() {
     return true;
   });
   const registerProvider = vi.fn((provider: MessageChannelProvider) => {
+    // Mirrors the real MessageChannelCenter.registerProvider (center.ts:287-288),
+    // which throws on a duplicate provider id instead of silently overwriting
+    // it — a plain overwrite here would hide the reload race Fix 2 guards
+    // against (the real center genuinely throws when a reload re-registers
+    // the same bridge id while the old registration is still torn down).
+    if (providers.has(provider.id))
+      throw new Error(`duplicate channel provider ${provider.id}`);
     providers.set(provider.id, provider);
     return () => {
       providers.delete(provider.id);
@@ -356,6 +363,43 @@ describe("ConnectorCenter", () => {
       }),
     ).resolves.toBeUndefined();
     expect(messageCenter.acceptInbound).toHaveBeenCalledTimes(1);
+  });
+
+  it("setOwners ends pairing: manual owner configuration is not superseded by the next inbound sender", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider, starts } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Manual owners",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const handle = starts[0]!;
+
+    const before = (await store.list()).find((row) => row.id === view.id);
+    expect(before?.pairing).toBe(true);
+
+    const updated = await center.setOwners(view.id, ["alice"]);
+    expect(updated.pairing).toBe(false);
+    expect(updated.owners).toEqual(["alice"]);
+
+    const afterSet = (await store.list()).find((row) => row.id === view.id);
+    expect(afterSet?.pairing).toBe(false);
+    expect(afterSet?.owners).toEqual(["alice"]);
+
+    // A stranger's inbound message must be dropped, not silently admitted
+    // as a claimed owner — pairing already ended via manual configuration,
+    // so it must never wipe out (or add to) what was just set.
+    await handle.onInbound({
+      id: "m1",
+      text: "hi",
+      sender: "mallory",
+      conversation: { key: "c1", kind: "p2p" },
+    });
+    expect(messageCenter.acceptInbound).not.toHaveBeenCalled();
+    const afterInbound = (await store.list()).find((row) => row.id === view.id);
+    expect(afterInbound?.owners).toEqual(["alice"]);
   });
 
   it("pairing claims are atomic under concurrent first messages", async () => {
@@ -652,7 +696,11 @@ describe("ConnectorCenter", () => {
     });
 
     expect(view.status).toMatchObject({ state: "error" });
-    expect((view.status as { detail?: string }).detail).toContain(
+    // Exact, not just `.toContain`: the detail must be the bare Error
+    // message, with no "Error: " prefix baked in (the status badge template
+    // already adds its own "Error: " — a stored "Error: ..." would double
+    // it up in the UI).
+    expect((view.status as { detail?: string }).detail).toBe(
       "unknown_capability_kind:cli",
     );
     expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
@@ -693,8 +741,9 @@ describe("ConnectorCenter", () => {
     });
 
     expect(view.status).toMatchObject({ state: "error" });
-    expect((view.status as { detail?: string }).detail).toContain(
-      "duplicate managed MCP server",
+    // Same bare-message contract as above: no doubled "Error: " prefix.
+    expect((view.status as { detail?: string }).detail).toBe(
+      "duplicate managed MCP server conn-fake",
     );
     expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
   });
@@ -1030,6 +1079,56 @@ describe("ConnectorCenter", () => {
     // joined mid-start one included) have actually stopped.
     await vi.waitFor(() => {
       expect(messageCenter.providers.has("connector-fake")).toBe(false);
+    });
+  });
+
+  it("re-registering a provider immediately after disposing it (no wait in between) does not throw the messaging bridge's duplicate-provider guard", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, start, runtimes } = fakeProvider();
+    const dispose = center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Reload race",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const firstRuntime = runtimes[0]!;
+    start.mockClear();
+
+    // Dispose the registration and IMMEDIATELY re-register the SAME
+    // provider id — no `vi.waitFor` in between. `dispose()`'s teardown
+    // (stopping this provider's connects, then dropping the messaging
+    // bridge) is fire-and-forget behind the disposer, so the old bridge id
+    // "connector-fake" is still occupied in messageCenter at the instant
+    // registerProvider runs again. The real MessageChannelCenter throws
+    // `duplicate channel provider ...` in that state (mirrored by this
+    // test's fakeMessageCenter above) — registerProvider must not let that
+    // exception escape.
+    expect(() => {
+      dispose();
+      center.registerProvider(provider);
+    }).not.toThrow();
+
+    // The old runtime must actually stop (M1 ordering: connects before
+    // bridge), and the connect must come back up under the new
+    // registration — a fresh start(), not a leaked stale runtime.
+    await vi.waitFor(() => {
+      expect(firstRuntime.stop).toHaveBeenCalledTimes(1);
+    });
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledTimes(1);
+    });
+
+    const reconnected = (await center.listConnects()).find(
+      (item) => item.id === view.id,
+    );
+    expect(reconnected?.status).not.toMatchObject({ state: "error" });
+
+    // Exactly one bridge entry survives — the old one was dropped before
+    // (or as part of) the new one landing, never both at once.
+    await vi.waitFor(() => {
+      expect(messageCenter.providers.size).toBe(1);
+      expect(messageCenter.providers.has("connector-fake")).toBe(true);
     });
   });
 });
