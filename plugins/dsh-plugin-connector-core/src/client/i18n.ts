@@ -75,7 +75,7 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.onboard.scanInstructions":
       "Scan this QR code with the platform's app to authorize Amiba.",
     "options.connect.dsh.onboard.longConnectionHint":
-      "This connect stays online through a persistent long connection — keep Amiba running after scanning so messages keep flowing.",
+      "If this connect doesn't come online after scanning, open the Feishu open-platform console for this app and set Event Subscription to long-connection mode — that setting can't be configured automatically and needs a manual switch. Keep Amiba running while it connects.",
     "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
     "options.connect.dsh.onboard.error.generic":
       "Scanning failed. Please try again.",
@@ -130,7 +130,7 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.onboard.scanInstructions":
       "使用该平台的 App 扫描此二维码以授权 Amiba。",
     "options.connect.dsh.onboard.longConnectionHint":
-      "该连接通过长连接保持在线；扫码完成后请让 Amiba 保持运行，以确保消息能持续送达。",
+      "如果扫码后连接迟迟未能上线，请前往飞书开放平台该应用的设置，将“事件订阅”的接收方式改为“使用长连接接收事件”——该设置无法自动配置，需要手动切换。扫码期间请保持 Amiba 处于运行状态。",
     "options.connect.dsh.onboard.waiting": "正在等待 Provider 响应…",
     "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",
   },

@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DshSettingsConnect } from "../DshSettingsConnect";
-import type { ConnectorProviderView, ConnectView } from "../../types";
+import type {
+  ConnectorProviderView,
+  ConnectView,
+  OnboardingView,
+} from "../../types";
 
 const listProviders = vi.fn();
 const list = vi.fn();
@@ -460,7 +464,7 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     ).toBeVisible();
     expect(
       within(dialog).getByText(
-        "This connect stays online through a persistent long connection — keep Amiba running after scanning so messages keep flowing.",
+        "If this connect doesn't come online after scanning, open the Feishu open-platform console for this app and set Event Subscription to long-connection mode — that setting can't be configured automatically and needs a manual switch. Keep Amiba running while it connects.",
       ),
     ).toBeVisible();
   });
@@ -585,5 +589,56 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     pollOnboarding.mockClear();
     await flush(3000);
     expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("ignores a poll response that resolves after the component unmounted mid-request", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-8", state: "pending" });
+    let resolvePoll: (view: OnboardingView) => void = () => {};
+    pollOnboarding.mockImplementation(
+      () =>
+        new Promise<OnboardingView>((resolve) => {
+          resolvePoll = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    const { unmount } = render(<DshSettingsConnect adapter={adapter} />);
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    // The poll fired and is now awaiting a response that hasn't arrived yet.
+    expect(pollOnboarding).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(1);
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    unmount();
+
+    // Resolve the in-flight request only now, after the component is gone.
+    // Without the post-await staleness guard this would call
+    // setOnboarding/onCreated on an unmounted component, which React
+    // surfaces as a "not wrapped in act(...)" console.error in tests.
+    resolvePoll({
+      sessionId: "sess-8",
+      state: "completed",
+      connect: connectView({ id: "connect-10", provider: "wecom" }),
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The unmount's own fire-and-forget cancel (a microtask, not synchronous
+    // with `unmount()`) has had its chance to run by now too.
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-8");
+    expect(consoleError).not.toHaveBeenCalled();
+    // `list` is called once by the initial mount-time refresh(); `onCreated`
+    // (which would call refresh() -> list() again) must never have fired.
+    expect(list).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
   });
 });

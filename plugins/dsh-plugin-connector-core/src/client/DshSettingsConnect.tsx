@@ -510,6 +510,20 @@ function CreateConnectDialog({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Guards against a slow poll response overlapping with the next tick.
   const pollingRef = useRef(false);
+  // True while this component instance is mounted. `beginScan`/`poll` await
+  // an adapter call that can outlive the component (dialog closed, or the
+  // whole settings page unmounted, mid-request); checking this ref after
+  // the await — alongside the `sessionIdRef` comparison in `poll` — stops
+  // that stale response from resurrecting state, starting a poll interval
+  // nothing will ever clear, or firing `onCreated`/`setError` on a
+  // component nobody is looking at.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const clearPollInterval = useCallback(() => {
     if (pollRef.current !== null) {
@@ -587,6 +601,16 @@ function CreateConnectDialog({
     pollingRef.current = true;
     try {
       const view = await adapter.pollOnboarding(sessionId);
+      // Stale-response guard: the component may have unmounted, or the
+      // session may have been torn down (dialog closed, provider changed,
+      // a newer session started) while this request was in flight. Both
+      // close and unmount-while-open route through the same effect
+      // cleanup that nulls `sessionIdRef`, so comparing against the id
+      // this poll started with catches every teardown path; `mountedRef`
+      // additionally covers the pathological case of a still-current
+      // session id on an unmounted instance. Bail before touching any
+      // state rather than resurrect a dead session.
+      if (!mountedRef.current || sessionIdRef.current !== sessionId) return;
       setOnboarding(view);
       if (view.state === "pending") return;
       // Terminal state: stop polling and let go of the session id so a
@@ -603,6 +627,7 @@ function CreateConnectDialog({
         );
       }
     } catch (cause) {
+      if (!mountedRef.current || sessionIdRef.current !== sessionId) return;
       sessionIdRef.current = null;
       clearPollInterval();
       setError(describeError(t, cause));
@@ -621,6 +646,12 @@ function CreateConnectDialog({
         name: name.trim(),
         agentPreset: agentPreset.trim(),
       });
+      // Same stale-response concern as `poll`: the dialog's owner may have
+      // unmounted while `beginOnboarding` was in flight. There's no prior
+      // session id to compare against here (this call is what creates
+      // one), so `mountedRef` is the guard — skip starting a poll interval
+      // (which nothing would ever clear) or touching state.
+      if (!mountedRef.current) return;
       setOnboarding(view);
       if (view.state === "pending") {
         sessionIdRef.current = view.sessionId;
@@ -644,9 +675,10 @@ function CreateConnectDialog({
       // "cancelled" as an initial state is not expected from a fresh begin
       // call; nothing further to render if the center ever returns it.
     } catch (cause) {
+      if (!mountedRef.current) return;
       setError(describeError(t, cause));
     } finally {
-      setBeginning(false);
+      if (mountedRef.current) setBeginning(false);
     }
   }
 
