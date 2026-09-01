@@ -1,0 +1,35 @@
+{
+  "name": "@amiba/dsh-plugin-connector-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Connect lifecycle mechanism: platform bindings that fan out into messaging channels and tool capabilities.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["lib"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-mcp-manager": "workspace:*",
+    "@amiba/dsh-plugin-messaging-core": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-credentials": "catalog:"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-credentials": "catalog:",
+    "@types/node": "22.9.0",
+    "typescript": "5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
