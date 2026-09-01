@@ -105,6 +105,13 @@ export class ConnectorCenter {
     };
     const disposeBridge = this.messageCenter.registerProvider(bridge);
 
+    // A provider can (re)register while some of its connects are already
+    // enabled-but-stranded in the store — its previous registration was
+    // disposed while connects stayed enabled, or the app booted before this
+    // provider registered at all. Reconcile them now instead of waiting for
+    // an explicit setEnabled toggle to notice.
+    void this.startProviderConnects(provider.id);
+
     let disposed = false;
     return () => {
       if (disposed) return;
@@ -124,19 +131,58 @@ export class ConnectorCenter {
     };
   }
 
-  /** Stops every currently-live connect owned by `providerId`, best-effort. */
-  private async stopProviderConnects(providerId: string): Promise<void> {
+  /**
+   * Ids to join for teardown: every connect currently live, plus every
+   * connect currently mid-start (in `starting`, not yet in `live`). A
+   * teardown that only looked at `live` would miss a start still in flight
+   * and leave it running unnoticed once it lands — `stopConnect` already
+   * awaits the in-flight start before touching `live`, so joining
+   * `starting` here is all that's needed to guarantee the eventual runtime
+   * gets stopped.
+   */
+  private async teardownIds(providerId?: string): Promise<string[]> {
     const rows = await this.store.list();
-    const ids = rows
-      .filter((row) => row.provider === providerId && this.live.has(row.id))
-      .map((row) => row.id);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const candidates = new Set([...this.live.keys(), ...this.starting.keys()]);
+    return [...candidates].filter((id) => {
+      const row = byId.get(id);
+      return row ? providerId === undefined || row.provider === providerId : true;
+    });
+  }
+
+  /** Stops every currently-live (or mid-start) connect owned by `providerId`, best-effort. */
+  private async stopProviderConnects(providerId: string): Promise<void> {
+    const ids = await this.teardownIds(providerId);
     await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
-  /** Stops every currently-live connect, e.g. on plugin unload. */
+  /** Stops every currently-live (or mid-start) connect, e.g. on plugin unload. */
   async stop(): Promise<void> {
-    const ids = [...this.live.keys()];
+    const ids = await this.teardownIds();
     await Promise.all(ids.map((id) => this.stopConnect(id)));
+  }
+
+  /**
+   * Starts every stored connect owned by `providerId` that's enabled but
+   * not yet live — the same reconciliation `start()` performs at boot, run
+   * again whenever a provider (re)registers. Per-connect start failures are
+   * contained into that connect's own error status, exactly like `start()`:
+   * one bad connect must never abort the loop over the rest.
+   */
+  private async startProviderConnects(providerId: string): Promise<void> {
+    const rows = await this.store.list();
+    for (const row of rows) {
+      if (row.provider !== providerId || !row.enabled || this.live.has(row.id))
+        continue;
+      try {
+        await this.startConnect(row);
+      } catch (error) {
+        this.statuses.set(row.id, { state: "error", detail: String(error) });
+        this.ctx
+          .logger("amiba-connector-core")
+          .error(`Failed to start connect ${row.id}: ${String(error)}`);
+      }
+    }
   }
 
   listProviders(): ConnectorProviderView[] {
@@ -222,11 +268,20 @@ export class ConnectorCenter {
     const rows = await this.store.list();
     const before = rows.find((item) => item.id === id);
     if (!before) throw new Error("connect_not_found");
-    if (before.enabled === enabled) return this.toView(before);
 
-    const updated = await this.store.update(id, { enabled });
+    // Nothing to reconcile when the row is already disabled (asked to
+    // disable again), or already enabled AND live. An enabled-but-not-live
+    // row — its provider dropped and hasn't reconciled yet, or a previous
+    // start attempt failed — falls through below to attempt a (re)start
+    // instead of silently no-op'ing.
+    if (before.enabled === enabled && (!enabled || this.live.has(id))) {
+      return this.toView(before);
+    }
+
+    const row =
+      before.enabled === enabled ? before : await this.store.update(id, { enabled });
     if (enabled) {
-      await this.startConnect(updated).catch(() => undefined);
+      await this.startConnect(row).catch(() => undefined);
     } else {
       await this.stopConnect(id);
     }

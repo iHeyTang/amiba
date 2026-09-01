@@ -189,6 +189,19 @@ function fakeAppliers(
   return appliers;
 }
 
+/** A promise plus its resolvers, exposed for tests that need to control
+ * exactly when an in-flight async operation (e.g. `provider.start`)
+ * settles, so they can observe center state while it's mid-flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 async function harness(options?: { withMcpManager?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), "amiba-connector-center-"));
   roots.push(root);
@@ -828,5 +841,195 @@ describe("ConnectorCenter", () => {
 
     expect(await store.list()).toHaveLength(0);
     expect(credentials.store.size).toBe(0);
+  });
+
+  it("registerProvider starts already-enabled connects of that provider", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, starts, runtimes, start } = fakeProvider();
+    const dispose = center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Reconcile",
+      config: {},
+      agentPreset: "restricted",
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+
+    // Dispose the provider registration: this stops the connect's runtime
+    // (fire-and-forget behind the disposer) but the row itself stays
+    // enabled in the store — nothing ever called setEnabled(false).
+    dispose();
+    await vi.waitFor(() => {
+      expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
+    });
+    const strandedRow = (await center.listConnects()).find(
+      (item) => item.id === view.id,
+    );
+    expect(strandedRow?.enabled).toBe(true);
+
+    // Re-register the SAME provider id. registerProvider must reconcile:
+    // the row is enabled but no longer live, so it should be started again
+    // without any explicit setEnabled call.
+    center.registerProvider(provider);
+
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledTimes(2);
+    });
+
+    const reconnected = (await center.listConnects()).find(
+      (item) => item.id === view.id,
+    );
+    expect(reconnected?.status).not.toMatchObject({ state: "error" });
+
+    // The runtime is actually live: a subsequent onInbound relays through
+    // the bridge instead of being dropped.
+    const handle = starts[starts.length - 1]!;
+    await handle.onInbound({
+      id: "after-reconcile",
+      text: "hi",
+      sender: "alice",
+      conversation: { key: "c1", kind: "p2p" },
+    });
+    expect(
+      messageCenter.acceptInboundCalls.some(
+        (call) => (call.envelope as { id?: string }).id === "after-reconcile",
+      ),
+    ).toBe(true);
+  });
+
+  it("setEnabled(true) on an enabled-but-not-live row attempts a start", async () => {
+    const { center } = await harness();
+    const { provider, start, runtimes } = fakeProvider();
+    center.registerProvider(provider);
+
+    start.mockRejectedValueOnce(new Error("boom"));
+
+    // createConnect swallows the startConnect error (`.catch(() =>
+    // undefined)`), so the connect ends up created, enabled, but not live,
+    // with an error status.
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Retry after failure",
+      config: {},
+      agentPreset: "restricted",
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(view.status).toMatchObject({ state: "error" });
+    const stranded = (await center.listConnects()).find(
+      (item) => item.id === view.id,
+    );
+    expect(stranded?.enabled).toBe(true);
+
+    // setEnabled(id, true) on an already-enabled row must not early-return
+    // when that row isn't live — it must attempt a start.
+    const after = await center.setEnabled(view.id, true);
+
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(after.status).not.toMatchObject({ state: "error" });
+    expect(runtimes).toHaveLength(1);
+  });
+
+  it("stop() joins a mid-start connect", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, start, starts } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Mid-start stop",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+    start.mockClear();
+
+    const runtime: ConnectorRuntime = {
+      stop: vi.fn(async () => undefined),
+      deliver: vi.fn(async () => undefined),
+    } as unknown as ConnectorRuntime;
+    const startGate = deferred<ConnectorRuntime>();
+    start.mockImplementationOnce(async (handle: ConnectorHandle) => {
+      starts.push(handle);
+      return startGate.promise;
+    });
+
+    const enablePromise = center.setEnabled(view.id, true);
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+
+    // center.stop() must join the in-flight start (present in `starting`,
+    // not yet `live`) rather than seeing an empty live set and no-op'ing.
+    const stopPromise = center.stop();
+
+    startGate.resolve(runtime);
+    await Promise.all([enablePromise, stopPromise]);
+
+    expect(runtime.stop).toHaveBeenCalledTimes(1);
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.deliver) throw new Error("bridge provider missing deliver");
+    await expect(
+      bridge.deliver({ id: "channel-1" } as never, {
+        id: "o1",
+        channelId: "channel-1",
+        sessionId: "session-1",
+        inReplyTo: "m1",
+        text: "reply",
+        createdAt: new Date().toISOString(),
+      }),
+    ).rejects.toThrow("connector_not_live");
+  });
+
+  it("provider dispose joins that provider's mid-start connect", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider, start, starts } = fakeProvider();
+    const dispose = center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Mid-start dispose",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+    start.mockClear();
+
+    const runtime: ConnectorRuntime = {
+      stop: vi.fn(async () => undefined),
+      deliver: vi.fn(async () => undefined),
+    } as unknown as ConnectorRuntime;
+    const startGate = deferred<ConnectorRuntime>();
+    start.mockImplementationOnce(async (handle: ConnectorHandle) => {
+      starts.push(handle);
+      return startGate.promise;
+    });
+
+    const enablePromise = center.setEnabled(view.id, true);
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+
+    // Freeze a row snapshot now (row.enabled is already true — setEnabled's
+    // store.update ran before startConnect was called) and make the very
+    // next store.list() call — the one dispose's teardown path issues —
+    // resolve from it instead of hitting disk. Without this, that real
+    // fs.readFile races against the pure-microtask start continuation
+    // below: disk I/O can lose that race, letting the connect land in
+    // `live` before teardown's read ever runs, which would make this
+    // assertion pass against the unfixed center.ts too (a false green).
+    const rows = await store.list();
+    vi.spyOn(store, "list").mockImplementationOnce(async () => rows);
+
+    // Dispose the provider registration while the re-enable's start is
+    // still in-flight (present in `starting`, not yet `live` — `startGate`
+    // hasn't been resolved yet).
+    dispose();
+
+    startGate.resolve(runtime);
+    await enablePromise;
+
+    await vi.waitFor(() => {
+      expect(runtime.stop).toHaveBeenCalledTimes(1);
+    });
+    // The disposer only drops the messaging bridge once its connects (the
+    // joined mid-start one included) have actually stopped.
+    await vi.waitFor(() => {
+      expect(messageCenter.providers.has("connector-fake")).toBe(false);
+    });
   });
 });
