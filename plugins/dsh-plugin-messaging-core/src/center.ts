@@ -410,20 +410,25 @@ export class MessageChannelCenter {
       if (bound) return bound.sessionId;
       const sessionId = `session-${randomUUID()}`;
       const runtime = this.ctx as MessageRuntimeContext;
-      await this.ctx.agents.create({
+      const handle = await this.ctx.agents.create({
         sessionId: sessionId as never,
         meta: channel.agentPreset ? { agentPreset: channel.agentPreset } : {},
         setup: async (agentCtx: Context) => {
           await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
         },
       });
-      await this.store.bindConversation({
-        channelId: channel.id,
-        conversationKey: conversation.key,
-        kind: conversation.kind,
-        ...(conversation.title ? { title: conversation.title } : {}),
-        sessionId,
-      });
+      try {
+        await this.store.bindConversation({
+          channelId: channel.id,
+          conversationKey: conversation.key,
+          kind: conversation.kind,
+          ...(conversation.title ? { title: conversation.title } : {}),
+          sessionId,
+        });
+      } catch (error) {
+        await handle.dispose().catch(() => undefined);
+        throw error;
+      }
       return sessionId;
     })().finally(() => {
       this.conversationCreates.delete(key);

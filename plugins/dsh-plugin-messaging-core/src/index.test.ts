@@ -36,12 +36,13 @@ async function harness() {
     },
   );
   const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
+  const dispose = vi.fn(async () => undefined);
   const create = vi.fn(
     async ({ sessionId, meta }: { sessionId: string; meta?: Record<string, unknown> }) => {
       const agent = makeAgent(sessionId);
       live.set(sessionId, agent);
       created.push({ sessionId, ...(meta ? { meta } : {}) });
-      return { agent };
+      return { agent, dispose };
     },
   );
   const ctx = {
@@ -76,7 +77,7 @@ async function harness() {
     supportsInbound: true,
     supportsOutbound: true,
   });
-  return { center, followup, listeners, resume, live, created, create };
+  return { center, followup, listeners, resume, live, created, create, dispose };
 }
 
 describe("DSH-native message channel center", () => {
@@ -360,5 +361,38 @@ describe("conversation-scoped routing", () => {
     ]);
     expect(created).toHaveLength(1);
     expect(a.sessionId).toBe(b.sessionId);
+  });
+
+  it("disposes the freshly created agent when binding the conversation fails, then retries cleanly", async () => {
+    const { center, created, dispose } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const bindConversation = vi
+      .spyOn(center.store, "bindConversation")
+      .mockRejectedValueOnce(new Error("disk_full"));
+
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "b-1",
+        text: "first attempt",
+        conversation: { key: "chat-b", kind: "p2p" },
+      }),
+    ).rejects.toThrow("disk_full");
+    expect(dispose).toHaveBeenCalledTimes(1);
+
+    const second = await center.acceptInbound(channel.id, secret, {
+      id: "b-2",
+      text: "second attempt",
+      conversation: { key: "chat-b", kind: "p2p" },
+    });
+    expect(created).toHaveLength(2);
+    expect(second.sessionId).not.toBe(created[0]!.sessionId);
+    expect(second.sessionId).toBe(created[1]!.sessionId);
+    expect(await center.listConversations(channel.id)).toHaveLength(1);
+
+    bindConversation.mockRestore();
   });
 });
