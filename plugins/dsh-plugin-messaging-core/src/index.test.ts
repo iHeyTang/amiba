@@ -27,9 +27,16 @@ async function harness() {
   });
   live.set("session-a", makeAgent("session-a"));
   const resume = vi.fn(
-    async ({ resumeSessionId }: { resumeSessionId: string }) => {
+    async ({
+      resumeSessionId,
+      setup,
+    }: {
+      resumeSessionId: string;
+      setup?: (agentCtx: unknown) => Promise<unknown>;
+    }) => {
       if (resumeSessionId !== "session-cold")
         throw new Error("session_not_found");
+      if (setup) await setup({});
       const agent = makeAgent(resumeSessionId);
       live.set(resumeSessionId, agent);
       return { agent };
@@ -38,13 +45,23 @@ async function harness() {
   const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
   const dispose = vi.fn(async () => undefined);
   const create = vi.fn(
-    async ({ sessionId, meta }: { sessionId: string; meta?: Record<string, unknown> }) => {
+    async ({
+      sessionId,
+      meta,
+      setup,
+    }: {
+      sessionId: string;
+      meta?: Record<string, unknown>;
+      setup?: (agentCtx: unknown) => Promise<unknown>;
+    }) => {
+      if (setup) await setup({});
       const agent = makeAgent(sessionId);
       live.set(sessionId, agent);
       created.push({ sessionId, ...(meta ? { meta } : {}) });
       return { agent, dispose };
     },
   );
+  const loggerCalls = { error: vi.fn(), warn: vi.fn() };
   const ctx = {
     agents: { get: (id: string) => live.get(id), resume, create },
     agentPresets: { mount: vi.fn(async () => undefined) },
@@ -64,7 +81,7 @@ async function harness() {
         if (typeof cleanup === "function") await cleanup();
       };
     },
-    logger: () => ({ error: vi.fn() }),
+    logger: () => loggerCalls,
   };
   const center = new MessageChannelCenter(
     ctx as never,
@@ -77,7 +94,18 @@ async function harness() {
     supportsInbound: true,
     supportsOutbound: true,
   });
-  return { center, followup, listeners, resume, live, created, create, dispose };
+  return {
+    center,
+    followup,
+    listeners,
+    resume,
+    live,
+    created,
+    create,
+    dispose,
+    ctx,
+    loggerCalls,
+  };
 }
 
 describe("DSH-native message channel center", () => {
@@ -394,5 +422,59 @@ describe("conversation-scoped routing", () => {
     expect(await center.listConversations(channel.id)).toHaveLength(1);
 
     bindConversation.mockRestore();
+  });
+
+  it("falls back to a presetless session when mounting the agent preset fails on session creation", async () => {
+    const { center, followup, created, ctx, loggerCalls } = await harness();
+    ctx.agentPresets.mount.mockRejectedValueOnce(
+      new Error('agent-presets: unknown preset "restricted"'),
+    );
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "msg-1",
+        text: "hello",
+        sender: "alice",
+        conversation: { key: "chat-1", kind: "p2p" },
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+
+    expect(created).toHaveLength(1);
+    expect(created[0]!.meta).toMatchObject({ agentPreset: "restricted" });
+    expect(followup).toHaveBeenCalledTimes(1);
+    expect(await center.listConversations(channel.id)).toHaveLength(1);
+    expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
+    const [warning] = loggerCalls.warn.mock.calls[0]!;
+    expect(String(warning)).toContain("restricted");
+  });
+
+  it("falls back to a presetless session when mounting the agent preset fails on resume", async () => {
+    const { center, followup, resume, ctx, loggerCalls } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Cold",
+      sessionId: "session-cold",
+    });
+    ctx.agentPresets.mount.mockRejectedValueOnce(
+      new Error('agent-presets: unknown preset "standard"'),
+    );
+
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "evt-cold",
+        text: "wake up",
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(followup).toHaveBeenCalledTimes(1);
+    expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
+    const [warning] = loggerCalls.warn.mock.calls[0]!;
+    expect(String(warning)).toContain("standard");
   });
 });

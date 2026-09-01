@@ -414,7 +414,15 @@ export class MessageChannelCenter {
         sessionId: sessionId as never,
         meta: channel.agentPreset ? { agentPreset: channel.agentPreset } : {},
         setup: async (agentCtx: Context) => {
-          await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
+          try {
+            await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
+          } catch (error) {
+            this.ctx
+              .logger("amiba-messaging-core")
+              .warn(
+                `Could not mount agent preset "${String(channel.agentPreset)}" for channel ${channel.id} (session ${sessionId}); continuing without it: ${String(error)}`,
+              );
+          }
         },
       });
       try {
@@ -511,7 +519,15 @@ export class MessageChannelCenter {
       const handle = await this.ctx.agents.resume({
         resumeSessionId: sessionId as never,
         setup: async (agentCtx) => {
-          await runtime.agentPresets.mount(agentCtx, preset);
+          try {
+            await runtime.agentPresets.mount(agentCtx, preset);
+          } catch (error) {
+            this.ctx
+              .logger("amiba-messaging-core")
+              .warn(
+                `Could not mount agent preset "${String(preset)}" while resuming session ${sessionId}; continuing without it: ${String(error)}`,
+              );
+          }
         },
       });
       return handle.agent;
