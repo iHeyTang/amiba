@@ -75,6 +75,60 @@ export function namespacedMcpServerName(base: string, connectId: string): string
   return `${clippedBase}-${suffix}`;
 }
 
+/**
+ * Derives a per-connect instance key for the "cli" capability applier's
+ * filesystem artifacts — the wrapper script's filename and the carrier
+ * skill's directory name (see `CliProvisionInstance.id` in
+ * `cli-provision.ts`) — from the provider-declared `CliProvisionSpec.id`
+ * plus the connect's own id. `spec.id` is a PROVIDER constant (lark's cli
+ * capability always declares the literal `"lark"`), so two connects of the
+ * same provider declare the exact identical base id; without per-connect
+ * namespacing here the "cli" applier would provision both connects' wrapper
+ * AND carrier skill to the exact same paths — the second connect's
+ * provision silently overwriting the first's already-credentialed wrapper,
+ * and disposing either connect deleting the artifact the other one still
+ * depends on. Same shape of bug `namespacedMcpServerName` above fixes for
+ * the "mcp" applier's `serverName` collision.
+ *
+ * Reuses that function's exact suffix strategy for the reasons documented
+ * there: `connectId`'s `connect-` prefix carries no entropy and is
+ * stripped, and only the uuid's first 8 characters — always plain hex,
+ * before the uuid's own `-` separators start at index 8 — are kept as a
+ * short, effectively-unique, per-connect-stable suffix (same connect id
+ * always yields the same key across repeated applier runs, e.g. the
+ * disable/enable recovery path in `center.ts`).
+ *
+ * Unlike `namespacedMcpServerName`, there is no external registry enforcing
+ * a strict charset or a 32-char ceiling here — the result only ever becomes
+ * a directory/file name under this plugin's own `cliRoot`/`skillsRoot`, and
+ * (as a skill directory name) it also becomes the carrier skill's
+ * frontmatter `name:`, which `@deepseek-ai/dsh-skill`'s loader requires to
+ * match `^[a-z0-9]+(?:-[a-z0-9]+)*$` — lowercase alnum, single hyphens, no
+ * underscore (its `SKILL_NAME` regex). So the base is slugified (lowercased,
+ * every run of non-`[a-z0-9]` characters collapsed to a single `-`,
+ * leading/trailing `-` trimmed, falling back to `"s"` if that empties it
+ * out) rather than sanitized to `namespacedMcpServerName`'s wider
+ * `[A-Za-z0-9_-]` charset. For every `spec.id` value declared anywhere in
+ * this codebase today (a lowercase provider constant like `"lark"`) the two
+ * approaches produce byte-identical output; the stricter slugify only
+ * diverges for a hypothetical future `spec.id` containing uppercase or `_`,
+ * where it guarantees a skill-loader-valid name instead of silently
+ * producing one the skill loader would reject.
+ */
+export function connectInstanceKey(baseId: string, connectId: string): string {
+  const slugify = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, "-")
+      .replace(/^-+|-+$/gu, "");
+  const suffix = connectId
+    .replace(/^connect-/u, "")
+    .replace(/[^A-Za-z0-9_-]/gu, "")
+    .slice(0, 8);
+  const sanitizedBase = slugify(baseId) || "s";
+  return `${sanitizedBase}-${suffix}`;
+}
+
 export const name = "amiba-connector-core";
 // This cordis version's object-form `inject` maps each service name to its
 // own intercept config (`{ [service]: config }`), not a `{required,optional}`
@@ -169,10 +223,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // always available and its failures are genuine (hard-fail the enable,
   // same as any other capability applier rejection).
   appliers.set("cli", {
-    apply: async (_connect, decl) => {
+    apply: async (connect, decl) => {
       if (decl.kind !== "cli")
         throw new Error(`unexpected_capability_kind:${decl.kind}`);
-      const handle = await provisionCli(decl.spec, realCliDeps(ctx, config));
+      // Instance identity is owned entirely by this applier, never by the
+      // provider-declared spec (see connectInstanceKey's doc comment and
+      // CliProvisionInstance in cli-provision.ts) — two connects of the same
+      // provider share the identical decl.spec.id, so without deriving a
+      // per-connect key here, their wrapper/carrier-skill artifacts would
+      // collide on the exact same filesystem paths.
+      const instance = {
+        id: connectInstanceKey(decl.spec.id, connect.id),
+        connectName: connect.name,
+        provider: connect.provider,
+      };
+      const handle = await provisionCli(decl.spec, instance, realCliDeps(ctx, config));
       return () => {
         void handle.dispose();
       };

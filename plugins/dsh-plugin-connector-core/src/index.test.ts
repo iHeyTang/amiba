@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectorCenter } from "./center.js";
 import { provisionCli, type CliProvisionHandle } from "./cli-provision.js";
-import { apply, namespacedMcpServerName } from "./index.js";
+import { apply, connectInstanceKey, namespacedMcpServerName } from "./index.js";
 import type { ConnectorHandle, ConnectorProvider, ConnectorRuntime } from "./types.js";
 
 // Mocked (vitest hoists this above the imports above at transform time) so
@@ -451,12 +451,13 @@ describe("connector-core plugin apply() — cli capability applier wiring", () =
     vi.mocked(provisionCli).mockReset();
   });
 
-  it("routes a 'cli' capability decl through provisionCli on enable, and disposes its handle on disable", async () => {
+  it("routes a 'cli' capability decl through provisionCli on enable, with a derived per-connect instance, and disposes its handle on disable", async () => {
     const config = await fakeApplyConfig();
     const dispose = vi.fn(async () => undefined);
     const handle: CliProvisionHandle = {
       binaryPath: "/managed/acme",
-      wrapperPath: "/cli-root/wrappers/acme-cli.sh",
+      wrapperPath: "/cli-root/wrappers/acme-cli-abcd1234.sh",
+      skillPath: "/skills-root/acme-cli-abcd1234/SKILL.md",
       seededSkills: [],
       dispose,
     };
@@ -480,8 +481,15 @@ describe("connector-core plugin apply() — cli capability applier wiring", () =
     });
 
     expect(provisionCli).toHaveBeenCalledTimes(1);
-    const [spec, deps] = vi.mocked(provisionCli).mock.calls[0]!;
+    const [spec, instance, deps] = vi.mocked(provisionCli).mock.calls[0]!;
     expect(spec).toMatchObject({ id: "acme-cli", package: "@acme/cli", binary: "acme-cli" });
+    // The instance identity is derived by the applier itself (never the
+    // provider-declared spec) — see connectInstanceKey's doc comment.
+    expect(instance).toEqual({
+      id: connectInstanceKey("acme-cli", view.id),
+      connectName: "CLI test",
+      provider: "fake-cli",
+    });
     expect(deps).toMatchObject({
       cliRoot: config.cliRoot,
       skillsRoot: config.skillsRoot,
@@ -493,6 +501,110 @@ describe("connector-core plugin apply() — cli capability applier wiring", () =
     await center.setEnabled(view.id, false);
 
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("derives a distinct instanceId per connect via connectInstanceKey, even though every connect of the same provider declares the identical decl.spec.id", async () => {
+    const config = await fakeApplyConfig();
+    vi.mocked(provisionCli).mockImplementation(async (_spec, instance) => ({
+      binaryPath: `/managed/${instance.id}`,
+      wrapperPath: `/cli-root/wrappers/${instance.id}.sh`,
+      skillPath: `/skills-root/${instance.id}/SKILL.md`,
+      seededSkills: [],
+      dispose: vi.fn(async () => undefined),
+    }));
+
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const { ctx, store } = fakeCordisCtxWithMessaging(messageCenter, credentials);
+
+    await apply(ctx as never, config);
+    const center = store.get("amibaConnectors") as ConnectorCenter;
+
+    const { provider } = fakeCliProvider();
+    center.registerProvider(provider);
+
+    const viewA = await center.createConnect({
+      provider: "fake-cli",
+      name: "Connect A",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const viewB = await center.createConnect({
+      provider: "fake-cli",
+      name: "Connect B",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    expect(provisionCli).toHaveBeenCalledTimes(2);
+    const [specA, instanceA] = vi.mocked(provisionCli).mock.calls[0]!;
+    const [specB, instanceB] = vi.mocked(provisionCli).mock.calls[1]!;
+
+    // Both connects declare the exact same provider spec.id — that's the
+    // whole premise of the collision this fix closes: namespacing cannot
+    // come from spec.id itself, only from the applier combining it with
+    // each connect's own id.
+    expect(specA.id).toBe("acme-cli");
+    expect(specB.id).toBe("acme-cli");
+
+    expect(instanceA.id).toBe(connectInstanceKey("acme-cli", viewA.id));
+    expect(instanceB.id).toBe(connectInstanceKey("acme-cli", viewB.id));
+    expect(instanceA.id).not.toBe(instanceB.id);
+    expect(instanceA).toMatchObject({ connectName: "Connect A", provider: "fake-cli" });
+    expect(instanceB).toMatchObject({ connectName: "Connect B", provider: "fake-cli" });
+
+    // A successful applier application never surfaces an error status.
+    expect(viewA.status).toEqual({ state: "connecting" });
+    expect(viewB.status).toEqual({ state: "connecting" });
+  });
+
+  it("disposing one connect's runtime disposes only its own provisionCli handle — the other connect's handle is untouched", async () => {
+    const config = await fakeApplyConfig();
+    const disposeA = vi.fn(async () => undefined);
+    const disposeB = vi.fn(async () => undefined);
+    const handleA: CliProvisionHandle = {
+      binaryPath: "/managed/a",
+      wrapperPath: "/cli-root/wrappers/instance-a.sh",
+      skillPath: "/skills-root/instance-a/SKILL.md",
+      seededSkills: [],
+      dispose: disposeA,
+    };
+    const handleB: CliProvisionHandle = {
+      binaryPath: "/managed/b",
+      wrapperPath: "/cli-root/wrappers/instance-b.sh",
+      skillPath: "/skills-root/instance-b/SKILL.md",
+      seededSkills: [],
+      dispose: disposeB,
+    };
+    vi.mocked(provisionCli).mockResolvedValueOnce(handleA).mockResolvedValueOnce(handleB);
+
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const { ctx, store } = fakeCordisCtxWithMessaging(messageCenter, credentials);
+
+    await apply(ctx as never, config);
+    const center = store.get("amibaConnectors") as ConnectorCenter;
+
+    const { provider } = fakeCliProvider();
+    center.registerProvider(provider);
+
+    const viewA = await center.createConnect({
+      provider: "fake-cli",
+      name: "Connect A",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.createConnect({
+      provider: "fake-cli",
+      name: "Connect B",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    await center.setEnabled(viewA.id, false);
+
+    expect(disposeA).toHaveBeenCalledTimes(1);
+    expect(disposeB).not.toHaveBeenCalled();
   });
 
   it("a provisionCli rejection hard-fails the enable (propagates, same as any other capability applier)", async () => {
