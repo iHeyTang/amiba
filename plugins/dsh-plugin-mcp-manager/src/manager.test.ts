@@ -39,7 +39,7 @@ async function makeManager() {
 describe("programmatic managed servers", () => {
   it("registers, merges into supervisor reloads, and unwinds via the disposer", async () => {
     const { manager, reload } = await makeManager();
-    const dispose = manager.registerManagedServer(stdioServer("conn-lark"));
+    const dispose = await manager.registerManagedServer(stdioServer("conn-lark"));
     await manager.list();
     expect(reload.mock.lastCall?.[0]).toEqual(
       expect.arrayContaining([expect.objectContaining({ serverName: "conn-lark" })]),
@@ -57,7 +57,7 @@ describe("programmatic managed servers", () => {
 
   it("keeps programmatic servers present across user save/remove reloads", async () => {
     const { manager, reload } = await makeManager();
-    manager.registerManagedServer(stdioServer("conn-lark"));
+    await manager.registerManagedServer(stdioServer("conn-lark"));
     await manager.save({
       serverName: "user-one",
       transport: "stdio",
@@ -73,8 +73,12 @@ describe("programmatic managed servers", () => {
 
   it("rejects duplicate names in both directions", async () => {
     const { manager } = await makeManager();
-    manager.registerManagedServer(stdioServer("conn-lark"));
-    expect(() => manager.registerManagedServer(stdioServer("conn-lark"))).toThrow();
+    const dispose = await manager.registerManagedServer(stdioServer("conn-lark"));
+    // Programmatic-vs-programmatic duplicate (synchronous throw converted to rejected promise)
+    await expect(
+      manager.registerManagedServer(stdioServer("conn-lark")),
+    ).rejects.toThrow("duplicate managed MCP server");
+    // Save-vs-programmatic name conflict
     await expect(
       manager.save({
         serverName: "conn-lark",
@@ -84,5 +88,23 @@ describe("programmatic managed servers", () => {
         args: [],
       }),
     ).rejects.toThrow("name_reserved");
+    // Stored-name collision with new registration
+    await manager.save({
+      serverName: "user-two",
+      transport: "stdio",
+      enabled: true,
+      command: "echo",
+      args: [],
+    });
+    await expect(
+      manager.registerManagedServer(stdioServer("user-two")),
+    ).rejects.toThrow("duplicate managed MCP server");
+    // Queue is not poisoned; another registration succeeds
+    const dispose2 = await manager.registerManagedServer(
+      stdioServer("conn-unrelated"),
+    );
+    expect(dispose2).toBeDefined();
+    dispose(); // cleanup from first registration
+    dispose2(); // cleanup from successful registration
   });
 });

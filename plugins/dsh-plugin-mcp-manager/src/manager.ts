@@ -203,29 +203,36 @@ export class DshMcpManager implements McpReloadTarget {
     return [...stored, ...this.programmatic.values()];
   }
 
-  registerManagedServer(server: ManagedMcpServer): () => void {
+  async registerManagedServer(server: ManagedMcpServer): Promise<() => void> {
     const validated = validateServer(server);
     if (this.programmatic.has(validated.serverName))
       throw new Error(`duplicate managed MCP server ${validated.serverName}`);
     this.programmatic.set(validated.serverName, validated);
-    void this.enqueue(async () => {
-      const current = await readServers(this.root);
-      if (current.some((item) => item.serverName === validated.serverName)) {
-        this.programmatic.delete(validated.serverName);
-        throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+    return this.enqueue(async () => {
+      try {
+        const current = await readServers(this.root);
+        if (current.some((item) => item.serverName === validated.serverName)) {
+          this.programmatic.delete(validated.serverName);
+          throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+        }
+        await this.supervisor.reload(this.merged(current));
+      } catch (error) {
+        if (this.programmatic.get(validated.serverName) === validated) {
+          this.programmatic.delete(validated.serverName);
+        }
+        throw error;
       }
-      await this.supervisor.reload(this.merged(current));
+      let disposed = false;
+      return () => {
+        if (disposed) return;
+        disposed = true;
+        if (this.programmatic.get(validated.serverName) !== validated) return;
+        this.programmatic.delete(validated.serverName);
+        void this.enqueue(async () => {
+          await this.supervisor.reload(this.merged(await readServers(this.root)));
+        });
+      };
     });
-    let disposed = false;
-    return () => {
-      if (disposed) return;
-      disposed = true;
-      if (this.programmatic.get(validated.serverName) !== validated) return;
-      this.programmatic.delete(validated.serverName);
-      void this.enqueue(async () => {
-        await this.supervisor.reload(this.merged(await readServers(this.root)));
-      });
-    };
   }
 
   async list(): Promise<{ servers: McpServerView[]; toolsOnly: true }> {
