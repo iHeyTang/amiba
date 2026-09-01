@@ -1,0 +1,59 @@
+import type { Context } from "@deepseek-ai/cordis";
+import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
+
+import type { ConnectorCenter } from "./center.js";
+import type { CreateConnectInput } from "./remote.js";
+
+// Exported (unlike messaging-core's private equivalent) so remote-service.test.ts
+// can construct it directly and drive its @Remote methods as plain instance
+// methods, without a real Typert Gateway carrier in the loop.
+export class AmibaConnectorsRemoteService extends TypertRemoteService {
+  constructor(
+    ctx: Context,
+    private readonly center: ConnectorCenter,
+  ) {
+    super(ctx, "amibaConnectors");
+  }
+
+  @Remote
+  // async keeps the return type a real Promise, matching every other
+  // @Remote method here and the declared
+  // TypertRemoteMap["amibaConnectors/listProviders"] signature, even though
+  // ConnectorCenter#listProviders() itself is synchronous.
+  async listProviders() {
+    return { providers: this.center.listProviders() };
+  }
+
+  @Remote
+  async listConnects() {
+    return { connects: await this.center.listConnects() };
+  }
+
+  @Remote
+  createConnect(input: CreateConnectInput) {
+    return this.center.createConnect(input);
+  }
+
+  @Remote
+  setEnabled(id: string, enabled: boolean) {
+    return this.center.setEnabled(id, enabled);
+  }
+
+  @Remote
+  async removeConnect(id: string) {
+    return { id, deleted: await this.center.removeConnect(id) };
+  }
+
+  @Remote
+  setOwners(id: string, owners: string[]) {
+    return this.center.setOwners(id, owners);
+  }
+}
+
+/** Install the official DSH Host Remote face owned by connector-core. */
+export function applyConnectorsRemote(
+  ctx: Context,
+  center: ConnectorCenter,
+): void {
+  new AmibaConnectorsRemoteService(ctx, center);
+}

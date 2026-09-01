@@ -19,10 +19,13 @@
   "dependencies": {
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
-    "@deepseek-ai/schemastery": "catalog:"
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
+    "@deepseek-ai/schemastery": "catalog:",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:",
     "@deepseek-ai/dsh-credentials": "catalog:"
   },
   "devDependencies": {

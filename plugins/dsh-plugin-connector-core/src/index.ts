@@ -6,10 +6,13 @@ import type {} from "@deepseek-ai/dsh-credentials";
 import z from "@deepseek-ai/schemastery";
 
 import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
+import { applyConnectorsRemote } from "./remote-service.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
 import type { CapabilityDecl } from "./types.js";
 
 export * from "./center.js";
+export { AMIBA_CONNECTORS_REMOTE } from "./remote.js";
+export * from "./remote.js";
 export * from "./store.js";
 export * from "./types.js";
 
@@ -74,6 +77,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     appliers,
   );
   ctx.provide("amibaConnectors", center);
+  applyConnectorsRemote(ctx, center);
   // Stop every live connect on plugin unload (a reload, or a full shutdown)
   // so no runtime, socket, or mcp registration is left orphaned behind a
   // torn-down amibaConnectors service.
