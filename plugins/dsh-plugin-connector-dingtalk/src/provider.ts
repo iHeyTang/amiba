@@ -44,6 +44,15 @@ export interface DingtalkClientHandlers {
 export interface DwLike {
   connect(): Promise<void>;
   disconnect(): void;
+  /**
+   * Post-`connect()` reality check. This SDK's `connect()` never rejects
+   * (see the `try { await client.connect() }` comment in `start()` below),
+   * so a resolved `connect()` alone doesn't mean the long connection is up.
+   * The real impl is a single read of the SDK's own `client.connected`
+   * boolean — never polling, just the freshest value at the moment `start()`
+   * asks.
+   */
+  isConnected(): boolean;
 }
 
 export interface DingtalkDeps {
@@ -184,12 +193,22 @@ export function createDingtalkProvider(
       });
 
       try {
+        // Verified against the installed dingtalk-stream@2.1.6-beta.1's
+        // compiled `_connect()` (dist/client.cjs): every failure path (bad
+        // credentials, network error, non-101 handshake) is caught
+        // internally, logged, and turned into `scheduleReconnect()` —
+        // `connect()` always resolves, never rejects, on this SDK version.
+        // The catch below is therefore dead code today; it's kept as a
+        // protective seam in case a future SDK version starts rejecting.
         await client.connect();
       } catch (error) {
         safeSetStatus({ state: "error", detail: String(error) });
         throw error;
       }
-      safeSetStatus({ state: "ready" });
+      // Because connect() can't be trusted to reject on failure, ready vs.
+      // still-connecting is decided from the SDK's own post-connect state
+      // rather than assumed from connect() having resolved at all.
+      safeSetStatus(client.isConnected() ? { state: "ready" } : { state: "connecting" });
 
       const runtime: ConnectorRuntime = {
         async stop(): Promise<void> {
@@ -295,6 +314,33 @@ interface DingtalkWebhookResponse {
   errmsg?: string;
 }
 
+/**
+ * Parses one downstream socket frame's `data` string and dispatches it to
+ * `onRobotMessage`, containing any failure instead of letting it escape.
+ *
+ * Verified: the SDK's dispatch chain (`onDownStream` -> `onCallback` ->
+ * `EventEmitter.emit` -> this callback, all in `dist/client.cjs`) has no
+ * `try`/`catch` anywhere on the path to `registerCallbackListener`
+ * callbacks. Before this function existed, a single malformed frame's
+ * `JSON.parse` `SyntaxError` — or a throw from inside `onRobotMessage`
+ * itself — would propagate all the way out as an uncaught exception,
+ * crashing the whole Electron main process over one bad frame. Exported so
+ * every case (malformed JSON, a throwing handler, valid JSON) is directly
+ * unit-testable without going through the real `DWClient`.
+ */
+export function handleRobotFrame(
+  rawData: unknown,
+  handlers: Pick<DingtalkClientHandlers, "onRobotMessage">,
+  log?: (msg: string) => void,
+): void {
+  try {
+    const parsed = JSON.parse(rawData as string) as unknown;
+    handlers.onRobotMessage(parsed);
+  } catch (error) {
+    log?.(`amiba-connector-dingtalk: malformed or unhandleable stream frame: ${String(error)}`);
+  }
+}
+
 export const realDingtalkDeps: DingtalkDeps = {
   createClient(config, handlers): DwLike {
     const client = new DWClient({
@@ -304,7 +350,7 @@ export const realDingtalkDeps: DingtalkDeps = {
 
     client.registerCallbackListener(TOPIC_ROBOT, (msg: DWClientDownStream) => {
       try {
-        handlers.onRobotMessage(JSON.parse(msg.data));
+        handleRobotFrame(msg.data, handlers, realDingtalkDeps.log);
       } finally {
         client.socketCallBackResponse(msg.headers.messageId, { status: "SUCCESS" });
       }
@@ -313,6 +359,7 @@ export const realDingtalkDeps: DingtalkDeps = {
     return {
       connect: () => client.connect(),
       disconnect: () => client.disconnect(),
+      isConnected: () => client.connected,
     };
   },
 

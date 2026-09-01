@@ -7,6 +7,7 @@ import type {
 
 import {
   createDingtalkProvider,
+  handleRobotFrame,
   type DingtalkClientHandlers,
   type DingtalkDeps,
   type DwLike,
@@ -29,6 +30,7 @@ function fakeClient(overrides: Partial<DwLike> = {}): DwLike {
   return {
     connect: vi.fn(async () => undefined),
     disconnect: vi.fn(),
+    isConnected: vi.fn(() => true),
     ...overrides,
   };
 }
@@ -184,6 +186,20 @@ describe("createDingtalkProvider", () => {
       expect(handle.statuses).toEqual([
         { state: "connecting" },
         { state: "error", detail: "Error: boom" },
+      ]);
+    });
+
+    it("sets status to connecting, not ready, when connect() resolves but isConnected() is false", async () => {
+      const client = fakeClient({ isConnected: vi.fn(() => false) });
+      const deps = fakeDeps({ client });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+
+      await provider.start(handle);
+
+      expect(handle.statuses).toEqual([
+        { state: "connecting" }, // constructing
+        { state: "connecting" }, // connect() resolved, but not actually connected
       ]);
     });
 
@@ -447,5 +463,55 @@ describe("createDingtalkProvider", () => {
         provider.capabilities({ clientId: "", clientSecret: "", enableTools: "nope" }),
       ).toThrow();
     });
+  });
+});
+
+// --- handleRobotFrame: the real TOPIC_ROBOT listener's parse+dispatch,
+// extracted so a malformed frame or a throwing handler can never become an
+// uncaught exception in the Electron main process. ----------------------
+
+describe("handleRobotFrame", () => {
+  it("swallows a malformed JSON frame, logs it, and never calls onRobotMessage", () => {
+    const onRobotMessage = vi.fn();
+    const logs: string[] = [];
+
+    expect(() =>
+      handleRobotFrame("{not valid json", { onRobotMessage }, (msg) => logs.push(msg)),
+    ).not.toThrow();
+
+    expect(onRobotMessage).not.toHaveBeenCalled();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("malformed");
+  });
+
+  it("calls onRobotMessage with the parsed payload for valid JSON", () => {
+    const onRobotMessage = vi.fn();
+    const logs: string[] = [];
+
+    handleRobotFrame(JSON.stringify({ msgtype: "text" }), { onRobotMessage }, (msg) =>
+      logs.push(msg),
+    );
+
+    expect(onRobotMessage).toHaveBeenCalledWith({ msgtype: "text" });
+    expect(logs).toHaveLength(0);
+  });
+
+  it("does not throw when the log callback is omitted", () => {
+    expect(() => handleRobotFrame("{not valid json", { onRobotMessage: vi.fn() })).not.toThrow();
+  });
+
+  it("swallows and logs when onRobotMessage itself throws", () => {
+    const onRobotMessage = vi.fn(() => {
+      throw new Error("handler exploded");
+    });
+    const logs: string[] = [];
+
+    expect(() =>
+      handleRobotFrame(JSON.stringify({ msgtype: "text" }), { onRobotMessage }, (msg) =>
+        logs.push(msg),
+      ),
+    ).not.toThrow();
+
+    expect(logs.some((line) => line.includes("handler exploded"))).toBe(true);
   });
 });
