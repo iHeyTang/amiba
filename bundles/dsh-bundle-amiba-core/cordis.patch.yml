@@ -70,6 +70,8 @@
       config:
         root: !!js dshHomePath('amiba-connectors')
         agentPresetsRoot: !!js dshHomePath('.agent-presets')
+        cliRoot: !!js dshHomePath('amiba-cli')
+        skillsRoot: !!js dshHomePath('skills')
 
     - id: amiba-connector-lark
       name: "@amiba/dsh-plugin-connector-lark"

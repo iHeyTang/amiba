@@ -6,12 +6,15 @@ import type {} from "@deepseek-ai/dsh-credentials";
 import z from "@deepseek-ai/schemastery";
 
 import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
+import { provisionCli } from "./cli-provision.js";
+import { realCliDeps } from "./cli-provision-deps.js";
 import { RESTRICTED_PRESET, seedAgentPresets } from "./preset-seed.js";
 import { applyConnectorsRemote } from "./remote-service.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
 import type { CapabilityDecl } from "./types.js";
 
 export * from "./center.js";
+export * from "./cli-provision.js";
 export { AMIBA_CONNECTORS_REMOTE } from "./remote.js";
 export * from "./remote.js";
 export * from "./store.js";
@@ -28,11 +31,19 @@ export const inject = ["amibaMessageCenter", "credentials"];
 export interface Config {
   root: string;
   agentPresetsRoot: string;
+  /** Managed CLI cache + wrapper-script root for the `cli` capability
+   * applier (`<cliRoot>/<package>@<version>/`, `<cliRoot>/wrappers/`). */
+  cliRoot: string;
+  /** Writable skills root the `cli` capability applier create-only seeds a
+   * provisioned package's skills into. */
+  skillsRoot: string;
 }
 
 export const Config: z<Config> = z.object({
   root: z.string().required(),
   agentPresetsRoot: z.string().required(),
+  cliRoot: z.string().required(),
+  skillsRoot: z.string().required(),
 });
 
 declare module "@deepseek-ai/cordis" {
@@ -69,6 +80,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       const manager = ctx.reflect.get("amibaMcpManager");
       if (!manager) throw new CapabilityUnavailableError("mcp_manager_unavailable");
       return await manager.registerManagedServer(decl.spec);
+    },
+  });
+
+  // "cli" has no optional-dependency story like "mcp" does — provisioning is
+  // pure filesystem/process work owned entirely by this plugin, so it's
+  // always available and its failures are genuine (hard-fail the enable,
+  // same as any other capability applier rejection).
+  appliers.set("cli", {
+    apply: async (_connect, decl) => {
+      if (decl.kind !== "cli")
+        throw new Error(`unexpected_capability_kind:${decl.kind}`);
+      const handle = await provisionCli(decl.spec, realCliDeps(ctx, config));
+      return () => {
+        void handle.dispose();
+      };
     },
   });
 
