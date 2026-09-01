@@ -1,0 +1,60 @@
+import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { RemoteResult } from "@deepseek-ai/dsh-typert-protocol";
+
+import type { ConnectorProviderView, ConnectView } from "../types.js";
+
+export interface CreateConnectInput {
+  provider: string;
+  name: string;
+  agentPreset: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Client-facing surface consumed by `DshSettingsConnect` (Task 7). Method
+ * names are unnamespaced (`remove`, not `removeConnect`) — only the wire
+ * methods on the mounted `amibaConnectors` remote carry the `Connect` suffix
+ * that disambiguates them among the remote's other namespaces.
+ */
+export interface ConnectAdapter {
+  listProviders(): Promise<ConnectorProviderView[]>;
+  list(): Promise<ConnectView[]>;
+  create(input: CreateConnectInput): Promise<ConnectView>;
+  setEnabled(id: string, enabled: boolean): Promise<ConnectView>;
+  remove(id: string): Promise<{ id: string; deleted: boolean }>;
+  setOwners(id: string, owners: string[]): Promise<ConnectView>;
+}
+
+type ConnectorsRemote = ClientContext["remote"]["amibaConnectors"];
+
+function remoteError(value: unknown): Error {
+  if (value && typeof value === "object") {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string") return new Error(message);
+  }
+  return new Error(String(value));
+}
+
+async function valueOf<T>(result: Promise<RemoteResult<T>>): Promise<T> {
+  const settled = await result;
+  if (!settled.ok) throw remoteError(settled.error);
+  return settled.value;
+}
+
+/** Build the `ConnectAdapter` over the mounted `amibaConnectors` remote. */
+export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
+  return {
+    listProviders: async () => {
+      const snapshot = await valueOf(remote.listProviders());
+      return snapshot.providers;
+    },
+    list: async () => {
+      const snapshot = await valueOf(remote.listConnects());
+      return snapshot.connects;
+    },
+    create: (input) => valueOf(remote.createConnect(input)),
+    setEnabled: (id, enabled) => valueOf(remote.setEnabled(id, enabled)),
+    remove: (id) => valueOf(remote.removeConnect(id)),
+    setOwners: (id, owners) => valueOf(remote.setOwners(id, owners)),
+  };
+}
