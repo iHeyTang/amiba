@@ -91,6 +91,93 @@ export interface LarkDeps {
   log?: (msg: string) => void;
 }
 
+// ---------------------------------------------------------------------------
+// capabilities() — the two tool surfaces this connector offers a mounted
+// agent: an MCP server (lark-mcp, read+write Lark/Feishu API tools) and a CLI
+// provisioning spec (lark-cli, curated read-oriented Agent Skills). Both
+// version strings below were verified against the published registry at
+// implementation time (`npm view <pkg> version`) rather than left floating,
+// so a later `npx -y <pkg>@latest`/`npm install <pkg>@latest` drift can't
+// silently change tool behavior underneath an existing connect:
+//   - @larksuiteoapi/lark-mcp  → 0.5.1 (pinned into the npx arg itself, since
+//     `ManagedMcpServer` has no separate version field)
+//   - @larksuite/cli           → 1.0.92 (CliProvisionSpec.pinnedVersion)
+//
+// Credential channel (verified, not assumed): lark-mcp's installed dist
+// (`dist/utils/constants.js`, `OAPI_MCP_ENV_ARGS`) reads
+// `process.env.APP_ID` / `process.env.APP_SECRET` (plus USER_ACCESS_TOKEN /
+// LARK_TOKEN_MODE / LARK_TOOLS / LARK_DOMAIN) and merges them under the `mcp`
+// command's own `-a`/`-s`/... flags — so credentials are passed via `env`
+// here and never appear in `args`, keeping them out of `ps`/process-list
+// visibility. (If a future lark-mcp version dropped env support, the
+// fallback would be appending `-a <appId> -s <appSecret>` to args instead —
+// deliberately NOT done here since it would put secrets in `ps aux` output
+// for every local user on the machine.)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read-oriented Agent Skills curated from `@larksuite/cli`'s published
+ * skill set (docs/wiki/search flavored — see the package README's "Agent
+ * Skills" table for the full 23-skill list). Deliberately excludes
+ * message-sending, task/approval-mutation, and other write-flavored skills:
+ * this connector mounts the CLI for the agent's own tool-use, and a
+ * conservative default keeps write actions opt-in rather than ambient.
+ */
+const LARK_CLI_SKILLS: readonly string[] = [
+  "lark-doc", // Create, read, update, search documents (Markdown-based)
+  "lark-wiki", // Knowledge spaces, nodes, documents
+  "lark-drive", // Upload, download files, manage permissions & comments
+  "lark-openapi-explorer", // Explore underlying APIs from official docs
+  "lark-contact", // Search users by name/email/phone, get user profiles
+];
+
+const LARK_MCP_PACKAGE = "@larksuiteoapi/lark-mcp";
+const LARK_MCP_PINNED_VERSION = "0.5.1";
+const LARK_CLI_PINNED_VERSION = "1.0.92";
+
+function buildCapabilities(config: LarkConnectorConfig): CapabilityDecl[] {
+  return [
+    {
+      kind: "mcp",
+      spec: {
+        serverName: "lark",
+        transport: "stdio",
+        command: "npx",
+        args: [
+          "-y",
+          `${LARK_MCP_PACKAGE}@${LARK_MCP_PINNED_VERSION}`,
+          "mcp",
+          "-t",
+          "preset.light",
+          ...(config.domain === "lark"
+            ? ["--domain", "https://open.larksuite.com"]
+            : []),
+        ],
+        env: {
+          APP_ID: config.appId,
+          APP_SECRET: config.appSecret,
+        },
+        enabled: true,
+      },
+    },
+    {
+      kind: "cli",
+      spec: {
+        id: "lark",
+        package: "@larksuite/cli",
+        binary: "lark-cli",
+        minVersion: "1.0.0",
+        pinnedVersion: LARK_CLI_PINNED_VERSION,
+        env: {
+          LARKSUITE_CLI_APP_ID: config.appId,
+          LARKSUITE_CLI_APP_SECRET: config.appSecret,
+        },
+        skills: [...LARK_CLI_SKILLS],
+      },
+    },
+  ];
+}
+
 /** `translateReceiveEvent`'s return type is structurally a `ConnectorInboundEnvelope`. */
 function toEnvelope(
   event: LarkReceiveEvent,
@@ -103,7 +190,8 @@ function toEnvelope(
  * Lark/Feishu `ConnectorProvider`: runs the official WS long connection,
  * translates inbound `im.message.receive_v1` events into
  * `ConnectorInboundEnvelope`s, and delivers outbound text via the HTTP API.
- * Tools are out of scope for M2a — `capabilities()` is empty until M2b.
+ * `capabilities()` declares the two M2b tool surfaces (lark-mcp, lark-cli) —
+ * see `buildCapabilities()` below for the verification trail.
  */
 export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProvider {
   return {
@@ -177,7 +265,8 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
       return runtime;
     },
 
-    capabilities: (): CapabilityDecl[] => [],
+    capabilities: (config: unknown): CapabilityDecl[] =>
+      buildCapabilities(larkConfigSchema.parse(config)),
 
     /**
      * Scan-to-connect onboarding: runs the SDK's device-authorization

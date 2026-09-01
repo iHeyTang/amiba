@@ -123,7 +123,7 @@ describe("createLarkProvider", () => {
     const provider = createLarkProvider(fakeDeps());
     expect(provider.id).toBe("lark");
     expect(typeof provider.name).toBe("string");
-    expect(provider.capabilities(validConfig)).toEqual([]);
+    expect(provider.capabilities(validConfig)).toHaveLength(2);
   });
 
   // --- Contract item 1: validate() -----------------------------------
@@ -494,6 +494,108 @@ describe("createLarkProvider", () => {
     it("is present as a function on the default (SDK-backed) provider", () => {
       const provider = createLarkProvider();
       expect(typeof provider.onboard).toBe("function");
+    });
+  });
+
+  // --- Contract item 6: capabilities() ---------------------------------
+
+  describe("capabilities", () => {
+    it("declares exactly [mcp, cli] in a stable order", () => {
+      const provider = createLarkProvider(fakeDeps());
+      const decls = provider.capabilities(validConfig);
+      expect(decls.map((decl) => decl.kind)).toEqual(["mcp", "cli"]);
+    });
+
+    it("declares the lark-mcp server with a base (unnamespaced) serverName, pinned version, and preset.light tools", () => {
+      const provider = createLarkProvider(fakeDeps());
+      const [mcpDecl] = provider.capabilities(validConfig);
+      if (mcpDecl?.kind !== "mcp") throw new Error("expected mcp decl first");
+      expect(mcpDecl.spec).toMatchObject({
+        serverName: "lark",
+        transport: "stdio",
+        command: "npx",
+        enabled: true,
+      });
+      if (mcpDecl.spec.transport !== "stdio") throw new Error("expected stdio spec");
+      expect(mcpDecl.spec.args).toEqual([
+        "-y",
+        "@larksuiteoapi/lark-mcp@0.5.1",
+        "mcp",
+        "-t",
+        "preset.light",
+      ]);
+    });
+
+    it("puts lark-mcp credentials in env (verified: APP_ID/APP_SECRET), never in argv", () => {
+      const provider = createLarkProvider(fakeDeps());
+      const [mcpDecl] = provider.capabilities(validConfig);
+      if (mcpDecl?.kind !== "mcp" || mcpDecl.spec.transport !== "stdio") {
+        throw new Error("expected stdio mcp decl first");
+      }
+      expect(mcpDecl.spec.env).toEqual({
+        APP_ID: validConfig.appId,
+        APP_SECRET: validConfig.appSecret,
+      });
+      expect(mcpDecl.spec.args).not.toContain(validConfig.appId);
+      expect(mcpDecl.spec.args).not.toContain(validConfig.appSecret);
+      expect(mcpDecl.spec.args.join(" ")).not.toContain(validConfig.appSecret);
+    });
+
+    it("appends --domain for the lark tenant brand but not for the feishu default", () => {
+      const provider = createLarkProvider(fakeDeps());
+
+      const [feishuMcp] = provider.capabilities(validConfig);
+      if (feishuMcp?.kind !== "mcp" || feishuMcp.spec.transport !== "stdio") {
+        throw new Error("expected stdio mcp decl first");
+      }
+      expect(feishuMcp.spec.args).not.toContain("--domain");
+
+      const larkConfig: LarkConnectorConfig = { ...validConfig, domain: "lark" };
+      const [larkMcp] = provider.capabilities(larkConfig);
+      if (larkMcp?.kind !== "mcp" || larkMcp.spec.transport !== "stdio") {
+        throw new Error("expected stdio mcp decl first");
+      }
+      expect(larkMcp.spec.args).toEqual([
+        "-y",
+        "@larksuiteoapi/lark-mcp@0.5.1",
+        "mcp",
+        "-t",
+        "preset.light",
+        "--domain",
+        "https://open.larksuite.com",
+      ]);
+    });
+
+    it("declares the lark-cli provisioning spec with pinned version, binary, credential env, and curated skills", () => {
+      const provider = createLarkProvider(fakeDeps());
+      const [, cliDecl] = provider.capabilities(validConfig);
+      if (cliDecl?.kind !== "cli") throw new Error("expected cli decl second");
+      expect(cliDecl.spec).toMatchObject({
+        id: "lark",
+        package: "@larksuite/cli",
+        binary: "lark-cli",
+        minVersion: "1.0.0",
+        pinnedVersion: "1.0.92",
+        env: {
+          LARKSUITE_CLI_APP_ID: validConfig.appId,
+          LARKSUITE_CLI_APP_SECRET: validConfig.appSecret,
+        },
+      });
+      expect(cliDecl.spec.skills.length).toBeGreaterThan(0);
+      expect(cliDecl.spec.skills).toEqual([
+        "lark-doc",
+        "lark-wiki",
+        "lark-drive",
+        "lark-openapi-explorer",
+        "lark-contact",
+      ]);
+    });
+
+    it("parses config via larkConfigSchema first, throwing on an invalid config before building any decl", () => {
+      const provider = createLarkProvider(fakeDeps());
+      expect(() =>
+        provider.capabilities({ appId: "", appSecret: "", domain: "nope" }),
+      ).toThrow();
     });
   });
 });
