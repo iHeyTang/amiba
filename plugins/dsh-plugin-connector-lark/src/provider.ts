@@ -307,11 +307,9 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         domain: result.user_info?.tenant_brand === "lark" ? "lark" : "feishu",
       });
 
-      // Same tenant-token path `validate()` uses — confirms the freshly
-      // registered credentials actually work before handing config back.
-      const api = deps.createApiClient(config);
-      await api.tenantToken();
-
+      // No pre-validation tenantToken() call here: createConnect validates
+      // this same config via provider.validate() moments after this
+      // resolves, which already makes that exact call.
       return { config };
     },
   };

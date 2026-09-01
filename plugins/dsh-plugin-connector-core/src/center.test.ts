@@ -105,10 +105,14 @@ function fakeCredentials() {
           current: { kind: string; payload?: unknown } | undefined,
         ) => Promise<unknown>,
       ) => {
-        const next = await mutate(store.get(key));
-        if (next !== undefined)
-          store.set(key, next as { kind: string; payload?: unknown });
-        else store.delete(key);
+        const current = store.get(key);
+        const next = await mutate(current);
+        // Matches the real seam (@deepseek-ai/dsh-credentials-local's
+        // modifyRecord): a mutate that resolves to undefined declines the
+        // write and leaves the existing record untouched — it does not
+        // delete. Explicit removal goes through deleteRecord.
+        if (next === undefined) return current;
+        store.set(key, next as { kind: string; payload?: unknown });
         return next;
       },
     ),
@@ -251,6 +255,43 @@ async function harness(options?: {
   );
   return { root, store, messageCenter, credentials, mcp, appliers, ctx, center };
 }
+
+describe("fakeCredentials seam parity", () => {
+  // The real seam (@deepseek-ai/dsh-credentials-local's modifyRecord)
+  // declines the write and keeps the existing record when `mutate` resolves
+  // to undefined — it does not delete. The test fake must match that so
+  // tests exercising a declined mutate don't silently diverge from
+  // production behavior.
+  it("modifyRecord leaves an existing record untouched when mutate resolves to undefined", async () => {
+    const { credentials } = await harness();
+    const key = "amiba-connector-core/some-connect";
+    await credentials.modifyRecord(key, async () => ({
+      kind: "grant",
+      payload: { config: {}, channelSecret: "s3cr3t" },
+    }));
+
+    const result = await credentials.modifyRecord(key, async () => undefined);
+
+    expect(result).toMatchObject({
+      kind: "grant",
+      payload: { config: {}, channelSecret: "s3cr3t" },
+    });
+    expect(await credentials.readRecord(key)).toMatchObject({
+      kind: "grant",
+      payload: { config: {}, channelSecret: "s3cr3t" },
+    });
+  });
+
+  it("modifyRecord on a never-written key stays absent when mutate resolves to undefined", async () => {
+    const { credentials } = await harness();
+    const key = "amiba-connector-core/never-written";
+
+    const result = await credentials.modifyRecord(key, async () => undefined);
+
+    expect(result).toBeUndefined();
+    expect(await credentials.readRecord(key)).toBeUndefined();
+  });
+});
 
 describe("ConnectorCenter", () => {
   it("registers a provider and exposes a messaging bridge provider", async () => {
@@ -1424,6 +1465,7 @@ describe("ConnectorCenter onboarding", () => {
 
     const cancelledView = center.cancelOnboarding(view.sessionId);
     expect(cancelledView.sessionId).toBe(view.sessionId);
+    expect(cancelledView.state).toBe("cancelled");
 
     const handle = getHandle();
     expect(handle?.signal.aborted).toBe(true);
@@ -1560,5 +1602,53 @@ describe("ConnectorCenter onboarding", () => {
 
     const handle = getHandle();
     expect(handle?.signal.aborted).toBe(true);
+  });
+
+  it("unregistering a provider aborts and settles its own in-flight onboarding sessions as cancelled", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    const dispose = center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Unregister me",
+      agentPreset: "restricted",
+    });
+
+    const handle = getHandle();
+    if (!handle) throw new Error("onboard handle not captured");
+    expect(handle.signal.aborted).toBe(false);
+
+    dispose();
+
+    expect(handle.signal.aborted).toBe(true);
+    expect(center.pollOnboarding(view.sessionId).state).toBe("cancelled");
+  });
+
+  it("unregistering a provider leaves another provider's in-flight onboarding session untouched", async () => {
+    const { center } = await harness();
+    const target = fakeOnboardingProvider("target-provider");
+    const bystander = fakeOnboardingProvider("bystander-provider");
+    const dispose = center.registerProvider(target.provider);
+    center.registerProvider(bystander.provider);
+
+    center.beginOnboarding({
+      provider: "target-provider",
+      name: "Unregister me",
+      agentPreset: "restricted",
+    });
+    const bystanderView = center.beginOnboarding({
+      provider: "bystander-provider",
+      name: "Leave me alone",
+      agentPreset: "restricted",
+    });
+
+    dispose();
+
+    const bystanderHandle = bystander.getHandle();
+    expect(bystanderHandle?.signal.aborted).toBe(false);
+    expect(center.pollOnboarding(bystanderView.sessionId).state).toBe(
+      "pending",
+    );
   });
 });

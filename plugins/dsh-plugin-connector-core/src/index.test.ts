@@ -158,10 +158,14 @@ function fakeCredentials() {
           current: { kind: string; payload?: unknown } | undefined,
         ) => Promise<unknown>,
       ) => {
-        const next = await mutate(store.get(key));
-        if (next !== undefined)
-          store.set(key, next as { kind: string; payload?: unknown });
-        else store.delete(key);
+        const current = store.get(key);
+        const next = await mutate(current);
+        // Matches the real seam (@deepseek-ai/dsh-credentials-local's
+        // modifyRecord): a mutate that resolves to undefined declines the
+        // write and leaves the existing record untouched — it does not
+        // delete. Explicit removal goes through deleteRecord.
+        if (next === undefined) return current;
+        store.set(key, next as { kind: string; payload?: unknown });
         return next;
       },
     ),

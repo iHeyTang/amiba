@@ -478,3 +478,114 @@ describe("conversation-scoped routing", () => {
     expect(String(warning)).toContain("standard");
   });
 });
+
+describe("outbound delivery retry", () => {
+  // Mirrors the DELIVERY_MAX_ATTEMPTS constant in center.ts.
+  const DELIVERY_MAX_ATTEMPTS = 8;
+
+  async function seedDelivery(
+    center: Awaited<ReturnType<typeof harness>>["center"],
+    channelId: string,
+    deliveryId: string,
+  ) {
+    await center.store.acceptInbound({
+      key: `pending-${deliveryId}`,
+      channelId,
+      messageId: `msg-${deliveryId}`,
+      sessionId: "session-a",
+      dshMessageId: `dsh-${deliveryId}`,
+      text: "hi",
+      acceptedAt: new Date().toISOString(),
+    });
+    await center.store.queueReply(`pending-${deliveryId}`, {
+      id: deliveryId,
+      channelId,
+      sessionId: "session-a",
+      inReplyTo: `msg-${deliveryId}`,
+      text: "reply",
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  it("retries with backoff instead of dropping the delivery when the channel provider is unregistered", async () => {
+    const { center, loggerCalls } = await harness();
+    const { channel } = await center.store.create({
+      provider: "ghost-provider",
+      name: "Ghost channel",
+      sessionId: "session-a",
+    });
+    await seedDelivery(center, channel.id, "delivery-1");
+
+    await center.start();
+
+    const outbox = await center.store.listOutbox();
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.attempts).toBe(1);
+    expect(outbox[0]?.lastError).toBe("provider_unregistered");
+    expect(outbox[0]?.nextAttemptAt).toBeTruthy();
+    expect(loggerCalls.error).toHaveBeenCalled();
+    const [message] = loggerCalls.error.mock.calls.at(-1)!;
+    expect(String(message)).toContain("delivery-1");
+    expect(String(message)).toContain("provider_unregistered");
+  });
+
+  it("delivers on the next pump once the provider is re-registered", async () => {
+    const { center } = await harness();
+    const { channel } = await center.store.create({
+      provider: "ghost-provider",
+      name: "Ghost channel",
+      sessionId: "session-a",
+    });
+    await seedDelivery(center, channel.id, "delivery-2");
+
+    await center.start();
+    expect((await center.store.listOutbox())[0]?.attempts).toBe(1);
+
+    // Simulate the backoff window having elapsed so the delivery is due again.
+    await center.store.markDeliveryFailed(
+      "delivery-2",
+      "provider_unregistered",
+      new Date(0).toISOString(),
+    );
+
+    const deliver = vi.fn(async () => undefined);
+    center.registerProvider({
+      id: "ghost-provider",
+      name: "Ghost",
+      description: "Recovered transport",
+      supportsInbound: false,
+      supportsOutbound: true,
+      deliver,
+    });
+
+    await vi.waitFor(async () => {
+      expect(await center.store.listOutbox()).toHaveLength(0);
+    });
+    expect(deliver).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops retrying and leaves the delivery terminal after DELIVERY_MAX_ATTEMPTS", async () => {
+    const { center } = await harness();
+    const { channel } = await center.store.create({
+      provider: "ghost-provider",
+      name: "Ghost channel",
+      sessionId: "session-a",
+    });
+    await seedDelivery(center, channel.id, "delivery-3");
+    for (let i = 0; i < DELIVERY_MAX_ATTEMPTS - 1; i += 1) {
+      await center.store.markDeliveryFailed(
+        "delivery-3",
+        "provider_unregistered",
+        new Date(0).toISOString(),
+      );
+    }
+
+    await center.start();
+
+    const outbox = await center.store.listOutbox();
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.attempts).toBe(DELIVERY_MAX_ATTEMPTS);
+    expect(outbox[0]?.nextAttemptAt).toBeUndefined();
+    expect(outbox[0]?.lastError).toBe("provider_unregistered");
+  });
+});

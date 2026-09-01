@@ -611,11 +611,15 @@ function CreateConnectDialog({
     setConfigText("");
     setError(null);
     setMode(initialProvider?.supportsOnboarding ? "scan" : "manual");
-    setOnboarding(null);
     setBeginning(false);
-    sessionIdRef.current = null;
-    clearPollInterval();
-  }, [open, providers, clearPollInterval]);
+    // Routes through the shared teardown (not a bare `setOnboarding(null)` +
+    // `sessionIdRef.current = null` + `clearPollInterval()`) so a `providers`
+    // identity change arriving mid-scan — e.g. a background list refresh —
+    // also fires the adapter's `cancelOnboarding`, not just the local reset;
+    // otherwise the just-displayed QR session would keep running host-side
+    // with nothing left pointing at it.
+    cancelCurrentSession();
+  }, [open, providers, cancelCurrentSession]);
 
   // Closing the dialog (via the Cancel button, backdrop, or Escape — anything
   // that flips `open` to false) and unmounting mid-flow both need the same
@@ -647,6 +651,20 @@ function CreateConnectDialog({
     // Switching providers mid-scan must not leave the just-displayed QR
     // live host-side: cancel whatever session was active for the previous
     // provider before letting go of it, same as closing the dialog does.
+    cancelCurrentSession();
+  }
+
+  /**
+   * Scan <-> manual toggle. Leaving scan mid-flight must not leave the
+   * just-displayed QR live host-side, same as `handleProviderChange` —
+   * `cancelCurrentSession` is a no-op when there's nothing to cancel, so
+   * this is safe to call on every switch rather than only the scan-to-manual
+   * direction. Switching back to scan intentionally starts fresh: nothing
+   * here re-adopts the session just cancelled or begins a new one — the user
+   * has to click "Start scanning" again.
+   */
+  function handleModeChange(next: "scan" | "manual") {
+    setMode(next);
     cancelCurrentSession();
   }
 
@@ -861,7 +879,7 @@ function CreateConnectDialog({
             <div className="flex gap-1 rounded-lg border border-border/55 p-1">
               <Button
                 className="flex-1"
-                onClick={() => setMode("scan")}
+                onClick={() => handleModeChange("scan")}
                 size="sm"
                 type="button"
                 variant={mode === "scan" ? "default" : "ghost"}
@@ -870,7 +888,7 @@ function CreateConnectDialog({
               </Button>
               <Button
                 className="flex-1"
-                onClick={() => setMode("manual")}
+                onClick={() => handleModeChange("manual")}
                 size="sm"
                 type="button"
                 variant={mode === "manual" ? "default" : "ghost"}

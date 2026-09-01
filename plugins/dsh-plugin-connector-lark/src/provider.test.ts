@@ -409,7 +409,10 @@ describe("createLarkProvider", () => {
       ]);
     });
 
-    it("maps the registerApp result to config (domain from tenant_brand, both ways) and validates credentials", async () => {
+    it("maps the registerApp result to config (domain from tenant_brand, both ways) without a redundant tenantToken call", async () => {
+      // createConnect validates the returned config via provider.validate()
+      // moments later, which itself calls tenantToken() — onboard() must not
+      // duplicate that call.
       const larkApi = fakeApi();
       const larkDeps = fakeDeps({
         api: larkApi,
@@ -431,8 +434,8 @@ describe("createLarkProvider", () => {
         appSecret: "secret_lark",
         domain: "lark",
       });
-      expect(larkDeps.createApiClient).toHaveBeenCalledWith(larkResult.config);
-      expect(larkApi.tenantToken).toHaveBeenCalledTimes(1);
+      expect(larkDeps.createApiClient).not.toHaveBeenCalled();
+      expect(larkApi.tenantToken).not.toHaveBeenCalled();
 
       const feishuApi = fakeApi();
       const feishuDeps = fakeDeps({
@@ -451,7 +454,8 @@ describe("createLarkProvider", () => {
         appSecret: "secret_feishu",
         domain: "feishu",
       });
-      expect(feishuApi.tenantToken).toHaveBeenCalledTimes(1);
+      expect(feishuDeps.createApiClient).not.toHaveBeenCalled();
+      expect(feishuApi.tenantToken).not.toHaveBeenCalled();
     });
 
     it("propagates a registerApp rejection", async () => {

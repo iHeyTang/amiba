@@ -206,6 +206,13 @@ export class ConnectorCenter {
       disposed = true;
       if (this.providers.get(provider.id) === provider)
         this.providers.delete(provider.id);
+      // A provider going away must not leave its own in-flight onboarding
+      // sessions (e.g. a QR scan waiting on this provider's onboard()) dangling
+      // forever — abort and settle them the same way an explicit
+      // cancelOnboarding() would, scoped to this provider's own sessions only.
+      for (const session of this.onboardings.values()) {
+        if (session.provider === provider.id) this.cancelSession(session);
+      }
       // Unregistering a provider must not leave its connects orphaned (live
       // sockets, live mcp registrations, deliveries that would fail forever
       // once the bridge is gone) — and dropping the bridge first opens a
@@ -259,9 +266,7 @@ export class ConnectorCenter {
    * `onboard()` sees its signal abort instead of dangling forever. */
   async stop(): Promise<void> {
     const ids = await this.teardownIds();
-    for (const session of this.onboardings.values()) {
-      if (!session.controller.signal.aborted) session.controller.abort();
-    }
+    for (const session of this.onboardings.values()) this.cancelSession(session);
     await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
@@ -484,9 +489,26 @@ export class ConnectorCenter {
     this.sweepOnboardings();
     const session = this.onboardings.get(sessionId);
     if (!session) throw new Error("onboarding_not_found");
-    if (session.state !== "pending") return this.toOnboardingView(session);
-    session.controller.abort();
+    this.cancelSession(session);
     return this.toOnboardingView(session);
+  }
+
+  /**
+   * Settles a still-`"pending"` session as `"cancelled"` synchronously and
+   * aborts its controller — shared by `cancelOnboarding`, provider
+   * unregistration, and `stop()` so every path that cancels a session
+   * leaves it in the same immediately-observable state instead of waiting
+   * on the run chain in `beginOnboarding` to notice the abort asynchronously
+   * (that chain's own post-resolve/catch handling still guards against a
+   * `pending` session it settles on its own — see its comments). A no-op on
+   * a session that already reached a terminal state.
+   */
+  private cancelSession(session: OnboardingSession): void {
+    if (session.state === "pending") {
+      session.state = "cancelled";
+      session.terminalAt = this.now();
+    }
+    if (!session.controller.signal.aborted) session.controller.abort();
   }
 
   /**

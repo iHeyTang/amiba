@@ -630,7 +630,11 @@ export class MessageChannelCenter {
       const channel = channelById.get(delivery.channelId);
       if (!channel?.enabled) continue;
       const provider = this.providers.get(channel.provider);
-      if (!provider?.supportsOutbound || !provider.deliver) {
+      if (!provider) {
+        await this.failDelivery(delivery, "provider_unregistered");
+        continue;
+      }
+      if (!provider.supportsOutbound || !provider.deliver) {
         await this.store.markDelivered(delivery.id);
         continue;
       }
@@ -647,20 +651,29 @@ export class MessageChannelCenter {
       await provider.deliver!(channel, delivery.envelope);
       await this.store.markDelivered(delivery.id);
     } catch (error) {
-      const attempts = delivery.attempts + 1;
-      const terminal = attempts >= DELIVERY_MAX_ATTEMPTS;
-      const retryAt = terminal
-        ? undefined
-        : new Date(
-            Date.now() + Math.min(60 * 60_000, 2_000 * 2 ** attempts),
-          ).toISOString();
-      await this.store.markDeliveryFailed(delivery.id, String(error), retryAt);
-      this.ctx
-        .logger("amiba-messaging-core")
-        .error(
-          `Outbound delivery ${delivery.id} failed on attempt ${attempts}/${DELIVERY_MAX_ATTEMPTS}: ${String(error)}`,
-        );
+      await this.failDelivery(delivery, String(error));
     }
+  }
+
+  // Same backoff formula as deliverOne's failure path, shared so a channel
+  // whose provider has been unregistered retries instead of being dropped.
+  private async failDelivery(
+    delivery: StoredOutboundDelivery,
+    reason: string,
+  ): Promise<void> {
+    const attempts = delivery.attempts + 1;
+    const terminal = attempts >= DELIVERY_MAX_ATTEMPTS;
+    const retryAt = terminal
+      ? undefined
+      : new Date(
+          Date.now() + Math.min(60 * 60_000, 2_000 * 2 ** attempts),
+        ).toISOString();
+    await this.store.markDeliveryFailed(delivery.id, reason, retryAt);
+    this.ctx
+      .logger("amiba-messaging-core")
+      .error(
+        `Outbound delivery ${delivery.id} failed on attempt ${attempts}/${DELIVERY_MAX_ATTEMPTS}: ${reason}`,
+      );
   }
 }
 

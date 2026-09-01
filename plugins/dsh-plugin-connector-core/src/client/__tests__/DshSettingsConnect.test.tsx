@@ -688,6 +688,117 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     expect(pollOnboarding).not.toHaveBeenCalled();
   });
 
+  it("cancels the onboarding session exactly once when the providers array identity changes mid-scan (e.g. a background list refresh), and stops polling", async () => {
+    // A fresh array reference on every call, same contents each time — the
+    // dialog's provider-identity-change effect must react to a reference
+    // change even when nothing about the providers actually differs.
+    listProviders.mockImplementation(async () => [...onboardProviders]);
+    list.mockResolvedValue([connects[0]!]);
+    setEnabled.mockResolvedValue(undefined);
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-25", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-25",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-25",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-25", state: "cancelled" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    within(dialog).getByRole("img", { name: "Onboarding QR code" });
+
+    // Trigger a `providers` state update on the parent — same as e.g.
+    // toggling a connect's enabled state, which refetches both lists — while
+    // the modal dialog (and its in-flight scan session) stays open. Radix
+    // marks the rest of the tree `aria-hidden` while the dialog is open, so
+    // this row is queried with `hidden: true`, same as a real background
+    // refresh a user can't literally click through would still deliver.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Turn off", hidden: true }),
+    );
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-25");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("cancels the onboarding session and stops polling when the mode switch flips from scan to manual mid-scan", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-30", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-30",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-30",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-30", state: "cancelled" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    within(dialog).getByRole("img", { name: "Onboarding QR code" });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Manual setup" }));
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-30");
+    expect(
+      within(dialog).queryByRole("img", { name: "Onboarding QR code" }),
+    ).not.toBeInTheDocument();
+    within(dialog).getByLabelText("Provider configuration");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("starts fresh (no auto-resume) when switching back to scan mode after cancelling via manual", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-31", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-31",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-31",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-31", state: "cancelled" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    within(dialog).getByRole("img", { name: "Onboarding QR code" });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Manual setup" }));
+    await flush();
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Scan to connect" }));
+    await flush();
+
+    // No auto-resume: back in scan mode empty-handed, requiring a fresh
+    // "Start scanning" click — never re-adopting the just-cancelled session.
+    expect(
+      within(dialog).queryByRole("img", { name: "Onboarding QR code" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Start scanning" }),
+    ).toBeVisible();
+    expect(beginOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
   it("cancels a session created by a begin request that resolves after the dialog was already closed", async () => {
     // `beginOnboarding` never resolves on its own here — the test drives it
     // manually to land the response after the dialog has already closed,
