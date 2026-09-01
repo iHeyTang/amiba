@@ -32,29 +32,47 @@ export * from "./types.js";
  * `connectId` is always `connect-<uuid>` (see store.ts's `ConnectorStore`);
  * its `connect-` prefix carries no entropy, so it's stripped and only the
  * uuid's first 8 characters — always plain hex, never containing the uuid's
- * own `-` separators, which start at index 8 — are appended after the base
- * name as a short, effectively-unique-per-provider suffix.
+ * own `-` separators, which start at index 8 — are kept as a short,
+ * effectively-unique-per-connect suffix.
  *
  * `sanitize` strips every character outside mcp-manager's own
  * `[A-Za-z0-9_-]` charset (covers a base containing dots/slashes, e.g. a
- * package-flavored id) and clamps to its 32-char length ceiling, so the
- * combined base+suffix always satisfies `/^[A-Za-z0-9_-]{1,32}$/` even for
- * an oversized base. Pure function of its two inputs: same `base` +
- * `connectId` always yields the same name (stable across repeated applier
- * runs for the same connect, e.g. the disable/enable recovery below).
+ * package-flavored id) from both pieces independently. The 32-char length
+ * ceiling is then enforced by clamping the BASE ONLY, never the suffix —
+ * `${base}-${suffix}`.slice(0, 32)` was tried first and rejected: for any
+ * base long enough to push the combined length past 32 (any sanitized base
+ * ≥24 chars starts losing suffix characters; ≥31 chars loses the suffix
+ * entirely), a plain end-slice cuts the suffix off the right end instead of
+ * the base, so two connects sharing that same long base would clamp to the
+ * IDENTICAL name — silently defeating the whole point of namespacing and
+ * hard-failing the second connect's registration. Reserving room for `-` +
+ * the full suffix and clamping the base into whatever's left of the budget
+ * (falling back to a single `"s"` placeholder if the base sanitizes to
+ * nothing) guarantees the suffix — the actual per-connect entropy — always
+ * survives at the tail, for every base length. Pure function of its two
+ * inputs: same `base` + `connectId` always yields the same name (stable
+ * across repeated applier runs for the same connect, e.g. the disable/enable
+ * recovery below).
  *
  * Residual collision risk: two connects whose ids happen to share the same
  * first 8 hex characters would still collide (≈1 in 16^8, ~4.3 billion, for
  * any given pair of connects on the same provider+base — accepted as
  * negligible rather than spending more of the 32-char budget on entropy).
- * A base that sanitizes to empty (e.g. all-punctuation) still produces a
- * valid, non-empty name: the joining `-` alone satisfies the charset, so
- * the result degrades to `-<suffix>` rather than failing.
+ * This is now the ONLY collision source — unlike the rejected base-clamped
+ * approach above, a long or duplicate base can no longer cause one on its
+ * own.
  */
 export function namespacedMcpServerName(base: string, connectId: string): string {
-  const suffix = connectId.replace(/^connect-/, "").slice(0, 8);
-  const sanitized = `${base}-${suffix}`.replace(/[^A-Za-z0-9_-]/g, "");
-  return sanitized.slice(0, 32);
+  const sanitize = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "");
+  const suffix = sanitize(connectId.replace(/^connect-/, "")).slice(0, 8);
+  const sanitizedBase = sanitize(base);
+  // Room left for the base once "-" + the full suffix are reserved; always
+  // ≥23 in practice (suffix is at most 8 chars) — Math.max(1, ...) is
+  // defensive only, so a future change to the suffix length can never drive
+  // this negative and empty out the base entirely.
+  const baseBudget = Math.max(1, 32 - 1 - suffix.length);
+  const clippedBase = sanitizedBase.slice(0, baseBudget) || "s";
+  return `${clippedBase}-${suffix}`;
 }
 
 export const name = "amiba-connector-core";

@@ -385,12 +385,16 @@ describe("namespacedMcpServerName", () => {
     expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
   });
 
-  it("clamps the combined base+suffix to mcp-manager's 32-char ceiling", () => {
+  it("clamps the BASE (never the suffix) to mcp-manager's 32-char ceiling — the suffix survives intact at the tail", () => {
     const longBase = "a".repeat(40);
     const name = namespacedMcpServerName(longBase, CONNECT_ID);
-    expect(name).toBe("a".repeat(32));
     expect(name.length).toBe(32);
     expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+    // The full 8-char suffix must still be present at the tail — a
+    // plain end-slice of "base-suffix" would have cut it off instead of
+    // the (over-long) base.
+    expect(name.endsWith("-3f9a1b2c")).toBe(true);
+    expect(name).toBe(`${"a".repeat(23)}-3f9a1b2c`);
   });
 
   it("is stable: the same base + connect id always produce the same serverName", () => {
@@ -401,7 +405,9 @@ describe("namespacedMcpServerName", () => {
 
   it("still produces a valid, non-empty serverName when the base sanitizes to empty", () => {
     const name = namespacedMcpServerName("...", CONNECT_ID);
-    expect(name.length).toBeGreaterThan(0);
+    // Falls back to a single "s" placeholder rather than a bare
+    // leading "-<suffix>" — see the function's doc comment.
+    expect(name).toBe("s-3f9a1b2c");
     expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
   });
 
@@ -410,6 +416,29 @@ describe("namespacedMcpServerName", () => {
     expect(namespacedMcpServerName("lark", CONNECT_ID)).not.toBe(
       namespacedMcpServerName("lark", other),
     );
+  });
+
+  // Regression for the review-Critical finding: a plain end-slice of
+  // "base-suffix" collides two connects that share the same over-long base,
+  // because the slice cuts the SUFFIX off instead of the base — which would
+  // make the second connect's registerManagedServer call reject as a
+  // duplicate and hard-fail its enable. Clamping the base only (never the
+  // suffix) must keep two such connects distinct.
+  it("two connects sharing the SAME 40-char base still produce DISTINCT, regex-valid, ≤32-char names with the suffix intact at the tail", () => {
+    const longBase = "b".repeat(40);
+    const connectA = "connect-11112222-0000-4000-8000-000000000000";
+    const connectB = "connect-99998888-0000-4000-8000-000000000000";
+
+    const nameA = namespacedMcpServerName(longBase, connectA);
+    const nameB = namespacedMcpServerName(longBase, connectB);
+
+    expect(nameA).not.toBe(nameB);
+    for (const name of [nameA, nameB]) {
+      expect(name.length).toBeLessThanOrEqual(32);
+      expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+    }
+    expect(nameA.endsWith("-11112222")).toBe(true);
+    expect(nameB.endsWith("-99998888")).toBe(true);
   });
 });
 
