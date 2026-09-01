@@ -1528,6 +1528,43 @@ if (
 ) {
   fail("messaging-core Host plugin must expose management through DSH Typert");
 }
+const connectorManifest = await json(
+  "plugins/dsh-plugin-connector-core/package.json",
+);
+if (
+  JSON.stringify(connectorManifest.dsh?.client?.inject) !==
+  JSON.stringify([
+    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-api-remotes",
+    "@amiba/dsh-plugin-ui-shell",
+  ])
+) {
+  fail(
+    "connector-core Client plugin must depend on DSH Remote and the slot owner",
+  );
+}
+const connectorClient = await text(
+  "plugins/dsh-plugin-connector-core/src/client/index.tsx",
+);
+for (const required of [
+  "ctx.remote.$mount(AMIBA_CONNECTORS_REMOTE)",
+  '"remote.amibaConnectors"',
+  '"settings.section"',
+  "DshSettingsConnect",
+]) {
+  if (!connectorClient.includes(required)) {
+    fail(`connector-core Client plugin is missing ${required}`);
+  }
+}
+const connectorHost = await text(
+  "plugins/dsh-plugin-connector-core/src/remote-service.ts",
+);
+if (
+  !connectorHost.includes("TypertRemoteService") ||
+  !connectorHost.includes("@Remote")
+) {
+  fail("connector-core Host plugin must expose management through DSH Typert");
+}
 const settingsView = await text("packages/ui/src/settings/SettingsView.tsx");
 if (
   settingsView.includes('mainTab === "messaging"') ||
