@@ -5,6 +5,7 @@ import type {
   ConnectorInboundEnvelope,
   ConnectorProvider,
   ConnectorRuntime,
+  ConnectorStatus,
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
@@ -90,12 +91,27 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
       const api = deps.createApiClient(config);
       const botOpenId = await api.botOpenId();
 
+      // Declared before the callbacks below (not after `ws.start()`) so
+      // every callback closure — including one that could in principle fire
+      // synchronously during construction — sees a real `false`, never a
+      // TDZ reference. `stop()` flips this to true and every callback below
+      // checks it first: a callback racing a torn-down connect (stop()
+      // already resolved, the center already deleted its status entry)
+      // must not resurrect a status, or deliver an inbound message, for a
+      // connect that no longer exists.
+      let stopped = false;
+      const safeSetStatus = (status: ConnectorStatus): void => {
+        if (stopped) return;
+        handle.setStatus(status);
+      };
+
       const ws = deps.createWsClient(config, {
-        onReady: () => handle.setStatus({ state: "ready" }),
-        onReconnected: () => handle.setStatus({ state: "ready" }),
-        onReconnecting: () => handle.setStatus({ state: "connecting" }),
-        onError: (err) => handle.setStatus({ state: "error", detail: String(err) }),
+        onReady: () => safeSetStatus({ state: "ready" }),
+        onReconnected: () => safeSetStatus({ state: "ready" }),
+        onReconnecting: () => safeSetStatus({ state: "connecting" }),
+        onError: (err) => safeSetStatus({ state: "error", detail: String(err) }),
         onEvent: async (event) => {
+          if (stopped) return;
           const envelope = toEnvelope(event, botOpenId);
           if (!envelope) return;
           try {
@@ -111,7 +127,6 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
 
       await ws.start();
 
-      let stopped = false;
       const runtime: ConnectorRuntime = {
         async stop(): Promise<void> {
           if (stopped) return;

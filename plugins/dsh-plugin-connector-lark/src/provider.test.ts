@@ -241,6 +241,38 @@ describe("createLarkProvider", () => {
         true,
       );
     });
+
+    it("gates late ws callbacks behind stop(): no status writes or inbound delivery after stop", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await runtime.stop();
+      const statusesAfterStop = handle.statuses.length;
+
+      // Fire every callback as if it raced the initial connect attempt and
+      // only landed after stop() had already resolved and the center had
+      // already torn down this connect's status entry.
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onReady?.();
+      callbacks.onReconnected?.();
+      callbacks.onReconnecting?.();
+      callbacks.onError?.(new Error("late boom"));
+      await callbacks.onEvent?.({
+        sender: { sender_id: { open_id: "ou_user_1" } },
+        message: {
+          message_id: "msg_late",
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_type: "text",
+          content: '{"text":"hello"}',
+        },
+      });
+
+      expect(handle.statuses.length).toBe(statusesAfterStop);
+      expect(handle.onInbound).not.toHaveBeenCalled();
+    });
   });
 
   // --- Contract item 3: runtime.deliver() -----------------------------
