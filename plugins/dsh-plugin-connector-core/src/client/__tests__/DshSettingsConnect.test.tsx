@@ -67,6 +67,25 @@ const onboardProviders: ConnectorProviderView[] = [
   },
 ];
 
+// Task 4 fixture: the dingtalk provider, whose manual form is under test
+// below. Listed first so it becomes the dialog's default-selected provider;
+// `lark` is included second so the provider-switch residue test has a
+// second provider (with its own manual fields) to switch through.
+const dingtalkProviders: ConnectorProviderView[] = [
+  {
+    id: "dingtalk",
+    name: "钉钉 / DingTalk",
+    description: "DingTalk stream-mode bot connector",
+    supportsOnboarding: false,
+  },
+  {
+    id: "lark",
+    name: "Lark",
+    description: "Feishu/Lark bot connector",
+    supportsOnboarding: false,
+  },
+];
+
 const connects: ConnectView[] = [
   {
     id: "connect-1",
@@ -920,5 +939,136 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     // (which would call refresh() -> list() again) must never have fired.
     expect(list).toHaveBeenCalledTimes(1);
     consoleError.mockRestore();
+  });
+});
+
+describe("DshSettingsConnect — dingtalk manual config", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProviders.mockResolvedValue(dingtalkProviders);
+    list.mockResolvedValue([]);
+  });
+
+  it("renders the dingtalk manual fields (client id, client secret, tools switch) with no mode switch and no scan tab", async () => {
+    const user = userEvent.setup();
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByLabelText("Client ID")).toBeVisible();
+    const secretField = within(dialog).getByLabelText("Client secret");
+    expect(secretField).toBeVisible();
+    expect(secretField).toHaveAttribute("type", "password");
+    const toolsSwitch = within(dialog).getByRole("switch", {
+      name: "Enable tools (experimental)",
+    });
+    expect(toolsSwitch).toBeVisible();
+    expect(toolsSwitch).not.toBeChecked();
+
+    // No mode switch and no scan tab: dingtalk's supportsOnboarding is
+    // false, so the manual form renders unconditionally.
+    expect(
+      within(dialog).queryByRole("button", { name: "Scan to connect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Manual setup" }),
+    ).not.toBeInTheDocument();
+    // The JSON-fallback textarea must not also render for dingtalk.
+    expect(
+      within(dialog).queryByLabelText("Provider configuration"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("creates a dingtalk connect with trimmed clientId/clientSecret and enableTools defaulting to false", async () => {
+    const user = userEvent.setup();
+    create.mockResolvedValue(connectView({ provider: "dingtalk" }));
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Connect name"), "Ops bot");
+    await user.type(within(dialog).getByLabelText("Client ID"), "  client-abc  ");
+    await user.type(
+      within(dialog).getByLabelText("Client secret"),
+      "  secret-xyz  ",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(create).toHaveBeenCalledWith({
+      provider: "dingtalk",
+      name: "Ops bot",
+      agentPreset: "restricted",
+      config: {
+        clientId: "client-abc",
+        clientSecret: "secret-xyz",
+        enableTools: false,
+      },
+    });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("includes enableTools:true in the payload once the tools switch is toggled on", async () => {
+    const user = userEvent.setup();
+    create.mockResolvedValue(connectView({ provider: "dingtalk" }));
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Connect name"), "Ops bot");
+    await user.type(within(dialog).getByLabelText("Client ID"), "client-abc");
+    await user.type(
+      within(dialog).getByLabelText("Client secret"),
+      "secret-xyz",
+    );
+    await user.click(
+      within(dialog).getByRole("switch", {
+        name: "Enable tools (experimental)",
+      }),
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(create).toHaveBeenCalledWith({
+      provider: "dingtalk",
+      name: "Ops bot",
+      agentPreset: "restricted",
+      config: {
+        clientId: "client-abc",
+        clientSecret: "secret-xyz",
+        enableTools: true,
+      },
+    });
+  });
+
+  it("resets the client secret field when switching provider dingtalk -> lark -> dingtalk (no residue)", async () => {
+    const user = userEvent.setup();
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(
+      within(dialog).getByLabelText("Client secret"),
+      "leaky-secret",
+    );
+    expect(within(dialog).getByLabelText("Client secret")).toHaveValue(
+      "leaky-secret",
+    );
+
+    await user.click(within(dialog).getByLabelText("Provider"));
+    await user.click(await screen.findByRole("option", { name: "Lark" }));
+    expect(within(dialog).getByLabelText("App secret")).toHaveValue("");
+
+    await user.click(within(dialog).getByLabelText("Provider"));
+    await user.click(
+      await screen.findByRole("option", { name: "钉钉 / DingTalk" }),
+    );
+
+    expect(within(dialog).getByLabelText("Client secret")).toHaveValue("");
   });
 });

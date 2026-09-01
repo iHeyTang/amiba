@@ -42,6 +42,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.dingtalk.clientId": "Client ID",
+    "options.connect.dsh.dingtalk.clientSecret": "Client secret",
+    "options.connect.dsh.dingtalk.enableTools": "Enable tools (experimental)",
+    "options.connect.dsh.dingtalk.enableToolsHint":
+      "Tool access uses DingTalk's official but experimental dingtalk-mcp integration.",
     "options.connect.dsh.status.ready": "Ready",
     "options.connect.dsh.status.connecting": "Connecting",
     "options.connect.dsh.status.error": "Error: {detail}",
@@ -116,6 +121,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App Secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.dingtalk.clientId": "Client ID",
+    "options.connect.dsh.dingtalk.clientSecret": "Client Secret",
+    "options.connect.dsh.dingtalk.enableTools": "启用工具（实验）",
+    "options.connect.dsh.dingtalk.enableToolsHint":
+      "工具能力基于钉钉官方但仍处于实验阶段的 dingtalk-mcp 集成。",
     "options.connect.dsh.status.ready": "就绪",
     "options.connect.dsh.status.connecting": "连接中",
     "options.connect.dsh.status.error": "错误：{detail}",

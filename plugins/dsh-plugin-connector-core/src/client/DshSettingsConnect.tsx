@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
   SettingsPageDescription,
+  Switch,
   Textarea,
   cn,
   usePluginT,
@@ -485,6 +486,7 @@ function ConnectRow({
 }
 
 const LARK_PROVIDER_ID = "lark";
+const DINGTALK_PROVIDER_ID = "dingtalk";
 
 function parseJsonConfig(
   text: string,
@@ -522,9 +524,31 @@ function CreateConnectDialog({
   const [larkAppId, setLarkAppId] = useState("");
   const [larkAppSecret, setLarkAppSecret] = useState("");
   const [larkDomain, setLarkDomain] = useState("feishu");
+  const [dingtalkClientId, setDingtalkClientId] = useState("");
+  const [dingtalkClientSecret, setDingtalkClientSecret] = useState("");
+  // Experimental tool access (dingtalk-mcp) — default unchecked so a new
+  // connect never opts into it silently.
+  const [dingtalkEnableTools, setDingtalkEnableTools] = useState(false);
   const [configText, setConfigText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Clears every provider-specific manual-form field (lark's three plus
+   * dingtalk's three). Shared by the dialog-open reset effect and
+   * `handleProviderChange` below so switching providers mid-dialog can never
+   * leak one provider's typed credentials (e.g. a dingtalk client secret)
+   * into another provider's identically-shaped field, or back into the same
+   * provider's form after switching away and back.
+   */
+  const resetProviderFields = useCallback(() => {
+    setLarkAppId("");
+    setLarkAppSecret("");
+    setLarkDomain("feishu");
+    setDingtalkClientId("");
+    setDingtalkClientSecret("");
+    setDingtalkEnableTools(false);
+  }, []);
 
   // Scan-onboarding state (Task 4). `mode` only matters for a provider whose
   // `supportsOnboarding` is true — see `showModeSwitch`/`scanActive` below,
@@ -605,9 +629,7 @@ function CreateConnectDialog({
     setProvider(initialProvider?.id ?? "");
     setName("");
     setAgentPreset("restricted");
-    setLarkAppId("");
-    setLarkAppSecret("");
-    setLarkDomain("feishu");
+    resetProviderFields();
     setConfigText("");
     setError(null);
     setMode(initialProvider?.supportsOnboarding ? "scan" : "manual");
@@ -619,7 +641,7 @@ function CreateConnectDialog({
     // otherwise the just-displayed QR session would keep running host-side
     // with nothing left pointing at it.
     cancelCurrentSession();
-  }, [open, providers, cancelCurrentSession]);
+  }, [open, providers, cancelCurrentSession, resetProviderFields]);
 
   // Closing the dialog (via the Cancel button, backdrop, or Escape — anything
   // that flips `open` to false) and unmounting mid-flow both need the same
@@ -648,6 +670,12 @@ function CreateConnectDialog({
       providers.find((item) => item.id === next)?.supportsOnboarding ?? false;
     setMode(supports ? "scan" : "manual");
     setError(null);
+    // A provider switch mid-dialog must not leave the previous provider's
+    // manual-form fields (e.g. a typed lark app secret or dingtalk client
+    // secret) sitting around — clear them so the newly-selected provider's
+    // form (or the same provider's form, if switched back to) always starts
+    // empty instead of showing residue.
+    resetProviderFields();
     // Switching providers mid-scan must not leave the just-displayed QR
     // live host-side: cancel whatever session was active for the previous
     // provider before letting go of it, same as closing the dialog does.
@@ -794,9 +822,13 @@ function CreateConnectDialog({
     Boolean(provider) && Boolean(name.trim()) && Boolean(agentPreset.trim());
 
   const isLark = provider === LARK_PROVIDER_ID;
+  const isDingtalk = provider === DINGTALK_PROVIDER_ID;
   const jsonResult = useMemo(
-    () => (isLark ? { ok: true as const, value: {} } : parseJsonConfig(configText)),
-    [configText, isLark],
+    () =>
+      isLark || isDingtalk
+        ? { ok: true as const, value: {} }
+        : parseJsonConfig(configText),
+    [configText, isLark, isDingtalk],
   );
 
   async function submit() {
@@ -808,6 +840,13 @@ function CreateConnectDialog({
         appId: larkAppId.trim(),
         appSecret: larkAppSecret.trim(),
         domain: larkDomain,
+      };
+    } else if (isDingtalk) {
+      if (!dingtalkClientId.trim() || !dingtalkClientSecret.trim()) return;
+      config = {
+        clientId: dingtalkClientId.trim(),
+        clientSecret: dingtalkClientSecret.trim(),
+        enableTools: dingtalkEnableTools,
       };
     } else {
       if (!jsonResult.ok) return;
@@ -837,7 +876,9 @@ function CreateConnectDialog({
     Boolean(agentPreset.trim()) &&
     (isLark
       ? Boolean(larkAppId.trim()) && Boolean(larkAppSecret.trim())
-      : jsonResult.ok);
+      : isDingtalk
+        ? Boolean(dingtalkClientId.trim()) && Boolean(dingtalkClientSecret.trim())
+        : jsonResult.ok);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -961,6 +1002,47 @@ function CreateConnectDialog({
                     <SelectItem value="lark">Lark</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          ) : isDingtalk ? (
+            <div className="space-y-3 rounded-xl border border-border/55 p-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="dsh-connect-dingtalk-client-id">
+                  {t("options.connect.dsh.dingtalk.clientId")}
+                </Label>
+                <Input
+                  id="dsh-connect-dingtalk-client-id"
+                  onChange={(event) => setDingtalkClientId(event.target.value)}
+                  value={dingtalkClientId}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dsh-connect-dingtalk-client-secret">
+                  {t("options.connect.dsh.dingtalk.clientSecret")}
+                </Label>
+                <Input
+                  id="dsh-connect-dingtalk-client-secret"
+                  onChange={(event) =>
+                    setDingtalkClientSecret(event.target.value)
+                  }
+                  type="password"
+                  value={dingtalkClientSecret}
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border/50 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground">
+                    {t("options.connect.dsh.dingtalk.enableTools")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t("options.connect.dsh.dingtalk.enableToolsHint")}
+                  </p>
+                </div>
+                <Switch
+                  aria-label={t("options.connect.dsh.dingtalk.enableTools")}
+                  checked={dingtalkEnableTools}
+                  onCheckedChange={setDingtalkEnableTools}
+                />
               </div>
             </div>
           ) : (
