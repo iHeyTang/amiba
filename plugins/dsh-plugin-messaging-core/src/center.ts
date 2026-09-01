@@ -6,12 +6,13 @@ import {
 } from "@deepseek-ai/dsh-llm";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   hashChannelSecret,
   MessageCenterStore,
   type MessageChannelDeliveryStatus,
+  type StoredConversationBinding,
   type StoredMessageChannel,
   type StoredOutboundDelivery,
   type StoredPendingInbound,
@@ -25,6 +26,7 @@ export interface MessageChannelView {
   enabled: boolean;
   outboundUrl?: string;
   allowedSenders: string[];
+  agentPreset?: string;
   createdAt: string;
   updatedAt: string;
   delivery: MessageChannelDeliveryStatus;
@@ -53,11 +55,18 @@ export interface MessageChannelProvider {
   ): Promise<void>;
 }
 
+export interface InboundConversationRef {
+  key: string;
+  kind: "p2p" | "group";
+  title?: string;
+}
+
 export interface InboundMessageEnvelope {
   id: string;
   text: string;
   sender?: string;
   metadata?: Record<string, unknown>;
+  conversation?: InboundConversationRef;
 }
 
 export interface OutboundMessageEnvelope {
@@ -235,6 +244,7 @@ declare module "@deepseek-ai/cordis" {
 export class MessageChannelCenter {
   private readonly providers = new Map<string, MessageChannelProvider>();
   private readonly resumes = new Map<string, Promise<Agent>>();
+  private readonly conversationCreates = new Map<string, Promise<string>>();
   private recovery: Promise<void> | null = null;
   private deliveryPump: Promise<void> | null = null;
   private started = false;
@@ -308,13 +318,15 @@ export class MessageChannelCenter {
   async createChannel(input: {
     provider: string;
     name: string;
-    sessionId: string;
+    sessionId?: string;
+    agentPreset?: string;
     outboundUrl?: string;
     allowedSenders?: string[];
   }): Promise<{ channel: MessageChannelView; secret: string }> {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
-    if (!input.name.trim() || !input.sessionId.trim())
+    if (!input.name.trim()) throw new Error("invalid_channel");
+    if (!input.sessionId?.trim() && !input.agentPreset?.trim())
       throw new Error("invalid_channel");
     const result = await this.store.create(input);
     try {
@@ -364,6 +376,62 @@ export class MessageChannelCenter {
     return { channel: view(result.channel, status), secret: result.secret };
   }
 
+  listConversations(channelId?: string): Promise<StoredConversationBinding[]> {
+    return this.store.listConversations(channelId);
+  }
+
+  unbindConversation(
+    channelId: string,
+    conversationKey: string,
+  ): Promise<boolean> {
+    return this.store.removeConversation(channelId, conversationKey);
+  }
+
+  async conversationForSession(
+    channelId: string,
+    sessionId: string,
+  ): Promise<StoredConversationBinding | undefined> {
+    const binding = await this.store.findConversationBySession(sessionId);
+    return binding && binding.channelId === channelId ? binding : undefined;
+  }
+
+  private resolveConversationSession(
+    channel: StoredMessageChannel,
+    conversation: InboundConversationRef,
+  ): Promise<string> {
+    const key = `${channel.id}:${conversation.key}`;
+    const existing = this.conversationCreates.get(key);
+    if (existing) return existing;
+    const resolve = (async () => {
+      const bound = await this.store.findConversation(
+        channel.id,
+        conversation.key,
+      );
+      if (bound) return bound.sessionId;
+      const sessionId = `session-${randomUUID()}`;
+      const runtime = this.ctx as MessageRuntimeContext;
+      await this.ctx.agents.create({
+        sessionId: sessionId as never,
+        meta: channel.agentPreset ? { agentPreset: channel.agentPreset } : {},
+        setup: async (agentCtx: Context) => {
+          await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
+        },
+      });
+      await this.store.bindConversation({
+        channelId: channel.id,
+        conversationKey: conversation.key,
+        kind: conversation.kind,
+        ...(conversation.title ? { title: conversation.title } : {}),
+        sessionId,
+      });
+      return sessionId;
+    })().finally(() => {
+      this.conversationCreates.delete(key);
+    });
+    this.conversationCreates.set(key, resolve);
+    return resolve;
+  }
+
   async acceptInbound(
     channelId: string,
     secret: string,
@@ -385,7 +453,11 @@ export class MessageChannelCenter {
     )
       throw new Error("sender_not_allowed");
 
-    const agent = await this.ensureAgent(channel.sessionId);
+    const sessionId = envelope.conversation
+      ? await this.resolveConversationSession(channel, envelope.conversation)
+      : channel.sessionId;
+    if (!sessionId) throw new Error("conversation_required");
+    const agent = await this.ensureAgent(sessionId);
     const message = createUserMessage({
       content: [{ type: "text", text: envelope.text.trim() }],
       source: {
@@ -400,7 +472,7 @@ export class MessageChannelCenter {
       key: receiptKey,
       channelId: channel.id,
       messageId: envelope.id.trim(),
-      sessionId: channel.sessionId,
+      sessionId,
       dshMessageId: message.id,
       text: envelope.text.trim(),
       ...(envelope.sender ? { sender: envelope.sender } : {}),
@@ -408,7 +480,7 @@ export class MessageChannelCenter {
       acceptedAt,
     });
     if (!fresh)
-      return { accepted: true, duplicate: true, sessionId: channel.sessionId };
+      return { accepted: true, duplicate: true, sessionId };
     try {
       agent.followup(message);
     } catch (error) {
@@ -419,7 +491,7 @@ export class MessageChannelCenter {
         );
       void this.recoverPending();
     }
-    return { accepted: true, duplicate: false, sessionId: channel.sessionId };
+    return { accepted: true, duplicate: false, sessionId };
   }
 
   private ensureAgent(sessionId: string): Promise<Agent> {

@@ -35,8 +35,17 @@ async function harness() {
       return { agent };
     },
   );
+  const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
+  const create = vi.fn(
+    async ({ sessionId, meta }: { sessionId: string; meta?: Record<string, unknown> }) => {
+      const agent = makeAgent(sessionId);
+      live.set(sessionId, agent);
+      created.push({ sessionId, ...(meta ? { meta } : {}) });
+      return { agent };
+    },
+  );
   const ctx = {
-    agents: { get: (id: string) => live.get(id), resume },
+    agents: { get: (id: string) => live.get(id), resume, create },
     agentPresets: { mount: vi.fn(async () => undefined) },
     sessionPersistence: {
       inspect: vi.fn(async (id: string) => {
@@ -67,7 +76,7 @@ async function harness() {
     supportsInbound: true,
     supportsOutbound: true,
   });
-  return { center, followup, listeners, resume, live };
+  return { center, followup, listeners, resume, live, created, create };
 }
 
 describe("DSH-native message channel center", () => {
@@ -231,5 +240,125 @@ describe("DSH-native message channel center", () => {
     expect(
       await center.store.acceptReceipt(`${created.channel.id}:evt-retry`),
     ).toBe(true);
+  });
+});
+
+describe("conversation-scoped routing", () => {
+  it("creates and binds a session on first contact, reuses it after", async () => {
+    const { center, followup, created } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const first = await center.acceptInbound(channel.id, secret, {
+      id: "msg-1",
+      text: "hello",
+      sender: "alice",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1);
+    expect(created[0]!.meta).toMatchObject({ agentPreset: "restricted" });
+    expect(first.sessionId).toBe(created[0]!.sessionId);
+
+    const second = await center.acceptInbound(channel.id, secret, {
+      id: "msg-2",
+      text: "again",
+      sender: "alice",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1); // no new session
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(followup).toHaveBeenCalledTimes(2);
+
+    const other = await center.acceptInbound(channel.id, secret, {
+      id: "msg-3",
+      text: "different chat",
+      sender: "alice",
+      conversation: { key: "chat-2", kind: "group", title: "Team" },
+    });
+    expect(created).toHaveLength(2);
+    expect(other.sessionId).not.toBe(first.sessionId);
+
+    expect(await center.listConversations(channel.id)).toHaveLength(2);
+    expect(
+      await center.conversationForSession(channel.id, first.sessionId),
+    ).toMatchObject({ conversationKey: "chat-1" });
+  });
+
+  it("unbinding a conversation makes the next message start a fresh session", async () => {
+    const { center, created } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const first = await center.acceptInbound(channel.id, secret, {
+      id: "m-1",
+      text: "hi",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(await center.unbindConversation(channel.id, "chat-1")).toBe(true);
+    const second = await center.acceptInbound(channel.id, secret, {
+      id: "m-2",
+      text: "hi again",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(second.sessionId).not.toBe(first.sessionId);
+    expect(created).toHaveLength(2);
+  });
+
+  it("keeps the single-session fallback and rejects fallback-less channels", async () => {
+    const { center } = await harness();
+    const fallback = await center.createChannel({
+      provider: "webhook",
+      name: "Legacy",
+      sessionId: "session-a",
+    });
+    const routed = await center.acceptInbound(
+      fallback.channel.id,
+      fallback.secret,
+      { id: "evt-1", text: "no conversation field" },
+    );
+    expect(routed.sessionId).toBe("session-a");
+
+    const conversationOnly = await center.createChannel({
+      provider: "webhook",
+      name: "Connector-style",
+      agentPreset: "restricted",
+    });
+    await expect(
+      center.acceptInbound(conversationOnly.channel.id, conversationOnly.secret, {
+        id: "evt-2",
+        text: "missing conversation",
+      }),
+    ).rejects.toThrow("conversation_required");
+
+    await expect(
+      center.createChannel({ provider: "webhook", name: "Neither" }),
+    ).rejects.toThrow("invalid_channel");
+  });
+
+  it("serializes concurrent first messages of one conversation into one session", async () => {
+    const { center, created } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const [a, b] = await Promise.all([
+      center.acceptInbound(channel.id, secret, {
+        id: "r-1",
+        text: "race one",
+        conversation: { key: "chat-r", kind: "p2p" },
+      }),
+      center.acceptInbound(channel.id, secret, {
+        id: "r-2",
+        text: "race two",
+        conversation: { key: "chat-r", kind: "p2p" },
+      }),
+    ]);
+    expect(created).toHaveLength(1);
+    expect(a.sessionId).toBe(b.sessionId);
   });
 });
