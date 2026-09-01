@@ -5,6 +5,16 @@ import { dirname, join } from "node:path";
 const STATE_VERSION = 1;
 const MAX_RECEIPTS = 1_000;
 
+export interface StoredConversationBinding {
+  channelId: string;
+  conversationKey: string;
+  kind: "p2p" | "group";
+  title?: string;
+  sessionId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StoredMessageChannel {
   id: string;
   provider: string;
@@ -14,6 +24,7 @@ export interface StoredMessageChannel {
   secretHash: string;
   outboundUrl?: string;
   allowedSenders: string[];
+  agentPreset?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +79,7 @@ interface MessageCenterDocument {
   receipts: StoredReceipt[];
   pending: StoredPendingInbound[];
   outbox: StoredOutboundDelivery[];
+  conversations: StoredConversationBinding[];
 }
 
 function emptyDocument(): MessageCenterDocument {
@@ -77,6 +89,7 @@ function emptyDocument(): MessageCenterDocument {
     receipts: [],
     pending: [],
     outbox: [],
+    conversations: [],
   };
 }
 
@@ -110,6 +123,9 @@ function normalizeChannel(value: unknown): StoredMessageChannel | null {
       ? { outboundUrl: row.outboundUrl }
       : {}),
     allowedSenders: normalizeStringList(row.allowedSenders),
+    ...(typeof row.agentPreset === "string" && row.agentPreset
+      ? { agentPreset: row.agentPreset }
+      : {}),
     createdAt: typeof row.createdAt === "string" ? row.createdAt : now,
     updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : now,
   };
@@ -139,6 +155,28 @@ function normalizePending(value: unknown): StoredPendingInbound | null {
       ? { metadata: row.metadata as Record<string, unknown> }
       : {}),
     acceptedAt: row.acceptedAt,
+  };
+}
+
+function normalizeConversation(value: unknown): StoredConversationBinding | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.channelId !== "string" ||
+    typeof row.conversationKey !== "string" ||
+    (row.kind !== "p2p" && row.kind !== "group") ||
+    typeof row.sessionId !== "string" ||
+    typeof row.createdAt !== "string" ||
+    typeof row.updatedAt !== "string"
+  ) return null;
+  return {
+    channelId: row.channelId,
+    conversationKey: row.conversationKey,
+    kind: row.kind,
+    ...(typeof row.title === "string" && row.title ? { title: row.title } : {}),
+    sessionId: row.sessionId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -224,6 +262,11 @@ export class MessageCenterStore {
               .map(normalizeOutbound)
               .filter((item): item is StoredOutboundDelivery => Boolean(item))
           : [],
+        conversations: Array.isArray(parsed.conversations)
+          ? parsed.conversations
+              .map(normalizeConversation)
+              .filter((item): item is StoredConversationBinding => Boolean(item))
+          : [],
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyDocument();
@@ -259,9 +302,10 @@ export class MessageCenterStore {
   create(input: {
     provider: string;
     name: string;
-    sessionId: string;
+    sessionId?: string;
     outboundUrl?: string;
     allowedSenders?: string[];
+    agentPreset?: string;
   }): Promise<{ channel: StoredMessageChannel; secret: string }> {
     return this.mutate((document) => {
       const secret = generateChannelSecret();
@@ -270,11 +314,12 @@ export class MessageCenterStore {
         id: `channel-${randomUUID()}`,
         provider: input.provider,
         name: input.name.trim(),
-        sessionId: input.sessionId.trim(),
+        sessionId: input.sessionId?.trim() ?? "",
         enabled: true,
         secretHash: hashChannelSecret(secret),
         ...(input.outboundUrl?.trim() ? { outboundUrl: input.outboundUrl.trim() } : {}),
         allowedSenders: normalizeStringList(input.allowedSenders),
+        ...(input.agentPreset?.trim() ? { agentPreset: input.agentPreset.trim() } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -284,7 +329,7 @@ export class MessageCenterStore {
   }
 
   update(id: string, patch: Partial<Pick<StoredMessageChannel,
-    "name" | "sessionId" | "enabled" | "outboundUrl" | "allowedSenders"
+    "name" | "sessionId" | "enabled" | "outboundUrl" | "allowedSenders" | "agentPreset"
   >>): Promise<StoredMessageChannel> {
     return this.mutate((document) => {
       const index = document.channels.findIndex((item) => item.id === id);
@@ -303,6 +348,11 @@ export class MessageCenterStore {
         ...(patch.allowedSenders === undefined
           ? {}
           : { allowedSenders: normalizeStringList(patch.allowedSenders) }),
+        ...(patch.agentPreset === undefined
+          ? {}
+          : patch.agentPreset.trim()
+            ? { agentPreset: patch.agentPreset.trim() }
+            : { agentPreset: undefined }),
         updatedAt: new Date().toISOString(),
       };
       document.channels[index] = channel;
@@ -316,6 +366,9 @@ export class MessageCenterStore {
       document.channels = document.channels.filter((item) => item.id !== id);
       document.pending = document.pending.filter((item) => item.channelId !== id);
       document.outbox = document.outbox.filter((item) => item.channelId !== id);
+      document.conversations = document.conversations.filter(
+        (item) => item.channelId !== id,
+      );
       return document.channels.length !== before;
     });
   }
@@ -428,5 +481,77 @@ export class MessageCenterStore {
       if (item.lastError) current.lastDeliveryError = item.lastError;
     }
     return status;
+  }
+
+  findConversation(
+    channelId: string,
+    conversationKey: string,
+  ): Promise<StoredConversationBinding | undefined> {
+    return this.chain.then(async () =>
+      (await this.readDocument()).conversations.find(
+        (item) =>
+          item.channelId === channelId &&
+          item.conversationKey === conversationKey,
+      ),
+    );
+  }
+
+  findConversationBySession(
+    sessionId: string,
+  ): Promise<StoredConversationBinding | undefined> {
+    return this.chain.then(async () =>
+      (await this.readDocument()).conversations.find(
+        (item) => item.sessionId === sessionId,
+      ),
+    );
+  }
+
+  listConversations(channelId?: string): Promise<StoredConversationBinding[]> {
+    return this.chain.then(async () => {
+      const conversations = (await this.readDocument()).conversations;
+      return channelId
+        ? conversations.filter((item) => item.channelId === channelId)
+        : conversations;
+    });
+  }
+
+  bindConversation(
+    input: Omit<StoredConversationBinding, "createdAt" | "updatedAt">,
+  ): Promise<StoredConversationBinding> {
+    return this.mutate((document) => {
+      const now = new Date().toISOString();
+      const index = document.conversations.findIndex(
+        (item) =>
+          item.channelId === input.channelId &&
+          item.conversationKey === input.conversationKey,
+      );
+      const binding: StoredConversationBinding = {
+        channelId: input.channelId,
+        conversationKey: input.conversationKey,
+        kind: input.kind,
+        ...(input.title ? { title: input.title } : {}),
+        sessionId: input.sessionId,
+        createdAt: index >= 0 ? document.conversations[index]!.createdAt : now,
+        updatedAt: now,
+      };
+      if (index >= 0) document.conversations[index] = binding;
+      else document.conversations.push(binding);
+      return binding;
+    });
+  }
+
+  removeConversation(
+    channelId: string,
+    conversationKey: string,
+  ): Promise<boolean> {
+    return this.mutate((document) => {
+      const before = document.conversations.length;
+      document.conversations = document.conversations.filter(
+        (item) =>
+          !(item.channelId === channelId &&
+            item.conversationKey === conversationKey),
+      );
+      return document.conversations.length !== before;
+    });
   }
 }
