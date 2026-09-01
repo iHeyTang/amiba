@@ -15,12 +15,15 @@ export interface CliProvisionDeps {
   cliRoot: string;
   /** Root skills are seeded into (`<skillsRoot>/<name>/`). */
   skillsRoot: string;
-  /** PATH lookup for `spec.package`'s binary. Returns `null` when nothing is
-   * found; the caller decides whether a found version meets `minVersion`. */
+  /** PATH lookup for `spec.binary` — the CLI's actual executable name, NOT
+   * `spec.package` (a scoped package name like `@larksuite/cli` can never
+   * be found on PATH or under `node_modules/.bin/` directly). Returns
+   * `null` when nothing is found; the caller decides whether a found
+   * version meets `minVersion`. */
   resolveExisting(pkgBinary: string): Promise<{ path: string; version: string } | null>;
   /** Installs `pkg@version` into `dir` (a shared cache directory) if not
-   * already present there, and returns the resulting binary's path. */
-  managedInstall(pkg: string, version: string, dir: string): Promise<string>;
+   * already present there, and returns the resulting `binary`'s path. */
+  managedInstall(pkg: string, version: string, dir: string, binary: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean; mode?: number }): Promise<void>;
@@ -82,16 +85,16 @@ async function resolveBinaryPath(
   spec: CliProvisionSpec,
   deps: CliProvisionDeps,
 ): Promise<string> {
-  const existing = await deps.resolveExisting(spec.package);
+  const existing = await deps.resolveExisting(spec.binary);
   if (existing) {
     if (versionMeets(existing.version, spec.minVersion)) return existing.path;
     deps.log.warn(
-      `cli "${spec.id}": found ${spec.package}@${existing.version} on PATH, ` +
+      `cli "${spec.id}": found ${spec.binary}@${existing.version} on PATH, ` +
         `below required ${spec.minVersion} — treating as absent and using a managed install`,
     );
   }
   const installDir = join(deps.cliRoot, `${spec.package}@${spec.pinnedVersion}`);
-  return deps.managedInstall(spec.package, spec.pinnedVersion, installDir);
+  return deps.managedInstall(spec.package, spec.pinnedVersion, installDir, spec.binary);
 }
 
 /**
@@ -178,10 +181,23 @@ export async function provisionCli(
     async dispose() {
       if (disposed) return;
       disposed = true;
-      await deps.rm(wrapperPath, { force: true });
-      deps.log.info?.(
-        `cli "${spec.id}": removed wrapper script — managed install and seeded skills left in place`,
-      );
+      // Best-effort unwind: the caller (index.ts's "cli" applier disposer)
+      // fires this via `void handle.dispose()` — fire-and-forget, same as
+      // every other capability disposer (see center.ts's own best-effort
+      // unwind around its disposers). A rejection here would surface as an
+      // unhandled promise rejection with no catcher anywhere up the chain,
+      // which can crash the whole DSH runtime process over a single
+      // connector's wrapper failing to delete. Swallow and warn instead.
+      try {
+        await deps.rm(wrapperPath, { force: true });
+        deps.log.info?.(
+          `cli "${spec.id}": removed wrapper script — managed install and seeded skills left in place`,
+        );
+      } catch (error) {
+        deps.log.warn(
+          `cli "${spec.id}": failed to remove wrapper script at ${wrapperPath} — ${String(error)}`,
+        );
+      }
     },
   };
 }

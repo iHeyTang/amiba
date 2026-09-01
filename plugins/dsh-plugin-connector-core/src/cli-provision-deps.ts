@@ -29,11 +29,12 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-/** PATH lookup for `pkgBinary` (assumed to name both the package and its
- * binary — v1's simplifying assumption), followed by `--version` to read
- * back whatever version string it reports. Anything that fails along the
- * way (not on PATH, not executable, no parseable version) is treated as "no
- * usable existing install" rather than an error. */
+/** PATH lookup for `pkgBinary` — the spec's declared executable name
+ * (`spec.binary`), NOT the (possibly scoped) package name — followed by
+ * `--version` to read back whatever version string it reports. Anything
+ * that fails along the way (not on PATH, not executable, no parseable
+ * version) is treated as "no usable existing install" rather than an
+ * error. */
 async function resolveExisting(
   pkgBinary: string,
 ): Promise<{ path: string; version: string } | null> {
@@ -61,30 +62,48 @@ function binNameFor(pkg: string): string {
   return segments[segments.length - 1] ?? pkg;
 }
 
-/** Reads back the binary a managed install of `pkg` produced under `dir`,
- * using the package's own `package.json#bin` when present (falling back to
- * the unscoped package name), or `null` when nothing resolvable is there. */
-async function resolveInstalledBinary(dir: string, pkg: string): Promise<string | null> {
+/** Reads back the binary a managed install of `pkg` produced under `dir`.
+ * `binary` — the spec's declared executable name — is tried first at its
+ * expected `node_modules/.bin/<binary>` location; a scoped package's
+ * `package.json#bin` is consulted only as a fallback, in case what actually
+ * got installed doesn't match what the spec declared. `null` when neither
+ * resolves to something on disk. */
+async function resolveInstalledBinary(
+  dir: string,
+  pkg: string,
+  binary: string,
+): Promise<string | null> {
+  const preferred = join(dir, "node_modules", ".bin", binary);
+  if (await pathExists(preferred)) return preferred;
+
   const pkgRoot = join(dir, "node_modules", pkg);
   try {
     const raw = await readFile(join(pkgRoot, "package.json"), "utf8");
     const manifest = JSON.parse(raw) as { bin?: string | Record<string, string> };
-    let binName = binNameFor(pkg);
+    let binName: string | undefined;
     if (manifest.bin && typeof manifest.bin === "object") {
       const [first] = Object.keys(manifest.bin);
-      if (first) binName = first;
+      binName = first;
+    } else if (typeof manifest.bin === "string") {
+      binName = binNameFor(pkg);
     }
-    const binPath = join(dir, "node_modules", ".bin", binName);
-    return (await pathExists(binPath)) ? binPath : null;
+    if (!binName) return null;
+    const fallback = join(dir, "node_modules", ".bin", binName);
+    return (await pathExists(fallback)) ? fallback : null;
   } catch {
     return null;
   }
 }
 
 /** Installs `pkg@version` into the shared cache directory `dir`, skipping
- * the actual `npm install` when a resolvable binary is already there. */
-async function managedInstall(pkg: string, version: string, dir: string): Promise<string> {
-  const existing = await resolveInstalledBinary(dir, pkg);
+ * the actual `npm install` when `binary` is already resolvable there. */
+async function managedInstall(
+  pkg: string,
+  version: string,
+  dir: string,
+  binary: string,
+): Promise<string> {
+  const existing = await resolveInstalledBinary(dir, pkg, binary);
   if (existing) return existing;
 
   await fsMkdir(dir, { recursive: true });
@@ -98,7 +117,7 @@ async function managedInstall(pkg: string, version: string, dir: string): Promis
     `${pkg}@${version}`,
   ]);
 
-  const installed = await resolveInstalledBinary(dir, pkg);
+  const installed = await resolveInstalledBinary(dir, pkg, binary);
   if (!installed)
     throw new Error(`managed install of "${pkg}@${version}" produced no resolvable binary`);
   return installed;

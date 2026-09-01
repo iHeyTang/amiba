@@ -590,6 +590,7 @@ describe("ConnectorCenter", () => {
           spec: {
             id: "x",
             package: "y",
+            binary: "y",
             minVersion: "1.0.0",
             pinnedVersion: "1.0.0",
             env: {},
@@ -704,6 +705,7 @@ describe("ConnectorCenter", () => {
         spec: {
           id: "x",
           package: "y",
+          binary: "y",
           minVersion: "1.0.0",
           pinnedVersion: "1.0.0",
           env: {},

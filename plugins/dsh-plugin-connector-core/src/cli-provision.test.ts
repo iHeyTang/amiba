@@ -3,10 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { provisionCli, type CliProvisionDeps } from "./cli-provision.js";
 import type { CliProvisionSpec } from "./types.js";
 
+// `binary` ("acme-cli") is deliberately NOT derivable from `package`
+// ("@acme/cli") by any naive transform (stripping the scope gives "cli",
+// not "acme-cli") — this is what real scoped CLI packages look like (e.g.
+// `@larksuite/cli`'s actual binary is `lark-cli`), and it's what makes a
+// regression that resolves/installs against `spec.package` instead of
+// `spec.binary` visible in these tests instead of accidentally passing.
 function fakeSpec(overrides: Partial<CliProvisionSpec> = {}): CliProvisionSpec {
   return {
     id: "acme-cli",
     package: "@acme/cli",
+    binary: "acme-cli",
     minVersion: "1.2.0",
     pinnedVersion: "1.2.3",
     env: {},
@@ -23,7 +30,7 @@ function fakeSpec(overrides: Partial<CliProvisionSpec> = {}): CliProvisionSpec {
 function fakeDeps(overrides: Partial<CliProvisionDeps> = {}) {
   const calls = {
     resolveExisting: [] as string[],
-    managedInstall: [] as Array<{ pkg: string; version: string; dir: string }>,
+    managedInstall: [] as Array<{ pkg: string; version: string; dir: string; binary: string }>,
     writeFile: [] as Array<{ path: string; content: string }>,
     chmod: [] as Array<{ path: string; mode: number }>,
     mkdir: [] as Array<{ path: string; options?: { recursive?: boolean; mode?: number } }>,
@@ -41,9 +48,9 @@ function fakeDeps(overrides: Partial<CliProvisionDeps> = {}) {
       calls.resolveExisting.push(pkgBinary);
       return null;
     }),
-    managedInstall: vi.fn(async (pkg: string, version: string, dir: string) => {
-      calls.managedInstall.push({ pkg, version, dir });
-      return `${dir}/bin/${pkg.split("/").pop()}`;
+    managedInstall: vi.fn(async (pkg: string, version: string, dir: string, binary: string) => {
+      calls.managedInstall.push({ pkg, version, dir, binary });
+      return `${dir}/bin/${binary}`;
     }),
     writeFile: vi.fn(async (path: string, content: string) => {
       calls.writeFile.push({ path, content });
@@ -83,6 +90,17 @@ describe("provisionCli — resolution order", () => {
     expect(calls.managedInstall).toHaveLength(0);
   });
 
+  it("resolves against spec.binary, never spec.package — a scoped package name (containing '/') can never be found on PATH", async () => {
+    const { deps } = fakeDeps({
+      resolveExisting: vi.fn(async () => null),
+    });
+
+    await provisionCli(fakeSpec(), deps);
+
+    expect(deps.resolveExisting).toHaveBeenCalledWith("acme-cli");
+    expect(deps.resolveExisting).not.toHaveBeenCalledWith("@acme/cli");
+  });
+
   it("falls through to a managed install, with a warning, when the PATH hit is below minVersion", async () => {
     const { deps, calls, warn } = fakeDeps({
       resolveExisting: vi.fn(async () => ({ path: "/usr/local/bin/acme", version: "1.1.9" })),
@@ -94,9 +112,9 @@ describe("provisionCli — resolution order", () => {
     expect(warn.mock.calls[0]![0]).toContain("1.1.9");
     expect(warn.mock.calls[0]![0]).toContain("1.2.0");
     expect(calls.managedInstall).toEqual([
-      { pkg: "@acme/cli", version: "1.2.3", dir: "/cli-root/@acme/cli@1.2.3" },
+      { pkg: "@acme/cli", version: "1.2.3", dir: "/cli-root/@acme/cli@1.2.3", binary: "acme-cli" },
     ]);
-    expect(handle.binaryPath).toBe("/cli-root/@acme/cli@1.2.3/bin/cli");
+    expect(handle.binaryPath).toBe("/cli-root/@acme/cli@1.2.3/bin/acme-cli");
   });
 
   it("goes straight to a managed install when nothing is found on PATH", async () => {
@@ -106,7 +124,7 @@ describe("provisionCli — resolution order", () => {
 
     expect(warn).not.toHaveBeenCalled();
     expect(calls.managedInstall).toEqual([
-      { pkg: "@acme/cli", version: "1.2.3", dir: "/cli-root/@acme/cli@1.2.3" },
+      { pkg: "@acme/cli", version: "1.2.3", dir: "/cli-root/@acme/cli@1.2.3", binary: "acme-cli" },
     ]);
   });
 });
@@ -256,5 +274,30 @@ describe("provisionCli — dispose", () => {
     await handle.dispose();
 
     expect(calls.rm).toHaveLength(1);
+  });
+
+  it("resolves without throwing, and logs a warning, when removing the wrapper fails", async () => {
+    const { deps, warn } = fakeDeps({
+      resolveExisting: vi.fn(async () => ({ path: "/usr/local/bin/acme", version: "1.2.0" })),
+      rm: vi.fn(async () => {
+        throw new Error("EACCES: permission denied");
+      }),
+    });
+    const handle = await provisionCli(fakeSpec(), deps);
+
+    // The center's "cli" applier disposer fires this via `void
+    // handle.dispose()` — fire-and-forget. If this rejected, it would
+    // surface as an unhandled promise rejection with nothing to catch it,
+    // which can crash the whole DSH runtime process over one connector's
+    // wrapper failing to delete.
+    await expect(handle.dispose()).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain("acme-cli");
+
+    // Idempotent even after a failed attempt: disposed is latched before
+    // the rm call itself, so a second call never retries it.
+    await handle.dispose();
+    expect(deps.rm).toHaveBeenCalledTimes(1);
   });
 });

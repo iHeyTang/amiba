@@ -36,6 +36,11 @@ export interface ConnectorRuntime {
 export interface CliProvisionSpec {
   id: string;
   package: string;
+  /** The installed CLI's actual executable name (e.g. `"lark-cli"` for the
+   * `@larksuite/cli` package) — distinct from `package`, since a scoped
+   * package name can never be looked up on PATH or found under
+   * `node_modules/.bin/` directly. */
+  binary: string;
   minVersion: string;
   pinnedVersion: string;
   env: Record<string, string>;

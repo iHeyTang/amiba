@@ -227,6 +227,7 @@ function fakeCliProvider(id = "fake-cli") {
         spec: {
           id: "acme-cli",
           package: "@acme/cli",
+          binary: "acme-cli",
           minVersion: "1.0.0",
           pinnedVersion: "1.0.0",
           env: {},
@@ -273,7 +274,7 @@ describe("connector-core plugin apply() — cli capability applier wiring", () =
 
     expect(provisionCli).toHaveBeenCalledTimes(1);
     const [spec, deps] = vi.mocked(provisionCli).mock.calls[0]!;
-    expect(spec).toMatchObject({ id: "acme-cli", package: "@acme/cli" });
+    expect(spec).toMatchObject({ id: "acme-cli", package: "@acme/cli", binary: "acme-cli" });
     expect(deps).toMatchObject({
       cliRoot: config.cliRoot,
       skillsRoot: config.skillsRoot,
