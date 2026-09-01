@@ -66,6 +66,19 @@ export const connectI18n: PluginCatalogOverlay = {
       "Choose an agent preset before creating this connect.",
     "options.connect.dsh.error.provider_not_found":
       "That provider is no longer installed.",
+    "options.connect.dsh.onboard.modeScan": "Scan to connect",
+    "options.connect.dsh.onboard.modeManual": "Manual setup",
+    "options.connect.dsh.onboard.begin": "Start scanning",
+    "options.connect.dsh.onboard.intro":
+      "Start scanning to generate a QR code for this provider.",
+    "options.connect.dsh.onboard.qrAlt": "Onboarding QR code",
+    "options.connect.dsh.onboard.scanInstructions":
+      "Scan this QR code with the platform's app to authorize Amiba.",
+    "options.connect.dsh.onboard.longConnectionHint":
+      "This connect stays online through a persistent long connection — keep Amiba running after scanning so messages keep flowing.",
+    "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
+    "options.connect.dsh.onboard.error.generic":
+      "Scanning failed. Please try again.",
   },
   "zh-CN": {
     "options.connect.dsh.description":
@@ -109,5 +122,16 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.agent_preset_required":
       "创建连接前请先选择 Agent Preset。",
     "options.connect.dsh.error.provider_not_found": "该 Provider 已不再安装。",
+    "options.connect.dsh.onboard.modeScan": "扫码接入",
+    "options.connect.dsh.onboard.modeManual": "手动填写",
+    "options.connect.dsh.onboard.begin": "开始扫码",
+    "options.connect.dsh.onboard.intro": "点击“开始扫码”，生成该 Provider 的登录二维码。",
+    "options.connect.dsh.onboard.qrAlt": "接入二维码",
+    "options.connect.dsh.onboard.scanInstructions":
+      "使用该平台的 App 扫描此二维码以授权 Amiba。",
+    "options.connect.dsh.onboard.longConnectionHint":
+      "该连接通过长连接保持在线；扫码完成后请让 Amiba 保持运行，以确保消息能持续送达。",
+    "options.connect.dsh.onboard.waiting": "正在等待 Provider 响应…",
+    "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",
   },
 };

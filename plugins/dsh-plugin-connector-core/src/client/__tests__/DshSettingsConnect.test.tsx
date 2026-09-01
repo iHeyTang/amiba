@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DshSettingsConnect } from "../DshSettingsConnect";
 import type { ConnectorProviderView, ConnectView } from "../../types";
@@ -11,11 +11,9 @@ const create = vi.fn();
 const setEnabled = vi.fn();
 const remove = vi.fn();
 const setOwners = vi.fn();
-// Collateral fix, same category as Task 1's `supportsOnboarding` fixture
-// update: `ConnectAdapter` (Task 2) gained the onboarding trio, so this
-// hand-built mock needs stub implementations to satisfy the interface.
-// `DshSettingsConnect` itself doesn't call these yet (that's a later task) —
-// no test below exercises them.
+// `ConnectAdapter` (Task 2) gained the onboarding trio; Task 4 is where
+// `DshSettingsConnect` starts calling them (scan mode in the add-connect
+// dialog) — see the "scan mode" describe block below.
 const beginOnboarding = vi.fn();
 const pollOnboarding = vi.fn();
 const cancelOnboarding = vi.fn();
@@ -38,6 +36,24 @@ const providers: ConnectorProviderView[] = [
     name: "Lark",
     description: "Feishu/Lark bot connector",
     supportsOnboarding: false,
+  },
+  {
+    id: "webhook",
+    name: "Webhook",
+    description: "Generic JSON webhook",
+    supportsOnboarding: false,
+  },
+];
+
+// Task 4 fixture: a provider that supports the scan-onboarding flow, used by
+// the "scan mode" describe block below. Listed first so it becomes the
+// dialog's default-selected provider.
+const onboardProviders: ConnectorProviderView[] = [
+  {
+    id: "wecom",
+    name: "WeCom",
+    description: "WeCom bot connector",
+    supportsOnboarding: true,
   },
   {
     id: "webhook",
@@ -320,5 +336,254 @@ describe("DshSettingsConnect", () => {
       within(row).getByRole("button", { name: "Remove u1" }),
     );
     expect(setOwners).toHaveBeenCalledWith("connect-1", ["u2"]);
+  });
+});
+
+describe("DshSettingsConnect — scan-to-connect mode", () => {
+  // Opening the dialog and typing into it use REAL timers via `userEvent`:
+  // under Vitest fake timers, React 18's effect scheduling (jsdom has no
+  // `MessageChannel`, so the scheduler falls back to a timer it can't run
+  // without an explicit clock advance) and userEvent's own click both stall
+  // past any reasonable per-test timeout, even for state driven by an
+  // already-resolved mock promise — confirmed by isolated reproduction
+  // before writing these tests. Fake timers are switched on only once the
+  // dialog is open and the form is filled, right before the interaction
+  // that starts the 1500ms poll interval (so that interval is itself a fake
+  // one `advanceTimersByTimeAsync` can drive) — and every click after that
+  // switch uses plain `fireEvent.click` rather than `userEvent`, since
+  // userEvent's click still stalls under fake timers even with
+  // `advanceTimers` configured.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProviders.mockResolvedValue(onboardProviders);
+    list.mockResolvedValue([]);
+    // Default so RTL's automatic unmount-between-tests (which fires our
+    // close/unmount cleanup whenever a test leaves a session in flight)
+    // always has a well-behaved promise to resolve; individual tests still
+    // override this when the cancel call itself is under test.
+    cancelOnboarding.mockResolvedValue({ sessionId: "unused", state: "cancelled" });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function openDialogAndFillName(nameValue = "Support bot") {
+    const user = userEvent.setup();
+    render(<DshSettingsConnect adapter={adapter} />);
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Connect name"), nameValue);
+    return dialog;
+  }
+
+  /** Flushes pending microtasks/effects under fake timers, optionally also
+   * advancing the fake clock by `ms` (e.g. the 1500ms poll cadence). */
+  async function flush(ms = 0) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it("shows a scan/manual mode switch defaulting to scan mode, hiding the manual config fields", async () => {
+    const dialog = await openDialogAndFillName();
+
+    expect(
+      within(dialog).getByRole("button", { name: "Scan to connect" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Manual setup" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Start scanning" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).queryByLabelText("Provider configuration"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Add" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show a mode switch for a provider without onboarding support", async () => {
+    listProviders.mockResolvedValue(providers);
+    const dialog = await openDialogAndFillName();
+
+    expect(
+      within(dialog).queryByRole("button", { name: "Scan to connect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Manual setup" }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Add" })).toBeVisible();
+  });
+
+  it("begins onboarding with the provider, name, and default agent preset", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-1", state: "pending" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+
+    expect(beginOnboarding).toHaveBeenCalledWith({
+      provider: "wecom",
+      name: "Support bot",
+      agentPreset: "restricted",
+    });
+  });
+
+  it("renders the QR code once a poll returns a qrUrl", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-2", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-2",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-2",
+      qrExpireIn: 300,
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    expect(pollOnboarding).not.toHaveBeenCalled();
+
+    await flush(1500);
+
+    expect(pollOnboarding).toHaveBeenCalledWith("sess-2");
+    const img = within(dialog).getByRole("img", { name: "Onboarding QR code" });
+    expect(img.getAttribute("src")).toMatch(/^data:image\/svg/);
+    expect(
+      within(dialog).getByText(
+        "Scan this QR code with the platform's app to authorize Amiba.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        "This connect stays online through a persistent long connection — keep Amiba running after scanning so messages keep flowing.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("renders the statusNote (and no QR image or error) when a pending poll has no qrUrl yet", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-6", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-6",
+      state: "pending",
+      statusNote: "contacting platform",
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    expect(within(dialog).getByText("contacting platform")).toBeVisible();
+    expect(within(dialog).queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("That provider is no longer installed."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("closes the dialog and refreshes the list when onboarding completes", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-4", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-4",
+      state: "completed",
+      connect: connectView({
+        id: "connect-9",
+        provider: "wecom",
+        name: "Support bot",
+      }),
+    });
+    const dialog = await openDialogAndFillName();
+    expect(list).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows a translated inline error when onboarding fails", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-5", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-5",
+      state: "error",
+      error: "provider_not_found",
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    expect(
+      within(dialog).getByText("That provider is no longer installed."),
+    ).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("cancels the onboarding session exactly once when the dialog is closed mid-flow, and stops polling", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-3", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-3",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-3",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-3", state: "cancelled" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    within(dialog).getByRole("img", { name: "Onboarding QR code" });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-3");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("clears the poll interval on unmount mid-flow and issues exactly one cancel", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-7", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-7",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-7",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-7", state: "cancelled" });
+    const user = userEvent.setup();
+    const { unmount } = render(<DshSettingsConnect adapter={adapter} />);
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    unmount();
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-7");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
   });
 });

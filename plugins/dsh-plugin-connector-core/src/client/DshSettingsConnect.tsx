@@ -4,11 +4,13 @@ import {
   CircleAlert,
   Loader2,
   Plus,
+  QrCode,
   Trash2,
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import qrcode from "qrcode-generator";
 
 import {
   Badge,
@@ -35,7 +37,15 @@ import {
 
 import type { ConnectAdapter, CreateConnectInput } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
-import type { ConnectorProviderView, ConnectorStatus, ConnectView } from "../types.js";
+import type {
+  ConnectorProviderView,
+  ConnectorStatus,
+  ConnectView,
+  OnboardingView,
+} from "../types.js";
+
+/** Poll cadence for `adapter.pollOnboarding` while a scan session is pending. */
+const ONBOARD_POLL_INTERVAL_MS = 1500;
 
 /**
  * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
@@ -485,9 +495,33 @@ function CreateConnectDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Scan-onboarding state (Task 4). `mode` only matters for a provider whose
+  // `supportsOnboarding` is true — see `showModeSwitch`/`scanActive` below,
+  // which fall back to the manual form for everyone else regardless of this
+  // value, so a stale "scan" left over from a previously-selected provider
+  // can never leak into a provider that doesn't support it.
+  const [mode, setMode] = useState<"scan" | "manual">("scan");
+  const [onboarding, setOnboarding] = useState<OnboardingView | null>(null);
+  const [beginning, setBeginning] = useState(false);
+  // `sessionIdRef`/`pollRef` are refs (not state): they're read from
+  // interval/cleanup callbacks that must always see the latest value without
+  // re-subscribing, and writing them must never itself trigger a render.
+  const sessionIdRef = useRef<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guards against a slow poll response overlapping with the next tick.
+  const pollingRef = useRef(false);
+
+  const clearPollInterval = useCallback(() => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    setProvider(providers[0]?.id ?? "");
+    const initialProvider = providers[0];
+    setProvider(initialProvider?.id ?? "");
     setName("");
     setAgentPreset("restricted");
     setLarkAppId("");
@@ -495,7 +529,129 @@ function CreateConnectDialog({
     setLarkDomain("feishu");
     setConfigText("");
     setError(null);
-  }, [open, providers]);
+    setMode(initialProvider?.supportsOnboarding ? "scan" : "manual");
+    setOnboarding(null);
+    setBeginning(false);
+    sessionIdRef.current = null;
+    clearPollInterval();
+  }, [open, providers, clearPollInterval]);
+
+  // Closing the dialog (via the Cancel button, backdrop, or Escape — anything
+  // that flips `open` to false) and unmounting mid-flow both need the same
+  // teardown: stop polling and fire-and-forget a cancel for whatever session
+  // is still open. Returning this teardown from an effect keyed on `open`
+  // covers both cases — React runs it when `open` next changes (the close
+  // path) AND when the component unmounts while `open` was still true (the
+  // unmount path) — without a second, near-duplicate effect.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      clearPollInterval();
+      const sessionId = sessionIdRef.current;
+      sessionIdRef.current = null;
+      if (sessionId) {
+        // Fire-and-forget: this runs from an effect cleanup (close/unmount),
+        // so there's nowhere to surface a failure and nothing to await.
+        // `Promise.resolve(...)` guards against an adapter (or a test
+        // double) that throws synchronously or doesn't return a real
+        // promise, so a teardown call can never crash the unmount.
+        void Promise.resolve()
+          .then(() => adapter.cancelOnboarding(sessionId))
+          .catch(() => {});
+      }
+    };
+  }, [open, adapter, clearPollInterval]);
+
+  const selectedProvider = providers.find((item) => item.id === provider);
+  // The mode switch — and scan mode itself — only ever appears for a
+  // provider that actually supports onboarding; every other provider always
+  // renders today's manual form, unconditionally.
+  const showModeSwitch = Boolean(selectedProvider?.supportsOnboarding);
+  const scanActive = showModeSwitch && mode === "scan";
+
+  function handleProviderChange(next: string) {
+    setProvider(next);
+    const supports =
+      providers.find((item) => item.id === next)?.supportsOnboarding ?? false;
+    setMode(supports ? "scan" : "manual");
+    setOnboarding(null);
+    setError(null);
+    sessionIdRef.current = null;
+    clearPollInterval();
+  }
+
+  const poll = useCallback(async () => {
+    if (pollingRef.current) return;
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    pollingRef.current = true;
+    try {
+      const view = await adapter.pollOnboarding(sessionId);
+      setOnboarding(view);
+      if (view.state === "pending") return;
+      // Terminal state: stop polling and let go of the session id so a
+      // later dialog close doesn't also fire a redundant cancel.
+      sessionIdRef.current = null;
+      clearPollInterval();
+      if (view.state === "completed") {
+        onCreated();
+      } else if (view.state === "error") {
+        setError(
+          view.error
+            ? describeError(t, new Error(view.error))
+            : t("options.connect.dsh.onboard.error.generic"),
+        );
+      }
+    } catch (cause) {
+      sessionIdRef.current = null;
+      clearPollInterval();
+      setError(describeError(t, cause));
+    } finally {
+      pollingRef.current = false;
+    }
+  }, [adapter, clearPollInterval, onCreated, t]);
+
+  async function beginScan() {
+    if (!provider || !name.trim() || !agentPreset.trim()) return;
+    setError(null);
+    setBeginning(true);
+    try {
+      const view = await adapter.beginOnboarding({
+        provider,
+        name: name.trim(),
+        agentPreset: agentPreset.trim(),
+      });
+      setOnboarding(view);
+      if (view.state === "pending") {
+        sessionIdRef.current = view.sessionId;
+        clearPollInterval();
+        pollRef.current = setInterval(() => {
+          void poll();
+        }, ONBOARD_POLL_INTERVAL_MS);
+        return;
+      }
+      if (view.state === "completed") {
+        onCreated();
+        return;
+      }
+      if (view.state === "error") {
+        setError(
+          view.error
+            ? describeError(t, new Error(view.error))
+            : t("options.connect.dsh.onboard.error.generic"),
+        );
+      }
+      // "cancelled" as an initial state is not expected from a fresh begin
+      // call; nothing further to render if the center ever returns it.
+    } catch (cause) {
+      setError(describeError(t, cause));
+    } finally {
+      setBeginning(false);
+    }
+  }
+
+  const canBeginScan =
+    Boolean(provider) && Boolean(name.trim()) && Boolean(agentPreset.trim());
 
   const isLark = provider === LARK_PROVIDER_ID;
   const jsonResult = useMemo(
@@ -557,7 +713,7 @@ function CreateConnectDialog({
             </Label>
             <Select
               disabled={providers.length === 0}
-              onValueChange={setProvider}
+              onValueChange={handleProviderChange}
               value={provider}
             >
               <SelectTrigger id="dsh-connect-provider">
@@ -579,6 +735,28 @@ function CreateConnectDialog({
               </p>
             ) : null}
           </div>
+          {showModeSwitch ? (
+            <div className="flex gap-1 rounded-lg border border-border/55 p-1">
+              <Button
+                className="flex-1"
+                onClick={() => setMode("scan")}
+                size="sm"
+                type="button"
+                variant={mode === "scan" ? "default" : "ghost"}
+              >
+                {t("options.connect.dsh.onboard.modeScan")}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => setMode("manual")}
+                size="sm"
+                type="button"
+                variant={mode === "manual" ? "default" : "ghost"}
+              >
+                {t("options.connect.dsh.onboard.modeManual")}
+              </Button>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="dsh-connect-name">
               {t("options.connect.dsh.name")}
@@ -599,7 +777,15 @@ function CreateConnectDialog({
               value={agentPreset}
             />
           </div>
-          {isLark ? (
+          {scanActive ? (
+            onboarding ? (
+              <OnboardingScanPane onboarding={onboarding} t={t} />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t("options.connect.dsh.onboard.intro")}
+              </p>
+            )
+          ) : isLark ? (
             <div className="space-y-3 rounded-xl border border-border/55 p-3">
               <div className="space-y-1.5">
                 <Label htmlFor="dsh-connect-lark-app-id">
@@ -665,13 +851,85 @@ function CreateConnectDialog({
             <Button onClick={() => onOpenChange(false)} variant="ghost">
               {t("options.connect.dsh.cancel")}
             </Button>
-            <Button disabled={saving || !canSubmit} onClick={() => void submit()}>
-              {saving ? <Loader2 className="animate-spin" /> : <Plus />}
-              {t("options.connect.dsh.submit")}
-            </Button>
+            {scanActive ? (
+              !onboarding ? (
+                <Button
+                  disabled={beginning || !canBeginScan}
+                  onClick={() => void beginScan()}
+                >
+                  {beginning ? <Loader2 className="animate-spin" /> : <QrCode />}
+                  {t("options.connect.dsh.onboard.begin")}
+                </Button>
+              ) : null
+            ) : (
+              <Button disabled={saving || !canSubmit} onClick={() => void submit()}>
+                {saving ? <Loader2 className="animate-spin" /> : <Plus />}
+                {t("options.connect.dsh.submit")}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Scan-mode content once a session exists. Renders defensively: an
+ * `OnboardingView` update is server-pushed and its optional fields
+ * (`qrUrl`/`statusNote`) can legitimately be absent — a session that's still
+ * pending before the first QR is issued, or a future provider that only ever
+ * pushes status text — so this never assumes either is present. `error`
+ * state is handled by the shared error paragraph in `CreateConnectDialog`
+ * (via `describeError`), not here.
+ */
+function OnboardingScanPane({
+  onboarding,
+  t,
+}: {
+  onboarding: OnboardingView;
+  t: PluginTranslateFn;
+}) {
+  if (onboarding.state === "error") return null;
+
+  if (onboarding.qrUrl) {
+    const qr = qrcode(0, "M");
+    qr.addData(onboarding.qrUrl);
+    qr.make();
+    const svg = qr.createSvgTag({ cellSize: 4, margin: 2 });
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    return (
+      <div className="space-y-3 rounded-xl border border-border/55 p-4 text-center">
+        <img
+          alt={t("options.connect.dsh.onboard.qrAlt")}
+          className="mx-auto h-40 w-40"
+          src={dataUrl}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("options.connect.dsh.onboard.scanInstructions")}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          {t("options.connect.dsh.onboard.longConnectionHint")}
+        </p>
+        {onboarding.statusNote ? (
+          <p className="text-[11px] text-muted-foreground">
+            {onboarding.statusNote}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Graceful degradation (cross-plan compatibility guarantee): no `qrUrl`
+  // yet — render the status note if the provider sent one, otherwise a
+  // generic waiting line. Never an empty/broken pane, and never a crash on
+  // an absent optional field.
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border/55 px-4 py-6 text-center text-xs text-muted-foreground">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      <span>
+        {onboarding.statusNote ?? t("options.connect.dsh.onboard.waiting")}
+      </span>
+    </div>
   );
 }
