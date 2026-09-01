@@ -20,6 +20,43 @@ export * from "./remote.js";
 export * from "./store.js";
 export * from "./types.js";
 
+/**
+ * Namespaces a provider-declared BASE mcp serverName (e.g. lark declares the
+ * literal `"lark"`) into one unique per connect, so that two connects of the
+ * same provider — each independently declaring that same base name — don't
+ * collide in mcp-manager's registry. `registerManagedServer`'s async
+ * registration REJECTS on a duplicate `serverName` (see
+ * plugins/dsh-plugin-mcp-manager/src/manager.ts), which would otherwise
+ * hard-fail the second connect's enable outright.
+ *
+ * `connectId` is always `connect-<uuid>` (see store.ts's `ConnectorStore`);
+ * its `connect-` prefix carries no entropy, so it's stripped and only the
+ * uuid's first 8 characters — always plain hex, never containing the uuid's
+ * own `-` separators, which start at index 8 — are appended after the base
+ * name as a short, effectively-unique-per-provider suffix.
+ *
+ * `sanitize` strips every character outside mcp-manager's own
+ * `[A-Za-z0-9_-]` charset (covers a base containing dots/slashes, e.g. a
+ * package-flavored id) and clamps to its 32-char length ceiling, so the
+ * combined base+suffix always satisfies `/^[A-Za-z0-9_-]{1,32}$/` even for
+ * an oversized base. Pure function of its two inputs: same `base` +
+ * `connectId` always yields the same name (stable across repeated applier
+ * runs for the same connect, e.g. the disable/enable recovery below).
+ *
+ * Residual collision risk: two connects whose ids happen to share the same
+ * first 8 hex characters would still collide (≈1 in 16^8, ~4.3 billion, for
+ * any given pair of connects on the same provider+base — accepted as
+ * negligible rather than spending more of the 32-char budget on entropy).
+ * A base that sanitizes to empty (e.g. all-punctuation) still produces a
+ * valid, non-empty name: the joining `-` alone satisfies the charset, so
+ * the result degrades to `-<suffix>` rather than failing.
+ */
+export function namespacedMcpServerName(base: string, connectId: string): string {
+  const suffix = connectId.replace(/^connect-/, "").slice(0, 8);
+  const sanitized = `${base}-${suffix}`.replace(/[^A-Za-z0-9_-]/g, "");
+  return sanitized.slice(0, 32);
+}
+
 export const name = "amiba-connector-core";
 // This cordis version's object-form `inject` maps each service name to its
 // own intercept config (`{ [service]: config }`), not a `{required,optional}`
@@ -74,12 +111,36 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // load order never matters: whichever loads first, every future enable
   // (including a manual retry) re-checks freshly.
   appliers.set("mcp", {
-    apply: async (_connect, decl) => {
+    apply: async (connect, decl) => {
       if (decl.kind !== "mcp")
         throw new Error(`unexpected_capability_kind:${decl.kind}`);
       const manager = ctx.reflect.get("amibaMcpManager");
-      if (!manager) throw new CapabilityUnavailableError("mcp_manager_unavailable");
-      return await manager.registerManagedServer(decl.spec);
+      if (!manager) {
+        // Soft-skip (see CapabilityUnavailableError's doc comment): this one
+        // connect keeps running with every OTHER capability applied, just
+        // without its mcp registration, recorded as an error status rather
+        // than aborting the whole enable.
+        //
+        // Recovery once amibaMcpManager actually loads is NOT automatic for
+        // an already-live connect: `registerProvider`'s reconciliation
+        // (`startProviderConnects` in center.ts) only starts a connect
+        // that's enabled but not yet live — a connect whose runtime is
+        // already live with this capability soft-skipped stays exactly as
+        // it is (skip included) no matter how many times the owning
+        // provider re-registers afterward. The fix is a manual two-step
+        // disable/enable: `setEnabled(id, false)` tears the whole connect
+        // down (stopping its runtime and disposing every capability that
+        // DID apply), then `setEnabled(id, true)` starts it fresh and
+        // re-runs every capability decl from scratch — this "mcp" applier
+        // included — so it re-checks `amibaMcpManager` availability at that
+        // later point instead of replaying the earlier miss.
+        throw new CapabilityUnavailableError("mcp_manager_unavailable");
+      }
+      const spec = {
+        ...decl.spec,
+        serverName: namespacedMcpServerName(decl.spec.serverName, connect.id),
+      };
+      return await manager.registerManagedServer(spec);
     },
   });
 

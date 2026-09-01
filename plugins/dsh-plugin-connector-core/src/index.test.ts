@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectorCenter } from "./center.js";
 import { provisionCli, type CliProvisionHandle } from "./cli-provision.js";
-import { apply } from "./index.js";
+import { apply, namespacedMcpServerName } from "./index.js";
 import type { ConnectorHandle, ConnectorProvider, ConnectorRuntime } from "./types.js";
 
 // Mocked (vitest hoists this above the imports above at transform time) so
@@ -238,6 +238,180 @@ function fakeCliProvider(id = "fake-cli") {
   };
   return { provider, runtimes };
 }
+
+/** Fake `amibaMcpManager`: tracks every `registerManagedServer` call (spec
+ * included) so a test can inspect exactly what serverName the real "mcp"
+ * applier in index.ts computed and passed through. */
+function fakeMcpManager() {
+  const disposers: Array<ReturnType<typeof vi.fn>> = [];
+  const registerManagedServer = vi.fn(async (_spec: unknown) => {
+    const dispose = vi.fn();
+    disposers.push(dispose);
+    return dispose;
+  });
+  return { registerManagedServer, disposers };
+}
+
+/** A `ConnectorProvider` declaring one "mcp" capability with the given BASE
+ * serverName — unnamespaced, exactly as a real provider (e.g. lark
+ * declaring the literal `"lark"`) would. `capabilities()` is a fresh
+ * closure per call, so calling it again for a second connect yields an
+ * identical (still-unnamespaced) spec — namespacing only happens inside the
+ * real "mcp" applier under test. */
+function fakeMcpProvider(id = "fake-mcp", baseServerName = "acme") {
+  const runtimes: Array<{
+    stop: ReturnType<typeof vi.fn>;
+    deliver: ReturnType<typeof vi.fn>;
+  }> = [];
+  const start = vi.fn(async (_handle: ConnectorHandle) => {
+    const runtime: ConnectorRuntime = {
+      stop: vi.fn(async () => undefined),
+      deliver: vi.fn(async () => undefined),
+    } as unknown as ConnectorRuntime;
+    runtimes.push(runtime as never);
+    return runtime;
+  });
+  const provider: ConnectorProvider = {
+    id,
+    name: "Fake MCP Connector",
+    description: "Fake connector declaring an mcp capability",
+    configSchema: {},
+    validate: vi.fn(async () => undefined),
+    start,
+    capabilities: vi.fn(() => [
+      {
+        kind: "mcp" as const,
+        spec: {
+          serverName: baseServerName,
+          transport: "stdio" as const,
+          command: "echo",
+          args: [],
+          env: {},
+          enabled: true,
+        },
+      },
+    ]),
+  };
+  return { provider, runtimes };
+}
+
+describe("connector-core plugin apply() — mcp capability applier wiring", () => {
+  it("namespaces each connect's mcp serverName: two connects of the same provider declaring the same base name register DISTINCT, charset-valid serverNames", async () => {
+    const config = await fakeApplyConfig();
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const { ctx, store } = fakeCordisCtxWithMessaging(messageCenter, credentials);
+    const mcpManager = fakeMcpManager();
+    // The real "mcp" applier resolves amibaMcpManager lazily (`ctx.reflect.get`)
+    // at capability-apply time, not at plugin load — see index.ts's comment
+    // on the "mcp" applier — so it only needs to be on the store before the
+    // first createConnect below, not before apply() itself.
+    store.set("amibaMcpManager", mcpManager);
+
+    await apply(ctx as never, config);
+    const center = store.get("amibaConnectors") as ConnectorCenter;
+
+    const { provider } = fakeMcpProvider("fake-mcp", "acme");
+    center.registerProvider(provider);
+
+    const viewA = await center.createConnect({
+      provider: "fake-mcp",
+      name: "Connect A",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const viewB = await center.createConnect({
+      provider: "fake-mcp",
+      name: "Connect B",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    expect(mcpManager.registerManagedServer).toHaveBeenCalledTimes(2);
+    // A successful applier application never surfaces an error status — both
+    // connects' registrations landed cleanly, distinct names included.
+    expect(viewA.status).toEqual({ state: "connecting" });
+    expect(viewB.status).toEqual({ state: "connecting" });
+
+    const serverNames = mcpManager.registerManagedServer.mock.calls.map(
+      ([spec]) => (spec as { serverName: string }).serverName,
+    );
+    expect(new Set(serverNames).size).toBe(2);
+    for (const serverName of serverNames) {
+      expect(serverName).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+      expect(serverName.startsWith("acme-")).toBe(true);
+    }
+  });
+
+  it("skips (soft) and hard-fails nothing else when amibaMcpManager isn't wired in, recording an error status", async () => {
+    const config = await fakeApplyConfig();
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const { ctx, store } = fakeCordisCtxWithMessaging(messageCenter, credentials);
+    // No "amibaMcpManager" entry on the store at all.
+
+    await apply(ctx as never, config);
+    const center = store.get("amibaConnectors") as ConnectorCenter;
+
+    const { provider, runtimes } = fakeMcpProvider("fake-mcp", "acme");
+    center.registerProvider(provider);
+
+    const view = await center.createConnect({
+      provider: "fake-mcp",
+      name: "No manager",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    expect(view.status).toMatchObject({
+      state: "error",
+      detail: "mcp_manager_unavailable",
+    });
+    // The soft-skip must not unwind the runtime that already started.
+    expect(runtimes[0]!.stop).not.toHaveBeenCalled();
+  });
+});
+
+describe("namespacedMcpServerName", () => {
+  const CONNECT_ID = "connect-3f9a1b2c-dead-4bee-8000-000000000000";
+
+  it("appends a sanitized 8-char connect-id suffix to the base name", () => {
+    expect(namespacedMcpServerName("lark", CONNECT_ID)).toBe("lark-3f9a1b2c");
+  });
+
+  it("strips characters outside [A-Za-z0-9_-] from the base (dots, slashes)", () => {
+    const name = namespacedMcpServerName("acme.cli/v2", CONNECT_ID);
+    expect(name).toBe("acmecliv2-3f9a1b2c");
+    expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+  });
+
+  it("clamps the combined base+suffix to mcp-manager's 32-char ceiling", () => {
+    const longBase = "a".repeat(40);
+    const name = namespacedMcpServerName(longBase, CONNECT_ID);
+    expect(name).toBe("a".repeat(32));
+    expect(name.length).toBe(32);
+    expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+  });
+
+  it("is stable: the same base + connect id always produce the same serverName", () => {
+    const first = namespacedMcpServerName("lark", CONNECT_ID);
+    const second = namespacedMcpServerName("lark", CONNECT_ID);
+    expect(first).toBe(second);
+  });
+
+  it("still produces a valid, non-empty serverName when the base sanitizes to empty", () => {
+    const name = namespacedMcpServerName("...", CONNECT_ID);
+    expect(name.length).toBeGreaterThan(0);
+    expect(name).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+  });
+
+  it("two different connect ids sharing the provider's base name produce two different results", () => {
+    const other = "connect-abcdef01-0000-4000-8000-000000000000";
+    expect(namespacedMcpServerName("lark", CONNECT_ID)).not.toBe(
+      namespacedMcpServerName("lark", other),
+    );
+  });
+});
 
 describe("connector-core plugin apply() — cli capability applier wiring", () => {
   afterEach(() => {

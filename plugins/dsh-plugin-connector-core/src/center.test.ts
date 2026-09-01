@@ -973,6 +973,46 @@ describe("ConnectorCenter", () => {
     ).toBe(true);
   });
 
+  // Carryover from the mcp-namespacing work: registerProvider's
+  // reconciliation (`startProviderConnects`) re-runs the FULL start path for
+  // a stranded-but-enabled row, capability appliers included — a connect
+  // that already registered an mcp server once, got disposed by a provider
+  // reload, then comes back up under the provider's re-registration, must
+  // re-apply (not skip) its "mcp" capability, landing a second
+  // registerManagedServer call for the very same connect.
+  it("registerProvider's reconciliation re-applies capabilities: a disposed-then-re-registered provider's connect gets a SECOND registerManagedServer call", async () => {
+    const { center, mcp } = await harness();
+    const { provider, runtimes } = fakeProvider();
+    const dispose = center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake",
+      name: "Carryover",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    expect(mcp.registerManagedServer).toHaveBeenCalledTimes(1);
+
+    // Dispose the provider registration: this stops the connect's runtime
+    // and disposes its "mcp" registration (fire-and-forget behind the
+    // disposer), but the row itself stays enabled in the store — nothing
+    // ever called setEnabled(false).
+    dispose();
+    await vi.waitFor(() => {
+      expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
+    });
+    expect(mcp.disposers[0]).toHaveBeenCalledTimes(1);
+
+    // Re-register the SAME provider id. registerProvider's reconciliation
+    // finds the row enabled-but-not-live and starts it again, re-running
+    // every capability decl from scratch.
+    center.registerProvider(provider);
+
+    await vi.waitFor(() => {
+      expect(mcp.registerManagedServer).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("setEnabled(true) on an enabled-but-not-live row attempts a start", async () => {
     const { center } = await harness();
     const { provider, start, runtimes } = fakeProvider();
