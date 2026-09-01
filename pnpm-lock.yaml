@@ -280,6 +280,9 @@ importers:
       '@amiba/dsh-plugin-connector-core':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-connector-core
+      '@amiba/dsh-plugin-connector-dingtalk':
+        specifier: workspace:*
+        version: link:../../plugins/dsh-plugin-connector-dingtalk
       '@amiba/dsh-plugin-connector-lark':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-connector-lark

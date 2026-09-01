@@ -76,6 +76,9 @@
     - id: amiba-connector-lark
       name: "@amiba/dsh-plugin-connector-lark"
 
+    - id: amiba-connector-dingtalk
+      name: "@amiba/dsh-plugin-connector-dingtalk"
+
     - id: amiba-commands-adapter
       name: "@amiba/dsh-plugin-commands-adapter"
       config:
