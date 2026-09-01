@@ -57,7 +57,11 @@ function fakeCordisCtx() {
         if (typeof cleanup === "function") await cleanup();
       };
     },
-    logger: () => ({ error: vi.fn() }),
+    // `apply()` also calls `ctx.logger("amiba-connector-core")` to pass a
+    // logger into `seedAgentPresets` (see preset-seed.ts); a fresh temp
+    // `agentPresetsRoot` below has no "restricted" directory yet, so the
+    // seeder writes one and calls `.info` exactly once.
+    logger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
     // Never exercised: a fresh store has no rows, so center.start() at the
     // end of apply() finds nothing to reconcile and neither the messaging
     // center nor the credentials seam is ever called.
@@ -71,9 +75,13 @@ describe("connector-core plugin apply()", () => {
   it("registers the center and its Remote service under distinct Cordis service keys, without throwing on a real duplicate-registration guard", async () => {
     const root = await mkdtemp(join(tmpdir(), "amiba-connector-apply-"));
     roots.push(root);
+    const agentPresetsRoot = await mkdtemp(join(tmpdir(), "amiba-connector-apply-presets-"));
+    roots.push(agentPresetsRoot);
     const { ctx, store } = fakeCordisCtx();
 
-    await expect(apply(ctx as never, { root })).resolves.toBeUndefined();
+    await expect(
+      apply(ctx as never, { root, agentPresetsRoot }),
+    ).resolves.toBeUndefined();
 
     expect(store.has("amibaConnectors")).toBe(true);
     expect(store.get("amibaConnectors")).toBeInstanceOf(ConnectorCenter);

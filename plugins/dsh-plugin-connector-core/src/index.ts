@@ -6,6 +6,7 @@ import type {} from "@deepseek-ai/dsh-credentials";
 import z from "@deepseek-ai/schemastery";
 
 import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
+import { RESTRICTED_PRESET, seedAgentPresets } from "./preset-seed.js";
 import { applyConnectorsRemote } from "./remote-service.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
 import type { CapabilityDecl } from "./types.js";
@@ -26,10 +27,12 @@ export const inject = ["amibaMessageCenter", "credentials"];
 
 export interface Config {
   root: string;
+  agentPresetsRoot: string;
 }
 
 export const Config: z<Config> = z.object({
   root: z.string().required(),
+  agentPresetsRoot: z.string().required(),
 });
 
 declare module "@deepseek-ai/cordis" {
@@ -82,5 +85,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // so no runtime, socket, or mcp registration is left orphaned behind a
   // torn-down amibaConnectors service.
   ctx.effect(() => () => center.stop(), "amiba-connector-core.center");
+  // IM-originated sessions mount agent preset "restricted" by name; seed it
+  // into the writable roster root here so that mount resolves instead of
+  // messaging-core falling back to an unrestricted session with a warning.
+  // Idempotent and create-only: a user's own edited or broken copy is never
+  // touched, and a seeding failure is caught and logged — it must never
+  // block the rest of apply() or the connector center from starting.
+  await seedAgentPresets(
+    config.agentPresetsRoot,
+    [RESTRICTED_PRESET],
+    ctx.logger("amiba-connector-core"),
+  );
   await center.start();
 }
