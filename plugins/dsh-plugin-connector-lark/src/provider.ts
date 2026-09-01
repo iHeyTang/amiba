@@ -1,4 +1,10 @@
-import { Client, Domain, EventDispatcher, WSClient } from "@larksuiteoapi/node-sdk";
+import {
+  Client,
+  Domain,
+  EventDispatcher,
+  WSClient,
+  registerApp as sdkRegisterApp,
+} from "@larksuiteoapi/node-sdk";
 import type {
   CapabilityDecl,
   ConnectorHandle,
@@ -6,6 +12,8 @@ import type {
   ConnectorProvider,
   ConnectorRuntime,
   ConnectorStatus,
+  OnboardHandle,
+  OnboardResult,
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
@@ -44,9 +52,36 @@ export interface ApiLike {
   sendText(chatId: string, text: string): Promise<void>;
 }
 
+/**
+ * Narrow local mirror of the SDK's `RegisterAppOptions` — only the fields
+ * `provider.onboard()` actually passes. Structurally assignable to the
+ * SDK's real type (verified against the installed 1.73.0 declarations, see
+ * `realLarkDeps.registerApp` below), so fakes in tests never need to import
+ * SDK types either.
+ */
+export interface LarkRegisterAppOptions {
+  signal?: AbortSignal;
+  onQRCodeReady: (info: { url: string; expireIn: number }) => void;
+  onStatusChange?: (info: { status: string; interval?: number }) => void;
+  appPreset?: { name?: string; desc?: string };
+  addons?: {
+    scopes?: { tenant?: string[] };
+    events?: { items?: { tenant?: string[] } };
+  };
+}
+
+/** Narrow local mirror of the SDK's `RegisterAppResult`. */
+export interface LarkRegisterAppResult {
+  client_id: string;
+  client_secret: string;
+  user_info?: { open_id?: string; tenant_brand?: "feishu" | "lark" };
+}
+
 export interface LarkDeps {
   createWsClient(config: LarkConnectorConfig, callbacks: LarkWsCallbacks): WsLike;
   createApiClient(config: LarkConnectorConfig): ApiLike;
+  /** Runs the SDK's scan-to-register device-authorization flow; see `provider.onboard()`. */
+  registerApp(options: LarkRegisterAppOptions): Promise<LarkRegisterAppResult>;
   /**
    * Console-free logging seam: the provider core never calls `console.*`
    * directly. A swallowed `handle.onInbound` error is still observable
@@ -143,6 +178,53 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
     },
 
     capabilities: (): CapabilityDecl[] => [],
+
+    /**
+     * Scan-to-connect onboarding: runs the SDK's device-authorization
+     * `registerApp` flow, forwarding its QR/status callbacks onto the
+     * handle as they fire, then maps the returned credentials into a
+     * validated `LarkConnectorConfig`.
+     *
+     * `handle.signal` (the caller's own abort signal — never a locally
+     * constructed one) is passed straight through to `registerApp`, so
+     * cancelling the onboarding session unwinds the SDK's polling loop and
+     * this call rejects; the center classifies cancelled-vs-error by
+     * `signal.aborted`, so no local catch/translate is needed here.
+     */
+    async onboard(handle: OnboardHandle): Promise<OnboardResult> {
+      const result = await deps.registerApp({
+        signal: handle.signal,
+        onQRCodeReady: ({ url, expireIn }) =>
+          handle.emit({ kind: "qr", url, expireIn }),
+        onStatusChange: ({ status }) =>
+          handle.emit({ kind: "status", note: status }),
+        appPreset: {
+          name: "Amiba ({user})",
+          desc: "Amiba desktop agent connect",
+        },
+        // Minimal read+send set for im.message.receive_v1 + reply, verified
+        // against the SDK's own README examples: `im:message` ("发送和接收消息")
+        // covers receiving the event, `im:message:send_as_bot` covers the
+        // `client.im.message.create` call `runtime.deliver()` makes.
+        addons: {
+          scopes: { tenant: ["im:message", "im:message:send_as_bot"] },
+          events: { items: { tenant: ["im.message.receive_v1"] } },
+        },
+      });
+
+      const config = larkConfigSchema.parse({
+        appId: result.client_id,
+        appSecret: result.client_secret,
+        domain: result.user_info?.tenant_brand === "lark" ? "lark" : "feishu",
+      });
+
+      // Same tenant-token path `validate()` uses — confirms the freshly
+      // registered credentials actually work before handing config back.
+      const api = deps.createApiClient(config);
+      await api.tenantToken();
+
+      return { config };
+    },
   };
 }
 
@@ -165,6 +247,18 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
 //     the SDK's `formatDomain` only special-cases the two enum values and otherwise uses the
 //     given string verbatim as the base URL, so an unmapped "feishu"/"lark" string would be
 //     used as a broken host.
+//   - app registration: `registerApp(options): Promise<{ client_id, client_secret, user_info?:
+//     { open_id?, tenant_brand?: "feishu" | "lark" } }>` — a top-level SDK export (not on
+//     `Client`/`WSClient`), confirmed via the installed 1.73.0 type declarations
+//     (`types/index.d.ts`, `RegisterAppOptions`/`RegisterAppResult`) and the SDK's own
+//     README "App Registration" section. `options.signal` cancels the underlying polling
+//     loop; `onQRCodeReady`/`onStatusChange` fire zero or more times before the promise
+//     settles; `addons.scopes.tenant` / `addons.events.items.tenant` are additive
+//     pre-fills on the platform's default app template shown on the confirm page — the
+//     README documents `im:message` as "发送和接收消息" (send + receive messages) and
+//     `im:message:send_as_bot` as "以机器人身份发送消息" (send as bot identity), which is
+//     the minimal pair covering `im.message.receive_v1` plus the `client.im.message.create`
+//     reply this provider's `runtime.deliver()` already makes.
 // ---------------------------------------------------------------------------
 
 function resolveDomain(domain: LarkConnectorConfig["domain"]): Domain {
@@ -247,6 +341,10 @@ export const realLarkDeps: LarkDeps = {
         });
       },
     };
+  },
+
+  registerApp(options): Promise<LarkRegisterAppResult> {
+    return sdkRegisterApp(options);
   },
 
   log: (msg) => {

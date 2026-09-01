@@ -4,12 +4,16 @@ import type {
   ConnectorHandle,
   ConnectorInboundEnvelope,
   ConnectorStatus,
+  OnboardHandle,
+  OnboardUpdate,
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
   createLarkProvider,
   type ApiLike,
   type LarkDeps,
+  type LarkRegisterAppOptions,
+  type LarkRegisterAppResult,
   type LarkWsCallbacks,
   type WsLike,
 } from "./provider.js";
@@ -39,14 +43,28 @@ function fakeWs(overrides: Partial<WsLike> = {}): WsLike {
   };
 }
 
+/** Default registerApp stub for tests that don't exercise onboard(). */
+function fakeRegisterApp(
+  impl?: (options: LarkRegisterAppOptions) => Promise<LarkRegisterAppResult>,
+): ReturnType<typeof vi.fn> {
+  return vi.fn(
+    impl ??
+      (async () => {
+        throw new Error("registerApp not stubbed for this test");
+      }),
+  );
+}
+
 /** Captures every call the provider core makes into the deps seam. */
 function fakeDeps(options?: {
   api?: ApiLike;
   ws?: WsLike;
+  registerApp?: ReturnType<typeof vi.fn>;
 }): LarkDeps & {
   wsCallbacks?: LarkWsCallbacks;
   createWsClient: ReturnType<typeof vi.fn>;
   createApiClient: ReturnType<typeof vi.fn>;
+  registerApp: ReturnType<typeof vi.fn>;
   logs: string[];
 } {
   const api = options?.api ?? fakeApi();
@@ -56,6 +74,7 @@ function fakeDeps(options?: {
     wsCallbacks?: LarkWsCallbacks;
     createWsClient: ReturnType<typeof vi.fn>;
     createApiClient: ReturnType<typeof vi.fn>;
+    registerApp: ReturnType<typeof vi.fn>;
     logs: string[];
   } = {
     createApiClient: vi.fn(() => api),
@@ -63,10 +82,22 @@ function fakeDeps(options?: {
       deps.wsCallbacks = callbacks;
       return ws;
     }),
+    registerApp: options?.registerApp ?? fakeRegisterApp(),
     log: (msg: string) => logs.push(msg),
     logs,
   };
   return deps;
+}
+
+function fakeOnboardHandle(
+  signal: AbortSignal = new AbortController().signal,
+): OnboardHandle & { emits: OnboardUpdate[] } {
+  const emits: OnboardUpdate[] = [];
+  return {
+    signal,
+    emits,
+    emit: (update: OnboardUpdate) => emits.push(update),
+  };
 }
 
 function fakeHandle(config: unknown = validConfig): ConnectorHandle & {
@@ -352,6 +383,117 @@ describe("createLarkProvider", () => {
       await runtime.stop();
       await expect(runtime.stop()).resolves.toBeUndefined();
       expect(ws.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // --- Contract item 5: onboard() ---------------------------------------
+
+  describe("onboard", () => {
+    it("forwards onQRCodeReady and onStatusChange callbacks as emits, in order", async () => {
+      const registerApp = fakeRegisterApp(async (options) => {
+        options.onQRCodeReady({ url: "https://example.com/qr", expireIn: 300 });
+        options.onStatusChange?.({ status: "polling" });
+        options.onStatusChange?.({ status: "slow_down", interval: 5 });
+        return { client_id: "cli_1", client_secret: "secret_1" };
+      });
+      const deps = fakeDeps({ registerApp });
+      const handle = fakeOnboardHandle();
+      const provider = createLarkProvider(deps);
+
+      await provider.onboard!(handle);
+
+      expect(handle.emits).toEqual([
+        { kind: "qr", url: "https://example.com/qr", expireIn: 300 },
+        { kind: "status", note: "polling" },
+        { kind: "status", note: "slow_down" },
+      ]);
+    });
+
+    it("maps the registerApp result to config (domain from tenant_brand, both ways) and validates credentials", async () => {
+      const larkApi = fakeApi();
+      const larkDeps = fakeDeps({
+        api: larkApi,
+        registerApp: fakeRegisterApp(async (options) => {
+          options.onQRCodeReady({ url: "https://example.com/qr", expireIn: 300 });
+          return {
+            client_id: "cli_lark",
+            client_secret: "secret_lark",
+            user_info: { open_id: "ou_scanner", tenant_brand: "lark" },
+          };
+        }),
+      });
+      const larkProvider = createLarkProvider(larkDeps);
+
+      const larkResult = await larkProvider.onboard!(fakeOnboardHandle());
+
+      expect(larkResult.config).toEqual({
+        appId: "cli_lark",
+        appSecret: "secret_lark",
+        domain: "lark",
+      });
+      expect(larkDeps.createApiClient).toHaveBeenCalledWith(larkResult.config);
+      expect(larkApi.tenantToken).toHaveBeenCalledTimes(1);
+
+      const feishuApi = fakeApi();
+      const feishuDeps = fakeDeps({
+        api: feishuApi,
+        registerApp: fakeRegisterApp(async (options) => {
+          options.onQRCodeReady({ url: "https://example.com/qr", expireIn: 300 });
+          return { client_id: "cli_feishu", client_secret: "secret_feishu" };
+        }),
+      });
+      const feishuProvider = createLarkProvider(feishuDeps);
+
+      const feishuResult = await feishuProvider.onboard!(fakeOnboardHandle());
+
+      expect(feishuResult.config).toEqual({
+        appId: "cli_feishu",
+        appSecret: "secret_feishu",
+        domain: "feishu",
+      });
+      expect(feishuApi.tenantToken).toHaveBeenCalledTimes(1);
+    });
+
+    it("propagates a registerApp rejection", async () => {
+      const deps = fakeDeps({
+        registerApp: fakeRegisterApp(async () => {
+          throw new Error("access_denied");
+        }),
+      });
+      const handle = fakeOnboardHandle();
+      const provider = createLarkProvider(deps);
+
+      await expect(provider.onboard!(handle)).rejects.toThrow("access_denied");
+    });
+
+    it("passes the handle's own signal through and propagates rejection on abort", async () => {
+      const controller = new AbortController();
+      let observedSignal: AbortSignal | undefined;
+      const deps = fakeDeps({
+        registerApp: fakeRegisterApp(
+          (options) =>
+            new Promise((_resolve, reject) => {
+              observedSignal = options.signal;
+              options.signal?.addEventListener("abort", () => {
+                reject(new Error("abort"));
+              });
+            }),
+        ),
+      });
+      const handle = fakeOnboardHandle(controller.signal);
+      const provider = createLarkProvider(deps);
+
+      const pending = provider.onboard!(handle);
+      controller.abort();
+
+      await expect(pending).rejects.toThrow("abort");
+      expect(observedSignal).toBe(controller.signal);
+      expect(observedSignal?.aborted).toBe(true);
+    });
+
+    it("is present as a function on the default (SDK-backed) provider", () => {
+      const provider = createLarkProvider();
+      expect(typeof provider.onboard).toBe("function");
     });
   });
 });
