@@ -109,6 +109,25 @@ describe("DshSettingsConnect", () => {
     expect(screen.getByRole("button", { name: /Add connect/ })).toBeDisabled();
   });
 
+  it("shows the empty state with an enabled, reachable add flow when providers exist but there are no connects yet", async () => {
+    const user = userEvent.setup();
+    listProviders.mockResolvedValue(providers);
+    list.mockResolvedValue([]);
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    expect(await screen.findByText("No connects yet")).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Install a platform plugin (for example Lark) to add a connect.",
+      ),
+    ).not.toBeInTheDocument();
+    const addButton = screen.getByRole("button", { name: /Add connect/ });
+    expect(addButton).toBeEnabled();
+
+    await user.click(addButton);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
   it("creates a lark connect from the add dialog with the three lark-specific fields", async () => {
     const user = userEvent.setup();
     create.mockResolvedValue(connectView());
