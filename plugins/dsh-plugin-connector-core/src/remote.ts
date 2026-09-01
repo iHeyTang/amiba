@@ -32,9 +32,16 @@ export interface AmibaConnectorsConnectsSnapshot {
 }
 
 // Discriminated on `state`, matching ConnectorStatus in ./types.ts exactly.
+// Additive union: "off"/"degraded" are new members alongside the Task-2-era
+// "connecting"/"ready"/"error" ones — an older client decoding a status it
+// doesn't recognize is an unavoidable, unrelated concern (it never worked
+// for genuinely novel states), but every status a Task-2-era server could
+// ever have emitted still decodes exactly as before.
 const connectorStatusSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("off") }),
   z.object({ state: z.literal("connecting") }),
   z.object({ state: z.literal("ready") }),
+  z.object({ state: z.literal("degraded"), detail: z.string() }),
   z.object({ state: z.literal("error"), detail: z.string() }),
 ]);
 

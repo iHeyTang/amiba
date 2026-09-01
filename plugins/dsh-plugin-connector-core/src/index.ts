@@ -136,8 +136,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (!manager) {
         // Soft-skip (see CapabilityUnavailableError's doc comment): this one
         // connect keeps running with every OTHER capability applied, just
-        // without its mcp registration, recorded as an error status rather
-        // than aborting the whole enable.
+        // without its mcp registration, recorded as a degraded status
+        // rather than aborting the whole enable (or reporting a hard error
+        // for what is, from the operator's perspective, a still-functional
+        // connect missing one optional capability).
         //
         // Recovery once amibaMcpManager actually loads is NOT automatic for
         // an already-live connect: `registerProvider`'s reconciliation

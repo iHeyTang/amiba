@@ -115,6 +115,18 @@ export class ConnectorCenter {
   private readonly live = new Map<string, LiveConnect>();
   private readonly starting = new Map<string, Promise<void>>();
   private readonly statuses = new Map<string, ConnectorStatus>();
+  /**
+   * Connect ids whose current `statuses` entry was written by the center
+   * itself (a capability applier's soft-skip, or a hard-failure catch) —
+   * NOT by the provider through its `ConnectorHandle`. While locked, a
+   * provider-originated `setStatus` (`providerSetStatus` below) is ignored:
+   * a late-arriving "ready" from e.g. a ws reconnect callback must not
+   * silently clobber a `degraded`/`error` the center just recorded for a
+   * reason the provider knows nothing about. Cleared at the top of every
+   * `performStart` (a fresh start earns a fresh chance for the provider's
+   * own writes to land) and by `stopConnect` (alongside the status itself).
+   */
+  private readonly statusLocked = new Set<string>();
   private readonly droppedSenders = new Map<string, number>();
   /**
    * One in-flight teardown promise per provider id, tracked from the moment
@@ -268,7 +280,7 @@ export class ConnectorCenter {
       try {
         await this.startConnect(row);
       } catch (error) {
-        this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
+        this.lockStatus(row.id, { state: "error", detail: errorDetail(error) });
         this.ctx
           .logger("amiba-connector-core")
           .error(`Failed to start connect ${row.id}: ${String(error)}`);
@@ -576,7 +588,7 @@ export class ConnectorCenter {
       try {
         await this.startConnect(row);
       } catch (error) {
-        this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
+        this.lockStatus(row.id, { state: "error", detail: errorDetail(error) });
         this.ctx
           .logger("amiba-connector-core")
           .error(`Failed to start connect ${row.id}: ${String(error)}`);
@@ -594,10 +606,48 @@ export class ConnectorCenter {
       owners: row.owners,
       ...(row.agentPreset ? { agentPreset: row.agentPreset } : {}),
       ...(row.channelId ? { channelId: row.channelId } : {}),
-      status: this.statuses.get(row.id) ?? { state: "connecting" },
+      status: this.computeStatus(row),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
+  }
+
+  /**
+   * A disabled connect has no live runtime — `stopConnect` deletes its
+   * status entry — so it always reports the neutral `off` state, regardless
+   * of whatever was last recorded (a disable racing a status write could in
+   * principle leave a stale entry behind; `off` must win either way). An
+   * enabled connect reports its recorded status, falling back to
+   * `connecting` only when nothing has been recorded yet (e.g. observed
+   * between store creation and the first `performStart` write, or before
+   * boot recovery has run for a stranded-but-enabled row).
+   */
+  private computeStatus(row: StoredConnect): ConnectorStatus {
+    if (!row.enabled) return { state: "off" };
+    return this.statuses.get(row.id) ?? { state: "connecting" };
+  }
+
+  /**
+   * Center-internal status write — a capability applier's soft-skip, or a
+   * hard-failure catch — as opposed to a provider-originated write through
+   * `ConnectorHandle#setStatus` (`providerSetStatus` below). Always wins,
+   * and locks out any subsequent provider write until the next
+   * `performStart` clears the lock.
+   */
+  private lockStatus(connectId: string, status: ConnectorStatus): void {
+    this.statuses.set(connectId, status);
+    this.statusLocked.add(connectId);
+  }
+
+  /**
+   * Provider-originated status write, via the connect's `ConnectorHandle`.
+   * A no-op while `statusLocked` — see the field's doc comment for why an
+   * applier-recorded `degraded`/`error` must survive a late provider write
+   * instead of being silently overwritten.
+   */
+  private providerSetStatus(connectId: string, status: ConnectorStatus): void {
+    if (this.statusLocked.has(connectId)) return;
+    this.statuses.set(connectId, status);
   }
 
   private grantKey(connectId: string): string {
@@ -637,6 +687,10 @@ export class ConnectorCenter {
 
   private async performStart(row: StoredConnect): Promise<void> {
     this.statuses.set(row.id, { state: "connecting" });
+    // A fresh start earns a fresh chance for the provider's own status
+    // writes to land — whatever locked a prior degraded/error out of a
+    // stale provider write no longer applies to this attempt.
+    this.statusLocked.delete(row.id);
     const provider = this.providers.get(row.provider);
     const disposers: Array<() => void> = [];
     let runtime: ConnectorRuntime | undefined;
@@ -649,7 +703,7 @@ export class ConnectorCenter {
         connectId: row.id,
         config: grant.config,
         onInbound: (envelope) => this.routeInbound(row.id, envelope),
-        setStatus: (status) => this.statuses.set(row.id, status),
+        setStatus: (status) => this.providerSetStatus(row.id, status),
       };
       runtime = await provider.start(handle);
 
@@ -663,8 +717,10 @@ export class ConnectorCenter {
           // A soft, recoverable "not available right now" outcome (e.g. the
           // mcp applier finding amibaMcpManager isn't wired into this
           // runtime): record it and keep going instead of hard-failing the
-          // whole connect over one optional capability.
-          this.statuses.set(row.id, { state: "error", detail: error.message });
+          // whole connect over one optional capability. `degraded`, not
+          // `error` — the connect is still live and doing useful work with
+          // every OTHER capability applied, just missing this one.
+          this.lockStatus(row.id, { state: "degraded", detail: error.message });
         }
       }
 
@@ -682,7 +738,7 @@ export class ConnectorCenter {
         }
       }
       if (runtime) await runtime.stop().catch(() => undefined);
-      this.statuses.set(row.id, { state: "error", detail: errorDetail(error) });
+      this.lockStatus(row.id, { state: "error", detail: errorDetail(error) });
       throw error;
     }
   }
@@ -707,6 +763,7 @@ export class ConnectorCenter {
       this.live.delete(connectId);
     }
     this.statuses.delete(connectId);
+    this.statusLocked.delete(connectId);
   }
 
   private recordDrop(connectId: string): void {

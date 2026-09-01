@@ -46,6 +46,7 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.status.connecting": "Connecting",
     "options.connect.dsh.status.error": "Error: {detail}",
     "options.connect.dsh.status.off": "Off",
+    "options.connect.dsh.status.degraded": "Degraded: {detail}",
     "options.connect.dsh.enable": "Turn on",
     "options.connect.dsh.disable": "Turn off",
     "options.connect.dsh.remove": "Remove",
@@ -66,6 +67,16 @@ export const connectI18n: PluginCatalogOverlay = {
       "Choose an agent preset before creating this connect.",
     "options.connect.dsh.error.provider_not_found":
       "That provider is no longer installed.",
+    "options.connect.dsh.error.connect_not_found":
+      "That connect no longer exists.",
+    "options.connect.dsh.error.invalid_channel":
+      "This provider's messaging channel configuration is invalid.",
+    "options.connect.dsh.error.grant_not_found":
+      "This connect's stored credentials are missing or invalid.",
+    "options.connect.dsh.error.onboarding_not_found":
+      "This onboarding session has expired or no longer exists.",
+    "options.connect.dsh.error.onboarding_unsupported":
+      "That provider doesn't support scan-to-connect onboarding.",
     "options.connect.dsh.onboard.modeScan": "Scan to connect",
     "options.connect.dsh.onboard.modeManual": "Manual setup",
     "options.connect.dsh.onboard.begin": "Start scanning",
@@ -79,6 +90,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
     "options.connect.dsh.onboard.error.generic":
       "Scanning failed. Please try again.",
+    "options.connect.dsh.onboard.note.polling": "Waiting for you to scan…",
+    "options.connect.dsh.onboard.note.slow_down":
+      "Scanning too fast — slowing down…",
+    "options.connect.dsh.onboard.note.domain_switched":
+      "Switched login domain — scan again if the code doesn't work.",
   },
   "zh-CN": {
     "options.connect.dsh.description":
@@ -104,6 +120,7 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.status.connecting": "连接中",
     "options.connect.dsh.status.error": "错误：{detail}",
     "options.connect.dsh.status.off": "已关闭",
+    "options.connect.dsh.status.degraded": "降级：{detail}",
     "options.connect.dsh.enable": "启用",
     "options.connect.dsh.disable": "停用",
     "options.connect.dsh.remove": "移除",
@@ -122,6 +139,12 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.agent_preset_required":
       "创建连接前请先选择 Agent Preset。",
     "options.connect.dsh.error.provider_not_found": "该 Provider 已不再安装。",
+    "options.connect.dsh.error.connect_not_found": "该连接已不存在。",
+    "options.connect.dsh.error.invalid_channel": "该 Provider 的消息渠道配置无效。",
+    "options.connect.dsh.error.grant_not_found": "该连接保存的凭据缺失或已失效。",
+    "options.connect.dsh.error.onboarding_not_found": "该扫码会话已过期或不存在。",
+    "options.connect.dsh.error.onboarding_unsupported":
+      "该 Provider 不支持扫码接入。",
     "options.connect.dsh.onboard.modeScan": "扫码接入",
     "options.connect.dsh.onboard.modeManual": "手动填写",
     "options.connect.dsh.onboard.begin": "开始扫码",
@@ -133,5 +156,9 @@ export const connectI18n: PluginCatalogOverlay = {
       "如果扫码后连接迟迟未能上线，请前往飞书开放平台该应用的设置，将“事件订阅”的接收方式改为“使用长连接接收事件”——该设置无法自动配置，需要手动切换。扫码期间请保持 Amiba 处于运行状态。",
     "options.connect.dsh.onboard.waiting": "正在等待 Provider 响应…",
     "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",
+    "options.connect.dsh.onboard.note.polling": "正在等待扫码…",
+    "options.connect.dsh.onboard.note.slow_down": "扫描过于频繁，正在降速…",
+    "options.connect.dsh.onboard.note.domain_switched":
+      "登录域名已切换，如二维码失效请重新扫码。",
   },
 };

@@ -14,8 +14,10 @@ export interface ConnectorInboundEnvelope
 }
 
 export type ConnectorStatus =
+  | { state: "off" }
   | { state: "connecting" }
   | { state: "ready" }
+  | { state: "degraded"; detail: string }
   | { state: "error"; detail: string };
 
 export interface ConnectorHandle {

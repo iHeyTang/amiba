@@ -343,7 +343,7 @@ describe("connector-core plugin apply() — mcp capability applier wiring", () =
     }
   });
 
-  it("skips (soft) and hard-fails nothing else when amibaMcpManager isn't wired in, recording an error status", async () => {
+  it("skips (soft) and hard-fails nothing else when amibaMcpManager isn't wired in, recording a degraded status", async () => {
     const config = await fakeApplyConfig();
     const messageCenter = fakeMessageCenter();
     const credentials = fakeCredentials();
@@ -364,7 +364,7 @@ describe("connector-core plugin apply() — mcp capability applier wiring", () =
     });
 
     expect(view.status).toMatchObject({
-      state: "error",
+      state: "degraded",
       detail: "mcp_manager_unavailable",
     });
     // The soft-skip must not unwind the runtime that already started.

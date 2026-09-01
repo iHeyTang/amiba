@@ -61,12 +61,41 @@ function useT() {
 const KNOWN_CREATE_ERRORS: Record<string, string> = {
   agent_preset_required: "options.connect.dsh.error.agent_preset_required",
   provider_not_found: "options.connect.dsh.error.provider_not_found",
+  connect_not_found: "options.connect.dsh.error.connect_not_found",
+  invalid_channel: "options.connect.dsh.error.invalid_channel",
+  grant_not_found: "options.connect.dsh.error.grant_not_found",
+  onboarding_not_found: "options.connect.dsh.error.onboarding_not_found",
+  onboarding_unsupported: "options.connect.dsh.error.onboarding_unsupported",
 };
 
 function describeError(t: PluginTranslateFn, cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   const key = KNOWN_CREATE_ERRORS[message];
   return key ? t(key) : message;
+}
+
+/**
+ * Maps a provider's raw onboarding `statusNote` token (e.g. the lark
+ * provider's `handle.emit({ kind: "status", note: status })`, which
+ * forwards the Lark SDK's `registerApp` `onStatusChange` status string
+ * verbatim — see `plugins/dsh-plugin-connector-lark/src/provider.ts`) to
+ * translated copy. Deliberately the simpler of the two designs considered
+ * (provider-side token mapping vs. UI-side translation): the provider keeps
+ * emitting the SDK's own stable token untouched, and translation — a
+ * presentation concern — lives entirely here. A token with no known
+ * translation (a future SDK status this dict hasn't caught up with yet, or
+ * a different provider's own free-text note) falls back to the raw string
+ * rather than showing nothing.
+ */
+const KNOWN_STATUS_NOTES: Record<string, string> = {
+  polling: "options.connect.dsh.onboard.note.polling",
+  slow_down: "options.connect.dsh.onboard.note.slow_down",
+  domain_switched: "options.connect.dsh.onboard.note.domain_switched",
+};
+
+function describeStatusNote(t: PluginTranslateFn, note: string): string {
+  const key = KNOWN_STATUS_NOTES[note];
+  return key ? t(key) : note;
 }
 
 /**
@@ -263,21 +292,16 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
   );
 }
 
-function ConnectStatusBadge({
-  enabled,
-  status,
-}: {
-  enabled: boolean;
-  status: ConnectorStatus;
-}) {
+/**
+ * Server-driven: `ConnectorCenter#toView` (via `computeStatus`) is the only
+ * place that decides `off` vs `connecting` vs a recorded status — this
+ * component just renders whatever `status` says, with no client-side
+ * `!enabled` special case of its own (M2a had one; removed once the center
+ * became authoritative for the `off` state — see task-4-brief.md).
+ */
+function ConnectStatusBadge({ status }: { status: ConnectorStatus }) {
   const { t } = useT();
-  // A disabled connect has no live runtime — `stopConnect` deletes its
-  // status entry, so `toView` falls back to `{ state: "connecting" }` (the
-  // default for "nothing recorded yet"). Reading `status` here for a
-  // disabled connect would render a permanently-stuck "Connecting" badge
-  // next to the "Turn on" button. Show a neutral off state instead; only a
-  // live (enabled) connect's status is meaningful to show.
-  if (!enabled) {
+  if (status.state === "off") {
     return (
       <Badge variant="outline">{t("options.connect.dsh.status.off")}</Badge>
     );
@@ -289,6 +313,13 @@ function ConnectStatusBadge({
     return (
       <Badge variant="secondary">
         {t("options.connect.dsh.status.connecting")}
+      </Badge>
+    );
+  }
+  if (status.state === "degraded") {
+    return (
+      <Badge variant="secondary">
+        {t("options.connect.dsh.status.degraded", { detail: status.detail })}
       </Badge>
     );
   }
@@ -340,7 +371,7 @@ function ConnectRow({
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{connect.name}</span>
-            <ConnectStatusBadge enabled={connect.enabled} status={connect.status} />
+            <ConnectStatusBadge status={connect.status} />
           </span>
           <span className="mt-1 block truncate text-[11px] text-muted-foreground">
             {providerName}
@@ -1004,7 +1035,7 @@ function OnboardingScanPane({
         </p>
         {onboarding.statusNote ? (
           <p className="text-[11px] text-muted-foreground">
-            {onboarding.statusNote}
+            {describeStatusNote(t, onboarding.statusNote)}
           </p>
         ) : null}
       </div>
@@ -1019,7 +1050,9 @@ function OnboardingScanPane({
     <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border/55 px-4 py-6 text-center text-xs text-muted-foreground">
       <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
       <span>
-        {onboarding.statusNote ?? t("options.connect.dsh.onboard.waiting")}
+        {onboarding.statusNote
+          ? describeStatusNote(t, onboarding.statusNote)
+          : t("options.connect.dsh.onboard.waiting")}
       </span>
     </div>
   );

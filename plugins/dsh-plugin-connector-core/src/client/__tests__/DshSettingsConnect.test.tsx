@@ -88,7 +88,10 @@ const connects: ConnectView[] = [
     enabled: false,
     pairing: true,
     owners: [],
-    status: { state: "connecting" },
+    // Server-driven: the center reports `off` for any disabled connect
+    // (see ConnectorCenter#computeStatus), so the badge just renders
+    // whatever the server says — no client-side `!enabled` special case.
+    status: { state: "off" },
     createdAt: "2026-08-15T00:00:00.000Z",
     updatedAt: "2026-08-15T00:00:00.000Z",
   },
@@ -100,6 +103,17 @@ const connects: ConnectView[] = [
     pairing: false,
     owners: ["u3"],
     status: { state: "error", detail: "invalid token" },
+    createdAt: "2026-08-15T00:00:00.000Z",
+    updatedAt: "2026-08-15T00:00:00.000Z",
+  },
+  {
+    id: "connect-4",
+    provider: "lark",
+    name: "Partial bot",
+    enabled: true,
+    pairing: false,
+    owners: ["u4"],
+    status: { state: "degraded", detail: "mcp_manager_unavailable" },
     createdAt: "2026-08-15T00:00:00.000Z",
     updatedAt: "2026-08-15T00:00:00.000Z",
   },
@@ -121,13 +135,16 @@ describe("DshSettingsConnect", () => {
 
     expect(await screen.findByText("Sales bot")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
-    // connect-2 is disabled (enabled: false) despite carrying a stale
-    // { state: "connecting" } status left over from before it was turned
-    // off — the badge must show a neutral "Off", not read that status.
+    // connect-2's { state: "off" } status is server-driven (the center
+    // reports off for any disabled connect) — the badge just renders it
+    // directly, no client-side `!enabled` special case.
     expect(screen.getByText("Off")).toBeVisible();
     expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
     expect(screen.getByText("Error: invalid token")).toBeVisible();
-    expect(screen.getAllByText("Lark")).toHaveLength(2);
+    // connect-4: a degraded status (e.g. the mcp soft-skip) renders its own
+    // badge variant with the detail text, distinct from both ready and error.
+    expect(screen.getByText("Degraded: mcp_manager_unavailable")).toBeVisible();
+    expect(screen.getAllByText("Lark")).toHaveLength(3);
     expect(screen.getByText("Webhook")).toBeVisible();
     expect(
       screen.getByRole("button", { name: /2 owners/ }),
@@ -252,6 +269,25 @@ describe("DshSettingsConnect", () => {
       ),
     ).toBeVisible();
     // The dialog stays open on failure.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("surfaces a translated message for the connect_not_found create error", async () => {
+    const user = userEvent.setup();
+    create.mockRejectedValue(new Error("connect_not_found"));
+    render(<DshSettingsConnect adapter={adapter} />);
+
+    await user.click(await screen.findByRole("button", { name: /Add connect/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
+    await user.type(within(dialog).getByLabelText("App ID"), "app-123");
+    await user.type(within(dialog).getByLabelText("App secret"), "secret-xyz");
+
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(
+      await within(dialog).findByText("That connect no longer exists."),
+    ).toBeVisible();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
@@ -489,6 +525,24 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
       within(dialog).queryByText("That provider is no longer installed."),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("translates a known statusNote token (e.g. the lark provider's raw 'polling') instead of showing it raw", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-9", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-9",
+      state: "pending",
+      statusNote: "polling",
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    expect(within(dialog).getByText("Waiting for you to scan…")).toBeVisible();
+    expect(within(dialog).queryByText("polling")).not.toBeInTheDocument();
   });
 
   it("closes the dialog and refreshes the list when onboarding completes", async () => {

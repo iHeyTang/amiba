@@ -733,7 +733,7 @@ describe("ConnectorCenter", () => {
     expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
   });
 
-  it("skips a capability when its manager dependency is unavailable, without aborting the connect", async () => {
+  it("skips a capability when its manager dependency is unavailable, without aborting the connect, recording a degraded (not error) status", async () => {
     const { center } = await harness({ withMcpManager: false });
     const { provider, runtimes } = fakeProvider();
     center.registerProvider(provider);
@@ -745,8 +745,8 @@ describe("ConnectorCenter", () => {
       agentPreset: "restricted",
     });
 
-    expect(view.status).toMatchObject({
-      state: "error",
+    expect(view.status).toEqual({
+      state: "degraded",
       detail: "mcp_manager_unavailable",
     });
     expect(runtimes[0]!.stop).not.toHaveBeenCalled();
@@ -1197,6 +1197,129 @@ describe("ConnectorCenter", () => {
       expect(messageCenter.providers.size).toBe(1);
       expect(messageCenter.providers.has("connector-fake")).toBe(true);
     });
+  });
+});
+
+describe("ConnectorCenter status lattice (off/degraded)", () => {
+  it("reports off (not connecting) for a disabled connect", async () => {
+    const { center } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Off test",
+      config: {},
+      agentPreset: "restricted",
+    });
+    expect(view.enabled).toBe(true);
+
+    await center.setEnabled(view.id, false);
+    const [disabled] = await center.listConnects();
+    expect(disabled!.status).toEqual({ state: "off" });
+  });
+
+  it("reports connecting for an enabled row with no recorded status yet (e.g. before boot recovery has run)", async () => {
+    const { center, store } = await harness();
+    // A row created directly through the store, bypassing center's start
+    // machinery entirely (no provider registered, no start() called) — the
+    // statuses map has nothing recorded for it.
+    const row = await store.create({
+      provider: "fake",
+      name: "No status yet",
+      agentPreset: "restricted",
+    });
+    expect(row.enabled).toBe(true);
+
+    const [view] = await center.listConnects();
+    expect(view!.id).toBe(row.id);
+    expect(view!.status).toEqual({ state: "connecting" });
+  });
+
+  it("a degraded status recorded by the mcp soft-skip survives a subsequent provider setStatus(ready)", async () => {
+    const { center } = await harness({ withMcpManager: false });
+    const { provider, starts } = fakeProvider();
+    center.registerProvider(provider);
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Locked degraded",
+      config: {},
+      agentPreset: "restricted",
+    });
+    expect(view.status).toEqual({
+      state: "degraded",
+      detail: "mcp_manager_unavailable",
+    });
+
+    // A late-arriving provider write (e.g. the ws finally connecting) must
+    // not silently clobber the applier-recorded degraded status.
+    starts[0]!.setStatus({ state: "ready" });
+
+    const [after] = await center.listConnects();
+    expect(after!.status).toEqual({
+      state: "degraded",
+      detail: "mcp_manager_unavailable",
+    });
+  });
+
+  it("a fresh enable clears the lock: once the capability becomes available, a subsequent provider ready lands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "amiba-connector-center-"));
+    roots.push(root);
+    const store = new ConnectorStore(root);
+    const messageCenter = fakeMessageCenter();
+    const credentials = fakeCredentials();
+    const mcp = fakeMcpManager();
+    // A mutable availability flag (unlike `fakeAppliers`, which fixes
+    // availability at harness construction) so the SAME applier instance
+    // can miss on the first start and hit on the second — mirroring
+    // index.ts's real "mcp" applier, which resolves availability at apply
+    // time rather than at plugin-load time.
+    let available = false;
+    const appliers = new Map<
+      string,
+      { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
+    >();
+    appliers.set("mcp", {
+      apply: async (_connect, decl) => {
+        if (decl.kind !== "mcp") throw new Error("unexpected_kind");
+        if (!available) throw new CapabilityUnavailableError("mcp_manager_unavailable");
+        return mcp.registerManagedServer(decl.spec);
+      },
+    });
+    const ctx = { logger: () => ({ error: vi.fn() }) };
+    const center = new ConnectorCenter(
+      ctx as never,
+      store,
+      messageCenter as never,
+      credentials as never,
+      appliers,
+    );
+
+    const { provider, starts } = fakeProvider();
+    center.registerProvider(provider);
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Unlocked after re-enable",
+      config: {},
+      agentPreset: "restricted",
+    });
+    expect(view.status).toEqual({
+      state: "degraded",
+      detail: "mcp_manager_unavailable",
+    });
+
+    // The capability becomes available before the reconnect, so the second
+    // start's applier call succeeds — no soft-skip, no re-lock.
+    available = true;
+    await center.setEnabled(view.id, false);
+    await center.setEnabled(view.id, true);
+
+    const freshHandle = starts[starts.length - 1]!;
+    freshHandle.setStatus({ state: "ready" });
+
+    const [after] = await center.listConnects();
+    expect(after!.status).toEqual({ state: "ready" });
   });
 });
 
