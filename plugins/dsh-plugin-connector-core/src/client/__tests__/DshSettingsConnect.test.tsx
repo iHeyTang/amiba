@@ -15,8 +15,18 @@ const setOwners = vi.fn();
 const adapter = { listProviders, list, create, setEnabled, remove, setOwners };
 
 const providers: ConnectorProviderView[] = [
-  { id: "lark", name: "Lark", description: "Feishu/Lark bot connector" },
-  { id: "webhook", name: "Webhook", description: "Generic JSON webhook" },
+  {
+    id: "lark",
+    name: "Lark",
+    description: "Feishu/Lark bot connector",
+    supportsOnboarding: false,
+  },
+  {
+    id: "webhook",
+    name: "Webhook",
+    description: "Generic JSON webhook",
+    supportsOnboarding: false,
+  },
 ];
 
 const connects: ConnectView[] = [

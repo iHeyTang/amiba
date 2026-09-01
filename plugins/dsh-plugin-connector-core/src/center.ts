@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Context } from "@deepseek-ai/cordis";
 import type {
   MessageChannelCenter,
@@ -16,6 +18,10 @@ import type {
   ConnectorRuntime,
   ConnectorStatus,
   ConnectView,
+  OnboardHandle,
+  OnboardingState,
+  OnboardingView,
+  OnboardUpdate,
 } from "./types.js";
 
 interface CapabilityApplier {
@@ -32,6 +38,26 @@ interface GrantPayload {
   config: unknown;
   channelSecret: string;
 }
+
+interface OnboardingSession {
+  readonly id: string;
+  readonly provider: string;
+  readonly controller: AbortController;
+  readonly createdAt: number;
+  state: OnboardingState;
+  qrUrl?: string;
+  qrExpireIn?: number;
+  statusNote?: string;
+  connect?: ConnectView;
+  error?: string;
+  /** Timestamp the session reached a terminal state; unset while pending. */
+  terminalAt?: number;
+}
+
+/** No timers: sessions are swept lazily (on the next begin/poll/cancel call)
+ * against these two independent age limits. */
+const ONBOARDING_MAX_AGE_MS = 10 * 60 * 1000;
+const ONBOARDING_TERMINAL_MAX_AGE_MS = 5 * 60 * 1000;
 
 interface CredentialsSeam {
   readRecord(
@@ -98,6 +124,7 @@ export class ConnectorCenter {
    * race matters.
    */
   private readonly teardowns = new Map<string, Promise<void>>();
+  private readonly onboardings = new Map<string, OnboardingSession>();
 
   constructor(
     private readonly ctx: Context,
@@ -105,6 +132,9 @@ export class ConnectorCenter {
     private readonly messageCenter: MessageChannelCenter,
     private readonly credentials: CredentialsSeam,
     private readonly appliers: Map<string, CapabilityApplier>,
+    /** Injectable clock, test seam only — production always defaults to
+     * `Date.now`. Onboarding session GC stamps and ages against this. */
+    private readonly now: () => number = Date.now,
   ) {}
 
   registerProvider(provider: ConnectorProvider): () => void {
@@ -212,9 +242,14 @@ export class ConnectorCenter {
     await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
-  /** Stops every currently-live (or mid-start) connect, e.g. on plugin unload. */
+  /** Stops every currently-live (or mid-start) connect, e.g. on plugin unload.
+   * Also cancels every in-flight onboarding session so a provider's
+   * `onboard()` sees its signal abort instead of dangling forever. */
   async stop(): Promise<void> {
     const ids = await this.teardownIds();
+    for (const session of this.onboardings.values()) {
+      if (!session.controller.signal.aborted) session.controller.abort();
+    }
     await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
@@ -243,11 +278,12 @@ export class ConnectorCenter {
 
   listProviders(): ConnectorProviderView[] {
     return [...this.providers.values()]
-      .map(({ id, name, description, icon }) => ({
+      .map(({ id, name, description, icon, onboard }) => ({
         id,
         name,
         description,
         ...(icon ? { icon } : {}),
+        supportsOnboarding: typeof onboard === "function",
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -318,6 +354,144 @@ export class ConnectorCenter {
     const finalRow = rows.find((item) => item.id === row.id);
     if (!finalRow) throw new Error("connect_not_found");
     return this.toView(finalRow);
+  }
+
+  /**
+   * Starts an interactive onboarding session against a provider's optional
+   * `onboard()` hook (e.g. a scan-a-QR-code login). Returns the session's
+   * initial (`"pending"`) view synchronously; the provider's flow runs in
+   * the background and is observed via `pollOnboarding`.
+   *
+   * On success, `provider.onboard()`'s resolved config is handed to
+   * `createConnect` verbatim — the exact same validate-persist-start path a
+   * manually entered config goes through — so the session never sees or
+   * stores credentials itself, only the resulting `ConnectView`.
+   */
+  beginOnboarding(input: {
+    provider: string;
+    name: string;
+    agentPreset: string;
+  }): OnboardingView {
+    this.sweepOnboardings();
+
+    const provider = this.providers.get(input.provider);
+    if (!provider) throw new Error("provider_not_found");
+    const onboard = provider.onboard;
+    if (typeof onboard !== "function") throw new Error("onboarding_unsupported");
+    const name = input.name.trim();
+    if (!name) throw new Error("invalid_connect");
+    const agentPreset = input.agentPreset.trim();
+    if (!agentPreset) throw new Error("agent_preset_required");
+
+    const controller = new AbortController();
+    const id = `onboard-${randomUUID()}`;
+    const session: OnboardingSession = {
+      id,
+      provider: input.provider,
+      controller,
+      createdAt: this.now(),
+      state: "pending",
+    };
+    this.onboardings.set(id, session);
+
+    const handle: OnboardHandle = {
+      signal: controller.signal,
+      emit: (update: OnboardUpdate) => {
+        const current = this.onboardings.get(id);
+        if (!current || current.state !== "pending") return;
+        if (update.kind === "qr") {
+          current.qrUrl = update.url;
+          current.qrExpireIn = update.expireIn;
+        } else {
+          current.statusNote = update.note;
+        }
+      },
+    };
+
+    // The catch below makes every branch of this chain settle (never
+    // reject), so the extra `.catch` is belt-and-suspenders against a throw
+    // inside the catch handler itself (e.g. from `errorDetail`) — either
+    // way, nothing here is left as an unhandled rejection. Attached
+    // synchronously, in the same tick `onboard()` is kicked off.
+    const run = (async () => {
+      try {
+        const result = await onboard(handle);
+        const connect = await this.createConnect({
+          provider: input.provider,
+          name,
+          config: result.config,
+          agentPreset,
+        });
+        const current = this.onboardings.get(id);
+        if (!current) return;
+        current.state = "completed";
+        current.connect = connect;
+        current.terminalAt = this.now();
+      } catch (error) {
+        const current = this.onboardings.get(id);
+        if (!current) return;
+        current.state = controller.signal.aborted ? "cancelled" : "error";
+        if (current.state === "error") current.error = errorDetail(error);
+        current.terminalAt = this.now();
+      }
+    })();
+    run.catch(() => undefined);
+
+    return this.toOnboardingView(session);
+  }
+
+  pollOnboarding(sessionId: string): OnboardingView {
+    this.sweepOnboardings();
+    const session = this.onboardings.get(sessionId);
+    if (!session) throw new Error("onboarding_not_found");
+    return this.toOnboardingView(session);
+  }
+
+  /** Idempotent: aborting an already-aborted (or already-terminal) session's
+   * controller is a no-op. Returns the session's current view — a session
+   * already completed/errored just returns that terminal view unchanged. */
+  cancelOnboarding(sessionId: string): OnboardingView {
+    this.sweepOnboardings();
+    const session = this.onboardings.get(sessionId);
+    if (!session) throw new Error("onboarding_not_found");
+    if (!session.controller.signal.aborted) session.controller.abort();
+    return this.toOnboardingView(session);
+  }
+
+  /**
+   * Lazy GC, run at the top of every begin/poll/cancel call — no timers.
+   * Drops a session once it's more than 10 minutes old regardless of state
+   * (a provider's `onboard()` that never settles must not leak forever),
+   * and additionally drops a terminal (completed/error/cancelled) session 5
+   * minutes after it reached that terminal state, freeing memory for
+   * short-lived flows well before the 10 minute ceiling.
+   */
+  private sweepOnboardings(): void {
+    const now = this.now();
+    for (const [id, session] of this.onboardings) {
+      if (now - session.createdAt > ONBOARDING_MAX_AGE_MS) {
+        this.onboardings.delete(id);
+        continue;
+      }
+      if (
+        session.terminalAt !== undefined &&
+        now - session.terminalAt > ONBOARDING_TERMINAL_MAX_AGE_MS
+      ) {
+        this.onboardings.delete(id);
+      }
+    }
+  }
+
+  private toOnboardingView(session: OnboardingSession): OnboardingView {
+    return {
+      sessionId: session.id,
+      state: session.state,
+      ...(session.qrUrl !== undefined ? { qrUrl: session.qrUrl } : {}),
+      ...(session.qrExpireIn !== undefined ? { qrExpireIn: session.qrExpireIn } : {}),
+      ...(session.statusNote !== undefined ? { statusNote: session.statusNote } : {}),
+      ...(session.connect ? { connect: session.connect } : {}),
+      ...(session.error !== undefined ? { error: session.error } : {}),
+    };
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<ConnectView> {

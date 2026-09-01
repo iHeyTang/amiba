@@ -46,6 +46,25 @@ export type CapabilityDecl =
   | { kind: "mcp"; spec: ManagedMcpServer }
   | { kind: "cli"; spec: CliProvisionSpec };
 
+/** Update pushed by a provider's `onboard()` while it runs, e.g. a scannable
+ * QR code or a free-text progress note. Surfaced onto the session's
+ * `OnboardingView` for the caller to poll. */
+export type OnboardUpdate =
+  | { kind: "qr"; url: string; expireIn: number }
+  | { kind: "status"; note: string };
+
+export interface OnboardHandle {
+  /** Aborted when the caller cancels the onboarding session (or the center
+   * stops); the provider's `onboard()` should observe this and unwind. */
+  readonly signal: AbortSignal;
+  emit(update: OnboardUpdate): void;
+}
+
+export interface OnboardResult {
+  /** Becomes `createConnect`'s `config` verbatim. */
+  config: unknown;
+}
+
 export interface ConnectorProvider {
   readonly id: string; // lowercase [a-z][a-z0-9-]*, e.g. "lark"
   readonly name: string;
@@ -56,6 +75,10 @@ export interface ConnectorProvider {
   validate(config: unknown): Promise<void>;
   start(handle: ConnectorHandle): Promise<ConnectorRuntime>;
   capabilities(config: unknown): CapabilityDecl[];
+  /** Optional interactive onboarding flow (e.g. scan-a-QR-code login) that
+   * produces the config a connect will be created from. Absent for
+   * providers whose config is entered directly through the settings form. */
+  onboard?(handle: OnboardHandle): Promise<OnboardResult>;
 }
 
 export interface ConnectorProviderView {
@@ -63,6 +86,21 @@ export interface ConnectorProviderView {
   name: string;
   description: string;
   icon?: string;
+  supportsOnboarding: boolean;
+}
+
+export type OnboardingState = "pending" | "completed" | "error" | "cancelled";
+
+export interface OnboardingView {
+  sessionId: string;
+  state: OnboardingState;
+  qrUrl?: string;
+  qrExpireIn?: number;
+  statusNote?: string;
+  /** Set when `state === "completed"`. */
+  connect?: ConnectView;
+  /** Set when `state === "error"`. */
+  error?: string;
 }
 
 export interface ConnectView {

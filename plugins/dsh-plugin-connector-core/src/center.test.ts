@@ -12,6 +12,8 @@ import type {
   ConnectorHandle,
   ConnectorProvider,
   ConnectorRuntime,
+  OnboardHandle,
+  OnboardResult,
 } from "./types.js";
 
 const roots: string[] = [];
@@ -172,6 +174,24 @@ function fakeProvider(
 }
 
 /**
+ * A `fakeProvider` plus a controllable `onboard()`: the deferred promise
+ * lets a test decide exactly when the flow resolves/rejects, and the
+ * captured handle exposes `signal`/`emit` for assertions (e.g. "did the
+ * provider see the abort").
+ */
+function fakeOnboardingProvider(id = "fake-onboard") {
+  const base = fakeProvider(undefined, id);
+  const gate = deferred<OnboardResult>();
+  let handle: OnboardHandle | undefined;
+  const onboard = vi.fn(async (h: OnboardHandle) => {
+    handle = h;
+    return gate.promise;
+  });
+  const provider: ConnectorProvider = { ...base.provider, onboard };
+  return { ...base, provider, onboard, gate, getHandle: () => handle };
+}
+
+/**
  * Builds a fresh appliers map mirroring index.ts's real "mcp" applier: always
  * registered, resolving manager availability at apply time rather than at
  * plugin-load time. `withMcpManager: false` simulates the manager not being
@@ -209,7 +229,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function harness(options?: { withMcpManager?: boolean }) {
+async function harness(options?: {
+  withMcpManager?: boolean;
+  now?: () => number;
+}) {
   const root = await mkdtemp(join(tmpdir(), "amiba-connector-center-"));
   roots.push(root);
   const store = new ConnectorStore(root);
@@ -224,6 +247,7 @@ async function harness(options?: { withMcpManager?: boolean }) {
     messageCenter as never,
     credentials as never,
     appliers,
+    options?.now,
   );
   return { root, store, messageCenter, credentials, mcp, appliers, ctx, center };
 }
@@ -248,6 +272,7 @@ describe("ConnectorCenter", () => {
         id: "fake",
         name: "Fake Connector",
         description: "Fake connector for tests",
+        supportsOnboarding: false,
       },
     ]);
 
@@ -1130,5 +1155,186 @@ describe("ConnectorCenter", () => {
       expect(messageCenter.providers.size).toBe(1);
       expect(messageCenter.providers.has("connector-fake")).toBe(true);
     });
+  });
+});
+
+describe("ConnectorCenter onboarding", () => {
+  it("listProviders reports supportsOnboarding derived from the provider's onboard hook", async () => {
+    const { center } = await harness();
+    const { provider: plain } = fakeProvider(undefined, "plain");
+    const { provider: onboardable } = fakeOnboardingProvider("onboardable");
+    center.registerProvider(plain);
+    center.registerProvider(onboardable);
+
+    const views = center.listProviders();
+    expect(views.find((view) => view.id === "plain")?.supportsOnboarding).toBe(
+      false,
+    );
+    expect(
+      views.find((view) => view.id === "onboardable")?.supportsOnboarding,
+    ).toBe(true);
+  });
+
+  it("beginOnboarding starts pending, and an emitted qr update surfaces on the next poll", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Scan me",
+      agentPreset: "restricted",
+    });
+    expect(view.state).toBe("pending");
+    expect(view.sessionId).toMatch(/^onboard-/);
+
+    const handle = getHandle();
+    if (!handle) throw new Error("onboard handle not captured");
+    handle.emit({ kind: "qr", url: "https://example.com/qr", expireIn: 120 });
+
+    const polled = center.pollOnboarding(view.sessionId);
+    expect(polled.state).toBe("pending");
+    expect(polled.qrUrl).toBe("https://example.com/qr");
+    expect(polled.qrExpireIn).toBe(120);
+  });
+
+  it("resolving onboard auto-creates and starts the connect, surfaced on the completed session", async () => {
+    const { center } = await harness();
+    const { provider, gate, start } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Resolved",
+      agentPreset: "restricted",
+    });
+
+    gate.resolve({ config: { token: "xyz" } });
+
+    await vi.waitFor(() => {
+      expect(center.pollOnboarding(view.sessionId).state).toBe("completed");
+    });
+
+    const polled = center.pollOnboarding(view.sessionId);
+    expect(polled.connect).toBeDefined();
+    expect(polled.connect?.provider).toBe("fake-onboard");
+    expect(polled.connect?.name).toBe("Resolved");
+    expect(start).toHaveBeenCalledTimes(1);
+
+    const connects = await center.listConnects();
+    expect(connects.some((connect) => connect.id === polled.connect?.id)).toBe(
+      true,
+    );
+  });
+
+  it("a rejected onboard settles the session as error with a bare (no 'Error: ' prefix) message", async () => {
+    const { center } = await harness();
+    const { provider, gate } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Errored",
+      agentPreset: "restricted",
+    });
+
+    gate.reject(new Error("boom"));
+
+    await vi.waitFor(() => {
+      expect(center.pollOnboarding(view.sessionId).state).toBe("error");
+    });
+    expect(center.pollOnboarding(view.sessionId).error).toBe("boom");
+  });
+
+  it("cancelOnboarding aborts the provider's signal, and the session settles as cancelled", async () => {
+    const { center } = await harness();
+    const { provider, gate, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Cancel me",
+      agentPreset: "restricted",
+    });
+
+    const cancelledView = center.cancelOnboarding(view.sessionId);
+    expect(cancelledView.sessionId).toBe(view.sessionId);
+
+    const handle = getHandle();
+    expect(handle?.signal.aborted).toBe(true);
+
+    // A real onboard() is expected to observe the abort and reject; the fake
+    // simulates that reaction explicitly rather than wiring an abort
+    // listener into the fake itself.
+    gate.reject(new Error("aborted"));
+
+    await vi.waitFor(() => {
+      expect(center.pollOnboarding(view.sessionId).state).toBe("cancelled");
+    });
+  });
+
+  it("beginOnboarding throws onboarding_unsupported for a provider with no onboard hook", async () => {
+    const { center } = await harness();
+    const { provider } = fakeProvider(undefined, "no-onboard");
+    center.registerProvider(provider);
+
+    expect(() =>
+      center.beginOnboarding({
+        provider: "no-onboard",
+        name: "x",
+        agentPreset: "restricted",
+      }),
+    ).toThrow("onboarding_unsupported");
+  });
+
+  it("pollOnboarding and cancelOnboarding throw onboarding_not_found for an unknown session id", async () => {
+    const { center } = await harness();
+
+    expect(() => center.pollOnboarding("onboard-nope")).toThrow(
+      "onboarding_not_found",
+    );
+    expect(() => center.cancelOnboarding("onboard-nope")).toThrow(
+      "onboarding_not_found",
+    );
+  });
+
+  it("lazily GCs a session more than 10 minutes old, dropping it on the next poll", async () => {
+    let currentTime = Date.now();
+    const { center } = await harness({ now: () => currentTime });
+    const { provider } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "GC me",
+      agentPreset: "restricted",
+    });
+    // Still fresh: not swept yet.
+    expect(center.pollOnboarding(view.sessionId).sessionId).toBe(
+      view.sessionId,
+    );
+
+    currentTime += 11 * 60 * 1000;
+
+    expect(() => center.pollOnboarding(view.sessionId)).toThrow(
+      "onboarding_not_found",
+    );
+  });
+
+  it("center.stop() cancels every in-flight onboarding session", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Stop me",
+      agentPreset: "restricted",
+    });
+
+    await center.stop();
+
+    const handle = getHandle();
+    expect(handle?.signal.aborted).toBe(true);
   });
 });

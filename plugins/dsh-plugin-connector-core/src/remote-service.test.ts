@@ -247,6 +247,7 @@ describe("AmibaConnectorsRemoteService", () => {
           id: "fake",
           name: "Fake Connector",
           description: "Fake connector for tests",
+          supportsOnboarding: false,
         },
       ],
     });
