@@ -1273,6 +1273,38 @@ describe("ConnectorCenter onboarding", () => {
     });
   });
 
+  it("a stale onboard resolve arriving after cancel creates nothing: no connect, no start, session stays cancelled", async () => {
+    const { center } = await harness();
+    const { provider, gate, start } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Cancel then resolve",
+      agentPreset: "restricted",
+    });
+
+    center.cancelOnboarding(view.sessionId);
+
+    // Unlike the "cancel then reject" test above, this provider ignores the
+    // abort signal entirely and resolves anyway — the run chain must still
+    // notice the session is no longer "pending" and refuse to create a
+    // connect nobody asked for anymore.
+    gate.resolve({ config: { token: "too-late" } });
+
+    // Give the resolved promise's continuation — and, if the guard is
+    // missing, createConnect's real disk I/O (store writes, credentials) —
+    // a real turn of the event loop to run before asserting nothing
+    // happened. A microtask-only flush (`await Promise.resolve()`) would
+    // pass even against the unfixed code, since createConnect's fs writes
+    // don't settle within pure microtasks.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(center.pollOnboarding(view.sessionId).state).toBe("cancelled");
+    expect(start).not.toHaveBeenCalled();
+    expect(await center.listConnects()).toEqual([]);
+  });
+
   it("beginOnboarding throws onboarding_unsupported for a provider with no onboard hook", async () => {
     const { center } = await harness();
     const { provider } = fakeProvider(undefined, "no-onboard");
@@ -1319,6 +1351,33 @@ describe("ConnectorCenter onboarding", () => {
     expect(() => center.pollOnboarding(view.sessionId)).toThrow(
       "onboarding_not_found",
     );
+  });
+
+  it("the GC sweep aborts a dropped session's controller instead of orphaning it", async () => {
+    let currentTime = Date.now();
+    const { center } = await harness({ now: () => currentTime });
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "GC abort me",
+      agentPreset: "restricted",
+    });
+
+    const handle = getHandle();
+    if (!handle) throw new Error("onboard handle not captured");
+    expect(handle.signal.aborted).toBe(false);
+
+    currentTime += 11 * 60 * 1000;
+    // The poll itself sweeps (and, since this session is the one aged
+    // past the ceiling, drops it) before discovering it's gone — but the
+    // provider's in-flight onboard() must have already been told to stop
+    // via its signal, not silently orphaned.
+    expect(() => center.pollOnboarding(view.sessionId)).toThrow(
+      "onboarding_not_found",
+    );
+    expect(handle.signal.aborted).toBe(true);
   });
 
   it("center.stop() cancels every in-flight onboarding session", async () => {

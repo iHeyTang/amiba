@@ -416,6 +416,23 @@ export class ConnectorCenter {
     const run = (async () => {
       try {
         const result = await onboard(handle);
+
+        // `onboard()` can resolve after this session was already
+        // cancelled (or GC-swept away) while it was still in flight —
+        // `controller.abort()` doesn't stop a provider that ignores the
+        // signal, it only requests that it stop. Re-check right here,
+        // before ever touching `createConnect`: a stale resolve must not
+        // silently create and start a live connect nobody asked for
+        // anymore.
+        const pending = this.onboardings.get(id);
+        if (!pending || pending.state !== "pending" || controller.signal.aborted) {
+          if (pending && pending.state === "pending") {
+            pending.state = "cancelled";
+            pending.terminalAt = this.now();
+          }
+          return;
+        }
+
         const connect = await this.createConnect({
           provider: input.provider,
           name,
@@ -447,14 +464,16 @@ export class ConnectorCenter {
     return this.toOnboardingView(session);
   }
 
-  /** Idempotent: aborting an already-aborted (or already-terminal) session's
-   * controller is a no-op. Returns the session's current view — a session
-   * already completed/errored just returns that terminal view unchanged. */
+  /** Idempotent: cancelling a session that isn't `"pending"` anymore is a
+   * no-op (its controller is left alone, matching its already-settled
+   * state) — a session already completed/errored/cancelled just returns
+   * that terminal view unchanged. */
   cancelOnboarding(sessionId: string): OnboardingView {
     this.sweepOnboardings();
     const session = this.onboardings.get(sessionId);
     if (!session) throw new Error("onboarding_not_found");
-    if (!session.controller.signal.aborted) session.controller.abort();
+    if (session.state !== "pending") return this.toOnboardingView(session);
+    session.controller.abort();
     return this.toOnboardingView(session);
   }
 
@@ -465,18 +484,23 @@ export class ConnectorCenter {
    * and additionally drops a terminal (completed/error/cancelled) session 5
    * minutes after it reached that terminal state, freeing memory for
    * short-lived flows well before the 10 minute ceiling.
+   *
+   * Every session dropped here has its controller aborted first — same as
+   * `stop()` — so a still-in-flight `onboard()` (e.g. holding a socket or
+   * poll loop for the QR flow) is told to stop instead of being silently
+   * orphaned once its session is gone from the map. Unconditional: a no-op
+   * on a controller that's already aborted or whose session already
+   * reached a terminal state on its own.
    */
   private sweepOnboardings(): void {
     const now = this.now();
     for (const [id, session] of this.onboardings) {
-      if (now - session.createdAt > ONBOARDING_MAX_AGE_MS) {
-        this.onboardings.delete(id);
-        continue;
-      }
-      if (
+      const expired = now - session.createdAt > ONBOARDING_MAX_AGE_MS;
+      const terminalExpired =
         session.terminalAt !== undefined &&
-        now - session.terminalAt > ONBOARDING_TERMINAL_MAX_AGE_MS
-      ) {
+        now - session.terminalAt > ONBOARDING_TERMINAL_MAX_AGE_MS;
+      if (expired || terminalExpired) {
+        session.controller.abort();
         this.onboardings.delete(id);
       }
     }
