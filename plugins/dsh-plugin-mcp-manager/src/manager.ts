@@ -182,19 +182,50 @@ function replacement(input: McpSaveInput, existing?: ManagedMcpServer): ManagedM
 
 /** Persistence and lifecycle owner for the dynamic official MCP child plugins. */
 export class DshMcpManager implements McpReloadTarget {
-  private readonly supervisor: DshMcpPluginSupervisor;
+  private readonly supervisor: Pick<DshMcpPluginSupervisor, "reload" | "dispose">;
   private readonly ready: Promise<void>;
   private mutation: Promise<unknown> = Promise.resolve();
+  private readonly programmatic = new Map<string, ManagedMcpServer>();
 
   constructor(
     ctx: Context,
     private readonly root: string,
     provenance?: ToolProvenanceRegistry,
+    supervisor?: Pick<DshMcpPluginSupervisor, "reload" | "dispose">,
   ) {
-    this.supervisor = new DshMcpPluginSupervisor(ctx, provenance);
+    this.supervisor = supervisor ?? new DshMcpPluginSupervisor(ctx, provenance);
     this.ready = readServers(root).then(async (servers) => {
-      await this.supervisor.reload(servers);
+      await this.supervisor.reload(this.merged(servers));
     });
+  }
+
+  private merged(stored: ManagedMcpServer[]): ManagedMcpServer[] {
+    return [...stored, ...this.programmatic.values()];
+  }
+
+  registerManagedServer(server: ManagedMcpServer): () => void {
+    const validated = validateServer(server);
+    if (this.programmatic.has(validated.serverName))
+      throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+    this.programmatic.set(validated.serverName, validated);
+    void this.enqueue(async () => {
+      const current = await readServers(this.root);
+      if (current.some((item) => item.serverName === validated.serverName)) {
+        this.programmatic.delete(validated.serverName);
+        throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+      }
+      await this.supervisor.reload(this.merged(current));
+    });
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      if (this.programmatic.get(validated.serverName) !== validated) return;
+      this.programmatic.delete(validated.serverName);
+      void this.enqueue(async () => {
+        await this.supervisor.reload(this.merged(await readServers(this.root)));
+      });
+    };
   }
 
   async list(): Promise<{ servers: McpServerView[]; toolsOnly: true }> {
@@ -205,6 +236,8 @@ export class DshMcpManager implements McpReloadTarget {
 
   save(input: McpSaveInput): Promise<{ server: McpServerView }> {
     return this.enqueue(async () => {
+      if (this.programmatic.has(input.serverName))
+        throw new Error("name_reserved");
       const current = await readServers(this.root);
       const index = current.findIndex(
         (server) => server.serverName === input.serverName,
@@ -236,10 +269,10 @@ export class DshMcpManager implements McpReloadTarget {
       const requested = values.map((value) => validateServer(value as ManagedMcpServer));
       await writeServers(this.root, requested);
       try {
-        return await this.supervisor.reload(requested);
+        return await this.supervisor.reload(this.merged(requested));
       } catch (error) {
         await writeServers(this.root, current);
-        await this.supervisor.reload(current).catch(() => undefined);
+        await this.supervisor.reload(this.merged(current)).catch(() => undefined);
         throw error;
       }
     });
@@ -263,10 +296,10 @@ export class DshMcpManager implements McpReloadTarget {
   ): Promise<void> {
     await writeServers(this.root, next);
     try {
-      await this.supervisor.reload(next);
+      await this.supervisor.reload(this.merged(next));
     } catch (error) {
       await writeServers(this.root, previous);
-      await this.supervisor.reload(previous).catch(() => undefined);
+      await this.supervisor.reload(this.merged(previous)).catch(() => undefined);
       throw error;
     }
   }
