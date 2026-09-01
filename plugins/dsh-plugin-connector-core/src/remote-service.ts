@@ -12,7 +12,23 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
     ctx: Context,
     private readonly center: ConnectorCenter,
   ) {
-    super(ctx, "amibaConnectors");
+    // Distinct Cordis service key from "amibaConnectors" — index.ts's
+    // `ctx.provide("amibaConnectors", center)` already occupies that key,
+    // and `TypertRemoteService`'s Service-base constructor registers its
+    // own serviceKey too; using the same string for both collides with
+    // cordis 4.0.1's real duplicate-registration guard
+    // (`ReflectService#provide` throws when a name is already in its
+    // store), which fails apply() at boot on a real Context.
+    // `{ namespace: "amibaConnectors" }` keeps the wire namespace — and
+    // therefore every remote.ts descriptor's `namespace` field, the
+    // `TypertRemoteNamespaceMap.amibaConnectors` augmentation, and the
+    // client — unchanged; only the Cordis-local service key moves. Verified
+    // against @deepseek-ai/dsh-typert-protocol's shipped .d.ts:
+    // `TypertRemoteService`'s constructor takes
+    // `(ctx, serviceKey, options?: TypertGatewayBindingOptions)` where
+    // `TypertGatewayBindingOptions.namespace` is exactly "wire namespace;
+    // defaults to the Cordis service key" — the divergence this fix needs.
+    super(ctx, "amibaConnectorsRemote", { namespace: "amibaConnectors" });
   }
 
   @Remote

@@ -126,7 +126,17 @@ const descriptor = (
   result: TypertRemoteContribution["descriptors"][number]["result"],
 ): TypertRemoteContribution["descriptors"][number] => ({
   id: `@amiba/dsh-plugin-connector-core#amibaConnectors/${method}`,
-  service: "amibaConnectors",
+  // Must match AmibaConnectorsRemoteService's actual Cordis service key
+  // (remote-service.ts: `super(ctx, "amibaConnectorsRemote", { namespace:
+  // "amibaConnectors" })`) — dsh-api-gateway resolves a strict descriptor's
+  // receiver via `ctx.get(descriptor.service)` and then validates that
+  // receiver's `typertRemote.serviceKey` against this same field (see
+  // @deepseek-ai/dsh-api-gateway's `invoke`/`validateBinding`). `namespace`
+  // stays "amibaConnectors": that's the wire endpoint
+  // (`<namespace>/<method>`) the client and
+  // `TypertRemoteNamespaceMap.amibaConnectors` augmentation below key off,
+  // and it's unaffected by the service-key rename.
+  service: "amibaConnectorsRemote",
   namespace: "amibaConnectors",
   method,
   invocation: { kind: "direct" },

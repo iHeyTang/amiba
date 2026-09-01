@@ -194,8 +194,11 @@ async function harness() {
  * `ctx.reflect.provide(name, self, check)` (see
  * node_modules/@deepseek-ai/cordis src/service.ts) — nothing else on `ctx` is
  * read during construction. Recording each call lets tests confirm
- * `applyConnectorsRemote` actually registered the service under
- * "amibaConnectors" and hand back the live instance to drive directly.
+ * `applyConnectorsRemote` actually registered the service under its own
+ * "amibaConnectorsRemote" Cordis service key (distinct from the
+ * "amibaConnectors" key index.ts's `ConnectorCenter` occupies — see
+ * remote-service.ts's constructor comment) and hand back the live instance
+ * to drive directly.
  */
 function fakeRemoteCtx() {
   const provided: Array<{ name: string; service: unknown }> = [];
@@ -217,13 +220,19 @@ function buildService(center: ConnectorCenter) {
 }
 
 describe("AmibaConnectorsRemoteService", () => {
-  it("registers itself under the amibaConnectors service key", async () => {
+  it("registers itself under its own amibaConnectorsRemote service key, distinct from the amibaConnectors service center.ts provides", async () => {
     const { center } = await harness();
     const { provided, service } = buildService(center);
 
     expect(provided).toHaveLength(1);
-    expect(provided[0]?.name).toBe("amibaConnectors");
+    expect(provided[0]?.name).toBe("amibaConnectorsRemote");
     expect(service).toBeInstanceOf(AmibaConnectorsRemoteService);
+    // The wire namespace (what the client and Gateway endpoint routing
+    // actually key off) is unaffected by the service-key rename.
+    expect(service.typertRemote).toMatchObject({
+      serviceKey: "amibaConnectorsRemote",
+      namespace: "amibaConnectors",
+    });
   });
 
   it("listProviders reflects a registered fake provider", async () => {
