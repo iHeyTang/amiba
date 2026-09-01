@@ -534,6 +534,47 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
+  it("re-shows an enabled begin control after a terminal scan error, and retrying clears it", async () => {
+    beginOnboarding.mockResolvedValueOnce({
+      sessionId: "sess-22",
+      state: "pending",
+    });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-22",
+      state: "error",
+      error: "provider_not_found",
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+
+    expect(
+      within(dialog).getByText("That provider is no longer installed."),
+    ).toBeVisible();
+    // The terminal error must not be a dead end: the begin control comes
+    // back so the user can retry instead of being stuck with "please try
+    // again" and nothing to click.
+    const retryButton = within(dialog).getByRole("button", {
+      name: "Start scanning",
+    });
+    expect(retryButton).toBeEnabled();
+
+    beginOnboarding.mockResolvedValueOnce({
+      sessionId: "sess-23",
+      state: "pending",
+    });
+    fireEvent.click(retryButton);
+    await flush();
+
+    expect(beginOnboarding).toHaveBeenCalledTimes(2);
+    expect(
+      within(dialog).queryByText("That provider is no longer installed."),
+    ).not.toBeInTheDocument();
+  });
+
   it("cancels the onboarding session exactly once when the dialog is closed mid-flow, and stops polling", async () => {
     beginOnboarding.mockResolvedValue({ sessionId: "sess-3", state: "pending" });
     pollOnboarding.mockResolvedValue({
@@ -555,6 +596,80 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
 
     expect(cancelOnboarding).toHaveBeenCalledTimes(1);
     expect(cancelOnboarding).toHaveBeenCalledWith("sess-3");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("cancels the onboarding session exactly once when the provider changes mid-scan, and stops polling", async () => {
+    beginOnboarding.mockResolvedValue({ sessionId: "sess-20", state: "pending" });
+    pollOnboarding.mockResolvedValue({
+      sessionId: "sess-20",
+      state: "pending",
+      qrUrl: "https://example.com/qr/sess-20",
+    });
+    cancelOnboarding.mockResolvedValue({ sessionId: "sess-20", state: "cancelled" });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    await flush(1500);
+    within(dialog).getByRole("img", { name: "Onboarding QR code" });
+
+    // Switch to the other (non-onboarding) provider while the QR is live.
+    // Radix portals the option list onto `document.body`, so it's queried
+    // via `screen`, not `within(dialog)` — same as the plain-mode test
+    // above that exercises this same Select.
+    fireEvent.click(within(dialog).getByLabelText("Provider"));
+    fireEvent.click(screen.getByRole("option", { name: "Webhook" }));
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-20");
+
+    pollOnboarding.mockClear();
+    await flush(3000);
+    expect(pollOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("cancels a session created by a begin request that resolves after the dialog was already closed", async () => {
+    // `beginOnboarding` never resolves on its own here — the test drives it
+    // manually to land the response after the dialog has already closed,
+    // reproducing the "dialog-closed-but-mounted during in-flight begin"
+    // orphan: `CreateConnectDialog` stays mounted the whole time (only
+    // Radix's `open` flips), so `mountedRef` alone can't catch this —
+    // that's what `sessionContextRef` is for.
+    let resolveBegin: (view: OnboardingView) => void = () => {};
+    beginOnboarding.mockImplementation(
+      () =>
+        new Promise<OnboardingView>((resolve) => {
+          resolveBegin = resolve;
+        }),
+    );
+    cancelOnboarding.mockResolvedValue({
+      sessionId: "sess-21",
+      state: "cancelled",
+    });
+    const dialog = await openDialogAndFillName();
+
+    vi.useFakeTimers();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start scanning" }));
+    await flush();
+    expect(beginOnboarding).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await flush();
+    // No session id was ever adopted into `sessionIdRef` (begin hasn't
+    // resolved yet), so the close-cleanup itself has nothing to cancel yet.
+    expect(cancelOnboarding).not.toHaveBeenCalled();
+
+    resolveBegin({ sessionId: "sess-21", state: "pending" });
+    await flush();
+
+    expect(cancelOnboarding).toHaveBeenCalledTimes(1);
+    expect(cancelOnboarding).toHaveBeenCalledWith("sess-21");
 
     pollOnboarding.mockClear();
     await flush(3000);

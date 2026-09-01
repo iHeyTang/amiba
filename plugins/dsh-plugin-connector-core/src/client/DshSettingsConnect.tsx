@@ -510,6 +510,13 @@ function CreateConnectDialog({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Guards against a slow poll response overlapping with the next tick.
   const pollingRef = useRef(false);
+  // Bumped every time the current onboarding context is torn down (provider
+  // changed, dialog closed, component unmounted — see `cancelCurrentSession`
+  // below). `beginScan` snapshots this before calling `adapter
+  // .beginOnboarding` and compares it after the await resolves: if it moved
+  // on, the just-created session belongs to a context nobody's looking at
+  // anymore and gets cancelled instead of silently adopted.
+  const sessionContextRef = useRef(0);
   // True while this component instance is mounted. `beginScan`/`poll` await
   // an adapter call that can outlive the component (dialog closed, or the
   // whole settings page unmounted, mid-request); checking this ref after
@@ -531,6 +538,35 @@ function CreateConnectDialog({
       pollRef.current = null;
     }
   }, []);
+
+  /**
+   * Tears down whatever onboarding session is currently live: stops the
+   * poll interval, forgets the local session id, fires a best-effort cancel
+   * to the adapter for the session that was live (mirrors the previous
+   * close-only teardown's `Promise.resolve().then().catch()` wrapper — a
+   * fire-and-forget from a change handler or an effect cleanup has nowhere
+   * to surface a failure and nothing to await), resets the onboarding view,
+   * and bumps `sessionContextRef` so a `beginOnboarding` call already in
+   * flight treats its eventual response as belonging to a dead context (see
+   * `beginScan`'s staleness guard) instead of silently adopting it.
+   *
+   * Shared by the provider-change handler and the dialog close/unmount
+   * cleanup — the two places a scan session's context disappears out from
+   * under it — so a QR already displayed to the host never outlives the UI
+   * that showed it and isn't left for the 10-minute host-side GC.
+   */
+  const cancelCurrentSession = useCallback(() => {
+    clearPollInterval();
+    const sessionId = sessionIdRef.current;
+    sessionIdRef.current = null;
+    sessionContextRef.current += 1;
+    if (sessionId) {
+      void Promise.resolve()
+        .then(() => adapter.cancelOnboarding(sessionId))
+        .catch(() => {});
+    }
+    if (mountedRef.current) setOnboarding(null);
+  }, [adapter, clearPollInterval]);
 
   useEffect(() => {
     if (!open) return;
@@ -560,21 +596,9 @@ function CreateConnectDialog({
   useEffect(() => {
     if (!open) return;
     return () => {
-      clearPollInterval();
-      const sessionId = sessionIdRef.current;
-      sessionIdRef.current = null;
-      if (sessionId) {
-        // Fire-and-forget: this runs from an effect cleanup (close/unmount),
-        // so there's nowhere to surface a failure and nothing to await.
-        // `Promise.resolve(...)` guards against an adapter (or a test
-        // double) that throws synchronously or doesn't return a real
-        // promise, so a teardown call can never crash the unmount.
-        void Promise.resolve()
-          .then(() => adapter.cancelOnboarding(sessionId))
-          .catch(() => {});
-      }
+      cancelCurrentSession();
     };
-  }, [open, adapter, clearPollInterval]);
+  }, [open, cancelCurrentSession]);
 
   const selectedProvider = providers.find((item) => item.id === provider);
   // The mode switch — and scan mode itself — only ever appears for a
@@ -588,10 +612,11 @@ function CreateConnectDialog({
     const supports =
       providers.find((item) => item.id === next)?.supportsOnboarding ?? false;
     setMode(supports ? "scan" : "manual");
-    setOnboarding(null);
     setError(null);
-    sessionIdRef.current = null;
-    clearPollInterval();
+    // Switching providers mid-scan must not leave the just-displayed QR
+    // live host-side: cancel whatever session was active for the previous
+    // provider before letting go of it, same as closing the dialog does.
+    cancelCurrentSession();
   }
 
   const poll = useCallback(async () => {
@@ -625,6 +650,12 @@ function CreateConnectDialog({
             ? describeError(t, new Error(view.error))
             : t("options.connect.dsh.onboard.error.generic"),
         );
+        // Terminal error, no live session left to retry into: drop the
+        // onboarding view so `!onboarding` goes back to true and the begin
+        // button re-renders. The error paragraph (driven by `error`, set
+        // just above) stays visible until the next `beginScan()` call
+        // clears it.
+        setOnboarding(null);
       }
     } catch (cause) {
       if (!mountedRef.current || sessionIdRef.current !== sessionId) return;
@@ -640,18 +671,42 @@ function CreateConnectDialog({
     if (!provider || !name.trim() || !agentPreset.trim()) return;
     setError(null);
     setBeginning(true);
+    // Snapshot the session context before the round trip: `beginOnboarding`
+    // can outlive the context it was called for (dialog closed, provider
+    // changed) while this component stays mounted the whole time — see
+    // `cancelCurrentSession`, which is what bumps this ref on both of those
+    // paths.
+    const sessionContextAtStart = sessionContextRef.current;
     try {
       const view = await adapter.beginOnboarding({
         provider,
         name: name.trim(),
         agentPreset: agentPreset.trim(),
       });
-      // Same stale-response concern as `poll`: the dialog's owner may have
-      // unmounted while `beginOnboarding` was in flight. There's no prior
-      // session id to compare against here (this call is what creates
-      // one), so `mountedRef` is the guard — skip starting a poll interval
-      // (which nothing would ever clear) or touching state.
-      if (!mountedRef.current) return;
+      // Same stale-response concern as `poll`, extended: the dialog's owner
+      // may have unmounted while `beginOnboarding` was in flight
+      // (`mountedRef`), or the component is still mounted but the dialog
+      // was closed / the provider changed out from under this call
+      // (`sessionContextRef` moved on). Either way this response no longer
+      // belongs to a context anyone is looking at.
+      const stale =
+        !mountedRef.current ||
+        sessionContextRef.current !== sessionContextAtStart;
+      if (stale) {
+        // A `pending` view means the center already created a live session
+        // (and possibly issued a QR) for a context that's gone. Cancel it
+        // now instead of leaving it to the 10-minute host-side GC — the
+        // same fire-and-forget `cancelOnboarding` the close-cleanup and
+        // provider-change paths use via `cancelCurrentSession`, inlined
+        // here since this session was never adopted into `sessionIdRef` for
+        // that helper to find.
+        if (view.state === "pending") {
+          void Promise.resolve()
+            .then(() => adapter.cancelOnboarding(view.sessionId))
+            .catch(() => {});
+        }
+        return;
+      }
       setOnboarding(view);
       if (view.state === "pending") {
         sessionIdRef.current = view.sessionId;
@@ -671,6 +726,10 @@ function CreateConnectDialog({
             ? describeError(t, new Error(view.error))
             : t("options.connect.dsh.onboard.error.generic"),
         );
+        // Terminal error on the very first response: no live session to
+        // retry into. Drop the onboarding view so the begin button
+        // re-renders, same as the poll-error path.
+        setOnboarding(null);
       }
       // "cancelled" as an initial state is not expected from a fresh begin
       // call; nothing further to render if the center ever returns it.
