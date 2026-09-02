@@ -373,7 +373,7 @@ function ConnectRow({
             {providerName}
           </span>
         </span>
-        <span className="flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {removing ? (
             <>
               <span className="text-[11px] text-destructive">
