@@ -105,7 +105,9 @@ for (const workspaceRoot of ["packages", "plugins", "bundles"]) {
     }
   }
 }
-const outputDir = path.join(runtimePackageDir, "resources", "dsh-runtime");
+const outputDir = process.env.DSH_RUNTIME_OUTPUT
+  ? path.resolve(process.env.DSH_RUNTIME_OUTPUT)
+  : path.join(runtimePackageDir, "resources", "dsh-runtime");
 const managedPnpmVersion = "9.12.0";
 const markerPath = path.join(outputDir, "runtime-manifest.json");
 const args = new Set(process.argv.slice(2));
@@ -188,6 +190,45 @@ async function computeAmibaSourceDigest() {
 
 const amibaSourceDigest = await computeAmibaSourceDigest();
 
+/**
+ * The exact content of the generated `app/package.json`.
+ *
+ * This is the complete input to `npm install` (there is no lockfile): it
+ * fully encodes the DSH version, the pinned pnpm version, and every
+ * third-party dependency name + version after `resolveCatalogSpecifier`.
+ * Computed once here so the string that gets hashed (`appTreeHash`, below)
+ * is byte-identical to the string that later gets written to disk.
+ */
+const appPackageJsonContent = `${JSON.stringify(
+  {
+    private: true,
+    dependencies: {
+      "@deepseek-ai/dsh": declaration.version,
+      pnpm: managedPnpmVersion,
+      ...Object.fromEntries(
+        pluginPackages.flatMap((manifest) =>
+          Object.entries(manifest.dependencies ?? {})
+            .filter(
+              ([name, version]) =>
+                !name.startsWith("@amiba/") &&
+                typeof version === "string" &&
+                !version.startsWith("workspace:"),
+            )
+            .map(([name, version]) => [
+              name,
+              resolveCatalogSpecifier(name, version),
+            ]),
+        ),
+      ),
+    },
+  },
+  null,
+  2,
+)}\n`;
+const appTreeHash = createHash("sha256")
+  .update(appPackageJsonContent)
+  .digest("hex");
+
 function fail(message) {
   throw new Error(`[dsh:runtime] ${message}`);
 }
@@ -199,6 +240,7 @@ function expectedMarker() {
     nodeVersion: declaration.nodeVersion,
     amibaPluginRevision: declaration.amibaPluginRevision,
     amibaSourceDigest,
+    appTreeHash,
     platform: process.platform,
     arch: process.arch,
   };
@@ -501,6 +543,51 @@ async function installNode(stage) {
   return `${baseUrl}/${archiveName}`;
 }
 
+/**
+ * Reuse the app dependency tree (`app/node_modules`) from the existing
+ * runtime at `outputDir` when its marker declares the same `appTreeHash` —
+ * i.e. the generated `app/package.json` (the complete `npm install` input,
+ * since there is no lockfile) is byte-identical to the previous build's.
+ *
+ * Conservative by design: a missing marker, a missing `app/node_modules`, a
+ * hash mismatch, an unreadable/corrupt marker, or a failed copy all fall
+ * back to `false` (full install below) rather than risking a stale reuse.
+ * An old marker without `appTreeHash` compares as `undefined !== <hash>` and
+ * also falls back to a full install.
+ */
+async function reuseAppDependencyTree(appDir) {
+  const installedMarkerPath = path.join(outputDir, "runtime-manifest.json");
+  const installedNodeModules = path.join(outputDir, "app", "node_modules");
+  if (
+    !fs.existsSync(installedMarkerPath) ||
+    !fs.existsSync(installedNodeModules)
+  ) {
+    return false;
+  }
+  try {
+    const installedMarker = JSON.parse(
+      await fsp.readFile(installedMarkerPath, "utf8"),
+    );
+    if (installedMarker.appTreeHash !== appTreeHash) return false;
+    await fsp.cp(installedNodeModules, path.join(appDir, "node_modules"), {
+      recursive: true,
+    });
+    console.log(
+      "[dsh:runtime] reused app dependency tree from the existing runtime (manifest unchanged)",
+    );
+    return true;
+  } catch (error) {
+    console.warn(
+      `[dsh:runtime] existing app dependency tree is not reusable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    await fsp.rm(path.join(appDir, "node_modules"), {
+      recursive: true,
+      force: true,
+    });
+    return false;
+  }
+}
+
 const stage = await fsp.mkdtemp(
   path.join(runtimePackageDir, ".dsh-runtime-build-"),
 );
@@ -511,61 +598,36 @@ try {
   const nodeSource = await installNode(stage);
   const appDir = path.join(stage, "app");
   await fsp.mkdir(appDir, { recursive: true });
-  await fsp.writeFile(
-    path.join(appDir, "package.json"),
-    `${JSON.stringify(
+  await fsp.writeFile(path.join(appDir, "package.json"), appPackageJsonContent);
+  const reusedAppTree = await reuseAppDependencyTree(appDir);
+  if (!reusedAppTree) {
+    run(
+      nodeBinary(stage),
+      [
+        npmCli(stage),
+        "install",
+        "--omit=dev",
+        "--no-audit",
+        "--no-fund",
+        "--package-lock=false",
+        "--ignore-scripts=false",
+        "--prefer-offline",
+      ],
       {
-        private: true,
-        dependencies: {
-          "@deepseek-ai/dsh": declaration.version,
-          pnpm: managedPnpmVersion,
-          ...Object.fromEntries(
-            pluginPackages.flatMap((manifest) =>
-              Object.entries(manifest.dependencies ?? {})
-                .filter(
-                  ([name, version]) =>
-                    !name.startsWith("@amiba/") &&
-                    typeof version === "string" &&
-                    !version.startsWith("workspace:"),
-                )
-                .map(([name, version]) => [
-                  name,
-                  resolveCatalogSpecifier(name, version),
-                ]),
-            ),
+        cwd: appDir,
+        env: {
+          ...process.env,
+          PATH: `${managedNodePath(stage)}${path.delimiter}${process.env.PATH ?? ""}`,
+          npm_config_cache: path.join(
+            runtimePackageDir,
+            ".cache",
+            "dsh-runtime",
+            "npm",
           ),
         },
       },
-      null,
-      2,
-    )}\n`,
-  );
-  run(
-    nodeBinary(stage),
-    [
-      npmCli(stage),
-      "install",
-      "--omit=dev",
-      "--no-audit",
-      "--no-fund",
-      "--package-lock=false",
-      "--ignore-scripts=false",
-      "--prefer-offline",
-    ],
-    {
-      cwd: appDir,
-      env: {
-        ...process.env,
-        PATH: `${managedNodePath(stage)}${path.delimiter}${process.env.PATH ?? ""}`,
-        npm_config_cache: path.join(
-          runtimePackageDir,
-          ".cache",
-          "dsh-runtime",
-          "npm",
-        ),
-      },
-    },
-  );
+    );
+  }
   const amibaScope = path.join(appDir, "node_modules", "@amiba");
   await fsp.mkdir(amibaScope, { recursive: true });
   for (const [index, pluginSourceDir] of pluginSourceDirs.entries()) {
