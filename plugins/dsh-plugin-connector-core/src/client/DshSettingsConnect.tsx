@@ -25,6 +25,7 @@ import {
 import { AddConnectModal } from "./AddConnectModal.js";
 import type { ConnectAdapter } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
+import { useConnectWizardProviderIds } from "./wizard-registry.js";
 import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
 import type {
   ConnectorProviderView,
@@ -83,6 +84,12 @@ export function DshSettingsConnect({
   loadPresets,
 }: DshSettingsConnectProps) {
   const { t } = useT();
+  // Membership subscription, called for its re-render: a provider plugin's
+  // client half registers its wizard from its own `apply` and disposes it when
+  // the plugin unloads, either of which can happen while this page is already
+  // mounted. Without it the `registry.get` reads below (row icons) and the
+  // picker inside `AddConnectModal` would stay frozen at their mount-time view.
+  useConnectWizardProviderIds(registry);
   const [providers, setProviders] = useState<ConnectorProviderView[]>([]);
   const [connects, setConnects] = useState<ConnectView[]>([]);
   const [loading, setLoading] = useState(true);

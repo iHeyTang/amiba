@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -78,6 +78,45 @@ describe("ConnectWizardChrome", () => {
     );
     expect(await screen.findByText("submit")).toBeInTheDocument();
     expect(screen.queryByText("Choose a platform")).not.toBeInTheDocument();
+  });
+
+  // A provider plugin's client half registers its wizard from its own `apply`,
+  // which can settle after this chrome has already mounted. The picker has to
+  // follow the registry rather than snapshot it at mount.
+  it("lists a wizard registered after mount", async () => {
+    const registry = createConnectWizardRegistry();
+    render(
+      <ConnectWizardChrome
+        adapter={fakeAdapter()} registry={registry} providers={providers}
+        presets={presets} onDone={vi.fn()} onCancel={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByText(/选择平台|Choose a platform/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("飞书 / Lark")).not.toBeInTheDocument();
+
+    act(() => {
+      registry.register("lark", { component: makeBody({}) });
+    });
+    expect(screen.getByText("飞书 / Lark")).toBeInTheDocument();
+  });
+
+  it("drops a card again when its wizard is disposed", async () => {
+    const registry = createConnectWizardRegistry();
+    const dispose = registry.register("lark", { component: makeBody({}) });
+    render(
+      <ConnectWizardChrome
+        adapter={fakeAdapter()} registry={registry} providers={providers}
+        presets={presets} onDone={vi.fn()} onCancel={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("飞书 / Lark")).toBeInTheDocument();
+
+    act(() => {
+      dispose();
+    });
+    expect(screen.queryByText("飞书 / Lark")).not.toBeInTheDocument();
   });
 
   // Presets are fetched lazily by `DshSettingsConnect` once the add flow

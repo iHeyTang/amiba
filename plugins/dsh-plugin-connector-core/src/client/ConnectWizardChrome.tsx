@@ -9,6 +9,7 @@ import {
 
 import type { ConnectAdapter } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
+import { useConnectWizardProviderIds } from "./wizard-registry.js";
 import type {
   ConnectWizardHost, ConnectWizardRegistry, PresetOption,
 } from "./wizard-registry.js";
@@ -41,9 +42,13 @@ export function ConnectWizardChrome({
 }: ConnectWizardChromeProps): ReactNode {
   const { t } = useT();
   // Providers offered = those with a registered wizard, joined for display.
+  // Read through the subscription rather than `registry.get` so a wizard
+  // registered (or disposed) after this chrome mounted — a provider plugin's
+  // client half settles on its own schedule — shows up without a remount.
+  const registeredIds = useConnectWizardProviderIds(registry);
   const choices = useMemo(
-    () => providers.filter((p) => registry.get(p.id) !== undefined),
-    [providers, registry],
+    () => providers.filter((p) => registeredIds.includes(p.id)),
+    [providers, registeredIds],
   );
   // `initialProvider` seeds `provider` unconditionally — even when it has no
   // registry entry — so a pre-selected-but-unregistered provider skips the

@@ -1,3 +1,4 @@
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 import type { ConnectAdapter } from "./adapter.js";
@@ -70,7 +71,35 @@ export function createConnectWizardRegistry(): ConnectWizardRegistry {
     list: () => [...entries.keys()],
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
+}
+
+/**
+ * Subscribes a component to the registry's membership, returning the ids that
+ * currently have a wizard. This is what makes `registry.subscribe` matter: a
+ * provider plugin's client half registers from its own `apply`, which can
+ * settle after the connect settings page (and its modal) already mounted, and
+ * a wizard is disposed when its plugin unloads. Without this, both surfaces
+ * would snapshot the registry at mount and silently miss every later change.
+ *
+ * `useSyncExternalStore` demands a snapshot that is stable under `Object.is`
+ * between notifications, so the store value is the joined id string (provider
+ * ids never contain spaces) and the array is derived from it — returning
+ * `registry.list()` directly would hand back a fresh array every render and
+ * spin forever.
+ */
+export function useConnectWizardProviderIds(
+  registry: ConnectWizardRegistry,
+): string[] {
+  const subscribe = useCallback(
+    (listener: () => void) => registry.subscribe(listener),
+    [registry],
+  );
+  const getSnapshot = useCallback(() => registry.list().join(" "), [registry]);
+  const key = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useMemo(() => (key ? key.split(" ") : []), [key]);
 }

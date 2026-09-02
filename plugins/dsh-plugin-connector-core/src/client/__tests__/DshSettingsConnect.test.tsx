@@ -315,6 +315,38 @@ describe("DshSettingsConnect", () => {
     expect(captured.agentPreset).toBe("restricted");
   });
 
+  // A provider plugin's client half can finish registering its wizard after
+  // this page has mounted, so the rows have to follow the registry rather than
+  // snapshot it: until then the row shows the generic `Cable` fallback.
+  it("swaps in a provider icon registered after the page mounted", async () => {
+    const registry = createConnectWizardRegistry();
+    listProviders.mockResolvedValue([
+      { id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false },
+    ]);
+    list.mockResolvedValue([
+      {
+        id: "c1", provider: "lark", name: "Sales", enabled: true, pairing: false,
+        owners: [], status: { state: "ready" },
+        createdAt: "2026-08-15T00:00:00.000Z", updatedAt: "2026-08-15T00:00:00.000Z",
+      },
+    ]);
+    const { container } = render(
+      <DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />,
+    );
+
+    await screen.findByText("Sales");
+    expect(screen.queryByTestId("late-lark-icon")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-cable")).not.toBeNull();
+
+    act(() => {
+      registry.register("lark", {
+        component: () => null,
+        icon: <span data-testid="late-lark-icon" />,
+      });
+    });
+    expect(screen.getByTestId("late-lark-icon")).toBeInTheDocument();
+  });
+
   it("shows the provider's registry icon on a connect row", async () => {
     const registry = createConnectWizardRegistry();
     registry.register("lark", { component: () => null, icon: <span data-testid="lark-row-icon" /> });
