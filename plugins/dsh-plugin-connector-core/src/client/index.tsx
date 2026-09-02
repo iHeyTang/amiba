@@ -33,6 +33,22 @@ declare module "@deepseek-ai/cordis" {
   }
 }
 
+/**
+ * The wizard contract, re-exported through this package's `./client` entry so
+ * a provider plugin's own client half can type its wizard body against it
+ * (`import type { ConnectWizardHost } from
+ * "@amiba/dsh-plugin-connector-core/client"`). Type-only on purpose: nothing
+ * of it survives into a provider's bundle, and a provider body still depends
+ * on no runtime value from this package — only on the `host` prop it is
+ * handed.
+ */
+export type {
+  ConnectWizardEntry,
+  ConnectWizardHost,
+  ConnectWizardRegistry,
+  PresetOption,
+} from "./wizard-registry.js";
+
 type ConnectSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ConnectAdapter;
   registry: ConnectWizardRegistry;

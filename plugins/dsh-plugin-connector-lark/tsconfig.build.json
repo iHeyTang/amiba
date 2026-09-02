@@ -1,1 +1,12 @@
-{"extends":"./tsconfig.json","compilerOptions":{"noEmit":false,"isolatedModules":false,"declaration":true,"rootDir":"src","outDir":"lib"},"exclude":["src/**/*.test.ts"]}
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "isolatedModules": false,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]
+}
