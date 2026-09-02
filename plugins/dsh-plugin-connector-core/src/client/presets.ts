@@ -10,13 +10,21 @@ export interface PresetConnection {
   api: { agentPresets: { list(input: object): Promise<unknown> } };
 }
 
-interface RawProfile {
+interface RawEntry {
+  id?: unknown;
   name?: unknown;
-  description?: unknown;
-  is_default?: unknown;
+  isDefault?: unknown;
 }
 
-/** Read the installed agent presets as picker options; [] on any failure. */
+/**
+ * Read the installed agent presets as picker options; [] on any failure.
+ *
+ * The call resolves to an rpc envelope — `{ rpcId, result: { ok, value } }`
+ * — exactly as `dsh-plugin-agent-preset`'s `client/data.ts` `unwrap()` reads
+ * it; `value.presets` carries camelCase `AgentPresetEntry` rows. `name` is the
+ * display name and falls back to `id` (DSH's own contract); `description` is a
+ * longer blurb and is NOT the label.
+ */
 export async function loadAgentPresets(
   connection: PresetConnection,
 ): Promise<PresetOption[]> {
@@ -27,15 +35,17 @@ export async function loadAgentPresets(
     return [];
   }
   if (!response || typeof response !== "object") return [];
-  const { ok, profiles } = response as { ok?: unknown; profiles?: unknown };
-  if (ok !== true || !Array.isArray(profiles)) return [];
-  return profiles.flatMap((raw): PresetOption[] => {
-    const profile = raw as RawProfile;
-    if (typeof profile.name !== "string" || !profile.name) return [];
+  const result = (response as { result?: unknown }).result;
+  if (!result || typeof result !== "object") return [];
+  const { ok, value } = result as { ok?: unknown; value?: unknown };
+  if (ok !== true || !value || typeof value !== "object") return [];
+  const presets = (value as { presets?: unknown }).presets;
+  if (!Array.isArray(presets)) return [];
+  return presets.flatMap((raw): PresetOption[] => {
+    const entry = raw as RawEntry;
+    if (typeof entry.id !== "string" || !entry.id) return [];
     const label =
-      typeof profile.description === "string" && profile.description.trim()
-        ? profile.description
-        : profile.name;
-    return [{ id: profile.name, label, isDefault: profile.is_default === true }];
+      typeof entry.name === "string" && entry.name.trim() ? entry.name : entry.id;
+    return [{ id: entry.id, label, isDefault: entry.isDefault === true }];
   });
 }
