@@ -8,27 +8,62 @@
   "types": "lib/index.d.ts",
   "exports": {
     ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-remotes",
+        "@amiba/dsh-plugin-ui-shell",
+        "@amiba/dsh-plugin-connector-core"
+      ],
+      "platform": "web"
+    }
   },
   "files": ["lib"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@amiba/dsh-plugin-connector-core": "workspace:*",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*",
+    "@amiba/ui": "workspace:*",
     "dingtalk-stream": "2.1.6-beta.1",
     "@deepseek-ai/schemastery": "catalog:",
+    "lucide-react": "^0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "catalog:"
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@amiba/app-runtime": "workspace:*",
     "@deepseek-ai/cordis": "catalog:",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
     "@types/node": "22.9.0",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "jsdom": "^25.0.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "typescript": "5.6.3",
+    "vite": "^5.4.11",
     "vitest": "^2.1.4"
   }
 }
