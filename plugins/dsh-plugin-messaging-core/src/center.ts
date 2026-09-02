@@ -125,6 +125,15 @@ interface MessageRuntimeContext extends Context {
       events: readonly SessionEvent[];
     }>;
   };
+  // Published by dsh-host-apiproxy (and mirrored by any host that seeds
+  // agent sessions); absent on headless runtimes, so read it defensively.
+  agentDefaultModel?: {
+    currentSelection(): {
+      provider: string;
+      model: string;
+      reasoningEffort?: unknown;
+    };
+  };
 }
 
 function presetForSession(session: {
@@ -167,6 +176,34 @@ function eventMessageId(event: SessionEvent): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   const id = (message as Record<string, unknown>).id;
   return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * `turn/end`'s `reason` is a structured DSH value (e.g.
+ * `{kind:"error", error:{message,code}}` or `{kind:"aborted", reason}`), not a
+ * string — interpolating it directly collapses to `[object Object]`. Surface
+ * whatever readable detail it carries instead.
+ */
+function describeTurnEndReason(reason: unknown): string {
+  if (reason && typeof reason === "object") {
+    const row = reason as Record<string, unknown>;
+    if (typeof row.kind === "string") {
+      const error = row.error;
+      const message =
+        error && typeof error === "object"
+          ? (error as Record<string, unknown>).message
+          : undefined;
+      return typeof message === "string" && message.trim()
+        ? `${row.kind}: ${message}`
+        : row.kind;
+    }
+    try {
+      return JSON.stringify(reason);
+    } catch {
+      return String(reason);
+    }
+  }
+  return String(reason ?? "completed");
 }
 
 function completedTurnReply(
@@ -222,7 +259,7 @@ function completedTurnReply(
       : `${pending.sessionId}:turn:${turn}`,
     text:
       text ||
-      `DSH completed the message without a text reply (${String(reason ?? "completed")}).`,
+      `DSH completed the message without a text reply (${describeTurnEndReason(reason)}).`,
     time: end.time,
   };
 }
@@ -395,6 +432,18 @@ export class MessageChannelCenter {
     return binding && binding.channelId === channelId ? binding : undefined;
   }
 
+  /** The seed model each create/resume declares; re-read so it never goes
+   * stale. Undefined on headless runtimes that never mount
+   * `agentDefaultModel` — callers must tolerate its absence. */
+  private defaultAgentOptions(): { provider: string; model: string } | undefined {
+    const selection = (
+      this.ctx as MessageRuntimeContext
+    ).agentDefaultModel?.currentSelection?.();
+    return selection
+      ? { provider: selection.provider, model: selection.model }
+      : undefined;
+  }
+
   private resolveConversationSession(
     channel: StoredMessageChannel,
     conversation: InboundConversationRef,
@@ -410,9 +459,11 @@ export class MessageChannelCenter {
       if (bound) return bound.sessionId;
       const sessionId = `session-${randomUUID()}`;
       const runtime = this.ctx as MessageRuntimeContext;
+      const agentOptions = this.defaultAgentOptions();
       const handle = await this.ctx.agents.create({
         sessionId: sessionId as never,
         meta: channel.agentPreset ? { agentPreset: channel.agentPreset } : {},
+        ...(agentOptions ? { agentOptions } : {}),
         setup: async (agentCtx: Context) => {
           try {
             await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
@@ -516,8 +567,10 @@ export class MessageChannelCenter {
     const resume = (async () => {
       const inspected = await runtime.sessionPersistence.inspect(sessionId);
       const preset = presetForSession(inspected);
+      const agentOptions = this.defaultAgentOptions();
       const handle = await this.ctx.agents.resume({
         resumeSessionId: sessionId as never,
+        ...(agentOptions ? { agentOptions } : {}),
         setup: async (agentCtx) => {
           try {
             await runtime.agentPresets.mount(agentCtx, preset);

@@ -26,38 +26,58 @@ async function harness() {
     inbox: { nextTurn: [], nextStep: [] },
   });
   live.set("session-a", makeAgent("session-a"));
+  const resumed: Array<{
+    resumeSessionId: string;
+    agentOptions?: Record<string, unknown>;
+  }> = [];
   const resume = vi.fn(
     async ({
       resumeSessionId,
       setup,
+      agentOptions,
     }: {
       resumeSessionId: string;
       setup?: (agentCtx: unknown) => Promise<unknown>;
+      agentOptions?: Record<string, unknown>;
     }) => {
       if (resumeSessionId !== "session-cold")
         throw new Error("session_not_found");
       if (setup) await setup({});
       const agent = makeAgent(resumeSessionId);
       live.set(resumeSessionId, agent);
+      resumed.push({
+        resumeSessionId,
+        ...(agentOptions ? { agentOptions } : {}),
+      });
       return { agent };
     },
   );
-  const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
+  const created: Array<{
+    sessionId: string;
+    meta?: Record<string, unknown>;
+    agentOptions?: Record<string, unknown>;
+  }> = [];
   const dispose = vi.fn(async () => undefined);
   const create = vi.fn(
     async ({
       sessionId,
       meta,
       setup,
+      agentOptions,
     }: {
       sessionId: string;
       meta?: Record<string, unknown>;
       setup?: (agentCtx: unknown) => Promise<unknown>;
+      agentOptions?: Record<string, unknown>;
     }) => {
       if (setup) await setup({});
       const agent = makeAgent(sessionId);
       live.set(sessionId, agent);
-      created.push({ sessionId, ...(meta ? { meta } : {}) });
+      created.push({
+        sessionId,
+        ...(meta ? { meta } : {}),
+        ...(agentOptions ? { agentOptions } : {}),
+      });
       return { agent, dispose };
     },
   );
@@ -65,6 +85,9 @@ async function harness() {
   const ctx = {
     agents: { get: (id: string) => live.get(id), resume, create },
     agentPresets: { mount: vi.fn(async () => undefined) },
+    agentDefaultModel: {
+      currentSelection: () => ({ provider: "deepseek", model: "deepseek-chat" }),
+    },
     sessionPersistence: {
       inspect: vi.fn(async (id: string) => {
         if (id !== "session-cold") throw new Error("session_not_found");
@@ -99,6 +122,7 @@ async function harness() {
     followup,
     listeners,
     resume,
+    resumed,
     live,
     created,
     create,
@@ -106,6 +130,15 @@ async function harness() {
     ctx,
     loggerCalls,
   };
+}
+
+/** A harness variant with no `agentDefaultModel` mounted, mirroring headless
+ * runtimes where that Cordis service is never published. */
+async function harnessWithoutDefaultModel() {
+  const built = await harness();
+  const ctx = built.ctx as Record<string, unknown>;
+  delete ctx.agentDefaultModel;
+  return built;
 }
 
 describe("DSH-native message channel center", () => {
@@ -233,6 +266,68 @@ describe("DSH-native message channel center", () => {
       expect(await center.store.listPending("session-a")).toHaveLength(0);
       expect(await center.store.listOutbox()).toHaveLength(0);
     });
+  });
+
+  it("surfaces a readable reason instead of [object Object] when a turn ends in error", async () => {
+    const { center, listeners, live } = await harness();
+    const created = await center.createChannel({
+      provider: "webhook",
+      name: "Reply",
+      sessionId: "session-a",
+    });
+    await center.acceptInbound(created.channel.id, created.secret, {
+      id: "evt-error",
+      text: "status?",
+    });
+    const [pending] = await center.store.listPending("session-a");
+    expect(pending).toBeDefined();
+    const queueReply = vi.spyOn(center.store, "queueReply");
+    const events = [
+      { seq: 0, time: 1, type: "turn/start", data: { turn: 1 } },
+      {
+        seq: 1,
+        time: 2,
+        type: "user/message",
+        data: {
+          id: pending!.dshMessageId,
+          role: "user",
+          content: [{ type: "text", text: "status?" }],
+          source: {
+            kind: "plugin",
+            plugin: `amiba-message:${created.channel.id}`,
+            form: "relay",
+          },
+        },
+      },
+      {
+        seq: 2,
+        time: 3,
+        type: "turn/end",
+        data: {
+          turn: 1,
+          reason: {
+            kind: "error",
+            error: {
+              message:
+                'prompt variable "{{model}}" has no value for this assembly (section "deployment:persona")',
+              code: "UNKNOWN",
+            },
+          },
+        },
+      },
+    ];
+    const agent = live.get("session-a") as { session: { events: unknown[] } };
+    agent.session.events = events;
+    listeners.get("session/event")?.(agent.session as never, events[2] as never);
+    await vi.waitFor(() => {
+      expect(queueReply).toHaveBeenCalled();
+    });
+    const [, envelope] = queueReply.mock.calls[0]!;
+    expect(envelope.text).not.toContain("[object Object]");
+    expect(envelope.text).toContain(
+      'prompt variable "{{model}}" has no value',
+    );
+    queueReply.mockRestore();
   });
 
   it("resumes a persisted cold session before accepting its message", async () => {
@@ -476,6 +571,78 @@ describe("conversation-scoped routing", () => {
     expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
     const [warning] = loggerCalls.warn.mock.calls[0]!;
     expect(String(warning)).toContain("standard");
+  });
+});
+
+describe("default model injection for IM sessions", () => {
+  it("supplies the deployment default model when creating a session for a new conversation", async () => {
+    const { center, created } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    await center.acceptInbound(channel.id, secret, {
+      id: "msg-1",
+      text: "hello",
+      sender: "alice",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1);
+    expect(created[0]!.agentOptions).toEqual({
+      provider: "deepseek",
+      model: "deepseek-chat",
+    });
+  });
+
+  it("supplies the deployment default model when resuming a cold session", async () => {
+    const { center, resumed } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Cold",
+      sessionId: "session-cold",
+    });
+    await center.acceptInbound(channel.id, secret, {
+      id: "evt-cold",
+      text: "wake up",
+    });
+    expect(resumed).toHaveLength(1);
+    expect(resumed[0]!.agentOptions).toEqual({
+      provider: "deepseek",
+      model: "deepseek-chat",
+    });
+  });
+
+  it("omits agentOptions without throwing when agentDefaultModel is not mounted (headless runtimes)", async () => {
+    const { center, created, resumed } = await harnessWithoutDefaultModel();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "msg-1",
+        text: "hello",
+        conversation: { key: "chat-1", kind: "p2p" },
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(created).toHaveLength(1);
+    expect(created[0]!.agentOptions).toBeUndefined();
+
+    const cold = await center.createChannel({
+      provider: "webhook",
+      name: "Cold",
+      sessionId: "session-cold",
+    });
+    await expect(
+      center.acceptInbound(cold.channel.id, cold.secret, {
+        id: "evt-cold",
+        text: "wake up",
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(resumed).toHaveLength(1);
+    expect(resumed[0]!.agentOptions).toBeUndefined();
   });
 });
 
