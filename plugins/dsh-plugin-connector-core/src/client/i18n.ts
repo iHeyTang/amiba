@@ -31,26 +31,12 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.emptyDescription":
       "Add a connect to bind a messaging platform to an agent preset.",
     "options.connect.dsh.provider": "Provider",
-    "options.connect.dsh.selectProvider": "Select a provider",
     "options.connect.dsh.wizard.pickProvider": "Choose a platform",
     "options.connect.dsh.wizard.back": "Back",
     "options.connect.dsh.wizard.noWizard":
       "This platform has no setup wizard installed.",
     "options.connect.dsh.name": "Connect name",
     "options.connect.dsh.agentPreset": "Agent preset",
-    "options.connect.dsh.config": "Provider configuration",
-    "options.connect.dsh.configJsonHint":
-      "Enter this provider's configuration as a JSON object.",
-    "options.connect.dsh.configJsonError":
-      "Configuration must be valid JSON for an object.",
-    "options.connect.dsh.lark.appId": "App ID",
-    "options.connect.dsh.lark.appSecret": "App secret",
-    "options.connect.dsh.lark.domain": "Domain",
-    "options.connect.dsh.dingtalk.clientId": "Client ID",
-    "options.connect.dsh.dingtalk.clientSecret": "Client secret",
-    "options.connect.dsh.dingtalk.enableTools": "Enable tools (experimental)",
-    "options.connect.dsh.dingtalk.enableToolsHint":
-      "Tool access uses DingTalk's official but experimental dingtalk-mcp integration.",
     "options.connect.dsh.status.ready": "Ready",
     "options.connect.dsh.status.connecting": "Connecting",
     "options.connect.dsh.status.error": "Error: {detail}",
@@ -86,24 +72,6 @@ export const connectI18n: PluginCatalogOverlay = {
       "This onboarding session has expired or no longer exists.",
     "options.connect.dsh.error.onboarding_unsupported":
       "That provider doesn't support scan-to-connect onboarding.",
-    "options.connect.dsh.onboard.modeScan": "Scan to connect",
-    "options.connect.dsh.onboard.modeManual": "Manual setup",
-    "options.connect.dsh.onboard.begin": "Start scanning",
-    "options.connect.dsh.onboard.intro":
-      "Start scanning to generate a QR code for this provider.",
-    "options.connect.dsh.onboard.qrAlt": "Onboarding QR code",
-    "options.connect.dsh.onboard.scanInstructions":
-      "Scan this QR code with the platform's app to authorize Amiba.",
-    "options.connect.dsh.onboard.longConnectionHint":
-      "If this connect doesn't come online after scanning, open the Feishu open-platform console for this app and set Event Subscription to long-connection mode — that setting can't be configured automatically and needs a manual switch. Keep Amiba running while it connects.",
-    "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
-    "options.connect.dsh.onboard.error.generic":
-      "Scanning failed. Please try again.",
-    "options.connect.dsh.onboard.note.polling": "Waiting for you to scan…",
-    "options.connect.dsh.onboard.note.slow_down":
-      "Scanning too fast — slowing down…",
-    "options.connect.dsh.onboard.note.domain_switched":
-      "Switched login domain — scan again if the code doesn't work.",
   },
   "zh-CN": {
     "options.connect.dsh.description":
@@ -116,23 +84,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.emptyDescription":
       "添加一个连接，把消息平台绑定到某个 Agent Preset。",
     "options.connect.dsh.provider": "Provider",
-    "options.connect.dsh.selectProvider": "选择 Provider",
     "options.connect.dsh.wizard.pickProvider": "选择平台",
     "options.connect.dsh.wizard.back": "返回",
     "options.connect.dsh.wizard.noWizard": "该平台暂无接入向导",
     "options.connect.dsh.name": "连接名称",
     "options.connect.dsh.agentPreset": "Agent Preset",
-    "options.connect.dsh.config": "Provider 配置",
-    "options.connect.dsh.configJsonHint": "以 JSON 对象的形式填写该 Provider 的配置。",
-    "options.connect.dsh.configJsonError": "配置必须是合法的 JSON 对象。",
-    "options.connect.dsh.lark.appId": "App ID",
-    "options.connect.dsh.lark.appSecret": "App Secret",
-    "options.connect.dsh.lark.domain": "Domain",
-    "options.connect.dsh.dingtalk.clientId": "Client ID",
-    "options.connect.dsh.dingtalk.clientSecret": "Client Secret",
-    "options.connect.dsh.dingtalk.enableTools": "启用工具（实验）",
-    "options.connect.dsh.dingtalk.enableToolsHint":
-      "工具能力基于钉钉官方但仍处于实验阶段的 dingtalk-mcp 集成。",
     "options.connect.dsh.status.ready": "就绪",
     "options.connect.dsh.status.connecting": "连接中",
     "options.connect.dsh.status.error": "错误：{detail}",
@@ -162,20 +118,5 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.onboarding_not_found": "该扫码会话已过期或不存在。",
     "options.connect.dsh.error.onboarding_unsupported":
       "该 Provider 不支持扫码接入。",
-    "options.connect.dsh.onboard.modeScan": "扫码接入",
-    "options.connect.dsh.onboard.modeManual": "手动填写",
-    "options.connect.dsh.onboard.begin": "开始扫码",
-    "options.connect.dsh.onboard.intro": "点击“开始扫码”，生成该 Provider 的登录二维码。",
-    "options.connect.dsh.onboard.qrAlt": "接入二维码",
-    "options.connect.dsh.onboard.scanInstructions":
-      "使用该平台的 App 扫描此二维码以授权 Amiba。",
-    "options.connect.dsh.onboard.longConnectionHint":
-      "如果扫码后连接迟迟未能上线，请前往飞书开放平台该应用的设置，将“事件订阅”的接收方式改为“使用长连接接收事件”——该设置无法自动配置，需要手动切换。扫码期间请保持 Amiba 处于运行状态。",
-    "options.connect.dsh.onboard.waiting": "正在等待 Provider 响应…",
-    "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",
-    "options.connect.dsh.onboard.note.polling": "正在等待扫码…",
-    "options.connect.dsh.onboard.note.slow_down": "扫描过于频繁，正在降速…",
-    "options.connect.dsh.onboard.note.domain_switched":
-      "登录域名已切换，如二维码失效请重新扫码。",
   },
 };
