@@ -44,12 +44,18 @@ export interface WsLike {
   close(params?: { force?: boolean }): void;
 }
 
-/** Thin seam over the HTTP `Client`, hiding every SDK call shape behind three verbs. */
+/** Thin seam over the HTTP `Client`, hiding every SDK call shape behind a handful of verbs. */
 export interface ApiLike {
   /** Exchanges a tenant access token; rejects with the SDK's error message on auth failure. */
   tenantToken(): Promise<void>;
   botOpenId(): Promise<string>;
+  /** Plain-text message. Kept as `runtime.deliver()`'s fallback when `sendCard` rejects. */
   sendText(chatId: string, text: string): Promise<void>;
+  /** Interactive-card message rendering `markdown` — Feishu text messages don't render markdown. */
+  sendCard(chatId: string, markdown: string): Promise<void>;
+  /** Adds a reaction to `messageId`; resolves with the reaction id (needed to remove it later). */
+  addReaction(messageId: string, emoji: string): Promise<string>;
+  removeReaction(messageId: string, reactionId: string): Promise<void>;
 }
 
 /**
@@ -228,6 +234,12 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         handle.setStatus(status);
       };
 
+      // Per-start "typing" reaction ledger: inbound message_id -> the
+      // reaction_id `addReaction` returned for it, so `deliver()` can remove
+      // the right reaction once the reply for that message goes out. Never
+      // read across a stop()/start() cycle — `stop()` clears it outright.
+      const reactions = new Map<string, string>();
+
       const ws = deps.createWsClient(config, {
         onReady: () => safeSetStatus({ state: "ready" }),
         onReconnected: () => safeSetStatus({ state: "ready" }),
@@ -237,6 +249,23 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
           if (stopped) return;
           const envelope = toEnvelope(event, botOpenId);
           if (!envelope) return;
+
+          // Fire-and-forget "typing" reaction: never awaited before
+          // onInbound (must not delay message routing) and never allowed to
+          // throw into the ws loop. A late resolution after stop() must not
+          // resurrect the ledger for a connect that's already torn down.
+          const inboundMessageId = envelope.id;
+          api
+            .addReaction(inboundMessageId, "Typing")
+            .then((reactionId) => {
+              if (!stopped) reactions.set(inboundMessageId, reactionId);
+            })
+            .catch((error) => {
+              deps.log?.(
+                `amiba-connector-lark: addReaction failed for ${inboundMessageId}: ${String(error)}`,
+              );
+            });
+
           try {
             await handle.onInbound(envelope);
           } catch (error) {
@@ -254,12 +283,41 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         async stop(): Promise<void> {
           if (stopped) return;
           stopped = true;
+          // Lingering reactions are harmless (the keyboard emoji just stays
+          // on the last inbound message) — never worth a network round trip
+          // during shutdown, so just drop the ledger and stay fast/idempotent.
+          reactions.clear();
           ws.close({ force: false });
         },
         async deliver(conversation, envelope): Promise<void> {
-          // No swallow here: an SDK rejection must propagate so the
-          // messaging outbox retries the delivery.
-          await api.sendText(conversation.key, envelope.text);
+          // Best-effort: clear the "typing" reaction left on the message
+          // this reply answers, if any is still on file. A removal failure
+          // must never block the reply itself.
+          const reactionId = reactions.get(envelope.inReplyTo);
+          if (reactionId !== undefined) {
+            reactions.delete(envelope.inReplyTo);
+            try {
+              await api.removeReaction(envelope.inReplyTo, reactionId);
+            } catch (error) {
+              deps.log?.(
+                `amiba-connector-lark: removeReaction failed for ${envelope.inReplyTo}: ${String(error)}`,
+              );
+            }
+          }
+
+          // Markdown only renders through an interactive card — plain text
+          // messages render Lark/Feishu markdown syntax literally. Fall back
+          // to sendText on any card-send rejection (e.g. a schema mismatch)
+          // so a reply is never lost to a formatting error; a fallback
+          // failure still propagates so the messaging outbox retries.
+          try {
+            await api.sendCard(conversation.key, envelope.text);
+          } catch (error) {
+            deps.log?.(
+              `amiba-connector-lark: sendCard failed, falling back to sendText: ${String(error)}`,
+            );
+            await api.sendText(conversation.key, envelope.text);
+          }
         },
       };
       return runtime;
@@ -329,6 +387,27 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
 //   - send text: client.im.message.create({ params: { receive_id_type: "chat_id" }, data }) —
 //     NOT client.im.v1.message.create. This SDK version flattens the im/v1/message resource
 //     directly onto `client.im.message` (confirmed: no `im.v1` key exists in the type decls).
+//   - send card: same client.im.message.create call, with msg_type: "interactive" and content
+//     JSON.stringify'd from a card v2 payload ({ schema: "2.0", body: { elements: [{ tag:
+//     "markdown", content }] } }) — the installed type decls leave `msg_type`/`content` as plain
+//     `string`, so no cast is needed for the "interactive" literal. Unlike the existing
+//     `sendText` (which never inspects the response), `sendCard` DOES check `res.code` and
+//     throws on a truthy value — required so a card-schema rejection (a 200 HTTP response
+//     carrying a non-zero business `code`, since the SDK's axios response interceptor only
+//     returns `resp.data` and never inspects `code` itself — confirmed in the installed
+//     `lib/index.js`) actually rejects the promise and trips `runtime.deliver()`'s
+//     sendText fallback, instead of silently "succeeding" with an undelivered card.
+//   - add reaction: client.im.messageReaction.create({ path: { message_id }, data:
+//     { reaction_type: { emoji_type } } }) → response is always `{ code?, msg?, data?:
+//     { reaction_id?, ... } }` per the installed type decls (reaction_id is NEVER top-level) —
+//     confirmed by reading the decl directly. `sendCard`'s hedge (`res.data?.reaction_id ??
+//     res.reaction_id`) is kept anyway as a defensive belt against future SDK/gateway drift,
+//     mirroring the `botOpenId` precedent above.
+//   - remove reaction: client.im.messageReaction.delete({ path: { message_id, reaction_id } })
+//     — no `data` payload, same `{ code?, msg?, data? }` response shape.
+//   - "typing" emoji: the string "Typing" is the emoji_type key for Feishu's keyboard (⌨️)
+//     reaction — this file passes it as a plain string literal from `runtime.deliver()`'s
+//     caller (the ws `onEvent` callback), never imported as an SDK enum (none exists for it).
 //   - domain: config's "feishu"/"lark" strings must be mapped to the Domain enum
 //     (Domain.Feishu = 0 / Domain.Lark = 1). Passing the raw string through would NOT work:
 //     the SDK's `formatDomain` only special-cases the two enum values and otherwise uses the
@@ -367,6 +446,35 @@ interface BotInfoResponse {
   // level. Hedge against both shapes rather than assuming the untyped
   // top-level one.
   data?: { bot?: { open_id?: string } };
+}
+
+interface MessageCreateResponse {
+  code?: number;
+  msg?: string;
+  data?: { message_id?: string };
+}
+
+/**
+ * Verified against the installed 1.73.0 type decls: `reaction_id` is always
+ * under `data`, never top-level. The top-level `reaction_id` field here is a
+ * defensive hedge only (see the SDK-verification comment block above), kept
+ * for parity with the `botOpenId` precedent rather than because this
+ * endpoint is known to ever respond that way.
+ */
+interface ReactionResponse {
+  code?: number;
+  msg?: string;
+  reaction_id?: string;
+  data?: { reaction_id?: string };
+}
+
+/** Card v2 payload for a single markdown element — see the SDK-verification
+ * comment block above for why this schema (over v1's `lark_md`/`md` tags). */
+function markdownCard(markdown: string): unknown {
+  return {
+    schema: "2.0",
+    body: { elements: [{ tag: "markdown", content: markdown }] },
+  };
 }
 
 export const realLarkDeps: LarkDeps = {
@@ -426,6 +534,38 @@ export const realLarkDeps: LarkDeps = {
             content: JSON.stringify({ text }),
           },
         });
+      },
+      async sendCard(chatId, markdown): Promise<void> {
+        const res = (await client.im.message.create({
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: chatId,
+            msg_type: "interactive",
+            content: JSON.stringify(markdownCard(markdown)),
+          },
+        })) as MessageCreateResponse;
+        if (res.code) {
+          throw new Error(res.msg ?? `lark_send_card_failed:${res.code}`);
+        }
+      },
+      async addReaction(messageId, emoji): Promise<string> {
+        const res = (await client.im.messageReaction.create({
+          path: { message_id: messageId },
+          data: { reaction_type: { emoji_type: emoji } },
+        })) as ReactionResponse;
+        const reactionId = res.data?.reaction_id ?? res.reaction_id;
+        if (!reactionId) {
+          throw new Error(res.msg ?? "lark_add_reaction_missing_reaction_id");
+        }
+        return reactionId;
+      },
+      async removeReaction(messageId, reactionId): Promise<void> {
+        const res = (await client.im.messageReaction.delete({
+          path: { message_id: messageId, reaction_id: reactionId },
+        })) as ReactionResponse;
+        if (res.code) {
+          throw new Error(res.msg ?? `lark_remove_reaction_failed:${res.code}`);
+        }
       },
     };
   },

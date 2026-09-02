@@ -31,8 +31,18 @@ function fakeApi(overrides: Partial<ApiLike> = {}): ApiLike {
     tenantToken: vi.fn(async () => undefined),
     botOpenId: vi.fn(async () => "ou_bot_123"),
     sendText: vi.fn(async () => undefined),
+    sendCard: vi.fn(async () => undefined),
+    addReaction: vi.fn(async () => "reaction_1"),
+    removeReaction: vi.fn(async () => undefined),
     ...overrides,
   };
+}
+
+/** Flushes the fire-and-forget addReaction promise chain queued by onEvent
+ * (a macrotask hop guarantees every pending microtask — including the
+ * `.then()`/`.catch()` on that chain — has already run). */
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function fakeWs(overrides: Partial<WsLike> = {}): WsLike {
@@ -225,6 +235,79 @@ describe("createLarkProvider", () => {
       ]);
     });
 
+    it("fires a Typing reaction on the inbound message without blocking onInbound, then stores the reaction id", async () => {
+      const api = fakeApi({ addReaction: vi.fn(async () => "reaction_typing_1") });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const callbacks = deps.wsCallbacks!;
+      await callbacks.onEvent?.({
+        sender: { sender_id: { open_id: "ou_user_1" } },
+        message: {
+          message_id: "msg_typing_1",
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_type: "text",
+          content: '{"text":"hello"}',
+        },
+      });
+
+      expect(api.addReaction).toHaveBeenCalledWith("msg_typing_1", "Typing");
+      expect(handle.onInbound).toHaveBeenCalled();
+
+      // Stored reaction id is observable via deliver()'s removeReaction call.
+      await flushMicrotasks();
+      await runtime.deliver(
+        { key: "oc_1", kind: "p2p" },
+        {
+          id: "out-typing-1",
+          channelId: "channel-1",
+          sessionId: "session-1",
+          inReplyTo: "msg_typing_1",
+          text: "pong",
+          createdAt: new Date().toISOString(),
+        },
+      );
+      expect(api.removeReaction).toHaveBeenCalledWith(
+        "msg_typing_1",
+        "reaction_typing_1",
+      );
+    });
+
+    it("does not let an addReaction failure block onInbound or throw", async () => {
+      const api = fakeApi({
+        addReaction: vi.fn(async () => {
+          throw new Error("reaction_add_failed");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      await provider.start(handle);
+
+      const callbacks = deps.wsCallbacks!;
+      await expect(
+        callbacks.onEvent?.({
+          sender: { sender_id: { open_id: "ou_user_1" } },
+          message: {
+            message_id: "msg_typing_fail",
+            chat_id: "oc_1",
+            chat_type: "p2p",
+            message_type: "text",
+            content: '{"text":"hello"}',
+          },
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(handle.onInbound).toHaveBeenCalled();
+      await flushMicrotasks();
+      expect(deps.logs.some((line) => line.includes("reaction_add_failed"))).toBe(
+        true,
+      );
+    });
+
     it("does not call onInbound when translateReceiveEvent returns null", async () => {
       const deps = fakeDeps();
       const handle = fakeHandle();
@@ -273,8 +356,9 @@ describe("createLarkProvider", () => {
       );
     });
 
-    it("gates late ws callbacks behind stop(): no status writes or inbound delivery after stop", async () => {
-      const deps = fakeDeps();
+    it("gates late ws callbacks behind stop(): no status writes, inbound delivery, or reaction after stop", async () => {
+      const api = fakeApi();
+      const deps = fakeDeps({ api });
       const handle = fakeHandle();
       const provider = createLarkProvider(deps);
       const runtime = await provider.start(handle);
@@ -303,13 +387,14 @@ describe("createLarkProvider", () => {
 
       expect(handle.statuses.length).toBe(statusesAfterStop);
       expect(handle.onInbound).not.toHaveBeenCalled();
+      expect(api.addReaction).not.toHaveBeenCalled();
     });
   });
 
   // --- Contract item 3: runtime.deliver() -----------------------------
 
   describe("runtime.deliver", () => {
-    it("sends text via deps.sendText using the conversation key", async () => {
+    it("sends the reply as a markdown card via deps.sendCard using the conversation key", async () => {
       const api = fakeApi();
       const deps = fakeDeps({ api });
       const handle = fakeHandle();
@@ -328,11 +413,47 @@ describe("createLarkProvider", () => {
         },
       );
 
-      expect(api.sendText).toHaveBeenCalledWith("oc_target", "pong");
+      expect(api.sendCard).toHaveBeenCalledWith("oc_target", "pong");
+      expect(api.sendText).not.toHaveBeenCalled();
     });
 
-    it("propagates an SDK rejection instead of swallowing it", async () => {
+    it("falls back to deps.sendText (logging the fallback) when sendCard rejects, and still resolves", async () => {
       const api = fakeApi({
+        sendCard: vi.fn(async () => {
+          throw new Error("card_schema_rejected");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await expect(
+        runtime.deliver(
+          { key: "oc_target", kind: "p2p" },
+          {
+            id: "out-1b",
+            channelId: "channel-1",
+            sessionId: "session-1",
+            inReplyTo: "msg_1",
+            text: "pong",
+            createdAt: new Date().toISOString(),
+          },
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(api.sendCard).toHaveBeenCalledWith("oc_target", "pong");
+      expect(api.sendText).toHaveBeenCalledWith("oc_target", "pong");
+      expect(
+        deps.logs.some((line) => line.includes("card_schema_rejected")),
+      ).toBe(true);
+    });
+
+    it("propagates a rejection (for outbox retry) when both sendCard and the sendText fallback fail", async () => {
+      const api = fakeApi({
+        sendCard: vi.fn(async () => {
+          throw new Error("card_schema_rejected");
+        }),
         sendText: vi.fn(async () => {
           throw new Error("outbox_send_failed");
         }),
@@ -355,6 +476,113 @@ describe("createLarkProvider", () => {
           },
         ),
       ).rejects.toThrow("outbox_send_failed");
+    });
+
+    it("removes the stored Typing reaction for inReplyTo before sending the card", async () => {
+      const api = fakeApi({ addReaction: vi.fn(async () => "reaction_xyz") });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const callbacks = deps.wsCallbacks!;
+      await callbacks.onEvent?.({
+        sender: { sender_id: { open_id: "ou_user_1" } },
+        message: {
+          message_id: "msg_reply_target",
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_type: "text",
+          content: '{"text":"hello"}',
+        },
+      });
+      await flushMicrotasks();
+
+      await runtime.deliver(
+        { key: "oc_1", kind: "p2p" },
+        {
+          id: "out-3",
+          channelId: "channel-1",
+          sessionId: "session-1",
+          inReplyTo: "msg_reply_target",
+          text: "pong",
+          createdAt: new Date().toISOString(),
+        },
+      );
+
+      expect(api.removeReaction).toHaveBeenCalledWith(
+        "msg_reply_target",
+        "reaction_xyz",
+      );
+      expect(api.sendCard).toHaveBeenCalledWith("oc_1", "pong");
+    });
+
+    it("still sends the card when removeReaction fails (best-effort, never blocks the reply)", async () => {
+      const api = fakeApi({
+        addReaction: vi.fn(async () => "reaction_xyz"),
+        removeReaction: vi.fn(async () => {
+          throw new Error("reaction_remove_failed");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const callbacks = deps.wsCallbacks!;
+      await callbacks.onEvent?.({
+        sender: { sender_id: { open_id: "ou_user_1" } },
+        message: {
+          message_id: "msg_reply_target_2",
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_type: "text",
+          content: '{"text":"hello"}',
+        },
+      });
+      await flushMicrotasks();
+
+      await expect(
+        runtime.deliver(
+          { key: "oc_1", kind: "p2p" },
+          {
+            id: "out-4",
+            channelId: "channel-1",
+            sessionId: "session-1",
+            inReplyTo: "msg_reply_target_2",
+            text: "pong",
+            createdAt: new Date().toISOString(),
+          },
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(api.sendCard).toHaveBeenCalledWith("oc_1", "pong");
+      expect(
+        deps.logs.some((line) => line.includes("reaction_remove_failed")),
+      ).toBe(true);
+    });
+
+    it("does not call removeReaction when inReplyTo has no stored reaction, and still sends the card", async () => {
+      const api = fakeApi();
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await runtime.deliver(
+        { key: "oc_1", kind: "p2p" },
+        {
+          id: "out-5",
+          channelId: "channel-1",
+          sessionId: "session-1",
+          inReplyTo: "msg_never_seen",
+          text: "pong",
+          createdAt: new Date().toISOString(),
+        },
+      );
+
+      expect(api.removeReaction).not.toHaveBeenCalled();
+      expect(api.sendCard).toHaveBeenCalledWith("oc_1", "pong");
     });
   });
 
@@ -383,6 +611,47 @@ describe("createLarkProvider", () => {
       await runtime.stop();
       await expect(runtime.stop()).resolves.toBeUndefined();
       expect(ws.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears stored reactions on stop() without attempting to remove them (lingering is harmless)", async () => {
+      const api = fakeApi({ addReaction: vi.fn(async () => "reaction_stop") });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const callbacks = deps.wsCallbacks!;
+      await callbacks.onEvent?.({
+        sender: { sender_id: { open_id: "ou_user_1" } },
+        message: {
+          message_id: "msg_stop_1",
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_type: "text",
+          content: '{"text":"hello"}',
+        },
+      });
+      await flushMicrotasks();
+
+      await runtime.stop();
+
+      // stop() itself never calls removeReaction...
+      expect(api.removeReaction).not.toHaveBeenCalled();
+
+      // ...and the map was actually cleared (not just left unread): a
+      // later deliver() for the same inReplyTo finds nothing to remove.
+      await runtime.deliver(
+        { key: "oc_1", kind: "p2p" },
+        {
+          id: "out-stop-1",
+          channelId: "channel-1",
+          sessionId: "session-1",
+          inReplyTo: "msg_stop_1",
+          text: "pong",
+          createdAt: new Date().toISOString(),
+        },
+      );
+      expect(api.removeReaction).not.toHaveBeenCalled();
     });
   });
 
