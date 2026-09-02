@@ -11,17 +11,29 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * generic verbs this body's own buttons render. Key NAMES are unchanged so the
  * copy a user sees is bit-identical to what the retired dialog showed.
  *
- * Deliberately NOT migrated: connector-core's other `error.*` codes
- * (`agent_preset_required`, `provider_not_found`, `invalid_channel`,
- * `grant_not_found`). Those belong to the connect lifecycle that core still
- * owns and renders; a create failure carrying one of them surfaces its raw
- * message here rather than duplicating core's copy into every provider.
+ * That includes all seven `options.connect.dsh.error.*` codes a create or
+ * onboarding call can fail with, not just the two onboarding-specific ones:
+ * plugin-owned copy is the doctrine, and a provider body must be able to
+ * translate every failure its own submit path can produce without reaching
+ * into another plugin's catalog. The five lifecycle codes are duplicated with
+ * connector-core on purpose — core keeps them for its own row-mutation path
+ * (enable/disable/remove/owners), which this wizard never drives.
  */
 export const larkI18n: PluginCatalogOverlay = {
   en: {
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.error.agent_preset_required":
+      "Choose an agent preset before creating this connect.",
+    "options.connect.dsh.error.provider_not_found":
+      "That provider is no longer installed.",
+    "options.connect.dsh.error.connect_not_found":
+      "That connect no longer exists.",
+    "options.connect.dsh.error.invalid_channel":
+      "This provider's messaging channel configuration is invalid.",
+    "options.connect.dsh.error.grant_not_found":
+      "This connect's stored credentials are missing or invalid.",
     "options.connect.dsh.error.onboarding_not_found":
       "This onboarding session has expired or no longer exists.",
     "options.connect.dsh.error.onboarding_unsupported":
@@ -52,6 +64,12 @@ export const larkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App Secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.error.agent_preset_required":
+      "创建连接前请先选择 Agent Preset。",
+    "options.connect.dsh.error.provider_not_found": "该 Provider 已不再安装。",
+    "options.connect.dsh.error.connect_not_found": "该连接已不存在。",
+    "options.connect.dsh.error.invalid_channel": "该 Provider 的消息渠道配置无效。",
+    "options.connect.dsh.error.grant_not_found": "该连接保存的凭据缺失或已失效。",
     "options.connect.dsh.error.onboarding_not_found": "该扫码会话已过期或不存在。",
     "options.connect.dsh.error.onboarding_unsupported":
       "该 Provider 不支持扫码接入。",

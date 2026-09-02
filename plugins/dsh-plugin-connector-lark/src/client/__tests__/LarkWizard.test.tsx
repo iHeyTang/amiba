@@ -56,6 +56,38 @@ describe("LarkWizard", () => {
     expect(host.done).toHaveBeenCalledWith({ id: "c1" });
   });
 
+  it("translates a create failure code instead of rendering the raw code", async () => {
+    const host = hostWith({
+      adapter: {
+        create: vi.fn(async () => {
+          throw new Error("agent_preset_required");
+        }),
+        beginOnboarding: vi.fn(),
+        pollOnboarding: vi.fn(),
+        cancelOnboarding: vi.fn(async () => ({})),
+      } as never,
+    });
+    render(<LarkWizard host={host} />);
+    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    fireEvent.change(screen.getByLabelText("App ID"), {
+      target: { value: "cli_x" },
+    });
+    fireEvent.change(screen.getByLabelText(/App [Ss]ecret/), {
+      target: { value: "secret" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
+
+    expect(
+      screen.getByText(
+        /创建连接前请先选择 Agent Preset。|Choose an agent preset before creating this connect\./,
+      ),
+    ).toBeInTheDocument();
+    // The point of the mapping: the wire code never reaches the user.
+    expect(screen.getByText(/[Aa]gent [Pp]reset/)).toBeInTheDocument();
+    expect(screen.queryByText("agent_preset_required")).not.toBeInTheDocument();
+    expect(host.done).not.toHaveBeenCalled();
+  });
+
   it("secret field is a password input", async () => {
     render(<LarkWizard host={hostWith()} />);
     await userEvent.click(screen.getByText(/手动填写|Manual/));

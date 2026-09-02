@@ -43,18 +43,27 @@ function useT() {
 }
 
 /**
- * The onboarding failure codes this wizard owns copy for. Everything else —
- * including connector-core's connect-lifecycle codes — falls through to the
- * raw message rather than duplicating core's vocabulary here (see `./i18n.ts`).
+ * Every failure code `ConnectorCenter#createConnect` and the onboarding trio
+ * can hand back, mapped to this plugin's own translated copy (see
+ * `./i18n.ts`). All seven live here rather than only the two onboarding ones:
+ * a provider body must be able to translate every failure its own submit path
+ * can produce without reaching into another plugin's catalog. An unrecognised
+ * message still falls back to the raw string — better a real message than
+ * nothing.
  */
-const KNOWN_ERRORS: Record<string, string> = {
+const KNOWN_CREATE_ERRORS: Record<string, string> = {
+  agent_preset_required: "options.connect.dsh.error.agent_preset_required",
+  provider_not_found: "options.connect.dsh.error.provider_not_found",
+  connect_not_found: "options.connect.dsh.error.connect_not_found",
+  invalid_channel: "options.connect.dsh.error.invalid_channel",
+  grant_not_found: "options.connect.dsh.error.grant_not_found",
   onboarding_not_found: "options.connect.dsh.error.onboarding_not_found",
   onboarding_unsupported: "options.connect.dsh.error.onboarding_unsupported",
 };
 
 function describeError(t: PluginTranslateFn, cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
-  const key = KNOWN_ERRORS[message];
+  const key = KNOWN_CREATE_ERRORS[message];
   return key ? t(key) : message;
 }
 
