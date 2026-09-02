@@ -3,11 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DshSettingsConnect } from "../DshSettingsConnect";
+import { createConnectWizardRegistry } from "../wizard-registry";
 import type {
   ConnectorProviderView,
   ConnectView,
   OnboardingView,
 } from "../../types";
+
+// Task 4: `DshSettingsConnect` now takes the wizard registry and a preset
+// loader instead of building its own add-connect dialog. A fresh, empty
+// registry is enough for the list/enable/remove/owners/empty tests below —
+// none of them drive the add flow into a provider wizard body.
+const registry = createConnectWizardRegistry();
+const loadPresets = async () => [
+  { id: "restricted", label: "Restricted", isDefault: true },
+];
 
 const listProviders = vi.fn();
 const list = vi.fn();
@@ -150,7 +160,7 @@ describe("DshSettingsConnect", () => {
   });
 
   it("lists connects with provider name, status badges, and owner counts", async () => {
-    const { container } = render(<DshSettingsConnect adapter={adapter} />);
+    const { container } = render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     expect(await screen.findByText("Sales bot")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
@@ -186,7 +196,7 @@ describe("DshSettingsConnect", () => {
   it("shows the empty state and a disabled add button with a hint when no providers are installed", async () => {
     listProviders.mockResolvedValue([]);
     list.mockResolvedValue([]);
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     expect(await screen.findByText("No connects yet")).toBeVisible();
     expect(
@@ -201,7 +211,7 @@ describe("DshSettingsConnect", () => {
     const user = userEvent.setup();
     listProviders.mockResolvedValue(providers);
     list.mockResolvedValue([]);
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     expect(await screen.findByText("No connects yet")).toBeVisible();
     expect(
@@ -216,10 +226,12 @@ describe("DshSettingsConnect", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("creates a lark connect from the add dialog with the three lark-specific fields", async () => {
+  // removed in Task 5: drives the retired CreateConnectDialog's lark manual
+  // form, which DshSettingsConnect no longer renders.
+  it.skip("creates a lark connect from the add dialog with the three lark-specific fields", async () => {
     const user = userEvent.setup();
     create.mockResolvedValue(connectView());
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -245,10 +257,12 @@ describe("DshSettingsConnect", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("trims the app secret on submit, same as the app id", async () => {
+  // removed in Task 5: drives the retired CreateConnectDialog's lark manual
+  // form, which DshSettingsConnect no longer renders.
+  it.skip("trims the app secret on submit, same as the app id", async () => {
     const user = userEvent.setup();
     create.mockResolvedValue(connectView());
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -269,10 +283,12 @@ describe("DshSettingsConnect", () => {
     );
   });
 
-  it("surfaces a translated message for a known create error, inline in the dialog", async () => {
+  // removed in Task 5: drives the retired CreateConnectDialog's lark manual
+  // form, which DshSettingsConnect no longer renders.
+  it.skip("surfaces a translated message for a known create error, inline in the dialog", async () => {
     const user = userEvent.setup();
     create.mockRejectedValue(new Error("agent_preset_required"));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -291,10 +307,12 @@ describe("DshSettingsConnect", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("surfaces a translated message for the connect_not_found create error", async () => {
+  // removed in Task 5: drives the retired CreateConnectDialog's lark manual
+  // form, which DshSettingsConnect no longer renders.
+  it.skip("surfaces a translated message for the connect_not_found create error", async () => {
     const user = userEvent.setup();
     create.mockRejectedValue(new Error("connect_not_found"));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -310,9 +328,11 @@ describe("DshSettingsConnect", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("disables submit and shows an inline parse error for invalid JSON on a non-lark provider", async () => {
+  // removed in Task 5: drives the retired CreateConnectDialog's JSON-config
+  // fallback form, which DshSettingsConnect no longer renders.
+  it.skip("disables submit and shows an inline parse error for invalid JSON on a non-lark provider", async () => {
     const user = userEvent.setup();
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -336,7 +356,7 @@ describe("DshSettingsConnect", () => {
   it("toggles enabled state through adapter.setEnabled and refreshes", async () => {
     const user = userEvent.setup();
     setEnabled.mockResolvedValue(connectView({ enabled: false }));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await screen.findByText("Sales bot");
     const row = screen.getByText("Sales bot").closest("article")!;
@@ -349,7 +369,7 @@ describe("DshSettingsConnect", () => {
   it("removes a connect only after confirming", async () => {
     const user = userEvent.setup();
     remove.mockResolvedValue({ id: "connect-1", deleted: true });
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await screen.findByText("Sales bot");
     const row = screen.getByText("Sales bot").closest("article")!;
@@ -371,7 +391,7 @@ describe("DshSettingsConnect", () => {
   it("adds and removes an owner through the row's owners editor", async () => {
     const user = userEvent.setup();
     setOwners.mockResolvedValue(connectView({ owners: ["u1", "u2", "u3"] }));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await screen.findByText("Sales bot");
     const row = screen.getByText("Sales bot").closest("article")!;
@@ -398,7 +418,11 @@ describe("DshSettingsConnect", () => {
   });
 });
 
-describe("DshSettingsConnect — scan-to-connect mode", () => {
+// removed in Task 5: scan-to-connect onboarding now lives in the provider
+// wizard body mounted through ConnectWizardChrome/AddConnectModal, not in
+// this file's retired `CreateConnectDialog`. Task 5 deletes both the dialog
+// code and this describe block.
+describe.skip("DshSettingsConnect — scan-to-connect mode", () => {
   // Opening the dialog and typing into it use REAL timers via `userEvent`:
   // under Vitest fake timers, React 18's effect scheduling (jsdom has no
   // `MessageChannel`, so the scheduler falls back to a timer it can't run
@@ -429,7 +453,7 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
 
   async function openDialogAndFillName(nameValue = "Support bot") {
     const user = userEvent.setup();
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("Connect name"), nameValue);
@@ -869,7 +893,7 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
     });
     cancelOnboarding.mockResolvedValue({ sessionId: "sess-7", state: "cancelled" });
     const user = userEvent.setup();
-    const { unmount } = render(<DshSettingsConnect adapter={adapter} />);
+    const { unmount } = render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
@@ -900,7 +924,7 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
         }),
     );
     const user = userEvent.setup();
-    const { unmount } = render(<DshSettingsConnect adapter={adapter} />);
+    const { unmount } = render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("Connect name"), "Support bot");
@@ -942,7 +966,11 @@ describe("DshSettingsConnect — scan-to-connect mode", () => {
   });
 });
 
-describe("DshSettingsConnect — dingtalk manual config", () => {
+// removed in Task 5: the dingtalk manual-config form now lives in that
+// provider's own wizard body, not in this file's retired
+// `CreateConnectDialog`. Task 5 deletes both the dialog code and this
+// describe block.
+describe.skip("DshSettingsConnect — dingtalk manual config", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listProviders.mockResolvedValue(dingtalkProviders);
@@ -951,7 +979,7 @@ describe("DshSettingsConnect — dingtalk manual config", () => {
 
   it("renders the dingtalk manual fields (client id, client secret, tools switch) with no mode switch and no scan tab", async () => {
     const user = userEvent.setup();
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -983,7 +1011,7 @@ describe("DshSettingsConnect — dingtalk manual config", () => {
   it("creates a dingtalk connect with trimmed clientId/clientSecret and enableTools defaulting to false", async () => {
     const user = userEvent.setup();
     create.mockResolvedValue(connectView({ provider: "dingtalk" }));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -1014,7 +1042,7 @@ describe("DshSettingsConnect — dingtalk manual config", () => {
   it("includes enableTools:true in the payload once the tools switch is toggled on", async () => {
     const user = userEvent.setup();
     create.mockResolvedValue(connectView({ provider: "dingtalk" }));
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");
@@ -1047,7 +1075,7 @@ describe("DshSettingsConnect — dingtalk manual config", () => {
 
   it("resets the client secret field when switching provider dingtalk -> lark -> dingtalk (no residue)", async () => {
     const user = userEvent.setup();
-    render(<DshSettingsConnect adapter={adapter} />);
+    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
 
     await user.click(await screen.findByRole("button", { name: /Add connect/ }));
     const dialog = await screen.findByRole("dialog");

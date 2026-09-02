@@ -6,6 +6,12 @@ import type { ReactNode } from "react";
 
 import { buildConnectAdapter, type ConnectAdapter } from "./adapter.js";
 import { DshSettingsConnect } from "./DshSettingsConnect.js";
+import { loadAgentPresets, type PresetConnection } from "./presets.js";
+import {
+  createConnectWizardRegistry,
+  type ConnectWizardRegistry,
+  type PresetOption,
+} from "./wizard-registry.js";
 import { AMIBA_CONNECTORS_REMOTE } from "../remote.js";
 
 export const name = "amiba-connector-ui";
@@ -13,8 +19,24 @@ export const inject = ["slots", "remote"];
 
 const SECTION_ID = "connect";
 
+/**
+ * Client-side registry of provider wizards, provided as the
+ * `amibaConnectWizards` Cordis service — mirrors ui-shell's `layout` service
+ * augmentation exactly (`plugins/dsh-plugin-ui-shell/src/client/index.tsx`),
+ * including using `ctx.reflect.provide` so plugins declaring `inject:
+ * ["amibaConnectWizards"]` can register a provider wizard from their own
+ * client half (Phase B).
+ */
+declare module "@deepseek-ai/cordis" {
+  interface Context {
+    amibaConnectWizards: ConnectWizardRegistry;
+  }
+}
+
 type ConnectSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ConnectAdapter;
+  registry: ConnectWizardRegistry;
+  loadPresets: () => Promise<PresetOption[]>;
 };
 
 /**
@@ -22,18 +44,34 @@ type ConnectSectionProps = PropsRuntime<"settings.section"> & {
  * framework-mandatory members (`close`, `useSessions`, `useWorkspaces`) that
  * only the real slot runtime supplies; Connect needs none of them, so this
  * wrapper exists only to satisfy `slots.register`'s prop contract and forward
- * the one prop `DshSettingsConnect` actually needs. Same split
+ * the props `DshSettingsConnect` actually needs. Same split
  * `DshSettingsMessaging`/`MessagingSettings` uses in the messaging-core
  * sibling — `DshSettingsConnect` itself stays plainly typed so it can be
  * rendered directly in a unit test.
  */
-function ConnectSettingsSection({ adapter }: ConnectSectionProps): ReactNode {
-  return <DshSettingsConnect adapter={adapter} />;
+function ConnectSettingsSection({
+  adapter,
+  registry,
+  loadPresets,
+}: ConnectSectionProps): ReactNode {
+  return (
+    <DshSettingsConnect
+      adapter={adapter}
+      loadPresets={loadPresets}
+      registry={registry}
+    />
+  );
 }
 
 /** Register connector-core's management surface from the plugin's Client half. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_CONNECTORS_REMOTE);
+  // Provided BEFORE the settings.section registration below so a provider
+  // plugin's own client half — which will inject `["amibaConnectWizards"]`
+  // to register its wizard (Phase B) — can never race the section that
+  // reads from this same registry.
+  const registry = createConnectWizardRegistry();
+  const disposeRegistry = ctx.reflect.provide("amibaConnectWizards", registry);
   const sectionFiber = ctx.inject(
     ["slots", "remote.amibaConnectors"],
     (injectedCtx) => {
@@ -48,7 +86,20 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               document.documentElement.lang.toLowerCase().startsWith("zh")
                 ? "连接"
                 : "Connect",
-            inject: () => ({ adapter, navIcon: () => <Cable /> }),
+            inject: () => ({
+              adapter,
+              navIcon: () => <Cable />,
+              registry,
+              // `connection` is a client-root service present regardless of
+              // this plugin's own `inject` declaration above (mirrors how
+              // dsh-plugin-agent-preset's client/data.ts consumes it) — read
+              // via `ctx.get` at call time instead of adding it to `export
+              // const inject`.
+              loadPresets: () =>
+                loadAgentPresets(
+                  ctx.get("connection") as unknown as PresetConnection,
+                ),
+            }),
           },
           ConnectSettingsSection,
         ),
@@ -59,5 +110,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   return async () => {
     await sectionFiber.dispose();
     await disposeRemote();
+    disposeRegistry();
   };
 }

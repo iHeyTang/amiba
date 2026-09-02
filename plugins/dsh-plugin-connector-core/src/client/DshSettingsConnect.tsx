@@ -36,8 +36,10 @@ import {
   type PluginTranslateFn,
 } from "@amiba/ui/plugin";
 
+import { AddConnectModal } from "./AddConnectModal.js";
 import type { ConnectAdapter, CreateConnectInput } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
+import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
 import type {
   ConnectorProviderView,
   ConnectorStatus,
@@ -113,9 +115,15 @@ function describeStatusNote(t: PluginTranslateFn, note: string): string {
  */
 export interface DshSettingsConnectProps {
   adapter: ConnectAdapter;
+  registry: ConnectWizardRegistry;
+  loadPresets: () => Promise<PresetOption[]>;
 }
 
-export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
+export function DshSettingsConnect({
+  adapter,
+  registry,
+  loadPresets,
+}: DshSettingsConnectProps) {
   const { t } = useT();
   const [providers, setProviders] = useState<ConnectorProviderView[]>([]);
   const [connects, setConnects] = useState<ConnectView[]>([]);
@@ -128,6 +136,7 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
     null,
   );
   const [ownerDraft, setOwnerDraft] = useState("");
+  const [presets, setPresets] = useState<PresetOption[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -153,6 +162,20 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
     // that never changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapter]);
+
+  // Presets are loaded lazily, the first time the add flow opens — not on
+  // every mount — since fetching them costs a round trip nobody needs until
+  // the user actually starts adding a connect.
+  useEffect(() => {
+    if (!adding) return;
+    let cancelled = false;
+    void loadPresets().then((list) => {
+      if (!cancelled) setPresets(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [adding, loadPresets]);
 
   async function mutate(id: string, operation: () => Promise<unknown>) {
     setBusyId(id);
@@ -279,7 +302,7 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
         </PageContent>
       </ScrollArea>
 
-      <CreateConnectDialog
+      <AddConnectModal
         adapter={adapter}
         onCreated={() => {
           setAdding(false);
@@ -287,7 +310,9 @@ export function DshSettingsConnect({ adapter }: DshSettingsConnectProps) {
         }}
         onOpenChange={setAdding}
         open={adding}
+        presets={presets}
         providers={providers}
+        registry={registry}
       />
     </div>
   );
