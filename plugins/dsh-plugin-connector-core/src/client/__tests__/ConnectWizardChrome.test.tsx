@@ -181,14 +181,20 @@ describe("ConnectWizardChrome", () => {
     await waitFor(() => expect(captured.host?.agentPreset).toBe("alpha"));
   });
 
-  it("shows a no-wizard notice when a chosen provider has no entry", async () => {
+  // `initialProvider` skips the picker, and the picker's cancel button with
+  // it, so this dead end has to carry its own way out — in Phase B's composer
+  // takeover there is no dialog chrome to close instead.
+  it("shows a no-wizard notice with its own cancel when a chosen provider has no entry", async () => {
     const registry = createConnectWizardRegistry();
+    const onCancel = vi.fn();
     render(
       <ConnectWizardChrome
         adapter={fakeAdapter()} registry={registry} providers={providers}
-        presets={presets} initialProvider="lark" onDone={vi.fn()} onCancel={vi.fn()}
+        presets={presets} initialProvider="lark" onDone={vi.fn()} onCancel={onCancel}
       />,
     );
     expect(await screen.findByText(/no setup wizard|暂无接入向导/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /取消|Cancel/ }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

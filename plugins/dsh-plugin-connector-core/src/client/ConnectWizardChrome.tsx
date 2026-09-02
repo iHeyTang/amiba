@@ -151,9 +151,20 @@ export function ConnectWizardChrome({
         {Body ? (
           <Body host={host} />
         ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("options.connect.dsh.wizard.noWizard")}
-          </p>
+          // Dead end: no body means no cancel control of its own, and with
+          // `initialProvider` set there is no picker step to go back to
+          // either. Phase B's composer takeover has no dialog chrome to close
+          // instead, so the notice carries its own way out.
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {t("options.connect.dsh.wizard.noWizard")}
+            </p>
+            <div className="flex justify-end">
+              <Button onClick={onCancel} variant="ghost">
+                {t("options.connect.dsh.cancel")}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     </div>
