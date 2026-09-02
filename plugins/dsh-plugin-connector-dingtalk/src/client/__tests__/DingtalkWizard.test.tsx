@@ -65,6 +65,23 @@ describe("DingtalkWizard", () => {
     expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
   });
 
+  // The retired per-provider dialog gated creation on a non-empty agent
+  // preset; the body inherits that gate, so a preset list that hasn't loaded
+  // yet can't push a create the center would reject with
+  // `agent_preset_required`.
+  it("blocks submit until an agent preset is chosen", () => {
+    const h = host({ agentPreset: "" });
+    render(<DingtalkWizard host={h} />);
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "cid" },
+    });
+    fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
+      target: { value: "sec" },
+    });
+    expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
+    expect(h.adapter.create).not.toHaveBeenCalled();
+  });
+
   it("translates a create failure code instead of rendering the raw code", async () => {
     const h = host({
       adapter: {

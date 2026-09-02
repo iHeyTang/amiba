@@ -90,16 +90,19 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
   async function submit() {
     const current = hostRef.current;
     const name = current.connectName.trim();
+    const agentPreset = current.agentPreset.trim();
     const trimmedClientId = clientId.trim();
     const trimmedClientSecret = clientSecret.trim();
-    if (!name || !trimmedClientId || !trimmedClientSecret) return;
+    if (!name || !agentPreset || !trimmedClientId || !trimmedClientSecret) {
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const connect = await current.adapter.create({
         provider: current.providerId,
         name,
-        agentPreset: current.agentPreset,
+        agentPreset,
         // The secret leaves this component exactly here and nowhere else —
         // it is never logged, echoed into an error message, or put in the
         // DOM outside its own password input.
@@ -117,8 +120,13 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
     }
   }
 
+  // Inherits the retired per-provider dialog's gate: a connect name AND a
+  // chosen agent preset. Without the preset check a submit fired before the
+  // chrome's preset list resolved would reach the center only to come back as
+  // `agent_preset_required`.
   const canSubmit =
     Boolean(host.connectName.trim()) &&
+    Boolean(host.agentPreset.trim()) &&
     Boolean(clientId.trim()) &&
     Boolean(clientSecret.trim());
 
