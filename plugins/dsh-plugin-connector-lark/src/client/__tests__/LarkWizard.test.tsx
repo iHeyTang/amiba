@@ -274,6 +274,29 @@ describe("LarkWizard", () => {
     expect(poll).not.toHaveBeenCalled();
   });
 
+  // The retired per-provider dialog gated creation on a non-empty agent
+  // preset; the body inherits that gate, so a preset list that hasn't loaded
+  // yet can't push a create the center would reject with
+  // `agent_preset_required`.
+  it("blocks both entry points until an agent preset is chosen", async () => {
+    const host = hostWith({ agentPreset: "" });
+    render(<LarkWizard host={host} />);
+    expect(
+      screen.getByRole("button", { name: /开始扫码|scanning/i }),
+    ).toBeDisabled();
+
+    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    fireEvent.change(screen.getByLabelText("App ID"), {
+      target: { value: "cli_x" },
+    });
+    fireEvent.change(screen.getByLabelText(/App [Ss]ecret/), {
+      target: { value: "secret" },
+    });
+    expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
+    expect(host.adapter.beginOnboarding).not.toHaveBeenCalled();
+    expect(host.adapter.create).not.toHaveBeenCalled();
+  });
+
   it("cancels the wizard through the host", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
