@@ -82,12 +82,22 @@ async function harness() {
     },
   );
   const loggerCalls = { error: vi.fn(), warn: vi.fn() };
+  const defaultModelService = {
+    currentSelection: () => ({ provider: "deepseek", model: "deepseek-chat" }),
+  };
+  // Mirrors the real Cordis contract: messaging-core never declares
+  // `agentDefaultModel` in `inject`, so it must be read via `ctx.reflect.get`
+  // (a point-in-time lookup that returns undefined for an absent service)
+  // rather than as a direct property — Cordis throws on a bare, un-injected
+  // property ACCESS. `reflectServices` lets `harnessWithoutDefaultModel`
+  // simulate the headless case by removing just this entry.
+  const reflectServices = new Map<string, unknown>([
+    ["agentDefaultModel", defaultModelService],
+  ]);
   const ctx = {
     agents: { get: (id: string) => live.get(id), resume, create },
     agentPresets: { mount: vi.fn(async () => undefined) },
-    agentDefaultModel: {
-      currentSelection: () => ({ provider: "deepseek", model: "deepseek-chat" }),
-    },
+    reflect: { get: (name: string) => reflectServices.get(name) },
     sessionPersistence: {
       inspect: vi.fn(async (id: string) => {
         if (id !== "session-cold") throw new Error("session_not_found");
@@ -128,16 +138,17 @@ async function harness() {
     create,
     dispose,
     ctx,
+    reflectServices,
     loggerCalls,
   };
 }
 
 /** A harness variant with no `agentDefaultModel` mounted, mirroring headless
- * runtimes where that Cordis service is never published. */
+ * runtimes where that Cordis service is never published — `ctx.reflect.get`
+ * returns undefined for it, same as an un-injected service on real Cordis. */
 async function harnessWithoutDefaultModel() {
   const built = await harness();
-  const ctx = built.ctx as Record<string, unknown>;
-  delete ctx.agentDefaultModel;
+  built.reflectServices.delete("agentDefaultModel");
   return built;
 }
 
@@ -643,6 +654,87 @@ describe("default model injection for IM sessions", () => {
     ).resolves.toMatchObject({ accepted: true, duplicate: false });
     expect(resumed).toHaveLength(1);
     expect(resumed[0]!.agentOptions).toBeUndefined();
+  });
+
+  it("reads the default model through ctx.reflect.get, not a direct ctx.agentDefaultModel property", async () => {
+    // Regression guard for the runtime bug: Cordis throws on the bare
+    // property ACCESS of an undeclared injected service — before optional
+    // chaining ever runs — so `ctx.agentDefaultModel?.currentSelection?.()`
+    // is unsafe even though it reads like a safe optional access. A getter
+    // that throws on access (mimicking Cordis's inject guard) proves the
+    // production code path never touches `ctx.agentDefaultModel` directly;
+    // it must go through `ctx.reflect.get("agentDefaultModel")` instead.
+    const { center, created, ctx } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    Object.defineProperty(ctx, "agentDefaultModel", {
+      configurable: true,
+      get(): never {
+        throw new Error(
+          'cannot get property "agentDefaultModel" without inject',
+        );
+      },
+    });
+
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "msg-1",
+        text: "hello",
+        conversation: { key: "chat-1", kind: "p2p" },
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(created).toHaveLength(1);
+    expect(created[0]!.agentOptions).toEqual({
+      provider: "deepseek",
+      model: "deepseek-chat",
+    });
+  });
+});
+
+describe("IM session cwd", () => {
+  it("gives a freshly created conversation session an absolute cwd so {{cwd}} prompt assembly succeeds", async () => {
+    const { center, created } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    await center.acceptInbound(channel.id, secret, {
+      id: "msg-1",
+      text: "hello",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1);
+    const meta = created[0]!.meta as { cwd?: string; agentPreset?: string };
+    expect(typeof meta.cwd).toBe("string");
+    expect(meta.cwd).toBe(process.cwd());
+    expect(meta.cwd!.startsWith("/")).toBe(true);
+    // The agent preset must still be carried alongside the new cwd field.
+    expect(meta.agentPreset).toBe("restricted");
+  });
+
+  it("still succeeds without a cwd on the resume path (cwd comes from the persisted session header)", async () => {
+    const { center, resume } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Cold",
+      sessionId: "session-cold",
+    });
+    await expect(
+      center.acceptInbound(channel.id, secret, {
+        id: "evt-cold",
+        text: "wake up",
+      }),
+    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(resume).toHaveBeenCalledTimes(1);
+    // Resume never receives a `meta` field (its own harness stub above has
+    // no meta parameter at all) — cwd for a resumed session already lives on
+    // its persisted session header, not something this call can inject.
+    const [call] = resume.mock.calls[0]!;
+    expect((call as Record<string, unknown>).meta).toBeUndefined();
   });
 });
 

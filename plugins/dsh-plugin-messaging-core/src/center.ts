@@ -125,16 +125,23 @@ interface MessageRuntimeContext extends Context {
       events: readonly SessionEvent[];
     }>;
   };
-  // Published by dsh-host-apiproxy (and mirrored by any host that seeds
-  // agent sessions); absent on headless runtimes, so read it defensively.
-  agentDefaultModel?: {
-    currentSelection(): {
-      provider: string;
-      model: string;
-      reasoningEffort?: unknown;
-    };
-  };
 }
+
+/** Shape of the `agentDefaultModel` service published by dsh-host-apiproxy
+ * (and mirrored by any host that seeds agent sessions). It is read through
+ * `ctx.reflect.get`, never declared in `inject`: messaging-core has no
+ * business depending on it, and Cordis throws on ACCESSING an undeclared
+ * injected property (before optional-chaining can even yield undefined), so
+ * `ctx.agentDefaultModel?.currentSelection?.()` is unsafe — `reflect.get` is
+ * the point-in-time, non-throwing read for an optional service, same as
+ * connector-core's `amibaMcpManager` lookup. */
+type AgentDefaultModelService = {
+  currentSelection(): {
+    provider: string;
+    model: string;
+    reasoningEffort?: unknown;
+  };
+};
 
 function presetForSession(session: {
   meta: { agentPreset?: string };
@@ -434,11 +441,19 @@ export class MessageChannelCenter {
 
   /** The seed model each create/resume declares; re-read so it never goes
    * stale. Undefined on headless runtimes that never mount
-   * `agentDefaultModel` — callers must tolerate its absence. */
+   * `agentDefaultModel` — callers must tolerate its absence. Read via
+   * `ctx.reflect.get`, not a direct property access: messaging-core doesn't
+   * (and shouldn't) declare `agentDefaultModel` in `inject`, and Cordis
+   * throws `cannot get property "agentDefaultModel" without inject` on the
+   * bare access itself for an undeclared injected property — before
+   * optional-chaining ever gets a chance to short-circuit. `reflect.get` is
+   * a point-in-time read that returns `undefined` for an absent/un-injected
+   * service instead of throwing. */
   private defaultAgentOptions(): { provider: string; model: string } | undefined {
-    const selection = (
-      this.ctx as MessageRuntimeContext
-    ).agentDefaultModel?.currentSelection?.();
+    const service = this.ctx.reflect?.get?.("agentDefaultModel") as
+      | AgentDefaultModelService
+      | undefined;
+    const selection = service?.currentSelection?.();
     return selection
       ? { provider: selection.provider, model: selection.model }
       : undefined;
@@ -462,7 +477,19 @@ export class MessageChannelCenter {
       const agentOptions = this.defaultAgentOptions();
       const handle = await this.ctx.agents.create({
         sessionId: sessionId as never,
-        meta: channel.agentPreset ? { agentPreset: channel.agentPreset } : {},
+        // Agent presets (e.g. `restricted`'s persona section) reference
+        // `{{cwd}}`, resolved from `agent.session.header.cwd`. IM-originated
+        // sessions have no workspace of their own — mirror the desktop
+        // host's own default for a no-workspace session (dsh-host-apiproxy)
+        // by seeding the runtime process's own working directory, a valid
+        // absolute path, rather than leaving it unset and failing prompt
+        // assembly on the first turn. The RESUME path can't inject a cwd —
+        // it comes from the persisted session header — so only CREATE needs
+        // this; a session created with a cwd carries it into future resumes.
+        meta: {
+          cwd: process.cwd(),
+          ...(channel.agentPreset ? { agentPreset: channel.agentPreset } : {}),
+        },
         ...(agentOptions ? { agentOptions } : {}),
         setup: async (agentCtx: Context) => {
           try {
