@@ -110,6 +110,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   return async () => {
     await sectionFiber.dispose();
     await disposeRemote();
-    disposeRegistry();
+    await disposeRegistry();
   };
 }
