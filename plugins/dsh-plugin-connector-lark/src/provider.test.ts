@@ -8,8 +8,24 @@ import type {
   OnboardUpdate,
 } from "@amiba/dsh-plugin-connector-core";
 
+// Only `describe("realLarkDeps ...")` below actually exercises this mock —
+// every other test in this file drives the provider core through an
+// explicit fake `LarkDeps`, never touching the real SDK. Mocked here (not
+// per-test) because `vi.mock` factories are hoisted above all imports by
+// vitest regardless of where the call site sits in the file.
+vi.mock("@larksuiteoapi/node-sdk", () => ({
+  Client: vi.fn(),
+  Domain: { Feishu: 0, Lark: 1 },
+  EventDispatcher: vi.fn(() => ({ register: vi.fn().mockReturnThis() })),
+  WSClient: vi.fn(),
+  registerApp: vi.fn(),
+}));
+
+import { Client } from "@larksuiteoapi/node-sdk";
+
 import {
   createLarkProvider,
+  realLarkDeps,
   type ApiLike,
   type LarkDeps,
   type LarkRegisterAppOptions,
@@ -478,6 +494,46 @@ describe("createLarkProvider", () => {
       ).rejects.toThrow("outbox_send_failed");
     });
 
+    // Fix round 1: a business-level failure (chat/account-level — permission
+    // revoked, bot removed from the chat, invalid receive_id, content
+    // moderation, rate limit) is NOT card-specific, so a sendCard failure of
+    // this class means the sendText fallback to the SAME chat very plausibly
+    // hits the identical condition. Both the real sendCard and (after the
+    // fix) the real sendText throw on such a response (`res.code` truthy),
+    // which is what makes this reject rather than resolve — models that
+    // scenario with realistic `lark_send_*_failed:<code>` error shapes
+    // rather than generic strings, so the case this fix closes stays visible
+    // even though it exercises the same ApiLike-seam control flow as the
+    // "both throw" test above.
+    it("propagates a rejection when sendCard AND the sendText fallback both fail on a business-level (non-zero res.code) error", async () => {
+      const api = fakeApi({
+        sendCard: vi.fn(async () => {
+          throw new Error("lark_send_card_failed:230002");
+        }),
+        sendText: vi.fn(async () => {
+          throw new Error("lark_send_text_failed:230002");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await expect(
+        runtime.deliver(
+          { key: "oc_target", kind: "p2p" },
+          {
+            id: "out-2b",
+            channelId: "channel-1",
+            sessionId: "session-1",
+            inReplyTo: "msg_1",
+            text: "pong",
+            createdAt: new Date().toISOString(),
+          },
+        ),
+      ).rejects.toThrow("lark_send_text_failed:230002");
+    });
+
     it("removes the stored Typing reaction for inReplyTo before sending the card", async () => {
       const api = fakeApi({ addReaction: vi.fn(async () => "reaction_xyz") });
       const deps = fakeDeps({ api });
@@ -870,6 +926,74 @@ describe("createLarkProvider", () => {
         provider.capabilities({ appId: "", appSecret: "", domain: "nope" }),
       ).toThrow();
     });
+  });
+});
+
+// --- realLarkDeps: real-SDK-backed behavior -----------------------------
+//
+// Every test above drives the provider core through an explicit fake
+// `LarkDeps`/`ApiLike`, which is the right level for the provider's own
+// control flow but can never catch a defect that lives purely inside
+// `realLarkDeps`'s SDK-call mapping — a seam-level fake always resolves or
+// rejects exactly as the test tells it to, regardless of what the real
+// implementation does. Fix round 1: `sendText`'s real impl resolved
+// silently on a non-zero business `res.code` (the SDK's shared axios
+// response interceptor returns `resp.data` and never inspects `code`
+// itself — see the SDK-verification comment block in provider.ts), so a
+// chat/account-level failure (permission revoked, bot removed from chat,
+// etc.) that also breaks the sendText fallback would have gone completely
+// unnoticed. This block exercises `realLarkDeps.createApiClient(...)`
+// directly against a mocked `Client` to regression-lock that fix at the
+// only layer that can actually see it.
+describe("realLarkDeps.createApiClient — business-level (res.code) failures", () => {
+  it("sendText rejects when the SDK response carries a non-zero code, instead of resolving silently", async () => {
+    const create = vi.fn(async () => ({
+      code: 230002,
+      msg: "no permission to send message to this chat",
+    }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: {
+        message: { create },
+        messageReaction: { create: vi.fn(), delete: vi.fn() },
+      },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+
+    await expect(api.sendText("oc_1", "hello")).rejects.toThrow(
+      "no permission to send message to this chat",
+    );
+    expect(create).toHaveBeenCalledWith({
+      params: { receive_id_type: "chat_id" },
+      data: {
+        receive_id: "oc_1",
+        msg_type: "text",
+        content: JSON.stringify({ text: "hello" }),
+      },
+    });
+  });
+
+  it("sendCard rejects when the SDK response carries a non-zero code (regression guard, already fixed pre-round-1)", async () => {
+    const create = vi.fn(async () => ({
+      code: 230002,
+      msg: "invalid card schema",
+    }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: {
+        message: { create },
+        messageReaction: { create: vi.fn(), delete: vi.fn() },
+      },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+
+    await expect(api.sendCard("oc_1", "**hi**")).rejects.toThrow(
+      "invalid card schema",
+    );
   });
 });
 

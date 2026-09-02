@@ -390,13 +390,16 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
 //   - send card: same client.im.message.create call, with msg_type: "interactive" and content
 //     JSON.stringify'd from a card v2 payload ({ schema: "2.0", body: { elements: [{ tag:
 //     "markdown", content }] } }) — the installed type decls leave `msg_type`/`content` as plain
-//     `string`, so no cast is needed for the "interactive" literal. Unlike the existing
-//     `sendText` (which never inspects the response), `sendCard` DOES check `res.code` and
-//     throws on a truthy value — required so a card-schema rejection (a 200 HTTP response
-//     carrying a non-zero business `code`, since the SDK's axios response interceptor only
-//     returns `resp.data` and never inspects `code` itself — confirmed in the installed
-//     `lib/index.js`) actually rejects the promise and trips `runtime.deliver()`'s
-//     sendText fallback, instead of silently "succeeding" with an undelivered card.
+//     `string`, so no cast is needed for the "interactive" literal.
+//   - both `sendText` and `sendCard` check `res.code` and throw on a truthy value (fix round 1:
+//     `sendText` originally didn't) — required because the SDK's shared axios response
+//     interceptor only returns `resp.data` and never inspects `code` itself (confirmed in the
+//     installed `lib/index.js`), so a 200 HTTP response carrying a non-zero business `code`
+//     (bot removed from chat, permission revoked, invalid receive_id, content-moderation block,
+//     rate limit, ...) would otherwise resolve silently. Without this check on BOTH verbs, a
+//     `sendCard` failure of this class would fall back to a `sendText` call that hits the same
+//     chat/account-level condition, also "succeeds" silently, and `runtime.deliver()` resolves
+//     with the reply actually lost and the outbox never retrying.
 //   - add reaction: client.im.messageReaction.create({ path: { message_id }, data:
 //     { reaction_type: { emoji_type } } }) → response is always `{ code?, msg?, data?:
 //     { reaction_id?, ... } }` per the installed type decls (reaction_id is NEVER top-level) —
@@ -526,14 +529,17 @@ export const realLarkDeps: LarkDeps = {
         return openId;
       },
       async sendText(chatId, text): Promise<void> {
-        await client.im.message.create({
+        const res = (await client.im.message.create({
           params: { receive_id_type: "chat_id" },
           data: {
             receive_id: chatId,
             msg_type: "text",
             content: JSON.stringify({ text }),
           },
-        });
+        })) as MessageCreateResponse;
+        if (res.code) {
+          throw new Error(res.msg ?? `lark_send_text_failed:${res.code}`);
+        }
       },
       async sendCard(chatId, markdown): Promise<void> {
         const res = (await client.im.message.create({
