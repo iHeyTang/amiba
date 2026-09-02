@@ -195,7 +195,11 @@ const amibaSourceDigest = await computeAmibaSourceDigest();
  *
  * This is the complete input to `npm install` (there is no lockfile): it
  * fully encodes the DSH version, the pinned pnpm version, and every
- * third-party dependency name + version after `resolveCatalogSpecifier`.
+ * third-party dependency name + specifier after `resolveCatalogSpecifier`
+ * (a `catalog:` entry resolves to a concrete pinned version; anything else
+ * passes through as whatever specifier the plugin declared, semver range
+ * included — `npm install` still has to consult the registry to resolve
+ * those, same as it always did).
  * Computed once here so the string that gets hashed (`appTreeHash`, below)
  * is byte-identical to the string that later gets written to disk.
  */
@@ -549,11 +553,24 @@ async function installNode(stage) {
  * i.e. the generated `app/package.json` (the complete `npm install` input,
  * since there is no lockfile) is byte-identical to the previous build's.
  *
+ * `appTreeHash` alone only covers dependency name + specifier; it says
+ * nothing about the platform/arch/Node version the tree was actually
+ * resolved and built under. `npm install` runs with `--ignore-scripts=false`,
+ * so some of these packages compile native addons at install time — a tree
+ * built on one platform/arch (or against a different managed Node) is not
+ * safe to copy into a build for another. `outputDir` can also be a shared or
+ * persisted location via `DSH_RUNTIME_OUTPUT`, which makes cross-platform
+ * reuse plausible in practice, not just theoretical. So this also gates on
+ * `nodeVersion`/`platform`/`arch` matching the current run, mirroring the
+ * same three checks `installNode` already uses to decide whether the
+ * managed Node itself is reusable.
+ *
  * Conservative by design: a missing marker, a missing `app/node_modules`, a
- * hash mismatch, an unreadable/corrupt marker, or a failed copy all fall
- * back to `false` (full install below) rather than risking a stale reuse.
- * An old marker without `appTreeHash` compares as `undefined !== <hash>` and
- * also falls back to a full install.
+ * hash/platform/arch/Node-version mismatch, an unreadable/corrupt marker, or
+ * a failed copy all fall back to `false` (full install below) rather than
+ * risking a stale or cross-platform reuse. An old marker without
+ * `appTreeHash` compares as `undefined !== <hash>` and also falls back to a
+ * full install.
  */
 async function reuseAppDependencyTree(appDir) {
   const installedMarkerPath = path.join(outputDir, "runtime-manifest.json");
@@ -568,7 +585,12 @@ async function reuseAppDependencyTree(appDir) {
     const installedMarker = JSON.parse(
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
-    if (installedMarker.appTreeHash !== appTreeHash) return false;
+    const reusable =
+      installedMarker.appTreeHash === appTreeHash &&
+      installedMarker.nodeVersion === declaration.nodeVersion &&
+      installedMarker.platform === process.platform &&
+      installedMarker.arch === process.arch;
+    if (!reusable) return false;
     await fsp.cp(installedNodeModules, path.join(appDir, "node_modules"), {
       recursive: true,
     });
@@ -633,6 +655,15 @@ try {
   for (const [index, pluginSourceDir] of pluginSourceDirs.entries()) {
     const pluginDestination = path.join(amibaScope, pluginNames[index]);
     await fsp.mkdir(pluginDestination, { recursive: true });
+    // On a reused app tree, `pluginDestination/lib` may already exist from
+    // the previous build. `fsp.cp` merges into an existing directory rather
+    // than replacing it, so without this the copy below would leave a
+    // renamed/removed compiled file behind as a stale orphan. Clear it
+    // first so every build lands a clean replace, cache hit or not.
+    await fsp.rm(path.join(pluginDestination, "lib"), {
+      recursive: true,
+      force: true,
+    });
     await Promise.all([
       fsp.cp(
         path.join(pluginSourceDir, "lib"),
