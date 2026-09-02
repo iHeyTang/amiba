@@ -1,9 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DshSettingsConnect } from "../DshSettingsConnect";
 import { createConnectWizardRegistry } from "../wizard-registry";
+import type { ConnectWizardHost, PresetOption } from "../wizard-registry";
 import type { ConnectorProviderView, ConnectView } from "../../types";
 
 // Task 4: `DshSettingsConnect` now takes the wizard registry and a preset
@@ -273,6 +274,45 @@ describe("DshSettingsConnect", () => {
     // own CTA exists alongside the header add button — click the first one.
     await userEvent.click((await screen.findAllByText(/添加连接|Add connect/))[0]!);
     expect(await screen.findByText("飞书 / Lark")).toBeInTheDocument();
+  });
+
+  // The real page loads presets lazily, only once `adding` flips true, so the
+  // wizard chrome is already mounted (with an empty list) by the time they
+  // land. The mounted body must still end up with the default preset —
+  // otherwise the very first add fails with `agent_preset_required`.
+  it("hands the mounted wizard body the default preset once the lazy preset load resolves", async () => {
+    const registry = createConnectWizardRegistry();
+    const captured: { agentPreset?: string } = {};
+    registry.register("lark", {
+      component: ({ host }: { host: ConnectWizardHost }) => {
+        captured.agentPreset = host.agentPreset;
+        return <div>lark body</div>;
+      },
+    });
+    listProviders.mockResolvedValue([
+      { id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false },
+    ]);
+    list.mockResolvedValue([]);
+    let resolvePresets!: (list: PresetOption[]) => void;
+    const loadPresets = vi.fn(
+      () =>
+        new Promise<PresetOption[]>((resolve) => {
+          resolvePresets = resolve;
+        }),
+    );
+    render(
+      <DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />,
+    );
+
+    await userEvent.click((await screen.findAllByText(/添加连接|Add connect/))[0]!);
+    await userEvent.click(await screen.findByText("飞书 / Lark"));
+    expect(await screen.findByText("lark body")).toBeInTheDocument();
+    expect(captured.agentPreset).toBe("");
+
+    await act(async () => {
+      resolvePresets([{ id: "restricted", label: "Restricted", isDefault: true }]);
+    });
+    expect(captured.agentPreset).toBe("restricted");
   });
 
   it("shows the provider's registry icon on a connect row", async () => {

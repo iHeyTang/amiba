@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -78,6 +78,68 @@ describe("ConnectWizardChrome", () => {
     );
     expect(await screen.findByText("submit")).toBeInTheDocument();
     expect(screen.queryByText("Choose a platform")).not.toBeInTheDocument();
+  });
+
+  // Presets are fetched lazily by `DshSettingsConnect` once the add flow
+  // opens, so the chrome always mounts with `presets === []` in the real app
+  // and the list lands one tick later. A mount-only default would leave
+  // `host.agentPreset` empty forever and every first add would fail
+  // server-side with `agent_preset_required`.
+  it("applies the default preset when presets arrive after mount", async () => {
+    const registry = createConnectWizardRegistry();
+    const captured: { host?: ConnectWizardHost } = {};
+    registry.register("lark", { component: makeBody(captured) });
+    const view = (list: typeof presets) => (
+      <ConnectWizardChrome
+        adapter={fakeAdapter()} registry={registry} providers={providers}
+        presets={list} initialProvider="lark" onDone={vi.fn()} onCancel={vi.fn()}
+      />
+    );
+    const { rerender } = render(view([]));
+    expect(await screen.findByText("submit")).toBeInTheDocument();
+    expect(captured.host?.agentPreset).toBe("");
+    // An empty trigger still names itself rather than rendering blank.
+    expect(screen.getByRole("combobox")).toHaveTextContent(/Agent [Pp]reset/);
+
+    rerender(view(presets));
+    await waitFor(() => expect(captured.host?.agentPreset).toBe("restricted"));
+  });
+
+  it("prefers a listed initialPreset over the default when presets arrive late", async () => {
+    const registry = createConnectWizardRegistry();
+    const captured: { host?: ConnectWizardHost } = {};
+    registry.register("lark", { component: makeBody(captured) });
+    const view = (list: typeof presets) => (
+      <ConnectWizardChrome
+        adapter={fakeAdapter()} registry={registry} providers={providers}
+        presets={list} initialProvider="lark" initialPreset="full"
+        onDone={vi.fn()} onCancel={vi.fn()}
+      />
+    );
+    const { rerender } = render(view([]));
+    expect(await screen.findByText("submit")).toBeInTheDocument();
+    rerender(view(presets));
+    await waitFor(() => expect(captured.host?.agentPreset).toBe("full"));
+  });
+
+  it("falls back to the first preset when none is marked default", async () => {
+    const registry = createConnectWizardRegistry();
+    const captured: { host?: ConnectWizardHost } = {};
+    registry.register("lark", { component: makeBody(captured) });
+    const undefaulted = [
+      { id: "alpha", label: "Alpha", isDefault: false },
+      { id: "beta", label: "Beta", isDefault: false },
+    ];
+    const view = (list: typeof presets) => (
+      <ConnectWizardChrome
+        adapter={fakeAdapter()} registry={registry} providers={providers}
+        presets={list} initialProvider="lark" onDone={vi.fn()} onCancel={vi.fn()}
+      />
+    );
+    const { rerender } = render(view([]));
+    expect(await screen.findByText("submit")).toBeInTheDocument();
+    rerender(view(undefaulted));
+    await waitFor(() => expect(captured.host?.agentPreset).toBe("alpha"));
   });
 
   it("shows a no-wizard notice when a chosen provider has no entry", async () => {

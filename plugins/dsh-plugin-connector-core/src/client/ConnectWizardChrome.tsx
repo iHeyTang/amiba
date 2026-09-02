@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -51,9 +51,21 @@ export function ConnectWizardChrome({
   // silently falling back to the picker step.
   const [provider, setProvider] = useState(initialProvider ?? "");
   const [name, setName] = useState(initialName ?? "");
+  // The initializer covers the synchronous case (a caller that already has the
+  // list). In the real app it never fires: `DshSettingsConnect` loads presets
+  // lazily once the add flow opens, so the chrome mounts with `presets === []`
+  // and the list lands a tick later. Without the effect below `agentPreset`
+  // would stay `""` forever and the first add would fail server-side with
+  // `agent_preset_required`.
   const [agentPreset, setAgentPreset] = useState(
     initialPresetId(presets, initialPreset),
   );
+  useEffect(() => {
+    // Only ever fills a still-empty selection — never overwrites a preset the
+    // user picked, and never re-runs once one is set.
+    if (agentPreset || presets.length === 0) return;
+    setAgentPreset(initialPresetId(presets, initialPreset));
+  }, [presets, initialPreset, agentPreset]);
 
   const entry = provider ? registry.get(provider) : undefined;
 
@@ -120,7 +132,9 @@ export function ConnectWizardChrome({
       <div className="space-y-1.5">
         <Label htmlFor="dsh-connect-agent-preset">{t("options.connect.dsh.agentPreset")}</Label>
         <Select value={agentPreset} onValueChange={setAgentPreset}>
-          <SelectTrigger id="dsh-connect-agent-preset"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="dsh-connect-agent-preset">
+            <SelectValue placeholder={t("options.connect.dsh.agentPreset")} />
+          </SelectTrigger>
           <SelectContent>
             {presets.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
