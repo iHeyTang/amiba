@@ -5,8 +5,8 @@ import type {} from "@amiba/dsh-plugin-ui-shell/client";
 // plugin imports no VALUE from connector-core's client half — the registry
 // arrives through `ctx`, and the wizard body depends only on its `host` prop.
 import type {} from "@amiba/dsh-plugin-connector-core/client";
-import { Bot } from "lucide-react";
 
+import { DingtalkMark } from "./brand-mark.js";
 import { DingtalkWizard } from "./DingtalkWizard.js";
 
 export const name = "amiba-connector-dingtalk-ui";
@@ -22,7 +22,7 @@ export const inject = ["amibaConnectWizards"];
 export async function apply(ctx: ClientContext): Promise<() => void> {
   const dispose = ctx.amibaConnectWizards.register("dingtalk", {
     component: DingtalkWizard,
-    icon: <Bot className="h-[18px] w-[18px]" />,
+    icon: <DingtalkMark size={22} />,
     // A one-liner about what the wizard DOES: the chooser card already
     // shows the provider's display name as its title.
     tagline: "填写机器人的 Client ID 与 Secret 接入钉钉",

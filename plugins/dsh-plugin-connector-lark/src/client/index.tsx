@@ -5,8 +5,8 @@ import type {} from "@amiba/dsh-plugin-ui-shell/client";
 // plugin imports no VALUE from connector-core's client half — the registry
 // arrives through `ctx`, and the wizard body depends only on its `host` prop.
 import type {} from "@amiba/dsh-plugin-connector-core/client";
-import { MessageSquare } from "lucide-react";
 
+import { LarkMark } from "./brand-mark.js";
 import { LarkWizard } from "./LarkWizard.js";
 
 export const name = "amiba-connector-lark-ui";
@@ -22,7 +22,7 @@ export const inject = ["amibaConnectWizards"];
 export async function apply(ctx: ClientContext): Promise<() => void> {
   const dispose = ctx.amibaConnectWizards.register("lark", {
     component: LarkWizard,
-    icon: <MessageSquare className="h-[18px] w-[18px]" />,
+    icon: <LarkMark size={22} />,
     // A one-liner about what the wizard DOES: the chooser card already
     // shows the provider's display name as its title.
     tagline: "扫码授权或填写应用凭证接入飞书机器人",

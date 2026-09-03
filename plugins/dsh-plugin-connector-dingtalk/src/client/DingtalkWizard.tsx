@@ -1,4 +1,4 @@
-import { Bot, ChevronLeft, Loader2, Lock, Plus } from "lucide-react";
+import { ChevronLeft, Loader2, Lock, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -13,6 +13,7 @@ import {
 } from "@amiba/ui/plugin";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
+import { DingtalkMark } from "./brand-mark.js";
 import { dingtalkI18n } from "./i18n.js";
 
 /**
@@ -188,7 +189,7 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
           {t("options.connect.dsh.wizard.privacyHint")}
         </>
       }
-      icon={<Bot className="h-[18px] w-[18px]" />}
+      icon={<DingtalkMark size={20} />}
       onClose={() => host.cancel()}
       subtitle={t("options.connect.dsh.dingtalk.subtitle")}
       title={t("options.connect.dsh.dingtalk.title")}

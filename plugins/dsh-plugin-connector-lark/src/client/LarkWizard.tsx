@@ -1,11 +1,4 @@
-import {
-  ChevronLeft,
-  Loader2,
-  Lock,
-  MessageSquare,
-  Plus,
-  QrCode,
-} from "lucide-react";
+import { ChevronLeft, Loader2, Lock, Plus, QrCode } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import qrcode from "qrcode-generator";
@@ -25,6 +18,7 @@ import {
 } from "@amiba/ui/plugin";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
+import { LarkMark } from "./brand-mark.js";
 import { larkI18n } from "./i18n.js";
 
 /**
@@ -457,7 +451,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
           {t("options.connect.dsh.wizard.privacyHint")}
         </>
       }
-      icon={<MessageSquare className="h-[18px] w-[18px]" />}
+      icon={<LarkMark size={20} />}
       onClose={() => host.cancel()}
       subtitle={
         mode === "scan"
