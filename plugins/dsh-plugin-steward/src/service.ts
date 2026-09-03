@@ -5,6 +5,7 @@ import type { Agent } from "@deepseek-ai/dsh-agent";
 // Type-only: loads the `ctx.agents` / `ctx.tools` augmentations.
 import type {} from "@deepseek-ai/dsh-agent";
 import type {} from "@deepseek-ai/dsh-tools";
+import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 
@@ -40,7 +41,12 @@ export interface StewardServiceOptions {
   now?: () => number;
 }
 
-interface StewardRuntimeContext extends Context {
+// An intersection (not `extends`) so this file's narrower service-shaped
+// views of `agentPresets` / `sessionPersistence` / `sessionQuery` never have
+// to structurally satisfy the real, much larger ambient types those DSH
+// packages augment `Context` with (some carry private class fields, which
+// makes any plain object literal type provably unable to `extends` them).
+type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence" | "sessionQuery"> & {
   agentPresets: {
     readonly defaultId: string;
     mount(agentCtx: Context, id?: string): Promise<unknown>;
@@ -53,18 +59,7 @@ interface StewardRuntimeContext extends Context {
     searchSessions(request: { query: string; limit?: number }): Promise<{ items: ReadonlyArray<{ header: { id: string; cwd?: string } }> }>;
     readTitle(id: string): Promise<{ title: string } | undefined>;
   };
-}
-
-function presetForSession(session: { meta: { agentPreset?: string }; events: readonly SessionEvent[] }): string | undefined {
-  let preset = session.meta.agentPreset;
-  for (const event of session.events) {
-    const row = event as unknown as { type: string; data: Record<string, unknown> };
-    if (row.type !== "agent-preset/selected") continue;
-    const value = row.data.agentPreset;
-    if (typeof value === "string" && value.trim()) preset = value.trim();
-  }
-  return preset;
-}
+};
 
 function summarize(text: string): string {
   const flat = text.replace(/\s+/gu, " ").trim();
@@ -93,7 +88,7 @@ export class StewardService {
     private readonly store: StewardStore,
     private readonly options: StewardServiceOptions,
   ) {
-    this.ctx = ctx as StewardRuntimeContext;
+    this.ctx = ctx as unknown as StewardRuntimeContext;
     this.now = options.now ?? Date.now;
     this.log = ctx.logger(STEWARD_SOURCE) as typeof this.log;
     ctx.on("session/event", (session, event) => {
@@ -134,16 +129,30 @@ export class StewardService {
         const id = state.stewardSessionId;
         const live = this.ctx.agents.get(id as never) as Agent | undefined;
         if (live) {
+          this.log.warn("steward: reusing an already-live steward agent; steward tools were not registered by this plugin");
           this.stewardHandle = { agent: live, dispose: async () => undefined };
           return live;
         }
+        // Only "the session can't be loaded at all" falls through to creating a
+        // fresh one. A failure of `resume` itself (including a `setup` throw) is
+        // never treated as "not loadable" — that would silently orphan the
+        // user's steward history — so it propagates instead.
+        let loadable = true;
         try {
           await this.ctx.sessionPersistence.inspect(id);
-          const handle = await this.ctx.agents.resume({ resumeSessionId: id as never, setup });
-          this.stewardHandle = handle;
-          return handle.agent;
         } catch (error) {
+          loadable = false;
           this.log.warn(`steward: session ${id} is not loadable (${String(error)}); creating a new one`);
+        }
+        if (loadable) {
+          try {
+            const handle = await this.ctx.agents.resume({ resumeSessionId: id as never, setup });
+            this.stewardHandle = handle;
+            return handle.agent;
+          } catch (error) {
+            this.log.error(`steward: failed to resume the steward session ${id}: ${String(error)}`);
+            throw error;
+          }
         }
       }
       const sessionId = `session-${randomUUID()}`;
@@ -233,8 +242,8 @@ export class StewardService {
     agent.followup(
       createUserMessage({
         content: [{ type: "text", text: `${message}\n\n${DISPATCH_FOOTER}` }],
-        source: { kind: "plugin", plugin: STEWARD_SOURCE, form: "relay" },
-      } as never) as never,
+        source: { kind: "plugin", plugin: STEWARD_SOURCE, form: "relay" } as never,
+      }),
     );
     await this.updateTask(task.id, { status: "running", lastError: undefined });
     return { taskId: task.id, sessionId: task.sessionId, created };
@@ -272,7 +281,7 @@ export class StewardService {
     if (existing) return existing;
     const resume = (async () => {
       const inspected = await this.ctx.sessionPersistence.inspect(task.sessionId);
-      const preset = presetForSession(inspected);
+      const preset = resolveSessionPreset({ header: inspected.meta, events: inspected.events } as never);
       const handle = await this.ctx.agents.resume({
         resumeSessionId: task.sessionId as never,
         setup: async (agentCtx: Context) => {
@@ -314,6 +323,7 @@ export class StewardService {
       }
       sessionId = hits[0]!.header.id;
     }
+    if (sessionId === state.stewardSessionId) throw new Error("steward: the steward's own session cannot be adopted");
     const bound = state.tasks.find((task) => task.sessionId === sessionId);
     if (bound) return { kind: "adopted", task: bound, existing: true };
     const inspected = await this.ctx.sessionPersistence.inspect(sessionId);

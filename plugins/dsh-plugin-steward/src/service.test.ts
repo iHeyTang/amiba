@@ -35,6 +35,17 @@ describe("StewardService — steward session", () => {
     expect(fresh).not.toBe("session-gone");
     expect(third.created).toHaveLength(1);
   });
+
+  it("propagates a resume failure instead of recreating the steward session", async () => {
+    const { service, store, ctx, created, persist } = harness();
+    const id = "session-x";
+    await store.mutate((s) => ({ ...s, stewardSessionId: id }));
+    persist(id, [], { agentPreset: "amiba-steward" });
+    ctx.agents.resume.mockRejectedValueOnce(new Error("setup exploded"));
+    await expect(service.ensureStewardSessionId()).rejects.toThrow(/setup exploded/u);
+    expect(created).toHaveLength(0);
+    expect((await store.read()).stewardSessionId).toBe(id);
+  });
 });
 
 describe("StewardService — dispatch", () => {
@@ -64,6 +75,18 @@ describe("StewardService — dispatch", () => {
     expect(resumed).toEqual([first.sessionId]);
     await service.dispatch({ taskId: first.taskId, message: "again" });
     expect(resumed).toHaveLength(1);
+    expect(live.get(first.sessionId)!.followup).toHaveBeenCalledTimes(2);
+  });
+
+  it("resumes a cold task session once when two dispatches race", async () => {
+    const { service, live, resumed } = harness();
+    const first = await service.dispatch({ newTask: { title: "A" }, message: "start" });
+    live.delete(first.sessionId); // simulate the agent retiring before either dispatch runs
+    await Promise.all([
+      service.dispatch({ taskId: first.taskId, message: "a" }),
+      service.dispatch({ taskId: first.taskId, message: "b" }),
+    ]);
+    expect(resumed).toEqual([first.sessionId]);
     expect(live.get(first.sessionId)!.followup).toHaveBeenCalledTimes(2);
   });
 
@@ -116,6 +139,12 @@ describe("StewardService — adopt / read / close", () => {
     const many = await service.adopt({ titleQuery: "x" });
     expect(many).toEqual({ kind: "candidates", candidates: [{ sessionId: "session-1", title: "title of session-1" }, { sessionId: "session-2", title: "title of session-2" }] });
     await expect(service.adopt({})).rejects.toThrow(/sessionId or titleQuery/u);
+  });
+
+  it("refuses to adopt the steward's own session", async () => {
+    const { service } = harness();
+    const id = await service.ensureStewardSessionId();
+    await expect(service.adopt({ sessionId: id })).rejects.toThrow(/cannot be adopted/u);
   });
 
   it("reads the last N completed turns and closes a task", async () => {
