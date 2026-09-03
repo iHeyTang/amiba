@@ -1,5 +1,8 @@
 /** Amiba steward — durable task bindings and the shapes shared by service, tools, remote and client. */
 
+/** The steward's own agent preset id — shared by the host seeder and the client's hidePreset call. */
+export const STEWARD_PRESET_ID = "amiba-steward";
+
 export type StewardTaskStatus = "idle" | "running" | "needs_input" | "done" | "failed";
 
 export interface StewardTask {

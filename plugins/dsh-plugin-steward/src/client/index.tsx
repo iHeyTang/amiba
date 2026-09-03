@@ -6,7 +6,7 @@ import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
-import type { AdoptResult, StewardTask } from "../types.js";
+import { STEWARD_PRESET_ID, type AdoptResult, type StewardTask } from "../types.js";
 import { AdoptAction } from "./AdoptAction.js";
 import { StewardNavigation } from "./StewardNavigation.js";
 import { TaskBoard } from "./TaskBoard.js";
@@ -17,19 +17,6 @@ export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVis
 
 const NAV_ID = "steward";
 type StewardRemote = ClientContext["remote"]["amibaSteward"];
-
-// Deliberately NOT imported from `../preset-seed.js`: that module's
-// top-level `import ... from "node:fs/promises"` is fine on the server
-// (seedAgentPresets runs in the host plugin), but Rollup binds every
-// top-level import while building this browser bundle regardless of
-// tree-shaking, and the Node builtin has no browser stub with these named
-// exports — the build fails before dead code elimination ever drops the
-// unused seeding function. No other plugin's client entry crosses into its
-// own fs-touching module for a shared id constant (see
-// dsh-plugin-cron/src/client, which never imports from store.ts); this
-// literal is that same boundary, kept in sync with `STEWARD_PRESET_ID` in
-// ../preset-seed.ts by the exported id itself never changing post-seed.
-const STEWARD_PRESET_ID = "amiba-steward";
 
 /**
  * Narrow structural view of `ISessions.list` (session id + subscribe), used
@@ -115,10 +102,12 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               currentSessionId,
               subscribeCurrent,
               open: () => {
-                void ensureStewardSession().then((id) => {
-                  injectedCtx.layout.openChat();
-                  openSession(id);
-                });
+                void ensureStewardSession()
+                  .then((id) => {
+                    injectedCtx.layout.openChat();
+                    openSession(id);
+                  })
+                  .catch(() => undefined);
               },
             }),
           },

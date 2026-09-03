@@ -1,12 +1,14 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { STEWARD_PRESET_ID } from "./types.js";
+
+export { STEWARD_PRESET_ID } from "./types.js";
+
 export interface PresetSeed {
   id: string;
   files: Record<string, string>;
 }
-
-export const STEWARD_PRESET_ID = "amiba-steward";
 
 const PRESET_YML = `name: 大管家
 description: 只做调度与汇报的管家会话：把每件事派给对应的任务会话，做完后向你汇报。Seeded by Amiba steward; edits are preserved.
