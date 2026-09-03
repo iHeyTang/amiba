@@ -3,11 +3,18 @@ import type { Context } from "@deepseek-ai/cordis";
 // augmentation (declared inside dsh-credentials) is loaded — connector-core
 // itself only depends on the loose `CredentialsSeam` shape in center.ts.
 import type {} from "@deepseek-ai/dsh-credentials";
+// Import needed only so `@deepseek-ai/cordis`'s `Context.userQuestions`
+// augmentation (declared inside dsh-user-questions) is loaded —
+// registerConnectAddTool's own `ConnectToolContext` shape is loose, but
+// passing the real `ctx` into it below requires `Context` to actually carry
+// `.userQuestions`.
+import type {} from "@deepseek-ai/dsh-user-questions";
 import z from "@deepseek-ai/schemastery";
 
 import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
 import { provisionCli } from "./cli-provision.js";
 import { realCliDeps } from "./cli-provision-deps.js";
+import { registerConnectAddTool } from "./connect-tool.js";
 import { RESTRICTED_PRESET, seedAgentPresets } from "./preset-seed.js";
 import { applyConnectorsRemote } from "./remote-service.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
@@ -135,7 +142,7 @@ export const name = "amiba-connector-core";
 // grouping — see plugins/dsh-plugin-connector-core/README or task-5-report
 // for the grep that confirmed this. So required deps are declared as a plain
 // array here; `amibaMcpManager` is intentionally NOT listed (optional dep).
-export const inject = ["amibaMessageCenter", "credentials"];
+export const inject = ["amibaMessageCenter", "credentials", "tools", "userQuestions"];
 
 export interface Config {
   root: string;
@@ -253,6 +260,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   );
   ctx.provide("amibaConnectors", center);
   applyConnectorsRemote(ctx, center);
+  registerConnectAddTool(ctx, center);
   // Stop every live connect on plugin unload (a reload, or a full shutdown)
   // so no runtime, socket, or mcp registration is left orphaned behind a
   // torn-down amibaConnectors service.

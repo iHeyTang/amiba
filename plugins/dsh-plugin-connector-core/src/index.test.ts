@@ -78,6 +78,11 @@ function fakeCordisCtx() {
     // center nor the credentials seam is ever called.
     amibaMessageCenter: {},
     credentials: {},
+    // apply() now also calls registerConnectAddTool(ctx, center), which
+    // registers `amiba_connect_add` via ctx.effect(() => ctx.tools.register(...))
+    // — never exercised beyond that registration call in this suite.
+    tools: { register: vi.fn(() => () => {}) },
+    userQuestions: { ask: vi.fn() },
   };
   return { ctx, store };
 }
@@ -201,6 +206,11 @@ function fakeCordisCtxWithMessaging(
     logger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
     amibaMessageCenter: messageCenter,
     credentials,
+    // Same reason as fakeCordisCtx above: apply() unconditionally registers
+    // amiba_connect_add via ctx.tools.register, so every apply() caller needs
+    // this stub even though these capability-wiring tests never call the tool.
+    tools: { register: vi.fn(() => () => {}) },
+    userQuestions: { ask: vi.fn() },
   };
   return { ctx, store };
 }
