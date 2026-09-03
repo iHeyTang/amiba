@@ -36,6 +36,7 @@ import {
   type OnboardingStepRow,
   type PendingPromptAttachment,
   type PendingPromptResult,
+  type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
 import { NavigationRow } from "@amiba/ui/plugin";
@@ -470,6 +471,20 @@ function ProductShellInner({
     [renderSlot],
   );
 
+  // Amiba's KEYED per-question seat. Dispatched once per pending request with
+  // the FIRST question's id as `entryKey`, and with Amiba's own ClarifyBanner
+  // as `fallback` — so an unclaimed question id renders exactly what it
+  // always did and a registered id takes over that one question only. Both
+  // options are load-bearing for the same reasons as the tool-view seat.
+  const renderQuestionSeat = useCallback(
+    (request: QuestionSeatRequest) =>
+      renderSlot("amiba.conversation.question", request.owner, {
+        entryKey: request.owner.request.questions[0]?.id ?? "",
+        fallback: request.fallback,
+      }),
+    [renderSlot],
+  );
+
   // The official `settings.trigger` seat. Owner share = `{ wide }`, the
   // sidebar column state, which only the chat view knows — hence a renderer
   // rather than a node. Amiba's own gear + label rides as the dispatch
@@ -583,6 +598,7 @@ function ProductShellInner({
           // why the home/draft composer keeps Amiba's own trigger menu.
           inputOverlay: renderSlot("conversation.input.overlay", {}),
           toolView: renderToolViewSeat,
+          questionSeat: renderQuestionSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
             renderSlot("amiba.workspace.navigation", { activeView }),

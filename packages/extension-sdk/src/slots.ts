@@ -499,6 +499,10 @@ export const AMIBA_ROOT_SLOTS = [
   "amiba.composer.modelPicker",
   "amiba.settings.content.overlay",
   "amiba.agentPreset.section",
+  // The KEYED per-question seat: one entry per question id, so a plugin
+  // claims exactly its own question kind and every other question keeps
+  // rendering the host's built-in ClarifyBanner (the dispatch `fallback`).
+  "amiba.conversation.question",
 ] as const;
 
 export type AmibaRootSlot = (typeof AMIBA_ROOT_SLOTS)[number];
@@ -576,6 +580,72 @@ export interface AmibaComposerModelPickerOwner {
   refreshKey?: number;
 }
 
+/**
+ * One selectable answer of an {@link AmibaConversationQuestionItem}.
+ * Structural mirror of `@amiba/app-runtime`'s `UserQuestionOption` — that
+ * type stays the canonical definition (the engine surface is host-owned);
+ * this SDK repeats the shape only so the public slot contract carries no
+ * app-runtime import.
+ */
+export interface AmibaConversationQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/**
+ * One pending question. `id` is the seat's KEY DOMAIN: a plugin registers
+ * against the id its own flow emits, so it claims exactly that question and
+ * nothing else.
+ */
+export interface AmibaConversationQuestionItem {
+  id: string;
+  question: string;
+  header?: string;
+  detail?: string;
+  options?: AmibaConversationQuestionOption[];
+  multiSelect?: boolean;
+}
+
+/** One answerable request; may carry several questions, answered as a batch. */
+export interface AmibaConversationQuestionRequest {
+  requestId: string;
+  sessionId?: string;
+  questions: AmibaConversationQuestionItem[];
+}
+
+/** One question's answer, as the host's respond wire expects it. */
+export interface AmibaConversationQuestionAnswer {
+  id: string;
+  selected: string[];
+  custom?: string;
+}
+
+/**
+ * Owner props of `amiba.conversation.question` — the KEYED per-question seat
+ * in the conversation footer, dispatched with the FIRST pending question's id
+ * as `entryKey` and Amiba's own `ClarifyBanner` as the dispatch `fallback`.
+ *
+ * The fallback is the seat's whole visual-parity guarantee: a question id no
+ * plugin registered renders EXACTLY the banner it rendered before the seat
+ * existed, and a registered id replaces only that one question's screen.
+ *
+ * The owner share is the complete answering contract — the pending request
+ * plus the host's in-flight/error state and its two terminal callbacks — so
+ * an occupant needs no host wire of its own to answer or to back out.
+ */
+export interface AmibaConversationQuestionOwner {
+  /** The pending request the host is currently showing. */
+  request: AmibaConversationQuestionRequest;
+  /** True while the host is delivering an answer; occupants should lock. */
+  inFlight: boolean;
+  /** The last delivery failure, or null. */
+  error: string | null;
+  /** Answer the request (one entry per answered question). */
+  respond(answers: AmibaConversationQuestionAnswer[]): void;
+  /** Decline the request outright. */
+  cancel(): void;
+}
+
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     "amiba.navigation.before": { kind: "list"; scope: "root" };
@@ -602,6 +672,16 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       kind: "list";
       scope: "root";
       owner: AmibaAgentPresetSectionOwner;
+    };
+    /**
+     * KEYED, session-scoped: registration key = the question id, an OPEN
+     * domain like `tool.call.toolview`'s wire tool name. Unclaimed ids fall
+     * back to the built-in ClarifyBanner.
+     */
+    "amiba.conversation.question": {
+      kind: "keyed";
+      scope: "session";
+      owner: AmibaConversationQuestionOwner;
     };
     /**
      * MIRROR of the official `shell.overlay` declaration

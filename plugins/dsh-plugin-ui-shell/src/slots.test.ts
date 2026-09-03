@@ -13,6 +13,7 @@ describe("Amiba root slot contract", () => {
         "amiba.workspace.view",
         "amiba.settings.content.overlay",
         "amiba.agentPreset.section",
+        "amiba.conversation.question",
       ]),
     );
     // Official-equivalent seats use the OFFICIAL names (`settings.section`

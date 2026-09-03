@@ -478,6 +478,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
           "tool.call.toolview": { kind: "keyed", scope: "session" },
+          // Amiba's keyed question seat: one entry per question id (a
+          // plugin-owned question kind claims exactly its own id), `fallback`
+          // is the built-in ClarifyBanner. Same keyed shape as
+          // tool.call.toolview, whose key domain is the wire tool name.
+          "amiba.conversation.question": { kind: "keyed", scope: "session" },
           // Official vocabulary: the settings-page ledger seat, inherited
           // from @deepseek-ai/dsh-client-ui-settings (owner: { close }).
           "settings.section": {
