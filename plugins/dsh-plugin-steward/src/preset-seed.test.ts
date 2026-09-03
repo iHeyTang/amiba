@@ -12,10 +12,15 @@ describe("steward preset seed", () => {
     const log = { warn: vi.fn(), info: vi.fn() };
     await seedAgentPresets(root, [STEWARD_PRESET], log);
     const dir = join(root, STEWARD_PRESET_ID);
-    expect(readFileSync(join(dir, "preset.yml"), "utf8")).toContain("大管家");
+    const preset = readFileSync(join(dir, "preset.yml"), "utf8");
+    expect(preset).toContain("大管家");
+    // The picker offers this preset like any other, so its own copy warns.
+    expect(preset).toContain("请勿");
     const composition = readFileSync(join(dir, "agent.cordis.yml"), "utf8");
     expect(composition).toContain("@deepseek-ai/dsh-persona");
     expect(composition).toContain("@deepseek-ai/dsh-tool-ask-user");
+    // The steward conversation never rotates, so it must compact itself.
+    expect(composition).toContain("@deepseek-ai/dsh-compaction-basic");
     expect(composition).toContain("steward_dispatch");
     expect(composition).not.toContain("dsh-tool-bash");
 

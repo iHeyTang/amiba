@@ -9,7 +9,9 @@ steward summarises it for the user.
 
 - Task bindings persist as JSON under `config.root`.
 - The steward's own preset (`amiba-steward`) is seeded create-only into
-  `config.agentPresetsRoot`.
+  `config.agentPresetsRoot`: an existing `<agentPresetsRoot>/amiba-steward/`
+  directory is never touched, so an install that already has one must delete it
+  to pick up changes to the seeded composition (persona, compaction, …).
 - Managed task sessions get `ask_user_question` guarded off; they ask in plain
   text instead, and the steward relays the question.
 - Client half: a workspace navigation entry beside 定时任务, a task board in the

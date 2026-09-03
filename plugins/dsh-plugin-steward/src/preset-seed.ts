@@ -10,17 +10,25 @@ export interface PresetSeed {
   files: Record<string, string>;
 }
 
-const PRESET_YML = `name: 大管家
-description: 只做调度与汇报的管家会话：把每件事派给对应的任务会话，做完后向你汇报。Seeded by Amiba steward; edits are preserved.
+// The picker has no "internal preset" filter yet, so the NAME and DESCRIPTION
+// carry the warning: a chat manually started on this preset is hidden from the
+// history list (ui-shell hides the preset) and has no steward_* tools, since
+// those are registered by the plugin's setup(), not by the composition.
+const PRESET_YML = `name: 大管家（内部）
+description: 大管家插件内部使用的会话预设，请勿在普通对话中手动选择；手动选中的会话会从历史列表隐藏且没有派单工具。Seeded by Amiba steward; edits are preserved.
 order: 20
 `;
 
 /**
  * The steward persona is the COMPLETE system prompt (`complete: true`,
  * `includeRuntimeContext: false`) so no host section can hand it work tools'
- * guidance. The only model-facing row besides persona is ask-user; the
- * steward_* tools are registered into the agent scope by the plugin's
- * setup(), not by this composition.
+ * guidance. The only model-facing rows besides persona are ask-user and the
+ * compaction group; the steward_* tools are registered into the agent scope by
+ * the plugin's setup(), not by this composition.
+ *
+ * The compaction group is copied verbatim from the stock `standard` preset:
+ * the steward conversation is always live and never rotates, so without it the
+ * context grows until every dispatch fails.
  */
 const AGENT_CORDIS_YML = `# The \`amiba-steward\` agent preset: seeded create-only by @amiba/dsh-plugin-steward.
 # If this directory already exists the seeder never overwrites it.
@@ -46,6 +54,28 @@ const AGENT_CORDIS_YML = `# The \`amiba-steward\` agent preset: seeded create-on
       7. 用户提到把某个已有会话交给你管：steward_adopt（先按标题搜索，多于一个命中时反问）。
 
       回复用用户使用的语言，简洁、像一位可靠的管家。
+
+# \`compaction-basic\` reads \`toolResultPrune\` through \`ctx.get\`, so the pruner must
+# share this realm rather than sit outside it.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
