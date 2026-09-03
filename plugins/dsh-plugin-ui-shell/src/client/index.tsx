@@ -128,6 +128,48 @@ export interface SessionFilterContribution {
   test(session: SessionBadgeTarget): boolean;
 }
 
+/**
+ * Static slot typing for the two registrations above. The runtime
+ * declaration lives in `apply()` below, on `root`'s `children` table
+ * (`"amiba.sessions.item.badge"` / `"amiba.sessions.list.filter"`,
+ * `{ kind: "list", scope: "root" }`) — that alone is enough for the slot to
+ * exist and to be read via `ctx.slots.entriesOfSlot(...)`, but it does NOT
+ * put the name in `SlotMap`, so a plugin's own `ctx.slots.register({ name:
+ * "amiba.sessions.item.badge", ... })` would not typecheck without this
+ * augmentation (`register`'s `name` parameter is typed `keyof SlotMap &
+ * string`). Declared here, beside the `inject` face types it names, rather
+ * than in `@amiba/extension-sdk`'s `AMIBA_ROOT_SLOTS` vocabulary: these two
+ * slots are read directly off `entriesOfSlot` (see `session-list-sources.ts`)
+ * and never dispatched through `renderSlot`, so they have no place in
+ * `AmibaShellSlot` (extension-sdk sits below this package in the dependency
+ * graph and cannot import `SessionBadgeContribution`/`SessionFilterContribution`
+ * from here to declare it either way).
+ *
+ * Deliberately NO `inject` field on either `SlotMap` entry: per
+ * `SlotSpec`/`ChildrenDecl` (`@deepseek-ai/dsh-client-ui-slots`'s
+ * `lib/types/index.d.ts`), a `SlotMap[K].inject` is the SHARED face the
+ * *declaring parent* (root, here) must supply once in its own `children`
+ * spec and every entry receives identically — the mechanism
+ * `amiba.workspace.navigation`'s `inject: { openWorkspace }` uses. That is
+ * not what these two slots want: `SessionBadgeContribution`/
+ * `SessionFilterContribution` are each REGISTRANT's own per-entry business
+ * face, supplied the ordinary way via that entry's own `options.inject`
+ * factory (`register`'s `I extends object` overload, structurally inferred,
+ * independent of whatever `SlotMap[K]` declares) — exactly like
+ * `amiba.navigation.before`/`.after` below, which also carry no `inject` in
+ * `SlotMap` yet support per-entry business faces freely. Adding `inject`
+ * here instead makes root's own `{ kind: "list", scope: "root" }` children
+ * entry fail to typecheck (`Property 'inject' is missing`) since it would
+ * then have to supply ONE shared `SessionBadgeContribution` for every
+ * plugin, which is nonsensical for a per-plugin `resolve`/`test`.
+ */
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "amiba.sessions.item.badge": { kind: "list"; scope: "root" };
+    "amiba.sessions.list.filter": { kind: "list"; scope: "root" };
+  }
+}
+
 type AmibaRootProps = PropsRuntime<"root"> &
   PropsRenderSlots<AmibaShellSlot> & {
     dshClient: DshApiClient;
