@@ -43,6 +43,21 @@ describe("wizard kit", () => {
     expect(screen.getAllByTestId("state")[1]).toHaveTextContent('"preset":"full"');
   });
 
+  // A prefill is a SUGGESTION from the chat tool, not a promise: preset ids go
+  // stale (renamed, deleted, another machine's list). An id the list doesn't
+  // carry would otherwise sit there looking chosen — the Select shows its
+  // placeholder while the wizard's own gate reads "ready" — and the create
+  // would come back `agent_preset_required`.
+  it("replaces a prefilled preset that is not in the list", () => {
+    render(<Harness list={presets} prefillPreset="ghost" />);
+    expect(screen.getByTestId("state")).toHaveTextContent('"preset":"restricted"');
+  });
+
+  it("keeps a prefilled preset the list does carry", () => {
+    render(<Harness list={presets} prefillPreset="full" />);
+    expect(screen.getByTestId("state")).toHaveTextContent('"preset":"full"');
+  });
+
   it("exposes BasicsFields on the kit", () => {
     expect(connectWizardKit.BasicsFields).toBe(BasicsFields);
     expect(vi.isMockFunction(connectWizardKit.BasicsFields)).toBe(false);

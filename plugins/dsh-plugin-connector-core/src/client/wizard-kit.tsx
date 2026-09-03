@@ -27,8 +27,12 @@ export interface BasicsFieldsProps {
  * Connect name + agent-preset picker, the two fields every connect needs. A
  * PART a provider wizard places wherever its own screen wants it — never a
  * frame around the wizard. Presets arrive asynchronously in both hosts, so
- * the picker fills an empty selection with the default once the list lands
- * and never overwrites a value the user (or a prefill) already chose.
+ * the picker fills an empty selection with the default once the list lands,
+ * and never overwrites a value the list actually carries. A prefilled id the
+ * list does NOT carry (a stale suggestion from the chat tool, a renamed or
+ * deleted preset) is replaced by the default instead of being left to look
+ * chosen while the Select shows its placeholder — healing it here means every
+ * wizard and both hosts get the fix for free.
  */
 export function BasicsFields({
   name, onNameChange, preset, onPresetChange, presets, className,
@@ -37,8 +41,11 @@ export function BasicsFields({
   const nameId = useId();
   const presetId = useId();
   useEffect(() => {
-    if (preset || presets.length === 0) return;
-    onPresetChange(defaultPresetId(presets));
+    // Fill an empty selection, and REPLACE one that is not in the list (a
+    // stale prefill from the chat tool) — both only once presets have landed.
+    if (presets.length === 0) return;
+    if (preset && presets.some((p) => p.id === preset)) return;
+    onPresetChange(defaultPresetId(presets, preset || undefined));
   }, [preset, presets, onPresetChange]);
   return (
     <div className={cn("grid grid-cols-2 gap-4", className)}>

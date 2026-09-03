@@ -26,9 +26,11 @@ function FakeBasicsFields({
   presets: { id: string; label: string; isDefault: boolean }[];
 }) {
   useEffect(() => {
-    if (!preset && presets.length) {
-      onPresetChange(presets.find((p) => p.isDefault)?.id ?? presets[0]!.id);
-    }
+    // Same rule as the real kit: fill an empty selection AND replace one the
+    // list doesn't carry (a stale prefill), once the presets have landed.
+    if (presets.length === 0) return;
+    if (preset && presets.some((p) => p.id === preset)) return;
+    onPresetChange(presets.find((p) => p.isDefault)?.id ?? presets[0]!.id);
   }, [preset, presets, onPresetChange]);
   return (
     <div>
@@ -123,6 +125,30 @@ describe("LarkWizard", () => {
   it("seeds the name from the host prefill", () => {
     render(<LarkWizard host={hostWith({ prefill: { name: "飞书助手" } })} />);
     expect(screen.getByLabelText("连接名称")).toHaveValue("飞书助手");
+  });
+
+  it("drops a prefilled preset the host's list doesn't carry", async () => {
+    const begin = vi.fn(async () => ({ sessionId: "s1", state: "pending" }));
+    const host = hostWith({
+      prefill: { agentPreset: "ghost" },
+      adapter: {
+        create: vi.fn(),
+        beginOnboarding: begin,
+        pollOnboarding: vi.fn(async () => ({ sessionId: "s1", state: "pending" })),
+        cancelOnboarding: vi.fn(async () => ({})),
+      } as never,
+    });
+    render(<LarkWizard host={host} />);
+    typeName();
+    await act(async () => {
+      fireEvent.click(beginButton());
+    });
+    // Never the stale suggestion: the kit healed the selection to the default.
+    expect(begin).toHaveBeenCalledWith({
+      provider: "lark",
+      name: "Sales",
+      agentPreset: "restricted",
+    });
   });
 
   it("goes back to the platform picker and closes through the host", async () => {
