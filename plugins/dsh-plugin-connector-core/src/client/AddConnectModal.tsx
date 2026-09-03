@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { Dialog, DialogContent, DialogTitle, usePluginT } from "@amiba/ui/plugin";
+import {
+  Dialog, DialogContent, DialogDescription, DialogTitle, usePluginT,
+} from "@amiba/ui/plugin";
 
 import type { ConnectAdapter } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
@@ -37,6 +39,9 @@ export function AddConnectModal({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className={providerId ? "max-w-[600px] p-0" : "max-w-lg p-0"}>
         <DialogTitle className="sr-only">{providerId || t("options.connect.dsh.add")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("options.connect.dsh.addDescription")}
+        </DialogDescription>
         {!open ? null : providerId ? (
           <ProviderScreen
             adapter={adapter}
