@@ -93,6 +93,55 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
   );
 }
 
+type SessionSummaryLike = Awaited<
+  ReturnType<ReturnType<typeof sessionsAdapter>["list"]>
+>[number];
+
+/** One host summary + its local sidecar → the renderer's SessionMeta. */
+function toSessionMeta(
+  summary: SessionSummaryLike,
+  sidecar: SessionLocalMeta | undefined,
+): SessionMeta {
+  return {
+    id: summary.sessionId,
+    title: summary.title ?? "",
+    createdAt: summary.updatedAt,
+    updatedAt: summary.updatedAt,
+    pinned: sidecar?.pinned,
+    archived: sidecar?.archived,
+    unread: sidecar?.unread,
+    titleManual: sidecar?.titleManual,
+    parentSessionId: summary.parentSessionId ?? sidecar?.parentSessionId,
+    source: SOURCE_LOCAL,
+    agent: {
+      profileId: normalizeAgentProfileId(
+        summary.agentPreset ?? sidecar?.agent?.profileId,
+      ),
+    },
+  };
+}
+
+/**
+ * Resolve ONE session by id, including blank ones the history list drops.
+ * A host or plugin may create a session before the user ever types (the
+ * steward's conversation, for instance); opening it by id must still
+ * surface its real identity — above all the agent preset it already runs —
+ * or the composer falls back to the roster default and the first submit is
+ * rejected by the host as a preset change.
+ */
+export async function loadSessionMeta(
+  id: string,
+): Promise<SessionMeta | undefined> {
+  const [summaries, local, hidden] = await Promise.all([
+    sessionsAdapter().list(),
+    readLocalMeta(),
+    readRuntimeHiddenSessions(),
+  ]);
+  if (hidden.has(id)) return undefined;
+  const summary = summaries.find((item) => item.sessionId === id);
+  return summary ? toSessionMeta(summary, local[id]) : undefined;
+}
+
 export async function loadIndex(): Promise<SessionMeta[]> {
   const [summaries, local, hidden] = await Promise.all([
     sessionsAdapter().list(),
@@ -102,26 +151,7 @@ export async function loadIndex(): Promise<SessionMeta[]> {
   lastSavedLocalMeta = local;
   const result = summaries
     .filter((summary) => !summary.blank && !hidden.has(summary.sessionId))
-    .map((summary): SessionMeta => {
-      const sidecar = local[summary.sessionId];
-      return {
-        id: summary.sessionId,
-        title: summary.title ?? "",
-        createdAt: summary.updatedAt,
-        updatedAt: summary.updatedAt,
-        pinned: sidecar?.pinned,
-        archived: sidecar?.archived,
-        unread: sidecar?.unread,
-        titleManual: sidecar?.titleManual,
-        parentSessionId: summary.parentSessionId ?? sidecar?.parentSessionId,
-        source: SOURCE_LOCAL,
-        agent: {
-          profileId: normalizeAgentProfileId(
-            summary.agentPreset ?? sidecar?.agent?.profileId,
-          ),
-        },
-      };
-    })
+    .map((summary) => toSessionMeta(summary, local[summary.sessionId]))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   lastSavedIndex = new Map(
     result.map((session) => [session.id, { ...session }]),

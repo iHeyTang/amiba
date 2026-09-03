@@ -32,6 +32,15 @@ vi.mock("@amiba/app-runtime/platform", () => ({
           title: "DSH task",
           agentPreset: "standard",
         },
+        // A host-created session with no user turn yet: kept out of the
+        // history list, but still openable by id with its real preset.
+        {
+          sessionId: "dsh-blank",
+          updatedAt: 30,
+          running: false,
+          blank: true,
+          agentPreset: "amiba-steward",
+        },
       ],
       search: async () => [{ sessionId: "dsh-1", snippet: "match" }],
       create: async () => ({ sessionId: "dsh-new" }),
@@ -93,6 +102,25 @@ describe("SessionsStore with DSH sessions", () => {
       { role: "user", content: "hello" },
       { role: "assistant", content: "world" },
     ]);
+    store.teardown();
+  });
+
+  it("opens a blank host session by id with the preset it already runs", async () => {
+    // Regression: the steward plugin creates its conversation on the host
+    // before the user ever types. The list drops blank sessions, so opening
+    // one by id left the composer on the roster's default preset and the
+    // first submit asked the host to re-create the session under it —
+    // rejected with "already runs agent preset …; requested …".
+    const store = new SessionsStore();
+    await store.initialize();
+    expect(
+      store.getSnapshot().sessions.some((session) => session.id === "dsh-blank"),
+    ).toBe(false);
+    await store.openTab("dsh-blank");
+    expect(store.getSnapshot().activeId).toBe("dsh-blank");
+    expect(
+      store.getSnapshot().sessions.find((session) => session.id === "dsh-blank"),
+    ).toMatchObject({ id: "dsh-blank", agent: { profileId: "amiba-steward" } });
     store.teardown();
   });
 

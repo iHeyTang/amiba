@@ -59,6 +59,7 @@ import {
   deriveTitleFromMessages,
   dropMessages,
   loadIndex,
+  loadSessionMeta,
   loadMessages,
   newSessionMeta,
   saveIndex,
@@ -429,6 +430,14 @@ export class SessionsStore {
 
   openTab = async (id: string): Promise<void> => {
     if (!id) return;
+    if (!this.state.sessions.some((session) => session.id === id)) {
+      // Open-by-id may target a session the history index dropped (a host-
+      // or plugin-created session with no user turn yet). Surface its real
+      // identity — the agent preset it already runs, its title — before it
+      // becomes active, or the composer would treat it as a fresh draft.
+      const meta = await loadSessionMeta(id);
+      if (meta) this.commit({ sessions: [meta, ...this.state.sessions] });
+    }
     if (!this.state.openTabIds.includes(id)) {
       // Append at the end so existing tabs keep their relative order.
       const nextTabs = [...this.state.openTabIds, id];
