@@ -35,6 +35,7 @@
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
+    "@amiba/extension-sdk": "workspace:*",
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",

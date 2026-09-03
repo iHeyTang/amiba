@@ -78,6 +78,11 @@ export const connectI18n: PluginCatalogOverlay = {
       "This onboarding session has expired or no longer exists.",
     "options.connect.dsh.error.onboarding_unsupported":
       "That provider doesn't support scan-to-connect onboarding.",
+    "options.connect.dsh.tool.action": "Connect platform",
+    "options.connect.dsh.tool.waiting": "Waiting for you to finish below…",
+    "options.connect.dsh.tool.connected": "Connected {provider} · {name}",
+    "options.connect.dsh.tool.cancelled": "Cancelled",
+    "options.connect.dsh.tool.failed": "Failed",
   },
   "zh-CN": {
     "options.connect.dsh.description":
@@ -129,5 +134,10 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.onboarding_not_found": "该扫码会话已过期或不存在。",
     "options.connect.dsh.error.onboarding_unsupported":
       "该 Provider 不支持扫码接入。",
+    "options.connect.dsh.tool.action": "接入平台",
+    "options.connect.dsh.tool.waiting": "等待你在下方完成接入…",
+    "options.connect.dsh.tool.connected": "已接入 {provider} · {name}",
+    "options.connect.dsh.tool.cancelled": "已取消",
+    "options.connect.dsh.tool.failed": "失败",
   },
 };
