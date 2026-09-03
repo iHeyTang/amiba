@@ -354,3 +354,30 @@ describe("StewardService — reporting", () => {
     expect(second.resumed).toEqual([stewardId]);
   });
 });
+
+describe("StewardService — model route", () => {
+  // Agent presets render `{{model}}` from the agent's own route. A session
+  // created or resumed without `agentOptions` has no route, so prompt
+  // assembly fails ("{{model}} has no value") on the first turn. Mirror
+  // messaging-core: seed the deployment's default selection when the
+  // optional `agentDefaultModel` service is mounted.
+  const selection = { provider: "deepseek", model: "deepseek-chat" };
+
+  it("seeds the default model route on every task and steward create/resume", async () => {
+    const { service, created, resumeOptions, reflectServices, live } = harness();
+    reflectServices.set("agentDefaultModel", { currentSelection: () => selection });
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "金价" }, message: "查金价" });
+    expect(created.find((c) => c.sessionId === stewardId)?.agentOptions).toEqual(selection);
+    expect(created.find((c) => c.sessionId === sessionId)?.agentOptions).toEqual(selection);
+    live.delete(sessionId);
+    await service.dispatch({ taskId, message: "再查" });
+    expect(resumeOptions).toEqual([selection]);
+  });
+
+  it("omits agentOptions when no default model service is mounted", async () => {
+    const { service, created } = harness();
+    await service.dispatch({ newTask: { title: "A" }, message: "go" });
+    expect(created.every((c) => c.agentOptions === undefined)).toBe(true);
+  });
+});

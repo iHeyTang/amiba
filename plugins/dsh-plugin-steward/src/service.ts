@@ -189,7 +189,7 @@ export class StewardService {
         }
         if (loadable) {
           try {
-            const handle = await this.ctx.agents.resume({ resumeSessionId: id as never, setup });
+            const handle = await this.ctx.agents.resume({ resumeSessionId: id as never, ...this.agentOptionsSpread(), setup });
             this.stewardHandle = handle;
             return handle.agent;
           } catch (error) {
@@ -202,6 +202,7 @@ export class StewardService {
       const handle = await this.ctx.agents.create({
         sessionId: sessionId as never,
         meta: { cwd: this.options.defaultCwd, agentPreset: this.options.presetId },
+        ...this.agentOptionsSpread(),
         setup,
       });
       await this.store.mutate((current) => ({ ...current, stewardSessionId: sessionId }));
@@ -295,6 +296,27 @@ export class StewardService {
     return { taskId: task.id, sessionId: task.sessionId, created };
   }
 
+  /**
+   * The deployment's default model route, or undefined on hosts that never
+   * mount `agentDefaultModel`. Read via `ctx.reflect.get` (a non-throwing,
+   * point-in-time lookup) — the service is optional and not in `inject`, and
+   * Cordis throws on a bare access to an un-injected property. Presets render
+   * `{{model}}` from this route, so every create/resume must carry it.
+   */
+  private defaultAgentOptions(): { provider: string; model: string } | undefined {
+    const service = (this.ctx as { reflect?: { get?(name: string): unknown } }).reflect?.get?.("agentDefaultModel") as
+      | { currentSelection?(): { provider: string; model: string } | undefined }
+      | undefined;
+    const selection = service?.currentSelection?.();
+    return selection ? { provider: selection.provider, model: selection.model } : undefined;
+  }
+
+  /** `{ agentOptions }` to spread into an `agents.create/resume` call, or nothing. */
+  private agentOptionsSpread(): { agentOptions?: { provider: string; model: string } } {
+    const agentOptions = this.defaultAgentOptions();
+    return agentOptions ? { agentOptions } : {};
+  }
+
   private guardAskUser(agentCtx: Context): void {
     try {
       agentCtx.tools.guard((execution) => (execution.name === ASK_USER_TOOL ? ASK_USER_DENIED : undefined));
@@ -308,6 +330,7 @@ export class StewardService {
     const handle = await this.ctx.agents.create({
       sessionId: task.sessionId as never,
       meta: { cwd: task.cwd, ...(preset ? { agentPreset: preset } : {}) },
+      ...this.agentOptionsSpread(),
       setup: async (agentCtx: Context) => {
         try {
           await this.ctx.agentPresets.mount(agentCtx, preset);
@@ -330,6 +353,7 @@ export class StewardService {
       const preset = resolveSessionPreset({ header: inspected.meta, events: inspected.events } as never);
       const handle = await this.ctx.agents.resume({
         resumeSessionId: task.sessionId as never,
+        ...this.agentOptionsSpread(),
         setup: async (agentCtx: Context) => {
           try {
             await this.ctx.agentPresets.mount(agentCtx, preset);

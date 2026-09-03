@@ -14,8 +14,11 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const persisted = new Map<string, { meta: Record<string, unknown>; events: Array<Record<string, unknown>> }>();
   const listeners: Listener[] = [];
   const disposed: string[] = [];
-  const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
+  const created: Array<{ sessionId: string; meta?: Record<string, unknown>; agentOptions?: Record<string, unknown> }> = [];
   const resumed: string[] = [];
+  const resumeOptions: Array<Record<string, unknown> | undefined> = [];
+  /** Optional Cordis services read via `ctx.reflect.get` (e.g. `agentDefaultModel`). */
+  const reflectServices = new Map<string, unknown>();
   const setupCtxs = new Map<string, FakeAgentCtx>();
 
   type FakeAgentCtx = { tools: { guard: ReturnType<typeof vi.fn>; register: ReturnType<typeof vi.fn> }; effect: ReturnType<typeof vi.fn> };
@@ -41,17 +44,18 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const ctx = {
     agents: {
       get: (id: string) => live.get(id),
-      create: vi.fn(async (opts: { sessionId: string; meta?: Record<string, unknown>; setup?: (c: unknown) => Promise<unknown> }) => {
+      create: vi.fn(async (opts: { sessionId: string; meta?: Record<string, unknown>; agentOptions?: Record<string, unknown>; setup?: (c: unknown) => Promise<unknown> }) => {
         const agentCtx = makeAgentCtx();
         setupCtxs.set(opts.sessionId, agentCtx);
         if (opts.setup) await opts.setup(agentCtx);
         const agent = makeAgent(opts.sessionId, [], agentCtx);
         live.set(opts.sessionId, agent);
         persisted.set(opts.sessionId, { meta: { id: opts.sessionId, ...opts.meta }, events: agent.session.events });
-        created.push({ sessionId: opts.sessionId, ...(opts.meta ? { meta: opts.meta } : {}) });
+        created.push({ sessionId: opts.sessionId, ...(opts.meta ? { meta: opts.meta } : {}), ...(opts.agentOptions ? { agentOptions: opts.agentOptions } : {}) });
         return { agent, dispose: vi.fn(async () => { disposed.push(opts.sessionId); }) };
       }),
-      resume: vi.fn(async (opts: { resumeSessionId: string; setup?: (c: unknown) => Promise<unknown> }) => {
+      resume: vi.fn(async (opts: { resumeSessionId: string; agentOptions?: Record<string, unknown>; setup?: (c: unknown) => Promise<unknown> }) => {
+        resumeOptions.push(opts.agentOptions);
         const stored = persisted.get(opts.resumeSessionId);
         if (!stored) throw new Error("session_not_found");
         const agentCtx = makeAgentCtx();
@@ -91,7 +95,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
     },
     effect: (run: () => unknown) => { const cleanup = run(); return async () => { if (typeof cleanup === "function") await cleanup(); }; },
     logger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-    reflect: { get: () => undefined },
+    reflect: { get: (name: string) => reflectServices.get(name) },
   };
 
   const store = new StewardStore(mkdtempSync(join(tmpdir(), "amiba-steward-")));
@@ -113,5 +117,5 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
     agent.session.events.push(event);
     for (const listener of listeners) void listener(agent.session, event);
   };
-  return { ctx, store, service, live, persisted, created, resumed, disposed, setupCtxs, onStewardSetup, makeAgent, persist, emit };
+  return { ctx, store, service, live, persisted, created, resumed, resumeOptions, reflectServices, disposed, setupCtxs, onStewardSetup, makeAgent, persist, emit };
 }
