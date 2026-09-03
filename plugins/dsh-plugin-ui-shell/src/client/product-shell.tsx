@@ -1,4 +1,9 @@
-import { SessionsProvider, useSessions, type AgentExecutionContext } from "@amiba/app-runtime/core";
+import {
+  SessionsProvider,
+  useSessions,
+  type AgentExecutionContext,
+  type SessionMeta,
+} from "@amiba/app-runtime/core";
 import {
   DshChatEngineClient,
   type DshApiClient,
@@ -24,6 +29,10 @@ import {
 } from "./settings-shell.js";
 import { officialListFingerprint } from "./official-index-sync.js";
 import type { HiddenPresetsSource } from "./session-visibility.js";
+import type {
+  ContributionsSource,
+  SessionFilterRow,
+} from "./session-list-sources.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -32,12 +41,15 @@ import {
   SettingsTriggerContent,
   SettingsView,
   makeWorkspaceFilesProvider,
+  resolveBadgeTexts,
   type ChatSurfaceCapabilities,
   type ComposerModelPickerRequest,
   type ComposerTriggerRuntime,
   type OnboardingStepRow,
   type PendingPromptAttachment,
   type PendingPromptResult,
+  type SessionBadgeSource,
+  type SessionListFilter,
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
@@ -78,6 +90,8 @@ export type { OnboardingStepRow, SettingsOnboardingStepsSource };
 
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
+const EMPTY_SESSION_BADGES: readonly SessionBadgeSource[] = [];
+const EMPTY_SESSION_FILTERS: readonly SessionFilterRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
@@ -311,6 +325,10 @@ interface ProductShellProps {
   settingsOnboardingSteps?: SettingsOnboardingStepsSource;
   triggerRuntime?: ComposerTriggerRuntime;
   hiddenSessionPresets?: HiddenPresetsSource;
+  /** `amiba.sessions.item.badge` contributions, sorted by `order`. */
+  sessionItemBadges?: ContributionsSource<SessionBadgeSource>;
+  /** `amiba.sessions.list.filter` contributions, sorted by `order`. */
+  sessionListFilters?: ContributionsSource<SessionFilterRow>;
   /**
    * The framework's `useSessions` standard hook (`GlobalStandardProps`),
    * handed down from the root entry. It is the OFFICIAL sessions list store —
@@ -344,6 +362,8 @@ function ProductShellInner({
   settingsOnboardingSteps,
   triggerRuntime,
   hiddenSessionPresets,
+  sessionItemBadges,
+  sessionListFilters,
   useOfficialSessions,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
@@ -358,6 +378,30 @@ function ProductShellInner({
   const hiddenPresets = useSyncExternalStore(
     hiddenSessionPresets?.subscribe ?? (() => () => {}),
     hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
+  );
+  // The two generic session-list extension points. Neither the shell nor
+  // `<FullScreenChatView>`/`<Sidebar>`/`<SessionsListView>` know anything
+  // about who registered a badge or a filter — `sessionBadges` is handed
+  // down as an `itemBadges` resolver function built from the pure
+  // `resolveBadgeTexts` helper, and `sessionFilters` is the plain
+  // `{ id, label, test }` list `SessionsListView` renders its tri-state
+  // chip row from.
+  const sessionBadges = useSyncExternalStore(
+    sessionItemBadges?.subscribe ?? (() => () => {}),
+    sessionItemBadges?.getSnapshot ?? (() => EMPTY_SESSION_BADGES),
+  );
+  const sessionFilters = useSyncExternalStore(
+    sessionListFilters?.subscribe ?? (() => () => {}),
+    sessionListFilters?.getSnapshot ?? (() => EMPTY_SESSION_FILTERS),
+  );
+  const itemBadges = useCallback(
+    (session: SessionMeta) => resolveBadgeTexts(session, sessionBadges),
+    [sessionBadges],
+  );
+  const sessionFilterList = useMemo<readonly SessionListFilter[]>(
+    () =>
+      sessionFilters.map(({ id, label, test }) => ({ id, label, test })),
+    [sessionFilters],
   );
   // Settings is a MODAL LAYER, not a route: the chat surface stays mounted
   // behind it, exactly as the official settings shell layers its panel over
@@ -597,6 +641,8 @@ function ProductShellInner({
         topBarClassName={desktop ? "app-drag-region" : undefined}
         restoreSidebarViewOnMount={false}
         hiddenSessionPresets={hiddenPresets}
+        itemBadges={itemBadges}
+        filters={sessionFilterList}
         slots={{
           emptyState: (
             <HomeView

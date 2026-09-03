@@ -29,6 +29,14 @@ export {
 } from "./WorkspaceControl";
 export { SessionDrawer } from "./SessionDrawer";
 export {
+  applyTriStateFilters,
+  resolveBadgeTexts,
+  type SessionBadgeSource,
+  type SessionBadgeTarget,
+  type SessionFilterState,
+  type SessionListFilter,
+} from "./session-list-extensions";
+export {
   WallpaperBackdrop,
   WallpaperCredit,
   wallpaperAmbientTextClass,

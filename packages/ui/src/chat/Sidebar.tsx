@@ -31,6 +31,7 @@ import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
 import { SettingsTriggerContent } from "../settings/SettingsTriggerContent";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
+import type { SessionListFilter } from "./session-list-extensions";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
 /** Workspace plugin ids are intentionally open-ended. */
@@ -94,6 +95,13 @@ export interface SidebarProps {
   /** Whether the settings dialog this row opens is currently open. */
   settingsOpen?: boolean;
   className?: string;
+  /**
+   * Declarative per-row badges — forwarded verbatim to `SessionsListView`.
+   * See `session-list-extensions.ts` for the contract.
+   */
+  itemBadges?: (session: SessionMeta) => readonly string[];
+  /** Tri-state history filters — forwarded verbatim to `SessionsListView`. */
+  filters?: readonly SessionListFilter[];
 }
 
 export function Sidebar({
@@ -122,6 +130,8 @@ export function Sidebar({
   wide = true,
   settingsOpen = false,
   className,
+  itemBadges,
+  filters,
 }: SidebarProps) {
   const { t } = useT();
   const workspaceBindings = useWorkspaceBindings(sessions);
@@ -331,6 +341,8 @@ export function Sidebar({
             historyLayout === "timeline" ? <MessageSquare /> : undefined
           }
           indentRows={historyLayout === "grouped"}
+          itemBadges={itemBadges}
+          filters={filters}
         />
       </div>
 

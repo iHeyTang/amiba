@@ -26,7 +26,11 @@ import {
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 
-import { useSessions, type ChatEngineClient } from "@amiba/app-runtime/core";
+import {
+  useSessions,
+  type ChatEngineClient,
+  type SessionMeta,
+} from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import { useT } from "@amiba/i18n";
@@ -42,6 +46,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
+import type { SessionListFilter } from "./session-list-extensions";
 import ChatSurface from "./ChatSurface";
 import type {
   ComposerModelPickerRenderer,
@@ -281,6 +286,17 @@ export interface FullScreenChatViewProps {
    * `amibaSessionVisibility` seam.
    */
   hiddenSessionPresets?: ReadonlySet<string>;
+  /**
+   * Declarative per-row badges for the sidebar history list — forwarded
+   * verbatim to `<Sidebar itemBadges>`. See `session-list-extensions.ts`.
+   */
+  itemBadges?: (session: SessionMeta) => readonly string[];
+  /**
+   * Tri-state history filters for the sidebar history list — forwarded
+   * verbatim to `<Sidebar filters>`. Only the sidebar's own list is
+   * filtered; the command palette is unaffected.
+   */
+  filters?: readonly SessionListFilter[];
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -315,6 +331,8 @@ function FullScreenChatViewInner({
   triggerRuntime,
   restoreSidebarViewOnMount = true,
   hiddenSessionPresets,
+  itemBadges,
+  filters,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -824,6 +842,8 @@ function FullScreenChatViewInner({
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
+            itemBadges={itemBadges}
+            filters={filters}
           />
         </div>
       </aside>

@@ -33,6 +33,12 @@ import {
   type HiddenPresetsSource,
 } from "./session-visibility.js";
 import {
+  createSessionBadgesSource,
+  createSessionFiltersSource,
+  type ContributionsSource,
+  type SessionFilterRow,
+} from "./session-list-sources.js";
+import {
   connectOfficialLocale,
   LOCALE_SETTINGS_NAMESPACE,
 } from "./locale-bridge.js";
@@ -48,7 +54,12 @@ import {
   SHADOW_PRIORITY,
   SLASH_MENU_ENTRY_ID,
 } from "./trigger-seats.js";
-import { TRIGGER_SOURCE_LABELS, officialTriggerSources } from "@amiba/ui";
+import {
+  TRIGGER_SOURCE_LABELS,
+  officialTriggerSources,
+  type SessionBadgeSource,
+  type SessionBadgeTarget,
+} from "@amiba/ui";
 import { AskUserQuestionToolview } from "./ask-toolview.js";
 import { OFFICIAL_TOOLVIEWS } from "./official-toolviews.js";
 import shellCss from "./styles.css?inline";
@@ -92,6 +103,30 @@ export type {
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
 export type { AmibaSessionVisibility, HiddenPresetsSource } from "./session-visibility.js";
+export type { SessionBadgeTarget } from "@amiba/ui";
+/**
+ * The `inject` business face of one `amiba.sessions.item.badge`
+ * registration: `ctx.slots.register({ name: "amiba.sessions.item.badge",
+ * id, order, label, inject: () => ({ resolve }) }, NoopComponent)`.
+ * `resolve(session)` returning `true` renders the registered `label` as the
+ * chip text; a string renders that string; `false`/`null` renders no chip
+ * for that session. The registered component itself is never mounted — the
+ * shell only reads `options` and `inject()`, exactly like `settings.section`.
+ */
+export interface SessionBadgeContribution {
+  resolve(session: SessionBadgeTarget): string | boolean | null;
+}
+/**
+ * The `inject` business face of one `amiba.sessions.list.filter`
+ * registration: `ctx.slots.register({ name: "amiba.sessions.list.filter",
+ * id, order, label, inject: () => ({ test }) }, NoopComponent)`.
+ * `test(session)` reports whether the session matches this filter; the
+ * sidebar history list's tri-state chip decides whether matches,
+ * non-matches, or everything is kept.
+ */
+export interface SessionFilterContribution {
+  test(session: SessionBadgeTarget): boolean;
+}
 
 type AmibaRootProps = PropsRuntime<"root"> &
   PropsRenderSlots<AmibaShellSlot> & {
@@ -102,6 +137,8 @@ type AmibaRootProps = PropsRuntime<"root"> &
     sessionsBridge: AmibaSessionsBridge;
     triggerRuntime: AmibaInputTriggerBridge;
     hiddenSessionPresets: HiddenPresetsSource;
+    sessionItemBadges: ContributionsSource<SessionBadgeSource>;
+    sessionListFilters: ContributionsSource<SessionFilterRow>;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -124,6 +161,8 @@ function AmibaRoot({
   sessionsBridge,
   triggerRuntime,
   hiddenSessionPresets,
+  sessionItemBadges,
+  sessionListFilters,
   useSessions,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
@@ -142,6 +181,8 @@ function AmibaRoot({
       settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
       hiddenSessionPresets={hiddenSessionPresets}
+      sessionItemBadges={sessionItemBadges}
+      sessionListFilters={sessionListFilters}
       useOfficialSessions={useSessions}
     />
   );
@@ -315,6 +356,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
       "amibaSessionVisibility",
       visibility,
     );
+    // The two generic session-list extension points: declarative badges and
+    // tri-state filters. Neither carries any plugin semantics here — a
+    // feature plugin (the steward, a connector, …) registers into
+    // `amiba.sessions.item.badge` / `amiba.sessions.list.filter` the same
+    // way any other plugin registers into `settings.section`, and the shell
+    // just projects the registrations into the shapes `<FullScreenChatView>`
+    // renders. See `session-list-sources.ts`.
+    const sessionItemBadges = createSessionBadgesSource(ctx.slots);
+    const sessionListFilters = createSessionFiltersSource(ctx.slots);
     // R1 selection bridge: keep the official ctx.sessions selection (the
     // session resolution every official session-scoped slot renders under)
     // in lock-step with Amiba's own per-window sessions store. The official
@@ -412,10 +462,21 @@ export async function apply(ctx: ClientContext): Promise<void> {
           sessionsBridge,
           triggerRuntime,
           hiddenSessionPresets: visibility.source,
+          sessionItemBadges,
+          sessionListFilters,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
           "amiba.navigation.after": { kind: "list", scope: "root" },
+          // The two generic session-list extension points (declarative
+          // badges and tri-state filters). List/root scope, same shape as
+          // `amiba.workspace.navigation` just below: a plugin's registered
+          // component is a placeholder (never rendered) and the shell reads
+          // only `options.{id,order,label}` and `inject()` — see
+          // `session-list-sources.ts` and the `SessionBadgeContribution` /
+          // `SessionFilterContribution` inject-face types exported above.
+          "amiba.sessions.item.badge": { kind: "list", scope: "root" },
+          "amiba.sessions.list.filter": { kind: "list", scope: "root" },
           "amiba.workspace.navigation": {
             kind: "list",
             scope: "root",

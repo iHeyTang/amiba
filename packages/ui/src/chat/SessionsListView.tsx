@@ -32,6 +32,11 @@ import {
 import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/app-runtime/core";
 import { useT, type MessageKey } from "@amiba/i18n";
 import { CascadeMenu, Input, type CascadeMenuItem, cn } from "../primitives";
+import {
+  applyTriStateFilters,
+  type SessionFilterState,
+  type SessionListFilter,
+} from "./session-list-extensions";
 import { TopSection } from "./TopSection";
 
 const HISTORY_PAGE_SIZE = 20;
@@ -93,6 +98,18 @@ export interface SessionsListViewProps {
   indentRows?: boolean;
   /** Disable rename/delete affordances for read-only rows. */
   allowActionsFor?: (session: SessionMeta) => boolean;
+  /**
+   * Declarative per-row badges (`amiba.sessions.item.badge` contributions,
+   * already resolved to display strings by the caller). Rendered as small
+   * chips right after the row title. Absent/empty means no chips.
+   */
+  itemBadges?: (session: SessionMeta) => readonly string[];
+  /**
+   * `amiba.sessions.list.filter` contributions. When non-empty, a tri-state
+   * chip row is rendered above the list; its selection state lives in this
+   * component (not persisted) and is combined via `applyTriStateFilters`.
+   */
+  filters?: readonly SessionListFilter[];
 }
 
 export function SessionsListView({
@@ -126,9 +143,27 @@ export function SessionsListView({
   rowIconFor,
   indentRows = false,
   allowActionsFor,
+  itemBadges,
+  filters,
 }: SessionsListViewProps) {
   const { t } = useT();
   const [showArchived, setShowArchived] = useState(false);
+  const [filterStates, setFilterStates] = useState<
+    Record<string, SessionFilterState>
+  >({});
+  const cycleFilter = (id: string) =>
+    setFilterStates((previous) => {
+      const current = previous[id] ?? null;
+      const next = current === null ? true : current === true ? false : null;
+      return { ...previous, [id]: next };
+    });
+  const filteredSessions = useMemo(
+    () =>
+      filters && filters.length > 0
+        ? applyTriStateFilters(sessions, filters, filterStates)
+        : sessions,
+    [sessions, filters, filterStates],
+  );
 
   useEffect(() => {
     if (onRefresh) void onRefresh();
@@ -144,7 +179,9 @@ export function SessionsListView({
    */
   const channelSections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const live = sessions.filter((s) => Boolean(s.archived) === showArchived);
+    const live = filteredSessions.filter(
+      (s) => Boolean(s.archived) === showArchived,
+    );
     const matching = q
       ? live.filter((s) =>
           (s.title || t("chat.untitled")).toLowerCase().includes(q),
@@ -227,7 +264,7 @@ export function SessionsListView({
     }
     return sections;
   }, [
-    sessions,
+    filteredSessions,
     query,
     t,
     sectionLabelFor,
@@ -270,6 +307,41 @@ export function SessionsListView({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      {filters && filters.length > 0 ? (
+        <div
+          data-testid="session-filter-row"
+          className="flex flex-wrap gap-1 px-2 pb-1.5 pt-1"
+        >
+          {filters.map((filter) => {
+            const state = filterStates[filter.id] ?? null;
+            return (
+              <button
+                key={filter.id}
+                type="button"
+                data-testid="session-filter-chip"
+                data-state={
+                  state === null ? "unset" : state ? "include" : "exclude"
+                }
+                aria-pressed={state === true}
+                onClick={() => cycleFilter(filter.id)}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  state === null &&
+                    "border-border/60 bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  state === true &&
+                    "border-transparent bg-primary text-primary-foreground",
+                  state === false &&
+                    "border-foreground/30 bg-transparent text-muted-foreground line-through decoration-1",
+                )}
+              >
+                {state === true ? `✓ ${filter.label}` : null}
+                {state === false ? `✕ ${filter.label}` : null}
+                {state === null ? filter.label : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       {sessions.some((session) => session.archived) ? (
         <div className="sticky top-0 z-10 flex min-h-8 items-center gap-1 bg-background/95 px-1 py-1 backdrop-blur">
           <div className="flex rounded-full bg-muted/70 p-0.5 text-[10px]">
@@ -359,6 +431,7 @@ export function SessionsListView({
                     icon={rowIconFor?.(s)}
                     nested={indentRows}
                     allowActions={allowActionsFor?.(s) ?? true}
+                    badges={itemBadges?.(s) ?? []}
                   />
                 ))}
               </nav>
@@ -416,6 +489,8 @@ interface SessionRowProps {
   icon?: ReactNode;
   nested?: boolean;
   allowActions: boolean;
+  /** Resolved `amiba.sessions.item.badge` chip texts, in registration order. */
+  badges?: readonly string[];
 }
 
 function SessionRow({
@@ -436,6 +511,7 @@ function SessionRow({
   icon,
   nested,
   allowActions,
+  badges = [],
 }: SessionRowProps) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
@@ -620,6 +696,19 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
+        {badges.length > 0 ? (
+          <span className="flex shrink-0 items-center gap-1">
+            {badges.map((text, index) => (
+              <span
+                key={`${text}-${index}`}
+                data-testid="session-badge"
+                className="rounded bg-muted px-1 py-0.5 text-[10px] leading-none text-muted-foreground"
+              >
+                {text}
+              </span>
+            ))}
+          </span>
+        ) : null}
         {session.pinned && !selecting ? (
           <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
         ) : null}
