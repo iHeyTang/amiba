@@ -13,10 +13,16 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * Unlike `DshSettingsMessaging`, this page keeps even the generic verbs
  * (cancel/add/confirm/loading) in its own overlay instead of the shared
  * `common.*` host vocabulary: this page's tests exercise those buttons
- * directly (add-connect submit, remove confirm/cancel), and `common.*`
+ * directly (the add-connect trigger, remove confirm/cancel), and `common.*`
  * only resolves through a host locale runtime that isolated component
  * tests do not install — plugin-local keeps the copy real and testable
  * without that dependency.
+ *
+ * Provider-wizard copy is NOT here: a provider plugin owns its own overlay
+ * (see `dsh-plugin-connector-lark/src/client/i18n.ts`), so the keys the
+ * retired per-provider dialog used — the submit verb, the credential privacy
+ * hint, the platform-picker heading and the `Provider` column label — live
+ * there now and were dropped from this catalog.
  */
 export const connectI18n: PluginCatalogOverlay = {
   en: {
@@ -30,15 +36,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.empty": "No connects yet",
     "options.connect.dsh.emptyDescription":
       "Add a connect to bind a messaging platform to an agent preset.",
-    "options.connect.dsh.provider": "Provider",
-    "options.connect.dsh.wizard.pickProvider": "Choose a platform",
     "options.connect.dsh.wizard.pickSubtitle":
       "Choose the platform to connect; that platform's wizard takes over from here.",
     "options.connect.dsh.wizard.noPlatformHint":
       "Missing a platform? Install its connector plugin and it appears here.",
     "options.connect.dsh.wizard.changePlatform": "Change platform",
-    "options.connect.dsh.wizard.privacyHint":
-      "Credentials stay on this device and are never sent to the model",
     "options.connect.dsh.wizard.noWizard":
       "This platform has no setup wizard installed.",
     "options.connect.dsh.name": "Connect name",
@@ -55,7 +57,6 @@ export const connectI18n: PluginCatalogOverlay = {
       "Remove this connect? This cannot be undone.",
     "options.connect.dsh.confirmRemoveAction": "Confirm removal",
     "options.connect.dsh.cancel": "Cancel",
-    "options.connect.dsh.submit": "Add",
     "options.connect.dsh.loading": "Loading…",
     "options.connect.dsh.owners": "{count} owners",
     "options.connect.dsh.pairingExplanation":
@@ -94,14 +95,11 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.empty": "尚未配置连接",
     "options.connect.dsh.emptyDescription":
       "添加一个连接，把消息平台绑定到某个 Agent Preset。",
-    "options.connect.dsh.provider": "Provider",
-    "options.connect.dsh.wizard.pickProvider": "选择平台",
     "options.connect.dsh.wizard.pickSubtitle":
       "选择要接入的平台，接下来由该平台的接入向导接管。",
     "options.connect.dsh.wizard.noPlatformHint":
       "没有你要的平台？安装对应的连接器插件后会出现在这里。",
     "options.connect.dsh.wizard.changePlatform": "换个平台",
-    "options.connect.dsh.wizard.privacyHint": "凭证只保存在本机，不会发送给模型",
     "options.connect.dsh.wizard.noWizard": "该平台暂无接入向导",
     "options.connect.dsh.name": "连接名称",
     "options.connect.dsh.agentPreset": "Agent Preset",
@@ -116,7 +114,6 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.confirmRemove": "确认移除此连接？该操作无法撤销。",
     "options.connect.dsh.confirmRemoveAction": "确认移除",
     "options.connect.dsh.cancel": "取消",
-    "options.connect.dsh.submit": "添加",
     "options.connect.dsh.loading": "加载中…",
     "options.connect.dsh.owners": "{count} 位所有者",
     "options.connect.dsh.pairingExplanation":

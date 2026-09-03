@@ -62,7 +62,6 @@ export const larkI18n: PluginCatalogOverlay = {
       "Switched login domain — scan again if the code doesn't work.",
     "options.connect.dsh.cancel": "Cancel",
     "options.connect.dsh.submit": "Add",
-    "options.connect.dsh.loading": "Loading…",
   },
   "zh-CN": {
     "options.connect.dsh.lark.title": "接入飞书",
@@ -98,6 +97,5 @@ export const larkI18n: PluginCatalogOverlay = {
       "登录域名已切换，如二维码失效请重新扫码。",
     "options.connect.dsh.cancel": "取消",
     "options.connect.dsh.submit": "添加",
-    "options.connect.dsh.loading": "加载中…",
   },
 };
