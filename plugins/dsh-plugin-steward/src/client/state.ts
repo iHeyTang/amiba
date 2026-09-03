@@ -1,3 +1,9 @@
+import type {
+  SessionBadgeContribution,
+  SessionBadgeTarget,
+  SessionFilterContribution,
+} from "@amiba/dsh-plugin-ui-shell/client";
+
 /** Tiny client-side cache: the steward session id and which sessions are already managed. */
 export interface StewardClientState {
   stewardSessionId(): string | null;
@@ -31,5 +37,26 @@ export function createStewardClientState(): StewardClientState {
         listeners.delete(listener);
       };
     },
+  };
+}
+
+/**
+ * The `amiba.sessions.item.badge` business face: a session carries the
+ * 「大管家」 badge exactly when it's in the live adopted set. `resolve` reads
+ * `state.adoptedSessionIds()` at CALL time (not at registration time), so a
+ * later `state.setAdopted(...)` — from the periodic refresh, an adopt, or
+ * the initial apply-time fetch in `index.tsx` — is reflected the next time
+ * the host calls `resolve` for that session, with no extra plumbing needed.
+ */
+export function stewardBadgeFace(state: StewardClientState): SessionBadgeContribution {
+  return {
+    resolve: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
+  };
+}
+
+/** The `amiba.sessions.list.filter` business face — same live read, keyed as a boolean test. */
+export function stewardFilterFace(state: StewardClientState): SessionFilterContribution {
+  return {
+    test: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
   };
 }

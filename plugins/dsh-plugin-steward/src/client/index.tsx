@@ -9,8 +9,7 @@ import { AMIBA_STEWARD_REMOTE } from "../remote.js";
 import { STEWARD_PRESET_ID, type AdoptResult, type StewardTask } from "../types.js";
 import { AdoptAction } from "./AdoptAction.js";
 import { StewardNavigation } from "./StewardNavigation.js";
-import { TaskBoard } from "./TaskBoard.js";
-import { createStewardClientState } from "./state.js";
+import { createStewardClientState, stewardBadgeFace, stewardFilterFace } from "./state.js";
 
 export const name = "amiba-steward-ui";
 export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVisibility"];
@@ -48,6 +47,24 @@ function copy() {
   return document.documentElement.lang.toLowerCase().startsWith("zh") ? "大管家" : "Steward";
 }
 
+/**
+ * The registered component for `amiba.sessions.item.badge` /
+ * `amiba.sessions.list.filter` — never rendered. The shell reads these
+ * registrations by enumerating `entriesOfSlot` and calling `options.label` /
+ * `inject().resolve` / `inject().test` directly (see
+ * `createSessionBadgesSource` / `createSessionFiltersSource` in
+ * `dsh-plugin-ui-shell`'s `session-list-sources.ts`); it never mounts the
+ * component through a slot renderer. A component is still required to
+ * satisfy `ctx.slots.register`'s signature, exactly like `settings.section`
+ * registrants that also carry a component argument.
+ */
+function NoopComponent(): ReactNode {
+  return null;
+}
+
+/** How often the adopted-session set is re-fetched while the plugin is mounted. */
+const REFRESH_INTERVAL_MS = 20_000;
+
 function openSession(sessionId: string): void {
   // The host's open-by-id seam (see cron's client): admits any valid DSH id,
   // including ones hidden from the history list.
@@ -67,13 +84,29 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           return sessionId;
         });
       const listTasks = (includeDone: boolean): Promise<StewardTask[]> => valueOf(remote.listTasks(includeDone));
-      const adopt = (sessionId: string): Promise<AdoptResult> => valueOf(remote.adopt({ sessionId }));
+      // `listTasks(true)` (include done) so a task's session keeps its
+      // 大管家 badge/filter membership even after the task itself finishes —
+      // the managed set is about "did the steward ever adopt this session",
+      // not "is it still active".
       const refreshAdopted = () =>
         listTasks(true).then((tasks) => state.setAdopted(tasks.map((task) => task.sessionId))).catch(() => undefined);
+      const adopt = (sessionId: string): Promise<AdoptResult> =>
+        valueOf(remote.adopt({ sessionId })).then((result) => {
+          // `AdoptAction` already adds `result.task.sessionId` to the local
+          // set optimistically; this refetches from the host so the set
+          // stays correct even if adopt routed to a different/existing
+          // session than the one that was clicked (see `AdoptResult`).
+          if (result.kind === "adopted") void refreshAdopted();
+          return result;
+        });
       // Learn the steward id up front so the nav row can highlight and the
       // header seats can tell the steward session apart before the first click.
       void ensureStewardSession().catch(() => undefined);
       void refreshAdopted();
+      // Task completion, and adoption from another client/window, don't
+      // notify this client — poll so the badge/filter set stays close to
+      // the host's truth without a push channel.
+      const refreshIntervalId = setInterval(() => void refreshAdopted(), REFRESH_INTERVAL_MS);
 
       const disposeHidden = injectedCtx.amibaSessionVisibility.hidePreset(STEWARD_PRESET_ID);
       // `ctx.sessions` resolves inconsistently in this package's TS program:
@@ -114,23 +147,36 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           StewardNavigation as (props: PropsRuntime<"amiba.workspace.navigation">) => ReactNode,
         ),
       );
-      const disposeBoard = injectedCtx.slots.inject("conversation.session.header.utilities", () =>
+      // Session list: mark every session the steward has ever adopted with
+      // a 「大管家」 badge, and let the sidebar filter down to just those (or
+      // just the un-adopted ones). Both faces read `state.adoptedSessionIds()`
+      // live (see `stewardBadgeFace`/`stewardFilterFace` in `state.ts`), so
+      // `refreshAdopted()` above — at apply, after an adopt, and every
+      // `REFRESH_INTERVAL_MS` — is all that's needed to keep them current;
+      // the registered component itself is never rendered (see
+      // `NoopComponent`'s doc comment).
+      const disposeBadge = injectedCtx.slots.inject("amiba.sessions.item.badge", () =>
         injectedCtx.slots.register(
           {
-            name: "conversation.session.header.utilities",
-            id: "steward-board",
+            name: "amiba.sessions.item.badge",
+            id: NAV_ID,
             order: 50,
-            inject: () => ({ state, listTasks, openSession }),
+            label: copy,
+            inject: () => stewardBadgeFace(state),
           },
-          (
-            props: PropsRuntime<"conversation.session.header.utilities"> & {
-              state: typeof state;
-              listTasks: typeof listTasks;
-              openSession: typeof openSession;
-            },
-          ) => (
-            <TaskBoard sessionId={String(props.sessionId)} state={props.state} listTasks={props.listTasks} openSession={props.openSession} />
-          ),
+          NoopComponent,
+        ),
+      );
+      const disposeFilter = injectedCtx.slots.inject("amiba.sessions.list.filter", () =>
+        injectedCtx.slots.register(
+          {
+            name: "amiba.sessions.list.filter",
+            id: NAV_ID,
+            order: 50,
+            label: copy,
+            inject: () => stewardFilterFace(state),
+          },
+          NoopComponent,
         ),
       );
       const disposeAdopt = injectedCtx.slots.inject("conversation.session.header.actions", () =>
@@ -150,8 +196,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         ),
       );
       return () => {
+        clearInterval(refreshIntervalId);
         disposeAdopt();
-        disposeBoard();
+        disposeFilter();
+        disposeBadge();
         disposeNavigation();
         disposeHidden();
       };
