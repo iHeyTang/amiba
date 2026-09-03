@@ -77,6 +77,19 @@ describe("ConnectQuestionScreen", () => {
     expect(screen.getByText("respond-failed")).toBeInTheDocument();
   });
 
+  // Spec: "the same chrome in the composer seat, sized like the plan-review
+  // card". Everything docked above the composer — approvals, ClarifyBanner,
+  // dock errors — shares ComposerDockSheet; the seat occupant renders INSIDE
+  // it, never in a card of its own.
+  it("renders inside the shared composer dock sheet", async () => {
+    const { container } = render(<ConnectQuestionScreen {...props(undefined)} />);
+    await screen.findByRole("heading");
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass("amiba-dock-sheet");
+    expect(root.querySelector("[data-wizard-frame]")).not.toBeNull();
+    expect(container.querySelector("[data-connect-question-screen]")).toBeNull();
+  });
+
   it("cancel closes the wait", async () => {
     const p = props(undefined);
     render(<ConnectQuestionScreen {...p} />);

@@ -1,7 +1,7 @@
 import type { AmibaConversationQuestionOwner } from "@amiba/extension-sdk";
 import { useEffect, useMemo, useState } from "react";
 
-import { usePluginT } from "@amiba/ui/plugin";
+import { ComposerDockSheet, usePluginT } from "@amiba/ui/plugin";
 
 import type { ConnectAdapter } from "./adapter.js";
 import { describeError } from "./describe-error.js";
@@ -23,6 +23,12 @@ export type ConnectQuestionScreenProps = AmibaConversationQuestionOwner & {
  * `amiba.connect-wizard`: core's chooser when the tool passed no provider,
  * else the platform's own screen. The answer carries only the connect id —
  * never a credential, never the wizard's form state.
+ *
+ * It renders INSIDE `ComposerDockSheet` — the one container every surface
+ * docked above the composer shares (approvals, ClarifyBanner, dock errors) —
+ * so the wizard slides out of the same toaster as a question would. The spec
+ * calls this "the same chrome in the composer seat"; a card of the seat's
+ * own would be a second visual language for one kind of wait.
  *
  * Plainly typed on purpose (the owner share plus the three injected
  * dependencies) and registered DIRECTLY in `index.tsx` — there is no wrapper
@@ -93,10 +99,7 @@ export function ConnectQuestionScreen({
         }
       : undefined;
   return (
-    <div
-      className="mx-auto w-full max-w-3xl rounded-2xl border border-border bg-background shadow-[0_-18px_42px_-24px_rgb(0_0_0_/_0.18),0_8px_24px_-18px_rgb(0_0_0_/_0.17)]"
-      data-connect-question-screen=""
-    >
+    <ComposerDockSheet>
       {providerId ? (
         <ProviderScreen
           adapter={adapter}
@@ -119,16 +122,16 @@ export function ConnectQuestionScreen({
         />
       )}
       {loadFailure ? (
-        <p className="px-4 pb-3 text-xs text-destructive">
+        <p className="px-4 pt-2 text-xs text-destructive">
           {describeError(t, loadFailure)}
         </p>
       ) : null}
-      {error ? <p className="px-4 pb-3 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="px-4 pt-2 text-xs text-destructive">{error}</p> : null}
       {inFlight ? (
-        <p className="px-4 pb-3 text-xs text-muted-foreground">
+        <p className="px-4 pt-2 text-xs text-muted-foreground">
           {t("options.connect.dsh.loading")}
         </p>
       ) : null}
-    </div>
+    </ComposerDockSheet>
   );
 }

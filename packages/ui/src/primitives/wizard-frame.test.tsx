@@ -43,4 +43,19 @@ describe("WizardFrame", () => {
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
+
+  // Docked above the composer the frame sits inside ComposerDockSheet, whose
+  // own bottom padding already clears the composer card. The frame hands its
+  // vertical insets to the sheet through an ancestor variant (a provider
+  // wizard renders the frame from its own bundle and cannot be told which
+  // seat mounted it), so a docked wizard sits as tight as ClarifyBanner.
+  it("hands its vertical insets to the composer dock sheet when docked", () => {
+    const { container } = render(
+      <WizardFrame title="T" actions={<button type="button">go</button>}>
+        <p>x</p>
+      </WizardFrame>,
+    );
+    expect(container.querySelector("header")).toHaveClass("[.amiba-dock-sheet_&]:pt-3");
+    expect(container.querySelector("footer")).toHaveClass("[.amiba-dock-sheet_&]:pb-0");
+  });
 });

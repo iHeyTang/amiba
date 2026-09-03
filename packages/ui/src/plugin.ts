@@ -35,6 +35,14 @@ export {
   DialogTitle,
 } from "./primitives/dialog";
 export { WizardFrame, type WizardFrameProps, type WizardTab } from "./primitives/wizard-frame";
+// The ONE container for anything docked above the composer (approvals,
+// questions, errors). A plugin occupying the `amiba.conversation.question`
+// seat renders INSIDE it, never in a card of its own.
+export {
+  ComposerDockSheet,
+  type ComposerDockSheetProps,
+  type ComposerDockTone,
+} from "./chat/ComposerDockSheet";
 export { Input } from "./primitives/input";
 export { Label } from "./primitives/label";
 export { PageContent } from "./primitives/page-content";

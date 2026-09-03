@@ -32,6 +32,13 @@ export interface WizardFrameProps {
  * subtitle + close), optional tab row, body, footer (hint left, actions
  * right). It is a set of parts a screen composes, never a container that
  * wraps someone else's screen: the caller owns every button in `actions`.
+ *
+ * Docked above the composer it sits inside `ComposerDockSheet`, whose
+ * `pb-5` already clears the composer card; the `[.amiba-dock-sheet_&]`
+ * variants below tighten the header and drop the footer's bottom inset there
+ * so a docked wizard reads as tight as the approval and question sheets. An
+ * ancestor selector, not a prop: provider wizards render the frame from their
+ * own bundles without knowing which seat mounted them.
  */
 export function WizardFrame({
   icon, title, subtitle, tabs, hint, actions, onClose, closeLabel, className, children,
@@ -39,7 +46,7 @@ export function WizardFrame({
   const hasFooter = Boolean(hint) || Boolean(actions);
   return (
     <section className={cn("flex min-w-0 flex-col", className)} data-wizard-frame="">
-      <header className="flex items-start gap-3 px-4 pt-4">
+      <header className="flex items-start gap-3 px-4 pt-4 [.amiba-dock-sheet_&]:pt-3">
         {icon ? (
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-primary/25 bg-background text-primary shadow-sm">
             {icon}
@@ -85,7 +92,7 @@ export function WizardFrame({
       ) : null}
       <div className="px-4 pb-1 pt-4">{children}</div>
       {hasFooter ? (
-        <footer className="mt-3 flex items-center gap-2 border-t border-border/70 px-4 pb-4 pt-3">
+        <footer className="mt-3 flex items-center gap-2 border-t border-border/70 px-4 pb-4 pt-3 [.amiba-dock-sheet_&]:pb-0">
           <div className="mr-auto flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             {hint}
           </div>
