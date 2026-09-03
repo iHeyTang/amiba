@@ -22,6 +22,7 @@ import {
   useSettingsShell,
   type SettingsOnboardingStepsSource,
 } from "./settings-shell.js";
+import { officialListFingerprint } from "./official-index-sync.js";
 import type { HiddenPresetsSource } from "./session-visibility.js";
 import { useT } from "@amiba/i18n";
 import {
@@ -372,6 +373,15 @@ function ProductShellInner({
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
   const sessions = useSessions();
+  // Host-side session changes (a plugin creating a task session, a blank
+  // session getting its first turn) reach the official list live; re-read
+  // Amiba's own index whenever the facts it renders change, so the sidebar
+  // does not wait for the next open-by-id or window switch.
+  const officialFingerprint = useOfficialSessions(officialListFingerprint);
+  useEffect(() => {
+    if (!sessions.ready) return;
+    void sessions.refresh();
+  }, [officialFingerprint, sessions.ready, sessions.refresh]);
   const activeIdRef = useRef(sessions.activeId);
   activeIdRef.current = sessions.activeId;
   const mentionProviders = useMemo(
