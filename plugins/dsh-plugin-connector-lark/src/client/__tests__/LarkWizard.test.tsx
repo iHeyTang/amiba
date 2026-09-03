@@ -105,6 +105,7 @@ function cancelControls() {
 const beginButton = () =>
   screen.getByRole("button", { name: /开始扫码|scanning/i });
 const manualTab = () => screen.getByRole("tab", { name: /手动填写|Manual/ });
+const scanTab = () => screen.getByRole("tab", { name: /扫码接入|Scan to connect/ });
 
 afterEach(() => vi.useRealTimers());
 
@@ -392,6 +393,50 @@ describe("LarkWizard", () => {
     poll.mockClear();
     await flush(3000);
     expect(poll).not.toHaveBeenCalled();
+  });
+
+  // Re-selecting the tab you are already on is not a mode CHANGE, so it must
+  // not tear down a live scan: the QR the user is looking at stays on screen.
+  it("re-selecting the active scan tab leaves the live session alone", async () => {
+    vi.useFakeTimers();
+    const poll = vi.fn(async () => ({
+      sessionId: "s1",
+      state: "pending",
+      qrUrl: "https://x/qr",
+    }));
+    const cancel = vi.fn(async () => ({ sessionId: "s1", state: "cancelled" }));
+    const host = hostWith({
+      adapter: {
+        create: vi.fn(),
+        beginOnboarding: vi.fn(async () => ({
+          sessionId: "s1",
+          state: "pending",
+        })),
+        pollOnboarding: poll,
+        cancelOnboarding: cancel,
+      } as never,
+    });
+    render(<LarkWizard host={host} />);
+    typeName();
+    await act(async () => {
+      fireEvent.click(beginButton());
+    });
+    await flush(1600);
+    screen.getByAltText(/二维码|QR/);
+
+    await act(async () => {
+      fireEvent.click(scanTab());
+    });
+
+    expect(cancel).not.toHaveBeenCalled();
+    expect(screen.getByAltText(/二维码|QR/)).toBeInTheDocument();
+
+    // A real change still cancels exactly once (the existing behaviour).
+    await act(async () => {
+      fireEvent.click(manualTab());
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledWith("s1");
   });
 
   // The retired per-provider dialog gated creation on a connect name AND a

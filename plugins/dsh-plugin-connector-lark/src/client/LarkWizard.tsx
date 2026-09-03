@@ -220,8 +220,13 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
    * only the scan-to-manual direction. Switching back to scan intentionally
    * starts fresh: nothing here re-adopts the session just cancelled or begins
    * a new one — the user has to click "Start scanning" again.
+   *
+   * Both tabs are always clickable, so the FIRST thing this does is bail on a
+   * no-op re-selection: clicking the tab you are already on is not a mode
+   * change, and cancelling there would kill the very QR the user is scanning.
    */
   function handleModeChange(next: "scan" | "manual") {
+    if (next === mode) return;
     setMode(next);
     cancelCurrentSession();
   }
