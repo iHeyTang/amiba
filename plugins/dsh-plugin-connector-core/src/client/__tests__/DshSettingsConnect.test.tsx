@@ -282,10 +282,10 @@ describe("DshSettingsConnect", () => {
   // otherwise the very first add fails with `agent_preset_required`.
   it("hands the mounted wizard body the default preset once the lazy preset load resolves", async () => {
     const registry = createConnectWizardRegistry();
-    const captured: { agentPreset?: string } = {};
+    const captured: { host?: ConnectWizardHost } = {};
     registry.register("lark", {
       component: ({ host }: { host: ConnectWizardHost }) => {
-        captured.agentPreset = host.agentPreset;
+        captured.host = host;
         return <div>lark body</div>;
       },
     });
@@ -307,12 +307,12 @@ describe("DshSettingsConnect", () => {
     await userEvent.click((await screen.findAllByText(/添加连接|Add connect/))[0]!);
     await userEvent.click(await screen.findByText("飞书 / Lark"));
     expect(await screen.findByText("lark body")).toBeInTheDocument();
-    expect(captured.agentPreset).toBe("");
+    expect(captured.host?.presets.map((p) => p.id)).not.toContain("restricted");
 
     await act(async () => {
       resolvePresets([{ id: "restricted", label: "Restricted", isDefault: true }]);
     });
-    expect(captured.agentPreset).toBe("restricted");
+    expect(captured.host?.presets.map((p) => p.id)).toContain("restricted");
   });
 
   // A provider plugin's client half can finish registering its wizard after

@@ -28,10 +28,6 @@ export interface ConnectWizardHost {
   back(): void;
   done(connect: ConnectView): void;
   cancel(): void;
-  /** @deprecated Phase B: the wizard owns the name; removed in Task 4. */
-  connectName: string;
-  /** @deprecated Phase B: the wizard owns the preset; removed in Task 4. */
-  agentPreset: string;
 }
 
 /** A provider's registry contribution: its wizard body plus picker chrome. */

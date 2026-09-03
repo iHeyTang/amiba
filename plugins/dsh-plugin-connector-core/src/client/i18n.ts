@@ -32,7 +32,13 @@ export const connectI18n: PluginCatalogOverlay = {
       "Add a connect to bind a messaging platform to an agent preset.",
     "options.connect.dsh.provider": "Provider",
     "options.connect.dsh.wizard.pickProvider": "Choose a platform",
-    "options.connect.dsh.wizard.back": "Back",
+    "options.connect.dsh.wizard.pickSubtitle":
+      "Choose the platform to connect; that platform's wizard takes over from here.",
+    "options.connect.dsh.wizard.noPlatformHint":
+      "Missing a platform? Install its connector plugin and it appears here.",
+    "options.connect.dsh.wizard.changePlatform": "Change platform",
+    "options.connect.dsh.wizard.privacyHint":
+      "Credentials stay on this device and are never sent to the model",
     "options.connect.dsh.wizard.noWizard":
       "This platform has no setup wizard installed.",
     "options.connect.dsh.name": "Connect name",
@@ -85,7 +91,12 @@ export const connectI18n: PluginCatalogOverlay = {
       "添加一个连接，把消息平台绑定到某个 Agent Preset。",
     "options.connect.dsh.provider": "Provider",
     "options.connect.dsh.wizard.pickProvider": "选择平台",
-    "options.connect.dsh.wizard.back": "返回",
+    "options.connect.dsh.wizard.pickSubtitle":
+      "选择要接入的平台，接下来由该平台的接入向导接管。",
+    "options.connect.dsh.wizard.noPlatformHint":
+      "没有你要的平台？安装对应的连接器插件后会出现在这里。",
+    "options.connect.dsh.wizard.changePlatform": "换个平台",
+    "options.connect.dsh.wizard.privacyHint": "凭证只保存在本机，不会发送给模型",
     "options.connect.dsh.wizard.noWizard": "该平台暂无接入向导",
     "options.connect.dsh.name": "连接名称",
     "options.connect.dsh.agentPreset": "Agent Preset",

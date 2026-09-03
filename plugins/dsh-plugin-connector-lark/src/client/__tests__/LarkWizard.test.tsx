@@ -69,8 +69,6 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
     back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
-    connectName: "",
-    agentPreset: "",
     ...overrides,
   } as ConnectWizardHost;
 }

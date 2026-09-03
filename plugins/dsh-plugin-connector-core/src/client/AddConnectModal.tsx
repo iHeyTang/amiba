@@ -1,12 +1,12 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import {
-  Dialog, DialogContent, DialogDescription, DialogTitle, usePluginT,
-} from "@amiba/ui/plugin";
+import { Dialog, DialogContent, DialogTitle, usePluginT } from "@amiba/ui/plugin";
 
 import type { ConnectAdapter } from "./adapter.js";
-import { ConnectWizardChrome } from "./ConnectWizardChrome.js";
 import { connectI18n } from "./i18n.js";
+import { ProviderChooser } from "./ProviderChooser.js";
+import { ProviderScreen } from "./ProviderScreen.js";
 import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
 import type { ConnectorProviderView } from "../types.js";
 
@@ -21,37 +21,46 @@ export interface AddConnectModalProps {
 }
 
 /**
- * Modal chrome around `ConnectWizardChrome`: owns the Dialog frame (title +
- * description via connector-core's own `connectI18n` overlay) and the two
- * lifecycle edges the wizard itself doesn't know about — closing the dialog
- * on cancel, and closing it + notifying the caller on a completed create.
- * `DshSettingsConnect` mounts this in place of the retired
- * `CreateConnectDialog` (Task 5 deletes that dialog's code).
+ * Screen 1 is core's chooser; screen 2 is the chosen platform's whole
+ * wizard. The dialog draws no title of its own beyond the a11y one — every
+ * other pixel belongs to whichever screen is mounted.
  */
 export function AddConnectModal({
   open, onOpenChange, adapter, registry, providers, presets, onCreated,
 }: AddConnectModalProps): ReactNode {
   const { t } = usePluginT(connectI18n);
+  const [providerId, setProviderId] = useState("");
+  useEffect(() => {
+    if (!open) setProviderId("");
+  }, [open]);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogTitle>{t("options.connect.dsh.add")}</DialogTitle>
-        <DialogDescription>{t("options.connect.dsh.addDescription")}</DialogDescription>
-        <div className="pt-2">
-          {open ? (
-            <ConnectWizardChrome
-              adapter={adapter}
-              registry={registry}
-              providers={providers}
-              presets={presets}
-              onCancel={() => onOpenChange(false)}
-              onDone={() => {
-                onOpenChange(false);
-                onCreated();
-              }}
-            />
-          ) : null}
-        </div>
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className={providerId ? "max-w-[600px] p-0" : "max-w-lg p-0"}>
+        <DialogTitle className="sr-only">{providerId || t("options.connect.dsh.add")}</DialogTitle>
+        {!open ? null : providerId ? (
+          <ProviderScreen
+            adapter={adapter}
+            onBack={() => setProviderId("")}
+            onCancel={() => onOpenChange(false)}
+            onDone={() => {
+              onOpenChange(false);
+              onCreated();
+            }}
+            presets={presets}
+            providerId={providerId}
+            registry={registry}
+          />
+        ) : (
+          <ProviderChooser
+            hint={t("options.connect.dsh.wizard.noPlatformHint")}
+            onCancel={() => onOpenChange(false)}
+            onPick={setProviderId}
+            providers={providers}
+            registry={registry}
+            subtitle={t("options.connect.dsh.wizard.pickSubtitle")}
+            title={t("options.connect.dsh.add")}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
