@@ -19,7 +19,7 @@ describe("StewardService — steward session", () => {
   it("resumes a persisted steward session on start and recreates it when unloadable", async () => {
     const first = harness();
     const id = await first.service.ensureStewardSessionId();
-    first.service.dispose();
+    await first.service.dispose();
 
     const second = harness();
     await second.store.mutate((s) => ({ ...s, stewardSessionId: id }));
@@ -34,6 +34,17 @@ describe("StewardService — steward session", () => {
     const fresh = await third.service.ensureStewardSessionId();
     expect(fresh).not.toBe("session-gone");
     expect(third.created).toHaveLength(1);
+  });
+
+  it("registers steward tools onto an already-live steward agent", async () => {
+    const { service, store, live, created, resumed, onStewardSetup, makeAgent } = harness();
+    const id = "session-live";
+    await store.mutate((s) => ({ ...s, stewardSessionId: id }));
+    live.set(id, makeAgent(id));
+    expect(await service.ensureStewardSessionId()).toBe(id);
+    expect(onStewardSetup).toHaveBeenCalledWith(live.get(id)!.ctx);
+    expect(created).toHaveLength(0);
+    expect(resumed).toHaveLength(0);
   });
 
   it("propagates a resume failure instead of recreating the steward session", async () => {
@@ -233,8 +244,8 @@ describe("StewardService — reporting", () => {
     expect(created).toHaveLength(3);
   });
 
-  it("flags needs_input when a managed session asks via the tool, and clears it on the result", async () => {
-    const { service, live, emit } = harness();
+  it("flags needs_input at once but only relays the question after the notice delay", async () => {
+    const { service, live, emit } = harness({ askNoticeDelayMs: 10 });
     const stewardId = await service.ensureStewardSessionId();
     const { taskId, sessionId } = await service.dispatch({ newTask: { title: "D" }, message: "go" });
     emit(sessionId, { type: "tool/call", seq: 0, time: 1, data: { turn: 0, step: 0, callId: "c1", name: "ask_user_question", arguments: "{}" } });
@@ -248,6 +259,19 @@ describe("StewardService — reporting", () => {
     expect((await service.listTasks())[0]!.id).toBe(taskId);
   });
 
+  it("does not relay a question the guard denied", async () => {
+    const { service, live, emit } = harness({ askNoticeDelayMs: 10 });
+    const stewardId = await service.ensureStewardSessionId();
+    const { sessionId } = await service.dispatch({ newTask: { title: "G" }, message: "go" });
+    // The guard denies at EXECUTION time, so the request is already logged as a
+    // tool/call and the denial follows immediately as its tool/result.
+    emit(sessionId, { type: "tool/call", seq: 0, time: 1, data: { turn: 0, step: 0, callId: "c1", name: "ask_user_question", arguments: "{}" } });
+    emit(sessionId, { type: "tool/result", seq: 1, time: 1, data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+    expect((await service.listTasks())[0]!.status).toBe("running");
+  });
+
   it("does not report or revive a task closed while its session was mid-turn", async () => {
     const { service, live, emit } = harness();
     const stewardId = await service.ensureStewardSessionId();
@@ -259,11 +283,22 @@ describe("StewardService — reporting", () => {
     expect((await service.listTasks(true))[0]!.status).toBe("done");
   });
 
+  it("creates no agent for a deliver queued across dispose()", async () => {
+    const { service, emit, created, resumed } = harness();
+    const { sessionId } = await service.dispatch({ newTask: { title: "H" }, message: "go" });
+    expect(created).toHaveLength(1); // the task session only; no steward yet
+    await service.dispose();
+    for (const event of turnEvents(0, "late")) emit(sessionId, event);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(created).toHaveLength(1);
+    expect(resumed).toHaveLength(0);
+  });
+
   it("re-reports turns that completed while the runtime was down", async () => {
     const first = harness();
     const stewardId = await first.service.ensureStewardSessionId();
     const { taskId, sessionId } = await first.service.dispatch({ newTask: { title: "E" }, message: "go" });
-    first.service.dispose();
+    await first.service.dispose();
 
     const second = harness();
     await second.store.mutate(() => ({

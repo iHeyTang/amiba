@@ -39,12 +39,24 @@ const ASK_USER_DENIED =
 const SUMMARY_CHARS = 200;
 const UNTITLED = "未命名任务";
 
+/**
+ * How long a managed session's `ask_user_question` must stay pending before
+ * the steward tells the user to go answer it. The guard denies the call at
+ * EXECUTION time, i.e. after the model's request was already appended as a
+ * `tool/call` — so an immediate notice would report a question that never
+ * reaches the user. Waiting one beat lets the denial's `tool/result` land and
+ * cancel the notice.
+ */
+const ASK_NOTICE_DELAY_MS = 1_500;
+
 export interface StewardServiceOptions {
   defaultCwd: string;
   taskPreset?: string;
   presetId: string;
   onStewardSetup?: (agentCtx: Context) => void;
   now?: () => number;
+  /** @see ASK_NOTICE_DELAY_MS */
+  askNoticeDelayMs?: number;
 }
 
 // An intersection (not `extends`) so this file's narrower service-shaped
@@ -85,6 +97,8 @@ export class StewardService {
   private stewardHandle: { agent: Agent; dispose(): Promise<void> } | null = null;
   private stewardPending: Promise<Agent> | null = null;
   private readonly taskAgents = new Map<string, Promise<Agent>>();
+  /** Per-task deferred "go answer the question" notices, keyed by task id. */
+  private readonly askTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Serializes reconcile/report work so two events for one task never interleave. */
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
@@ -109,11 +123,23 @@ export class StewardService {
     await this.recover();
   }
 
-  dispose(): void {
+  /**
+   * Awaitable so the plugin's effect disposer can hold unload open until the
+   * steward agent is really gone — a report still queued behind `dispose()`
+   * would otherwise resurrect it (`ensureStewardAgent` now refuses once
+   * disposed, which is the other half of that guarantee).
+   */
+  async dispose(): Promise<void> {
     this.disposed = true;
+    for (const timer of this.askTimers.values()) clearTimeout(timer);
+    this.askTimers.clear();
     const handle = this.stewardHandle;
     this.stewardHandle = null;
-    void handle?.dispose().catch(() => undefined);
+    try {
+      await handle?.dispose();
+    } catch {
+      // Teardown is best-effort; the owner is unloading either way.
+    }
   }
 
   // ── steward session ──────────────────────────────────────────────────
@@ -123,6 +149,9 @@ export class StewardService {
   }
 
   private ensureStewardAgent(): Promise<Agent> {
+    // Never mint (or adopt) an agent after unload has begun: a report racing
+    // `dispose()` would otherwise leave a live steward nobody owns.
+    if (this.disposed) return Promise.reject(new Error("steward: disposed"));
     if (this.stewardHandle) return Promise.resolve(this.stewardHandle.agent);
     if (this.stewardPending) return this.stewardPending;
     this.stewardPending = (async () => {
@@ -135,7 +164,15 @@ export class StewardService {
         const id = state.stewardSessionId;
         const live = this.ctx.agents.get(id as never) as Agent | undefined;
         if (live) {
-          this.log.warn("steward: reusing an already-live steward agent; steward tools were not registered by this plugin");
+          // Someone else (the UI, a resume elsewhere) already owns this agent,
+          // so we hold no handle for it — but its scope still needs the
+          // steward_* tools or the steward would sit there tool-less.
+          try {
+            this.options.onStewardSetup?.(live.ctx);
+            this.log.warn("steward: reusing an already-live steward agent; the steward tools were registered onto it");
+          } catch (error) {
+            this.log.warn(`steward: could not register the steward tools onto the already-live steward agent: ${String(error)}`);
+          }
           this.stewardHandle = { agent: live, dispose: async () => undefined };
           return live;
         }
@@ -245,13 +282,16 @@ export class StewardService {
         throw error;
       }
     }
+    // `running` lands BEFORE the followup: a turn that starts and ends inside
+    // the same tick would otherwise have its `idle`/`failed` outcome stomped
+    // back to `running` by this write.
+    await this.updateTask(task.id, { status: "running", lastError: undefined });
     agent.followup(
       createUserMessage({
         content: [{ type: "text", text: `${message}\n\n${DISPATCH_FOOTER}` }],
         source: { kind: "plugin", plugin: STEWARD_SOURCE, form: "relay" } as never,
       }),
     );
-    await this.updateTask(task.id, { status: "running", lastError: undefined });
     return { taskId: task.id, sessionId: task.sessionId, created };
   }
 
@@ -381,6 +421,7 @@ export class StewardService {
     const task = await this.taskBySession(session.id as string);
     if (!task) return;
     await this.enqueue(async () => {
+      if (this.disposed) return;
       if (row.type === "turn/end") {
         await this.reconcileTask(task.id, session.events);
         return;
@@ -389,22 +430,58 @@ export class StewardService {
         const fresh = await this.findTask(task.id);
         if (fresh.status === "done") return;
         if (fresh.status === "needs_input") return;
-        await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
         await this.updateTask(task.id, { status: "needs_input" });
+        this.armAskNotice(task.id);
         return;
       }
       if (row.type === "tool/result") {
         const fresh = await this.findTask(task.id);
         if (fresh.status === "done") return;
         if (fresh.status === "needs_input" && pendingAskUser(session.events) === null) {
+          this.clearAskNotice(task.id);
           await this.updateTask(task.id, { status: "running" });
         }
       }
     });
   }
 
+  private clearAskNotice(taskId: string): void {
+    const timer = this.askTimers.get(taskId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    this.askTimers.delete(taskId);
+  }
+
+  /**
+   * Tell the user to go answer, but only once the question has survived a
+   * beat: `tools.guard` denies `ask_user_question` at execution time, i.e.
+   * after the model's request is already in the log, so the denial arrives as
+   * a `tool/result` right behind the `tool/call` that armed this.
+   */
+  private armAskNotice(taskId: string): void {
+    this.clearAskNotice(taskId);
+    const timer = setTimeout(() => {
+      this.askTimers.delete(taskId);
+      void this.enqueue(async () => {
+        if (this.disposed) return;
+        const fresh = await this.findTask(taskId);
+        if (fresh.status !== "needs_input") return;
+        // Read the live log rather than the captured event array: it is the
+        // only view guaranteed to include whatever landed during the delay.
+        const live = this.ctx.agents.get(fresh.sessionId as never) as Agent | undefined;
+        if (!live || pendingAskUser(live.session.events) === null) return;
+        await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
+      }).catch((error) => {
+        this.log.error(`steward: failed to relay a pending question for ${taskId}: ${String(error)}`);
+      });
+    }, this.options.askNoticeDelayMs ?? ASK_NOTICE_DELAY_MS);
+    timer.unref?.();
+    this.askTimers.set(taskId, timer);
+  }
+
   /** Report every completed turn after `lastReportedSeq`, oldest first, then advance the cursor. */
   private async reconcileTask(taskId: string, events: readonly SessionEvent[]): Promise<void> {
+    if (this.disposed) return;
     const task = await this.findTask(taskId);
     if (task.status === "done") return;
     const turns = completedTurns(events, task.lastReportedSeq);

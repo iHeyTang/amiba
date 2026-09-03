@@ -9,7 +9,7 @@ import { StewardStore } from "../store.js";
 
 type Listener = (session: unknown, event: unknown) => unknown;
 
-export function harness(options: { presetAvailable?: boolean } = {}) {
+export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?: number } = {}) {
   const live = new Map<string, FakeAgent>();
   const persisted = new Map<string, { meta: Record<string, unknown>; events: Array<Record<string, unknown>> }>();
   const listeners: Listener[] = [];
@@ -22,6 +22,8 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
   type FakeAgent = {
     id: string;
     followup: ReturnType<typeof vi.fn>;
+    /** Mirrors the real `Agent.ctx`: the agent-scoped context setup composes. */
+    ctx: FakeAgentCtx;
     session: { id: string; header: Record<string, unknown>; events: Array<Record<string, unknown>> };
   };
 
@@ -29,9 +31,10 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
     tools: { guard: vi.fn(() => () => undefined), register: vi.fn(() => () => undefined) },
     effect: vi.fn((run: () => unknown) => { run(); return () => undefined; }),
   });
-  const makeAgent = (id: string, events: Array<Record<string, unknown>> = []): FakeAgent => ({
+  const makeAgent = (id: string, events: Array<Record<string, unknown>> = [], agentCtx = makeAgentCtx()): FakeAgent => ({
     id,
     followup: vi.fn(),
+    ctx: agentCtx,
     session: { id, header: { id }, events },
   });
 
@@ -42,7 +45,7 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
         const agentCtx = makeAgentCtx();
         setupCtxs.set(opts.sessionId, agentCtx);
         if (opts.setup) await opts.setup(agentCtx);
-        const agent = makeAgent(opts.sessionId);
+        const agent = makeAgent(opts.sessionId, [], agentCtx);
         live.set(opts.sessionId, agent);
         persisted.set(opts.sessionId, { meta: { id: opts.sessionId, ...opts.meta }, events: agent.session.events });
         created.push({ sessionId: opts.sessionId, ...(opts.meta ? { meta: opts.meta } : {}) });
@@ -54,7 +57,7 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
         const agentCtx = makeAgentCtx();
         setupCtxs.set(opts.resumeSessionId, agentCtx);
         if (opts.setup) await opts.setup(agentCtx);
-        const agent = makeAgent(opts.resumeSessionId, stored.events);
+        const agent = makeAgent(opts.resumeSessionId, stored.events, agentCtx);
         live.set(opts.resumeSessionId, agent);
         resumed.push(opts.resumeSessionId);
         return { agent, dispose: vi.fn(async () => { disposed.push(opts.resumeSessionId); }) };
@@ -98,6 +101,7 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
     presetId: "amiba-steward",
     onStewardSetup,
     now: () => 5_000,
+    ...(options.askNoticeDelayMs === undefined ? {} : { askNoticeDelayMs: options.askNoticeDelayMs }),
   });
   /** Seed a persisted, cold session the service did not create. */
   const persist = (id: string, events: Array<Record<string, unknown>> = [], meta: Record<string, unknown> = {}) => {
@@ -109,5 +113,5 @@ export function harness(options: { presetAvailable?: boolean } = {}) {
     agent.session.events.push(event);
     for (const listener of listeners) void listener(agent.session, event);
   };
-  return { ctx, store, service, live, persisted, created, resumed, disposed, setupCtxs, onStewardSetup, persist, emit };
+  return { ctx, store, service, live, persisted, created, resumed, disposed, setupCtxs, onStewardSetup, makeAgent, persist, emit };
 }

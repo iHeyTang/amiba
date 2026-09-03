@@ -11,7 +11,6 @@ import { registerStewardTools } from "./tools.js";
 
 export * from "./remote.js";
 export * from "./types.js";
-export { STEWARD_PRESET_ID } from "./preset-seed.js";
 export { StewardService, DISPATCH_FOOTER, formatReport } from "./service.js";
 export { StewardStore } from "./store.js";
 
@@ -49,6 +48,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     presetId: STEWARD_PRESET_ID,
     onStewardSetup: (agentCtx) => registerStewardTools(agentCtx, service),
   });
+  // The disposer returns the teardown promise so unload waits for the
+  // steward agent to actually go away (cordis effect disposers may be async).
   ctx.effect(() => () => service.dispose(), "amiba-steward");
   applyStewardRemote(ctx, service);
   void service.start().catch((error) => {
