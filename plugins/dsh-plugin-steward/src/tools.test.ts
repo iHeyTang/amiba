@@ -48,6 +48,26 @@ describe("steward tools", () => {
     await expect(tools.steward_dispatch!.execute({ task_id: "x", message: "m" }, exec)).rejects.toThrow(/unknown task/u);
   });
 
+  it("coerces malformed arguments to safe defaults instead of throwing", async () => {
+    const service = fakeService();
+    const tools = Object.fromEntries(stewardToolDefinitions(service as never).map((d) => [d.name, d]));
+
+    await tools.steward_list_tasks!.execute({}, exec);
+    expect(service.listTasks).toHaveBeenCalledWith(false);
+
+    await tools.steward_list_tasks!.execute({ include_done: "yes" }, exec);
+    expect(service.listTasks).toHaveBeenLastCalledWith(false);
+
+    await tools.steward_read_task!.execute({ task_id: "task-1", turns: "2" }, exec);
+    expect(service.readTask).toHaveBeenCalledWith("task-1", undefined);
+
+    await tools.steward_dispatch!.execute({ new_task_title: "   ", task_id: "task-1", message: "m" }, exec);
+    expect(service.dispatch).toHaveBeenCalledWith({ taskId: "task-1", newTask: undefined, message: "m" });
+
+    await tools.steward_adopt!.execute({ session_id: "", title_query: " x " }, exec);
+    expect(service.adopt).toHaveBeenCalledWith({ sessionId: undefined, titleQuery: " x ", title: undefined });
+  });
+
   it("registers every tool into the given agent scope through effect()", () => {
     const register = vi.fn(() => () => undefined);
     const effect = vi.fn((run: () => unknown) => { run(); return () => undefined; });

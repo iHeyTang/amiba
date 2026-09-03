@@ -72,7 +72,7 @@ export function stewardToolDefinitions(service: StewardService): ToolDefinition[
     {
       name: "steward_adopt",
       description:
-        "Bring an existing conversation under the steward's management. Provide `session_id`, or `title_query` to search by title; when several sessions match, the result lists candidates — ask the user which one.",
+        "Bring an existing conversation under the steward's management. Provide `session_id`, or `title_query` to search by title; when zero or several sessions match, the result lists candidates (possibly none) — ask the user which one, or for a session id.",
       parameters: objectSchema({
         session_id: { type: "string", description: "Exact DSH session id." },
         title_query: { type: "string", description: "Words from the conversation's title." },
@@ -104,7 +104,7 @@ export function stewardToolDefinitions(service: StewardService): ToolDefinition[
       execute: async (args: unknown) => {
         const input = record(args);
         const turns = typeof input.turns === "number" ? input.turns : undefined;
-        return textResult(await service.readTask(String(input.task_id ?? ""), turns)) as never;
+        return textResult(await service.readTask(optionalString(input.task_id) ?? "", turns)) as never;
       },
     },
     {
@@ -112,7 +112,7 @@ export function stewardToolDefinitions(service: StewardService): ToolDefinition[
       description: "Mark a task as done. Its conversation is kept; it just leaves the active list.",
       parameters: objectSchema({ task_id: { type: "string", description: "Task id." } }, ["task_id"]) as never,
       output: OUTPUT,
-      execute: async (args: unknown) => textResult(await service.closeTask(String(record(args).task_id ?? ""))) as never,
+      execute: async (args: unknown) => textResult(await service.closeTask(optionalString(record(args).task_id) ?? "")) as never,
     },
   ];
 }
