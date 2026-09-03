@@ -90,6 +90,11 @@ export {
   type ToolCallSeatRequest,
 } from "./bubble/tool-call-seat";
 export {
+  QuestionSeat,
+  type QuestionSeatRenderer,
+  type QuestionSeatRequest,
+} from "./bubble/question-seat";
+export {
   toolCallBlockFromProgress,
   toolCallBlockName,
 } from "./bubble/tool-call-block";

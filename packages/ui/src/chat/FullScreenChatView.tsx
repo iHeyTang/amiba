@@ -48,6 +48,7 @@ import type {
   ComposerPlanSeatRenderer,
 } from "./Composer";
 import type { ToolCallSeatRenderer } from "./bubble/tool-call-seat";
+import type { QuestionSeatRenderer } from "./bubble/question-seat";
 import {
   WorkspacePane,
   WorkspacePaneProvider,
@@ -202,6 +203,15 @@ export interface FullScreenChatViewProps {
      * runtime) and every row renders Amiba's own tool chip.
      */
     toolView?: ToolCallSeatRenderer;
+    /**
+     * renderSlot-backed dispatch of Amiba's keyed
+     * `amiba.conversation.question` seat, forwarded through ChatSurface to
+     * the conversation footer. Omit it (Quick-Ask, any host outside a DSH
+     * plugin runtime) and every pending question renders Amiba's own
+     * `ClarifyBanner`, which is also the `fallback` of every unclaimed
+     * question id.
+     */
+    questionSeat?: QuestionSeatRenderer;
     /**
      * renderSlot-backed dispatch of the official `settings.trigger` seat —
      * the content of the sidebar's settings row. The owner share is

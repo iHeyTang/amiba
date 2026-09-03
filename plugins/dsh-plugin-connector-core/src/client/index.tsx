@@ -5,6 +5,8 @@ import { Cable } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { buildConnectAdapter, type ConnectAdapter } from "./adapter.js";
+import { ConnectAddToolview } from "./ConnectAddToolview.js";
+import { ConnectQuestionScreen } from "./ConnectQuestionScreen.js";
 import { DshSettingsConnect } from "./DshSettingsConnect.js";
 import { loadAgentPresets, type PresetConnection } from "./presets.js";
 import {
@@ -12,6 +14,10 @@ import {
   type ConnectWizardRegistry,
   type PresetOption,
 } from "./wizard-registry.js";
+import {
+  CONNECT_ADD_TOOL_NAME,
+  CONNECT_WIZARD_QUESTION_ID,
+} from "../connect-wizard-question.js";
 import { AMIBA_CONNECTORS_REMOTE } from "../remote.js";
 
 export const name = "amiba-connector-ui";
@@ -42,12 +48,8 @@ declare module "@deepseek-ai/cordis" {
  * on no runtime value from this package — only on the `host` prop it is
  * handed.
  */
-export type {
-  ConnectWizardEntry,
-  ConnectWizardHost,
-  ConnectWizardRegistry,
-  PresetOption,
-} from "./wizard-registry.js";
+export type { ConnectWizardHost, ConnectWizardEntry, ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
+export type { ConnectWizardKit, BasicsFieldsProps } from "./wizard-kit.js";
 
 type ConnectSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ConnectAdapter;
@@ -92,7 +94,16 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaConnectors"],
     (injectedCtx) => {
       const adapter = buildConnectAdapter(injectedCtx.remote.amibaConnectors);
-      return injectedCtx.slots.inject("settings.section", () =>
+      // `connection` is a client-root service present regardless of this
+      // plugin's own `inject` declaration above (mirrors how
+      // dsh-plugin-agent-preset's client/data.ts consumes it) — read via
+      // `ctx.get` at call time instead of adding it to `export const inject`.
+      // Hoisted to ONE stable const so both seats hand their occupant the
+      // same function identity: `ConnectQuestionScreen` keys its loader
+      // effect off it, and a fresh closure per render would re-fetch forever.
+      const loadPresets = () =>
+        loadAgentPresets(ctx.get("connection") as unknown as PresetConnection);
+      const disposeSection = injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
             name: "settings.section",
@@ -106,20 +117,43 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               adapter,
               navIcon: () => <Cable />,
               registry,
-              // `connection` is a client-root service present regardless of
-              // this plugin's own `inject` declaration above (mirrors how
-              // dsh-plugin-agent-preset's client/data.ts consumes it) — read
-              // via `ctx.get` at call time instead of adding it to `export
-              // const inject`.
-              loadPresets: () =>
-                loadAgentPresets(
-                  ctx.get("connection") as unknown as PresetConnection,
-                ),
+              loadPresets,
             }),
           },
           ConnectSettingsSection,
         ),
       );
+      // The conversation seat for the chat wizard: KEYED by the question id
+      // the `amiba_connect_add` tool blocks on, so every other question keeps
+      // rendering the host's built-in banner (the dispatch fallback). The
+      // seat is session-scoped, so the inject factory is handed a
+      // `sessionId` — Connect's wizard is session-independent and ignores it.
+      const disposeQuestionSeat = injectedCtx.slots.inject(
+        "amiba.conversation.question",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.conversation.question",
+              key: CONNECT_WIZARD_QUESTION_ID,
+              inject: () => ({ adapter, registry, loadPresets }),
+            },
+            ConnectQuestionScreen,
+          ),
+      );
+      // The timeline row for the same tool, keyed by its wire name.
+      const disposeToolview = injectedCtx.slots.inject(
+        "tool.call.toolview",
+        () =>
+          injectedCtx.slots.register(
+            { name: "tool.call.toolview", key: CONNECT_ADD_TOOL_NAME },
+            ConnectAddToolview,
+          ),
+      );
+      return () => {
+        disposeToolview();
+        disposeQuestionSeat();
+        disposeSection();
+      };
     },
   );
   await sectionFiber;

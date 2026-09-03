@@ -365,6 +365,7 @@ for (const slot of [
   "amiba.settings.content.overlay",
   "shell.overlay",
   "tool.call.toolview",
+  "amiba.conversation.question",
 ]) {
   if (!uiShellClient.includes(`\"${slot}\"`)) {
     fail(`UI shell is missing semantic child slot ${slot}`);
@@ -391,6 +392,10 @@ for (const [slot, kind, scope] of [
   // case of all: entries registered with `key: "<wire tool name>"` against
   // the upstream contract would compile and then never render.
   ["tool.call.toolview", "keyed", "session"],
+  // Amiba's keyed per-question row, same reasoning: entries registered with
+  // `key: "<question id>"` would compile and never render under a divergent
+  // kind, and a root scope would starve session-resolving occupants.
+  ["amiba.conversation.question", "keyed", "session"],
   // The settings family. `settings.section` was pinned by membership only
   // until the dialog phase; all seven now carry the official kind/scope.
   // The single/list split is the load-bearing half here: a `list` where
@@ -1184,23 +1189,32 @@ for (const [dispatch, what] of [
     /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?fallback:\s*request\.fallback/u,
     "pass Amiba's own tool row as the dispatch fallback",
   ],
+  [
+    /renderSlot\(\s*"amiba\.conversation\.question",\s*request\.owner,\s*\{\s*entryKey:\s*request\.owner\.request\.questions\[0\]\?\.id \?\? "",\s*fallback:\s*request\.fallback,?\s*\}\s*\)/u,
+    "dispatch the amiba.conversation.question seat keyed by the question id with the banner as fallback",
+  ],
 ]) {
   if (!dispatch.test(productShellSource)) {
     fail(`Product shell must ${what}`);
   }
 }
 
-// Keyed dispatch is legal for exactly ONE declaration here: the official
-// `tool.call.toolview`, whose key domain IS the wire tool name. Everything
-// else — Settings sections above all — must keep using the list-slot ledger,
-// so the exception is pinned BY NAME rather than the word being banned
-// outright, and a `kind: "keyed"` not attached to a named child declaration
-// still fails.
+// Keyed dispatch is legal for exactly TWO named declarations: the official
+// `tool.call.toolview` (key domain = wire tool name) and Amiba's
+// `amiba.conversation.question` (key domain = question id, fallback = the
+// built-in ClarifyBanner). Everything else — Settings sections above all —
+// must keep using the list-slot ledger, so the exception is pinned BY NAME
+// rather than the word being banned outright, and a `kind: "keyed"` not
+// attached to a named child declaration still fails.
+const KEYED_CHILD_DECLARATIONS = new Set([
+  "tool.call.toolview",
+  "amiba.conversation.question",
+]);
 const keyedChildDeclarations = [
   ...uiShellClient.matchAll(/"([\w.-]+)":\s*\{\s*kind:\s*"keyed"/gu),
 ].map((match) => match[1]);
 if (
-  keyedChildDeclarations.some((slot) => slot !== "tool.call.toolview") ||
+  keyedChildDeclarations.some((slot) => !KEYED_CHILD_DECLARATIONS.has(slot)) ||
   (uiShellClient.match(/kind:\s*"keyed"/gu) ?? []).length !==
     keyedChildDeclarations.length ||
   uiShellClient.includes("data-amiba-dsh-slot-key")

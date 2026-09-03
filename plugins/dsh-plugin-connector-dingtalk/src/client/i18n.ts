@@ -20,11 +20,15 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  */
 export const dingtalkI18n: PluginCatalogOverlay = {
   en: {
+    "options.connect.dsh.dingtalk.title": "Connect DingTalk",
+    "options.connect.dsh.dingtalk.subtitle":
+      "Enter the robot's Client ID and Secret.",
     "options.connect.dsh.dingtalk.clientId": "Client ID",
     "options.connect.dsh.dingtalk.clientSecret": "Client secret",
     "options.connect.dsh.dingtalk.enableTools": "Enable tools (experimental)",
-    "options.connect.dsh.dingtalk.enableToolsHint":
-      "Tool access uses DingTalk's official but experimental dingtalk-mcp integration.",
+    "options.connect.dsh.wizard.changePlatform": "Change platform",
+    "options.connect.dsh.wizard.privacyHint":
+      "Credentials stay on this device and are never sent to the model",
     "options.connect.dsh.error.agent_preset_required":
       "Choose an agent preset before creating this connect.",
     "options.connect.dsh.error.provider_not_found":
@@ -44,11 +48,15 @@ export const dingtalkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.loading": "Loading…",
   },
   "zh-CN": {
+    "options.connect.dsh.dingtalk.title": "接入钉钉",
+    "options.connect.dsh.dingtalk.subtitle":
+      "填写机器人的 Client ID 与 Secret。",
     "options.connect.dsh.dingtalk.clientId": "Client ID",
     "options.connect.dsh.dingtalk.clientSecret": "Client Secret",
     "options.connect.dsh.dingtalk.enableTools": "启用工具（实验）",
-    "options.connect.dsh.dingtalk.enableToolsHint":
-      "工具能力基于钉钉官方但仍处于实验阶段的 dingtalk-mcp 集成。",
+    "options.connect.dsh.wizard.changePlatform": "换个平台",
+    "options.connect.dsh.wizard.privacyHint":
+      "凭证只保存在本机，不会发送给模型",
     "options.connect.dsh.error.agent_preset_required":
       "创建连接前请先选择 Agent Preset。",
     "options.connect.dsh.error.provider_not_found": "该 Provider 已不再安装。",

@@ -1,5 +1,12 @@
-import { Loader2, Plus, QrCode } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  Loader2,
+  Lock,
+  MessageSquare,
+  Plus,
+  QrCode,
+} from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import qrcode from "qrcode-generator";
 
@@ -12,6 +19,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  WizardFrame,
   usePluginT,
   type PluginTranslateFn,
 } from "@amiba/ui/plugin";
@@ -88,8 +96,11 @@ function describeStatusNote(t: PluginTranslateFn, note: string): string {
 }
 
 /**
- * The Lark/Feishu connect wizard body, mounted by connector-core's
- * `ConnectWizardChrome` for the `"lark"` provider. Two ways in:
+ * The Lark/Feishu connect screen, registered for the `"lark"` provider and
+ * mounted whole into whatever seat the host gives it (the settings dialog
+ * today, the composer next). It draws its OWN header, tabs, form — connect
+ * name and agent preset included, via `host.kit.BasicsFields` — and footer
+ * buttons; nothing wraps it. Two ways in:
  *
  * - **scan** (default): `beginOnboarding` opens a session, a 1.5s poll drives
  *   the QR + status pane, and a `completed` view hands the created connect
@@ -98,19 +109,22 @@ function describeStatusNote(t: PluginTranslateFn, note: string): string {
  *   `host.adapter.create`.
  *
  * Depends on nothing from connector-core but the `host` prop (its type aside),
- * so the same body works in the settings modal and, later, in the composer.
+ * so the same screen works in the settings modal and, later, in the composer.
  */
 export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
   const { t } = useT();
-  // The chrome rebuilds `host` on every render and the user can still be
-  // typing the connect name / switching the preset while a scan is in flight,
-  // so every call site reads through this ref AT CALL TIME instead of closing
-  // over the render's `host`. That also keeps the callbacks below dependency-
-  // free, which is what lets the unmount teardown be a true unmount-only
-  // effect rather than one that re-runs on each keystroke.
+  // The seat rebuilds `host` on every render, so the async paths read the
+  // adapter and the `done`/`cancel` callbacks through this ref AT CALL TIME
+  // instead of closing over the render's `host`. That also keeps the callbacks
+  // below dependency-free, which is what lets the unmount teardown be a true
+  // unmount-only effect rather than one that re-runs on each keystroke.
   const hostRef = useRef(host);
   hostRef.current = host;
 
+  // The screen owns its basics: `host.prefill` only SEEDS them (the chat tool's
+  // suggested name/preset), it never keeps owning them.
+  const [name, setName] = useState(host.prefill?.name ?? "");
+  const [preset, setPreset] = useState(host.prefill?.agentPreset ?? "");
   const [mode, setMode] = useState<"scan" | "manual">("scan");
   const [onboarding, setOnboarding] = useState<OnboardingView | null>(null);
   const [beginning, setBeginning] = useState(false);
@@ -119,6 +133,10 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState("feishu");
+
+  const appIdId = useId();
+  const appSecretId = useId();
+  const domainId = useId();
 
   // `sessionIdRef`/`pollRef` are refs (not state): they're read from
   // interval/cleanup callbacks that must always see the latest value without
@@ -202,8 +220,13 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
    * only the scan-to-manual direction. Switching back to scan intentionally
    * starts fresh: nothing here re-adopts the session just cancelled or begins
    * a new one — the user has to click "Start scanning" again.
+   *
+   * Both tabs are always clickable, so the FIRST thing this does is bail on a
+   * no-op re-selection: clicking the tab you are already on is not a mode
+   * change, and cancelling there would kill the very QR the user is scanning.
    */
   function handleModeChange(next: "scan" | "manual") {
+    if (next === mode) return;
     setMode(next);
     cancelCurrentSession();
   }
@@ -263,9 +286,8 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   async function beginScan() {
     const current = hostRef.current;
-    const name = current.connectName.trim();
-    const agentPreset = current.agentPreset.trim();
-    if (!name || !agentPreset) return;
+    const trimmedName = name.trim();
+    if (!trimmedName || !preset.trim()) return;
     setError(null);
     setBeginning(true);
     // Snapshot the session context before the round trip: `beginOnboarding`
@@ -276,8 +298,8 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
     try {
       const view = await current.adapter.beginOnboarding({
         provider: current.providerId,
-        name,
-        agentPreset,
+        name: trimmedName,
+        agentPreset: preset,
       });
       // Same stale-response concern as `poll`, extended: the wizard may have
       // unmounted while `beginOnboarding` was in flight (`mountedRef`), or it
@@ -340,18 +362,18 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   async function submit() {
     const current = hostRef.current;
-    const name = current.connectName.trim();
-    const agentPreset = current.agentPreset.trim();
+    const trimmedName = name.trim();
     const trimmedAppId = appId.trim();
     const trimmedAppSecret = appSecret.trim();
-    if (!name || !agentPreset || !trimmedAppId || !trimmedAppSecret) return;
+    if (!trimmedName || !preset.trim() || !trimmedAppId || !trimmedAppSecret)
+      return;
     setSaving(true);
     setError(null);
     try {
       const connect = await current.adapter.create({
         provider: current.providerId,
-        name,
-        agentPreset,
+        name: trimmedName,
+        agentPreset: preset,
         // The secret leaves this component exactly here and nowhere else — it
         // is never logged, echoed into an error message, or put in the DOM
         // outside its own password input.
@@ -371,124 +393,164 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   // Both entry points inherit the retired per-provider dialog's gate: a
   // connect name AND a chosen agent preset. Without the preset check a submit
-  // fired before the chrome's preset list resolved would reach the center only
+  // fired before the seat's preset list resolved would reach the center only
   // to come back as `agent_preset_required`.
-  const canBeginScan =
-    Boolean(host.connectName.trim()) && Boolean(host.agentPreset.trim());
+  const basicsReady = Boolean(name.trim()) && Boolean(preset.trim());
+  const canBeginScan = basicsReady;
   const canSubmit =
-    Boolean(host.connectName.trim()) &&
-    Boolean(host.agentPreset.trim()) &&
-    Boolean(appId.trim()) &&
-    Boolean(appSecret.trim());
+    basicsReady && Boolean(appId.trim()) && Boolean(appSecret.trim());
+
+  // Handed over on the host rather than imported: each plugin client is its
+  // own bundle, so the shared parts travel with the seat.
+  const { BasicsFields } = host.kit;
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-1 rounded-lg border border-border/55 p-1">
-        <Button
-          className="flex-1"
-          onClick={() => handleModeChange("scan")}
-          size="sm"
-          type="button"
-          variant={mode === "scan" ? "default" : "ghost"}
-        >
-          {t("options.connect.dsh.onboard.modeScan")}
-        </Button>
-        <Button
-          className="flex-1"
-          onClick={() => handleModeChange("manual")}
-          size="sm"
-          type="button"
-          variant={mode === "manual" ? "default" : "ghost"}
-        >
-          {t("options.connect.dsh.onboard.modeManual")}
-        </Button>
-      </div>
-
+    <WizardFrame
+      actions={
+        <>
+          <Button
+            onClick={() => host.back()}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            {t("options.connect.dsh.wizard.changePlatform")}
+          </Button>
+          <Button
+            onClick={() => host.cancel()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("options.connect.dsh.cancel")}
+          </Button>
+          {mode === "scan" ? (
+            !onboarding ? (
+              <Button
+                disabled={beginning || !canBeginScan}
+                onClick={() => void beginScan()}
+                size="sm"
+                type="button"
+              >
+                {beginning ? <Loader2 className="animate-spin" /> : <QrCode />}
+                {t("options.connect.dsh.onboard.begin")}
+              </Button>
+            ) : null
+          ) : (
+            <Button
+              disabled={saving || !canSubmit}
+              onClick={() => void submit()}
+              size="sm"
+              type="button"
+            >
+              {saving ? <Loader2 className="animate-spin" /> : <Plus />}
+              {t("options.connect.dsh.submit")}
+            </Button>
+          )}
+        </>
+      }
+      closeLabel={t("options.connect.dsh.cancel")}
+      hint={
+        <>
+          <Lock className="h-3 w-3" />
+          {t("options.connect.dsh.wizard.privacyHint")}
+        </>
+      }
+      icon={<MessageSquare className="h-[18px] w-[18px]" />}
+      onClose={() => host.cancel()}
+      subtitle={
+        mode === "scan"
+          ? t("options.connect.dsh.lark.subtitleScan")
+          : t("options.connect.dsh.lark.subtitleManual")
+      }
+      tabs={[
+        {
+          id: "scan",
+          label: t("options.connect.dsh.onboard.modeScan"),
+          active: mode === "scan",
+          onSelect: () => handleModeChange("scan"),
+        },
+        {
+          id: "manual",
+          label: t("options.connect.dsh.onboard.modeManual"),
+          active: mode === "manual",
+          onSelect: () => handleModeChange("manual"),
+        },
+      ]}
+      title={t("options.connect.dsh.lark.title")}
+    >
       {mode === "scan" ? (
-        onboarding ? (
-          <OnboardingScanPane onboarding={onboarding} t={t} />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("options.connect.dsh.onboard.intro")}
-          </p>
-        )
+        <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-5">
+          <div className="flex flex-col items-center gap-2.5 rounded-xl border border-border/90 bg-background p-3.5">
+            {onboarding ? (
+              <OnboardingScanPane onboarding={onboarding} t={t} />
+            ) : (
+              <p className="text-center text-xs text-muted-foreground">
+                {t("options.connect.dsh.onboard.intro")}
+              </p>
+            )}
+          </div>
+          <BasicsFields
+            className="grid-cols-1"
+            name={name}
+            onNameChange={setName}
+            onPresetChange={setPreset}
+            preset={preset}
+            presets={host.presets}
+          />
+        </div>
       ) : (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="dsh-connect-lark-app-id">
-              {t("options.connect.dsh.lark.appId")}
-            </Label>
-            <Input
-              id="dsh-connect-lark-app-id"
-              onChange={(event) => setAppId(event.target.value)}
-              value={appId}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dsh-connect-lark-app-secret">
-              {t("options.connect.dsh.lark.appSecret")}
-            </Label>
-            <Input
-              id="dsh-connect-lark-app-secret"
-              onChange={(event) => setAppSecret(event.target.value)}
-              type="password"
-              value={appSecret}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dsh-connect-lark-domain">
-              {t("options.connect.dsh.lark.domain")}
-            </Label>
-            <Select onValueChange={setDomain} value={domain}>
-              <SelectTrigger id="dsh-connect-lark-domain">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="feishu">Feishu</SelectItem>
-                <SelectItem value="lark">Lark</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="space-y-4">
+          <BasicsFields
+            name={name}
+            onNameChange={setName}
+            onPresetChange={setPreset}
+            preset={preset}
+            presets={host.presets}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor={appIdId}>
+                {t("options.connect.dsh.lark.appId")}
+              </Label>
+              <Input
+                id={appIdId}
+                onChange={(event) => setAppId(event.target.value)}
+                value={appId}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={appSecretId}>
+                {t("options.connect.dsh.lark.appSecret")}
+              </Label>
+              <Input
+                id={appSecretId}
+                onChange={(event) => setAppSecret(event.target.value)}
+                type="password"
+                value={appSecret}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={domainId}>
+                {t("options.connect.dsh.lark.domain")}
+              </Label>
+              <Select onValueChange={setDomain} value={domain}>
+                <SelectTrigger id={domainId}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="feishu">Feishu</SelectItem>
+                  <SelectItem value="lark">Lark</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       )}
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-
-      <div className="flex justify-end gap-2">
-        <Button onClick={() => host.cancel()} type="button" variant="ghost">
-          {t("options.connect.dsh.cancel")}
-        </Button>
-        {mode === "scan" ? (
-          !onboarding ? (
-            <Button
-              disabled={beginning || !canBeginScan}
-              onClick={() => void beginScan()}
-              type="button"
-            >
-              {beginning ? <Loader2 className="animate-spin" /> : <QrCode />}
-              {t("options.connect.dsh.onboard.begin")}
-              {beginning ? (
-                <span className="sr-only">
-                  {t("options.connect.dsh.loading")}
-                </span>
-              ) : null}
-            </Button>
-          ) : null
-        ) : (
-          <Button
-            disabled={saving || !canSubmit}
-            onClick={() => void submit()}
-            type="button"
-          >
-            {saving ? <Loader2 className="animate-spin" /> : <Plus />}
-            {t("options.connect.dsh.submit")}
-            {saving ? (
-              <span className="sr-only">{t("options.connect.dsh.loading")}</span>
-            ) : null}
-          </Button>
-        )}
-      </div>
-    </div>
+      {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+    </WizardFrame>
   );
 }
 
@@ -517,18 +579,12 @@ function OnboardingScanPane({
     const svg = qr.createSvgTag({ cellSize: 4, margin: 2 });
     const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
     return (
-      <div className="space-y-3 rounded-xl border border-border/55 p-4 text-center">
+      <div className="space-y-3 text-center">
         <img
           alt={t("options.connect.dsh.onboard.qrAlt")}
           className="mx-auto h-40 w-40"
           src={dataUrl}
         />
-        <p className="text-xs text-muted-foreground">
-          {t("options.connect.dsh.onboard.scanInstructions")}
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          {t("options.connect.dsh.onboard.longConnectionHint")}
-        </p>
         {onboarding.statusNote ? (
           <p className="text-[11px] text-muted-foreground">
             {describeStatusNote(t, onboarding.statusNote)}
@@ -542,7 +598,7 @@ function OnboardingScanPane({
   // provider sent one, otherwise a generic waiting line. Never an empty/broken
   // pane, and never a crash on an absent optional field.
   return (
-    <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border/55 px-4 py-6 text-center text-xs text-muted-foreground">
+    <div className="flex items-center justify-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground">
       <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
       <span>
         {onboarding.statusNote

@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AddConnectModal } from "../AddConnectModal";
 import { createConnectWizardRegistry } from "../wizard-registry";
-import type { ConnectWizardHost } from "../wizard-registry";
 import type { ConnectorProviderView } from "../../types";
 
 const providers: ConnectorProviderView[] = [
@@ -13,25 +12,50 @@ const providers: ConnectorProviderView[] = [
 const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
 
 describe("AddConnectModal", () => {
-  it("renders the chrome when open and fires onCreated when a body completes", async () => {
+  it("shows the chooser, then the provider screen, and closes + notifies on done", async () => {
     const registry = createConnectWizardRegistry();
-    registry.register("lark", {
-      component: ({ host }: { host: ConnectWizardHost }) => (
-        <button type="button" onClick={() => host.done({ id: "c1" } as never)}>done</button>
-      ),
-    });
-    const onCreated = vi.fn();
-    const onOpenChange = vi.fn();
-    render(
-      <AddConnectModal
-        open onOpenChange={onOpenChange} adapter={{} as never}
-        registry={registry} providers={providers} presets={presets} onCreated={onCreated}
-      />,
-    );
-    await userEvent.click(await screen.findByText("飞书 / Lark"));
-    await userEvent.click(await screen.findByText("done"));
+    registry.register("lark", { component: ({ host }) => <button type="button" onClick={() => host.done({ id: "c1" } as never)}>lark-done</button> });
+    const onCreated = vi.fn(); const onOpenChange = vi.fn();
+    render(<AddConnectModal adapter={{} as never} onCreated={onCreated} onOpenChange={onOpenChange} open presets={presets} providers={providers} registry={registry} />);
+    await userEvent.click(await screen.findByRole("button", { name: /飞书 \/ Lark/ }));
+    await userEvent.click(await screen.findByText("lark-done"));
     expect(onCreated).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("returns to the chooser on back", async () => {
+    const registry = createConnectWizardRegistry();
+    registry.register("lark", { component: ({ host }) => <button type="button" onClick={() => host.back()}>go-back</button> });
+    render(<AddConnectModal adapter={{} as never} onCreated={vi.fn()} onOpenChange={vi.fn()} open presets={presets} providers={providers} registry={registry} />);
+    await userEvent.click(await screen.findByRole("button", { name: /飞书 \/ Lark/ }));
+    await userEvent.click(await screen.findByText("go-back"));
+    expect(await screen.findByRole("button", { name: /飞书 \/ Lark/ })).toBeInTheDocument();
+  });
+
+  // The mounted screen (chooser or provider wizard) draws its OWN header
+  // close, so `DialogContent`'s default `absolute right-3 top-3` close would
+  // sit right on top of it. `hideDefaultClose` is what keeps the corner
+  // single-occupancy.
+  it("draws exactly one close control on the chooser screen", async () => {
+    const registry = createConnectWizardRegistry();
+    registry.register("lark", { component: () => <div>lark-screen</div> });
+    render(<AddConnectModal adapter={{} as never} onCreated={vi.fn()} onOpenChange={vi.fn()} open presets={presets} providers={providers} registry={registry} />);
+    // Radix's own close button is the only control carrying the sr-only
+    // "Close" text; the chooser's header close is aria-labelled instead.
+    expect(screen.queryByText("Close")).not.toBeInTheDocument();
+    const iconOnlyCloses = screen
+      .getAllByRole("button", { name: /取消|Cancel|Close/ })
+      .filter((b) => !b.textContent?.trim());
+    expect(iconOnlyCloses).toHaveLength(1);
+  });
+
+  it("draws exactly one close control on the provider screen", async () => {
+    const registry = createConnectWizardRegistry();
+    registry.register("lark", { component: () => <div>lark-screen</div> });
+    render(<AddConnectModal adapter={{} as never} onCreated={vi.fn()} onOpenChange={vi.fn()} open presets={presets} providers={providers} registry={registry} />);
+    await userEvent.click(await screen.findByRole("button", { name: /飞书 \/ Lark/ }));
+    await screen.findByText("lark-screen");
+    expect(screen.queryByText("Close")).not.toBeInTheDocument();
   });
 
   it("renders nothing interactive when closed", () => {

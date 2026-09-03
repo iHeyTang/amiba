@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 import type { ConnectAdapter } from "./adapter.js";
+import type { ConnectWizardKit } from "./wizard-kit.js";
 import type { ConnectView } from "../types.js";
 
 /** One agent preset offered by the chrome's preset picker. */
@@ -12,17 +13,19 @@ export interface PresetOption {
 }
 
 /**
- * The only surface a provider wizard body depends on. The chrome builds one
- * and passes it as the sole prop, so the body works identically whether it is
- * mounted in the settings modal (Phase A) or the conversation composer (Phase
- * B). The body drives creation itself — `adapter.create` for a manual flow, or
- * the onboarding trio for a scan flow — then calls `done`.
+ * The only surface a provider wizard depends on. The wizard fills the whole
+ * seat it is mounted in — settings dialog or conversation seat — and draws
+ * its own header, tabs, form (incl. connect name + agent preset) and buttons.
  */
 export interface ConnectWizardHost {
   providerId: string;
-  connectName: string;
-  agentPreset: string;
+  presets: PresetOption[];
+  /** Suggested values from the caller (the chat tool's args); the wizard seeds its own fields with them. */
+  prefill?: { name?: string; agentPreset?: string };
   adapter: ConnectAdapter;
+  kit: ConnectWizardKit;
+  /** Return to the platform chooser. */
+  back(): void;
   done(connect: ConnectView): void;
   cancel(): void;
 }

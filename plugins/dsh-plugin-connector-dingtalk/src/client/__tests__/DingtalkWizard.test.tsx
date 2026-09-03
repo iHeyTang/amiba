@@ -1,59 +1,179 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkWizard } from "../DingtalkWizard";
 
-function host(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
+/**
+ * Stand-in for the real `host.kit.BasicsFields` (connector-core owns that
+ * component and its own tests): plain labelled controls so this suite can
+ * drive the wizard's own name/preset state, plus the same "fill an empty
+ * selection once the presets land" behaviour the real one has.
+ */
+function FakeBasicsFields({
+  name,
+  onNameChange,
+  preset,
+  onPresetChange,
+  presets,
+}: {
+  name: string;
+  onNameChange(v: string): void;
+  preset: string;
+  onPresetChange(v: string): void;
+  presets: { id: string; label: string; isDefault: boolean }[];
+}) {
+  useEffect(() => {
+    // Same rule as the real kit: fill an empty selection AND replace one the
+    // list doesn't carry (a stale prefill), once the presets have landed.
+    if (presets.length === 0) return;
+    if (preset && presets.some((p) => p.id === preset)) return;
+    onPresetChange(presets.find((p) => p.isDefault)?.id ?? presets[0]!.id);
+  }, [preset, presets, onPresetChange]);
+  return (
+    <div>
+      <label>
+        连接名称
+        <input onChange={(e) => onNameChange(e.target.value)} value={name} />
+      </label>
+      <label>
+        Agent 预设
+        <select onChange={(e) => onPresetChange(e.target.value)} value={preset}>
+          <option value="">-</option>
+          {presets.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
+
+function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
   return {
     providerId: "dingtalk",
-    connectName: "Bot",
-    agentPreset: "restricted",
+    presets,
     adapter: {
       create: vi.fn(async () => ({ id: "c1" }) as never),
       beginOnboarding: vi.fn(),
       pollOnboarding: vi.fn(),
-      cancelOnboarding: vi.fn(),
+      cancelOnboarding: vi.fn(async () => ({}) as never),
     } as never,
+    kit: { BasicsFields: FakeBasicsFields as never },
+    back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
     ...overrides,
+  } as ConnectWizardHost;
+}
+
+/**
+ * The wizard is gated on its own basics now, so every test that wants to
+ * reach `create` types a name first; the preset fills itself in from
+ * `host.presets`.
+ */
+function typeName(value = "Bot") {
+  fireEvent.change(screen.getByLabelText("连接名称"), { target: { value } });
+}
+
+/** The header's icon-only close (aria-labelled) vs the footer's own cancel button. */
+function cancelControls() {
+  const all = screen.getAllByRole("button", { name: /取消|Cancel/ });
+  return {
+    headerClose: all.filter((b) => !b.textContent?.trim())[0] as HTMLElement,
+    footerCancel: all.filter((b) => Boolean(b.textContent?.trim()))[0] as HTMLElement,
   };
 }
 
+function fillIds({ clientId = "cid", clientSecret = "sec" } = {}) {
+  fireEvent.change(screen.getByLabelText("Client ID"), {
+    target: { value: clientId },
+  });
+  fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
+    target: { value: clientSecret },
+  });
+}
+
+const submitButton = () => screen.getByRole("button", { name: /添加|Add/ });
+
 describe("DingtalkWizard", () => {
+  it("renders its own standalone header", () => {
+    render(<DingtalkWizard host={hostWith()} />);
+    expect(
+      screen.getByRole("heading", { name: /接入钉钉|Connect DingTalk/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("seeds the name from the host prefill", () => {
+    render(<DingtalkWizard host={hostWith({ prefill: { name: "钉钉助手" } })} />);
+    expect(screen.getByLabelText("连接名称")).toHaveValue("钉钉助手");
+  });
+
+  it("drops a prefilled preset the host's list doesn't carry", async () => {
+    const host = hostWith({ prefill: { agentPreset: "ghost" } });
+    render(<DingtalkWizard host={host} />);
+    typeName();
+    fillIds({ clientId: "cid", clientSecret: "sec" });
+    await userEvent.click(submitButton());
+    // Never the stale suggestion: the kit healed the selection to the default.
+    expect(host.adapter.create).toHaveBeenCalledWith(
+      expect.objectContaining({ agentPreset: "restricted" }),
+    );
+  });
+
+  it("goes back to the platform picker and closes through the host", async () => {
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /换个平台|Change platform/ }),
+    );
+    expect(host.back).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(cancelControls().headerClose);
+    expect(host.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the wizard through the host", async () => {
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    await userEvent.click(cancelControls().footerCancel);
+    expect(host.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("creates with trimmed ids and enableTools:false by default", async () => {
-    const h = host();
-    render(<DingtalkWizard host={h} />);
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: " cid " },
     });
     fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
       target: { value: " sec " },
     });
-    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
-    expect(h.adapter.create).toHaveBeenCalledWith({
+    await userEvent.click(submitButton());
+    expect(host.adapter.create).toHaveBeenCalledWith({
       provider: "dingtalk",
       name: "Bot",
       agentPreset: "restricted",
       config: { clientId: "cid", clientSecret: "sec", enableTools: false },
     });
-    expect(h.done).toHaveBeenCalledWith({ id: "c1" });
+    expect(host.done).toHaveBeenCalledWith({ id: "c1" });
   });
 
   it("includes enableTools:true once the switch is on", async () => {
-    const h = host();
-    render(<DingtalkWizard host={h} />);
-    fireEvent.change(screen.getByLabelText("Client ID"), {
-      target: { value: "cid" },
-    });
-    fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
-      target: { value: "sec" },
-    });
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    fillIds();
     await userEvent.click(screen.getByRole("switch"));
-    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
-    expect(h.adapter.create).toHaveBeenCalledWith(
+    await userEvent.click(submitButton());
+    expect(host.adapter.create).toHaveBeenCalledWith(
       expect.objectContaining({
         config: expect.objectContaining({ enableTools: true }),
       }),
@@ -61,51 +181,46 @@ describe("DingtalkWizard", () => {
   });
 
   it("blocks submit until both ids are present", () => {
-    render(<DingtalkWizard host={host()} />);
-    expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    expect(submitButton()).toBeDisabled();
+    expect(host.adapter.create).not.toHaveBeenCalled();
   });
 
-  // The retired per-provider dialog gated creation on a non-empty agent
-  // preset; the body inherits that gate, so a preset list that hasn't loaded
-  // yet can't push a create the center would reject with
-  // `agent_preset_required`.
+  // The retired per-provider dialog gated creation on a connect name AND a
+  // non-empty agent preset; the standalone screen inherits that gate on its
+  // own fields, so a preset list that hasn't loaded yet can't push a create
+  // the center would reject with `agent_preset_required`.
   it("blocks submit until an agent preset is chosen", () => {
-    const h = host({ agentPreset: "" });
-    render(<DingtalkWizard host={h} />);
-    fireEvent.change(screen.getByLabelText("Client ID"), {
-      target: { value: "cid" },
-    });
-    fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
-      target: { value: "sec" },
-    });
-    expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
-    expect(h.adapter.create).not.toHaveBeenCalled();
+    const host = hostWith({ presets: [] });
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    fillIds();
+    expect(submitButton()).toBeDisabled();
+    expect(host.adapter.create).not.toHaveBeenCalled();
   });
 
   it("translates a create failure code instead of rendering the raw code", async () => {
-    const h = host({
+    const host = hostWith({
       adapter: {
         create: vi.fn(async () => {
           throw new Error("agent_preset_required");
         }),
         beginOnboarding: vi.fn(),
         pollOnboarding: vi.fn(),
-        cancelOnboarding: vi.fn(),
+        cancelOnboarding: vi.fn(async () => ({})),
       } as never,
     });
-    render(<DingtalkWizard host={h} />);
-    fireEvent.change(screen.getByLabelText("Client ID"), {
-      target: { value: "cid" },
-    });
-    fireEvent.change(screen.getByLabelText(/Client [Ss]ecret/), {
-      target: { value: "sec" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    fillIds();
+    await userEvent.click(submitButton());
 
     expect(screen.getByText(/[Aa]gent [Pp]reset/)).toBeInTheDocument();
     expect(
       screen.queryByText("agent_preset_required"),
     ).not.toBeInTheDocument();
-    expect(h.done).not.toHaveBeenCalled();
+    expect(host.done).not.toHaveBeenCalled();
   });
 });

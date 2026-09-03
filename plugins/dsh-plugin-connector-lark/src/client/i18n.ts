@@ -21,9 +21,17 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  */
 export const larkI18n: PluginCatalogOverlay = {
   en: {
+    "options.connect.dsh.lark.title": "Connect Feishu",
+    "options.connect.dsh.lark.subtitleScan":
+      "Scan with the Feishu app to authorize; the connect is created automatically.",
+    "options.connect.dsh.lark.subtitleManual":
+      "Copy from Feishu Open Platform → your app → Credentials & Basic Info.",
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.wizard.changePlatform": "Change platform",
+    "options.connect.dsh.wizard.privacyHint":
+      "Credentials stay on this device and are never sent to the model",
     "options.connect.dsh.error.agent_preset_required":
       "Choose an agent preset before creating this connect.",
     "options.connect.dsh.error.provider_not_found":
@@ -44,10 +52,6 @@ export const larkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.onboard.intro":
       "Start scanning to generate a QR code for this provider.",
     "options.connect.dsh.onboard.qrAlt": "Onboarding QR code",
-    "options.connect.dsh.onboard.scanInstructions":
-      "Scan this QR code with the platform's app to authorize Amiba.",
-    "options.connect.dsh.onboard.longConnectionHint":
-      "If this connect doesn't come online after scanning, open the Feishu open-platform console for this app and set Event Subscription to long-connection mode — that setting can't be configured automatically and needs a manual switch. Keep Amiba running while it connects.",
     "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
     "options.connect.dsh.onboard.error.generic":
       "Scanning failed. Please try again.",
@@ -58,12 +62,19 @@ export const larkI18n: PluginCatalogOverlay = {
       "Switched login domain — scan again if the code doesn't work.",
     "options.connect.dsh.cancel": "Cancel",
     "options.connect.dsh.submit": "Add",
-    "options.connect.dsh.loading": "Loading…",
   },
   "zh-CN": {
+    "options.connect.dsh.lark.title": "接入飞书",
+    "options.connect.dsh.lark.subtitleScan":
+      "用飞书 App 扫码授权，完成后自动创建连接。",
+    "options.connect.dsh.lark.subtitleManual":
+      "在飞书开放平台 → 你的应用 → 凭证与基础信息 里复制。",
     "options.connect.dsh.lark.appId": "App ID",
     "options.connect.dsh.lark.appSecret": "App Secret",
     "options.connect.dsh.lark.domain": "Domain",
+    "options.connect.dsh.wizard.changePlatform": "换个平台",
+    "options.connect.dsh.wizard.privacyHint":
+      "凭证只保存在本机，不会发送给模型",
     "options.connect.dsh.error.agent_preset_required":
       "创建连接前请先选择 Agent Preset。",
     "options.connect.dsh.error.provider_not_found": "该 Provider 已不再安装。",
@@ -78,10 +89,6 @@ export const larkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.onboard.begin": "开始扫码",
     "options.connect.dsh.onboard.intro": "点击“开始扫码”，生成该 Provider 的登录二维码。",
     "options.connect.dsh.onboard.qrAlt": "接入二维码",
-    "options.connect.dsh.onboard.scanInstructions":
-      "使用该平台的 App 扫描此二维码以授权 Amiba。",
-    "options.connect.dsh.onboard.longConnectionHint":
-      "如果扫码后连接迟迟未能上线，请前往飞书开放平台该应用的设置，将“事件订阅”的接收方式改为“使用长连接接收事件”——该设置无法自动配置，需要手动切换。扫码期间请保持 Amiba 处于运行状态。",
     "options.connect.dsh.onboard.waiting": "正在等待 Provider 响应…",
     "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",
     "options.connect.dsh.onboard.note.polling": "正在等待扫码…",
@@ -90,6 +97,5 @@ export const larkI18n: PluginCatalogOverlay = {
       "登录域名已切换，如二维码失效请重新扫码。",
     "options.connect.dsh.cancel": "取消",
     "options.connect.dsh.submit": "添加",
-    "options.connect.dsh.loading": "加载中…",
   },
 };

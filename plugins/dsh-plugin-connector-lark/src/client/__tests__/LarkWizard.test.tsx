@@ -1,25 +1,76 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { LarkWizard } from "../LarkWizard";
 
+/**
+ * Stand-in for the real `host.kit.BasicsFields` (connector-core owns that
+ * component and its own tests): plain labelled controls so this suite can drive
+ * the wizard's own name/preset state, plus the same "fill an empty selection
+ * once the presets land" behaviour the real one has.
+ */
+function FakeBasicsFields({
+  name,
+  onNameChange,
+  preset,
+  onPresetChange,
+  presets,
+}: {
+  name: string;
+  onNameChange(v: string): void;
+  preset: string;
+  onPresetChange(v: string): void;
+  presets: { id: string; label: string; isDefault: boolean }[];
+}) {
+  useEffect(() => {
+    // Same rule as the real kit: fill an empty selection AND replace one the
+    // list doesn't carry (a stale prefill), once the presets have landed.
+    if (presets.length === 0) return;
+    if (preset && presets.some((p) => p.id === preset)) return;
+    onPresetChange(presets.find((p) => p.isDefault)?.id ?? presets[0]!.id);
+  }, [preset, presets, onPresetChange]);
+  return (
+    <div>
+      <label>
+        连接名称
+        <input onChange={(e) => onNameChange(e.target.value)} value={name} />
+      </label>
+      <label>
+        Agent 预设
+        <select onChange={(e) => onPresetChange(e.target.value)} value={preset}>
+          <option value="">-</option>
+          {presets.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
+
 function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
   return {
     providerId: "lark",
-    connectName: "Sales",
-    agentPreset: "restricted",
+    presets,
     adapter: {
       create: vi.fn(async () => ({ id: "c1" }) as never),
       beginOnboarding: vi.fn(),
       pollOnboarding: vi.fn(),
       cancelOnboarding: vi.fn(async () => ({}) as never),
     } as never,
+    kit: { BasicsFields: FakeBasicsFields as never },
+    back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
     ...overrides,
-  };
+  } as ConnectWizardHost;
 }
 
 /**
@@ -33,13 +84,89 @@ async function flush(ms = 0) {
   });
 }
 
+/**
+ * Both entry points are gated on the wizard's OWN basics now, so every test
+ * that wants to reach `beginOnboarding`/`create` types a name first; the preset
+ * fills itself in from `host.presets`.
+ */
+function typeName(value = "Sales") {
+  fireEvent.change(screen.getByLabelText("连接名称"), { target: { value } });
+}
+
+/** The header's icon-only close (aria-labelled) vs the footer's own cancel button. */
+function cancelControls() {
+  const all = screen.getAllByRole("button", { name: /取消|Cancel/ });
+  return {
+    headerClose: all.filter((b) => !b.textContent?.trim())[0] as HTMLElement,
+    footerCancel: all.filter((b) => Boolean(b.textContent?.trim()))[0] as HTMLElement,
+  };
+}
+
+const beginButton = () =>
+  screen.getByRole("button", { name: /开始扫码|scanning/i });
+const manualTab = () => screen.getByRole("tab", { name: /手动填写|Manual/ });
+const scanTab = () => screen.getByRole("tab", { name: /扫码接入|Scan to connect/ });
+
 afterEach(() => vi.useRealTimers());
 
 describe("LarkWizard", () => {
+  it("renders its own header and tabs", () => {
+    render(<LarkWizard host={hostWith()} />);
+    expect(
+      screen.getByRole("heading", { name: /接入飞书|Connect Feishu/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /扫码接入|Scan to connect/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(manualTab()).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("seeds the name from the host prefill", () => {
+    render(<LarkWizard host={hostWith({ prefill: { name: "飞书助手" } })} />);
+    expect(screen.getByLabelText("连接名称")).toHaveValue("飞书助手");
+  });
+
+  it("drops a prefilled preset the host's list doesn't carry", async () => {
+    const begin = vi.fn(async () => ({ sessionId: "s1", state: "pending" }));
+    const host = hostWith({
+      prefill: { agentPreset: "ghost" },
+      adapter: {
+        create: vi.fn(),
+        beginOnboarding: begin,
+        pollOnboarding: vi.fn(async () => ({ sessionId: "s1", state: "pending" })),
+        cancelOnboarding: vi.fn(async () => ({})),
+      } as never,
+    });
+    render(<LarkWizard host={host} />);
+    typeName();
+    await act(async () => {
+      fireEvent.click(beginButton());
+    });
+    // Never the stale suggestion: the kit healed the selection to the default.
+    expect(begin).toHaveBeenCalledWith({
+      provider: "lark",
+      name: "Sales",
+      agentPreset: "restricted",
+    });
+  });
+
+  it("goes back to the platform picker and closes through the host", async () => {
+    const host = hostWith();
+    render(<LarkWizard host={host} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /换个平台|Change platform/ }),
+    );
+    expect(host.back).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(cancelControls().headerClose);
+    expect(host.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("submits the manual form with appId/appSecret/domain and calls done", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
-    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    await userEvent.click(manualTab());
+    typeName();
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
     });
@@ -68,7 +195,8 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
-    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    await userEvent.click(manualTab());
+    typeName();
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
     });
@@ -90,7 +218,7 @@ describe("LarkWizard", () => {
 
   it("secret field is a password input", async () => {
     render(<LarkWizard host={hostWith()} />);
-    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    await userEvent.click(manualTab());
     expect(screen.getByLabelText(/App [Ss]ecret/)).toHaveAttribute(
       "type",
       "password",
@@ -114,10 +242,9 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
+    typeName();
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: /开始扫码|scanning/i }),
-      );
+      fireEvent.click(beginButton());
     });
     expect(begin).toHaveBeenCalledWith({
       provider: "lark",
@@ -149,10 +276,9 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
+    typeName();
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: /开始扫码|scanning/i }),
-      );
+      fireEvent.click(beginButton());
     });
     await flush(1600);
     expect(host.done).toHaveBeenCalledWith(connect);
@@ -176,10 +302,9 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
+    typeName();
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: /开始扫码|scanning/i }),
-      );
+      fireEvent.click(beginButton());
     });
     await flush(1600);
     expect(
@@ -189,9 +314,7 @@ describe("LarkWizard", () => {
     ).toBeInTheDocument();
     expect(screen.queryByAltText(/二维码|QR/)).not.toBeInTheDocument();
     // Terminal error is never a dead end: the begin control comes back.
-    expect(
-      screen.getByRole("button", { name: /开始扫码|scanning/i }),
-    ).toBeEnabled();
+    expect(beginButton()).toBeEnabled();
     expect(host.done).not.toHaveBeenCalled();
   });
 
@@ -215,10 +338,9 @@ describe("LarkWizard", () => {
       } as never,
     });
     const { unmount } = render(<LarkWizard host={host} />);
+    typeName();
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: /开始扫码|scanning/i }),
-      );
+      fireEvent.click(beginButton());
     });
     await flush(1600);
     screen.getByAltText(/二维码|QR/);
@@ -253,16 +375,15 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
+    typeName();
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: /开始扫码|scanning/i }),
-      );
+      fireEvent.click(beginButton());
     });
     await flush(1600);
     screen.getByAltText(/二维码|QR/);
 
     await act(async () => {
-      fireEvent.click(screen.getByText(/手动填写|Manual/));
+      fireEvent.click(manualTab());
     });
 
     expect(cancel).toHaveBeenCalledTimes(1);
@@ -274,18 +395,61 @@ describe("LarkWizard", () => {
     expect(poll).not.toHaveBeenCalled();
   });
 
-  // The retired per-provider dialog gated creation on a non-empty agent
-  // preset; the body inherits that gate, so a preset list that hasn't loaded
-  // yet can't push a create the center would reject with
-  // `agent_preset_required`.
-  it("blocks both entry points until an agent preset is chosen", async () => {
-    const host = hostWith({ agentPreset: "" });
+  // Re-selecting the tab you are already on is not a mode CHANGE, so it must
+  // not tear down a live scan: the QR the user is looking at stays on screen.
+  it("re-selecting the active scan tab leaves the live session alone", async () => {
+    vi.useFakeTimers();
+    const poll = vi.fn(async () => ({
+      sessionId: "s1",
+      state: "pending",
+      qrUrl: "https://x/qr",
+    }));
+    const cancel = vi.fn(async () => ({ sessionId: "s1", state: "cancelled" }));
+    const host = hostWith({
+      adapter: {
+        create: vi.fn(),
+        beginOnboarding: vi.fn(async () => ({
+          sessionId: "s1",
+          state: "pending",
+        })),
+        pollOnboarding: poll,
+        cancelOnboarding: cancel,
+      } as never,
+    });
     render(<LarkWizard host={host} />);
-    expect(
-      screen.getByRole("button", { name: /开始扫码|scanning/i }),
-    ).toBeDisabled();
+    typeName();
+    await act(async () => {
+      fireEvent.click(beginButton());
+    });
+    await flush(1600);
+    screen.getByAltText(/二维码|QR/);
 
-    await userEvent.click(screen.getByText(/手动填写|Manual/));
+    await act(async () => {
+      fireEvent.click(scanTab());
+    });
+
+    expect(cancel).not.toHaveBeenCalled();
+    expect(screen.getByAltText(/二维码|QR/)).toBeInTheDocument();
+
+    // A real change still cancels exactly once (the existing behaviour).
+    await act(async () => {
+      fireEvent.click(manualTab());
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledWith("s1");
+  });
+
+  // The retired per-provider dialog gated creation on a connect name AND a
+  // non-empty agent preset; the standalone screen inherits that gate on its own
+  // fields, so neither a nameless connect nor a preset list that hasn't loaded
+  // yet can push a create the center would reject with `agent_preset_required`.
+  it("blocks both entry points until the basics are filled", async () => {
+    // Nameless: the preset filled itself in, both entry points stay shut.
+    const host = hostWith();
+    const { unmount } = render(<LarkWizard host={host} />);
+    expect(beginButton()).toBeDisabled();
+
+    await userEvent.click(manualTab());
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
     });
@@ -295,12 +459,20 @@ describe("LarkWizard", () => {
     expect(screen.getByRole("button", { name: /添加|Add/ })).toBeDisabled();
     expect(host.adapter.beginOnboarding).not.toHaveBeenCalled();
     expect(host.adapter.create).not.toHaveBeenCalled();
+    unmount();
+
+    // Named, but no preset can be chosen yet: still shut.
+    const presetless = hostWith({ presets: [] });
+    render(<LarkWizard host={presetless} />);
+    typeName();
+    expect(beginButton()).toBeDisabled();
+    expect(presetless.adapter.beginOnboarding).not.toHaveBeenCalled();
   });
 
   it("cancels the wizard through the host", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
-    await userEvent.click(screen.getByRole("button", { name: /取消|Cancel/ }));
+    await userEvent.click(cancelControls().footerCancel);
     expect(host.cancel).toHaveBeenCalledTimes(1);
   });
 });

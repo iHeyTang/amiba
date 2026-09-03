@@ -19,11 +19,11 @@ import {
   ScrollArea,
   SettingsPageDescription,
   usePluginT,
-  type PluginTranslateFn,
 } from "@amiba/ui/plugin";
 
 import { AddConnectModal } from "./AddConnectModal.js";
 import type { ConnectAdapter } from "./adapter.js";
+import { describeError } from "./describe-error.js";
 import { connectI18n } from "./i18n.js";
 import { useConnectWizardProviderIds } from "./wizard-registry.js";
 import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
@@ -41,23 +41,6 @@ import type {
  */
 function useT() {
   return usePluginT(connectI18n);
-}
-
-/** Maps known `ConnectorCenter#createConnect` failure codes to translated copy. */
-const KNOWN_CREATE_ERRORS: Record<string, string> = {
-  agent_preset_required: "options.connect.dsh.error.agent_preset_required",
-  provider_not_found: "options.connect.dsh.error.provider_not_found",
-  connect_not_found: "options.connect.dsh.error.connect_not_found",
-  invalid_channel: "options.connect.dsh.error.invalid_channel",
-  grant_not_found: "options.connect.dsh.error.grant_not_found",
-  onboarding_not_found: "options.connect.dsh.error.onboarding_not_found",
-  onboarding_unsupported: "options.connect.dsh.error.onboarding_unsupported",
-};
-
-function describeError(t: PluginTranslateFn, cause: unknown): string {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  const key = KNOWN_CREATE_ERRORS[message];
-  return key ? t(key) : message;
 }
 
 /**

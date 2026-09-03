@@ -69,6 +69,10 @@ import {
   ToolCallSeatProvider,
   type ToolCallSeatRenderer,
 } from "./bubble/tool-call-seat";
+import {
+  QuestionSeat,
+  type QuestionSeatRenderer,
+} from "./bubble/question-seat";
 import { useWorkspacePane } from "./WorkspacePane";
 import {
   Composer,
@@ -290,6 +294,12 @@ export interface ChatSurfaceProps {
      * every unclaimed tool name.
      */
     toolView?: ToolCallSeatRenderer;
+    /**
+     * renderSlot-backed dispatch of Amiba's KEYED `amiba.conversation.question`
+     * seat, keyed by the first pending question's id; `fallback` is today's
+     * `ClarifyBanner`, so every unclaimed question renders unchanged.
+     */
+    questionSeat?: QuestionSeatRenderer;
   };
 
   /**
@@ -2154,12 +2164,24 @@ export default function ChatSurface({
               />
             )}
             {hasActive && pendingQuestions.length > 0 && (
-              <ClarifyBanner
-                error={clarifyError}
-                inFlight={clarifyInFlight}
-                onCancel={() => void cancelQuestionRequest()}
-                onRespond={(answers) => void respondToQuestion(answers)}
-                request={pendingQuestions[0]}
+              <QuestionSeat
+                fallback={
+                  <ClarifyBanner
+                    error={clarifyError}
+                    inFlight={clarifyInFlight}
+                    onCancel={() => void cancelQuestionRequest()}
+                    onRespond={(answers) => void respondToQuestion(answers)}
+                    request={pendingQuestions[0]}
+                  />
+                }
+                owner={{
+                  request: pendingQuestions[0],
+                  inFlight: clarifyInFlight,
+                  error: clarifyError,
+                  respond: (answers) => void respondToQuestion(answers),
+                  cancel: () => void cancelQuestionRequest(),
+                }}
+                render={slots?.questionSeat}
               />
             )}
             {composerNode}
