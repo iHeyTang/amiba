@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,5 +32,26 @@ describe("steward preset seed", () => {
     const log = { warn: vi.fn() };
     await seedAgentPresets(join(root, "blocked", STEWARD_PRESET_ID), [STEWARD_PRESET], log);
     expect(log.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("never writes when the existence check fails for a reason other than ENOENT", async () => {
+    if (process.getuid?.() === 0) {
+      // Running as root; chmod will not produce EACCES
+      return;
+    }
+
+    const root = mkdtempSync(join(tmpdir(), "amiba-presets-"));
+    try {
+      mkdirSync(join(root, STEWARD_PRESET_ID));
+      writeFileSync(join(root, STEWARD_PRESET_ID, "preset.yml"), "name: mine\n");
+      chmodSync(root, 0o000);
+      const log = { warn: vi.fn() };
+      await seedAgentPresets(root, [STEWARD_PRESET], log);
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      chmodSync(root, 0o700);
+      expect(readFileSync(join(root, STEWARD_PRESET_ID, "preset.yml"), "utf8")).toBe("name: mine\n");
+    } finally {
+      chmodSync(root, 0o700);
+    }
   });
 });
