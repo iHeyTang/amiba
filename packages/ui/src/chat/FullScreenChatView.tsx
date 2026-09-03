@@ -41,6 +41,7 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
+import { visibleChatSessions } from "./session-visibility";
 import ChatSurface from "./ChatSurface";
 import type {
   ComposerModelPickerRenderer,
@@ -264,6 +265,12 @@ export interface FullScreenChatViewProps {
    * the existing persisted-navigation behaviour by default.
    */
   restoreSidebarViewOnMount?: boolean;
+  /**
+   * Agent preset ids whose sessions are kept OUT of the history list and the
+   * command palette (they stay openable by id). Provided by ui-shell's
+   * `amibaSessionVisibility` seam.
+   */
+  hiddenSessionPresets?: ReadonlySet<string>;
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -297,6 +304,7 @@ function FullScreenChatViewInner({
   mentionProviders,
   triggerRuntime,
   restoreSidebarViewOnMount = true,
+  hiddenSessionPresets,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -438,16 +446,18 @@ function FullScreenChatViewInner({
   // parallel transcript, so the chat list needs only the archive filter; no
   // local id convention may hide a valid DSH session.
   const chatSessions = useMemo(
-    () => sessions.sessions.filter((s) => !s.archived),
-    [sessions.sessions],
+    () => visibleChatSessions(sessions.sessions, hiddenSessionPresets),
+    [sessions.sessions, hiddenSessionPresets],
   );
 
   // Active chat-session title — one of the top-bar placeholder sources.
+  // Looked up in the full session list (not `chatSessions`) so a session
+  // hidden from the history list still shows a title when it is open.
   const activeChatTitle = useMemo<string>(() => {
     if (!sessions.activeId) return "";
-    const found = chatSessions.find((s) => s.id === sessions.activeId);
+    const found = sessions.sessions.find((s) => s.id === sessions.activeId);
     return found?.title?.trim() || "";
-  }, [sessions.activeId, chatSessions]);
+  }, [sessions.activeId, sessions.sessions]);
 
   // External title override pushed via ``useSetSessionTitle`` from anywhere in
   // the subtree. Highest-priority slot in the placeholder chain.

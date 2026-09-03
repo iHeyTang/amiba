@@ -22,6 +22,7 @@ import {
   useSettingsShell,
   type SettingsOnboardingStepsSource,
 } from "./settings-shell.js";
+import type { HiddenPresetsSource } from "./session-visibility.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -74,6 +75,7 @@ export interface SettingsSectionsSource {
 export type { OnboardingStepRow, SettingsOnboardingStepsSource };
 
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
+const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
@@ -306,6 +308,7 @@ interface ProductShellProps {
   settingsSections?: SettingsSectionsSource;
   settingsOnboardingSteps?: SettingsOnboardingStepsSource;
   triggerRuntime?: ComposerTriggerRuntime;
+  hiddenSessionPresets?: HiddenPresetsSource;
   /**
    * The framework's `useSessions` standard hook (`GlobalStandardProps`),
    * handed down from the root entry. It is the OFFICIAL sessions list store —
@@ -338,6 +341,7 @@ function ProductShellInner({
   settingsSections,
   settingsOnboardingSteps,
   triggerRuntime,
+  hiddenSessionPresets,
   useOfficialSessions,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
@@ -348,6 +352,10 @@ function ProductShellInner({
   const sections = useSyncExternalStore(
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
+  );
+  const hiddenPresets = useSyncExternalStore(
+    hiddenSessionPresets?.subscribe ?? (() => () => {}),
+    hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
   );
   // Settings is a MODAL LAYER, not a route: the chat surface stays mounted
   // behind it, exactly as the official settings shell layers its panel over
@@ -563,6 +571,7 @@ function ProductShellInner({
         topBarHeightPx={topBarHeightPx}
         topBarClassName={desktop ? "app-drag-region" : undefined}
         restoreSidebarViewOnMount={false}
+        hiddenSessionPresets={hiddenPresets}
         slots={{
           emptyState: (
             <HomeView

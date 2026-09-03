@@ -28,6 +28,11 @@ import {
   type AmibaInputTriggerBridge,
 } from "./input-trigger-bridge.js";
 import {
+  createSessionVisibility,
+  type AmibaSessionVisibility,
+  type HiddenPresetsSource,
+} from "./session-visibility.js";
+import {
   connectOfficialLocale,
   LOCALE_SETTINGS_NAMESPACE,
 } from "./locale-bridge.js";
@@ -86,6 +91,7 @@ export type {
   ConversationInputPlanOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
+export type { AmibaSessionVisibility, HiddenPresetsSource } from "./session-visibility.js";
 
 type AmibaRootProps = PropsRuntime<"root"> &
   PropsRenderSlots<AmibaShellSlot> & {
@@ -95,6 +101,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
     triggerRuntime: AmibaInputTriggerBridge;
+    hiddenSessionPresets: HiddenPresetsSource;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -116,6 +123,7 @@ function AmibaRoot({
   openSettingsSection,
   sessionsBridge,
   triggerRuntime,
+  hiddenSessionPresets,
   useSessions,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
@@ -133,6 +141,7 @@ function AmibaRoot({
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
+      hiddenSessionPresets={hiddenSessionPresets}
       useOfficialSessions={useSessions}
     />
   );
@@ -180,6 +189,7 @@ function resolveSectionNavIcon(
 declare module "@deepseek-ai/cordis" {
   interface Context {
     layout: AmibaLayoutService;
+    amibaSessionVisibility: AmibaSessionVisibility;
   }
 }
 
@@ -300,6 +310,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ctx.slots.subscribe("settings.onboarding", listener),
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
+    const visibility = createSessionVisibility();
+    const disposeVisibility = ctx.reflect.provide(
+      "amibaSessionVisibility",
+      visibility,
+    );
     // R1 selection bridge: keep the official ctx.sessions selection (the
     // session resolution every official session-scoped slot renders under)
     // in lock-step with Amiba's own per-window sessions store. The official
@@ -396,6 +411,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             layout.openSettings(sectionId),
           sessionsBridge,
           triggerRuntime,
+          hiddenSessionPresets: visibility.source,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -593,6 +609,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();
+      void disposeVisibility();
     };
   }, "amiba-ui-shell: root and semantic child slots");
 }
