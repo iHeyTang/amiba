@@ -92,6 +92,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-notification-hub",
       "@amiba/dsh-plugin-schedule-adapter",
       "@amiba/dsh-plugin-skills",
+      "@amiba/dsh-plugin-steward",
       "@amiba/dsh-plugin-usage",
     ],
   },

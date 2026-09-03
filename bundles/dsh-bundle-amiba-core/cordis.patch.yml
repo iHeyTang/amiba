@@ -89,6 +89,12 @@
       config:
         root: !!js dshHomePath('amiba-cron')
 
+    - id: amiba-steward
+      name: "@amiba/dsh-plugin-steward"
+      config:
+        root: !!js dshHomePath('amiba-steward')
+        agentPresetsRoot: !!js dshHomePath('.agent-presets')
+
     - id: amiba-schedule-adapter
       name: "@amiba/dsh-plugin-schedule-adapter"
       config:

@@ -29,6 +29,7 @@
     "@amiba/dsh-plugin-notification-hub": "workspace:*",
     "@amiba/dsh-plugin-schedule-adapter": "workspace:*",
     "@amiba/dsh-plugin-skills": "workspace:*",
+    "@amiba/dsh-plugin-steward": "workspace:*",
     "@amiba/dsh-plugin-usage": "workspace:*"
   }
 }
