@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePluginT } from "@amiba/ui/plugin";
 
 import type { ConnectAdapter } from "./adapter.js";
+import { describeError } from "./describe-error.js";
 import { connectI18n } from "./i18n.js";
 import { ProviderChooser } from "./ProviderChooser.js";
 import { ProviderScreen } from "./ProviderScreen.js";
@@ -50,6 +51,11 @@ export function ConnectQuestionScreen({
   const [providerId, setProviderId] = useState(prefill.provider ?? "");
   const [providers, setProviders] = useState<ConnectorProviderView[]>([]);
   const [presets, setPresets] = useState<PresetOption[]>([]);
+  // The raw failure CODE, not the translated sentence: `t` is re-allocated on
+  // every render, so translating at render time keeps it out of the effect's
+  // dependency list (which must stay `adapter`/`loadPresets` — see above) and
+  // still re-renders in the right language when the locale changes.
+  const [loadFailure, setLoadFailure] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void Promise.all([adapter.listProviders(), loadPresets()]).then(
@@ -57,6 +63,12 @@ export function ConnectQuestionScreen({
         if (cancelled) return;
         setProviders(list);
         setPresets(options);
+      },
+      (cause: unknown) => {
+        // Without this the seat renders an empty chooser forever and the
+        // rejection escapes as an unhandled one.
+        if (cancelled) return;
+        setLoadFailure(cause instanceof Error ? cause.message : String(cause));
       },
     );
     return () => {
@@ -100,6 +112,11 @@ export function ConnectQuestionScreen({
           title={t("options.connect.dsh.add")}
         />
       )}
+      {loadFailure ? (
+        <p className="px-4 pb-3 text-xs text-destructive">
+          {describeError(t, loadFailure)}
+        </p>
+      ) : null}
       {error ? <p className="px-4 pb-3 text-xs text-destructive">{error}</p> : null}
       {inFlight ? (
         <p className="px-4 pb-3 text-xs text-muted-foreground">

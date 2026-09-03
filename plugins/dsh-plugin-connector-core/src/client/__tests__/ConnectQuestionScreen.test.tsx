@@ -32,6 +32,51 @@ describe("ConnectQuestionScreen", () => {
     await userEvent.click(await screen.findByRole("button", { name: /飞书 \/ Lark/ }));
     expect(await screen.findByText("lark-screen")).toBeInTheDocument();
   });
+  // The mount load is the screen's only data path; a rejection used to be
+  // swallowed by `void`, leaving an empty chooser and an unhandled rejection.
+  it("renders translated copy when the provider load fails, and leaves no unhandled rejection", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const p = {
+        ...props(undefined),
+        adapter: {
+          listProviders: vi.fn(async () => {
+            throw new Error("provider_not_found");
+          }),
+        } as never,
+      };
+      render(<ConnectQuestionScreen {...p} />);
+      expect(
+        await screen.findByText(
+          /该 Provider 已不再安装。|That provider is no longer installed\./,
+        ),
+      ).toBeInTheDocument();
+      // One macrotask is what Node needs to decide a rejection went unhandled.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("shows the owner's delivery error alongside a load failure", async () => {
+    const p = {
+      ...props(undefined),
+      error: "respond-failed",
+      adapter: {
+        listProviders: vi.fn(async () => {
+          throw new Error("connect_not_found");
+        }),
+      } as never,
+    };
+    render(<ConnectQuestionScreen {...p} />);
+    expect(
+      await screen.findByText(/该连接已不存在。|That connect no longer exists\./),
+    ).toBeInTheDocument();
+    expect(screen.getByText("respond-failed")).toBeInTheDocument();
+  });
+
   it("cancel closes the wait", async () => {
     const p = props(undefined);
     render(<ConnectQuestionScreen {...p} />);
