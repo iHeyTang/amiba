@@ -34,6 +34,7 @@ export {
   DialogHeader,
   DialogTitle,
 } from "./primitives/dialog";
+export { WizardFrame, type WizardFrameProps, type WizardTab } from "./primitives/wizard-frame";
 export { Input } from "./primitives/input";
 export { Label } from "./primitives/label";
 export { PageContent } from "./primitives/page-content";

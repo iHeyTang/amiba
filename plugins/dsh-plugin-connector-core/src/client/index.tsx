@@ -42,12 +42,8 @@ declare module "@deepseek-ai/cordis" {
  * on no runtime value from this package — only on the `host` prop it is
  * handed.
  */
-export type {
-  ConnectWizardEntry,
-  ConnectWizardHost,
-  ConnectWizardRegistry,
-  PresetOption,
-} from "./wizard-registry.js";
+export type { ConnectWizardHost, ConnectWizardEntry, ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
+export type { ConnectWizardKit, BasicsFieldsProps } from "./wizard-kit.js";
 
 type ConnectSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ConnectAdapter;

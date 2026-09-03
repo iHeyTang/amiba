@@ -9,6 +9,7 @@ import {
 
 import type { ConnectAdapter } from "./adapter.js";
 import { connectI18n } from "./i18n.js";
+import { connectWizardKit } from "./wizard-kit.js";
 import { useConnectWizardProviderIds } from "./wizard-registry.js";
 import type {
   ConnectWizardHost, ConnectWizardRegistry, PresetOption,
@@ -110,11 +111,14 @@ export function ConnectWizardChrome({
 
   const host: ConnectWizardHost = {
     providerId: provider,
-    connectName: name.trim(),
-    agentPreset,
+    presets,
     adapter,
+    kit: connectWizardKit,
+    back: () => setProvider(""),
     done: onDone,
     cancel: onCancel,
+    connectName: name.trim(),
+    agentPreset,
   };
 
   const Body = entry?.component;
