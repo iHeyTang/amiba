@@ -105,7 +105,9 @@ export function registerConnectAddTool(
         },
       } satisfies ConnectAddResult;
     },
-    presentCall: () => ({ card: "generic", title: "Connect a messaging platform", kind: "search" }),
+    // `other` (the ToolCallKind default) rather than `search`: this call
+    // searches nothing — it opens a UI and waits on the user.
+    presentCall: () => ({ card: "generic", title: "Connect a messaging platform", kind: "other" }),
   });
   ctx.effect(() => ctx.tools.register(definition), `amiba-connector-core:${CONNECT_ADD_TOOL_NAME}`);
 }
