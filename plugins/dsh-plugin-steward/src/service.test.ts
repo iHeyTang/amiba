@@ -127,6 +127,21 @@ describe("StewardService — adopt / read / close", () => {
     expect(await service.listTasks()).toHaveLength(1);
   });
 
+  it("seeds the report cursor at the last completed turn so an open turn is still reported later", async () => {
+    const { service, persist } = harness();
+    persist("session-o", [
+      { type: "turn/start", seq: 0, time: 1, data: { turn: 0 } },
+      { type: "user/message", seq: 1, time: 1, data: { id: "u1", role: "user", content: [{ type: "text", text: "q1" }] } },
+      { type: "assistant/message", seq: 2, time: 1, data: { turn: 0, step: 0, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "r1" }] } } },
+      { type: "turn/end", seq: 3, time: 9, data: { turn: 0, reason: { kind: "completed" } } },
+      { type: "turn/start", seq: 4, time: 1, data: { turn: 1 } },
+      { type: "user/message", seq: 5, time: 1, data: { id: "u2", role: "user", content: [{ type: "text", text: "q2" }] } },
+    ]);
+    const adopted = await service.adopt({ sessionId: "session-o" });
+    if (adopted.kind !== "adopted") throw new Error("unreachable");
+    expect(adopted.task.lastReportedSeq).toBe(3);
+  });
+
   it("adopts by title query when exactly one session matches, otherwise returns candidates", async () => {
     const { service, ctx, persist } = harness();
     persist("session-1");
@@ -207,13 +222,15 @@ describe("StewardService — reporting", () => {
   });
 
   it("ignores events from the steward's own session and from unmanaged sessions", async () => {
-    const { service, live, emit, created } = harness();
+    const { service, live, emit, created, ctx } = harness();
     const stewardId = await service.ensureStewardSessionId();
     for (const event of turnEvents(0, "self")) emit(stewardId, event);
     await service.dispatch({ newTask: { title: "C" }, message: "go" });
+    await ctx.agents.create({ sessionId: "session-stray" });
+    for (const event of turnEvents(0, "stray")) emit("session-stray", event);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
-    expect(created).toHaveLength(2);
+    expect(created).toHaveLength(3);
   });
 
   it("flags needs_input when a managed session asks via the tool, and clears it on the result", async () => {
@@ -229,6 +246,17 @@ describe("StewardService — reporting", () => {
     emit(sessionId, { type: "tool/result", seq: 1, time: 2, data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } } });
     await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("running"));
     expect((await service.listTasks())[0]!.id).toBe(taskId);
+  });
+
+  it("does not report or revive a task closed while its session was mid-turn", async () => {
+    const { service, live, emit } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "F" }, message: "go" });
+    await service.closeTask(taskId);
+    for (const event of turnEvents(0, "late reply")) emit(sessionId, event);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+    expect((await service.listTasks(true))[0]!.status).toBe("done");
   });
 
   it("re-reports turns that completed while the runtime was down", async () => {

@@ -14,7 +14,6 @@ import {
   completedTurns,
   type CompletedTurn,
   describeTurnEndReason,
-  lastSeq,
   pendingAskUser,
 } from "./reply-fold.js";
 import type { StewardStore } from "./store.js";
@@ -335,12 +334,14 @@ export class StewardService {
     if (bound) return { kind: "adopted", task: bound, existing: true };
     const inspected = await this.ctx.sessionPersistence.inspect(sessionId);
     const title = input.title?.trim() || (await this.ctx.sessionQuery.readTitle(sessionId))?.title || UNTITLED;
+    const finished = completedTurns(inspected.events, -1);
+    const lastReportedSeq = finished.length ? finished[finished.length - 1]!.endSeq : -1;
     const task = this.newTaskRecord({
       title,
       sessionId,
       cwd: inspected.meta.cwd ?? this.options.defaultCwd,
       origin: "adopted",
-      lastReportedSeq: lastSeq(inspected.events),
+      lastReportedSeq,
     });
     await this.store.mutate((current) => ({ ...current, tasks: [...current.tasks, task] }));
     return { kind: "adopted", task, existing: false };
@@ -386,13 +387,15 @@ export class StewardService {
       }
       if (row.type === "tool/call" && row.data.name === ASK_USER_TOOL) {
         const fresh = await this.findTask(task.id);
+        if (fresh.status === "done") return;
         if (fresh.status === "needs_input") return;
-        await this.updateTask(task.id, { status: "needs_input" });
         await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
+        await this.updateTask(task.id, { status: "needs_input" });
         return;
       }
       if (row.type === "tool/result") {
         const fresh = await this.findTask(task.id);
+        if (fresh.status === "done") return;
         if (fresh.status === "needs_input" && pendingAskUser(session.events) === null) {
           await this.updateTask(task.id, { status: "running" });
         }
@@ -403,6 +406,7 @@ export class StewardService {
   /** Report every completed turn after `lastReportedSeq`, oldest first, then advance the cursor. */
   private async reconcileTask(taskId: string, events: readonly SessionEvent[]): Promise<void> {
     const task = await this.findTask(taskId);
+    if (task.status === "done") return;
     const turns = completedTurns(events, task.lastReportedSeq);
     for (const turn of turns) {
       await this.deliver(formatReport(task, turn));
