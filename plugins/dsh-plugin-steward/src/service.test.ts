@@ -170,3 +170,85 @@ describe("StewardService — adopt / read / close", () => {
     await expect(service.closeTask("nope")).rejects.toThrow(/unknown task/u);
   });
 });
+
+describe("StewardService — reporting", () => {
+  const turnEvents = (turn: number, reply: string, reason: Record<string, unknown> = { kind: "completed" }) => [
+    { type: "turn/start", seq: turn * 4, time: 1, data: { turn } },
+    { type: "user/message", seq: turn * 4 + 1, time: 1, data: { id: `u${turn}`, role: "user", content: [{ type: "text", text: `ask ${turn}` }] } },
+    { type: "assistant/message", seq: turn * 4 + 2, time: 1, data: { turn, step: 0, message: { id: `a${turn}`, role: "assistant", content: [{ type: "text", text: reply }] } } },
+    { type: "turn/end", seq: turn * 4 + 3, time: 100 + turn, data: { turn, reason } },
+  ];
+
+  it("relays a finished turn into the steward session and updates the task", async () => {
+    const { service, live, emit } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "写周报" }, message: "go" });
+    for (const event of turnEvents(0, "周报写好了，在 report.md")) emit(sessionId, event);
+    await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
+    const message = live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
+    expect(message.content[0]!.text).toContain("【任务汇报】写周报");
+    expect(message.content[0]!.text).toContain("结果：完成");
+    expect(message.content[0]!.text).toContain("周报写好了，在 report.md");
+    expect(message.source).toEqual({ kind: "plugin", plugin: "amiba-steward", form: "relay" });
+    const task = (await service.listTasks())[0]!;
+    expect(task).toMatchObject({ id: taskId, status: "idle", lastReportedSeq: 3, lastSummary: "周报写好了，在 report.md" });
+  });
+
+  it("reports a failed turn with its reason and marks the task failed", async () => {
+    const { service, live, emit } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "B" }, message: "go" });
+    for (const event of turnEvents(0, "", { kind: "error", error: { message: "rate limited" } })) emit(sessionId, event);
+    await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
+    const text = (live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).toContain("结果：失败（error: rate limited）");
+    const task = (await service.listTasks())[0]!;
+    expect(task).toMatchObject({ id: taskId, status: "failed", lastError: "error: rate limited" });
+  });
+
+  it("ignores events from the steward's own session and from unmanaged sessions", async () => {
+    const { service, live, emit, created } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    for (const event of turnEvents(0, "self")) emit(stewardId, event);
+    await service.dispatch({ newTask: { title: "C" }, message: "go" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+    expect(created).toHaveLength(2);
+  });
+
+  it("flags needs_input when a managed session asks via the tool, and clears it on the result", async () => {
+    const { service, live, emit } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "D" }, message: "go" });
+    emit(sessionId, { type: "tool/call", seq: 0, time: 1, data: { turn: 0, step: 0, callId: "c1", name: "ask_user_question", arguments: "{}" } });
+    await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("needs_input"));
+    await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
+    const text = (live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).toContain("【任务汇报】D");
+    expect(text).toContain("正在它的会话里等你回答");
+    emit(sessionId, { type: "tool/result", seq: 1, time: 2, data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } } });
+    await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("running"));
+    expect((await service.listTasks())[0]!.id).toBe(taskId);
+  });
+
+  it("re-reports turns that completed while the runtime was down", async () => {
+    const first = harness();
+    const stewardId = await first.service.ensureStewardSessionId();
+    const { taskId, sessionId } = await first.service.dispatch({ newTask: { title: "E" }, message: "go" });
+    first.service.dispose();
+
+    const second = harness();
+    await second.store.mutate(() => ({
+      version: 1,
+      stewardSessionId: stewardId,
+      tasks: [{ id: taskId, title: "E", sessionId, cwd: "/default", origin: "created", status: "running", lastReportedSeq: -1, createdAt: 1, updatedAt: 1 }],
+    }));
+    second.persist(stewardId, [], { agentPreset: "amiba-steward" });
+    second.persist(sessionId, [...turnEvents(0, "done while down"), ...turnEvents(1, "and again")]);
+    await second.service.start();
+    await vi.waitFor(() => expect(second.live.get(stewardId)!.followup).toHaveBeenCalledTimes(2));
+    const task = (await second.service.listTasks())[0]!;
+    expect(task).toMatchObject({ id: taskId, status: "idle", lastReportedSeq: 7, lastSummary: "and again" });
+    expect(second.resumed).toEqual([stewardId]);
+  });
+});

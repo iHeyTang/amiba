@@ -9,7 +9,14 @@ import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 
-import { ASK_USER_TOOL, completedTurns, describeTurnEndReason, lastSeq, pendingAskUser } from "./reply-fold.js";
+import {
+  ASK_USER_TOOL,
+  completedTurns,
+  type CompletedTurn,
+  describeTurnEndReason,
+  lastSeq,
+  pendingAskUser,
+} from "./reply-fold.js";
 import type { StewardStore } from "./store.js";
 import type {
   AdoptInput,
@@ -352,14 +359,101 @@ export class StewardService {
     return this.updateTask(taskId, { status: "done" });
   }
 
-  // ── reporting (Task 6) ───────────────────────────────────────────────
+  // ── reporting ────────────────────────────────────────────────────────
 
-  private async handleSessionEvent(_session: Session, _event: SessionEvent): Promise<void> {}
+  private enqueue<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(work);
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
 
-  private async recover(): Promise<void> {}
+  private async taskBySession(sessionId: string): Promise<StewardTask | undefined> {
+    const state = await this.store.read();
+    if (sessionId === state.stewardSessionId) return undefined;
+    return state.tasks.find((task) => task.sessionId === sessionId && task.status !== "done");
+  }
+
+  private async handleSessionEvent(session: Session, event: SessionEvent): Promise<void> {
+    if (this.disposed) return;
+    const row = event as unknown as { type: string; data: Record<string, unknown> };
+    if (row.type !== "turn/end" && row.type !== "tool/call" && row.type !== "tool/result") return;
+    const task = await this.taskBySession(session.id as string);
+    if (!task) return;
+    await this.enqueue(async () => {
+      if (row.type === "turn/end") {
+        await this.reconcileTask(task.id, session.events);
+        return;
+      }
+      if (row.type === "tool/call" && row.data.name === ASK_USER_TOOL) {
+        const fresh = await this.findTask(task.id);
+        if (fresh.status === "needs_input") return;
+        await this.updateTask(task.id, { status: "needs_input" });
+        await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
+        return;
+      }
+      if (row.type === "tool/result") {
+        const fresh = await this.findTask(task.id);
+        if (fresh.status === "needs_input" && pendingAskUser(session.events) === null) {
+          await this.updateTask(task.id, { status: "running" });
+        }
+      }
+    });
+  }
+
+  /** Report every completed turn after `lastReportedSeq`, oldest first, then advance the cursor. */
+  private async reconcileTask(taskId: string, events: readonly SessionEvent[]): Promise<void> {
+    const task = await this.findTask(taskId);
+    const turns = completedTurns(events, task.lastReportedSeq);
+    for (const turn of turns) {
+      await this.deliver(formatReport(task, turn));
+      const reason = describeTurnEndReason(turn.reason);
+      await this.updateTask(taskId, {
+        lastReportedSeq: turn.endSeq,
+        lastSummary: summarize(turn.assistantText),
+        status: turn.failed ? "failed" : "idle",
+        lastError: turn.failed ? reason : undefined,
+      });
+    }
+    if (turns.length === 0 && task.status !== "needs_input" && pendingAskUser(events)) {
+      await this.updateTask(taskId, { status: "needs_input" });
+    }
+  }
+
+  private async deliver(text: string): Promise<void> {
+    const steward = await this.ensureStewardAgent();
+    steward.followup(
+      createUserMessage({
+        content: [{ type: "text", text }],
+        source: { kind: "plugin", plugin: STEWARD_SOURCE, form: "relay" },
+      }),
+    );
+  }
+
+  /** Boot-time catch-up: turns that ended while the runtime was down. */
+  private async recover(): Promise<void> {
+    const { tasks } = await this.store.read();
+    for (const task of tasks) {
+      if (task.status === "done") continue;
+      try {
+        const live = this.ctx.agents.get(task.sessionId as never) as Agent | undefined;
+        const events = live
+          ? live.session.events
+          : (await this.ctx.sessionPersistence.readFrom(task.sessionId, Math.max(0, task.lastReportedSeq + 1))).events;
+        await this.enqueue(() => this.reconcileTask(task.id, events));
+      } catch (error) {
+        this.log.error(`steward: failed to recover task ${task.id}: ${String(error)}`);
+      }
+    }
+  }
 
   /** Exposed for tests and the remote: current durable state. */
   async snapshot(): Promise<StewardState> {
     return this.store.read();
   }
+}
+
+export function formatReport(task: StewardTask, turn: CompletedTurn): string {
+  const outcome = turn.failed ? `失败（${describeTurnEndReason(turn.reason)}）` : "完成";
+  const body = turn.assistantText || "（这一轮没有文字回复）";
+  return `【任务汇报】${task.title}（task: ${task.id}）\n结果：${outcome}\n---\n${body}`;
 }
