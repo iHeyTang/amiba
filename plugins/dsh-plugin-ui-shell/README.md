@@ -119,10 +119,11 @@ counterpart.
   the frame-wide click-through floating layer
 - `tool.call.toolview` — official name from
   `@deepseek-ai/dsh-client-ui-tool`: the per-tool call row, KEYED by the wire
-  tool name (keyed, SESSION scope, owner `ToolCallOwnerProps`). The only seat
-  here whose occupants are not a fixed list — the key domain is open, so a
-  plugin registers `key: "<wire tool name>"` and owns how that tool's calls
-  render inside a turn. Every unclaimed name renders Amiba's own
+  tool name (keyed, SESSION scope, owner `ToolCallOwnerProps`). One of the two
+  seats here whose occupants are not a fixed list (the other is
+  `amiba.conversation.question`, below) — the key domain is open, so a plugin
+  registers `key: "<wire tool name>"` and owns how that tool's calls render
+  inside a turn. Every unclaimed name renders Amiba's own
   `ToolSpec`-driven tool chip, which the shell passes as the dispatch
   `fallback`, so with no plugin registered the conversation is byte-identical
   to before the seat existed. Owner supply: `callId` / `toolName` / `block`
@@ -130,6 +131,19 @@ counterpart.
   both Amiba tool producers retain), `cwd` from the conversation's workspace
   binding, `openFile` from the workspace pane. `inspect` is deliberately
   omitted — it addresses the trajectory view, which Amiba does not run
+- `amiba.conversation.question` — Amiba's own name: the per-question screen in
+  the conversation footer, KEYED by the question id (keyed, SESSION scope,
+  owner `AmibaConversationQuestionOwner`). The second seat here with an open
+  key domain — a plugin registers `key: "<question id>"` and owns how that one
+  question is asked and answered; the dispatch `entryKey` is the FIRST pending
+  question's id. Every unclaimed id renders Amiba's own `ClarifyBanner`, which
+  the shell passes as the dispatch `fallback`, so with no plugin registered the
+  footer is byte-identical to before the seat existed. Owner supply: the
+  pending `request`, the host's `inFlight`/`error` state, and its
+  `respond`/`cancel` callbacks — the complete answering contract, so an
+  occupant needs no host wire of its own. First occupant:
+  `@amiba/dsh-plugin-connector-core` claims `amiba.connect-wizard` and runs the
+  connect wizard there
 
 DECLARATION-ANCHOR divergence, recorded once for the seats that have one:
 upstream declares `tool.call.toolview` from `conversation.chat.node`'s

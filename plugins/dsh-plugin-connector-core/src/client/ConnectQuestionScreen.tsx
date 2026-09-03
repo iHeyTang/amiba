@@ -25,10 +25,16 @@ export type ConnectQuestionScreenProps = AmibaConversationQuestionOwner & {
  * never a credential, never the wizard's form state.
  *
  * Plainly typed on purpose (the owner share plus the three injected
- * dependencies): the registration wrapper in `index.tsx` is what carries the
- * slot runtime's mandatory standard kit, so this screen stays directly
- * renderable in a unit test. Same split `ConnectSettingsSection`/
- * `DshSettingsConnect` uses for `settings.section`.
+ * dependencies) and registered DIRECTLY in `index.tsx` — there is no wrapper
+ * around it. That typechecks because `slots.register` constrains its
+ * component argument to `SlotComponent<ComposedProps<…>> = (props: P) =>
+ * ReactNode`, and a function declaring only SOME of those props accepts the
+ * full share the runtime hands it. This screen reads neither the session
+ * standard kit (`sessionId`, `useSession`) nor the global seat, so leaving
+ * them undeclared costs nothing and keeps the component renderable in a unit
+ * test that supplies just these props. `settings.section` needs its
+ * `ConnectSettingsSection`/`DshSettingsConnect` split only because that
+ * registration types itself with the full `PropsRuntime` instead.
  *
  * The owner object and its `respond`/`cancel` closures are re-allocated on
  * every host render, so nothing here may depend on their identity — the one
