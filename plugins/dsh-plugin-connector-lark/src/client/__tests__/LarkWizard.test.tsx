@@ -10,6 +10,9 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
     providerId: "lark",
     connectName: "Sales",
     agentPreset: "restricted",
+    presets: [],
+    kit: { BasicsFields: (() => null) as never },
+    back: vi.fn(),
     adapter: {
       create: vi.fn(async () => ({ id: "c1" }) as never),
       beginOnboarding: vi.fn(),

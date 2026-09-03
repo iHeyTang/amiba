@@ -10,6 +10,9 @@ function host(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
     providerId: "dingtalk",
     connectName: "Bot",
     agentPreset: "restricted",
+    presets: [],
+    kit: { BasicsFields: (() => null) as never },
+    back: vi.fn(),
     adapter: {
       create: vi.fn(async () => ({ id: "c1" }) as never),
       beginOnboarding: vi.fn(),
