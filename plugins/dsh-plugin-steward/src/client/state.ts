@@ -51,6 +51,12 @@ export function createStewardClientState(): StewardClientState {
 export function stewardBadgeFace(state: StewardClientState): SessionBadgeContribution {
   return {
     resolve: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
+    // `state.subscribe` already notifies on every `setAdopted(...)` — the
+    // periodic refresh, an adopt, and the initial apply-time fetch all
+    // route through it — so it's also exactly the right signal for the
+    // shell: fire it and the session list re-renders this badge instead of
+    // waiting for some unrelated render to pick up the fresh value.
+    subscribe: state.subscribe,
   };
 }
 
@@ -58,5 +64,6 @@ export function stewardBadgeFace(state: StewardClientState): SessionBadgeContrib
 export function stewardFilterFace(state: StewardClientState): SessionFilterContribution {
   return {
     test: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
+    subscribe: state.subscribe,
   };
 }
