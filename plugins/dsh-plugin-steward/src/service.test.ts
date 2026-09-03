@@ -285,9 +285,8 @@ describe("StewardService — reporting", () => {
       emit(sessionId, { type: "tool/call", seq: i * 2, time: 1, data: { turn: 0, step: i, callId, name: "ask_user_question", arguments: "{}" } });
       emit(sessionId, { type: "tool/result", seq: i * 2 + 1, time: 1, data: { turn: 0, step: i, message: { content: [{ type: "tool-result", toolCallId: callId, content: [] }] } } });
     }
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("running"), { timeout: 3000, interval: 20 });
     expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
-    expect((await service.listTasks())[0]!.status).toBe("running");
   });
 
   it("heals a stale needs_input when the answer never reached the handler", async () => {
@@ -308,9 +307,8 @@ describe("StewardService — reporting", () => {
       time: 1,
       data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } },
     });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("running"), { timeout: 3000, interval: 20 });
     expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
-    expect((await service.listTasks())[0]!.status).toBe("running");
   });
 
   it("does not report or revive a task closed while its session was mid-turn", async () => {
