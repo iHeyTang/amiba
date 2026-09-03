@@ -41,7 +41,7 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
-import { visibleChatSessions } from "./session-visibility";
+import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
 import ChatSurface from "./ChatSurface";
 import type {
   ComposerModelPickerRenderer,
@@ -443,11 +443,19 @@ function FullScreenChatViewInner({
   }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
 
   // External session authors wake their owning session instead of minting a
-  // parallel transcript, so the chat list needs only the archive filter; no
-  // local id convention may hide a valid DSH session.
+  // parallel transcript, so the chat list filters on exactly two things: the
+  // archive flag, and the agent presets a plugin asked to hide. No local id
+  // convention may hide a valid DSH session.
   const chatSessions = useMemo(
     () => visibleChatSessions(sessions.sessions, hiddenSessionPresets),
     [sessions.sessions, hiddenSessionPresets],
+  );
+
+  // The palette swaps to its own search results as soon as the user types, so
+  // that path needs the same filter or a hidden session reappears there.
+  const searchChatSessions = useMemo(
+    () => filterSearchMatches(sessions.searchHistory, hiddenSessionPresets),
+    [sessions.searchHistory, hiddenSessionPresets],
   );
 
   // Active chat-session title — one of the top-bar placeholder sources.
@@ -942,7 +950,7 @@ function FullScreenChatViewInner({
         onOpenSession={(id) => void onOpenSession(id)}
         onNewChat={() => void onNewChatAndShow()}
         onOpenSettings={() => openSettings()}
-        onSearchSessions={sessions.searchHistory}
+        onSearchSessions={searchChatSessions}
       />
     </div>
   );
