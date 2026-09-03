@@ -89,6 +89,40 @@ const pluginPackages = await Promise.all(
     ),
   ),
 );
+// Build order is DEPENDENCY order, not alphabetical: a plugin that imports
+// another plugin's type surface (e.g. `@amiba/dsh-plugin-ui-shell/client`'s
+// Context augmentation) type-checks against that plugin's built `lib/`, so
+// the dependency must be rebuilt first or the dependent's `tsc` sees a stale
+// declaration. Only the build loop uses this order; every other array above
+// stays alphabetical so manifests and hashes are unaffected.
+const pluginBuildOrder = (() => {
+  const manifestByName = new Map(
+    pluginPackages.map((manifest, index) => [manifest.name, index]),
+  );
+  const ordered = [];
+  const visiting = new Set();
+  const visit = (name) => {
+    if (ordered.includes(name)) return;
+    if (visiting.has(name)) {
+      throw new Error(
+        `[dsh:runtime] circular @amiba/dsh-plugin-* dependency at ${name}`,
+      );
+    }
+    visiting.add(name);
+    const manifest = pluginPackages[manifestByName.get(name)];
+    const pluginDependencies = Object.keys({
+      ...(manifest.dependencies ?? {}),
+      ...(manifest.peerDependencies ?? {}),
+    })
+      .filter((dependency) => manifestByName.has(dependency))
+      .sort();
+    for (const dependency of pluginDependencies) visit(dependency);
+    visiting.delete(name);
+    ordered.push(name);
+  };
+  for (const name of pluginPackageNames) visit(name);
+  return ordered.map((name) => pluginSourceDirs[manifestByName.get(name)]);
+})();
 const workspacePackages = new Map();
 for (const workspaceRoot of ["packages", "plugins", "bundles"]) {
   for (const entry of await fsp.readdir(
@@ -614,7 +648,7 @@ const stage = await fsp.mkdtemp(
   path.join(runtimePackageDir, ".dsh-runtime-build-"),
 );
 try {
-  for (const pluginSourceDir of pluginSourceDirs) {
+  for (const pluginSourceDir of pluginBuildOrder) {
     run("pnpm", ["--dir", pluginSourceDir, "build"]);
   }
   const nodeSource = await installNode(stage);
