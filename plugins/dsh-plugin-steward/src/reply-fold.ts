@@ -107,7 +107,12 @@ export function completedTurns(events: readonly SessionEvent[], afterSeq: number
   return result;
 }
 
-/** The latest `ask_user_question` call that has no `tool/result` yet. */
+/**
+ * The latest `ask_user_question` call that is pending: has no matching `tool/result`
+ * AND whose turn has not ended. An unanswered question whose turn is already closed
+ * (aborted/interrupted/errored) is not pending — the session is no longer waiting on it.
+ * Returns the latest such pending call, else null.
+ */
 export function pendingAskUser(events: readonly SessionEvent[]): { callId: string; seq: number } | null {
   const all = rows(events);
   const answered = new Set<string>();
@@ -119,11 +124,19 @@ export function pendingAskUser(events: readonly SessionEvent[]): { callId: strin
       if (typeof block.toolCallId === "string") answered.add(block.toolCallId);
     }
   }
+  let lastTurnEndSeq = -1;
+  for (const row of all) {
+    if (row.type === "turn/end") {
+      lastTurnEndSeq = row.seq;
+    }
+  }
   for (let index = all.length - 1; index >= 0; index -= 1) {
     const row = all[index]!;
     if (row.type !== "tool/call" || row.data.name !== ASK_USER_TOOL) continue;
+    if (row.seq < lastTurnEndSeq) continue;
     const callId = String(row.data.callId);
-    return answered.has(callId) ? null : { callId, seq: row.seq };
+    if (answered.has(callId)) continue;
+    return { callId, seq: row.seq };
   }
   return null;
 }

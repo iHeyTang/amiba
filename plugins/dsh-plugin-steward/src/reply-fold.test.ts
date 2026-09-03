@@ -69,4 +69,26 @@ describe("pendingAskUser", () => {
     const events = [ev("tool/call", { turn: 0, step: 0, callId: "c2", name: "bash", arguments: "{}" })];
     expect(pendingAskUser(events as never)).toBeNull();
   });
+
+  it("skips an answered later call and returns an earlier unanswered one in the same open turn", () => {
+    seq = 0;
+    const events = [
+      ev("tool/call", { turn: 0, step: 0, callId: "c1", name: ASK_USER_TOOL, arguments: "{}" }),
+      ev("tool/call", { turn: 0, step: 0, callId: "c2", name: ASK_USER_TOOL, arguments: "{}" }),
+      ev("tool/result", { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c2", content: [] }] } }),
+    ];
+    expect(pendingAskUser(events as never)).toEqual({ callId: "c1", seq: 0 });
+  });
+
+  it("treats an unanswered call as settled once its turn has ended", () => {
+    seq = 0;
+    const events = [
+      ev("turn/start", { turn: 0 }),
+      ev("tool/call", { turn: 0, step: 0, callId: "c1", name: ASK_USER_TOOL, arguments: "{}" }),
+      ev("turn/end", { turn: 0, reason: { kind: "aborted" } }),
+    ];
+    expect(pendingAskUser(events as never)).toBeNull();
+    events.push(ev("tool/call", { turn: 1, step: 0, callId: "c3", name: ASK_USER_TOOL, arguments: "{}" }));
+    expect(pendingAskUser(events as never)).toEqual({ callId: "c3", seq: 3 });
+  });
 });
