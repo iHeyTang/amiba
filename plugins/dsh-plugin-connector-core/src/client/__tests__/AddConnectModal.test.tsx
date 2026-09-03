@@ -32,6 +32,32 @@ describe("AddConnectModal", () => {
     expect(await screen.findByRole("button", { name: /飞书 \/ Lark/ })).toBeInTheDocument();
   });
 
+  // The mounted screen (chooser or provider wizard) draws its OWN header
+  // close, so `DialogContent`'s default `absolute right-3 top-3` close would
+  // sit right on top of it. `hideDefaultClose` is what keeps the corner
+  // single-occupancy.
+  it("draws exactly one close control on the chooser screen", async () => {
+    const registry = createConnectWizardRegistry();
+    registry.register("lark", { component: () => <div>lark-screen</div> });
+    render(<AddConnectModal adapter={{} as never} onCreated={vi.fn()} onOpenChange={vi.fn()} open presets={presets} providers={providers} registry={registry} />);
+    // Radix's own close button is the only control carrying the sr-only
+    // "Close" text; the chooser's header close is aria-labelled instead.
+    expect(screen.queryByText("Close")).not.toBeInTheDocument();
+    const iconOnlyCloses = screen
+      .getAllByRole("button", { name: /取消|Cancel|Close/ })
+      .filter((b) => !b.textContent?.trim());
+    expect(iconOnlyCloses).toHaveLength(1);
+  });
+
+  it("draws exactly one close control on the provider screen", async () => {
+    const registry = createConnectWizardRegistry();
+    registry.register("lark", { component: () => <div>lark-screen</div> });
+    render(<AddConnectModal adapter={{} as never} onCreated={vi.fn()} onOpenChange={vi.fn()} open presets={presets} providers={providers} registry={registry} />);
+    await userEvent.click(await screen.findByRole("button", { name: /飞书 \/ Lark/ }));
+    await screen.findByText("lark-screen");
+    expect(screen.queryByText("Close")).not.toBeInTheDocument();
+  });
+
   it("renders nothing interactive when closed", () => {
     const registry = createConnectWizardRegistry();
     render(

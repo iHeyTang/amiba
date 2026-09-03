@@ -25,7 +25,10 @@ export interface AddConnectModalProps {
 /**
  * Screen 1 is core's chooser; screen 2 is the chosen platform's whole
  * wizard. The dialog draws no title of its own beyond the a11y one — every
- * other pixel belongs to whichever screen is mounted.
+ * other pixel belongs to whichever screen is mounted. That includes the
+ * corner: BOTH mounted screens draw their own `WizardFrame` header close, so
+ * `hideDefaultClose` suppresses `DialogContent`'s default one instead of
+ * stacking a second X on top of it.
  */
 export function AddConnectModal({
   open, onOpenChange, adapter, registry, providers, presets, onCreated,
@@ -37,7 +40,10 @@ export function AddConnectModal({
   }, [open]);
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className={providerId ? "max-w-[600px] p-0" : "max-w-lg p-0"}>
+      <DialogContent
+        className={providerId ? "max-w-[600px] p-0" : "max-w-lg p-0"}
+        hideDefaultClose
+      >
         <DialogTitle className="sr-only">{providerId || t("options.connect.dsh.add")}</DialogTitle>
         <DialogDescription className="sr-only">
           {t("options.connect.dsh.addDescription")}
