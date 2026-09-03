@@ -23,7 +23,9 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   const dispose = ctx.amibaConnectWizards.register("dingtalk", {
     component: DingtalkWizard,
     icon: <Bot className="h-[18px] w-[18px]" />,
-    tagline: "钉钉 / DingTalk",
+    // A one-liner about what the wizard DOES: the chooser card already
+    // shows the provider's display name as its title.
+    tagline: "填写机器人的 Client ID 与 Secret 接入钉钉",
   });
   return () => dispose();
 }
