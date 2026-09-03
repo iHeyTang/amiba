@@ -90,6 +90,61 @@ describe("createSlotContributionsSource", () => {
     expect(listener).toHaveBeenCalled();
     dispose();
   });
+
+  it("a contribution's own subscribe firing yields a new snapshot identity and notifies", () => {
+    let contributionListener: (() => void) | undefined;
+    const contributionDispose = vi.fn();
+    const { ctx } = fakeSlots([
+      {
+        options: { id: "a", order: 0 },
+        inject: () => ({
+          subscribe: (listener: () => void) => {
+            contributionListener = listener;
+            return contributionDispose;
+          },
+        }),
+      },
+    ]);
+    const source = createSlotContributionsSource(ctx, "test.slot", mapRow);
+    const outerListener = vi.fn();
+    const dispose = source.subscribe(outerListener);
+    expect(contributionListener).toBeTypeOf("function");
+
+    const before = source.getSnapshot();
+    contributionListener?.();
+    expect(outerListener).toHaveBeenCalledTimes(1);
+    const after = source.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(after.map((r) => r.id)).toEqual(before.map((r) => r.id));
+
+    dispose();
+    expect(contributionDispose).toHaveBeenCalled();
+  });
+
+  it("re-wires contribution subscriptions when entries are re-enumerated", () => {
+    const disposeA = vi.fn();
+    const subscribeB = vi.fn((listener: () => void) => {
+      void listener;
+      return vi.fn();
+    });
+    const fake = fakeSlots([
+      {
+        options: { id: "a", order: 0 },
+        inject: () => ({ subscribe: () => disposeA }),
+      },
+    ]);
+    const source = createSlotContributionsSource(fake.ctx, "test.slot", mapRow);
+    const dispose = source.subscribe(vi.fn());
+    expect(disposeA).not.toHaveBeenCalled();
+
+    fake.setEntries([
+      { options: { id: "b", order: 0 }, inject: () => ({ subscribe: subscribeB }) },
+    ]);
+    expect(disposeA).toHaveBeenCalledTimes(1);
+    expect(subscribeB).toHaveBeenCalledTimes(1);
+
+    dispose();
+  });
 });
 
 describe("createSessionBadgesSource", () => {

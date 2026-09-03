@@ -115,6 +115,14 @@ export type { SessionBadgeTarget } from "@amiba/ui";
  */
 export interface SessionBadgeContribution {
   resolve(session: SessionBadgeTarget): string | boolean | null;
+  /**
+   * Optional: call the listener when `resolve` results may have changed —
+   * the managed set was refreshed, an IM channel's membership changed, etc.
+   * The list re-renders. Not required: a contribution whose `resolve` never
+   * changes on its own (or only changes alongside a slot re-registration)
+   * can omit it.
+   */
+  subscribe?(listener: () => void): () => void;
 }
 /**
  * The `inject` business face of one `amiba.sessions.list.filter`
@@ -126,6 +134,11 @@ export interface SessionBadgeContribution {
  */
 export interface SessionFilterContribution {
   test(session: SessionBadgeTarget): boolean;
+  /**
+   * Optional: call the listener when `test` results may have changed. The
+   * list re-renders. See `SessionBadgeContribution.subscribe`.
+   */
+  subscribe?(listener: () => void): () => void;
 }
 
 /**

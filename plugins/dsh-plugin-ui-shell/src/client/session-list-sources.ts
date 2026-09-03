@@ -25,6 +25,25 @@ export interface ContributionsSource<T> {
 }
 
 /**
+ * One contribution's own change-notification hook, read off its `inject()`
+ * business face when present — the `subscribe` half of
+ * `SessionBadgeContribution` / `SessionFilterContribution` in `index.tsx`.
+ * Structural and generic on purpose: this module has no notion of "badge"
+ * vs "filter", only "a business face that may optionally know how to signal
+ * its own changes".
+ */
+type ContributionSubscribe = (listener: () => void) => () => void;
+
+function subscribeOfFace(
+  face: Record<string, unknown> | undefined,
+): ContributionSubscribe | undefined {
+  const subscribe = face?.subscribe;
+  return typeof subscribe === "function"
+    ? (subscribe as ContributionSubscribe)
+    : undefined;
+}
+
+/**
  * Builds a `useSyncExternalStore`-shaped source over one list-kind slot's
  * registrations — the same caching/versioning/lang-observer pattern
  * `sectionsSource` in `index.tsx` uses for `settings.section`:
@@ -32,41 +51,122 @@ export interface ContributionsSource<T> {
  * changes force a re-resolve of thunked labels, and `ctx.subscribe` plus a
  * `lang` `MutationObserver` are both wired into the returned `subscribe`.
  *
- * `mapEntry` turns one stored entry into the plugin-facing contribution row,
- * or `null` to drop an entry missing its `id` or its business face (e.g. no
- * `resolve`/`test` function) — the result is sorted by `order` ascending.
+ * `mapEntry` turns one stored entry (plus its already-resolved `inject()`
+ * face, so callers don't call `inject()` a second time themselves) into the
+ * plugin-facing contribution row, or `null` to drop an entry missing its
+ * `id` or its business face (e.g. no `resolve`/`test` function) — the
+ * result is sorted by `order` ascending.
+ *
+ * On top of the slot-registration/version/lang axis, each KEPT entry's own
+ * `face.subscribe` (when present) is wired into an internal `dataVersion`
+ * counter: a contribution firing its listener (its managed set refreshed,
+ * an IM channel's membership changed, …) bumps `dataVersion`, which (a)
+ * forces the next `getSnapshot()` to return a NEW array identity — same
+ * contents is fine, only the reference needs to change — and (b) notifies
+ * this source's own subscriber. `useSyncExternalStore` in `product-shell.tsx`
+ * is what turns that into a re-render, and the derived `itemBadges`
+ * callback / `sessionFilterList` array (both memoized on the snapshot
+ * array's identity) get recomputed with it.
+ *
+ * Contribution subscriptions are (re)wired on every `subscribe()` call and
+ * every time the slot's own registrations change (`ctx.subscribe(slotName,
+ * …)` firing) — old subscriptions disposed first, new ones attached from
+ * the freshly re-projected entry set — and all of them are disposed when
+ * the returned `subscribe()`'s disposer runs.
  */
 export function createSlotContributionsSource<T extends { order: number }>(
   ctx: SlotContributionsCtx,
   slotName: string,
-  mapEntry: (entry: SlotContributionEntry) => T | null,
+  mapEntry: (
+    entry: SlotContributionEntry,
+    face: Record<string, unknown> | undefined,
+  ) => T | null,
 ): ContributionsSource<T> {
   let version = -1;
   let language = "";
+  let dataVersion = 0;
+  let snapshotDataVersion = -1;
   let snapshot: readonly T[] = [];
+  // The kept entries' own `subscribe` faces, as of the last projection —
+  // what a `subscribe()` call (or a re-projection while already subscribed)
+  // wires listeners to.
+  let contributionSubscribes: readonly ContributionSubscribe[] = [];
+
+  /** Re-reads `entriesOfSlot`/lang when the slot's version or the active
+   *  language changed since the last call; returns whether it did. */
+  const project = (): boolean => {
+    const currentVersion = ctx.getVersion(slotName);
+    const currentLanguage =
+      typeof document === "undefined" ? "" : document.documentElement.lang;
+    if (currentVersion === version && currentLanguage === language) {
+      return false;
+    }
+    version = currentVersion;
+    language = currentLanguage;
+    const kept: { row: T; subscribe?: ContributionSubscribe }[] = [];
+    for (const entry of ctx.entriesOfSlot(slotName)) {
+      const face = entry.inject?.();
+      const row = mapEntry(entry, face);
+      if (row === null) continue;
+      kept.push({ row, subscribe: subscribeOfFace(face) });
+    }
+    kept.sort((left, right) => left.row.order - right.row.order);
+    snapshot = kept.map((k) => k.row);
+    contributionSubscribes = kept
+      .map((k) => k.subscribe)
+      .filter((s): s is ContributionSubscribe => Boolean(s));
+    return true;
+  };
+
   return {
     getSnapshot: () => {
-      const currentVersion = ctx.getVersion(slotName);
-      const currentLanguage =
-        typeof document === "undefined" ? "" : document.documentElement.lang;
-      if (currentVersion !== version || currentLanguage !== language) {
-        version = currentVersion;
-        language = currentLanguage;
-        snapshot = ctx
-          .entriesOfSlot(slotName)
-          .map(mapEntry)
-          .filter((entry): entry is T => entry !== null)
-          .sort((left, right) => left.order - right.order);
+      const reprojected = project();
+      if (reprojected) {
+        snapshotDataVersion = dataVersion;
+      } else if (snapshotDataVersion !== dataVersion) {
+        // No registration/lang change, but a contribution signalled a data
+        // change: same rows, new array identity so `useSyncExternalStore`
+        // treats this as a change.
+        snapshotDataVersion = dataVersion;
+        snapshot = snapshot.slice();
       }
       return snapshot;
     },
     subscribe: (listener: () => void) => {
-      const disposeSlotSubscription = ctx.subscribe(slotName, listener);
+      const onContributionChange = () => {
+        dataVersion += 1;
+        listener();
+      };
+      let contributionDisposers: Array<() => void> = [];
+      const rewireContributions = () => {
+        for (const dispose of contributionDisposers) dispose();
+        contributionDisposers = contributionSubscribes.map((subscribe) =>
+          subscribe(onContributionChange),
+        );
+      };
+      // `subscribe()` may be the very first call this source ever sees (no
+      // prior `getSnapshot()`) — project once up front so
+      // `contributionSubscribes` is populated before wiring.
+      project();
+      rewireContributions();
+
+      const disposeSlotSubscription = ctx.subscribe(slotName, () => {
+        // Entries were added/removed/changed: re-project so
+        // `contributionSubscribes` reflects the new set, then re-wire
+        // (old subscriptions disposed, new ones attached) before notifying.
+        project();
+        rewireContributions();
+        listener();
+      });
+
       if (
         typeof document === "undefined" ||
         typeof MutationObserver === "undefined"
       ) {
-        return disposeSlotSubscription;
+        return () => {
+          for (const dispose of contributionDisposers) dispose();
+          disposeSlotSubscription();
+        };
       }
       const languageObserver = new MutationObserver(listener);
       languageObserver.observe(document.documentElement, {
@@ -75,6 +175,7 @@ export function createSlotContributionsSource<T extends { order: number }>(
       });
       return () => {
         languageObserver.disconnect();
+        for (const dispose of contributionDisposers) dispose();
         disposeSlotSubscription();
       };
     },
@@ -98,18 +199,17 @@ export function createSessionBadgesSource(
   return createSlotContributionsSource<SessionBadgeSource>(
     ctx,
     SESSION_BADGE_SLOT,
-    (entry) => {
+    (entry, face) => {
       const id = entry.options.id ?? "";
       if (!id) return null;
-      const face = entry.inject?.() as
-        | { resolve?: SessionBadgeSource["resolve"] }
-        | undefined;
-      if (typeof face?.resolve !== "function") return null;
+      const resolve = (face as { resolve?: SessionBadgeSource["resolve"] } | undefined)
+        ?.resolve;
+      if (typeof resolve !== "function") return null;
       return {
         id,
         order: entry.options.order ?? 0,
         label: resolveSlotLabel(entry.options.label) ?? id,
-        resolve: face.resolve,
+        resolve,
       };
     },
   );
@@ -129,18 +229,16 @@ export function createSessionFiltersSource(
   return createSlotContributionsSource<SessionFilterRow>(
     ctx,
     SESSION_FILTER_SLOT,
-    (entry) => {
+    (entry, face) => {
       const id = entry.options.id ?? "";
       if (!id) return null;
-      const face = entry.inject?.() as
-        | { test?: SessionListFilter["test"] }
-        | undefined;
-      if (typeof face?.test !== "function") return null;
+      const test = (face as { test?: SessionListFilter["test"] } | undefined)?.test;
+      if (typeof test !== "function") return null;
       return {
         id,
         order: entry.options.order ?? 0,
         label: resolveSlotLabel(entry.options.label) ?? id,
-        test: face.test,
+        test,
       };
     },
   );
