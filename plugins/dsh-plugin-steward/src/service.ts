@@ -418,10 +418,13 @@ export class StewardService {
     if (this.disposed) return;
     const row = event as unknown as { type: string; data: Record<string, unknown> };
     if (row.type !== "turn/end" && row.type !== "tool/call" && row.type !== "tool/result") return;
-    const task = await this.taskBySession(session.id as string);
-    if (!task) return;
+    // Enqueue immediately (before the async taskBySession lookup) so the queue
+    // order matches event order even when two events for the same session are
+    // emitted back-to-back; the lookup happens inside the queued callback.
     await this.enqueue(async () => {
       if (this.disposed) return;
+      const task = await this.taskBySession(session.id as string);
+      if (!task) return;
       if (row.type === "turn/end") {
         await this.reconcileTask(task.id, session.events);
         return;
@@ -469,7 +472,13 @@ export class StewardService {
         // Read the live log rather than the captured event array: it is the
         // only view guaranteed to include whatever landed during the delay.
         const live = this.ctx.agents.get(fresh.sessionId as never) as Agent | undefined;
-        if (!live || pendingAskUser(live.session.events) === null) return;
+        if (!live || pendingAskUser(live.session.events) === null) {
+          // The question was already answered (or denied) by the time this
+          // fired — e.g. its tool/result raced ahead of the tool/call in the
+          // queue — so the earlier needs_input never got rolled back. Heal it.
+          await this.updateTask(taskId, { status: "running" });
+          return;
+        }
         await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
       }).catch((error) => {
         this.log.error(`steward: failed to relay a pending question for ${taskId}: ${String(error)}`);

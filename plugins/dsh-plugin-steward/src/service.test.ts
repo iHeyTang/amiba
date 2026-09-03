@@ -272,6 +272,47 @@ describe("StewardService — reporting", () => {
     expect((await service.listTasks())[0]!.status).toBe("running");
   });
 
+  it("keeps event order when a call and its result arrive back-to-back", async () => {
+    const { service, live, emit } = harness({ askNoticeDelayMs: 10 });
+    const stewardId = await service.ensureStewardSessionId();
+    const { sessionId } = await service.dispatch({ newTask: { title: "G2" }, message: "go" });
+    // 20 denied asks in a row, each call immediately followed by its result,
+    // all emitted synchronously — the un-serialized taskBySession lookup used
+    // to let a later tool/result's queue entry race ahead of an earlier
+    // tool/call's, leaving the task stuck at needs_input.
+    for (let i = 0; i < 20; i++) {
+      const callId = `c${i}`;
+      emit(sessionId, { type: "tool/call", seq: i * 2, time: 1, data: { turn: 0, step: i, callId, name: "ask_user_question", arguments: "{}" } });
+      emit(sessionId, { type: "tool/result", seq: i * 2 + 1, time: 1, data: { turn: 0, step: i, message: { content: [{ type: "tool-result", toolCallId: callId, content: [] }] } } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+    expect((await service.listTasks())[0]!.status).toBe("running");
+  });
+
+  it("heals a stale needs_input when the answer never reached the handler", async () => {
+    const { service, live, emit } = harness({ askNoticeDelayMs: 10 });
+    const stewardId = await service.ensureStewardSessionId();
+    const { sessionId } = await service.dispatch({ newTask: { title: "G3" }, message: "go" });
+    emit(sessionId, { type: "tool/call", seq: 0, time: 1, data: { turn: 0, step: 0, callId: "c1", name: "ask_user_question", arguments: "{}" } });
+    // Push the result straight onto the live log synchronously, in the same
+    // tick as the emit above — this guarantees it lands well before the real
+    // 10ms notice timer fires, regardless of how long the queued tool/call
+    // handler (which flips status to needs_input) itself takes to run.
+    // Simulate the result landing in the live log without the handler ever
+    // seeing the event (e.g. missed emit) — the deferred notice must still
+    // self-heal by re-checking the live log directly.
+    live.get(sessionId)!.session.events.push({
+      type: "tool/result",
+      seq: 1,
+      time: 1,
+      data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+    expect((await service.listTasks())[0]!.status).toBe("running");
+  });
+
   it("does not report or revive a task closed while its session was mid-turn", async () => {
     const { service, live, emit } = harness();
     const stewardId = await service.ensureStewardSessionId();
