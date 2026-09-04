@@ -1,17 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
+import { DWClient, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type {
   ConnectorHandle,
   ConnectorInboundEnvelope,
+  ConnectorRuntime,
   ConnectorStatus,
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
   createDingtalkProvider,
+  handleCardFrame,
   handleRobotFrame,
+  realDingtalkDeps,
   type DingtalkClientHandlers,
   type DingtalkDeps,
   type DwLike,
 } from "./provider.js";
+import { buildApprovalCardPrompt } from "./approval-card.js";
 import type { DingtalkConnectorConfig } from "./translate.js";
 
 const validConfig: DingtalkConnectorConfig = {
@@ -40,11 +45,15 @@ function fakeDeps(options?: {
   client?: DwLike;
   token?: ReturnType<typeof vi.fn>;
   postWebhook?: ReturnType<typeof vi.fn>;
+  createCard?: ReturnType<typeof vi.fn>;
+  updateCard?: ReturnType<typeof vi.fn>;
 }): DingtalkDeps & {
   handlers?: DingtalkClientHandlers;
   createClient: ReturnType<typeof vi.fn>;
   token: ReturnType<typeof vi.fn>;
   postWebhook: ReturnType<typeof vi.fn>;
+  createCard?: ReturnType<typeof vi.fn>;
+  updateCard?: ReturnType<typeof vi.fn>;
   logs: string[];
 } {
   const client = options?.client ?? fakeClient();
@@ -54,6 +63,8 @@ function fakeDeps(options?: {
     createClient: ReturnType<typeof vi.fn>;
     token: ReturnType<typeof vi.fn>;
     postWebhook: ReturnType<typeof vi.fn>;
+    createCard?: ReturnType<typeof vi.fn>;
+    updateCard?: ReturnType<typeof vi.fn>;
     logs: string[];
   } = {
     createClient: vi.fn(
@@ -64,6 +75,8 @@ function fakeDeps(options?: {
     ),
     token: options?.token ?? vi.fn(async () => undefined),
     postWebhook: options?.postWebhook ?? vi.fn(async () => undefined),
+    ...(options?.createCard ? { createCard: options.createCard } : {}),
+    ...(options?.updateCard ? { updateCard: options.updateCard } : {}),
     log: (msg: string) => logs.push(msg),
     logs,
   };
@@ -100,6 +113,28 @@ function outbound(overrides: Record<string, unknown> = {}) {
     inReplyTo: "msg_1",
     text: "pong",
     createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+/** Shape mirrors `ApprovalPrompt` (not imported — same reasoning as
+ * `outbound()` above: this plugin's dependency graph doesn't reach
+ * `@amiba/dsh-plugin-messaging-core`). */
+function approvalPrompt(overrides: Partial<{
+  approvalId: string;
+  seq: number;
+  toolName: string;
+  reason?: string;
+  sessionId: string;
+  signal: AbortSignal;
+  deadlineAt?: number;
+}> = {}) {
+  return {
+    approvalId: "appr_1",
+    seq: 1,
+    toolName: "run_shell",
+    sessionId: "session-1",
+    signal: new AbortController().signal,
     ...overrides,
   };
 }
@@ -419,6 +454,388 @@ describe("createDingtalkProvider", () => {
     });
   });
 
+  // --- requestApproval() / announceApprovalOutcome() --------------------
+
+  describe("runtime.requestApproval", () => {
+    it("returns null when deps.createCard is not implemented (no native surface)", async () => {
+      const deps = fakeDeps(); // no createCard
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const reply = await runtime.requestApproval!({ key: "cid_1", kind: "p2p" }, approvalPrompt());
+
+      expect(reply).toBeNull();
+    });
+
+    it("returns null and logs when deps.createCard rejects (send failure)", async () => {
+      const createCard = vi.fn(async () => {
+        throw new Error("card_api_down");
+      });
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const reply = await runtime.requestApproval!({ key: "cid_1", kind: "p2p" }, approvalPrompt());
+
+      expect(reply).toBeNull();
+      expect(deps.logs.some((line) => line.includes("card_api_down"))).toBe(true);
+    });
+
+    it("sends the card via deps.createCard with the conversation target and the built prompt content", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      void runtime.requestApproval!(
+        { key: "cid_1", kind: "group" },
+        approvalPrompt({
+          approvalId: "appr_9",
+          seq: 3,
+          toolName: "write_file",
+          reason: "needs write access",
+        }),
+      );
+      await flush();
+
+      expect(createCard).toHaveBeenCalledWith(
+        validConfig,
+        "appr_9",
+        { conversationKey: "cid_1", conversationKind: "group" },
+        {
+          header: "需要你的审批",
+          body: "#3 · write_file\nneeds write access",
+          agree: { label: "同意", decision: "allowed-once" },
+          reject: { label: "拒绝", decision: "rejected" },
+        },
+      );
+    });
+
+    it("resolves with the human's decision once a matching card callback arrives", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1" }),
+      );
+      await flush();
+
+      deps.handlers!.onCardCallback({
+        userId: "staff_9",
+        params: { approvalId: "appr_1", decision: "allowed-once" },
+      });
+
+      await expect(pending).resolves.toEqual({ outcome: "allowed-once", by: "staff_9" });
+    });
+
+    it("resolves a reject decision without an operator id when the callback carries none", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_2" }),
+      );
+      await flush();
+
+      deps.handlers!.onCardCallback({ params: { approvalId: "appr_2", decision: "rejected" } });
+
+      await expect(pending).resolves.toEqual({ outcome: "rejected", by: undefined });
+    });
+
+    it("ignores a card callback with a mismatched approvalId, keeping the request pending", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1" }),
+      );
+      await flush();
+
+      deps.handlers!.onCardCallback({
+        params: { approvalId: "some_other_approval", decision: "allowed-once" },
+      });
+      await flush();
+
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await flush();
+      expect(settled).toBe(false);
+
+      // Settle it for real so this test doesn't leave a permanently
+      // dangling promise behind.
+      deps.handlers!.onCardCallback({ params: { approvalId: "appr_1", decision: "rejected" } });
+      await expect(pending).resolves.toEqual({ outcome: "rejected", by: undefined });
+    });
+
+    it("ignores a second callback for an already-settled approval — the first decision wins", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1" }),
+      );
+      await flush();
+
+      deps.handlers!.onCardCallback({
+        params: { approvalId: "appr_1", decision: "allowed-once" },
+        userId: "first",
+      });
+      deps.handlers!.onCardCallback({
+        params: { approvalId: "appr_1", decision: "rejected" },
+        userId: "second",
+      });
+
+      await expect(pending).resolves.toEqual({ outcome: "allowed-once", by: "first" });
+    });
+
+    it("resolves null when request.signal aborts, and a late card callback afterward is a no-op", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+      const controller = new AbortController();
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1", signal: controller.signal }),
+      );
+      await flush();
+      controller.abort();
+
+      await expect(pending).resolves.toBeNull();
+
+      expect(() =>
+        deps.handlers!.onCardCallback({ params: { approvalId: "appr_1", decision: "allowed-once" } }),
+      ).not.toThrow();
+    });
+
+    it("resolves null immediately when request.signal is already aborted before the call", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+      const controller = new AbortController();
+      controller.abort();
+
+      const reply = await runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1", signal: controller.signal }),
+      );
+
+      expect(reply).toBeNull();
+    });
+
+    it("resolves every still-pending native request to null when the connect is stopped", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pendingA = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_a" }),
+      );
+      const pendingB = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_b" }),
+      );
+      await flush();
+
+      await runtime.stop();
+
+      await expect(pendingA).resolves.toBeNull();
+      await expect(pendingB).resolves.toBeNull();
+    });
+
+    it("resolves null when the connect is stopped while the card send is still in flight", async () => {
+      let resolveCreate!: (value: { cardInstanceId: string }) => void;
+      const createCard = vi.fn(
+        () =>
+          new Promise<{ cardInstanceId: string }>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      );
+      const deps = fakeDeps({ createCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId: "appr_1" }),
+      );
+
+      await runtime.stop();
+      resolveCreate({ cardInstanceId: "inst_1" });
+
+      await expect(pending).resolves.toBeNull();
+    });
+  });
+
+  describe("runtime.announceApprovalOutcome", () => {
+    /** Requests a card, settles it via a matching callback (allowed-once),
+     * and returns once `requestApproval`'s own promise has resolved — so
+     * `pendingApprovals` holds a settled-but-not-yet-announced entry the
+     * way `announceApprovalOutcome` expects to find it. */
+    async function requestAndSettle(
+      deps: ReturnType<typeof fakeDeps>,
+      runtime: ConnectorRuntime,
+      approvalId: string,
+    ): Promise<void> {
+      const pending = runtime.requestApproval!(
+        { key: "cid_1", kind: "p2p" },
+        approvalPrompt({ approvalId }),
+      );
+      await flush();
+      deps.handlers!.onCardCallback({ params: { approvalId, decision: "allowed-once" } });
+      await pending;
+    }
+
+    it("updates the card via deps.updateCard using the stored cardInstanceId", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_42" }));
+      const updateCard = vi.fn(async () => undefined);
+      const deps = fakeDeps({ createCard, updateCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await requestAndSettle(deps, runtime, "appr_1");
+
+      await runtime.announceApprovalOutcome!(
+        { key: "cid_1", kind: "p2p" },
+        { approvalId: "appr_1", seq: 1, toolName: "run_shell", outcome: "allowed-once", reason: "answered" },
+      );
+
+      expect(updateCard).toHaveBeenCalledWith(validConfig, "inst_42", {
+        header: "需要你的审批",
+        body: "#1 · run_shell",
+        statusLine: "已同意",
+      });
+    });
+
+    it("is a no-op when the approval was never displayed natively (unknown approvalId)", async () => {
+      const updateCard = vi.fn(async () => undefined);
+      const deps = fakeDeps({ updateCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await expect(
+        runtime.announceApprovalOutcome!(
+          { key: "cid_1", kind: "p2p" },
+          { approvalId: "never_shown", seq: 1, toolName: "x", outcome: "rejected", reason: "timeout" },
+        ),
+      ).resolves.toBeUndefined();
+      expect(updateCard).not.toHaveBeenCalled();
+    });
+
+    it("no-ops without throwing when deps.updateCard is not implemented", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const deps = fakeDeps({ createCard }); // no updateCard
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await requestAndSettle(deps, runtime, "appr_1");
+
+      await expect(
+        runtime.announceApprovalOutcome!(
+          { key: "cid_1", kind: "p2p" },
+          { approvalId: "appr_1", seq: 1, toolName: "run_shell", outcome: "allowed-once", reason: "answered" },
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it("logs but does not throw when deps.updateCard rejects", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const updateCard = vi.fn(async () => {
+        throw new Error("update_failed");
+      });
+      const deps = fakeDeps({ createCard, updateCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await requestAndSettle(deps, runtime, "appr_1");
+
+      await expect(
+        runtime.announceApprovalOutcome!(
+          { key: "cid_1", kind: "p2p" },
+          { approvalId: "appr_1", seq: 1, toolName: "run_shell", outcome: "rejected", reason: "answered" },
+        ),
+      ).resolves.toBeUndefined();
+      expect(deps.logs.some((line) => line.includes("update_failed"))).toBe(true);
+    });
+
+    it("removes the pending entry after announcing: a later announce for the same id is a no-op", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const updateCard = vi.fn(async () => undefined);
+      const deps = fakeDeps({ createCard, updateCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await requestAndSettle(deps, runtime, "appr_1");
+      await runtime.announceApprovalOutcome!(
+        { key: "cid_1", kind: "p2p" },
+        { approvalId: "appr_1", seq: 1, toolName: "run_shell", outcome: "allowed-once", reason: "answered" },
+      );
+      updateCard.mockClear();
+
+      await runtime.announceApprovalOutcome!(
+        { key: "cid_1", kind: "p2p" },
+        { approvalId: "appr_1", seq: 1, toolName: "run_shell", outcome: "allowed-once", reason: "answered" },
+      );
+
+      expect(updateCard).not.toHaveBeenCalled();
+    });
+
+    it("maps the timeout settlement reason to its own status line (已超时拒绝, not the generic 已拒绝)", async () => {
+      const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+      const updateCard = vi.fn(async () => undefined);
+      const deps = fakeDeps({ createCard, updateCard });
+      const handle = fakeHandle();
+      const provider = createDingtalkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await requestAndSettle(deps, runtime, "appr_timeout");
+      await runtime.announceApprovalOutcome!(
+        { key: "cid_1", kind: "p2p" },
+        { approvalId: "appr_timeout", seq: 1, toolName: "x", outcome: "rejected", reason: "timeout" },
+      );
+
+      expect(updateCard).toHaveBeenLastCalledWith(
+        validConfig,
+        "inst_1",
+        expect.objectContaining({ statusLine: "已超时拒绝" }),
+      );
+    });
+  });
+
   // --- Contract item 7: capabilities() ----------------------------------
 
   describe("capabilities", () => {
@@ -513,5 +930,90 @@ describe("handleRobotFrame", () => {
     ).not.toThrow();
 
     expect(logs.some((line) => line.includes("handler exploded"))).toBe(true);
+  });
+});
+
+// --- handleCardFrame: same parse+dispatch shape as handleRobotFrame above,
+// for the TOPIC_CARD callback topic. -------------------------------------
+
+describe("handleCardFrame", () => {
+  it("swallows a malformed JSON frame, logs it, and never calls onCardCallback", () => {
+    const onCardCallback = vi.fn();
+    const logs: string[] = [];
+
+    expect(() =>
+      handleCardFrame("{not valid json", { onCardCallback }, (msg) => logs.push(msg)),
+    ).not.toThrow();
+
+    expect(onCardCallback).not.toHaveBeenCalled();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("malformed");
+  });
+
+  it("calls onCardCallback with the parsed payload for valid JSON", () => {
+    const onCardCallback = vi.fn();
+    const logs: string[] = [];
+
+    handleCardFrame(
+      JSON.stringify({ params: { approvalId: "appr_1", decision: "allowed-once" } }),
+      { onCardCallback },
+      (msg) => logs.push(msg),
+    );
+
+    expect(onCardCallback).toHaveBeenCalledWith({
+      params: { approvalId: "appr_1", decision: "allowed-once" },
+    });
+    expect(logs).toHaveLength(0);
+  });
+
+  it("does not throw when the log callback is omitted", () => {
+    expect(() => handleCardFrame("{not valid json", { onCardCallback: vi.fn() })).not.toThrow();
+  });
+
+  it("swallows and logs when onCardCallback itself throws", () => {
+    const onCardCallback = vi.fn(() => {
+      throw new Error("handler exploded");
+    });
+    const logs: string[] = [];
+
+    expect(() =>
+      handleCardFrame(JSON.stringify({ params: {} }), { onCardCallback }, (msg) => logs.push(msg)),
+    ).not.toThrow();
+
+    expect(logs.some((line) => line.includes("handler exploded"))).toBe(true);
+  });
+});
+
+// --- realDingtalkDeps.createCard: the one behavior testable without
+// mocking `fetch` — a connect with no provisioned card template must fail
+// fast, before any network call, so `runtime.requestApproval` degrades to
+// `null` (text fallback) rather than attempting a call that could never
+// have worked. ------------------------------------------------------------
+
+describe("realDingtalkDeps.createClient", () => {
+  it("registers both TOPIC_ROBOT and TOPIC_CARD callback listeners on the real DWClient", () => {
+    const registerSpy = vi.spyOn(DWClient.prototype, "registerCallbackListener");
+
+    realDingtalkDeps.createClient(validConfig, { onRobotMessage: vi.fn(), onCardCallback: vi.fn() });
+
+    const topics = registerSpy.mock.calls.map((call) => call[0]);
+    expect(topics).toContain(TOPIC_ROBOT);
+    expect(topics).toContain(TOPIC_CARD);
+
+    registerSpy.mockRestore();
+  });
+});
+
+describe("realDingtalkDeps.createCard", () => {
+  it("rejects without a network call when approvalCardTemplateId is not configured", async () => {
+    const content = buildApprovalCardPrompt({ seq: 1, toolName: "run_shell" });
+    await expect(
+      realDingtalkDeps.createCard!(
+        validConfig, // no approvalCardTemplateId
+        "appr_1",
+        { conversationKey: "cid_1", conversationKind: "p2p" },
+        content,
+      ),
+    ).rejects.toThrow("dingtalk_approval_card_template_id_missing");
   });
 });

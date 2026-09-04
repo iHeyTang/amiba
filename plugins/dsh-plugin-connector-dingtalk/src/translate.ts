@@ -8,6 +8,20 @@ export interface DingtalkConnectorConfig {
   clientId: string;
   clientSecret: string;
   enableTools: boolean;
+  /**
+   * Id of a card template pre-designed in the DingTalk developer console's
+   * card platform designer, used to send native interactive approval cards
+   * (see approval-card.ts / provider.ts's `createCard`). A card template is
+   * a design-time artifact the DingTalk OpenAPI has no way to create on the
+   * fly — there is no config-form UI for it (task 4's wizard work item is
+   * only the shared "approval-wait" field, not this), so it can only be set
+   * by hand-editing a connect's stored config today. Absent (the common
+   * case) means `requestApproval` always resolves `null` and every approval
+   * on this connect goes through messaging-core's text protocol instead —
+   * see the "card API" section of task-4-report.md for why this is the
+   * honest default rather than a guessed-at template id.
+   */
+  approvalCardTemplateId?: string;
 }
 
 /**
@@ -17,6 +31,7 @@ export const dingtalkConfigSchema = z.object({
   clientId: z.string().min(1, "clientId is required"),
   clientSecret: z.string().min(1, "clientSecret is required"),
   enableTools: z.boolean().default(false),
+  approvalCardTemplateId: z.string().min(1).optional(),
 });
 
 /**
@@ -165,6 +180,89 @@ export function translateRobotMessage(msg: unknown): DingtalkInboundTranslation 
     }
 
     return translation;
+  } catch {
+    // Final backstop: any unexpected error returns null.
+    return null;
+  }
+}
+
+/** The decision a card-button click carries — mirrors messaging-core's
+ * `ApprovalDecision` structurally (this plugin doesn't depend on
+ * `@amiba/dsh-plugin-messaging-core` directly, same reasoning as
+ * `DingtalkInboundTranslation` above never importing connector-core's
+ * envelope types by name where a structural literal will do). */
+export type DingtalkApprovalDecision = "allowed-once" | "rejected";
+
+/** Result of translating one Stream Mode `TOPIC_CARD` callback frame into
+ * the approval decision it carries. */
+export interface DingtalkCardCallback {
+  readonly approvalId: string;
+  readonly decision: DingtalkApprovalDecision;
+  readonly operatorUserId?: string;
+}
+
+/**
+ * Translates a DingTalk Stream Mode card-callback frame (topic
+ * `TOPIC_CARD`, `/v1.0/card/instances/callback`) into the approval decision
+ * one of our own two buttons carries.
+ *
+ * Totally safe: never throws. Returns null for any malformed input or any
+ * frame that isn't one of OUR OWN approval-card button clicks.
+ *
+ * **Unverified wire shape** — see approval-card.ts's and provider.ts's
+ * `createCard` doc comments, and task-4-report.md's "card API" section: the
+ * installed `dingtalk-stream@2.1.6-beta.1` SDK types `TOPIC_CARD` as a
+ * callback-topic constant only (`dist/constants.d.ts`) with no accompanying
+ * payload shape — unlike `RobotTextMessage` for `TOPIC_ROBOT`, there is no
+ * `CardCallback`-style interface anywhere in the package, and the DingTalk
+ * OpenAPI card-callback docs (open.dingtalk.com) are a client-rendered SPA
+ * that neither `curl` nor an automated fetch could extract a literal JSON
+ * schema from. This function therefore reads OUR OWN convention — a flat
+ * `params` string map on the callback frame carrying back exactly the two
+ * keys `provider.ts`'s `createCard` wrote into the card's `cardParamMap`
+ * (`approvalId`, `decision`) — rather than a field DingTalk's platform is
+ * confirmed to produce verbatim. `userId`, if present, is read as the
+ * clicking operator's staff id (the same field name `translateRobotMessage`
+ * above reads off `RobotMessageBase.senderStaffId`-adjacent frames elsewhere
+ * in DingTalk's own APIs). A real DingTalk app is required to confirm or
+ * correct this against a live callback.
+ *
+ * @param raw The raw callback frame's `data`, already `JSON.parse`d by the
+ *   caller (mirrors `translateRobotMessage`'s calling convention).
+ * @returns The translated decision, or null if unparseable/not ours.
+ */
+export function translateCardCallback(raw: unknown): DingtalkCardCallback | null {
+  try {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return null;
+    }
+    const record = raw as Record<string, unknown>;
+
+    const params = record.params;
+    if (typeof params !== "object" || params === null || Array.isArray(params)) {
+      return null;
+    }
+    const paramRecord = params as Record<string, unknown>;
+
+    const approvalId = paramRecord.approvalId;
+    if (typeof approvalId !== "string" || approvalId === "") {
+      return null;
+    }
+
+    const decision = paramRecord.decision;
+    if (decision !== "allowed-once" && decision !== "rejected") {
+      return null;
+    }
+
+    const result: { approvalId: string; decision: DingtalkApprovalDecision; operatorUserId?: string } = {
+      approvalId,
+      decision,
+    };
+    const userId = record.userId;
+    if (typeof userId === "string" && userId !== "") {
+      result.operatorUserId = userId;
+    }
+    return result;
   } catch {
     // Final backstop: any unexpected error returns null.
     return null;

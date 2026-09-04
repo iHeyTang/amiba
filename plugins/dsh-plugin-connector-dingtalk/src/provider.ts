@@ -1,4 +1,4 @@
-import { DWClient, GET_TOKEN_URL, TOPIC_ROBOT } from "dingtalk-stream";
+import { DWClient, GET_TOKEN_URL, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DWClientDownStream } from "dingtalk-stream";
 import type {
   CapabilityDecl,
@@ -9,8 +9,16 @@ import type {
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
+  buildApprovalCardPrompt,
+  buildApprovalCardSettled,
+  type ApprovalCardPrompt,
+  type ApprovalCardSettled,
+} from "./approval-card.js";
+import {
   dingtalkConfigSchema,
+  translateCardCallback,
   translateRobotMessage,
+  type DingtalkApprovalDecision,
   type DingtalkConnectorConfig,
 } from "./translate.js";
 
@@ -30,6 +38,13 @@ export interface DingtalkClientHandlers {
   /** Raw Stream Mode robot-message payload, already `JSON.parse`d from the
    * downstream socket frame's `data` string. */
   onRobotMessage(raw: unknown): void;
+  /**
+   * Raw Stream Mode `TOPIC_CARD` callback payload (a card-button click),
+   * already `JSON.parse`d from the downstream socket frame's `data` string
+   * — same calling convention as `onRobotMessage` above. `realDingtalkDeps
+   * .createClient` registers this alongside `TOPIC_ROBOT`.
+   */
+  onCardCallback(raw: unknown): void;
   /**
    * Fires when the long connection is known to be down/reconnecting.
    * Optional: see `realDingtalkDeps.createClient`'s verification comment —
@@ -55,12 +70,60 @@ export interface DwLike {
   isConnected(): boolean;
 }
 
+/** Where a card should land — the same `key`/`kind` shape `deliver`'s
+ * `conversation` parameter already carries, narrowed to just what
+ * `createCard` needs to address a DingTalk "open space". */
+export interface DingtalkCardTarget {
+  readonly conversationKey: string;
+  readonly conversationKind: "p2p" | "group";
+}
+
+/** What `createCard` hands back once the platform accepts a card. */
+export interface DingtalkCardCreateResult {
+  /** Opaque id `updateCard` later addresses this same instance by. Not
+   * necessarily anything DingTalk's own response body returns verbatim —
+   * see `realDingtalkDeps.createCard`'s doc comment. */
+  readonly cardInstanceId: string;
+}
+
 export interface DingtalkDeps {
   createClient(config: DingtalkConnectorConfig, handlers: DingtalkClientHandlers): DwLike;
   /** Exchanges an access token via `GET_TOKEN_URL`; rejects on auth failure. Used only for validation. */
   token(config: DingtalkConnectorConfig): Promise<void>;
   /** Posts a reply body to a conversation's session webhook URL; rejects propagate to the outbox. */
   postWebhook(url: string, body: unknown): Promise<void>;
+  /**
+   * Creates and delivers a native interactive approval card into one
+   * conversation, registered for Stream-mode callbacks. Optional — and
+   * expected to be absent or to reject in practice today (see
+   * `DingtalkConnectorConfig.approvalCardTemplateId`'s doc comment): a
+   * connect with no working `createCard` simply can't present approvals
+   * natively, and `runtime.requestApproval` resolves `null` so
+   * messaging-core's text protocol carries the question instead (plan §5's
+   * "卡片发送失败 → 降级为文字兜底"). The `approvalId` is threaded through
+   * separately from `content` (rather than folded into it) because
+   * `approval-card.ts`'s builders are pure and don't know about any one
+   * request's id — this is the one place that stamps it into the outbound
+   * card data (see `realDingtalkDeps.createCard`).
+   */
+  createCard?(
+    config: DingtalkConnectorConfig,
+    approvalId: string,
+    target: DingtalkCardTarget,
+    content: ApprovalCardPrompt,
+  ): Promise<DingtalkCardCreateResult>;
+  /**
+   * Updates a previously created card instance to its settled variant.
+   * Optional; a rejection is caught and logged by the caller
+   * (`runtime.announceApprovalOutcome` never throws) — the approval has
+   * already been decided by the time this runs, so there is nothing left to
+   * fall back to.
+   */
+  updateCard?(
+    config: DingtalkConnectorConfig,
+    cardInstanceId: string,
+    content: ApprovalCardSettled,
+  ): Promise<void>;
   /**
    * Console-free logging seam: the provider core never calls `console.*`
    * directly. A swallowed `handle.onInbound` error is still observable
@@ -121,6 +184,49 @@ interface StoredWebhook {
   expiredAt?: number;
 }
 
+/** A human's answer collected off the card — structurally
+ * `@amiba/dsh-plugin-messaging-core`'s `ApprovalReply`, read/returned
+ * structurally rather than imported (this plugin doesn't depend on that
+ * package directly; `requestApproval`'s return type is inferred from
+ * `ConnectorRuntime`'s own declaration via contextual typing, the same way
+ * `deliver`'s `envelope` parameter already is above). */
+interface CardApprovalReply {
+  outcome: DingtalkApprovalDecision;
+  by?: string;
+}
+
+/** One native card `requestApproval` is waiting on (or has already settled
+ * but not yet been announced) — see `pendingApprovals`'s doc comment above
+ * for the lifecycle. */
+interface PendingApproval {
+  readonly cardInstanceId: string;
+  /** Present exactly while nobody has settled this yet. `undefined` once a
+   * click, an abort, or `stop()` has resolved the `requestApproval` promise
+   * — a further card callback for the same id is then a no-op. */
+  resolve?: (reply: CardApprovalReply | null) => void;
+  /** Detaches the `AbortSignal` listener `requestApproval` registered.
+   * Called once, from whichever of {card click, abort, stop()} settles the
+   * entry first, so the other two paths' own listeners/checks never fire
+   * again for it. */
+  detachAbort?: () => void;
+}
+
+/** Settles a still-pending entry exactly once: clears `resolve`/
+ * `detachAbort` (so a second click, a late abort, or `stop()` racing this
+ * are all no-ops afterward) and resolves the waiting `requestApproval`
+ * promise. The entry itself is NOT removed from `pendingApprovals` here —
+ * only `announceApprovalOutcome` (normal end of life) or `stop()`
+ * (teardown) do that, so `cardInstanceId` stays discoverable until the card
+ * is actually flipped to its settled state. */
+function settlePendingApproval(entry: PendingApproval, reply: CardApprovalReply | null): void {
+  const resolve = entry.resolve;
+  if (!resolve) return;
+  entry.resolve = undefined;
+  entry.detachAbort?.();
+  entry.detachAbort = undefined;
+  resolve(reply);
+}
+
 /**
  * DingTalk `ConnectorProvider`: runs the official Stream Mode long
  * connection (no public IP required), translates inbound robot messages
@@ -164,6 +270,16 @@ export function createDingtalkProvider(
       // conversation key -> the most recent session webhook seen for it.
       const webhooks = new Map<string, StoredWebhook>();
 
+      // approvalId -> the in-flight (or already-settled-but-not-yet-
+      // announced) native card for it. `resolve` is present exactly while
+      // `requestApproval`'s promise is still waiting on a human click or an
+      // abort; it's cleared (not deleted) the moment either fires, so a
+      // second click or a late `announceApprovalOutcome` call can still find
+      // `cardInstanceId` — the entry is only ever fully removed by
+      // `announceApprovalOutcome` (the normal end of life) or `stop()`
+      // (teardown).
+      const pendingApprovals = new Map<string, PendingApproval>();
+
       const client = deps.createClient(config, {
         onRobotMessage: (raw) => {
           if (stopped) return;
@@ -188,6 +304,18 @@ export function createDingtalkProvider(
               `amiba-connector-dingtalk: handle.onInbound failed: ${String(error)}`,
             );
           });
+        },
+        onCardCallback: (raw) => {
+          if (stopped) return;
+          const callback = translateCardCallback(raw);
+          if (!callback) return;
+          const entry = pendingApprovals.get(callback.approvalId);
+          // Mismatched id (not ours, or for a connect that never displayed
+          // it) and a second click on an already-settled card both land
+          // here as "no resolver waiting" — both are silently ignored, per
+          // plan §5 ("同一审批多次回答 → 第一次生效，其余忽略").
+          if (!entry || !entry.resolve) return;
+          settlePendingApproval(entry, { outcome: callback.decision, by: callback.operatorUserId });
         },
         onDown: () => safeSetStatus({ state: "connecting" }),
       });
@@ -216,6 +344,15 @@ export function createDingtalkProvider(
           stopped = true;
           client.disconnect();
           webhooks.clear();
+          // Mirrors the apiproxy teardown behavior task-1-report.md §4
+          // describes for messaging-core's own relay: every question this
+          // connect is still natively holding open resolves `null` (not a
+          // decision — this connect is going away, it never got an answer)
+          // rather than being left to dangle forever.
+          for (const entry of pendingApprovals.values()) {
+            settlePendingApproval(entry, null);
+          }
+          pendingApprovals.clear();
         },
         async deliver(conversation, envelope): Promise<void> {
           const stored = webhooks.get(conversation.key);
@@ -242,6 +379,77 @@ export function createDingtalkProvider(
             msgtype: "text",
             text: { content: envelope.text },
           });
+        },
+        async requestApproval(conversation, request) {
+          if (!deps.createCard) return null;
+
+          const content = buildApprovalCardPrompt({
+            seq: request.seq,
+            toolName: request.toolName,
+            reason: request.reason,
+          });
+
+          let created: DingtalkCardCreateResult;
+          try {
+            created = await deps.createCard(config, request.approvalId, {
+              conversationKey: conversation.key,
+              conversationKind: conversation.kind,
+            }, content);
+          } catch (error) {
+            // Send failure -> null, never a throw: messaging-core degrades
+            // straight to its text protocol on the same channel (plan §5's
+            // "卡片发送失败（API 报错） -> 降级为文字兜底同一条消息").
+            deps.log?.(`amiba-connector-dingtalk: createCard failed: ${String(error)}`);
+            return null;
+          }
+
+          // The connect was torn down while the card was in flight (its
+          // POST awaited across a `stop()`). Nothing will ever settle an
+          // entry registered now — `stop()` already ran its own sweep —
+          // so this falls back to null exactly as a send failure would,
+          // rather than leaving an orphaned pending entry (and a stale card
+          // sitting in the conversation) behind.
+          if (stopped) return null;
+
+          return new Promise<CardApprovalReply | null>((resolve) => {
+            const entry: PendingApproval = { cardInstanceId: created.cardInstanceId, resolve };
+            pendingApprovals.set(request.approvalId, entry);
+
+            if (request.signal.aborted) {
+              settlePendingApproval(entry, null);
+              return;
+            }
+            const onAbort = () => settlePendingApproval(entry, null);
+            request.signal.addEventListener("abort", onAbort, { once: true });
+            entry.detachAbort = () => request.signal.removeEventListener("abort", onAbort);
+          });
+        },
+        async announceApprovalOutcome(_conversation, notice) {
+          const entry = pendingApprovals.get(notice.approvalId);
+          // Only ever called for an approval this same runtime's
+          // `requestApproval` displayed successfully (contract, see
+          // `ConnectorRuntime.announceApprovalOutcome`'s doc comment in
+          // connector-core) — a missing entry means `stop()` already swept
+          // it, which is a benign race, not a bug: nothing left to update.
+          if (!entry) return;
+          pendingApprovals.delete(notice.approvalId);
+
+          if (!deps.updateCard) return;
+          const content = buildApprovalCardSettled({
+            seq: notice.seq,
+            toolName: notice.toolName,
+            outcome: notice.outcome,
+            reason: notice.reason,
+          });
+          try {
+            await deps.updateCard(config, entry.cardInstanceId, content);
+          } catch (error) {
+            // Errors logged, never thrown: the approval is already decided
+            // by the time this runs, so there is nothing left to fall back
+            // to (plan §4/§5 — the settled card just stays on its pending
+            // face if the update call fails).
+            deps.log?.(`amiba-connector-dingtalk: updateCard failed: ${String(error)}`);
+          }
         },
       };
       return runtime;
@@ -341,6 +549,72 @@ export function handleRobotFrame(
   }
 }
 
+/**
+ * Same parse+dispatch shape as `handleRobotFrame` above, for the card
+ * (`TOPIC_CARD`) callback topic instead of the robot-message one — see that
+ * function's doc comment for why this exists (a malformed frame or a
+ * throwing handler must never become an uncaught exception in the Electron
+ * main process) and `realDingtalkDeps.createClient`'s doc comment for why
+ * TWO separate `registerCallbackListener` registrations, one per topic, are
+ * both required (the SDK dispatches by topic; there is no single "any
+ * callback" registration).
+ */
+export function handleCardFrame(
+  rawData: unknown,
+  handlers: Pick<DingtalkClientHandlers, "onCardCallback">,
+  log?: (msg: string) => void,
+): void {
+  try {
+    const parsed = JSON.parse(rawData as string) as unknown;
+    handlers.onCardCallback(parsed);
+  } catch (error) {
+    log?.(`amiba-connector-dingtalk: malformed or unhandleable card callback frame: ${String(error)}`);
+  }
+}
+
+/**
+ * Fetches a fresh corp-app access token for use as the
+ * `x-acs-dingtalk-access-token` header on the card OpenAPI calls below.
+ * Deliberately separate from `token()` above (which discards the token —
+ * it exists purely to validate credentials at connect-creation time): this
+ * one is called on every `createCard`/`updateCard`, un-cached, since
+ * neither is a hot path (one card per approval, one update per settlement)
+ * and DingTalk's own token endpoint is designed for frequent, cheap calls
+ * (a corp's token is valid for ~2h and re-issuing early is a no-op
+ * server-side). Not part of the `DingtalkDeps` seam — it's an
+ * implementation detail of the real card calls, invisible to fakes.
+ */
+async function fetchDingtalkAccessToken(config: DingtalkConnectorConfig): Promise<string> {
+  const url = `${GET_TOKEN_URL}?appkey=${encodeURIComponent(config.clientId)}&appsecret=${encodeURIComponent(config.clientSecret)}`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) {
+    throw new Error(`dingtalk_token_http_${response.status}`);
+  }
+  const body = (await response.json()) as DingtalkTokenResponse;
+  if (body.errcode || !body.access_token) {
+    throw new Error(body.errmsg ?? `dingtalk_token_failed:${body.errcode ?? "no_access_token"}`);
+  }
+  return body.access_token;
+}
+
+/** `openSpaceId` addresses WHERE a card platform call lands — DingTalk's own
+ * concept, distinct from the robot-message `conversationId`/session-webhook
+ * addressing `deliver` uses above. Best-effort reconstruction, unverified
+ * against a live call — see `realDingtalkDeps.createCard`'s doc comment. */
+function cardOpenSpaceId(target: DingtalkCardTarget): string {
+  return target.conversationKind === "group"
+    ? `dtv1.card//IM_GROUP.${target.conversationKey}`
+    : `dtv1.card//IM_ROBOT.${target.conversationKey}`;
+}
+
+const CARD_INSTANCES_URL = "https://api.dingtalk.com/v1.0/card/instances";
+
+interface DingtalkCardApiResponse {
+  success?: boolean;
+  code?: string;
+  message?: string;
+}
+
 export const realDingtalkDeps: DingtalkDeps = {
   createClient(config, handlers): DwLike {
     const client = new DWClient({
@@ -351,6 +625,19 @@ export const realDingtalkDeps: DingtalkDeps = {
     client.registerCallbackListener(TOPIC_ROBOT, (msg: DWClientDownStream) => {
       try {
         handleRobotFrame(msg.data, handlers, realDingtalkDeps.log);
+      } finally {
+        client.socketCallBackResponse(msg.headers.messageId, { status: "SUCCESS" });
+      }
+    });
+
+    // Registered unconditionally, alongside TOPIC_ROBOT, rather than only
+    // when `config.approvalCardTemplateId` is set: a connect can gain a
+    // template later without a restart being required to start receiving
+    // its callbacks, and an unrecognized frame (no matching pending entry)
+    // is already a silent no-op in `onCardCallback` above regardless.
+    client.registerCallbackListener(TOPIC_CARD, (msg: DWClientDownStream) => {
+      try {
+        handleCardFrame(msg.data, handlers, realDingtalkDeps.log);
       } finally {
         client.socketCallBackResponse(msg.headers.messageId, { status: "SUCCESS" });
       }
@@ -389,6 +676,114 @@ export const realDingtalkDeps: DingtalkDeps = {
     const payload = (await response.json()) as DingtalkWebhookResponse;
     if (payload.errcode) {
       throw new Error(payload.errmsg ?? `dingtalk_webhook_failed:${payload.errcode}`);
+    }
+  },
+
+  // ---------------------------------------------------------------------
+  // createCard / updateCard — DingTalk's card-instance OpenAPI, reached
+  // directly over `fetch` exactly the way `postWebhook` above reaches the
+  // session-webhook API: the `dingtalk-stream` SDK has NO send-side card
+  // method at all. Verified by grepping the installed
+  // `dingtalk-stream@2.1.6-beta.1` package's every compiled `.d.ts`
+  // (`dist/*.d.ts`) for "card": the only hit is the `TOPIC_CARD` *callback*
+  // topic constant re-exported from `constants.d.ts` — `DWClient`'s own
+  // method list (`client.d.ts`, reproduced in the block comment further up
+  // this file) has nothing named `sendCard`/`createCardInstance`/
+  // `updateCardInstance`/similar.
+  //
+  // UNVERIFIED beyond that: the exact request/response body below is a
+  // best-effort reconstruction from DingTalk's own OpenAPI docs
+  // (open.dingtalk.com's "创建并投放卡片"/"卡片更新" pages) and public
+  // examples (github.com/open-dingtalk/dingtalk-card-examples,
+  // dingtalk-tutorial-go's bot_card_callback), not something pinned against
+  // a literal response body the way `postWebhook`'s was — DingTalk's own doc
+  // site renders its API reference client-side (a React SPA loaded from
+  // g.alicdn.com), so neither `curl` nor an automated fetch could extract a
+  // literal JSON schema from it; only the page's static section titles
+  // (confirming the endpoints exist, roughly matching the shape below) came
+  // back. See task-4-report.md's "card API" section for the full trail.
+  // Both methods are optional on `DingtalkDeps` and any rejection is caught
+  // by the caller (`requestApproval` -> `null`, `announceApprovalOutcome`
+  // -> logged) specifically because of this: a wrong body shape degrades to
+  // the text fallback rather than crashing anything. A real DingTalk app
+  // with a provisioned card template is required to confirm or correct
+  // this against a live call.
+  // ---------------------------------------------------------------------
+
+  async createCard(config, approvalId, target, content) {
+    if (!config.approvalCardTemplateId) {
+      // No card template provisioned for this connect — see
+      // `DingtalkConnectorConfig.approvalCardTemplateId`'s doc comment.
+      // Nothing to send; the caller (`requestApproval`) catches this and
+      // returns `null`.
+      throw new Error("dingtalk_approval_card_template_id_missing");
+    }
+    const accessToken = await fetchDingtalkAccessToken(config);
+    // Our own idempotency/tracking id rather than one trusted out of the
+    // create response body (see the UNVERIFIED note above) — it becomes the
+    // `cardInstanceId` handed back to the caller, and `updateCard` below
+    // addresses this same instance by it again as `outTrackId`.
+    const outTrackId = `amiba-approval-${approvalId}`;
+    const response = await fetch(CARD_INSTANCES_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-acs-dingtalk-access-token": accessToken,
+      },
+      body: JSON.stringify({
+        cardTemplateId: config.approvalCardTemplateId,
+        outTrackId,
+        callbackType: "STREAM",
+        cardData: {
+          cardParamMap: {
+            approvalId,
+            header: content.header,
+            body: content.body,
+            agreeLabel: content.agree.label,
+            rejectLabel: content.reject.label,
+          },
+        },
+        openSpaceId: cardOpenSpaceId(target),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(`dingtalk_card_create_http_${response.status}`);
+    }
+    const body = (await response.json()) as DingtalkCardApiResponse;
+    if (body.success === false) {
+      throw new Error(body.message ?? `dingtalk_card_create_failed:${body.code ?? "unknown"}`);
+    }
+    return { cardInstanceId: outTrackId };
+  },
+
+  async updateCard(config, cardInstanceId, content): Promise<void> {
+    const accessToken = await fetchDingtalkAccessToken(config);
+    const response = await fetch(CARD_INSTANCES_URL, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-acs-dingtalk-access-token": accessToken,
+      },
+      body: JSON.stringify({
+        outTrackId: cardInstanceId,
+        cardUpdateOptions: { updateCardDataByKey: true },
+        cardData: {
+          cardParamMap: {
+            header: content.header,
+            body: content.body,
+            statusLine: content.statusLine,
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(`dingtalk_card_update_http_${response.status}`);
+    }
+    const body = (await response.json()) as DingtalkCardApiResponse;
+    if (body.success === false) {
+      throw new Error(body.message ?? `dingtalk_card_update_failed:${body.code ?? "unknown"}`);
     }
   },
 

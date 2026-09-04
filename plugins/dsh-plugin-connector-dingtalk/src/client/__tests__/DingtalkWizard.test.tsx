@@ -2,9 +2,56 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { MessageChannelApproval } from "@amiba/dsh-plugin-connector-core";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkWizard } from "../DingtalkWizard";
+
+/**
+ * Stand-in for the real `host.kit.ApprovalField` (connector-core owns that
+ * component and its own tests, see `wizard-kit.test.tsx`): a minute input
+ * plus a checkbox for "wait forever", enough to drive the wizard's own
+ * `approval` state through its full range without depending on the real
+ * radio-group markup.
+ */
+function FakeApprovalField({
+  approval,
+  onApprovalChange,
+}: {
+  approval: MessageChannelApproval;
+  onApprovalChange(value: MessageChannelApproval): void;
+}) {
+  const minutes = Math.round(approval.timeoutMs / 60_000);
+  return (
+    <div>
+      <label>
+        超时分钟数
+        <input
+          disabled={approval.mode !== "timeout"}
+          onChange={(e) =>
+            onApprovalChange({ mode: "timeout", timeoutMs: Number(e.target.value) * 60_000 })
+          }
+          type="number"
+          value={minutes}
+        />
+      </label>
+      <label>
+        一直等
+        <input
+          checked={approval.mode === "wait"}
+          onChange={(e) =>
+            onApprovalChange(
+              e.target.checked
+                ? { mode: "wait", timeoutMs: approval.timeoutMs }
+                : { mode: "timeout", timeoutMs: approval.timeoutMs },
+            )
+          }
+          type="checkbox"
+        />
+      </label>
+    </div>
+  );
+}
 
 /**
  * Stand-in for the real `host.kit.BasicsFields` (connector-core owns that
@@ -65,7 +112,7 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
       pollOnboarding: vi.fn(),
       cancelOnboarding: vi.fn(async () => ({}) as never),
     } as never,
-    kit: { BasicsFields: FakeBasicsFields as never },
+    kit: { BasicsFields: FakeBasicsFields as never, ApprovalField: FakeApprovalField as never },
     back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
@@ -162,6 +209,7 @@ describe("DingtalkWizard", () => {
       name: "Bot",
       agentPreset: "restricted",
       config: { clientId: "cid", clientSecret: "sec", enableTools: false },
+      approval: { mode: "timeout", timeoutMs: 600_000 },
     });
     expect(host.done).toHaveBeenCalledWith({ id: "c1" });
   });
@@ -199,6 +247,32 @@ describe("DingtalkWizard", () => {
     fillIds();
     expect(submitButton()).toBeDisabled();
     expect(host.adapter.create).not.toHaveBeenCalled();
+  });
+
+  it("passes a changed approval-wait setting through to create", async () => {
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    fillIds();
+    fireEvent.change(screen.getByLabelText("超时分钟数"), { target: { value: "5" } });
+    await userEvent.click(submitButton());
+
+    expect(host.adapter.create).toHaveBeenCalledWith(
+      expect.objectContaining({ approval: { mode: "timeout", timeoutMs: 5 * 60_000 } }),
+    );
+  });
+
+  it("passes a wait-forever approval setting through to create", async () => {
+    const host = hostWith();
+    render(<DingtalkWizard host={host} />);
+    typeName("Bot");
+    fillIds();
+    await userEvent.click(screen.getByLabelText("一直等"));
+    await userEvent.click(submitButton());
+
+    expect(host.adapter.create).toHaveBeenCalledWith(
+      expect.objectContaining({ approval: expect.objectContaining({ mode: "wait" }) }),
+    );
   });
 
   it("translates a create failure code instead of rendering the raw code", async () => {

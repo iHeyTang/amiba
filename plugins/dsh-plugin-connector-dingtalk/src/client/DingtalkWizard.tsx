@@ -11,6 +11,7 @@ import {
   usePluginT,
   type PluginTranslateFn,
 } from "@amiba/ui/plugin";
+import type { MessageChannelApproval } from "@amiba/dsh-plugin-connector-core";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkMark } from "./brand-mark.js";
@@ -35,6 +36,23 @@ function useT() {
  * unrecognised message still falls back to the raw string — better a real
  * message than nothing.
  */
+/**
+ * The wizard's own seed for the approval-wait field, before the user
+ * touches it: `timeout`, 10 minutes — the same numeric default
+ * messaging-core applies when a channel's `approval` is omitted entirely
+ * (`DEFAULT_CHANNEL_APPROVAL`) and connector-core's own
+ * `wizard-kit.tsx#defaultApproval()` mirrors for the same reason. Defined
+ * locally rather than importing that helper because it isn't re-exported
+ * from `@amiba/dsh-plugin-connector-core/client`'s public surface today
+ * (only its TYPES are, via `ConnectWizardKit`/`ApprovalFieldProps`) — this
+ * task's brief scopes changes to this plugin only, so the two literals stay
+ * independently defined rather than reaching into connector-core to add an
+ * export for one call site.
+ */
+function defaultApproval(): MessageChannelApproval {
+  return { mode: "timeout", timeoutMs: 10 * 60_000 };
+}
+
 const KNOWN_CREATE_ERRORS: Record<string, string> = {
   agent_preset_required: "options.connect.dsh.error.agent_preset_required",
   provider_not_found: "options.connect.dsh.error.provider_not_found",
@@ -79,6 +97,7 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [enableTools, setEnableTools] = useState(false);
+  const [approval, setApproval] = useState<MessageChannelApproval>(defaultApproval());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +141,7 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
           clientSecret: trimmedClientSecret,
           enableTools,
         },
+        approval,
       });
       current.done(connect);
     } catch (cause) {
@@ -143,7 +163,7 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
 
   // Handed over on the host rather than imported: each plugin client is its
   // own bundle, so the shared parts travel with the seat.
-  const { BasicsFields } = host.kit;
+  const { BasicsFields, ApprovalField } = host.kit;
 
   return (
     <WizardFrame
@@ -235,6 +255,7 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
             onCheckedChange={setEnableTools}
           />
         </div>
+        <ApprovalField approval={approval} onApprovalChange={setApproval} />
       </div>
       {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
     </WizardFrame>

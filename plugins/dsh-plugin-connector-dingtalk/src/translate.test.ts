@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { translateRobotMessage } from "./translate.js";
+import { translateCardCallback, translateRobotMessage } from "./translate.js";
 
 describe("translateRobotMessage", () => {
   // Rule 1: p2p text message
@@ -266,5 +266,74 @@ describe("translateRobotMessage", () => {
     expect(result).not.toBeNull();
     expect(result).not.toHaveProperty("sessionWebhook");
     expect(result).not.toHaveProperty("sessionWebhookExpiredTime");
+  });
+});
+
+describe("translateCardCallback", () => {
+  it("translates a valid agree click with an operator id", () => {
+    const raw = {
+      cardInstanceId: "inst_1",
+      userId: "staff_1",
+      params: { approvalId: "appr_1", decision: "allowed-once" },
+    };
+    expect(translateCardCallback(raw)).toEqual({
+      approvalId: "appr_1",
+      decision: "allowed-once",
+      operatorUserId: "staff_1",
+    });
+  });
+
+  it("translates a valid reject click", () => {
+    const raw = { params: { approvalId: "appr_2", decision: "rejected" }, userId: "staff_2" };
+    expect(translateCardCallback(raw)?.decision).toBe("rejected");
+  });
+
+  it("omits operatorUserId when userId is absent", () => {
+    const raw = { params: { approvalId: "appr_3", decision: "allowed-once" } };
+    const result = translateCardCallback(raw);
+    expect(result).toEqual({ approvalId: "appr_3", decision: "allowed-once" });
+    expect(result).not.toHaveProperty("operatorUserId");
+  });
+
+  it("omits operatorUserId when userId is an empty string", () => {
+    const raw = { params: { approvalId: "appr_4", decision: "rejected" }, userId: "" };
+    expect(translateCardCallback(raw)).not.toHaveProperty("operatorUserId");
+  });
+
+  it("returns null when params is missing", () => {
+    expect(translateCardCallback({ userId: "staff_1" })).toBeNull();
+  });
+
+  it("returns null when params is not an object", () => {
+    expect(translateCardCallback({ params: "not an object" })).toBeNull();
+    expect(translateCardCallback({ params: ["a", "b"] })).toBeNull();
+    expect(translateCardCallback({ params: null })).toBeNull();
+  });
+
+  it("returns null when approvalId is missing or empty", () => {
+    expect(translateCardCallback({ params: { decision: "allowed-once" } })).toBeNull();
+    expect(translateCardCallback({ params: { approvalId: "", decision: "allowed-once" } })).toBeNull();
+  });
+
+  it("returns null when approvalId is the wrong type", () => {
+    expect(translateCardCallback({ params: { approvalId: 123, decision: "allowed-once" } })).toBeNull();
+  });
+
+  it("returns null when decision is missing or not one of the two known values", () => {
+    expect(translateCardCallback({ params: { approvalId: "appr_5" } })).toBeNull();
+    expect(translateCardCallback({ params: { approvalId: "appr_5", decision: "maybe" } })).toBeNull();
+    expect(translateCardCallback({ params: { approvalId: "appr_5", decision: "cancelled" } })).toBeNull();
+  });
+
+  it("returns null for null/undefined/non-object/array input (never throws)", () => {
+    expect(translateCardCallback(null)).toBeNull();
+    expect(translateCardCallback(undefined)).toBeNull();
+    expect(translateCardCallback("not an object")).toBeNull();
+    expect(translateCardCallback(42)).toBeNull();
+    expect(translateCardCallback(["array", "not", "object"])).toBeNull();
+  });
+
+  it("returns null for an empty object (never throws)", () => {
+    expect(translateCardCallback({})).toBeNull();
   });
 });
