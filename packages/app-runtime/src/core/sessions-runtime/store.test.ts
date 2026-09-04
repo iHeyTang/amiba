@@ -12,7 +12,10 @@ type Summary = {
 const mocks = vi.hoisted(() => ({
   storage: {} as Record<string, unknown>,
   summaries: [] as Summary[],
+  archived: [] as string[],
   set: vi.fn(),
+  removed: [] as string[],
+  archiveSession: vi.fn(),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -28,7 +31,12 @@ vi.mock("@amiba/app-runtime/platform", () => ({
         mocks.set(patch);
         Object.assign(mocks.storage, patch);
       },
-      remove: async () => {},
+      remove: async (keys: string | string[]) => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          mocks.removed.push(key);
+          delete mocks.storage[key];
+        }
+      },
       watch: () => () => {},
     },
     agentSessions: {
@@ -39,14 +47,18 @@ vi.mock("@amiba/app-runtime/platform", () => ({
       rename: async () => ({ title: "", seq: 0 }),
       fork: async () => ({ sessionId: "child" }),
     },
+    agentWorkspaces: {
+      list: async () => ({ items: [], archivedSessionIds: mocks.archived }),
+      archiveSession: mocks.archiveSession,
+    },
   }),
 }));
 
-import { dropMessages, loadIndex, loadSessionMeta } from "./store";
+import { archiveSession, loadIndex, loadSessionMeta } from "./store";
 
 const HIDDEN_KEY = "sessions.runtime-hidden";
-
-type Tombstone = { id: string; hiddenAt: number };
+const LOCAL_META_KEY = "sessions.local-meta";
+const MIGRATION_KEY = "sessions.archive-migrated";
 
 function summary(id: string, updatedAt: number): Summary {
   return {
@@ -59,138 +71,144 @@ function summary(id: string, updatedAt: number): Summary {
   };
 }
 
-function storedTombstones(): Tombstone[] {
-  return (mocks.storage[HIDDEN_KEY] ?? []) as Tombstone[];
-}
-
 function ids(sessions: { id: string }[]): string[] {
   return sessions.map((session) => session.id);
 }
 
-describe("sessions runtime tombstones", () => {
-  beforeEach(() => {
-    mocks.storage = {};
-    mocks.summaries = [];
-    mocks.set.mockReset();
+function archivedIds(sessions: { id: string; archived?: boolean }[]): string[] {
+  return sessions.filter((session) => session.archived).map((s) => s.id);
+}
+
+function archiveCallIds(): string[] {
+  return mocks.archiveSession.mock.calls.map((call) => call[0] as string);
+}
+
+beforeEach(() => {
+  mocks.storage = {};
+  mocks.summaries = [];
+  mocks.archived = [];
+  mocks.removed = [];
+  mocks.set.mockReset();
+  mocks.archiveSession.mockReset();
+  // Every archive answers with the full updated set, exactly as DSH does.
+  mocks.archiveSession.mockImplementation(async (id: string) => {
+    if (!mocks.archived.includes(id)) mocks.archived = [...mocks.archived, id];
+    return { archivedSessionIds: mocks.archived };
   });
+});
 
-  it("migrates legacy string tombstones to the timestamped shape on read", async () => {
-    mocks.storage[HIDDEN_KEY] = ["gone"];
-    mocks.summaries = [summary("gone", 10), summary("kept", 20)];
+describe("host archive projection", () => {
+  it("marks a session archived when the HOST set names it", async () => {
+    mocks.summaries = [summary("kept", 20), summary("filed", 10)];
+    mocks.archived = ["filed"];
 
-    const before = Date.now();
     const index = await loadIndex();
-
-    // A legacy deletion has no recorded time, so it is migrated with `now`
-    // and stays hidden until the session's NEXT activity.
-    expect(ids(index)).toEqual(["kept"]);
-    const stored = storedTombstones();
-    expect(stored).toHaveLength(1);
-    expect(stored[0].id).toBe("gone");
-    expect(stored[0].hiddenAt).toBeGreaterThanOrEqual(before);
+    expect(ids(index)).toEqual(["kept", "filed"]);
+    expect(archivedIds(index)).toEqual(["filed"]);
   });
 
-  it("keeps a session hidden when its activity predates the deletion", async () => {
-    mocks.storage[HIDDEN_KEY] = [{ id: "gone", hiddenAt: 300 }];
-    mocks.summaries = [summary("gone", 200)];
+  it("ignores a stale sidecar archived flag — the host set is the truth", async () => {
+    // Written by a build that still kept `archived` locally, and already
+    // drained (the marker is set), so the flag must not resurface.
+    mocks.storage[MIGRATION_KEY] = true;
+    mocks.storage[LOCAL_META_KEY] = { ghost: { archived: true } };
+    mocks.summaries = [summary("ghost", 10)];
 
-    expect(ids(await loadIndex())).toEqual([]);
-    expect(storedTombstones()).toEqual([{ id: "gone", hiddenAt: 300 }]);
+    expect(archivedIds(await loadIndex())).toEqual([]);
   });
 
-  it("revives a tombstoned session that gained activity after the deletion", async () => {
-    // A host-side plugin resumed the session the user had deleted; the new
-    // turn must bring the session back rather than vanish into the tombstone.
-    mocks.storage[HIDDEN_KEY] = [{ id: "resumed", hiddenAt: 100 }];
-    mocks.summaries = [summary("resumed", 200)];
+  it("keeps an archived session openable by id", async () => {
+    mocks.summaries = [summary("filed", 10)];
+    mocks.archived = ["filed"];
 
-    expect(ids(await loadIndex())).toEqual(["resumed"]);
-    expect(storedTombstones()).toEqual([]);
-  });
-
-  it("persists lifted tombstones once per load, not once per session", async () => {
-    mocks.storage[HIDDEN_KEY] = [
-      { id: "a", hiddenAt: 100 },
-      { id: "b", hiddenAt: 100 },
-      { id: "c", hiddenAt: 900 },
-    ];
-    mocks.summaries = [summary("a", 200), summary("b", 300), summary("c", 400)];
-
-    expect(ids(await loadIndex()).sort()).toEqual(["a", "b"]);
-    expect(mocks.set).toHaveBeenCalledTimes(1);
-    expect(storedTombstones()).toEqual([{ id: "c", hiddenAt: 900 }]);
-  });
-
-  it("writes no tombstone update when nothing was migrated or lifted", async () => {
-    mocks.storage[HIDDEN_KEY] = [{ id: "gone", hiddenAt: 300 }];
-    mocks.summaries = [summary("gone", 200), summary("kept", 400)];
-
-    await loadIndex();
-    expect(mocks.set).not.toHaveBeenCalled();
-  });
-
-  it("lifts the tombstone when the session is explicitly opened by id", async () => {
-    mocks.storage[HIDDEN_KEY] = [{ id: "gone", hiddenAt: 300 }];
-    mocks.summaries = [summary("gone", 200)];
-
-    await expect(loadSessionMeta("gone")).resolves.toMatchObject({
-      id: "gone",
+    await expect(loadSessionMeta("filed")).resolves.toMatchObject({
+      id: "filed",
+      archived: true,
       agent: { profileId: "standard" },
     });
-    expect(storedTombstones()).toEqual([]);
-    expect(ids(await loadIndex())).toEqual(["gone"]);
   });
 
-  it("leaves storage untouched when an unknown id is opened", async () => {
-    mocks.storage[HIDDEN_KEY] = [{ id: "gone", hiddenAt: 300 }];
-    mocks.summaries = [];
-
-    await expect(loadSessionMeta("missing")).resolves.toBeUndefined();
-    expect(mocks.set).not.toHaveBeenCalled();
-    expect(storedTombstones()).toEqual([{ id: "gone", hiddenAt: 300 }]);
+  it("archives through the host and answers with the updated set", async () => {
+    mocks.archived = ["older"];
+    await expect(archiveSession("fresh")).resolves.toEqual(
+      new Set(["older", "fresh"]),
+    );
+    expect(archiveCallIds()).toEqual(["fresh"]);
   });
+});
 
-  it("hides a dropped session immediately and persists the timestamped shape", async () => {
-    mocks.summaries = [summary("gone", 200), summary("kept", 300)];
-
-    const before = Date.now();
-    await dropMessages("gone");
-
-    const stored = storedTombstones();
-    expect(stored).toHaveLength(1);
-    expect(stored[0].id).toBe("gone");
-    expect(stored[0].hiddenAt).toBeGreaterThanOrEqual(before);
-    // The session's existing activity is older than the deletion, so an
-    // immediate reload must not resurrect what the user just removed.
-    expect(ids(await loadIndex())).toEqual(["kept"]);
-  });
-
-  it("tolerates garbage in the tombstone list", async () => {
+describe("legacy archive/tombstone migration", () => {
+  it("drains both legacy keys into the host archive and clears them", async () => {
+    mocks.storage[LOCAL_META_KEY] = {
+      filed: { archived: true, unread: true },
+      plain: { titleManual: true },
+    };
+    // Mixed shapes: the oldest bare-id form and the timestamped one.
     mocks.storage[HIDDEN_KEY] = [
+      "bare",
+      { id: "stamped", hiddenAt: 100 },
       null,
-      42,
-      "",
       { hiddenAt: 1 },
-      { id: "no-time" },
-      { id: "gone", hiddenAt: "soon" },
-      { id: "ok", hiddenAt: 100 },
+      "",
     ];
-    mocks.summaries = [summary("ok", 50), summary("no-time", 60)];
+    mocks.summaries = [summary("filed", 10), summary("bare", 20), summary("stamped", 30)];
 
-    expect(ids(await loadIndex())).toEqual([]);
-    const stored = storedTombstones();
-    expect(stored.map((entry) => entry.id).sort()).toEqual([
-      "gone",
-      "no-time",
-      "ok",
-    ]);
-    for (const entry of stored) expect(typeof entry.hiddenAt).toBe("number");
+    const index = await loadIndex();
+
+    expect(archiveCallIds().sort()).toEqual(["bare", "filed", "stamped"]);
+    expect(archivedIds(index).sort()).toEqual(["bare", "filed", "stamped"]);
+    // The tombstone key is gone; the sidecar keeps everything but `archived`.
+    expect(mocks.removed).toContain(HIDDEN_KEY);
+    expect(mocks.storage[HIDDEN_KEY]).toBeUndefined();
+    expect(mocks.storage[LOCAL_META_KEY]).toEqual({
+      filed: { unread: true },
+      plain: { titleManual: true },
+    });
+    expect(mocks.storage[MIGRATION_KEY]).toBe(true);
   });
 
-  it("ignores a tombstone value that is not a list", async () => {
-    mocks.storage[HIDDEN_KEY] = { gone: true };
-    mocks.summaries = [summary("gone", 200)];
+  it("tolerates one id the host cannot archive", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.archiveSession.mockImplementation(async (id: string) => {
+      if (id === "gone") {
+        throw Object.assign(new Error("no such session"), {
+          code: "session-not-found",
+        });
+      }
+      mocks.archived = [...mocks.archived, id];
+      return { archivedSessionIds: mocks.archived };
+    });
+    mocks.storage[HIDDEN_KEY] = ["gone", "real"];
+    mocks.summaries = [summary("real", 10)];
 
-    expect(ids(await loadIndex())).toEqual(["gone"]);
+    const index = await loadIndex();
+
+    expect(archiveCallIds().sort()).toEqual(["gone", "real"]);
+    expect(archivedIds(index)).toEqual(["real"]);
+    expect(warn).toHaveBeenCalled();
+    expect(mocks.storage[MIGRATION_KEY]).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("runs exactly once", async () => {
+    mocks.storage[HIDDEN_KEY] = ["bare"];
+    mocks.summaries = [summary("bare", 10)];
+
+    await loadIndex();
+    expect(archiveCallIds()).toEqual(["bare"]);
+
+    // A second load (or a second window) must not re-archive anything, and
+    // must not resurrect the key it just cleared.
+    await loadIndex();
+    expect(archiveCallIds()).toEqual(["bare"]);
+    expect(mocks.storage[HIDDEN_KEY]).toBeUndefined();
+  });
+
+  it("marks itself done even with nothing to drain", async () => {
+    mocks.summaries = [summary("kept", 10)];
+
+    await loadIndex();
+    expect(mocks.archiveSession).not.toHaveBeenCalled();
+    expect(mocks.storage[MIGRATION_KEY]).toBe(true);
   });
 });

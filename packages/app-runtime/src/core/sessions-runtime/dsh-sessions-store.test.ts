@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
   fork: vi.fn(),
   history: vi.fn(),
+  archived: [] as string[],
+  archiveSession: vi.fn(),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -19,8 +21,16 @@ vi.mock("@amiba/app-runtime/platform", () => ({
       set: async (patch: Record<string, unknown>) => {
         Object.assign(mocks.storage, patch);
       },
-      remove: async () => {},
+      remove: async (keys: string | string[]) => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          delete mocks.storage[key];
+        }
+      },
       watch: () => () => {},
+    },
+    agentWorkspaces: {
+      list: async () => ({ items: [], archivedSessionIds: mocks.archived }),
+      archiveSession: mocks.archiveSession,
     },
     agentSessions: {
       list: async () => [
@@ -56,6 +66,12 @@ import { SessionsStore } from "./sessions-store";
 describe("SessionsStore with DSH sessions", () => {
   beforeEach(() => {
     mocks.storage = {};
+    mocks.archived = [];
+    mocks.archiveSession.mockReset();
+    mocks.archiveSession.mockImplementation(async (id: string) => {
+      if (!mocks.archived.includes(id)) mocks.archived = [...mocks.archived, id];
+      return { archivedSessionIds: mocks.archived };
+    });
     mocks.rename.mockReset();
     mocks.fork.mockReset();
     mocks.fork.mockResolvedValue({ sessionId: "dsh-child" });
@@ -121,6 +137,46 @@ describe("SessionsStore with DSH sessions", () => {
     expect(
       store.getSnapshot().sessions.find((session) => session.id === "dsh-blank"),
     ).toMatchObject({ id: "dsh-blank", agent: { profileId: "amiba-steward" } });
+    store.teardown();
+  });
+
+  it("archives through the host, projects the set, and closes the tab", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    expect(store.getSnapshot().openTabIds).toEqual(["dsh-1"]);
+
+    await store.archiveSession("dsh-1");
+
+    expect(mocks.archiveSession).toHaveBeenCalledWith("dsh-1");
+    expect(
+      store.getSnapshot().sessions.find((session) => session.id === "dsh-1"),
+    ).toMatchObject({ archived: true });
+    // Archiving an open task takes it out of the tab strip.
+    expect(store.getSnapshot().openTabIds).toEqual([]);
+    // Nothing about the archive is written locally — DSH owns the set.
+    expect(mocks.storage["sessions.local-meta"]).toEqual({});
+    store.teardown();
+  });
+
+  it("batch-archives every selected id through the host", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    const extra = await store.createNew();
+
+    await store.archiveSessions(["dsh-1", extra, "dsh-1", ""]);
+
+    expect(mocks.archiveSession.mock.calls.map((call) => call[0])).toEqual([
+      "dsh-1",
+      extra,
+    ]);
+    expect(
+      store
+        .getSnapshot()
+        .sessions.filter((session) => session.archived)
+        .map((session) => session.id)
+        .sort(),
+    ).toEqual(["dsh-1", extra].sort());
     store.teardown();
   });
 
