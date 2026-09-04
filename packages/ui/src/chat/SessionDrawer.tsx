@@ -65,6 +65,9 @@ function groupSessionsByDate(
     { label: t("sidepanel.sessions.group.older"), items: [] },
   ];
 
+  // Quick-Ask's drawer is a quick picker for resuming live work — it has no
+  // Active/Archived toggle of its own, so archived rows stay out on purpose.
+  // The main sidebar's archived view is where they are found again.
   const rest = sessions
     .filter((s) => !s.archived)
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -129,9 +132,9 @@ export function SessionDrawer({
    * so frequently-used remote surfaces bubble up.
    */
   const channelSections = useMemo(() => {
-    const live = sessions.filter(
-      (s) => !s.archived,
-    );
+    // Same quick-picker rule as `groupSessionsByDate` above: no archived view
+    // here, so no archived rows.
+    const live = sessions.filter((s) => !s.archived);
 
     const bySource = new Map<string, SessionMeta[]>();
     for (const s of live) {
