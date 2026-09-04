@@ -48,23 +48,70 @@ async function writeLocalMeta(
   await getPlatform().storage.set({ [LOCAL_META_KEY]: meta });
 }
 
-async function readRuntimeHiddenSessions(): Promise<Set<string>> {
+/**
+ * A deletion is a local tombstone (DSH has no destructive delete), and it
+ * carries the time it was made. Anything the session does on the host AFTER
+ * that time — a plugin resuming it, another client writing a turn — is new
+ * activity the user never deleted, so the tombstone stops applying. Without
+ * the timestamp a resumed session became invisible forever: alive on the
+ * host, gone from every list, and unreachable even by id.
+ */
+type SessionTombstone = { id: string; hiddenAt: number };
+
+type TombstoneRead = {
+  /** id → deletion time. */
+  tombstones: Map<string, number>;
+  /** A legacy or malformed entry was given a time and must be written back. */
+  migrated: boolean;
+};
+
+function parseTombstones(value: unknown, now: number): TombstoneRead {
+  const tombstones = new Map<string, number>();
+  let migrated = false;
+  if (!Array.isArray(value)) return { tombstones, migrated };
+  for (const entry of value) {
+    // Legacy shape: a bare id with no recorded time. Adopt `now`, which keeps
+    // the deletion in force until the session's next activity.
+    if (typeof entry === "string") {
+      if (!entry) continue;
+      tombstones.set(entry, now);
+      migrated = true;
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const { id, hiddenAt } = entry as Partial<SessionTombstone>;
+    if (typeof id !== "string" || !id) continue;
+    if (typeof hiddenAt === "number" && Number.isFinite(hiddenAt)) {
+      tombstones.set(id, hiddenAt);
+    } else {
+      tombstones.set(id, now);
+      migrated = true;
+    }
+  }
+  return { tombstones, migrated };
+}
+
+async function readTombstones(): Promise<TombstoneRead> {
   const value = (
     await getPlatform().storage.get([RUNTIME_HIDDEN_SESSIONS_KEY])
   )[RUNTIME_HIDDEN_SESSIONS_KEY];
-  return new Set(
-    Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [],
-  );
+  return parseTombstones(value, Date.now());
+}
+
+async function writeTombstones(
+  tombstones: Map<string, number>,
+): Promise<void> {
+  const value: SessionTombstone[] = [...tombstones].map(([id, hiddenAt]) => ({
+    id,
+    hiddenAt,
+  }));
+  await getPlatform().storage.set({ [RUNTIME_HIDDEN_SESSIONS_KEY]: value });
 }
 
 async function hideRuntimeSession(id: string): Promise<void> {
-  const hidden = await readRuntimeHiddenSessions();
-  hidden.add(id);
-  await getPlatform().storage.set({
-    [RUNTIME_HIDDEN_SESSIONS_KEY]: [...hidden],
-  });
+  const { tombstones } = await readTombstones();
+  tombstones.set(id, Date.now());
+  await writeTombstones(tombstones);
 }
 
 function pickLocalFields(session: SessionMeta): SessionLocalMeta {
@@ -125,31 +172,48 @@ function toSessionMeta(
  * surface its real identity — above all the agent preset it already runs —
  * or the composer falls back to the roster default and the first submit is
  * rejected by the host as a preset change.
+ *
+ * This is the explicit open-by-id path: every caller reaches it because a
+ * user or a plugin asked for THIS session. So a tombstone does not hide the
+ * session here — opening it is itself the undo, and the tombstone is lifted.
  */
 export async function loadSessionMeta(
   id: string,
 ): Promise<SessionMeta | undefined> {
-  const [summaries, local, hidden] = await Promise.all([
+  const [summaries, local, { tombstones, migrated }] = await Promise.all([
     sessionsAdapter().list(),
     readLocalMeta(),
-    readRuntimeHiddenSessions(),
+    readTombstones(),
   ]);
-  if (hidden.has(id)) return undefined;
   const summary = summaries.find((item) => item.sessionId === id);
-  return summary ? toSessionMeta(summary, local[id]) : undefined;
+  if (!summary) return undefined;
+  if (tombstones.delete(id) || migrated) await writeTombstones(tombstones);
+  return toSessionMeta(summary, local[id]);
 }
 
 export async function loadIndex(): Promise<SessionMeta[]> {
-  const [summaries, local, hidden] = await Promise.all([
+  const [summaries, local, { tombstones, migrated }] = await Promise.all([
     sessionsAdapter().list(),
     readLocalMeta(),
-    readRuntimeHiddenSessions(),
+    readTombstones(),
   ]);
   lastSavedLocalMeta = local;
+  let tombstonesChanged = migrated;
   const result = summaries
-    .filter((summary) => !summary.blank && !hidden.has(summary.sessionId))
+    .filter((summary) => {
+      if (summary.blank) return false;
+      const hiddenAt = tombstones.get(summary.sessionId);
+      if (hiddenAt === undefined) return true;
+      // Activity after the deletion means the session lived on: show it
+      // again and forget the tombstone.
+      if (summary.updatedAt <= hiddenAt) return false;
+      tombstones.delete(summary.sessionId);
+      tombstonesChanged = true;
+      return true;
+    })
     .map((summary) => toSessionMeta(summary, local[summary.sessionId]))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+  if (tombstonesChanged) await writeTombstones(tombstones);
   lastSavedIndex = new Map(
     result.map((session) => [session.id, { ...session }]),
   );
