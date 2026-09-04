@@ -64,7 +64,12 @@ import { ApprovalBanner } from "./bubble/approval";
 import { ClarifyBanner } from "./bubble/clarify";
 import { ComposerDockError } from "./ComposerDockSheet";
 import { ErrorBlock } from "./bubble/chips";
-import { AwaitingUserInputContext, MessageTurns } from "./bubble/Bubble";
+import {
+  AwaitingUserInputContext,
+  MessageSourceLabelContext,
+  MessageTurns,
+  type MessageSourceLabelResolver,
+} from "./bubble/Bubble";
 import {
   ToolCallSeatProvider,
   type ToolCallSeatRenderer,
@@ -328,6 +333,15 @@ export interface ChatSurfaceProps {
    * Open an agent-destination URL in the user's primary browser.
    */
   openAgentDestination: (url: string) => void | Promise<void>;
+
+  /**
+   * Names the producer of a message whose `origin` says a plugin dispatched
+   * it. Provided once around the conversation as
+   * `MessageSourceLabelContext`, which the user bubble reads. Supplied by
+   * ui-shell from the `amiba.message.source` slot; omitted (Quick-Ask, the
+   * browser extension) the bubble shows the raw plugin id.
+   */
+  messageSourceLabel?: MessageSourceLabelResolver;
 }
 
 export type ChatSurfaceMode = "home" | "conversation";
@@ -403,6 +417,7 @@ export default function ChatSurface({
   triggerRuntime,
   openSettings,
   openAgentDestination,
+  messageSourceLabel,
 }: ChatSurfaceProps) {
   // Resolve the shared desktop theme before rendering either main chat or
   // Quick Ask.
@@ -2075,18 +2090,27 @@ export default function ChatSurface({
                       pendingQuestions.length > 0 || pendingApprovals.length > 0
                     }
                   >
-                    <MessageTurns
-                      messages={messages}
-                      onReviewWorkspaceChanges={
-                        workspacePane.enabled
-                          ? workspacePane.openReview
-                          : undefined
-                      }
-                      restorableTurnOrdinals={restorableTurnOrdinals}
-                      onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
-                      onOpenAgentDestination={openAgentDestination}
-                      onBranchUserMessage={branchUserMessage}
-                    />
+                    {/* Attribution for plugin-dispatched user messages.
+                        Provided here rather than drilled through
+                        MessageTurns/UserStickyBubble: it is one shell-wide
+                        lookup that every bubble reads and nothing between
+                        here and the bubble has any use for. */}
+                    <MessageSourceLabelContext.Provider
+                      value={messageSourceLabel}
+                    >
+                      <MessageTurns
+                        messages={messages}
+                        onReviewWorkspaceChanges={
+                          workspacePane.enabled
+                            ? workspacePane.openReview
+                            : undefined
+                        }
+                        restorableTurnOrdinals={restorableTurnOrdinals}
+                        onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
+                        onOpenAgentDestination={openAgentDestination}
+                        onBranchUserMessage={branchUserMessage}
+                      />
+                    </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>
 

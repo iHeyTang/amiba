@@ -51,6 +51,7 @@ import type {
   SessionListMenuItem,
 } from "./session-list-extensions";
 import ChatSurface from "./ChatSurface";
+import type { MessageSourceLabelResolver } from "./bubble/Bubble";
 import type {
   ComposerModelPickerRenderer,
   ComposerPlanSeatRenderer,
@@ -304,6 +305,13 @@ export interface FullScreenChatViewProps {
    * forwarded verbatim to `<Sidebar groups>`.
    */
   groups?: readonly SessionListGroup[];
+  /**
+   * `amiba.message.source` contributions, projected by ui-shell into one
+   * lookup from a plugin id to its display name — forwarded verbatim to
+   * `<ChatSurface messageSourceLabel>`, which provides it to the user
+   * bubbles that carry an `origin`.
+   */
+  messageSourceLabel?: MessageSourceLabelResolver;
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -341,6 +349,7 @@ function FullScreenChatViewInner({
   itemBadges,
   itemMenuItems,
   groups,
+  messageSourceLabel,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -918,6 +927,7 @@ function FullScreenChatViewInner({
                   openAgentDestination={openAgentDestination}
                   mentionProviders={mentionProviders}
                   triggerRuntime={triggerRuntime}
+                  messageSourceLabel={messageSourceLabel}
                 />
               </main>
             </PrimaryWorkspaceView>

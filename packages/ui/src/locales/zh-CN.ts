@@ -30,6 +30,9 @@ export const zhCN: UiMessages = {
   "conversationRail.jumpTo": "跳转到第 {index} 条消息：{message}",
   "conversationRail.messageFallback": "用户消息",
 
+  // 插件代为投递的用户消息（转发的任务简报、IM 入站消息）的来源标记。
+  "sidepanel.message.from": "来自 {source}",
+
   // 助手运行边界
   "sidepanel.runBoundary.interrupted": "响应已中断",
   "sidepanel.runBoundary.stopped": "已停止运行",

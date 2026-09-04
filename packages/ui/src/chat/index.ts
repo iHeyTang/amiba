@@ -3,6 +3,13 @@ export {
   default as FullScreenChatView,
   type FullScreenChatViewProps,
 } from "./FullScreenChatView";
+// The `amiba.message.source` projection: a plugin id to the name shown on a
+// plugin-dispatched user bubble. The shell builds one from the slot's
+// registrations and hands it to `<FullScreenChatView messageSourceLabel>`.
+export {
+  MessageSourceLabelContext,
+  type MessageSourceLabelResolver,
+} from "./bubble/Bubble";
 export {
   SessionTitleProvider,
   useSessionTitle,

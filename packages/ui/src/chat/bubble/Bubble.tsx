@@ -43,6 +43,24 @@ import {
   type WorkspaceReviewResource,
 } from "../workspace-review";
 
+/**
+ * Resolves the plugin id on a message's `origin` to a name to show the user.
+ * Returning `undefined` (nothing registered that id) falls back to rendering
+ * the raw id, so an unrecognised producer is still attributed rather than
+ * silently anonymous.
+ *
+ * Supplied by the shell from the `amiba.message.source` slot and provided
+ * once around the conversation by `ChatSurface`; a bubble rendered without a
+ * provider simply shows raw ids.
+ */
+export type MessageSourceLabelResolver = (
+  pluginId: string,
+) => string | undefined;
+
+export const MessageSourceLabelContext = createContext<
+  MessageSourceLabelResolver | undefined
+>(undefined);
+
 export interface BubbleProps {
   m: UiMessage;
   /** Turn-level renderers use this after moving execution details into one summary. */
@@ -84,17 +102,34 @@ export function Bubble({
   onOpenAgentDestination,
 }: BubbleProps) {
   const { t } = useT();
+  const resolveMessageSourceLabel = useContext(MessageSourceLabelContext);
 
   if (m.role === "user") {
     const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
     const fileBadges = m.attachmentBadges ?? [];
     const hasReferences = fileBadges.length > 0;
     const hasContent = bodyText.length > 0;
+    // A message a plugin dispatched on the user's behalf (a relayed task
+    // brief, an inbound IM message) reads as a user turn but did not come
+    // from the person at the composer — say so, in the same quiet chip the
+    // session list uses for its own plugin badges.
+    const sourcePlugin = m.origin?.kind === "plugin" ? m.origin.plugin : "";
+    const sourceLabel = sourcePlugin
+      ? (resolveMessageSourceLabel?.(sourcePlugin) ?? sourcePlugin)
+      : "";
     return (
       <div
         data-selection="text"
         className="min-w-0 rounded-xl border border-border/60 bg-secondary px-4 py-3 text-sm text-secondary-foreground"
       >
+        {sourceLabel && (
+          <div
+            data-testid="message-source"
+            className="mb-2 inline-flex rounded bg-muted px-1 py-0.5 text-[10px] leading-none text-muted-foreground"
+          >
+            {t("sidepanel.message.from", { source: sourceLabel })}
+          </div>
+        )}
         {hasReferences && (
           <div
             className={cn(

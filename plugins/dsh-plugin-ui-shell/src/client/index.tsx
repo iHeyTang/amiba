@@ -41,6 +41,10 @@ import {
   type SessionMenuItemRow,
 } from "./session-list-sources.js";
 import {
+  createMessageSourcesSource,
+  type MessageSourceRow,
+} from "./message-source.js";
+import {
   connectOfficialLocale,
   LOCALE_SETTINGS_NAMESPACE,
 } from "./locale-bridge.js";
@@ -169,10 +173,24 @@ export interface SessionMenuContribution {
 }
 
 /**
- * Static slot typing for the three registrations above. The runtime
+ * The fourth Amiba-owned declarative slot, and the only one with NO business
+ * face: `amiba.message.source`. A plugin registers
+ * `ctx.slots.register({ name: "amiba.message.source", id: <its own DSH plugin
+ * name>, order, label }, NoopComponent)` and every user-role message the
+ * runtime tagged with that plugin as its `source` renders "From <label>" on
+ * the bubble. `id` is not a slot-local identifier the shell invents meaning
+ * for: it must equal the plugin name that appears in the `user/message`
+ * frame's `source.plugin`, since that is the only thing core carries through
+ * to `ChatMessage.origin`. Nothing is asked of the plugin per message — a
+ * name is the whole contribution — so there is no `inject` face type to
+ * export beside `SessionBadgeContribution` and friends; an unregistered id
+ * still renders, as itself.
+ *
+ * Static slot typing for the four registrations above. The runtime
  * declaration lives in `apply()` below, on `root`'s `children` table
  * (`"amiba.sessions.item.badge"` / `"amiba.sessions.list.group"` /
- * `"amiba.sessions.item.menu"`, `{ kind: "list", scope: "root" }`) — that
+ * `"amiba.sessions.item.menu"` / `"amiba.message.source"`,
+ * `{ kind: "list", scope: "root" }`) — that
  * alone is enough for the slot to exist and to be read via
  * `ctx.slots.entriesOfSlot(...)`, but it does NOT put the name in `SlotMap`,
  * so a plugin's own `ctx.slots.register({ name: "amiba.sessions.item.badge",
@@ -210,6 +228,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "amiba.sessions.item.badge": { kind: "list"; scope: "root" };
     "amiba.sessions.list.group": { kind: "list"; scope: "root" };
     "amiba.sessions.item.menu": { kind: "list"; scope: "root" };
+    "amiba.message.source": { kind: "list"; scope: "root" };
   }
 }
 
@@ -225,6 +244,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     sessionItemBadges: ContributionsSource<SessionBadgeSource>;
     sessionListGroups: ContributionsSource<SessionGroupRow>;
     sessionItemMenuItems: ContributionsSource<SessionMenuItemRow>;
+    messageSources: ContributionsSource<MessageSourceRow>;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -250,6 +270,7 @@ function AmibaRoot({
   sessionItemBadges,
   sessionListGroups,
   sessionItemMenuItems,
+  messageSources,
   useSessions,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
@@ -271,6 +292,7 @@ function AmibaRoot({
       sessionItemBadges={sessionItemBadges}
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
+      messageSources={messageSources}
       useOfficialSessions={useSessions}
     />
   );
@@ -456,6 +478,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const sessionItemBadges = createSessionBadgesSource(ctx.slots);
     const sessionListGroups = createSessionGroupsSource(ctx.slots);
     const sessionItemMenuItems = createSessionMenuItemsSource(ctx.slots);
+    // The message-attribution extension point, same declarative shape and
+    // just as free of plugin semantics: core carries whatever plugin id the
+    // DSH wire put on a message's `origin`, and this projects the
+    // registrations into the id → display-name lookup the user bubble reads.
+    const messageSources = createMessageSourcesSource(ctx.slots);
     // R1 selection bridge: keep the official ctx.sessions selection (the
     // session resolution every official session-scoped slot renders under)
     // in lock-step with Amiba's own per-window sessions store. The official
@@ -556,6 +583,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           sessionItemBadges,
           sessionListGroups,
           sessionItemMenuItems,
+          messageSources,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
@@ -572,6 +600,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.sessions.item.badge": { kind: "list", scope: "root" },
           "amiba.sessions.list.group": { kind: "list", scope: "root" },
           "amiba.sessions.item.menu": { kind: "list", scope: "root" },
+          // Message attribution. The most declarative of the four: no
+          // `inject` face at all, only `options.{id,order,label}` — `id` IS
+          // the plugin name core reads off a message's wire `source`, and
+          // `label` is what the conversation calls it. See
+          // `message-source.ts`.
+          "amiba.message.source": { kind: "list", scope: "root" },
           "amiba.workspace.navigation": {
             kind: "list",
             scope: "root",

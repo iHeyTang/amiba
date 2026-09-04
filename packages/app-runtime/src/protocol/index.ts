@@ -6,12 +6,34 @@
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
+/**
+ * A user-role message that a PLUGIN dispatched on the user's behalf (the
+ * steward relaying a task brief, an IM connector relaying an inbound chat
+ * message, …) rather than one the person typed into the composer.
+ *
+ * `plugin` is the DSH plugin name verbatim, straight off the wire
+ * (`user/message` `data.source.plugin`) — core attaches no meaning to it and
+ * carries no per-plugin vocabulary. A surface that wants to name the producer
+ * in the user's language resolves the id through the `amiba.message.source`
+ * slot (ui-shell projects those registrations into a label resolver); an id
+ * nobody registered renders as itself.
+ */
+export interface PluginMessageOrigin {
+  kind: "plugin";
+  plugin: string;
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
   name?: string;
   /** Local-only id used by presentation surfaces. */
   uiId?: string;
+  /**
+   * Set when this message came from somewhere other than the person at the
+   * composer. Absent means the ordinary case: the user typed it.
+   */
+  origin?: PluginMessageOrigin;
 }
 
 /**

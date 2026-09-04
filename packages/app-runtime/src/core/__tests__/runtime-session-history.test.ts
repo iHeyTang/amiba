@@ -288,4 +288,75 @@ describe("projectRuntimeSessionHistory", () => {
       "image.png",
     ]);
   });
+
+  function pluginUserMessage(source: Record<string, unknown>) {
+    return [
+      {
+        event: {
+          type: "user/message",
+          seq: 4,
+          time: 2,
+          data: {
+            id: "m1",
+            source,
+            content: [{ type: "text", text: "帮我看下这个任务" }],
+          },
+        },
+      },
+    ] as never;
+  }
+
+  it("keeps a plugin-relayed user message and attributes it to the plugin", () => {
+    const messages = projectRuntimeSessionHistory(
+      pluginUserMessage({
+        kind: "plugin",
+        plugin: "amiba-steward",
+        form: "relay",
+      }),
+    );
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: "帮我看下这个任务",
+        origin: { kind: "plugin", plugin: "amiba-steward" },
+        uiId: "dsh:m1",
+        runtimeSeq: 4,
+      },
+    ]);
+  });
+
+  it("keeps a plugin notice, and a plugin message with no form at all", () => {
+    for (const source of [
+      { kind: "plugin", plugin: "amiba-im", form: "notice" },
+      { kind: "plugin", plugin: "amiba-im" },
+    ]) {
+      const messages = projectRuntimeSessionHistory(pluginUserMessage(source));
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.origin).toEqual({
+        kind: "plugin",
+        plugin: "amiba-im",
+      });
+    }
+  });
+
+  it("still drops injected model context and tool results", () => {
+    for (const source of [
+      { kind: "plugin", plugin: "dsh-agent-instructions", form: "instructions" },
+      { kind: "plugin", plugin: "dsh-tool-goal", form: "catalog" },
+      { kind: "plugin", plugin: "dsh-time-context", form: "snapshot" },
+      { kind: "plugin", plugin: "dsh-session-reference", form: "recall" },
+      { kind: "tool", callId: "c1" },
+    ]) {
+      expect(projectRuntimeSessionHistory(pluginUserMessage(source))).toEqual(
+        [],
+      );
+    }
+  });
+
+  it("leaves a message the person typed unattributed", () => {
+    const messages = projectRuntimeSessionHistory(
+      pluginUserMessage({ kind: "user" }),
+    );
+    expect(messages[0]?.origin).toBeUndefined();
+  });
 });

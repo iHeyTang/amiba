@@ -53,6 +53,10 @@ export const en = {
   "conversationRail.jumpTo": "Jump to message {index}: {message}",
   "conversationRail.messageFallback": "User message",
 
+  // Attribution for a user message a plugin dispatched (a relayed task
+  // brief, an inbound IM message) rather than the person at the composer.
+  "sidepanel.message.from": "From {source}",
+
   // Assistant run boundaries
   "sidepanel.runBoundary.interrupted": "Response interrupted",
   "sidepanel.runBoundary.stopped": "Stopped",

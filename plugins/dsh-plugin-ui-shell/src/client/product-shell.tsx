@@ -34,6 +34,10 @@ import type {
   SessionGroupRow,
   SessionMenuItemRow,
 } from "./session-list-sources.js";
+import {
+  messageSourceLabelResolver,
+  type MessageSourceRow,
+} from "./message-source.js";
 import { useT } from "@amiba/i18n";
 import {
   FullScreenChatView,
@@ -95,6 +99,7 @@ const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
 const EMPTY_SESSION_BADGES: readonly SessionBadgeSource[] = [];
 const EMPTY_SESSION_GROUPS: readonly SessionGroupRow[] = [];
 const EMPTY_SESSION_MENU_ITEMS: readonly SessionMenuItemRow[] = [];
+const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
@@ -334,6 +339,8 @@ interface ProductShellProps {
   sessionListGroups?: ContributionsSource<SessionGroupRow>;
   /** `amiba.sessions.item.menu` contributions, sorted by `order`. */
   sessionItemMenuItems?: ContributionsSource<SessionMenuItemRow>;
+  /** `amiba.message.source` contributions, sorted by `order`. */
+  messageSources?: ContributionsSource<MessageSourceRow>;
   /**
    * The framework's `useSessions` standard hook (`GlobalStandardProps`),
    * handed down from the root entry. It is the OFFICIAL sessions list store —
@@ -370,6 +377,7 @@ function ProductShellInner({
   sessionItemBadges,
   sessionListGroups,
   sessionItemMenuItems,
+  messageSources,
   useOfficialSessions,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
@@ -408,6 +416,12 @@ function ProductShellInner({
     sessionItemMenuItems?.subscribe ?? (() => () => {}),
     sessionItemMenuItems?.getSnapshot ?? (() => EMPTY_SESSION_MENU_ITEMS),
   );
+  // Message attribution, read exactly the same way: the shell never learns
+  // WHOSE messages these are, only that some plugin id has a display name.
+  const messageSourceRows = useSyncExternalStore(
+    messageSources?.subscribe ?? (() => () => {}),
+    messageSources?.getSnapshot ?? (() => EMPTY_MESSAGE_SOURCES),
+  );
   const itemBadges = useCallback(
     (session: SessionMeta) => resolveBadgeTexts(session, sessionBadges),
     [sessionBadges],
@@ -415,6 +429,10 @@ function ProductShellInner({
   const sessionGroupList = useMemo<readonly SessionListGroup[]>(
     () => sessionGroups.map(({ id, label, claim }) => ({ id, label, claim })),
     [sessionGroups],
+  );
+  const messageSourceLabel = useMemo(
+    () => messageSourceLabelResolver(messageSourceRows),
+    [messageSourceRows],
   );
   const sessionMenuItemList = useMemo<readonly SessionListMenuItem[]>(
     () =>
@@ -667,6 +685,7 @@ function ProductShellInner({
         itemBadges={itemBadges}
         groups={sessionGroupList}
         itemMenuItems={sessionMenuItemList}
+        messageSourceLabel={messageSourceLabel}
         slots={{
           emptyState: (
             <HomeView

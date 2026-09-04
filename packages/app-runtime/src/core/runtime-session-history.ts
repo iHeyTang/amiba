@@ -7,6 +7,11 @@ import {
   toolCallWireRecord,
   toolResultWireRecord,
 } from "../dsh-client/tool-wire";
+import {
+  userMessageTextParts,
+  userMessageUiId,
+  visibleUserMessage,
+} from "../dsh-client/user-message-source";
 import type { ToolProgress } from "./runtime-protocol";
 import type { SessionMessage } from "./sessions";
 
@@ -273,33 +278,31 @@ export function projectRuntimeSessionHistory(
     }
     if (event.type === "user/message") {
       const message = messageFromEvent(event);
-      const source = record(message?.source);
-      if (source?.kind && source.kind !== "user") continue;
+      // Which producers' user-role messages the conversation shows, and what
+      // they are attributed to, is one shared decision with the live bridge
+      // — see `visibleUserMessage`. A plugin-dispatched message (the steward
+      // relaying a task brief, an IM connector relaying an inbound message)
+      // is conversation and keeps an `origin`; injected model context and
+      // tool results are not, and are still dropped here.
+      const visible = visibleUserMessage(message?.source);
+      if (!visible) continue;
       // Text parts are processed one by one: since the two-part wire format,
       // the attachment metadata is its own part (splits to badges and empty
       // text); legacy sessions carry one merged part, which the same call
       // splits in place.
-      const parts = Array.isArray(message?.content) ? message.content : [];
       const badges: AttachmentBadge[] = [];
       const texts: string[] = [];
-      for (const part of parts) {
-        const item = record(part);
-        if (item?.type !== "text" || typeof item.text !== "string") continue;
-        const split = splitFileAttachmentsFromPrompt(item.text);
+      for (const part of userMessageTextParts(message?.content)) {
+        const split = splitFileAttachmentsFromPrompt(part);
         badges.push(...split.badges);
         if (split.text) texts.push(split.text);
       }
-      const userText = parts.length
-        ? texts.join("\n")
-        : contentText(message?.content);
       output.push({
         role: "user",
-        content: userText,
+        content: texts.join("\n"),
+        ...(visible.origin ? { origin: visible.origin } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),
-        uiId:
-          typeof message?.id === "string"
-            ? `dsh:${message.id}`
-            : `dsh:user:${event.seq}`,
+        uiId: userMessageUiId(message?.id, event.seq),
         runtimeSeq: event.seq,
       });
       continue;
