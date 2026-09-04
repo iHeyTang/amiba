@@ -118,7 +118,6 @@ describe("Sidebar", () => {
   it("keeps rename inside the per-session overflow menu", async () => {
     const props = setup({
       onBranchSession: vi.fn(),
-      onPinSession: vi.fn(),
     });
 
     expect(
@@ -136,9 +135,9 @@ describe("Sidebar", () => {
     expect(
       screen
         .getAllByRole("menuitem")
-        .slice(0, 3)
+        .slice(0, 2)
         .map((item) => item.textContent),
-    ).toEqual(["Rename", "Pin", "Create branch"]);
+    ).toEqual(["Rename", "Create branch"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
 
     const input = screen.getByRole("textbox");

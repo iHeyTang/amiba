@@ -14,7 +14,6 @@ export interface SessionMeta {
   createdAt: number
   /** Last activity time (last message append, last rename). */
   updatedAt: number
-  pinned?: boolean
   archived?: boolean
   /** Branch provenance retained when this task was forked from another task. */
   parentSessionId?: string
@@ -51,7 +50,6 @@ export type SessionMessage = ChatMessage
 
 /** UI-only per-session flags that don't have a counterpart in the engine. */
 export interface SessionLocalMeta {
-  pinned?: boolean
   archived?: boolean
   unread?: boolean
   titleManual?: boolean
@@ -69,5 +67,5 @@ export const SESSION_KEYS = {
   index: "sessions.index",
 } as const
 
-/** Storage key for local-only UI metadata (pinned / archived / unread / titleManual). */
+/** Storage key for local-only UI metadata (archived / unread / titleManual). */
 export const LOCAL_META_KEY = "sessions.local-meta" as const

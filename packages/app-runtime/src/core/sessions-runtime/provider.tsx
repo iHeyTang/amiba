@@ -140,7 +140,6 @@ export function useSessions(): SessionsController {
     createNew: store.createNew,
     setAgentContext: store.setAgentContext,
     rename: store.rename,
-    setPinned: store.setPinned,
     setArchived: store.setArchived,
     bulkUpdate: store.bulkUpdate,
     branchSession: store.branchSession,

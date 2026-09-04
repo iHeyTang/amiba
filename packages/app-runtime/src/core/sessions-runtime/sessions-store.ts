@@ -570,15 +570,6 @@ export class SessionsStore {
     await this.persistIndex(next);
   };
 
-  setPinned = async (id: string, pinned: boolean): Promise<void> => {
-    const index = this.state.sessions.findIndex((session) => session.id === id);
-    if (index < 0 || Boolean(this.state.sessions[index].pinned) === pinned) return;
-    const next = this.state.sessions.slice();
-    next[index] = { ...next[index], pinned, updatedAt: Date.now() };
-    this.commit({ sessions: next });
-    await this.persistIndex(next);
-  };
-
   setArchived = async (id: string, archived: boolean): Promise<void> => {
     const index = this.state.sessions.findIndex((session) => session.id === id);
     if (index < 0 || Boolean(this.state.sessions[index].archived) === archived) return;
@@ -593,7 +584,7 @@ export class SessionsStore {
 
   bulkUpdate = async (
     ids: string[],
-    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+    action: "archive" | "unarchive" | "delete",
   ): Promise<void> => {
     const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
     if (action === "delete") {
@@ -605,13 +596,7 @@ export class SessionsStore {
       idSet.has(session.id)
         ? {
             ...session,
-            ...(action === "archive"
-              ? { archived: true }
-              : action === "unarchive"
-                ? { archived: false }
-                : action === "pin"
-                  ? { pinned: true }
-                  : { pinned: false }),
+            archived: action === "archive",
             updatedAt: Date.now(),
           }
         : session,

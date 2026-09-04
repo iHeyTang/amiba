@@ -46,9 +46,9 @@ interface DateBucket {
 }
 
 /**
- * Bins sessions by `updatedAt` into Pinned + Today / Yesterday /
- * Earlier this week / This month / Older. Keeps the sidebar scannable when
- * there are dozens of sessions.
+ * Bins sessions by `updatedAt` into Today / Yesterday / Earlier this week /
+ * This month / Older. Keeps the sidebar scannable when there are dozens of
+ * sessions.
  */
 function groupSessionsByDate(
   sessions: SessionMeta[],
@@ -73,19 +73,9 @@ function groupSessionsByDate(
     { label: t("sidepanel.sessions.group.older"), items: [] },
   ];
 
-  // Pinned items always come first regardless of date.
-  const pinned: SessionMeta[] = [];
-  const rest: SessionMeta[] = [];
-  for (const s of sessions) {
-    if (s.archived) continue;
-    if (s.pinned) pinned.push(s);
-    else rest.push(s);
-  }
-
-  const sortByUpdated = (a: SessionMeta, b: SessionMeta) =>
-    b.updatedAt - a.updatedAt;
-  pinned.sort(sortByUpdated);
-  rest.sort(sortByUpdated);
+  const rest = sessions
+    .filter((s) => !s.archived)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 
   for (const s of rest) {
     if (s.updatedAt >= today) buckets[0].items.push(s);
@@ -95,11 +85,7 @@ function groupSessionsByDate(
     else buckets[4].items.push(s);
   }
 
-  const out: DateBucket[] = [];
-  if (pinned.length)
-    out.push({ label: t("sidepanel.sessions.group.pinned"), items: pinned });
-  for (const b of buckets) if (b.items.length) out.push(b);
-  return out;
+  return buckets.filter((b) => b.items.length);
 }
 
 export function SessionDrawer({

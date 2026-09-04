@@ -450,8 +450,6 @@ export const zhCN: UiMessages = {
     "确定要从 Amiba 移除「{title}」吗？DSH 会保留原始会话事件；此操作只会从 Amiba 历史中隐藏该任务。",
   "sidepanel.sessions.selected": "已选择 {count} 项",
   "sidepanel.sessions.select": "批量选择",
-  "sidepanel.sessions.pin": "置顶",
-  "sidepanel.sessions.unpin": "取消置顶",
   "sidepanel.sessions.archive": "归档",
   "sidepanel.sessions.unarchive": "取消归档",
   "sidepanel.sessions.active": "当前",
@@ -461,7 +459,6 @@ export const zhCN: UiMessages = {
   "sidepanel.sessions.more": "更多任务操作",
   "sidepanel.sessions.bulkDeleteConfirm":
     "确定从 Amiba 移除选中的 {count} 个任务吗？DSH 会保留其原始事件日志。",
-  "sidepanel.sessions.group.pinned": "已置顶",
   "sidepanel.sessions.group.today": "今天",
   "sidepanel.sessions.group.yesterday": "昨天",
   "sidepanel.sessions.group.earlierWeek": "本周早些时候",

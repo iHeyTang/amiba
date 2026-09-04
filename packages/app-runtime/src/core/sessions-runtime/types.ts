@@ -107,11 +107,10 @@ export interface SessionsController {
 
   rename: (id: string, title: string) => Promise<void>;
 
-  setPinned: (id: string, pinned: boolean) => Promise<void>;
   setArchived: (id: string, archived: boolean) => Promise<void>;
   bulkUpdate: (
     ids: string[],
-    action: "archive" | "unarchive" | "pin" | "unpin" | "delete",
+    action: "archive" | "unarchive" | "delete",
   ) => Promise<void>;
   branchSession: (id: string, messageId?: number) => Promise<string>;
   exportSession: (id: string) => Promise<Record<string, unknown>>;

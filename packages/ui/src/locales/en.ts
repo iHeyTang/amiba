@@ -496,8 +496,6 @@ export const en = {
     'Remove "{title}" from Amiba? DSH keeps the canonical session event log; this only hides the task from Amiba history.',
   "sidepanel.sessions.selected": "{count} selected",
   "sidepanel.sessions.select": "Select tasks",
-  "sidepanel.sessions.pin": "Pin",
-  "sidepanel.sessions.unpin": "Unpin",
   "sidepanel.sessions.archive": "Archive",
   "sidepanel.sessions.unarchive": "Unarchive",
   "sidepanel.sessions.active": "Active",
@@ -507,7 +505,6 @@ export const en = {
   "sidepanel.sessions.more": "More task actions",
   "sidepanel.sessions.bulkDeleteConfirm":
     "Remove {count} selected tasks from Amiba? DSH keeps their canonical event logs.",
-  "sidepanel.sessions.group.pinned": "Pinned",
   "sidepanel.sessions.group.today": "Today",
   "sidepanel.sessions.group.yesterday": "Yesterday",
   "sidepanel.sessions.group.earlierWeek": "Earlier this week",

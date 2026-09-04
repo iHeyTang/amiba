@@ -811,7 +811,6 @@ function FullScreenChatViewInner({
             onOpenSession={(id) => void onOpenSession(id)}
             onRenameSession={(id, title) => void sessions.rename(id, title)}
             onDeleteSession={(id) => void sessions.remove(id)}
-            onPinSession={(id, pinned) => sessions.setPinned(id, pinned)}
             onArchiveSession={(id, archived) =>
               sessions.setArchived(id, archived)
             }

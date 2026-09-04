@@ -17,8 +17,6 @@ import {
   GitBranch,
   MoreHorizontal,
   Pencil,
-  Pin,
-  PinOff,
   Trash2,
 } from "lucide-react";
 import {
@@ -52,7 +50,6 @@ export interface SessionsListViewProps {
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
-  onPin?: (id: string, pinned: boolean) => void | Promise<void>;
   onArchive?: (id: string, archived: boolean) => void | Promise<void>;
   onBranch?: (id: string) => void | Promise<void>;
   onExport?: (id: string) => void | Promise<void>;
@@ -133,7 +130,6 @@ export function SessionsListView({
   onOpen,
   onRename,
   onDelete,
-  onPin,
   onArchive,
   onBranch,
   onExport,
@@ -206,11 +202,7 @@ export function SessionsListView({
     // to enforce it explicitly — keep the guarantee now that the flat
     // render order alone determines the user-visible sequence.
     for (const arr of bySource.values()) {
-      arr.sort(
-        (a, b) =>
-          Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
-          (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
-      );
+      arr.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     }
 
     const sections: {
@@ -338,7 +330,6 @@ export function SessionsListView({
               onOpen={() => onOpen(s.id)}
               onRename={(title) => onRename(s.id, title)}
               onDelete={() => onDelete(s.id)}
-              onPin={onPin ? (pinned) => onPin(s.id, pinned) : undefined}
               onArchive={
                 onArchive ? (archived) => onArchive(s.id, archived) : undefined
               }
@@ -478,7 +469,6 @@ interface SessionRowProps {
   onOpen: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
-  onPin?: (pinned: boolean) => void | Promise<void>;
   onArchive?: (archived: boolean) => void | Promise<void>;
   onBranch?: () => void | Promise<void>;
   onExport?: () => void | Promise<void>;
@@ -505,7 +495,6 @@ function SessionRow({
   onOpen,
   onRename,
   onDelete,
-  onPin,
   onArchive,
   onBranch,
   onExport,
@@ -570,18 +559,6 @@ function SessionRow({
       label: t("chat.rename"),
       onSelect: () => setEditing(true),
     },
-    ...(onPin
-      ? [
-          {
-            id: "pin",
-            icon: session.pinned ? <PinOff /> : <Pin />,
-            label: session.pinned
-              ? t("sidepanel.sessions.unpin")
-              : t("sidepanel.sessions.pin"),
-            onSelect: () => void onPin(!session.pinned),
-          },
-        ]
-      : []),
     ...(onBranch
       ? [
           {
@@ -733,9 +710,6 @@ function SessionRow({
               </span>
             ))}
           </span>
-        ) : null}
-        {session.pinned && !selecting ? (
-          <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
         ) : null}
       </button>
       {allowActions && !selecting ? (

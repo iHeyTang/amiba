@@ -69,7 +69,6 @@ async function hideRuntimeSession(id: string): Promise<void> {
 
 function pickLocalFields(session: SessionMeta): SessionLocalMeta {
   const result: SessionLocalMeta = {};
-  if (session.pinned) result.pinned = true;
   if (session.archived) result.archived = true;
   if (session.unread) result.unread = true;
   if (session.titleManual) result.titleManual = true;
@@ -83,7 +82,6 @@ function pickLocalFields(session: SessionMeta): SessionLocalMeta {
 
 function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
   return (
-    Boolean(a.pinned) === Boolean(b.pinned) &&
     Boolean(a.archived) === Boolean(b.archived) &&
     Boolean(a.unread) === Boolean(b.unread) &&
     Boolean(a.titleManual) === Boolean(b.titleManual) &&
@@ -107,7 +105,6 @@ function toSessionMeta(
     title: summary.title ?? "",
     createdAt: summary.updatedAt,
     updatedAt: summary.updatedAt,
-    pinned: sidecar?.pinned,
     archived: sidecar?.archived,
     unread: sidecar?.unread,
     titleManual: sidecar?.titleManual,
