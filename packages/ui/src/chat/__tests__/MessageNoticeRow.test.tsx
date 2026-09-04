@@ -64,7 +64,7 @@ describe("a notice renders as a collapsed context row, not a user bubble", () =>
     );
   });
 
-  it("expands to the full body rendered as markdown", async () => {
+  it("expands to the raw body as plain preformatted text, never as markdown", async () => {
     render(withLabel(<Bubble m={report} />));
 
     const row = screen.getByRole("button");
@@ -72,10 +72,35 @@ describe("a notice renders as a collapsed context row, not a user bubble", () =>
     await userEvent.click(row);
     expect(row).toHaveAttribute("aria-expanded", "true");
 
-    // The same renderer the assistant body uses, so a report's tables are
-    // tables rather than a wall of pipes.
-    expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "周报" })).toBeInTheDocument();
+    // A notice is a machine account, not prose — no markdown parsing at all,
+    // so a pipe table stays literal pipe characters, not an actual <table>.
+    expect(screen.queryByRole("table")).toBeNull();
+    const pre = screen.getByTestId("message-notice").parentElement!.querySelector("pre");
+    expect(pre).not.toBeNull();
+    expect(pre).toHaveTextContent("| 项目 | 状态 |");
+    // Preformatted, small, muted — the same quiet chrome a tool call's
+    // expanded output uses, not the document face.
+    expect(pre).toHaveClass("whitespace-pre-wrap", "font-mono", "text-[10.5px]");
+  });
+
+  it("never turns a title-line-plus-`---` body into a giant heading", async () => {
+    // The reported bug: a notice body whose first line is a title followed
+    // by a bare `---` is legitimate machine-account text, but a markdown
+    // renderer reads that `---` as a setext heading underline.
+    const goldReport: UiMessage = {
+      uiId: "dsh:n2",
+      role: "user",
+      content: "【任务汇报】查询今日黄金价格（task: t2）\n---\n完成，金价为 700 元/克",
+      origin: { kind: "plugin", plugin: "amiba-steward" },
+      notice: { summary: "任务汇报：查询今日黄金价格 — 完成" },
+    };
+    render(withLabel(<Bubble m={goldReport} />));
+
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(screen.queryByRole("heading")).toBeNull();
+    const pre = screen.getByTestId("message-notice").parentElement!.querySelector("pre");
+    expect(pre).toHaveTextContent("【任务汇报】查询今日黄金价格（task: t2） --- 完成，金价为 700 元/克");
   });
 
   it("still renders a relayed message as a user bubble with its chip", () => {
