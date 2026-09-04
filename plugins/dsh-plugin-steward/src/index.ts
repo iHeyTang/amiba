@@ -15,7 +15,7 @@ export { StewardService, DISPATCH_FOOTER, formatReport } from "./service.js";
 export { StewardStore } from "./store.js";
 
 export const name = "amiba-steward";
-export const inject = ["agents", "sessions", "tools", "agentPresets", "sessionPersistence", "sessionQuery"];
+export const inject = ["agents", "sessions", "tools", "agentPresets", "sessionPersistence", "sessionQuery", "sessionTitle"];
 
 export interface Config {
   root: string;

@@ -1,7 +1,7 @@
 import type {
   SessionBadgeContribution,
   SessionBadgeTarget,
-  SessionFilterContribution,
+  SessionGroupContribution,
   SessionMenuContribution,
 } from "@amiba/dsh-plugin-ui-shell/client";
 
@@ -63,10 +63,14 @@ export function stewardBadgeFace(state: StewardClientState): SessionBadgeContrib
   };
 }
 
-/** The `amiba.sessions.list.filter` business face — same live read, keyed as a boolean test. */
-export function stewardFilterFace(state: StewardClientState): SessionFilterContribution {
+/**
+ * The `amiba.sessions.list.group` business face: a session is claimed by the
+ * 「大管家」group exactly when it's in the live adopted set — same live read
+ * as `stewardBadgeFace`, keyed as `claim` instead of `resolve`.
+ */
+export function stewardGroupFace(state: StewardClientState): SessionGroupContribution {
   return {
-    test: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
+    claim: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
     subscribe: state.subscribe,
   };
 }

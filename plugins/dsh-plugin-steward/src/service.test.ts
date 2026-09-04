@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { DISPATCH_FOOTER } from "./service.js";
+import { DISPATCH_FOOTER, STEWARD_TITLE } from "./service.js";
 import { harness } from "./test/service-harness.js";
 
 describe("StewardService — steward session", () => {
@@ -56,6 +56,51 @@ describe("StewardService — steward session", () => {
     await expect(service.ensureStewardSessionId()).rejects.toThrow(/setup exploded/u);
     expect(created).toHaveLength(0);
     expect((await store.read()).stewardSessionId).toBe(id);
+  });
+});
+
+describe("StewardService — title pin", () => {
+  it("pins the title when it creates the steward session", async () => {
+    const { service, ctx, live } = harness();
+    const id = await service.ensureStewardSessionId();
+    expect(ctx.sessionTitle.rename).toHaveBeenCalledWith(live.get(id)!.session, STEWARD_TITLE);
+  });
+
+  it("pins the title when it resumes a persisted steward session", async () => {
+    const { service, ctx, store, persist, live } = harness();
+    const id = "session-resumed";
+    await store.mutate((s) => ({ ...s, stewardSessionId: id }));
+    persist(id, [], { agentPreset: "amiba-steward" });
+    await service.start();
+    expect(ctx.sessionTitle.rename).toHaveBeenCalledWith(live.get(id)!.session, STEWARD_TITLE);
+  });
+
+  it("pins the title when it reuses an already-live steward agent", async () => {
+    const { service, ctx, store, live, makeAgent } = harness();
+    const id = "session-live";
+    await store.mutate((s) => ({ ...s, stewardSessionId: id }));
+    live.set(id, makeAgent(id));
+    await service.ensureStewardSessionId();
+    expect(ctx.sessionTitle.rename).toHaveBeenCalledWith(live.get(id)!.session, STEWARD_TITLE);
+  });
+
+  it("does not rename when the log already carries the fixed title", async () => {
+    const { service, ctx, store, persist } = harness();
+    const id = "session-titled";
+    await store.mutate((s) => ({ ...s, stewardSessionId: id }));
+    persist(id, [{ type: "session/title", seq: 0, time: 1, data: { title: STEWARD_TITLE, messageSeqs: [], source: { kind: "user" } } }], {
+      agentPreset: "amiba-steward",
+    });
+    await service.start();
+    expect(ctx.sessionTitle.rename).not.toHaveBeenCalled();
+  });
+
+  it("swallows a rename failure instead of breaking boot", async () => {
+    const { service, ctx } = harness();
+    ctx.sessionTitle.rename.mockImplementationOnce(() => {
+      throw new Error("rename exploded");
+    });
+    await expect(service.ensureStewardSessionId()).resolves.toMatch(/^session-/u);
   });
 });
 

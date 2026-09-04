@@ -33,6 +33,12 @@ export const STEWARD_SOURCE = "amiba-steward";
 export const DISPATCH_FOOTER =
   "---\n（来自大管家）需要用户输入时，请直接用文字提出问题并结束本轮，不要调用提问工具。";
 
+/**
+ * Fixed title for the steward's own session. An explicit user-sourced rename
+ * pins the title (stops auto-summarization) — see `pinStewardTitle`.
+ */
+export const STEWARD_TITLE = "大管家";
+
 const ASK_USER_DENIED =
   "This session is managed by the steward: ask the user in plain text and end your turn instead.";
 
@@ -60,11 +66,17 @@ export interface StewardServiceOptions {
 }
 
 // An intersection (not `extends`) so this file's narrower service-shaped
-// views of `agentPresets` / `sessionPersistence` / `sessionQuery` never have
-// to structurally satisfy the real, much larger ambient types those DSH
-// packages augment `Context` with (some carry private class fields, which
-// makes any plain object literal type provably unable to `extends` them).
-type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence" | "sessionQuery"> & {
+// views of `agentPresets` / `sessionPersistence` / `sessionQuery` /
+// `sessionTitle` never have to structurally satisfy the real, much larger
+// ambient types those DSH packages augment `Context` with (some carry
+// private class fields, which makes any plain object literal type provably
+// unable to `extends` them). `sessionTitle` in particular is kept as a local
+// structural type — rather than a type-only import of
+// `@deepseek-ai/dsh-session-title`'s `SessionTitleService` — for the same
+// reason: importing the real service class here has previously triggered a
+// TS2430 "interface incorrectly extends" error against this package's own
+// whole-program `Context` merge.
+type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence" | "sessionQuery" | "sessionTitle"> & {
   agentPresets: {
     readonly defaultId: string;
     mount(agentCtx: Context, id?: string): Promise<unknown>;
@@ -77,11 +89,27 @@ type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence"
     searchSessions(request: { query: string; limit?: number }): Promise<{ items: ReadonlyArray<{ header: { id: string; cwd?: string } }> }>;
     readTitle(id: string): Promise<{ title: string } | undefined>;
   };
+  sessionTitle: {
+    /** Explicit user-sourced rename: pins the title and stops auto-summarization. */
+    rename(session: Session, title: string): unknown;
+  };
 };
 
 function summarize(text: string): string {
   const flat = text.replace(/\s+/gu, " ").trim();
   return flat.length > SUMMARY_CHARS ? `${flat.slice(0, SUMMARY_CHARS)}…` : flat;
+}
+
+/** The latest logged `session/title` event's text, folded locally (mirrors `completedTurns`'s style in `reply-fold.ts`). */
+function lastSessionTitle(events: readonly SessionEvent[]): string | undefined {
+  const rows = events as unknown as ReadonlyArray<{ type: string; data: Record<string, unknown> }>;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index]!;
+    if (row.type !== "session/title") continue;
+    const title = row.data.title;
+    return typeof title === "string" ? title : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -148,6 +176,23 @@ export class StewardService {
     return (await this.ensureStewardAgent()).id as string;
   }
 
+  /**
+   * Pin the steward session's title to a fixed name so it never drifts to an
+   * auto-generated summary. A no-op once the title is already correct — read
+   * locally off the live session's own log (`lastSessionTitle`) rather than
+   * round-tripping through the host, since `ensureStewardAgent` already has
+   * the exact agent (and its events) in hand on every branch. Best-effort:
+   * a rename failure is logged and swallowed so it can never block boot.
+   */
+  private async pinStewardTitle(agent: Agent): Promise<void> {
+    try {
+      if (lastSessionTitle(agent.session.events) === STEWARD_TITLE) return;
+      this.ctx.sessionTitle.rename(agent.session, STEWARD_TITLE);
+    } catch (error) {
+      this.log.warn(`steward: failed to pin the steward session title: ${String(error)}`);
+    }
+  }
+
   private ensureStewardAgent(): Promise<Agent> {
     // Never mint (or adopt) an agent after unload has begun: a report racing
     // `dispose()` would otherwise leave a live steward nobody owns.
@@ -174,6 +219,7 @@ export class StewardService {
             this.log.warn(`steward: could not register the steward tools onto the already-live steward agent: ${String(error)}`);
           }
           this.stewardHandle = { agent: live, dispose: async () => undefined };
+          await this.pinStewardTitle(live);
           return live;
         }
         // Only "the session can't be loaded at all" falls through to creating a
@@ -191,6 +237,7 @@ export class StewardService {
           try {
             const handle = await this.ctx.agents.resume({ resumeSessionId: id as never, ...this.agentOptionsSpread(), setup });
             this.stewardHandle = handle;
+            await this.pinStewardTitle(handle.agent);
             return handle.agent;
           } catch (error) {
             this.log.error(`steward: failed to resume the steward session ${id}: ${String(error)}`);
@@ -207,6 +254,7 @@ export class StewardService {
       });
       await this.store.mutate((current) => ({ ...current, stewardSessionId: sessionId }));
       this.stewardHandle = handle;
+      await this.pinStewardTitle(handle.agent);
       return handle.agent;
     })().finally(() => {
       this.stewardPending = null;

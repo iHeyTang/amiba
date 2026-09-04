@@ -89,6 +89,9 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
       searchSessions: vi.fn(async (): Promise<{ items: Array<{ header: { id: string; cwd?: string } }> }> => ({ items: [] })),
       readTitle: vi.fn(async (id: string) => (persisted.has(id) ? { title: `title of ${id}` } : undefined)),
     },
+    sessionTitle: {
+      rename: vi.fn(),
+    },
     on: (name: string, callback: Listener) => {
       if (name === "session/event") listeners.push(callback);
       return () => undefined;
