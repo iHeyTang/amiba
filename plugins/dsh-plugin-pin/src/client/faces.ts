@@ -1,6 +1,6 @@
 import type {
-  SessionBadgeTarget,
   SessionGroupContribution,
+  SessionListItemTarget,
   SessionMenuContribution,
 } from "@amiba/dsh-plugin-ui-shell/client";
 
@@ -15,8 +15,8 @@ import type { PinState } from "./state.js";
  */
 export function pinMenuFace(state: PinState): SessionMenuContribution {
   return {
-    visible: (session: SessionBadgeTarget) => !state.isPinned(session.id),
-    run: (session: SessionBadgeTarget) => state.pin(session.id),
+    visible: (session: SessionListItemTarget) => !state.isPinned(session.id),
+    run: (session: SessionListItemTarget) => state.pin(session.id),
     subscribe: state.subscribe,
   };
 }
@@ -28,8 +28,8 @@ export function pinMenuFace(state: PinState): SessionMenuContribution {
  */
 export function unpinMenuFace(state: PinState): SessionMenuContribution {
   return {
-    visible: (session: SessionBadgeTarget) => state.isPinned(session.id),
-    run: (session: SessionBadgeTarget) => state.unpin(session.id),
+    visible: (session: SessionListItemTarget) => state.isPinned(session.id),
+    run: (session: SessionListItemTarget) => state.unpin(session.id),
     subscribe: state.subscribe,
   };
 }
@@ -40,7 +40,7 @@ export function unpinMenuFace(state: PinState): SessionMenuContribution {
  */
 export function pinnedGroupFace(state: PinState): SessionGroupContribution {
   return {
-    claim: (session: SessionBadgeTarget) => state.isPinned(session.id),
+    claim: (session: SessionListItemTarget) => state.isPinned(session.id),
     subscribe: state.subscribe,
   };
 }

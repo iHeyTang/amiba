@@ -100,11 +100,6 @@ export interface SidebarProps {
   settingsOpen?: boolean;
   className?: string;
   /**
-   * Declarative per-row badges — forwarded verbatim to `SessionsListView`.
-   * See `session-list-extensions.ts` for the contract.
-   */
-  itemBadges?: (session: SessionMeta) => readonly string[];
-  /**
    * `amiba.sessions.item.menu` contributions — forwarded verbatim to
    * `SessionsListView`. See `session-list-extensions.ts`.
    */
@@ -145,7 +140,6 @@ export function Sidebar({
   wide = true,
   settingsOpen = false,
   className,
-  itemBadges,
   itemMenuItems,
   groups,
 }: SidebarProps) {
@@ -300,7 +294,6 @@ export function Sidebar({
               onToggleSelected={toggleSelectedSession}
               rowIconFor={historyRowIconFor}
               indentRows={historyLayout === "grouped"}
-              itemBadges={itemBadges}
               itemMenuItems={itemMenuItems}
             />
           </TopSection>
@@ -391,7 +384,6 @@ export function Sidebar({
           showSectionHeaders={historyLayout === "grouped"}
           rowIconFor={historyRowIconFor}
           indentRows={historyLayout === "grouped"}
-          itemBadges={itemBadges}
           itemMenuItems={itemMenuItems}
         />
       </div>

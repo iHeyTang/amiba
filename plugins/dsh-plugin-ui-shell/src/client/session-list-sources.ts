@@ -1,6 +1,5 @@
 import { resolveSlotLabel, type SlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
 import type {
-  SessionBadgeSource,
   SessionListGroup,
   SessionListMenuItem,
 } from "@amiba/ui";
@@ -31,8 +30,8 @@ export interface ContributionsSource<T> {
 /**
  * One contribution's own change-notification hook, read off its `inject()`
  * business face when present — the `subscribe` half of
- * `SessionBadgeContribution` / `SessionMenuContribution` in `index.tsx`.
- * Structural and generic on purpose: this module has no notion of "badge"
+ * `SessionGroupContribution` / `SessionMenuContribution` in `index.tsx`.
+ * Structural and generic on purpose: this module has no notion of "group"
  * vs "menu item", only "a business face that may optionally know how to
  * signal its own changes".
  */
@@ -58,7 +57,7 @@ function subscribeOfFace(
  * `mapEntry` turns one stored entry (plus its already-resolved `inject()`
  * face, so callers don't call `inject()` a second time themselves) into the
  * plugin-facing contribution row, or `null` to drop an entry missing its
- * `id` or its business face (e.g. no `resolve`/`test` function) — the
+ * `id` or its business face (e.g. no `claim`/`run` function) — the
  * result is sorted by `order` ascending.
  *
  * On top of the slot-registration/version/lang axis, each KEPT entry's own
@@ -68,9 +67,9 @@ function subscribeOfFace(
  * forces the next `getSnapshot()` to return a NEW array identity — same
  * contents is fine, only the reference needs to change — and (b) notifies
  * this source's own subscriber. `useSyncExternalStore` in `product-shell.tsx`
- * is what turns that into a re-render, and the derived `itemBadges`
- * callback / `sessionFilterList` array (both memoized on the snapshot
- * array's identity) get recomputed with it.
+ * is what turns that into a re-render, and the derived `sessionGroupList` /
+ * `sessionMenuItemList` arrays (memoized on the snapshot array's identity)
+ * get recomputed with it.
  *
  * Contribution subscriptions are (re)wired on every `subscribe()` call and
  * every time the slot's own registrations change (`ctx.subscribe(slotName,
@@ -186,48 +185,17 @@ export function createSlotContributionsSource<T extends { order: number }>(
   };
 }
 
-const SESSION_BADGE_SLOT = "amiba.sessions.item.badge";
 const SESSION_GROUP_SLOT = "amiba.sessions.list.group";
 const SESSION_MENU_SLOT = "amiba.sessions.item.menu";
-
-/**
- * The `amiba.sessions.item.badge` contributions source: one row per
- * registration carrying a `resolve` business face, sorted by `order`. A
- * plugin registers with
- * `ctx.slots.register({ name: "amiba.sessions.item.badge", id, order,
- * label, inject: () => ({ resolve }) }, NoopComponent)` — the registered
- * component itself is never rendered, exactly like `settings.section`.
- */
-export function createSessionBadgesSource(
-  ctx: SlotContributionsCtx,
-): ContributionsSource<SessionBadgeSource> {
-  return createSlotContributionsSource<SessionBadgeSource>(
-    ctx,
-    SESSION_BADGE_SLOT,
-    (entry, face) => {
-      const id = entry.options.id ?? "";
-      if (!id) return null;
-      const resolve = (face as { resolve?: SessionBadgeSource["resolve"] } | undefined)
-        ?.resolve;
-      if (typeof resolve !== "function") return null;
-      return {
-        id,
-        order: entry.options.order ?? 0,
-        label: resolveSlotLabel(entry.options.label) ?? id,
-        resolve,
-      };
-    },
-  );
-}
 
 /** One `amiba.sessions.list.group` contribution, `order` kept for sorting. */
 export type SessionGroupRow = SessionListGroup & { order: number };
 
 /**
- * The `amiba.sessions.list.group` contributions source — same shape as
- * `createSessionBadgesSource`, keyed off a `claim` business face (the only
- * required one; `subscribe` is optional, same as the badge and menu-item
- * sources).
+ * The `amiba.sessions.list.group` contributions source — same
+ * `createSlotContributionsSource` shape as `createSessionMenuItemsSource`,
+ * keyed off a `claim` business face (the only required one; `subscribe` is
+ * optional, same as the menu-item source).
  */
 export function createSessionGroupsSource(
   ctx: SlotContributionsCtx,
@@ -256,11 +224,11 @@ export function createSessionGroupsSource(
 export type SessionMenuItemRow = SessionListMenuItem & { order: number };
 
 /**
- * The `amiba.sessions.item.menu` contributions source — same shape as
- * `createSessionBadgesSource`, keyed off a `run` business face (the only
- * required one; `visible` is optional and
- * defaults to "always visible" the same way `SessionListMenuItem.visible`
- * does downstream in `resolveMenuItems`).
+ * The `amiba.sessions.item.menu` contributions source — same
+ * `createSlotContributionsSource` shape as `createSessionGroupsSource`,
+ * keyed off a `run` business face (the only required one; `visible` is
+ * optional and defaults to "always visible" the same way
+ * `SessionListMenuItem.visible` does downstream in `resolveMenuItems`).
  */
 export function createSessionMenuItemsSource(
   ctx: SlotContributionsCtx,

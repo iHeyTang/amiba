@@ -29,7 +29,6 @@ import {
 import {
   useSessions,
   type ChatEngineClient,
-  type SessionMeta,
 } from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
@@ -294,11 +293,6 @@ export interface FullScreenChatViewProps {
    */
   hiddenSessionPresets?: ReadonlySet<string>;
   /**
-   * Declarative per-row badges for the sidebar history list — forwarded
-   * verbatim to `<Sidebar itemBadges>`. See `session-list-extensions.ts`.
-   */
-  itemBadges?: (session: SessionMeta) => readonly string[];
-  /**
    * `amiba.sessions.item.menu` contributions for the sidebar history list —
    * forwarded verbatim to `<Sidebar itemMenuItems>`.
    */
@@ -373,7 +367,6 @@ function FullScreenChatViewInner({
   triggerRuntime,
   restoreSidebarViewOnMount = true,
   hiddenSessionPresets,
-  itemBadges,
   itemMenuItems,
   groups,
   messageSourceLabel,
@@ -876,7 +869,6 @@ function FullScreenChatViewInner({
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
-            itemBadges={itemBadges}
             itemMenuItems={itemMenuItems}
             groups={groups}
           />

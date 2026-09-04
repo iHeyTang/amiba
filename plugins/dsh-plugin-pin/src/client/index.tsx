@@ -43,7 +43,7 @@ function groupLabel(): string {
  * `dsh-plugin-ui-shell`'s `session-list-sources.ts`); it never mounts the
  * component through a slot renderer. A component is still required to
  * satisfy `ctx.slots.register`'s signature — same convention as the
- * steward's badge/group/menu registrations.
+ * steward's group/menu registrations.
  */
 function NoopComponent(): ReactNode {
   return null;

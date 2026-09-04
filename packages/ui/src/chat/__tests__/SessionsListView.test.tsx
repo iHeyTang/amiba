@@ -8,9 +8,9 @@ import type { SessionListMenuItem } from "../session-list-extensions";
 function setup(overrides: Partial<React.ComponentProps<typeof SessionsListView>> = {}) {
   const props: React.ComponentProps<typeof SessionsListView> = {
     sessions: [
-      { id: "s1", title: "First chat", createdAt: 1, updatedAt: 3, source: "steward" },
+      { id: "s1", title: "First chat", createdAt: 1, updatedAt: 3 },
       { id: "s2", title: "Second chat", createdAt: 1, updatedAt: 2 },
-      { id: "s3", title: "Third chat", createdAt: 1, updatedAt: 1, source: "steward" },
+      { id: "s3", title: "Third chat", createdAt: 1, updatedAt: 1 },
     ],
     activeId: "",
     ready: true,
@@ -22,24 +22,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof SessionsListView>>
   render(<SessionsListView {...props} />);
   return props;
 }
-
-describe("SessionsListView badges", () => {
-  it("renders a chip per resolved badge, after the row title", () => {
-    setup({
-      itemBadges: (session) => (session.source === "steward" ? ["Steward"] : []),
-    });
-    const chips = screen.getAllByTestId("session-badge");
-    expect(chips.map((chip) => chip.textContent)).toEqual(["Steward", "Steward"]);
-    // s2 has no badge.
-    const secondRow = screen.getByText("Second chat").closest("button");
-    expect(secondRow?.querySelector('[data-testid="session-badge"]')).toBeNull();
-  });
-
-  it("renders nothing when itemBadges is absent", () => {
-    setup();
-    expect(screen.queryByTestId("session-badge")).not.toBeInTheDocument();
-  });
-});
 
 describe("SessionsListView session actions", () => {
   function rowFor(title: string) {

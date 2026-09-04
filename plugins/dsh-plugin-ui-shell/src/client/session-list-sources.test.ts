@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  createSessionBadgesSource,
   createSessionGroupsSource,
   createSessionMenuItemsSource,
   createSlotContributionsSource,
@@ -145,31 +144,6 @@ describe("createSlotContributionsSource", () => {
     expect(subscribeB).toHaveBeenCalledTimes(1);
 
     dispose();
-  });
-});
-
-describe("createSessionBadgesSource", () => {
-  it("reads the resolve face and falls back to id as the label", () => {
-    const resolve = vi.fn(() => true);
-    const { ctx } = fakeSlots([
-      {
-        options: { id: "steward", order: 5, label: "Steward" },
-        inject: () => ({ resolve }),
-      },
-    ]);
-    const source = createSessionBadgesSource(ctx);
-    const [row] = source.getSnapshot();
-    expect(row).toMatchObject({ id: "steward", order: 5, label: "Steward" });
-    expect(row?.resolve).toBe(resolve);
-  });
-
-  it("drops an entry with no resolve function", () => {
-    const { ctx } = fakeSlots([
-      { options: { id: "broken" }, inject: () => ({}) },
-      { options: { id: "no-inject" } },
-    ]);
-    const source = createSessionBadgesSource(ctx);
-    expect(source.getSnapshot()).toEqual([]);
   });
 });
 

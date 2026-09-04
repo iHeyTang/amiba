@@ -2,7 +2,6 @@ import {
   SessionsProvider,
   useSessions,
   type AgentExecutionContext,
-  type SessionMeta,
 } from "@amiba/app-runtime/core";
 import {
   DshChatEngineClient,
@@ -53,14 +52,12 @@ import {
   SettingsTriggerContent,
   SettingsView,
   makeWorkspaceFilesProvider,
-  resolveBadgeTexts,
   type ChatSurfaceCapabilities,
   type ComposerModelPickerRequest,
   type ComposerTriggerRuntime,
   type OnboardingStepRow,
   type PendingPromptAttachment,
   type PendingPromptResult,
-  type SessionBadgeSource,
   type SessionListGroup,
   type SessionListMenuItem,
   type QuestionSeatRequest,
@@ -103,7 +100,6 @@ export type { OnboardingStepRow, SettingsOnboardingStepsSource };
 
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
-const EMPTY_SESSION_BADGES: readonly SessionBadgeSource[] = [];
 const EMPTY_SESSION_GROUPS: readonly SessionGroupRow[] = [];
 const EMPTY_SESSION_MENU_ITEMS: readonly SessionMenuItemRow[] = [];
 const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
@@ -340,8 +336,6 @@ interface ProductShellProps {
   settingsOnboardingSteps?: SettingsOnboardingStepsSource;
   triggerRuntime?: ComposerTriggerRuntime;
   hiddenSessionPresets?: HiddenPresetsSource;
-  /** `amiba.sessions.item.badge` contributions, sorted by `order`. */
-  sessionItemBadges?: ContributionsSource<SessionBadgeSource>;
   /** `amiba.sessions.list.group` contributions, sorted by `order`. */
   sessionListGroups?: ContributionsSource<SessionGroupRow>;
   /** `amiba.sessions.item.menu` contributions, sorted by `order`. */
@@ -390,7 +384,6 @@ function ProductShellInner({
   settingsOnboardingSteps,
   triggerRuntime,
   hiddenSessionPresets,
-  sessionItemBadges,
   sessionListGroups,
   sessionItemMenuItems,
   messageSources,
@@ -410,21 +403,15 @@ function ProductShellInner({
     hiddenSessionPresets?.subscribe ?? (() => () => {}),
     hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
   );
-  // The three generic session-list extension points. Neither the shell nor
+  // The two generic session-list extension points. Neither the shell nor
   // `<FullScreenChatView>`/`<Sidebar>`/`<SessionsListView>` know anything
-  // about who registered a badge, a group, or a menu item — `sessionBadges`
-  // is handed down as an `itemBadges` resolver function built from the pure
-  // `resolveBadgeTexts` helper, `sessionGroupList` is the plain
-  // `{ id, label, claim }` list `SessionsListView` partitions the sidebar
-  // history list with, and `sessionMenuItems` is the plain `{ id, label,
-  // visible?, run }` list it appends to each row's "more" menu (`order`
-  // stripped in all three cases — it only matters for sorting the raw
-  // contributions, which `sessionItemBadges`/`sessionListGroups`/
-  // `sessionItemMenuItems` already did).
-  const sessionBadges = useSyncExternalStore(
-    sessionItemBadges?.subscribe ?? (() => () => {}),
-    sessionItemBadges?.getSnapshot ?? (() => EMPTY_SESSION_BADGES),
-  );
+  // about who registered a group or a menu item — `sessionGroupList` is the
+  // plain `{ id, label, claim }` list `SessionsListView` partitions the
+  // sidebar history list with, and `sessionMenuItems` is the plain `{ id,
+  // label, visible?, run }` list it appends to each row's "more" menu
+  // (`order` stripped in both cases — it only matters for sorting the raw
+  // contributions, which `sessionListGroups`/`sessionItemMenuItems` already
+  // did).
   const sessionGroups = useSyncExternalStore(
     sessionListGroups?.subscribe ?? (() => () => {}),
     sessionListGroups?.getSnapshot ?? (() => EMPTY_SESSION_GROUPS),
@@ -438,10 +425,6 @@ function ProductShellInner({
   const messageSourceRows = useSyncExternalStore(
     messageSources?.subscribe ?? (() => () => {}),
     messageSources?.getSnapshot ?? (() => EMPTY_MESSAGE_SOURCES),
-  );
-  const itemBadges = useCallback(
-    (session: SessionMeta) => resolveBadgeTexts(session, sessionBadges),
-    [sessionBadges],
   );
   const sessionGroupList = useMemo<readonly SessionListGroup[]>(
     () => sessionGroups.map(({ id, label, claim }) => ({ id, label, claim })),
@@ -706,7 +689,6 @@ function ProductShellInner({
         topBarClassName={desktop ? "app-drag-region" : undefined}
         restoreSidebarViewOnMount={false}
         hiddenSessionPresets={hiddenPresets}
-        itemBadges={itemBadges}
         groups={sessionGroupList}
         itemMenuItems={sessionMenuItemList}
         messageSourceLabel={messageSourceLabel}
