@@ -46,7 +46,10 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
-import type { SessionListMenuItem } from "./session-list-extensions";
+import type {
+  SessionListGroup,
+  SessionListMenuItem,
+} from "./session-list-extensions";
 import ChatSurface from "./ChatSurface";
 import type {
   ComposerModelPickerRenderer,
@@ -296,6 +299,11 @@ export interface FullScreenChatViewProps {
    * forwarded verbatim to `<Sidebar itemMenuItems>`.
    */
   itemMenuItems?: readonly SessionListMenuItem[];
+  /**
+   * `amiba.sessions.list.group` contributions for the sidebar history list —
+   * forwarded verbatim to `<Sidebar groups>`.
+   */
+  groups?: readonly SessionListGroup[];
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -332,6 +340,7 @@ function FullScreenChatViewInner({
   hiddenSessionPresets,
   itemBadges,
   itemMenuItems,
+  groups,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t } = useT();
@@ -843,6 +852,7 @@ function FullScreenChatViewInner({
             className="min-w-0 flex-1"
             itemBadges={itemBadges}
             itemMenuItems={itemMenuItems}
+            groups={groups}
           />
         </div>
       </aside>

@@ -29,10 +29,14 @@ export {
 } from "./WorkspaceControl";
 export { SessionDrawer } from "./SessionDrawer";
 export {
+  partitionSessionGroups,
   resolveBadgeTexts,
   resolveMenuItems,
   type SessionBadgeSource,
   type SessionBadgeTarget,
+  type SessionListGroup,
+  type SessionListGroupBucket,
+  type SessionListGroupPartition,
   type SessionListMenuItem,
 } from "./session-list-extensions";
 export {

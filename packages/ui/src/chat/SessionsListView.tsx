@@ -33,7 +33,9 @@ import { resolveChannel, SOURCE_LOCAL, type SessionMeta } from "@amiba/app-runti
 import { useT, type MessageKey } from "@amiba/i18n";
 import { CascadeMenu, Input, type CascadeMenuItem, cn } from "../primitives";
 import {
+  partitionSessionGroups,
   resolveMenuItems,
+  type SessionListGroup,
   type SessionListMenuItem,
 } from "./session-list-extensions";
 import { TopSection } from "./TopSection";
@@ -110,6 +112,15 @@ export interface SessionsListViewProps {
    * Visibility is re-evaluated per row via `resolveMenuItems`.
    */
   itemMenuItems?: readonly SessionListMenuItem[];
+  /**
+   * `amiba.sessions.list.group` contributions, in registration order. Each
+   * session is tested against `groups` in order (first `claim` match wins)
+   * BEFORE the list's own channel/date bucketing runs — a claimed session is
+   * pulled out of its normal section entirely and rendered under its group's
+   * own section instead, first, ahead of the regular sections. See
+   * `partitionSessionGroups`.
+   */
+  groups?: readonly SessionListGroup[];
 }
 
 export function SessionsListView({
@@ -145,6 +156,7 @@ export function SessionsListView({
   allowActionsFor,
   itemBadges,
   itemMenuItems,
+  groups,
 }: SessionsListViewProps) {
   const { t } = useT();
   const [showArchived, setShowArchived] = useState(false);
@@ -157,11 +169,12 @@ export function SessionsListView({
   }, []);
 
   /**
-   * Sessions split by originating channel. Each channel becomes its own
-   * top-level section; date-bucket grouping (Today / Yesterday / …) lives
-   * inside each section.
+   * `amiba.sessions.list.group` contributions applied to the (archived/
+   * search-filtered) live sessions before the channel bucketing below runs.
+   * A claimed session is entirely removed from `rest` — it renders once,
+   * under its plugin group's own section, never under a channel section too.
    */
-  const channelSections = useMemo(() => {
+  const pluginGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const live = sessions.filter(
       (s) => Boolean(s.archived) === showArchived,
@@ -171,9 +184,18 @@ export function SessionsListView({
           (s.title || t("chat.untitled")).toLowerCase().includes(q),
         )
       : live;
+    return partitionSessionGroups(matching, groups ?? []);
+  }, [sessions, query, t, showArchived, groups]);
 
+  /**
+   * Sessions split by originating channel. Each channel becomes its own
+   * top-level section; date-bucket grouping (Today / Yesterday / …) lives
+   * inside each section. Operates on `pluginGroups.rest` — sessions a
+   * plugin group already claimed are not bucketed here.
+   */
+  const channelSections = useMemo(() => {
     const bySource = new Map<string, SessionMeta[]>();
-    for (const s of matching) {
+    for (const s of pluginGroups.rest) {
       const src = groupKeyFor?.(s) ?? s.source ?? SOURCE_LOCAL;
       const arr = bySource.get(src) ?? [];
       arr.push(s);
@@ -248,18 +270,18 @@ export function SessionsListView({
     }
     return sections;
   }, [
-    sessions,
-    query,
+    pluginGroups.rest,
     t,
     sectionLabelFor,
     groupKeyFor,
     sectionOrder,
-    showArchived,
   ]);
 
   const totalMatching = useMemo(
-    () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
-    [channelSections],
+    () =>
+      channelSections.reduce((s, sec) => s + sec.items.length, 0) +
+      pluginGroups.groups.reduce((s, g) => s + g.items.length, 0),
+    [channelSections, pluginGroups.groups],
   );
 
   // Per-section collapse state. Keyed by SessionDB source so adding a
@@ -288,6 +310,63 @@ export function SessionsListView({
   const emptyText = query
     ? (noMatchesLabel ?? t("chat.noMatches"))
     : (emptyLabel ?? t("chat.noSessions"));
+
+  /**
+   * Renders one section's rows (with the show-more affordance) — shared by
+   * the plugin group sections and the regular channel sections below, keyed
+   * on `sectionKey` for both the per-section collapse and show-more state.
+   */
+  const renderRows = (sectionKey: string, items: SessionMeta[]) => {
+    const configuredLimit = visibleLimits[sectionKey] ?? HISTORY_PAGE_SIZE;
+    const activeIndex = items.findIndex((s) => s.id === activeId);
+    const visibleLimit =
+      activeIndex >= configuredLimit
+        ? Math.ceil((activeIndex + 1) / HISTORY_PAGE_SIZE) * HISTORY_PAGE_SIZE
+        : configuredLimit;
+    const visible = items.slice(0, visibleLimit);
+    const hiddenCount = items.length - visible.length;
+    return (
+      <>
+        <nav className="flex flex-col gap-0.5">
+          {visible.map((s) => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              running={runningSessionIds?.has(s.id) ?? false}
+              failed={failedSessionIds?.has(s.id) ?? false}
+              active={s.id === activeId}
+              onOpen={() => onOpen(s.id)}
+              onRename={(title) => onRename(s.id, title)}
+              onDelete={() => onDelete(s.id)}
+              onPin={onPin ? (pinned) => onPin(s.id, pinned) : undefined}
+              onArchive={
+                onArchive ? (archived) => onArchive(s.id, archived) : undefined
+              }
+              onBranch={onBranch ? () => onBranch(s.id) : undefined}
+              onExport={onExport ? () => onExport(s.id) : undefined}
+              selecting={selecting}
+              selected={selectedIds?.has(s.id) ?? false}
+              onToggleSelected={() => onToggleSelected?.(s.id)}
+              icon={rowIconFor?.(s)}
+              nested={indentRows}
+              allowActions={allowActionsFor?.(s) ?? true}
+              badges={itemBadges?.(s) ?? []}
+              itemMenuItems={itemMenuItems}
+            />
+          ))}
+        </nav>
+        {hiddenCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => showMore(sectionKey)}
+            className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            {t("sidepanel.sessions.showMore")}
+          </button>
+        ) : null}
+      </>
+    );
+  };
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
@@ -342,80 +421,50 @@ export function SessionsListView({
           </p>
         )
       ) : (
-        channelSections.map((sec) => {
-          const configuredLimit =
-            visibleLimits[sec.source] ?? HISTORY_PAGE_SIZE;
-          const activeIndex = sec.items.findIndex((s) => s.id === activeId);
-          const visibleLimit =
-            activeIndex >= configuredLimit
-              ? Math.ceil((activeIndex + 1) / HISTORY_PAGE_SIZE) *
-                HISTORY_PAGE_SIZE
-              : configuredLimit;
-          const visible = sec.items.slice(0, visibleLimit);
-          const hiddenCount = sec.items.length - visible.length;
-          const rows = (
-            <>
-              <nav className="flex flex-col gap-0.5">
-                {visible.map((s) => (
-                  <SessionRow
-                    key={s.id}
-                    session={s}
-                    running={runningSessionIds?.has(s.id) ?? false}
-                    failed={failedSessionIds?.has(s.id) ?? false}
-                    active={s.id === activeId}
-                    onOpen={() => onOpen(s.id)}
-                    onRename={(title) => onRename(s.id, title)}
-                    onDelete={() => onDelete(s.id)}
-                    onPin={onPin ? (pinned) => onPin(s.id, pinned) : undefined}
-                    onArchive={
-                      onArchive
-                        ? (archived) => onArchive(s.id, archived)
-                        : undefined
-                    }
-                    onBranch={onBranch ? () => onBranch(s.id) : undefined}
-                    onExport={onExport ? () => onExport(s.id) : undefined}
-                    selecting={selecting}
-                    selected={selectedIds?.has(s.id) ?? false}
-                    onToggleSelected={() => onToggleSelected?.(s.id)}
-                    icon={rowIconFor?.(s)}
-                    nested={indentRows}
-                    allowActions={allowActionsFor?.(s) ?? true}
-                    badges={itemBadges?.(s) ?? []}
-                    itemMenuItems={itemMenuItems}
-                  />
-                ))}
-              </nav>
-              {hiddenCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => showMore(sec.source)}
-                  className="mx-0.5 flex h-7 items-center rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-                >
-                  {t("sidepanel.sessions.showMore")}
-                </button>
-              ) : null}
-            </>
-          );
-          return showSectionHeaders ? (
-            <TopSection
-              key={sec.source}
-              label={sec.label}
-              collapsed={!!topCollapsed[sec.source]}
-              onToggle={() => toggleTop(sec.source)}
-              variant="rail"
-              actions={sectionActionsFor?.(sec.source)}
-              icon={sectionIconFor?.(sec.source)}
-              title={sectionTitleFor?.(sec.source)}
-              labelClassName={sectionLabelClassName}
-            >
-              {rows}
-            </TopSection>
-          ) : (
-            <div key={sec.source} className="pt-1">
-              {rows}
-            </div>
-          );
-        })
+        <>
+          {pluginGroups.groups.map(({ group, items }) => {
+            const sectionKey = `group:${group.id}`;
+            const rows = renderRows(sectionKey, items);
+            return showSectionHeaders ? (
+              <TopSection
+                key={sectionKey}
+                label={group.label}
+                collapsed={!!topCollapsed[sectionKey]}
+                onToggle={() => toggleTop(sectionKey)}
+                variant="rail"
+                labelClassName={sectionLabelClassName}
+              >
+                {rows}
+              </TopSection>
+            ) : (
+              <div key={sectionKey} className="pt-1">
+                {rows}
+              </div>
+            );
+          })}
+          {channelSections.map((sec) => {
+            const rows = renderRows(sec.source, sec.items);
+            return showSectionHeaders ? (
+              <TopSection
+                key={sec.source}
+                label={sec.label}
+                collapsed={!!topCollapsed[sec.source]}
+                onToggle={() => toggleTop(sec.source)}
+                variant="rail"
+                actions={sectionActionsFor?.(sec.source)}
+                icon={sectionIconFor?.(sec.source)}
+                title={sectionTitleFor?.(sec.source)}
+                labelClassName={sectionLabelClassName}
+              >
+                {rows}
+              </TopSection>
+            ) : (
+              <div key={sec.source} className="pt-1">
+                {rows}
+              </div>
+            );
+          })}
+        </>
       )}
     </div>
   );

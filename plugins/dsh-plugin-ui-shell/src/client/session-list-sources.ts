@@ -1,5 +1,9 @@
 import { resolveSlotLabel, type SlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
-import type { SessionBadgeSource, SessionListMenuItem } from "@amiba/ui";
+import type {
+  SessionBadgeSource,
+  SessionListGroup,
+  SessionListMenuItem,
+} from "@amiba/ui";
 
 /**
  * Minimal shape of one stored slot registration this module reads — a
@@ -183,6 +187,7 @@ export function createSlotContributionsSource<T extends { order: number }>(
 }
 
 const SESSION_BADGE_SLOT = "amiba.sessions.item.badge";
+const SESSION_GROUP_SLOT = "amiba.sessions.list.group";
 const SESSION_MENU_SLOT = "amiba.sessions.item.menu";
 
 /**
@@ -210,6 +215,38 @@ export function createSessionBadgesSource(
         order: entry.options.order ?? 0,
         label: resolveSlotLabel(entry.options.label) ?? id,
         resolve,
+      };
+    },
+  );
+}
+
+/** One `amiba.sessions.list.group` contribution, `order` kept for sorting. */
+export type SessionGroupRow = SessionListGroup & { order: number };
+
+/**
+ * The `amiba.sessions.list.group` contributions source — same shape as
+ * `createSessionBadgesSource`, keyed off a `claim` business face (the only
+ * required one; `subscribe` is optional, same as the badge and menu-item
+ * sources).
+ */
+export function createSessionGroupsSource(
+  ctx: SlotContributionsCtx,
+): ContributionsSource<SessionGroupRow> {
+  return createSlotContributionsSource<SessionGroupRow>(
+    ctx,
+    SESSION_GROUP_SLOT,
+    (entry, face) => {
+      const id = entry.options.id ?? "";
+      if (!id) return null;
+      const claim = (
+        face as { claim?: SessionListGroup["claim"] } | undefined
+      )?.claim;
+      if (typeof claim !== "function") return null;
+      return {
+        id,
+        order: entry.options.order ?? 0,
+        label: resolveSlotLabel(entry.options.label) ?? id,
+        claim,
       };
     },
   );

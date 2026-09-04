@@ -31,6 +31,7 @@ import { officialListFingerprint } from "./official-index-sync.js";
 import type { HiddenPresetsSource } from "./session-visibility.js";
 import type {
   ContributionsSource,
+  SessionGroupRow,
   SessionMenuItemRow,
 } from "./session-list-sources.js";
 import { useT } from "@amiba/i18n";
@@ -49,6 +50,7 @@ import {
   type PendingPromptAttachment,
   type PendingPromptResult,
   type SessionBadgeSource,
+  type SessionListGroup,
   type SessionListMenuItem,
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
@@ -91,6 +93,7 @@ export type { OnboardingStepRow, SettingsOnboardingStepsSource };
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
 const EMPTY_SESSION_BADGES: readonly SessionBadgeSource[] = [];
+const EMPTY_SESSION_GROUPS: readonly SessionGroupRow[] = [];
 const EMPTY_SESSION_MENU_ITEMS: readonly SessionMenuItemRow[] = [];
 
 /**
@@ -327,6 +330,8 @@ interface ProductShellProps {
   hiddenSessionPresets?: HiddenPresetsSource;
   /** `amiba.sessions.item.badge` contributions, sorted by `order`. */
   sessionItemBadges?: ContributionsSource<SessionBadgeSource>;
+  /** `amiba.sessions.list.group` contributions, sorted by `order`. */
+  sessionListGroups?: ContributionsSource<SessionGroupRow>;
   /** `amiba.sessions.item.menu` contributions, sorted by `order`. */
   sessionItemMenuItems?: ContributionsSource<SessionMenuItemRow>;
   /**
@@ -363,6 +368,7 @@ function ProductShellInner({
   triggerRuntime,
   hiddenSessionPresets,
   sessionItemBadges,
+  sessionListGroups,
   sessionItemMenuItems,
   useOfficialSessions,
 }: ProductShellProps): ReactElement {
@@ -379,18 +385,24 @@ function ProductShellInner({
     hiddenSessionPresets?.subscribe ?? (() => () => {}),
     hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
   );
-  // The two generic session-list extension points. Neither the shell nor
+  // The three generic session-list extension points. Neither the shell nor
   // `<FullScreenChatView>`/`<Sidebar>`/`<SessionsListView>` know anything
-  // about who registered a badge or a menu item — `sessionBadges` is handed
-  // down as an `itemBadges` resolver function built from the pure
-  // `resolveBadgeTexts` helper, and `sessionMenuItems` is the plain
-  // `{ id, label, visible?, run }` list it appends to each row's "more" menu
-  // (`order` stripped in both cases — it only matters for sorting the raw
-  // contributions, which `sessionItemBadges`/`sessionItemMenuItems` already
-  // did).
+  // about who registered a badge, a group, or a menu item — `sessionBadges`
+  // is handed down as an `itemBadges` resolver function built from the pure
+  // `resolveBadgeTexts` helper, `sessionGroupList` is the plain
+  // `{ id, label, claim }` list `SessionsListView` partitions the sidebar
+  // history list with, and `sessionMenuItems` is the plain `{ id, label,
+  // visible?, run }` list it appends to each row's "more" menu (`order`
+  // stripped in all three cases — it only matters for sorting the raw
+  // contributions, which `sessionItemBadges`/`sessionListGroups`/
+  // `sessionItemMenuItems` already did).
   const sessionBadges = useSyncExternalStore(
     sessionItemBadges?.subscribe ?? (() => () => {}),
     sessionItemBadges?.getSnapshot ?? (() => EMPTY_SESSION_BADGES),
+  );
+  const sessionGroups = useSyncExternalStore(
+    sessionListGroups?.subscribe ?? (() => () => {}),
+    sessionListGroups?.getSnapshot ?? (() => EMPTY_SESSION_GROUPS),
   );
   const sessionMenuItems = useSyncExternalStore(
     sessionItemMenuItems?.subscribe ?? (() => () => {}),
@@ -399,6 +411,10 @@ function ProductShellInner({
   const itemBadges = useCallback(
     (session: SessionMeta) => resolveBadgeTexts(session, sessionBadges),
     [sessionBadges],
+  );
+  const sessionGroupList = useMemo<readonly SessionListGroup[]>(
+    () => sessionGroups.map(({ id, label, claim }) => ({ id, label, claim })),
+    [sessionGroups],
   );
   const sessionMenuItemList = useMemo<readonly SessionListMenuItem[]>(
     () =>
@@ -649,6 +665,7 @@ function ProductShellInner({
         restoreSidebarViewOnMount={false}
         hiddenSessionPresets={hiddenPresets}
         itemBadges={itemBadges}
+        groups={sessionGroupList}
         itemMenuItems={sessionMenuItemList}
         slots={{
           emptyState: (

@@ -34,8 +34,10 @@ import {
 } from "./session-visibility.js";
 import {
   createSessionBadgesSource,
+  createSessionGroupsSource,
   createSessionMenuItemsSource,
   type ContributionsSource,
+  type SessionGroupRow,
   type SessionMenuItemRow,
 } from "./session-list-sources.js";
 import {
@@ -125,13 +127,33 @@ export interface SessionBadgeContribution {
   subscribe?(listener: () => void): () => void;
 }
 /**
+ * The `inject` business face of one `amiba.sessions.list.group`
+ * registration: `ctx.slots.register({ name: "amiba.sessions.list.group",
+ * id, order, label, inject: () => ({ claim }) }, NoopComponent)`.
+ * `claim(session)` reports whether this group takes ownership of a session —
+ * a claimed session is pulled out of the sidebar history list's normal
+ * channel/date sections and rendered under this group's own section instead,
+ * ahead of the regular sections. Sessions are tested against every
+ * registered group in `order`; the FIRST group whose `claim` returns `true`
+ * takes a given session (never two groups, never a group and the regular
+ * sections both). A group nothing claims renders no section at all.
+ */
+export interface SessionGroupContribution {
+  claim(session: SessionBadgeTarget): boolean;
+  /**
+   * Optional: call the listener when `claim` results may have changed. The
+   * list re-renders. See `SessionBadgeContribution.subscribe`.
+   */
+  subscribe?(listener: () => void): () => void;
+}
+/**
  * The `inject` business face of one `amiba.sessions.item.menu` registration:
  * `ctx.slots.register({ name: "amiba.sessions.item.menu", id, order, label,
  * inject: () => ({ visible, run, subscribe }) }, NoopComponent)`. Appended to
  * a session row's "more" (⋯) menu after the built-in actions, first visible
  * plugin item carrying the divider. The registered component itself is
- * never mounted — same `options`/`inject()`-only contract as the badge slot
- * above.
+ * never mounted — same `options`/`inject()`-only contract as the badge and
+ * group slots above.
  */
 export interface SessionMenuContribution {
   /** Omitted means always visible. */
@@ -147,43 +169,46 @@ export interface SessionMenuContribution {
 }
 
 /**
- * Static slot typing for the two registrations above. The runtime
+ * Static slot typing for the three registrations above. The runtime
  * declaration lives in `apply()` below, on `root`'s `children` table
- * (`"amiba.sessions.item.badge"` / `"amiba.sessions.item.menu"`,
- * `{ kind: "list", scope: "root" }`) — that alone is enough for the slot to
- * exist and to be read via `ctx.slots.entriesOfSlot(...)`, but it does NOT
- * put the name in `SlotMap`, so a plugin's own `ctx.slots.register({ name:
- * "amiba.sessions.item.badge", ... })` would not typecheck without this
- * augmentation (`register`'s `name` parameter is typed `keyof SlotMap &
- * string`). Declared here, beside the `inject` face types it names, rather
- * than in `@amiba/extension-sdk`'s `AMIBA_ROOT_SLOTS` vocabulary: these
- * slots are read directly off `entriesOfSlot` (see `session-list-sources.ts`)
- * and never dispatched through `renderSlot`, so they have no place in
- * `AmibaShellSlot` (extension-sdk sits below this package in the dependency
- * graph and cannot import `SessionBadgeContribution`/`SessionMenuContribution`
- * from here to declare it either way).
+ * (`"amiba.sessions.item.badge"` / `"amiba.sessions.list.group"` /
+ * `"amiba.sessions.item.menu"`, `{ kind: "list", scope: "root" }`) — that
+ * alone is enough for the slot to exist and to be read via
+ * `ctx.slots.entriesOfSlot(...)`, but it does NOT put the name in `SlotMap`,
+ * so a plugin's own `ctx.slots.register({ name: "amiba.sessions.item.badge",
+ * ... })` would not typecheck without this augmentation (`register`'s `name`
+ * parameter is typed `keyof SlotMap & string`). Declared here, beside the
+ * `inject` face types it names, rather than in `@amiba/extension-sdk`'s
+ * `AMIBA_ROOT_SLOTS` vocabulary: these slots are read directly off
+ * `entriesOfSlot` (see `session-list-sources.ts`) and never dispatched
+ * through `renderSlot`, so they have no place in `AmibaShellSlot`
+ * (extension-sdk sits below this package in the dependency graph and cannot
+ * import `SessionBadgeContribution`/`SessionGroupContribution`/
+ * `SessionMenuContribution` from here to declare it either way).
  *
- * Deliberately NO `inject` field on either `SlotMap` entry: per
+ * Deliberately NO `inject` field on any of the three `SlotMap` entries: per
  * `SlotSpec`/`ChildrenDecl` (`@deepseek-ai/dsh-client-ui-slots`'s
  * `lib/types/index.d.ts`), a `SlotMap[K].inject` is the SHARED face the
  * *declaring parent* (root, here) must supply once in its own `children`
  * spec and every entry receives identically — the mechanism
  * `amiba.workspace.navigation`'s `inject: { openWorkspace }` uses. That is
  * not what these slots want: `SessionBadgeContribution`/
- * `SessionMenuContribution` are each REGISTRANT's own per-entry business
- * face, supplied the ordinary way via that entry's own `options.inject`
- * factory (`register`'s `I extends object` overload, structurally inferred,
- * independent of whatever `SlotMap[K]` declares) — exactly like
- * `amiba.navigation.before`/`.after` below, which also carry no `inject` in
- * `SlotMap` yet support per-entry business faces freely. Adding `inject`
- * here instead makes root's own `{ kind: "list", scope: "root" }` children
- * entry fail to typecheck (`Property 'inject' is missing`) since it would
- * then have to supply ONE shared contribution for every plugin, which is
- * nonsensical for a per-plugin `resolve`/`run`.
+ * `SessionGroupContribution`/`SessionMenuContribution` are each
+ * REGISTRANT's own per-entry business face, supplied the ordinary way via
+ * that entry's own `options.inject` factory (`register`'s `I extends
+ * object` overload, structurally inferred, independent of whatever
+ * `SlotMap[K]` declares) — exactly like `amiba.navigation.before`/`.after`
+ * below, which also carry no `inject` in `SlotMap` yet support per-entry
+ * business faces freely. Adding `inject` here instead makes root's own
+ * `{ kind: "list", scope: "root" }` children entry fail to typecheck
+ * (`Property 'inject' is missing`) since it would then have to supply ONE
+ * shared contribution for every plugin, which is nonsensical for a
+ * per-plugin `resolve`/`claim`/`run`.
  */
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     "amiba.sessions.item.badge": { kind: "list"; scope: "root" };
+    "amiba.sessions.list.group": { kind: "list"; scope: "root" };
     "amiba.sessions.item.menu": { kind: "list"; scope: "root" };
   }
 }
@@ -198,6 +223,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     triggerRuntime: AmibaInputTriggerBridge;
     hiddenSessionPresets: HiddenPresetsSource;
     sessionItemBadges: ContributionsSource<SessionBadgeSource>;
+    sessionListGroups: ContributionsSource<SessionGroupRow>;
     sessionItemMenuItems: ContributionsSource<SessionMenuItemRow>;
   };
 
@@ -222,6 +248,7 @@ function AmibaRoot({
   triggerRuntime,
   hiddenSessionPresets,
   sessionItemBadges,
+  sessionListGroups,
   sessionItemMenuItems,
   useSessions,
 }: AmibaRootProps): ReactNode {
@@ -242,6 +269,7 @@ function AmibaRoot({
       triggerRuntime={triggerRuntime}
       hiddenSessionPresets={hiddenSessionPresets}
       sessionItemBadges={sessionItemBadges}
+      sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       useOfficialSessions={useSessions}
     />
@@ -416,14 +444,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
       "amibaSessionVisibility",
       visibility,
     );
-    // The two generic session-list extension points: declarative badges and
-    // row "more" menu items. Neither carries any plugin semantics here — a
+    // The three generic session-list extension points: declarative badges, a
+    // "group" that pulls claimed sessions into their own section, and row
+    // "more" menu items. Neither carries any plugin semantics here — a
     // feature plugin (the steward, a connector, …) registers into
-    // `amiba.sessions.item.badge` / `amiba.sessions.item.menu` the same way
-    // any other plugin registers into `settings.section`, and the shell just
-    // projects the registrations into the shapes `<FullScreenChatView>`
-    // renders. See `session-list-sources.ts`.
+    // `amiba.sessions.item.badge` / `amiba.sessions.list.group` /
+    // `amiba.sessions.item.menu` the same way any other plugin registers
+    // into `settings.section`, and the shell just projects the registrations
+    // into the shapes `<FullScreenChatView>` renders. See
+    // `session-list-sources.ts`.
     const sessionItemBadges = createSessionBadgesSource(ctx.slots);
+    const sessionListGroups = createSessionGroupsSource(ctx.slots);
     const sessionItemMenuItems = createSessionMenuItemsSource(ctx.slots);
     // R1 selection bridge: keep the official ctx.sessions selection (the
     // session resolution every official session-scoped slot renders under)
@@ -523,19 +554,23 @@ export async function apply(ctx: ClientContext): Promise<void> {
           triggerRuntime,
           hiddenSessionPresets: visibility.source,
           sessionItemBadges,
+          sessionListGroups,
           sessionItemMenuItems,
         }),
         children: {
           "amiba.navigation.before": { kind: "list", scope: "root" },
           "amiba.navigation.after": { kind: "list", scope: "root" },
-          // The two generic session-list extension points (declarative
-          // badges and row "more" menu items). List/root scope, same shape
-          // as `amiba.workspace.navigation` just below: a plugin's
+          // The three generic session-list extension points (declarative
+          // badges, a "group" that pulls claimed sessions into their own
+          // section, and row "more" menu items). List/root scope, same
+          // shape as `amiba.workspace.navigation` just below: a plugin's
           // registered component is a placeholder (never rendered) and the
           // shell reads only `options.{id,order,label}` and `inject()` —
           // see `session-list-sources.ts` and the `SessionBadgeContribution`
-          // / `SessionMenuContribution` inject-face types exported above.
+          // / `SessionGroupContribution` / `SessionMenuContribution`
+          // inject-face types exported above.
           "amiba.sessions.item.badge": { kind: "list", scope: "root" },
+          "amiba.sessions.list.group": { kind: "list", scope: "root" },
           "amiba.sessions.item.menu": { kind: "list", scope: "root" },
           "amiba.workspace.navigation": {
             kind: "list",

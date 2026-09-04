@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionsListView } from "../SessionsListView";
-import type { SessionListMenuItem } from "../session-list-extensions";
+import type {
+  SessionListGroup,
+  SessionListMenuItem,
+} from "../session-list-extensions";
 
 function setup(overrides: Partial<React.ComponentProps<typeof SessionsListView>> = {}) {
   const props: React.ComponentProps<typeof SessionsListView> = {
@@ -39,6 +42,67 @@ describe("SessionsListView badges", () => {
   it("renders nothing when itemBadges is absent", () => {
     setup();
     expect(screen.queryByTestId("session-badge")).not.toBeInTheDocument();
+  });
+});
+
+describe("SessionsListView groups", () => {
+  const stewardGroup: SessionListGroup = {
+    id: "steward",
+    label: "Steward group",
+    claim: (session) => session.source === "steward",
+  };
+
+  it("renders a claimed session under its plugin group, exactly once", () => {
+    setup({ groups: [stewardGroup] });
+    expect(screen.getByText("Steward group")).toBeInTheDocument();
+    expect(screen.getAllByText("First chat")).toHaveLength(1);
+    expect(screen.getAllByText("Third chat")).toHaveLength(1);
+  });
+
+  it("does not render a group nothing claims", () => {
+    setup({
+      groups: [{ id: "empty", label: "Empty group", claim: () => false }],
+    });
+    expect(screen.queryByText("Empty group")).not.toBeInTheDocument();
+  });
+
+  it("gives an overlapping claim to the first group in registration order", () => {
+    const claim = (session: { source?: string }) => session.source === "steward";
+    setup({
+      groups: [
+        { id: "a", label: "Group A", claim },
+        { id: "b", label: "Group B", claim },
+      ],
+    });
+    expect(screen.getByText("Group A")).toBeInTheDocument();
+    // Group B's claim never wins a session (A always claims first), so it
+    // ends up empty and is not rendered at all.
+    expect(screen.queryByText("Group B")).not.toBeInTheDocument();
+  });
+
+  it("gives an overlapping claim to whichever group is listed first", () => {
+    const claim = (session: { source?: string }) => session.source === "steward";
+    setup({
+      groups: [
+        { id: "b", label: "Group B", claim },
+        { id: "a", label: "Group A", claim },
+      ],
+    });
+    expect(screen.getByText("Group B")).toBeInTheDocument();
+    expect(screen.queryByText("Group A")).not.toBeInTheDocument();
+  });
+
+  it("leaves a session no group claims in its normal section", () => {
+    setup({ groups: [stewardGroup] });
+    // s2 has no source; the steward group does not claim it.
+    expect(screen.getByText("Second chat")).toBeInTheDocument();
+  });
+
+  it("renders nothing extra when groups is absent", () => {
+    setup();
+    expect(screen.getByText("First chat")).toBeInTheDocument();
+    expect(screen.getByText("Second chat")).toBeInTheDocument();
+    expect(screen.getByText("Third chat")).toBeInTheDocument();
   });
 });
 
