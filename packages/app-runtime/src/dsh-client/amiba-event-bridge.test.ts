@@ -65,6 +65,56 @@ describe("DshAmibaEventBridge", () => {
     })
   })
 
+  it("maps a plugin-dispatched user message, and ignores the user's own", () => {
+    const bridge = new DshAmibaEventBridge()
+    const userMessage = (data: Record<string, unknown>): DshMuxEnvelope => ({
+      rpcId: "rpc",
+      payload: {
+        type: "session/event",
+        sessionId: "s",
+        event: { type: "user/message", seq: 7, time: 10, data },
+      },
+    })
+
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m1",
+          source: { kind: "plugin", plugin: "amiba-steward", form: "relay" },
+          content: [{ type: "text", text: "帮我看下这个任务" }],
+        }),
+      )[0]?.event,
+    ).toEqual({
+      kind: "userMessage",
+      // The very id the durable-log projection derives, so the live bubble
+      // and the reloaded one collide instead of appearing twice.
+      uiId: "dsh:m1",
+      content: "帮我看下这个任务",
+      origin: { kind: "plugin", plugin: "amiba-steward" },
+    })
+
+    // The composer already put the person's own message on screen.
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m2",
+          source: { kind: "user" },
+          content: [{ type: "text", text: "hi" }],
+        }),
+      ),
+    ).toEqual([])
+    // Injected model context is not conversation.
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m3",
+          source: { kind: "plugin", plugin: "ctx", form: "snapshot" },
+          content: [{ type: "text", text: "state" }],
+        }),
+      ),
+    ).toEqual([])
+  })
+
   it("preserves DSH rpcId for answerable frames", () => {
     const bridge = new DshAmibaEventBridge()
     const approval = bridge.accept({

@@ -5,6 +5,11 @@ import type {
 } from "@amiba/app-runtime/protocol"
 import type { DshMuxEnvelope, DshSessionEvent } from "./index"
 import { toolCallWireRecord, toolResultWireRecord } from "./tool-wire"
+import {
+  userMessageTextParts,
+  userMessageUiId,
+  visibleUserMessage,
+} from "./user-message-source"
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
@@ -153,6 +158,28 @@ export class DshAmibaEventBridge {
     view: unknown,
   ): BridgedDshEvent[] {
     const data = source.data
+    if (source.type === "user/message") {
+      // Only a PLUGIN-dispatched message becomes a live event. The person's
+      // own message is already on screen — the composer appends its bubble
+      // before it submits — and echoing it would land a second bubble under
+      // a different id. Everything about the mapping (which forms count,
+      // the text, the `uiId`) comes from the same module the durable-log
+      // projection reads, so the live bubble and the reloaded one are the
+      // same message.
+      const visible = visibleUserMessage(data.source)
+      if (!visible?.origin) return []
+      return [
+        {
+          sessionId,
+          event: {
+            kind: "userMessage",
+            uiId: userMessageUiId(data.id, source.seq),
+            content: userMessageTextParts(data.content).join("\n"),
+            origin: visible.origin,
+          },
+        },
+      ]
+    }
     if (source.type === "turn/start") {
       const turn = typeof data.turn === "number" ? data.turn : source.seq
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}` } }]

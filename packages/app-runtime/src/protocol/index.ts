@@ -379,6 +379,19 @@ export type StreamEvent =
   | { kind: "questionResolved"; requestId: string }
   /** The runtime's session-title projection changed (auto-generated title). */
   | { kind: "sessionTitle"; title: string }
+  /**
+   * A user-role message the HOST put into the session — a plugin dispatching
+   * on the user's behalf, never the local composer (which appends its own
+   * bubble before submitting). `uiId` is the same id the durable-log
+   * projection derives, so the live bubble and the reloaded one are one
+   * message.
+   */
+  | {
+      kind: "userMessage";
+      uiId: string;
+      content: string;
+      origin?: ChatMessage["origin"];
+    }
   | { kind: "done"; agentFinalUrl?: string; agentFinalTitle?: string }
   | { kind: "aborted" }
   | { kind: "error"; message: string; status?: number; hint?: string };

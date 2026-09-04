@@ -102,6 +102,10 @@ import {
   type MessagesMaxWidth,
   type UiMessage,
 } from "./internal/types";
+import {
+  withHostAssistantPlaceholder,
+  withHostUserMessage,
+} from "./internal/host-turn-messages";
 
 import type {
   PendingPromptResult,
@@ -1255,7 +1259,31 @@ export default function ChatSurface({
       case "begin":
         setBusy(true);
         stream.onBegin(event.assistantUiId);
+        // A turn the HOST started (a plugin dispatching on the user's
+        // behalf) has no local `runChatTurn` to have appended the assistant
+        // placeholder first, and the chunk/verbose flushes only ever UPDATE
+        // an existing bubble. Append one when it is missing; a locally
+        // submitted turn already has it and this is a no-op. The check runs
+        // inside the updater so it reads the queued state, not the render
+        // that fired the event.
+        sessions.setActiveMessages((prev) =>
+          withHostAssistantPlaceholder(prev as UiMessage[], event.assistantUiId),
+        );
         break;
+      case "userMessage": {
+        // A message a plugin put into this session. `uiId` is the same id
+        // the durable-log projection derives, so re-reading history (a tab
+        // switch, a reload) lands on the same bubble instead of a second
+        // one — and an event that arrives after the read is a no-op.
+        const { uiId, content, origin } = event;
+        sessions.setActiveMessages((prev) => {
+          const arr = prev as UiMessage[];
+          const next = withHostUserMessage(arr, { uiId, content, origin });
+          if (next !== arr) void sessions.touchSession(sessionId, next);
+          return next;
+        });
+        break;
+      }
       case "chunk":
         stream.onChunk(event.text);
         break;

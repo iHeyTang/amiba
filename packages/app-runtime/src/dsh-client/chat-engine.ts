@@ -13,6 +13,7 @@ import type {
   UserQuestionRequest,
 } from "../protocol/index.js";
 import type { AgentAttachmentsAdapter } from "../platform/index.js";
+import { shortId } from "../utils/index.js";
 
 import { DshAmibaEventBridge } from "./amiba-event-bridge.js";
 import type {
@@ -24,6 +25,14 @@ import type {
 
 interface SessionState extends ChatRuntimeState {
   controller?: AbortController;
+  /**
+   * True for a run this window is only WATCHING: a turn the host started
+   * (a plugin, an IM connector, a schedule) that no local `submit()` owns.
+   * It has no `controller` — this window cannot abort what it did not start
+   * — and `submit()` may replace it outright, since a person typing into
+   * the composer takes the session back.
+   */
+  passive?: boolean;
 }
 
 export interface DshChatEngineOptions {
@@ -251,7 +260,9 @@ export class DshChatEngineClient implements ChatEngineClient {
               kind === "sessionTitle"
             ) {
               this.emit(mapped.sessionId, mapped.event);
+              continue;
             }
+            this.observePassiveFrame(mapped.sessionId, mapped.event);
           }
         }
       } catch {
@@ -260,6 +271,68 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
       if (this.disposed || signal.aborted) return;
       await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+
+  /**
+   * The stream-shaped half of the watcher: turns a host-started turn into the
+   * same events a local `run()` produces, so an open conversation follows a
+   * turn nobody in this window submitted.
+   *
+   * The one rule that keeps it from double-delivering is the `controller`
+   * check: while a local run owns a session, ITS iterator is already emitting
+   * every frame and the watcher stays out entirely. The check is safe against
+   * the watcher lagging behind that run, because a passive run can only be
+   * OPENED by a `turn` frame — the first frame of a turn, which necessarily
+   * arrives while the local controller is still set — and every later kind is
+   * gated on a passive state existing. Stragglers from a finished local turn
+   * therefore find no passive state and are dropped rather than replayed.
+   */
+  private observePassiveFrame(sessionId: string, event: StreamEvent): void {
+    const state = this.states.get(sessionId);
+    if (state?.controller) return;
+    switch (event.kind) {
+      case "userMessage":
+        // Independent of any turn: the bridge only maps plugin-dispatched
+        // messages, and one arrives BEFORE the turn it kicks off. Forwarded
+        // with no state of its own; the surface dedupes on `uiId`.
+        this.emit(sessionId, event);
+        return;
+      case "turn": {
+        if (!state?.passive || !state.streaming) {
+          // The assistant bubble id is minted HERE — no local submit chose
+          // one — and the surface opens its placeholder on the `begin` that
+          // carries it.
+          const assistantUiId = shortId("host");
+          const passive = initialState(sessionId, assistantUiId);
+          passive.passive = true;
+          this.states.set(sessionId, passive);
+          this.emit(sessionId, { kind: "begin", assistantUiId });
+        }
+        this.emit(sessionId, event);
+        return;
+      }
+      case "chunk":
+      case "reasoning":
+      case "toolCalls":
+      case "toolProgress":
+        if (!state?.passive) return;
+        this.emit(sessionId, event);
+        return;
+      case "done":
+      case "aborted":
+      case "error":
+        if (!state?.passive) return;
+        // `emit` applies the terminal event to the state first (so a
+        // listener reading a snapshot mid-dispatch sees a settled run), then
+        // the passive state is dropped: this window holds nothing durable
+        // for a turn it did not start, and the next host turn opens a fresh
+        // one.
+        this.emit(sessionId, event);
+        if (this.states.get(sessionId)?.passive) this.states.delete(sessionId);
+        return;
+      default:
+        return;
     }
   }
 
@@ -473,7 +546,11 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   submit(payload: SubmitPayload): void {
-    if (this.states.get(payload.sessionId)?.streaming) {
+    const current = this.states.get(payload.sessionId);
+    // A PASSIVE run is not this window's to guard: the person typing has
+    // taken the session back, and DSH queues the prompt behind whatever the
+    // host is running. Only a local run in flight refuses a second submit.
+    if (current?.streaming && !current.passive) {
       this.emit(payload.sessionId, {
         kind: "error",
         message: "A stream is already in progress for this session.",
