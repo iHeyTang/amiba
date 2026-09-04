@@ -70,7 +70,10 @@ import {
   WorkspaceTerminalToggle,
   useWorkspacePane,
 } from "./WorkspacePane";
-import { EmbeddedBrowserToggle } from "./EmbeddedBrowserPane";
+import {
+  EmbeddedBrowserHost,
+  EmbeddedBrowserToggle,
+} from "./EmbeddedBrowserPane";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
   clampAppSidebarWidth,
@@ -329,9 +332,33 @@ export default function FullScreenChatView(props: FullScreenChatViewProps) {
         capability={props.capabilities?.workspaceInspector}
         sessionId={sessions.activeId}
       >
-        <FullScreenChatViewInner {...props} />
+        <EmbeddedBrowserMount>
+          <FullScreenChatViewInner {...props} />
+        </EmbeddedBrowserMount>
       </WorkspacePaneProvider>
     </SessionTitleProvider>
+  );
+}
+
+/**
+ * Mounts the embedded browser's `<webview>`s once, ABOVE the workbench.
+ *
+ * They cannot live inside the workbench: it renders only the visible
+ * session, so a background task could never get a tab attached (main's
+ * five-second registration wait simply timed out), and switching tabs would
+ * re-parent a live `<webview>`, which reloads its page.
+ */
+function EmbeddedBrowserMount({ children }: { children: ReactNode }) {
+  const pane = useWorkspacePane();
+  return (
+    <EmbeddedBrowserHost
+      tabs={pane.browserTabs}
+      shownSessionId={pane.sessionId}
+      shownTabId={pane.visibleBrowserTabId}
+      onUpdateTab={pane.updateBrowserTabIn}
+    >
+      {children}
+    </EmbeddedBrowserHost>
   );
 }
 

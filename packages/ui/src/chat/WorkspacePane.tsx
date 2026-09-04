@@ -112,6 +112,7 @@ import {
   createEmbeddedBrowserResource,
   EmbeddedBrowserWorkspace,
   type EmbeddedBrowserResource,
+  type SessionBrowserTab,
 } from "./EmbeddedBrowserPane";
 
 export { workspaceFileTargets } from "./workspace-review";
@@ -249,6 +250,22 @@ interface WorkspacePaneContextValue {
     browserTabId: string,
     patch: Partial<EmbeddedBrowserResource>,
   ): void;
+  /**
+   * Every session's browser tabs, newest session state first-come order.
+   *
+   * `EmbeddedBrowserHost` mounts one `<webview>` per entry, for ALL sessions
+   * — a task running in the background has no workbench on screen, so this
+   * is the only place its tab can exist.
+   */
+  browserTabs: readonly SessionBrowserTab[];
+  /** The browser tab the visible session's workbench is showing, if any. */
+  visibleBrowserTabId: string | null;
+  /** Patch a browser tab inside a NAMED session's record. */
+  updateBrowserTabIn(
+    sessionId: string,
+    browserTabId: string,
+    patch: Partial<EmbeddedBrowserResource>,
+  ): void;
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
   beginTurn(turnIndex: number): Promise<void>;
@@ -287,6 +304,9 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   newBrowserTab: () => {},
   openBrowserUrl: () => false,
   updateBrowserTab: () => {},
+  browserTabs: [],
+  visibleBrowserTabId: null,
+  updateBrowserTabIn: () => {},
   openFile: () => {},
   openReview: () => {},
   beginTurn: async () => {},
@@ -733,14 +753,32 @@ export function WorkspacePaneProvider({
     };
   }, [enabled]);
 
-  const updateActiveSession = useCallback(
-    (updater: (state: SessionPaneState) => SessionPaneState) => {
+  /**
+   * Update ONE named session's workbench record.
+   *
+   * Browser tabs arrive from Electron main with the session that owns them,
+   * which is not necessarily the session on screen: a background task must
+   * write into its own record, never the one the user is looking at.
+   */
+  const updateSession = useCallback(
+    (
+      targetSessionId: string,
+      updater: (state: SessionPaneState) => SessionPaneState,
+    ) => {
+      const key = targetSessionId || EMPTY_SESSION_KEY;
       setSessionStates((current) => ({
         ...current,
-        [stateKey]: updater(current[stateKey] ?? emptySessionState()),
+        [key]: updater(current[key] ?? emptySessionState()),
       }));
     },
-    [stateKey],
+    [],
+  );
+
+  const updateActiveSession = useCallback(
+    (updater: (state: SessionPaneState) => SessionPaneState) => {
+      updateSession(stateKey, updater);
+    },
+    [stateKey, updateSession],
   );
 
   const updateSessionCheckpoints = useCallback(
@@ -974,10 +1012,19 @@ export function WorkspacePaneProvider({
     [openResource],
   );
 
+  /**
+   * Put a browser tab in ONE session's workbench.
+   *
+   * `owner` names that session. It is the visible one for anything the user
+   * does; for an agent-driven open it is the session whose turn asked for it,
+   * which may be a background task nobody is looking at — that record is
+   * updated in place and the visible workbench is left alone.
+   */
   const activateBrowser = useCallback(
-    (forceNew: boolean, url?: string) => {
+    (forceNew: boolean, url?: string, owner?: string) => {
       if (!browserAdapter) return false;
-      updateActiveSession((state) => {
+      const targetKey = owner || stateKey;
+      updateSession(targetKey, (state) => {
         const browserTabs = state.tabs.filter(
           (tab) => tab.resource.kind === "browser",
         );
@@ -992,7 +1039,12 @@ export function WorkspacePaneProvider({
             ? undefined
             : browserTabs.at(-1);
         if (existing) {
-          return { ...state, activeTabId: existing.id, mode: "preview" };
+          return {
+            ...state,
+            activeTabId: existing.id,
+            mode: "preview",
+            open: true,
+          };
         }
         const resource = createEmbeddedBrowserResource();
         if (url) {
@@ -1010,13 +1062,17 @@ export function WorkspacePaneProvider({
           tabs: [...state.tabs, tab].slice(-12),
           activeTabId: tab.id,
           mode: "preview",
+          // The owner's own workbench opens, so switching to that task finds
+          // the page waiting. Nothing here touches any other session.
+          open: true,
         };
       });
-      setBrowserRequestVersion((current) => current + 1);
-      persistOpen(true);
+      if (targetKey === stateKey) {
+        setBrowserRequestVersion((current) => current + 1);
+      }
       return true;
     },
-    [browserAdapter, persistOpen, updateActiveSession],
+    [browserAdapter, stateKey, updateSession],
   );
 
   const openBrowser = useCallback(
@@ -1034,12 +1090,20 @@ export function WorkspacePaneProvider({
 
   useEffect(() => {
     if (!browserAdapter) return;
-    return browserAdapter.onCreateRequested(newBrowserTab);
-  }, [browserAdapter, newBrowserTab]);
+    // Main asks for a tab on behalf of a named session. Without an owner the
+    // request has no agent behind it and lands in the visible workbench.
+    return browserAdapter.onCreateRequested((event) => {
+      activateBrowser(true, undefined, event?.sessionId);
+    });
+  }, [activateBrowser, browserAdapter]);
 
-  const updateBrowserTab = useCallback(
-    (browserTabId: string, patch: Partial<EmbeddedBrowserResource>) => {
-      updateActiveSession((state) => ({
+  const updateBrowserTabIn = useCallback(
+    (
+      targetSessionId: string,
+      browserTabId: string,
+      patch: Partial<EmbeddedBrowserResource>,
+    ) => {
+      updateSession(targetSessionId, (state) => ({
         ...state,
         tabs: state.tabs.map((tab) =>
           tab.resource.kind === "browser" &&
@@ -1049,24 +1113,54 @@ export function WorkspacePaneProvider({
         ),
       }));
     },
-    [updateActiveSession],
+    [updateSession],
+  );
+
+  const updateBrowserTab = useCallback(
+    (browserTabId: string, patch: Partial<EmbeddedBrowserResource>) => {
+      updateBrowserTabIn(stateKey, browserTabId, patch);
+    },
+    [stateKey, updateBrowserTabIn],
   );
 
   useEffect(() => {
     if (!browserAdapter) return;
-    return browserAdapter.onFocusRequested(({ tabId }) => {
-      updateActiveSession((state) => {
+    return browserAdapter.onFocusRequested(({ tabId, sessionId: owner }) => {
+      const targetKey = owner || stateKey;
+      updateSession(targetKey, (state) => {
         const tab = state.tabs.find(
           (candidate) =>
             candidate.resource.kind === "browser" &&
             candidate.resource.browserTabId === tabId,
         );
-        return tab ? { ...state, activeTabId: tab.id, mode: "preview" } : state;
+        return tab
+          ? { ...state, activeTabId: tab.id, mode: "preview", open: true }
+          : state;
       });
-      setBrowserRequestVersion((current) => current + 1);
-      persistOpen(true);
+      if (targetKey === stateKey) {
+        setBrowserRequestVersion((current) => current + 1);
+      }
     });
-  }, [browserAdapter, persistOpen, updateActiveSession]);
+  }, [browserAdapter, stateKey, updateSession]);
+
+  const browserTabs = useMemo<SessionBrowserTab[]>(() => {
+    const collected: SessionBrowserTab[] = [];
+    for (const [key, state] of Object.entries(sessionStates)) {
+      for (const tab of state.tabs) {
+        if (tab.resource.kind !== "browser") continue;
+        collected.push({
+          sessionId: key === EMPTY_SESSION_KEY ? "" : key,
+          resource: tab.resource,
+        });
+      }
+    }
+    return collected;
+  }, [sessionStates]);
+
+  const visibleBrowserTabId =
+    activeState.mode === "preview" && activeTab?.resource.kind === "browser"
+      ? activeTab.resource.browserTabId
+      : null;
 
   const beginTurn = useCallback(
     async (turnIndex: number) => {
@@ -1244,6 +1338,9 @@ export function WorkspacePaneProvider({
       newBrowserTab,
       openBrowserUrl,
       updateBrowserTab,
+      browserTabs,
+      visibleBrowserTabId,
+      updateBrowserTabIn,
       openFile,
       openReview,
       beginTurn,
@@ -1287,6 +1384,9 @@ export function WorkspacePaneProvider({
       setWidth,
       updateActiveSession,
       updateBrowserTab,
+      updateBrowserTabIn,
+      browserTabs,
+      visibleBrowserTabId,
       width,
     ],
   );
@@ -4465,6 +4565,7 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
             <EmbeddedBrowserWorkspace
               tabs={browserTabs}
               activeTabId={activeBrowserTabId}
+              visible={pane.open && Boolean(activeBrowserTabId)}
               onUpdateTab={pane.updateBrowserTab}
               onNewTab={pane.newBrowserTab}
               className={cn(

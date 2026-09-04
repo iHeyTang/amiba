@@ -8,11 +8,15 @@ import {
   X,
 } from "lucide-react";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 
 import {
@@ -74,20 +78,24 @@ type WebViewElement = HTMLElement & {
 
 function BrowserWebView({
   adapter,
+  sessionId,
   tab,
-  active,
+  shown,
   onChange,
 }: {
   adapter: EmbeddedBrowserAdapter;
+  /** The chat session that owns this tab — reported to main on registration. */
+  sessionId: string;
   tab: EmbeddedBrowserResource;
-  active: boolean;
+  /** Whether this tab is the one the visible workbench is showing. */
+  shown: boolean;
   onChange(patch: Partial<EmbeddedBrowserResource>): void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const registeredRef = useRef(false);
-  const activeRef = useRef(active);
+  const activeRef = useRef(shown);
   const onChangeRef = useRef(onChange);
-  activeRef.current = active;
+  activeRef.current = shown;
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -124,6 +132,7 @@ function BrowserWebView({
           tabId: tab.browserTabId,
           webContentsId: webview.getWebContentsId(),
           active: activeRef.current,
+          sessionId: sessionId || undefined,
         })
         .then((state) => update(pageStatePatch(state)))
         .catch((cause) =>
@@ -188,22 +197,199 @@ function BrowserWebView({
         // The parent may already be gone while Electron is shutting down.
       }
     };
+    // Deliberately keyed on the tab alone: `sessionId` is fixed for the life
+    // of a tab, and re-running this would tear the <webview> down and reload
+    // the page.
   }, [adapter, tab.browserTabId]);
 
   useEffect(() => {
-    if (!active || !registeredRef.current) return;
+    if (!shown || !registeredRef.current) return;
     void adapter.setActiveTab(tab.browserTabId).catch(() => {});
-  }, [active, adapter, tab.browserTabId]);
+  }, [shown, adapter, tab.browserTabId]);
 
   return (
     <div
       ref={containerRef}
-      aria-hidden={!active}
+      aria-hidden={!shown}
+      data-embedded-browser-tab={tab.browserTabId}
       className={cn(
         "absolute inset-0 bg-white",
-        active ? "visible" : "pointer-events-none invisible",
+        shown
+          ? "pointer-events-auto visible"
+          : "pointer-events-none invisible",
       )}
     />
+  );
+}
+
+/**
+ * A browser tab plus the session that owns it.
+ *
+ * The host mounts tabs from EVERY session, so it needs both halves: the tab
+ * id addresses the `<webview>`, the session id is what main keys ownership on.
+ */
+export interface SessionBrowserTab {
+  sessionId: string;
+  resource: EmbeddedBrowserResource;
+}
+
+interface BrowserViewportRegistry {
+  /** Publish the rectangle the shown `<webview>` should cover, or `null`. */
+  register(element: HTMLElement | null): void;
+}
+
+const BrowserViewportContext = createContext<BrowserViewportRegistry>({
+  register: () => {},
+});
+
+/** Where a `<webview>` parks while no workbench is showing it. */
+const OFFSCREEN_LEFT_PX = -20_000;
+const OFFSCREEN_SIZE = { width: 1280, height: 800 };
+/**
+ * How long the position keeps tracking after something moves it. The
+ * workbench opens, resizes and slides on CSS transitions, so one measurement
+ * is never enough — but a permanent rAF loop would wake the compositor every
+ * frame for nothing.
+ */
+const POSITION_SETTLE_MS = 700;
+
+/**
+ * The one place `<webview>`s live.
+ *
+ * Tabs used to be mounted by the workbench, which only ever renders the
+ * VISIBLE session — so a background task could not get a tab registered at
+ * all, and main's five-second wait timed out. The host mounts one `<webview>`
+ * per browser tab across every session's pane record and keeps it mounted:
+ * re-parenting a `<webview>` reloads its page, so the workbench never adopts
+ * one. It publishes the rectangle it wants filled and the host positions the
+ * shown tab over it; every other tab stays parked offscreen at a real size,
+ * so a background page still has a sane viewport to be driven in.
+ */
+export function EmbeddedBrowserHost({
+  tabs,
+  shownSessionId,
+  shownTabId,
+  onUpdateTab,
+  children,
+}: {
+  tabs: readonly SessionBrowserTab[];
+  /** The session whose workbench is on screen. */
+  shownSessionId: string;
+  /** The browser tab that workbench is showing, or null. */
+  shownTabId: string | null;
+  onUpdateTab(
+    sessionId: string,
+    browserTabId: string,
+    patch: Partial<EmbeddedBrowserResource>,
+  ): void;
+  children: ReactNode;
+}) {
+  const adapter = getPlatform().embeddedBrowser;
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<HTMLElement | null>(null);
+  const registry = useMemo<BrowserViewportRegistry>(
+    () => ({ register: setViewport }),
+    [],
+  );
+
+  const shown = tabs.find(
+    (tab) =>
+      tab.sessionId === shownSessionId &&
+      tab.resource.browserTabId === shownTabId,
+  );
+  // A blank tab must not cover the workbench's own empty state.
+  const shownBrowserTabId =
+    shown && shown.resource.url !== "about:blank"
+      ? shown.resource.browserTabId
+      : null;
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || typeof requestAnimationFrame !== "function") return;
+    let handle = 0;
+    let deadline = 0;
+    let last = "";
+    const apply = () => {
+      const rect = viewport?.getBoundingClientRect();
+      const next =
+        rect && rect.width > 1 && rect.height > 1
+          ? `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`
+          : "";
+      if (next === last) return;
+      last = next;
+      const [left, top, width, height] = next
+        ? next.split(",").map(Number)
+        : [OFFSCREEN_LEFT_PX, 0, OFFSCREEN_SIZE.width, OFFSCREEN_SIZE.height];
+      frame.style.left = `${left}px`;
+      frame.style.top = `${top}px`;
+      frame.style.width = `${width}px`;
+      frame.style.height = `${height}px`;
+    };
+    const tick = () => {
+      apply();
+      if (Date.now() > deadline) {
+        handle = 0;
+        return;
+      }
+      handle = requestAnimationFrame(tick);
+    };
+    const schedule = () => {
+      deadline = Date.now() + POSITION_SETTLE_MS;
+      if (!handle) handle = requestAnimationFrame(tick);
+    };
+    schedule();
+    const observer =
+      typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
+    if (viewport) observer?.observe(viewport);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      if (handle) cancelAnimationFrame(handle);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+    };
+  }, [viewport, shownBrowserTabId, tabs.length]);
+
+  return (
+    <BrowserViewportContext.Provider value={registry}>
+      {children}
+      {adapter ? (
+        <div
+          ref={frameRef}
+          data-embedded-browser-host
+          // The layer covers the workbench's own preview area, so it must not
+          // swallow clicks meant for what is painted under it (the blank-tab
+          // empty state, for one). Only the shown <webview> takes input.
+          className="pointer-events-none fixed overflow-hidden"
+          style={{
+            left: OFFSCREEN_LEFT_PX,
+            top: 0,
+            width: OFFSCREEN_SIZE.width,
+            height: OFFSCREEN_SIZE.height,
+            zIndex: "var(--z-workbench)" as unknown as number,
+          }}
+        >
+          {tabs.map((tab) => (
+            <BrowserWebView
+              key={tab.resource.browserTabId}
+              adapter={adapter}
+              sessionId={tab.sessionId}
+              tab={tab.resource}
+              shown={tab.resource.browserTabId === shownBrowserTabId}
+              onChange={(patch) =>
+                onUpdateTab(tab.sessionId, tab.resource.browserTabId, patch)
+              }
+            />
+          ))}
+          {shown?.resource.error && shown.resource.url !== "about:blank" ? (
+            <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-lg border border-destructive/20 bg-background/95 px-3 py-2 text-[10.5px] text-destructive shadow-sm backdrop-blur">
+              {shown.resource.error}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </BrowserViewportContext.Provider>
   );
 }
 
@@ -240,12 +426,20 @@ export function EmbeddedBrowserToggle({
 export function EmbeddedBrowserWorkspace({
   tabs,
   activeTabId,
+  visible,
   onUpdateTab,
   onNewTab,
   className,
 }: {
   tabs: EmbeddedBrowserResource[];
   activeTabId: string | null;
+  /**
+   * Whether this workbench is actually showing the browser. The `<webview>`
+   * is positioned over the viewport published below, so a closed or
+   * mode-switched workbench must publish nothing at all — its element still
+   * has a rectangle even when the pane is slid shut.
+   */
+  visible: boolean;
   onUpdateTab(
     browserTabId: string,
     patch: Partial<EmbeddedBrowserResource>,
@@ -255,6 +449,8 @@ export function EmbeddedBrowserWorkspace({
 }) {
   const adapter = getPlatform().embeddedBrowser;
   const { t } = useT();
+  const viewportRegistry = useContext(BrowserViewportContext);
+  const [viewportNode, setViewportNode] = useState<HTMLDivElement | null>(null);
   const [agentAction, setAgentAction] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [detected, setDetected] = useState(false);
@@ -319,6 +515,12 @@ export function EmbeddedBrowserWorkspace({
     },
     [adapter, updateTab],
   );
+
+  useEffect(() => {
+    const register = viewportRegistry.register;
+    register(visible ? viewportNode : null);
+    return () => register(null);
+  }, [viewportRegistry, viewportNode, visible]);
 
   const detect = async () => {
     if (!adapter || detecting) return;
@@ -447,15 +649,17 @@ export function EmbeddedBrowserWorkspace({
       ) : null}
 
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
-        {tabs.map((tab) => (
-          <BrowserWebView
-            key={tab.browserTabId}
-            adapter={adapter}
-            tab={tab}
-            active={tab.browserTabId === activeTabId}
-            onChange={(patch) => updateTab(tab.browserTabId, patch)}
-          />
-        ))}
+        {/*
+         * The rectangle `EmbeddedBrowserHost` positions the shown `<webview>`
+         * over. The webviews themselves are mounted once, outside the
+         * workbench, so a background session can register its tab and so that
+         * switching tabs never re-parents (and thus reloads) a live page.
+         */}
+        <div
+          ref={setViewportNode}
+          data-embedded-browser-viewport
+          className="absolute inset-0"
+        />
 
         {activeTab?.url === "about:blank" ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background px-8 text-center">
@@ -505,11 +709,6 @@ export function EmbeddedBrowserWorkspace({
           </div>
         ) : null}
 
-        {activeTab?.error && activeTab.url !== "about:blank" ? (
-          <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 rounded-lg border border-destructive/20 bg-background/95 px-3 py-2 text-[10.5px] text-destructive shadow-sm backdrop-blur">
-            {activeTab.error}
-          </div>
-        ) : null}
       </div>
     </section>
   );
