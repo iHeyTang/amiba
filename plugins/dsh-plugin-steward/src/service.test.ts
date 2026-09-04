@@ -496,3 +496,109 @@ describe("StewardService — model route", () => {
     expect(created.every((c) => c.agentOptions === undefined)).toBe(true);
   });
 });
+
+describe("StewardService — archived sessions", () => {
+  // DSH's `ctx.workspaceRegistry.archivedSessionIds` is a registry-global
+  // archive set (Amiba's session "delete" becoming a DSH archive); a task
+  // whose session lands in it is over and must never be resumed or reported
+  // on again. The optional service is read via `ctx.reflect.get`, so tests
+  // arm it the same way the "model route" describe above arms
+  // `agentDefaultModel`: `reflectServices.set("workspaceRegistry", { archivedSessionIds: [...] })`.
+  const turnEvents = (turn: number, reply: string) => [
+    { type: "turn/start", seq: turn * 4, time: 1, data: { turn } },
+    { type: "user/message", seq: turn * 4 + 1, time: 1, data: { id: `u${turn}`, role: "user", content: [{ type: "text", text: `ask ${turn}` }] } },
+    { type: "assistant/message", seq: turn * 4 + 2, time: 1, data: { turn, step: 0, message: { id: `a${turn}`, role: "assistant", content: [{ type: "text", text: reply }] } } },
+    { type: "turn/end", seq: turn * 4 + 3, time: 100 + turn, data: { turn, reason: { kind: "completed" } } },
+  ];
+
+  it("refuses to dispatch to an archived task's session and closes it instead", async () => {
+    const { service, reflectServices, live } = harness();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "A" }, message: "go" });
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: [sessionId] });
+    await expect(service.dispatch({ taskId, message: "again" })).rejects.toThrow(/archived/u);
+    // Never resumed/followed-up: the guard runs before `ensureTaskAgent`.
+    expect(live.get(sessionId)!.followup).toHaveBeenCalledTimes(1);
+    const stored = (await service.snapshot()).tasks.find((t) => t.id === taskId)!;
+    expect(stored.status).toBe("done");
+  });
+
+  it("excludes an archived task from listTasks regardless of includeDone, unlike an ordinary closed task", async () => {
+    const { service, reflectServices } = harness();
+    const { taskId: archivedId, sessionId: archivedSession } = await service.dispatch({ newTask: { title: "B" }, message: "go" });
+    const { taskId: closedId } = await service.dispatch({ newTask: { title: "B2" }, message: "go" });
+    await service.closeTask(closedId);
+    // Sanity: before archival the task is live (dispatch leaves it "running").
+    expect((await service.listTasks()).map((t) => t.id)).toEqual([archivedId]);
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: [archivedSession] });
+    expect(await service.listTasks()).toEqual([]);
+    // An ordinary closed task still surfaces with includeDone; the archived
+    // one never does — that's what actually drops it from the client's
+    // 「大管家」 badge/group poll (`listTasks(true)`), unlike a task the user
+    // just finished with `steward_close_task`.
+    const withDone = await service.listTasks(true);
+    expect(withDone.map((t) => t.id)).toEqual([closedId]);
+    const stored = (await service.snapshot()).tasks.find((t) => t.id === archivedId)!;
+    expect(stored.status).toBe("done");
+  });
+
+  it("leaves a non-archived task's dispatch and listing unaffected", async () => {
+    const { service, reflectServices, live } = harness();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "C" }, message: "go" });
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: ["session-someone-else"] });
+    await service.dispatch({ taskId, message: "again" });
+    expect(live.get(sessionId)!.followup).toHaveBeenCalledTimes(2);
+    expect((await service.listTasks()).map((t) => t.id)).toEqual([taskId]);
+  });
+
+  it("behaves as before when the workspace registry service is absent", async () => {
+    const { service, live } = harness();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "D" }, message: "go" });
+    await service.dispatch({ taskId, message: "again" });
+    expect(live.get(sessionId)!.followup).toHaveBeenCalledTimes(2);
+    expect((await service.listTasks()).map((t) => t.id)).toEqual([taskId]);
+  });
+
+  it("tells the caller an archived task is closed instead of returning stale turns", async () => {
+    const { service, reflectServices } = harness();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "E" }, message: "go" });
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: [sessionId] });
+    await expect(service.readTask(taskId)).rejects.toThrow(/archived/u);
+    const stored = (await service.snapshot()).tasks.find((t) => t.id === taskId)!;
+    expect(stored.status).toBe("done");
+  });
+
+  it("does not report or revive a completed turn arriving on an already-archived session", async () => {
+    const { service, live, emit, reflectServices } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { taskId, sessionId } = await service.dispatch({ newTask: { title: "F" }, message: "go" });
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: [sessionId] });
+    for (const event of turnEvents(0, "late reply")) emit(sessionId, event);
+    await vi.waitFor(async () => {
+      const stored = (await service.snapshot()).tasks.find((t) => t.id === taskId)!;
+      expect(stored.status).toBe("done");
+    });
+    expect(live.get(stewardId)!.followup).not.toHaveBeenCalled();
+  });
+
+  it("does not resurrect an archived task's reports on boot recovery", async () => {
+    const first = harness();
+    const stewardId = await first.service.ensureStewardSessionId();
+    const { taskId, sessionId } = await first.service.dispatch({ newTask: { title: "G" }, message: "go" });
+    await first.service.dispose();
+
+    const second = harness();
+    second.reflectServices.set("workspaceRegistry", { archivedSessionIds: [sessionId] });
+    await second.store.mutate(() => ({
+      version: 1,
+      stewardSessionId: stewardId,
+      tasks: [{ id: taskId, title: "G", sessionId, cwd: "/default", origin: "created", status: "running", lastReportedSeq: -1, createdAt: 1, updatedAt: 1 }],
+    }));
+    second.persist(stewardId, [], { agentPreset: "amiba-steward" });
+    second.persist(sessionId, turnEvents(0, "done while down"));
+    await second.service.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(second.live.get(stewardId)?.followup).not.toHaveBeenCalled();
+    const stored = (await second.service.snapshot()).tasks.find((t) => t.id === taskId)!;
+    expect(stored.status).toBe("done");
+  });
+});

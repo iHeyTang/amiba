@@ -15,6 +15,17 @@ export { StewardService, DISPATCH_FOOTER, formatReport } from "./service.js";
 export { StewardStore } from "./store.js";
 
 export const name = "amiba-steward";
+// `workspaceRegistry` (`@deepseek-ai/dsh-workspace`, exposing the DSH-wide
+// archived-session set) is deliberately NOT listed here: this cordis
+// version's array-form `inject` has no optional flag (object-form `inject`
+// maps each service name to its own intercept config, not a
+// `{required,optional}` grouping — see the identical note on
+// dsh-plugin-connector-core's own `inject`), and the DSH host runtime mounts
+// it unconditionally but this plugin's own tests (and any bundle assembled
+// without the base row) may still omit it. `StewardService` reads it
+// on-demand via `ctx.reflect.get` — the same non-throwing, point-in-time
+// lookup already used for the optional `agentDefaultModel` service — and
+// treats its absence as "nothing is archived".
 export const inject = ["agents", "sessions", "tools", "agentPresets", "sessionPersistence", "sessionQuery", "sessionTitle"];
 
 export interface Config {
