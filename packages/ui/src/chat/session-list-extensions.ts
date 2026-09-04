@@ -128,6 +128,28 @@ export function resolveMenuItems<T extends SessionBadgeTarget>(
 }
 
 /**
+ * Whether `session`'s title matches `query` — case-insensitive substring,
+ * exactly what the session-history search box filters by. An empty (or
+ * whitespace-only) `query` matches everything. `untitledLabel` stands in for
+ * an empty title, the same placeholder text the row itself renders, so
+ * searching for that text also finds untitled sessions.
+ *
+ * Shared by `SessionsListView`'s own channel-section filtering and
+ * `Sidebar`'s plugin-group partitioning — both need the identical predicate
+ * so a search query filters a claimed session out of its group section the
+ * same way it would filter it out of a channel section.
+ */
+export function matchesSessionQuery(
+  session: SessionBadgeTarget,
+  query: string,
+  untitledLabel: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (session.title || untitledLabel).toLowerCase().includes(q);
+}
+
+/**
  * Resolves the chip texts for one session against an ordered list of badge
  * sources. Callers pass `badges` pre-sorted by `order` — this function does
  * not re-sort, so the returned order is exactly the input order.

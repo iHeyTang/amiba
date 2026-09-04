@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  matchesSessionQuery,
   partitionSessionGroups,
   resolveBadgeTexts,
   resolveMenuItems,
@@ -106,6 +107,33 @@ describe("partitionSessionGroups", () => {
     const result = partitionSessionGroups(sessions, []);
     expect(result.groups).toEqual([]);
     expect(result.rest).toEqual(sessions);
+  });
+});
+
+describe("matchesSessionQuery", () => {
+  it("matches everything when the query is empty or whitespace", () => {
+    expect(matchesSessionQuery(s("a", { title: "Hello" }), "", "Untitled")).toBe(true);
+    expect(matchesSessionQuery(s("a", { title: "Hello" }), "   ", "Untitled")).toBe(true);
+  });
+
+  it("matches case-insensitively on a title substring", () => {
+    expect(matchesSessionQuery(s("a", { title: "Refine Workbench" }), "workbench", "Untitled")).toBe(
+      true,
+    );
+    expect(matchesSessionQuery(s("a", { title: "Refine Workbench" }), "WORKBENCH", "Untitled")).toBe(
+      true,
+    );
+  });
+
+  it("does not match a query that isn't a substring of the title", () => {
+    expect(matchesSessionQuery(s("a", { title: "Refine Workbench" }), "steward", "Untitled")).toBe(
+      false,
+    );
+  });
+
+  it("falls back to untitledLabel for a session with an empty title", () => {
+    expect(matchesSessionQuery(s("a", { title: "" }), "untitled", "Untitled chat")).toBe(true);
+    expect(matchesSessionQuery(s("a", { title: "" }), "steward", "Untitled chat")).toBe(false);
   });
 });
 

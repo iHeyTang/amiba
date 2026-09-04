@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../Sidebar";
+import type { SessionListGroup } from "../session-list-extensions";
 
 const workspaceBindings = vi.hoisted(() => ({
   current: {
@@ -454,5 +455,104 @@ describe("Sidebar", () => {
     expect(
       screen.queryByRole("button", { name: "Show more" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Sidebar plugin-group sections", () => {
+  const stewardGroup: SessionListGroup = {
+    id: "steward",
+    label: "Steward group",
+    claim: (session) => session.source === "steward",
+  };
+
+  it("renders a claimed session under a top-level header, ahead of 最近任务, not inside the recent list", () => {
+    setup({
+      groups: [stewardGroup],
+      sessions: [
+        {
+          id: "s1",
+          title: "Claimed chat",
+          createdAt: 1,
+          updatedAt: 2,
+          source: "steward",
+        },
+        {
+          id: "s2",
+          title: "Unclaimed chat",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    const groupHeader = screen.getByText("Steward group");
+    const recentHeader = screen.getByText("Recent tasks");
+    // DOCUMENT_POSITION_FOLLOWING on recentHeader (relative to groupHeader)
+    // means groupHeader comes first in document order — a sibling section
+    // ahead of "最近任务", not nested inside it.
+    expect(
+      groupHeader.compareDocumentPosition(recentHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The claimed session appears exactly once, under the group section —
+    // not duplicated into the recent-tasks list below.
+    expect(screen.getAllByText("Claimed chat")).toHaveLength(1);
+    const claimedRow = screen.getByText("Claimed chat");
+    expect(
+      groupHeader.compareDocumentPosition(claimedRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      claimedRow.compareDocumentPosition(recentHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The unclaimed session is unaffected — still in the regular list.
+    expect(screen.getByText("Unclaimed chat")).toBeInTheDocument();
+  });
+
+  it("renders no header for a group nothing claims", () => {
+    setup({
+      groups: [{ id: "empty", label: "Empty group", claim: () => false }],
+    });
+    expect(screen.queryByText("Empty group")).not.toBeInTheDocument();
+  });
+
+  it("collapsing a group header hides its rows", async () => {
+    setup({
+      groups: [stewardGroup],
+      sessions: [
+        {
+          id: "s1",
+          title: "Claimed chat",
+          createdAt: 1,
+          updatedAt: 1,
+          source: "steward",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Claimed chat")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Steward group" }),
+    );
+    expect(screen.queryByText("Claimed chat")).not.toBeInTheDocument();
+
+    // Toggling again brings it back.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Steward group" }),
+    );
+    expect(screen.getByText("Claimed chat")).toBeInTheDocument();
+  });
+
+  it("does not render any plugin-group chrome when groups is absent", () => {
+    setup({
+      sessions: [
+        { id: "s1", title: "Only chat", createdAt: 1, updatedAt: 1 },
+      ],
+    });
+    expect(screen.getByText("Only chat")).toBeInTheDocument();
+    expect(screen.getByText("Recent tasks")).toBeInTheDocument();
   });
 });

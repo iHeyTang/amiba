@@ -49,6 +49,7 @@ export {
 // plugin's own tests can exercise its `resolve`/`claim`/`visible`
 // predicates without the shell.
 export {
+  matchesSessionQuery,
   partitionSessionGroups,
   resolveBadgeTexts,
   resolveMenuItems,

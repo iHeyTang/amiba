@@ -29,6 +29,7 @@ export {
 } from "./WorkspaceControl";
 export { SessionDrawer } from "./SessionDrawer";
 export {
+  matchesSessionQuery,
   partitionSessionGroups,
   resolveBadgeTexts,
   resolveMenuItems,

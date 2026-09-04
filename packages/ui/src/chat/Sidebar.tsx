@@ -29,11 +29,14 @@ import { useT } from "@amiba/i18n";
 import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
 import { SettingsTriggerContent } from "../settings/SettingsTriggerContent";
 import { SidebarItem } from "./SidebarItem";
-import { SessionsListView } from "./SessionsListView";
-import type {
-  SessionListGroup,
-  SessionListMenuItem,
+import { SessionRowsList, SessionsListView } from "./SessionsListView";
+import {
+  matchesSessionQuery,
+  partitionSessionGroups,
+  type SessionListGroup,
+  type SessionListMenuItem,
 } from "./session-list-extensions";
+import { TopSection } from "./TopSection";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
 /** Workspace plugin ids are intentionally open-ended. */
@@ -107,8 +110,13 @@ export interface SidebarProps {
    */
   itemMenuItems?: readonly SessionListMenuItem[];
   /**
-   * `amiba.sessions.list.group` contributions — forwarded verbatim to
-   * `SessionsListView`. See `session-list-extensions.ts`.
+   * `amiba.sessions.list.group` contributions, in registration order. The
+   * sidebar itself partitions `sessions` with these (see
+   * `partitionSessionGroups`) and renders one top-level section per
+   * NON-EMPTY group — sibling to, and ahead of, the "最近任务" section —
+   * rather than nesting them inside `SessionsListView`'s own channel
+   * sections. `SessionsListView` never sees a claimed session twice: it
+   * only renders whatever `partitionSessionGroups` leaves in `rest`.
    */
   groups?: readonly SessionListGroup[];
 }
@@ -208,6 +216,49 @@ export function Sidebar({
     return ordered;
   }, [historyLayout, sessions, workspaceBindings.bySessionId]);
 
+  // `SessionsListView` has no search box of its own (below, it always gets
+  // `query=""` too — search lives in the top bar / command palette); kept as
+  // a local rather than a literal so the SAME `matchesSessionQuery` call
+  // shape applies here as it does inside `SessionsListView`'s own filtering,
+  // and so a future search source only needs to flow into this one spot.
+  const historyQuery = "";
+  const untitledLabel = t("chat.untitled");
+  /**
+   * `amiba.sessions.list.group` contributions applied to the NON-ARCHIVED
+   * sessions once, here — never inside `SessionsListView`. A claimed session
+   * renders under its own top-level section (below, ahead of "最近任务"),
+   * never inside `SessionsListView`'s channel/workspace sections too.
+   * Archived sessions are deliberately excluded from partitioning (a plugin
+   * group claims live sessions only) and are folded back into `rest` so
+   * `SessionsListView`'s own active/archived toggle keeps working exactly
+   * as it did before groups existed.
+   */
+  const groupPartition = useMemo(() => {
+    const claimable = historySessions.filter(
+      (session) =>
+        !session.archived &&
+        matchesSessionQuery(session, historyQuery, untitledLabel),
+    );
+    return partitionSessionGroups(claimable, groups ?? []);
+  }, [historySessions, groups, historyQuery, untitledLabel]);
+  const restSessions = useMemo(
+    () => [
+      ...groupPartition.rest,
+      ...historySessions.filter((session) => session.archived),
+    ],
+    [groupPartition.rest, historySessions],
+  );
+  // Collapse state for the plugin-group sections, keyed by group id —
+  // separate from `SessionsListView`'s own per-channel collapse state,
+  // since these sections now render outside it entirely.
+  const [groupCollapsed, setGroupCollapsed] = useState<
+    Record<string, boolean>
+  >({});
+  const toggleGroupCollapsed = (id: string) =>
+    setGroupCollapsed((previous) => ({ ...previous, [id]: !previous[id] }));
+  const historyRowIconFor = () =>
+    historyLayout === "timeline" ? <MessageSquare /> : undefined;
+
   return (
     <nav
       aria-label={t("sidepanel.sessions.activityBar.aria")}
@@ -228,6 +279,43 @@ export function Sidebar({
 
       {/* Middle (flex): chat history always remains visible. */}
       <div className="flex min-h-0 flex-1 flex-col px-2">
+        {/*
+          Plugin-group sections (`amiba.sessions.list.group`) — one
+          top-level, always-header'd section per NON-EMPTY group, sibling to
+          (and ahead of) "最近任务" below, never nested inside it. Same
+          header chrome as a channel section (`TopSection` "rail" variant:
+          uppercase 11px label + trailing chevron), collapse state local to
+          this component and keyed by group id.
+        */}
+        {groupPartition.groups.map(({ group, items }) => (
+          <TopSection
+            key={group.id}
+            label={group.label}
+            collapsed={!!groupCollapsed[group.id]}
+            onToggle={() => toggleGroupCollapsed(group.id)}
+            variant="rail"
+          >
+            <SessionRowsList
+              sessions={items}
+              runningSessionIds={runningSessionIds}
+              failedSessionIds={failedSessionIds}
+              activeId={activeSessionId}
+              onOpen={onOpenSession}
+              onRename={onRenameSession}
+              onDelete={onDeleteSession}
+              onArchive={onArchiveSession}
+              onBranch={onBranchSession}
+              onExport={onExportSession}
+              selecting={selectingSessions}
+              selectedIds={selectedSessionIds}
+              onToggleSelected={toggleSelectedSession}
+              rowIconFor={historyRowIconFor}
+              indentRows={historyLayout === "grouped"}
+              itemBadges={itemBadges}
+              itemMenuItems={itemMenuItems}
+            />
+          </TopSection>
+        ))}
         <div
           data-testid="sessions-header"
           className="flex h-8 shrink-0 items-center gap-0.5 pb-0 pl-2.5 pr-1.5 pt-1"
@@ -298,7 +386,7 @@ export function Sidebar({
           )}
         </div>
         <SessionsListView
-          sessions={historySessions}
+          sessions={restSessions}
           runningSessionIds={runningSessionIds}
           failedSessionIds={failedSessionIds}
           activeId={activeSessionId}
@@ -306,7 +394,7 @@ export function Sidebar({
             sessionsReady &&
             (historyLayout !== "grouped" || workspaceBindings.ready)
           }
-          query=""
+          query={historyQuery}
           onOpen={onOpenSession}
           onRename={onRenameSession}
           onDelete={onDeleteSession}
@@ -339,13 +427,10 @@ export function Sidebar({
           }
           sectionLabelClassName="normal-case tracking-normal text-[12px] text-foreground/75"
           showSectionHeaders={historyLayout === "grouped"}
-          rowIconFor={() =>
-            historyLayout === "timeline" ? <MessageSquare /> : undefined
-          }
+          rowIconFor={historyRowIconFor}
           indentRows={historyLayout === "grouped"}
           itemBadges={itemBadges}
           itemMenuItems={itemMenuItems}
-          groups={groups}
         />
       </div>
 
