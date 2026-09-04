@@ -6,7 +6,7 @@ import type { Agent } from "@deepseek-ai/dsh-agent";
 import type {} from "@deepseek-ai/dsh-agent";
 import type {} from "@deepseek-ai/dsh-tools";
 import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 
 import {
@@ -574,7 +574,10 @@ export class StewardService {
           await this.updateTask(taskId, { status: "running" });
           return;
         }
-        await this.deliver(`【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`);
+        await this.deliver(
+          `【任务汇报】${fresh.title}（task: ${fresh.id}）\n状态：正在它的会话里等你回答一个问题（会话 ${fresh.sessionId}）。请切到那个会话作答。`,
+          reportSummary(fresh.title, "需要你输入"),
+        );
       }).catch((error) => {
         this.log.error(`steward: failed to relay a pending question for ${taskId}: ${String(error)}`);
       });
@@ -590,7 +593,10 @@ export class StewardService {
     if (task.status === "done") return;
     const turns = completedTurns(events, task.lastReportedSeq);
     for (const turn of turns) {
-      await this.deliver(formatReport(task, turn));
+      await this.deliver(
+        formatReport(task, turn),
+        reportSummary(task.title, reportOutcome(turn)),
+      );
       const reason = describeTurnEndReason(turn.reason);
       await this.updateTask(taskId, {
         lastReportedSeq: turn.endSeq,
@@ -604,12 +610,34 @@ export class StewardService {
     }
   }
 
-  private async deliver(text: string): Promise<void> {
+  /**
+   * Put one report into the steward's own conversation.
+   *
+   * `notice`, never `relay`: nobody addressed a report TO the steward — it
+   * is "a one-off account of something that just happened", which is exactly
+   * DSH's `notice` form. The distinction is what the transcript reads: a
+   * relay renders as a user turn (and a task report rendered that way looked
+   * like something the person had typed, in flat text that hid its tables),
+   * while a notice renders as a collapsed row keyed by `summary`. The model
+   * still reads the full `text` — the kernel projects every `user/message`
+   * into the request history verbatim, form and all — so the steward can
+   * refer back to a report on a later turn exactly as before.
+   *
+   * @param text - the report the steward's model reads, unchanged.
+   * @param summary - one line for the collapsed row, bounded to the kernel's
+   *   `CONTEXT_SUMMARY_MAX_CHARS` (a task title has no length of its own).
+   */
+  private async deliver(text: string, summary: string): Promise<void> {
     const steward = await this.ensureStewardAgent();
     steward.followup(
       createUserMessage({
         content: [{ type: "text", text }],
-        source: { kind: "plugin", plugin: STEWARD_SOURCE, form: "relay" },
+        source: {
+          kind: "plugin",
+          plugin: STEWARD_SOURCE,
+          form: "notice",
+          summary: boundContextSummary(summary),
+        },
       }),
     );
   }
@@ -637,8 +665,23 @@ export class StewardService {
   }
 }
 
+/**
+ * The one outcome word a report states, shared by the body and the collapsed
+ * row so the two never drift into different vocabularies for one event.
+ */
+function reportOutcome(turn: CompletedTurn): string {
+  return turn.failed ? `失败（${describeTurnEndReason(turn.reason)}）` : "完成";
+}
+
+/**
+ * The one-line account that rides a delivered report's collapsed transcript
+ * row. `deliver` bounds it; this only decides what it says.
+ */
+function reportSummary(title: string, outcome: string): string {
+  return `任务汇报：${title} — ${outcome}`;
+}
+
 export function formatReport(task: StewardTask, turn: CompletedTurn): string {
-  const outcome = turn.failed ? `失败（${describeTurnEndReason(turn.reason)}）` : "完成";
   const body = turn.assistantText || "（这一轮没有文字回复）";
-  return `【任务汇报】${task.title}（task: ${task.id}）\n结果：${outcome}\n---\n${body}`;
+  return `【任务汇报】${task.title}（task: ${task.id}）\n结果：${reportOutcome(turn)}\n---\n${body}`;
 }

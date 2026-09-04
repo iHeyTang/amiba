@@ -119,6 +119,8 @@ describe("StewardService — dispatch", () => {
     expect(guard({ name: "bash" })).toBeUndefined();
     const message = live.get(result.sessionId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
     expect(message.content[0]!.text).toBe(`帮我写这周的周报\n\n${DISPATCH_FOOTER}`);
+    // A brief IS addressed to the task session — it stays a `relay`, and so
+    // stays a user turn in that session's transcript.
     expect(message.source).toEqual({ kind: "plugin", plugin: "amiba-steward", form: "relay" });
   });
 
@@ -300,7 +302,16 @@ describe("StewardService — reporting", () => {
     expect(message.content[0]!.text).toContain("【任务汇报】写周报");
     expect(message.content[0]!.text).toContain("结果：完成");
     expect(message.content[0]!.text).toContain("周报写好了，在 report.md");
-    expect(message.source).toEqual({ kind: "plugin", plugin: "amiba-steward", form: "relay" });
+    // A report is an ACCOUNT of a finished turn, not a message anyone
+    // addressed to the steward — `notice`, so the transcript collapses it
+    // into a context row keyed by this summary instead of showing it as
+    // something the person said.
+    expect(message.source).toEqual({
+      kind: "plugin",
+      plugin: "amiba-steward",
+      form: "notice",
+      summary: "任务汇报：写周报 — 完成",
+    });
     const task = (await service.listTasks())[0]!;
     expect(task).toMatchObject({ id: taskId, status: "idle", lastReportedSeq: 3, lastSummary: "周报写好了，在 report.md" });
   });
@@ -311,10 +322,26 @@ describe("StewardService — reporting", () => {
     const { taskId, sessionId } = await service.dispatch({ newTask: { title: "B" }, message: "go" });
     for (const event of turnEvents(0, "", { kind: "error", error: { message: "rate limited" } })) emit(sessionId, event);
     await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
-    const text = (live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }> }).content[0]!.text;
+    const message = live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
+    const text = message.content[0]!.text;
     expect(text).toContain("结果：失败（error: rate limited）");
+    // The row's one line reuses the body's outcome vocabulary verbatim.
+    expect(message.source).toMatchObject({ form: "notice", summary: "任务汇报：B — 失败（error: rate limited）" });
     const task = (await service.listTasks())[0]!;
     expect(task).toMatchObject({ id: taskId, status: "failed", lastError: "error: rate limited" });
+  });
+
+  it("bounds a long title's summary to the kernel's collapsed-row limit", async () => {
+    // A task title is caller text with no length of its own; the summary
+    // rides a durable log record DSH caps at 120 characters.
+    const { service, live, emit } = harness();
+    const stewardId = await service.ensureStewardSessionId();
+    const { sessionId } = await service.dispatch({ newTask: { title: "汇".repeat(300) }, message: "go" });
+    for (const event of turnEvents(0, "done")) emit(sessionId, event);
+    await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
+    const source = (live.get(stewardId)!.followup.mock.calls[0]![0] as { source: { summary: string } }).source;
+    expect(source.summary.length).toBeLessThanOrEqual(120);
+    expect(source.summary.startsWith("任务汇报：汇汇")).toBe(true);
   });
 
   it("ignores events from the steward's own session and from unmanaged sessions", async () => {
@@ -336,9 +363,12 @@ describe("StewardService — reporting", () => {
     emit(sessionId, { type: "tool/call", seq: 0, time: 1, data: { turn: 0, step: 0, callId: "c1", name: "ask_user_question", arguments: "{}" } });
     await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("needs_input"));
     await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
-    const text = (live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }> }).content[0]!.text;
+    const message = live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
+    const text = message.content[0]!.text;
     expect(text).toContain("【任务汇报】D");
     expect(text).toContain("正在它的会话里等你回答");
+    // Also an account, with its own outcome word in the collapsed row.
+    expect(message.source).toMatchObject({ form: "notice", summary: "任务汇报：D — 需要你输入" });
     emit(sessionId, { type: "tool/result", seq: 1, time: 2, data: { turn: 0, step: 0, message: { content: [{ type: "tool-result", toolCallId: "c1", content: [] }] } } });
     await vi.waitFor(async () => expect((await service.listTasks())[0]!.status).toBe("running"));
     expect((await service.listTasks())[0]!.id).toBe(taskId);
