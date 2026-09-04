@@ -34,8 +34,10 @@ import { useT, type MessageKey } from "@amiba/i18n";
 import { CascadeMenu, Input, type CascadeMenuItem, cn } from "../primitives";
 import {
   applyTriStateFilters,
+  resolveMenuItems,
   type SessionFilterState,
   type SessionListFilter,
+  type SessionListMenuItem,
 } from "./session-list-extensions";
 import { TopSection } from "./TopSection";
 
@@ -110,6 +112,13 @@ export interface SessionsListViewProps {
    * component (not persisted) and is combined via `applyTriStateFilters`.
    */
   filters?: readonly SessionListFilter[];
+  /**
+   * `amiba.sessions.item.menu` contributions. Appended to each row's "more"
+   * (⋯) menu after the built-in actions (rename/pin/branch/archive/export/
+   * delete), with a separator before the first visible plugin item.
+   * Visibility is re-evaluated per row via `resolveMenuItems`.
+   */
+  itemMenuItems?: readonly SessionListMenuItem[];
 }
 
 export function SessionsListView({
@@ -145,6 +154,7 @@ export function SessionsListView({
   allowActionsFor,
   itemBadges,
   filters,
+  itemMenuItems,
 }: SessionsListViewProps) {
   const { t } = useT();
   const [showArchived, setShowArchived] = useState(false);
@@ -432,6 +442,7 @@ export function SessionsListView({
                     nested={indentRows}
                     allowActions={allowActionsFor?.(s) ?? true}
                     badges={itemBadges?.(s) ?? []}
+                    itemMenuItems={itemMenuItems}
                   />
                 ))}
               </nav>
@@ -491,6 +502,11 @@ interface SessionRowProps {
   allowActions: boolean;
   /** Resolved `amiba.sessions.item.badge` chip texts, in registration order. */
   badges?: readonly string[];
+  /**
+   * `amiba.sessions.item.menu` contributions, unfiltered — this row resolves
+   * its own visible subset via `resolveMenuItems`.
+   */
+  itemMenuItems?: readonly SessionListMenuItem[];
 }
 
 function SessionRow({
@@ -512,6 +528,7 @@ function SessionRow({
   nested,
   allowActions,
   badges = [],
+  itemMenuItems = [],
 }: SessionRowProps) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
@@ -626,6 +643,26 @@ function SessionRow({
       },
     },
   ];
+  // `amiba.sessions.item.menu` contributions: appended after the built-in
+  // actions above, first visible one carrying the divider. A throwing/
+  // rejecting `run` is caught here so it never bubbles into the row.
+  resolveMenuItems(session, itemMenuItems).forEach((item, index) => {
+    menuItems.push({
+      id: item.id,
+      label: item.label,
+      separatorBefore: index === 0,
+      onSelect: () => {
+        void Promise.resolve()
+          .then(() => item.run(session))
+          .catch((error) => {
+            console.error(
+              `[SessionsListView] session menu item "${item.id}" failed:`,
+              error,
+            );
+          });
+      },
+    });
+  });
 
   if (editing) {
     return (

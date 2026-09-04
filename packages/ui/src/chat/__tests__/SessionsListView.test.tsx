@@ -1,9 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionsListView } from "../SessionsListView";
-import type { SessionListFilter } from "../session-list-extensions";
+import type {
+  SessionListFilter,
+  SessionListMenuItem,
+} from "../session-list-extensions";
 
 function setup(overrides: Partial<React.ComponentProps<typeof SessionsListView>> = {}) {
   const props: React.ComponentProps<typeof SessionsListView> = {
@@ -95,5 +98,75 @@ describe("SessionsListView filters", () => {
     expect(screen.getByText("First chat")).toBeInTheDocument();
     expect(screen.getByText("Second chat")).toBeInTheDocument();
     expect(screen.getByText("Third chat")).toBeInTheDocument();
+  });
+});
+
+describe("SessionsListView menu items", () => {
+  function rowFor(title: string) {
+    return screen.getByText(title).closest(".group") as HTMLElement;
+  }
+
+  async function openRowMenu(user: ReturnType<typeof userEvent.setup>, title: string) {
+    const row = rowFor(title);
+    await user.click(
+      within(row).getByRole("button", { name: "More actions" }),
+    );
+  }
+
+  it("appends a visible plugin item after the built-ins with a separator", async () => {
+    const user = userEvent.setup();
+    const item: SessionListMenuItem = {
+      id: "hand-off",
+      label: "Hand off",
+      run: vi.fn(),
+    };
+    setup({ itemMenuItems: [item] });
+    await openRowMenu(user, "First chat");
+
+    const menuitems = screen.getAllByRole("menuitem");
+    expect(menuitems.at(-1)).toHaveTextContent("Hand off");
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+  });
+
+  it("hides the item for a row where visible returns false", async () => {
+    const user = userEvent.setup();
+    const item: SessionListMenuItem = {
+      id: "hidden",
+      label: "Hidden",
+      visible: () => false,
+      run: vi.fn(),
+    };
+    setup({ itemMenuItems: [item] });
+    await openRowMenu(user, "First chat");
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Hidden" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+
+  it("calls run with the row's session on click", async () => {
+    const user = userEvent.setup();
+    const run = vi.fn();
+    setup({ itemMenuItems: [{ id: "hand-off", label: "Hand off", run }] });
+    await openRowMenu(user, "First chat");
+    await user.click(screen.getByRole("menuitem", { name: "Hand off" }));
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "s1", title: "First chat" }),
+    );
+  });
+
+  it("logs instead of throwing when run rejects", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = vi.fn(() => Promise.reject(new Error("boom")));
+    setup({ itemMenuItems: [{ id: "hand-off", label: "Hand off", run }] });
+    await openRowMenu(user, "First chat");
+    await user.click(screen.getByRole("menuitem", { name: "Hand off" }));
+
+    await vi.waitFor(() => expect(consoleError).toHaveBeenCalled());
+    consoleError.mockRestore();
   });
 });

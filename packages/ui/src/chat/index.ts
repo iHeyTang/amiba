@@ -31,10 +31,12 @@ export { SessionDrawer } from "./SessionDrawer";
 export {
   applyTriStateFilters,
   resolveBadgeTexts,
+  resolveMenuItems,
   type SessionBadgeSource,
   type SessionBadgeTarget,
   type SessionFilterState,
   type SessionListFilter,
+  type SessionListMenuItem,
 } from "./session-list-extensions";
 export {
   WallpaperBackdrop,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSessionBadgesSource,
   createSessionFiltersSource,
+  createSessionMenuItemsSource,
   createSlotContributionsSource,
   type SlotContributionEntry,
   type SlotContributionsCtx,
@@ -190,6 +191,44 @@ describe("createSessionFiltersSource", () => {
   it("drops an entry with no test function", () => {
     const { ctx } = fakeSlots([{ options: { id: "broken" }, inject: () => ({}) }]);
     const source = createSessionFiltersSource(ctx);
+    expect(source.getSnapshot()).toEqual([]);
+  });
+});
+
+describe("createSessionMenuItemsSource", () => {
+  it("reads the run face, and the optional visible face when present", () => {
+    const run = vi.fn();
+    const visible = vi.fn(() => true);
+    const { ctx } = fakeSlots([
+      {
+        options: { id: "hand-off", order: 3, label: "Hand off" },
+        inject: () => ({ run, visible }),
+      },
+    ]);
+    const source = createSessionMenuItemsSource(ctx);
+    const [row] = source.getSnapshot();
+    expect(row).toMatchObject({ id: "hand-off", order: 3, label: "Hand off" });
+    expect(row?.run).toBe(run);
+    expect(row?.visible).toBe(visible);
+  });
+
+  it("omits visible when the contribution does not supply one", () => {
+    const run = vi.fn();
+    const { ctx } = fakeSlots([
+      { options: { id: "always", order: 0 }, inject: () => ({ run }) },
+    ]);
+    const source = createSessionMenuItemsSource(ctx);
+    const [row] = source.getSnapshot();
+    expect(row?.run).toBe(run);
+    expect(row?.visible).toBeUndefined();
+  });
+
+  it("drops an entry with no run function", () => {
+    const { ctx } = fakeSlots([
+      { options: { id: "broken" }, inject: () => ({ visible: () => true }) },
+      { options: { id: "no-inject" } },
+    ]);
+    const source = createSessionMenuItemsSource(ctx);
     expect(source.getSnapshot()).toEqual([]);
   });
 });

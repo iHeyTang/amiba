@@ -32,6 +32,7 @@ import type { HiddenPresetsSource } from "./session-visibility.js";
 import type {
   ContributionsSource,
   SessionFilterRow,
+  SessionMenuItemRow,
 } from "./session-list-sources.js";
 import { useT } from "@amiba/i18n";
 import {
@@ -50,6 +51,7 @@ import {
   type PendingPromptResult,
   type SessionBadgeSource,
   type SessionListFilter,
+  type SessionListMenuItem,
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
@@ -92,6 +94,7 @@ const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
 const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
 const EMPTY_SESSION_BADGES: readonly SessionBadgeSource[] = [];
 const EMPTY_SESSION_FILTERS: readonly SessionFilterRow[] = [];
+const EMPTY_SESSION_MENU_ITEMS: readonly SessionMenuItemRow[] = [];
 
 /**
  * Root child slots the product shell dispatches itself: the amiba.* vendor
@@ -329,6 +332,8 @@ interface ProductShellProps {
   sessionItemBadges?: ContributionsSource<SessionBadgeSource>;
   /** `amiba.sessions.list.filter` contributions, sorted by `order`. */
   sessionListFilters?: ContributionsSource<SessionFilterRow>;
+  /** `amiba.sessions.item.menu` contributions, sorted by `order`. */
+  sessionItemMenuItems?: ContributionsSource<SessionMenuItemRow>;
   /**
    * The framework's `useSessions` standard hook (`GlobalStandardProps`),
    * handed down from the root entry. It is the OFFICIAL sessions list store —
@@ -364,6 +369,7 @@ function ProductShellInner({
   hiddenSessionPresets,
   sessionItemBadges,
   sessionListFilters,
+  sessionItemMenuItems,
   useOfficialSessions,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
@@ -379,13 +385,17 @@ function ProductShellInner({
     hiddenSessionPresets?.subscribe ?? (() => () => {}),
     hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
   );
-  // The two generic session-list extension points. Neither the shell nor
+  // The three generic session-list extension points. Neither the shell nor
   // `<FullScreenChatView>`/`<Sidebar>`/`<SessionsListView>` know anything
-  // about who registered a badge or a filter — `sessionBadges` is handed
-  // down as an `itemBadges` resolver function built from the pure
-  // `resolveBadgeTexts` helper, and `sessionFilters` is the plain
-  // `{ id, label, test }` list `SessionsListView` renders its tri-state
-  // chip row from.
+  // about who registered a badge, a filter, or a menu item — `sessionBadges`
+  // is handed down as an `itemBadges` resolver function built from the pure
+  // `resolveBadgeTexts` helper, `sessionFilters` is the plain
+  // `{ id, label, test }` list `SessionsListView` renders its tri-state chip
+  // row from, and `sessionMenuItems` is the plain `{ id, label, visible?,
+  // run }` list it appends to each row's "more" menu (`order` stripped in
+  // all three cases — it only matters for sorting the raw contributions,
+  // which `sessionItemBadges`/`sessionListFilters`/`sessionItemMenuItems`
+  // already did).
   const sessionBadges = useSyncExternalStore(
     sessionItemBadges?.subscribe ?? (() => () => {}),
     sessionItemBadges?.getSnapshot ?? (() => EMPTY_SESSION_BADGES),
@@ -393,6 +403,10 @@ function ProductShellInner({
   const sessionFilters = useSyncExternalStore(
     sessionListFilters?.subscribe ?? (() => () => {}),
     sessionListFilters?.getSnapshot ?? (() => EMPTY_SESSION_FILTERS),
+  );
+  const sessionMenuItems = useSyncExternalStore(
+    sessionItemMenuItems?.subscribe ?? (() => () => {}),
+    sessionItemMenuItems?.getSnapshot ?? (() => EMPTY_SESSION_MENU_ITEMS),
   );
   const itemBadges = useCallback(
     (session: SessionMeta) => resolveBadgeTexts(session, sessionBadges),
@@ -402,6 +416,16 @@ function ProductShellInner({
     () =>
       sessionFilters.map(({ id, label, test }) => ({ id, label, test })),
     [sessionFilters],
+  );
+  const sessionMenuItemList = useMemo<readonly SessionListMenuItem[]>(
+    () =>
+      sessionMenuItems.map(({ id, label, visible, run }) => ({
+        id,
+        label,
+        ...(visible ? { visible } : {}),
+        run,
+      })),
+    [sessionMenuItems],
   );
   // Settings is a MODAL LAYER, not a route: the chat surface stays mounted
   // behind it, exactly as the official settings shell layers its panel over
@@ -643,6 +667,7 @@ function ProductShellInner({
         hiddenSessionPresets={hiddenPresets}
         itemBadges={itemBadges}
         filters={sessionFilterList}
+        itemMenuItems={sessionMenuItemList}
         slots={{
           emptyState: (
             <HomeView

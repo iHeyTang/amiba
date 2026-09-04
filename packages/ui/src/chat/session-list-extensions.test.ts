@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   applyTriStateFilters,
   resolveBadgeTexts,
+  resolveMenuItems,
   type SessionBadgeSource,
   type SessionBadgeTarget,
   type SessionListFilter,
+  type SessionListMenuItem,
 } from "./session-list-extensions";
 
 const s = (id: string, extra: Partial<SessionBadgeTarget> = {}): SessionBadgeTarget => ({
@@ -130,5 +132,56 @@ describe("resolveBadgeTexts", () => {
 
   it("returns an empty array for an empty badge list", () => {
     expect(resolveBadgeTexts(s("a"), [])).toEqual([]);
+  });
+});
+
+describe("resolveMenuItems", () => {
+  const alwaysItem: SessionListMenuItem = {
+    id: "always",
+    label: "Always",
+    run: () => {},
+  };
+  const stewardOnlyItem: SessionListMenuItem = {
+    id: "steward-only",
+    label: "Steward only",
+    visible: (session) => session.source === "steward",
+    run: () => {},
+  };
+  const neverItem: SessionListMenuItem = {
+    id: "never",
+    label: "Never",
+    visible: () => false,
+    run: () => {},
+  };
+
+  it("keeps an item with no visible predicate", () => {
+    expect(resolveMenuItems(s("a"), [alwaysItem]).map((i) => i.id)).toEqual([
+      "always",
+    ]);
+  });
+
+  it("keeps an item whose visible predicate returns true", () => {
+    expect(
+      resolveMenuItems(s("a", { source: "steward" }), [stewardOnlyItem]).map(
+        (i) => i.id,
+      ),
+    ).toEqual(["steward-only"]);
+  });
+
+  it("drops an item whose visible predicate returns false", () => {
+    expect(resolveMenuItems(s("a"), [stewardOnlyItem, neverItem])).toEqual([]);
+  });
+
+  it("preserves the given item order in the output", () => {
+    expect(
+      resolveMenuItems(s("a", { source: "steward" }), [
+        stewardOnlyItem,
+        alwaysItem,
+      ]).map((i) => i.id),
+    ).toEqual(["steward-only", "always"]);
+  });
+
+  it("returns an empty array for an empty item list", () => {
+    expect(resolveMenuItems(s("a"), [])).toEqual([]);
   });
 });

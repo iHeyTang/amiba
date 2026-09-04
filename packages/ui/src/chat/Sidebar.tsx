@@ -31,7 +31,10 @@ import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
 import { SettingsTriggerContent } from "../settings/SettingsTriggerContent";
 import { SidebarItem } from "./SidebarItem";
 import { SessionsListView } from "./SessionsListView";
-import type { SessionListFilter } from "./session-list-extensions";
+import type {
+  SessionListFilter,
+  SessionListMenuItem,
+} from "./session-list-extensions";
 import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
 /** Workspace plugin ids are intentionally open-ended. */
@@ -102,6 +105,11 @@ export interface SidebarProps {
   itemBadges?: (session: SessionMeta) => readonly string[];
   /** Tri-state history filters — forwarded verbatim to `SessionsListView`. */
   filters?: readonly SessionListFilter[];
+  /**
+   * `amiba.sessions.item.menu` contributions — forwarded verbatim to
+   * `SessionsListView`. See `session-list-extensions.ts`.
+   */
+  itemMenuItems?: readonly SessionListMenuItem[];
 }
 
 export function Sidebar({
@@ -132,6 +140,7 @@ export function Sidebar({
   className,
   itemBadges,
   filters,
+  itemMenuItems,
 }: SidebarProps) {
   const { t } = useT();
   const workspaceBindings = useWorkspaceBindings(sessions);
@@ -343,6 +352,7 @@ export function Sidebar({
           indentRows={historyLayout === "grouped"}
           itemBadges={itemBadges}
           filters={filters}
+          itemMenuItems={itemMenuItems}
         />
       </div>
 

@@ -1,5 +1,9 @@
 import { resolveSlotLabel, type SlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
-import type { SessionBadgeSource, SessionListFilter } from "@amiba/ui";
+import type {
+  SessionBadgeSource,
+  SessionListFilter,
+  SessionListMenuItem,
+} from "@amiba/ui";
 
 /**
  * Minimal shape of one stored slot registration this module reads — a
@@ -184,6 +188,7 @@ export function createSlotContributionsSource<T extends { order: number }>(
 
 const SESSION_BADGE_SLOT = "amiba.sessions.item.badge";
 const SESSION_FILTER_SLOT = "amiba.sessions.list.filter";
+const SESSION_MENU_SLOT = "amiba.sessions.item.menu";
 
 /**
  * The `amiba.sessions.item.badge` contributions source: one row per
@@ -239,6 +244,43 @@ export function createSessionFiltersSource(
         order: entry.options.order ?? 0,
         label: resolveSlotLabel(entry.options.label) ?? id,
         test,
+      };
+    },
+  );
+}
+
+/** One `amiba.sessions.item.menu` contribution, `order` kept for sorting. */
+export type SessionMenuItemRow = SessionListMenuItem & { order: number };
+
+/**
+ * The `amiba.sessions.item.menu` contributions source — same shape as
+ * `createSessionBadgesSource`/`createSessionFiltersSource`, keyed off a
+ * `run` business face (the only required one; `visible` is optional and
+ * defaults to "always visible" the same way `SessionListMenuItem.visible`
+ * does downstream in `resolveMenuItems`).
+ */
+export function createSessionMenuItemsSource(
+  ctx: SlotContributionsCtx,
+): ContributionsSource<SessionMenuItemRow> {
+  return createSlotContributionsSource<SessionMenuItemRow>(
+    ctx,
+    SESSION_MENU_SLOT,
+    (entry, face) => {
+      const id = entry.options.id ?? "";
+      if (!id) return null;
+      const run = (
+        face as { run?: SessionListMenuItem["run"] } | undefined
+      )?.run;
+      if (typeof run !== "function") return null;
+      const visible = (
+        face as { visible?: SessionListMenuItem["visible"] } | undefined
+      )?.visible;
+      return {
+        id,
+        order: entry.options.order ?? 0,
+        label: resolveSlotLabel(entry.options.label) ?? id,
+        run,
+        ...(typeof visible === "function" ? { visible } : {}),
       };
     },
   );
