@@ -36,6 +36,7 @@ import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
 import { describeToolCall, hasToolDetail } from "./tool-presentation";
+import { CodeEvidence } from "./tool-evidence";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
@@ -106,9 +107,13 @@ function TurnRunningIndicator() {
  * One collapsed row for a message that ACCOUNTS for something rather than
  * saying it — DSH's `notice` form (a steward task report, a guard's reminder
  * to the model). The producer wrote the one-line `summary` for exactly this
- * row, so collapsed it needs nothing else; expanding reveals the full body
- * through the assistant bubble's own markdown renderer, because a report is
- * a document (tables, lists) and reading it as raw pipes was the bug.
+ * row, so collapsed it needs nothing else; expanding reveals the raw body
+ * the same way an expanded tool-call result does — plain preformatted text,
+ * never markdown. A notice is a machine account (a status line the model
+ * happens to read verbatim), not prose somebody composed for a reader: a
+ * bare `---` under a title line is legitimate account text, but a markdown
+ * renderer reads it as a setext heading underline and blows it up into a
+ * giant bold line, which is exactly the bug this avoids.
  *
  * Deliberately the same quiet shape as the execution-summary row: a notice
  * is a footnote to the conversation, not a turn in it.
@@ -166,14 +171,7 @@ function MessageNoticeRow({
           data-selection="text"
           className="ml-[7px] min-w-0 border-l border-border/60 py-1.5 pl-3 pr-1"
         >
-          <Streamdown
-            components={chatMarkdownComponents}
-            mode="static"
-            parseIncompleteMarkdown
-            className="chat-md break-words text-xs text-muted-foreground/85"
-          >
-            {body}
-          </Streamdown>
+          <CodeEvidence text={body} />
         </div>
       )}
     </div>
