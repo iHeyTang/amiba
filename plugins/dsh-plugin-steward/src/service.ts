@@ -765,7 +765,15 @@ function reportSummary(title: string, outcome: string): string {
   return `任务汇报：${title} — ${outcome}`;
 }
 
+/**
+ * Compact header (task id + outcome — the title already rides the delivered
+ * notice's collapsed-row summary, so repeating it here would just be a second
+ * copy of the same fact) then a blank line then the content, unchanged. No
+ * `---` separator: the body is plain text for a quiet expanded row, not a
+ * markdown document, and a bare `---` right under a line of text is a setext
+ * heading underline to any markdown renderer that still sees this string.
+ */
 export function formatReport(task: StewardTask, turn: CompletedTurn): string {
   const body = turn.assistantText || "（这一轮没有文字回复）";
-  return `【任务汇报】${task.title}（task: ${task.id}）\n结果：${reportOutcome(turn)}\n---\n${body}`;
+  return `task ${task.id} · ${reportOutcome(turn)}\n\n${body}`;
 }
