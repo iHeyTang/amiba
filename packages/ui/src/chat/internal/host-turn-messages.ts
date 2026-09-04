@@ -59,14 +59,21 @@ export function settleStreamingMessage(
 }
 
 /**
- * Appends a user message the host put into the session (a plugin dispatching
- * on the user's behalf), carrying its `origin` so the bubble can say who it
- * came from. The person's own messages never arrive this way — the composer
- * has already appended them.
+ * Appends a user-role message the host put into the session (a plugin
+ * dispatching on the user's behalf), carrying its `origin` so the bubble can
+ * say who it came from and its `notice` so an ACCOUNT of something that
+ * happened (a steward task report) renders as a collapsed row instead of the
+ * person's own words. The person's own messages never arrive this way — the
+ * composer has already appended them.
  */
 export function withHostUserMessage(
   messages: readonly UiMessage[],
-  message: { uiId: string; content: string; origin?: ChatMessage["origin"] },
+  message: {
+    uiId: string;
+    content: string;
+    origin?: ChatMessage["origin"];
+    notice?: ChatMessage["notice"];
+  },
 ): UiMessage[] {
   if (messages.some((existing) => existing.uiId === message.uiId)) {
     return messages as UiMessage[];
@@ -78,6 +85,7 @@ export function withHostUserMessage(
       role: "user",
       content: message.content,
       ...(message.origin ? { origin: message.origin } : {}),
+      ...(message.notice ? { notice: message.notice } : {}),
     },
   ];
 }

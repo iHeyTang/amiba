@@ -1,4 +1,7 @@
-import type { PluginMessageOrigin } from "@amiba/app-runtime/protocol"
+import type {
+  MessageNotice,
+  PluginMessageOrigin,
+} from "@amiba/app-runtime/protocol"
 
 import { splitFileAttachmentsFromPrompt } from "../core/attachments/format"
 import type { AttachmentBadge } from "../core/attachments/types"
@@ -27,30 +30,37 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The ONE `ContextForm` value (`@deepseek-ai/dsh-llm`) whose plugin-produced
- * user-role message is CONVERSATION material — something addressed to this
- * session that a person should see in the transcript as a user turn:
+ * The TWO `ContextForm` values (`@deepseek-ai/dsh-llm`) whose plugin-produced
+ * user-role message reaches the transcript, and the two different things the
+ * transcript makes of them:
  *
- *   - `relay` — "a message another agent addressed to this one". The
- *               steward's task brief and an IM connector's inbound message
- *               are both this, and both stamp it explicitly.
+ *   - `relay`  — "a message another agent addressed to this one". The
+ *                steward's task brief and an IM connector's inbound message
+ *                are both this, and both stamp it explicitly. Someone said
+ *                this TO the session, so it renders as a user turn with an
+ *                attribution chip.
+ *   - `notice` — "a one-off account of something that just happened; it
+ *                supersedes nothing". A steward task report and a guard's
+ *                reminder to the model (repeat-tool-reminder's "you are
+ *                repeating the same call") are both this. Nobody addressed
+ *                it to anyone, so it is CONVERSATION-ADJACENT, not a turn:
+ *                it renders as a collapsed context row keyed by the
+ *                producer's own `summary` — exactly what DSH's own
+ *                transcript does with one — and NEVER as a user bubble.
+ *                A `notice` whose `summary` is missing or not a string is
+ *                malformed (the DSH source type requires it) and dropped:
+ *                the row has nothing to show collapsed.
  *
- * Every other shape a plugin injects is MODEL CONTEXT, not conversation, and
- * the bar is deliberately this strict: a kept message renders as the USER
- * speaking (with an attribution chip), so anything less than an explicit
- * "this was addressed to the session" puts a plugin's words in the person's
- * mouth. `instructions` (workspace files the model must follow), `catalog`
- * (an inventory republished as it changes), `snapshot` (current state
- * superseded by the next one) and `recall` (material lifted out of another
- * session's log) are machinery. `notice` — "a one-off account of something
- * that just happened" — is machinery too: a guard's reminder to the MODEL
- * (repeat-tool-reminder's "you are repeating the same call") is the
- * canonical notice, and DSH's own transcript shows it as a collapsed
- * context row keyed by its `summary`, never as a user bubble. An ABSENT
- * `form` is what DSH documents as "presented as opaque content": undeclared
- * context, dropped for the same reason.
+ * Every other shape a plugin injects is MODEL CONTEXT with no place in the
+ * transcript at all: `instructions` (workspace files the model must follow),
+ * `catalog` (an inventory republished as it changes), `snapshot` (current
+ * state superseded by the next one) and `recall` (material lifted out of
+ * another session's log) are machinery. An ABSENT `form` is what DSH
+ * documents as "presented as opaque content": undeclared context, dropped
+ * for the same reason.
  */
-const CONVERSATIONAL_FORMS: ReadonlySet<string> = new Set(["relay"])
+const RELAY_FORM = "relay"
+const NOTICE_FORM = "notice"
 
 /** What a `user/message`'s `source` says about showing that message. */
 export interface VisibleUserMessage {
@@ -59,6 +69,12 @@ export interface VisibleUserMessage {
    * typed themselves (the ordinary case, which needs no attribution).
    */
   origin?: PluginMessageOrigin
+  /**
+   * Present iff this is an ACCOUNT rather than a turn — the producer's
+   * one-line summary, which the surface shows on a collapsed row instead of
+   * a user bubble. Never set without an `origin`.
+   */
+  notice?: MessageNotice
 }
 
 /**
@@ -67,9 +83,12 @@ export interface VisibleUserMessage {
  *
  * - `kind: "user"` (or no source at all) — the person typed it. Kept, no
  *   attribution.
- * - `kind: "plugin"` with `form: "relay"` and a `plugin` name — kept and
- *   attributed to that plugin (see {@link CONVERSATIONAL_FORMS}). Any other
- *   form, or no form, is injected context and dropped.
+ * - `kind: "plugin"` with `form: "relay"` and a `plugin` name — kept as a
+ *   user turn, attributed to that plugin.
+ * - `kind: "plugin"` with `form: "notice"`, a string `summary` and a `plugin`
+ *   name — kept as a collapsed context row carrying that summary, attributed
+ *   to that plugin. Any other form, or no form, is injected context and
+ *   dropped.
  * - `kind: "plugin"` with NO `plugin` name — dropped. `plugin` is required by
  *   the DSH source type, so this shape is malformed; there is nothing to
  *   attribute it to, and a plugin-produced message that cannot say who
@@ -87,10 +106,16 @@ export function visibleUserMessage(value: unknown): VisibleUserMessage | null {
   const kind = source?.kind
   if (kind === undefined || kind === "user") return {}
   if (kind !== "plugin") return null
-  const form = source?.form
-  if (typeof form !== "string" || !CONVERSATIONAL_FORMS.has(form)) return null
   const plugin = typeof source?.plugin === "string" ? source.plugin : ""
-  return plugin ? { origin: { kind: "plugin", plugin } } : null
+  if (!plugin) return null
+  const origin: PluginMessageOrigin = { kind: "plugin", plugin }
+  const form = source?.form
+  if (form === RELAY_FORM) return { origin }
+  if (form !== NOTICE_FORM) return null
+  const summary = source?.summary
+  return typeof summary === "string" && summary
+    ? { origin, notice: { summary } }
+    : null
 }
 
 /** A message's words, with its `<file-attachment>` envelopes lifted out. */
