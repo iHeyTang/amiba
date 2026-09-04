@@ -296,6 +296,22 @@ export class ApprovalRelay {
       pending.settle({ outcome: "cancelled", reason: "cancelled", silent: true });
   }
 
+  /**
+   * Settle every still-pending question tied to one session — used when
+   * messaging-core discovers the session bound to a channel/conversation was
+   * archived and rebinds to a fresh one (plan: "archived = closed"). Same
+   * closed shape as `dispose()` (cancelled, silent — no IM notice: the
+   * question's own conversation just moved on to a new session and would
+   * never see a notice about it anyway), scoped to just this session so
+   * other conversations' pending questions are untouched.
+   */
+  cancelForSession(sessionId: string): void {
+    for (const pending of this.pending.values()) {
+      if (pending.sessionId !== sessionId || pending.settled) continue;
+      pending.settle({ outcome: "cancelled", reason: "cancelled", silent: true });
+    }
+  }
+
   /** Pending questions of one conversation, oldest first. */
   private pendingFor(channelId: string, sessionId: string): PendingApproval[] {
     return [...this.pending.values()]

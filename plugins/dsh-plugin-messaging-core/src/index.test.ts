@@ -81,18 +81,25 @@ async function harness() {
       return { agent, dispose };
     },
   );
-  const loggerCalls = { error: vi.fn(), warn: vi.fn() };
+  const loggerCalls = { error: vi.fn(), warn: vi.fn(), info: vi.fn() };
   const defaultModelService = {
     currentSelection: () => ({ provider: "deepseek", model: "deepseek-chat" }),
   };
+  // The DSH-wide archived-session set (`ctx.workspaceRegistry`, mirrors
+  // `@deepseek-ai/dsh-workspace`). A plain mutable array so tests can push an
+  // id into it in place and have `isSessionArchived` see the change on its
+  // next read — same reflect.get lookup as `agentDefaultModel` below.
+  const archivedSessionIds: string[] = [];
   // Mirrors the real Cordis contract: messaging-core never declares
-  // `agentDefaultModel` in `inject`, so it must be read via `ctx.reflect.get`
-  // (a point-in-time lookup that returns undefined for an absent service)
-  // rather than as a direct property — Cordis throws on a bare, un-injected
-  // property ACCESS. `reflectServices` lets `harnessWithoutDefaultModel`
-  // simulate the headless case by removing just this entry.
+  // `agentDefaultModel` (or `workspaceRegistry`) in `inject`, so both must be
+  // read via `ctx.reflect.get` (a point-in-time lookup that returns
+  // undefined for an absent service) rather than as a direct property —
+  // Cordis throws on a bare, un-injected property ACCESS. `reflectServices`
+  // lets `harnessWithoutDefaultModel`/`harnessWithoutWorkspaceRegistry`
+  // simulate the headless case by removing just one entry.
   const reflectServices = new Map<string, unknown>([
     ["agentDefaultModel", defaultModelService],
+    ["workspaceRegistry", { archivedSessionIds }],
   ]);
   const ctx = {
     agents: { get: (id: string) => live.get(id), resume, create },
@@ -139,6 +146,7 @@ async function harness() {
     dispose,
     ctx,
     reflectServices,
+    archivedSessionIds,
     loggerCalls,
   };
 }
@@ -149,6 +157,15 @@ async function harness() {
 async function harnessWithoutDefaultModel() {
   const built = await harness();
   built.reflectServices.delete("agentDefaultModel");
+  return built;
+}
+
+/** A harness variant with no `workspaceRegistry` mounted, mirroring a bundle
+ * assembled without the DSH base row (or this plugin's own narrower tests) —
+ * `ctx.reflect.get` returns undefined for it, so nothing is ever archived. */
+async function harnessWithoutWorkspaceRegistry() {
+  const built = await harness();
+  built.reflectServices.delete("workspaceRegistry");
   return built;
 }
 
@@ -582,6 +599,115 @@ describe("conversation-scoped routing", () => {
     expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
     const [warning] = loggerCalls.warn.mock.calls[0]!;
     expect(String(warning)).toContain("standard");
+  });
+});
+
+describe("archived = closed: a bound session that got archived starts fresh", () => {
+  it("starts a new session and rebinds the conversation when the bound session is archived", async () => {
+    const { center, created, archivedSessionIds, loggerCalls } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const first = await center.acceptInbound(channel.id, secret, {
+      id: "msg-1",
+      text: "hello",
+      sender: "alice",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1);
+
+    archivedSessionIds.push(first.sessionId);
+
+    const second = await center.acceptInbound(channel.id, secret, {
+      id: "msg-2",
+      text: "still here?",
+      sender: "alice",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(2);
+    expect(second.sessionId).not.toBe(first.sessionId);
+    expect(second).toMatchObject({ accepted: true, duplicate: false });
+
+    // The rebind is durable: the conversation binding now points at the new
+    // session, not the archived one.
+    expect(
+      await center.conversationForSession(channel.id, second.sessionId),
+    ).toMatchObject({ conversationKey: "chat-1" });
+    expect(
+      await center.conversationForSession(channel.id, first.sessionId),
+    ).toBeUndefined();
+
+    // The new session got the same recipe as first-time binding.
+    expect(created[1]!.meta).toMatchObject({ agentPreset: "restricted" });
+
+    expect(loggerCalls.info).toHaveBeenCalledTimes(1);
+    const [info] = loggerCalls.info.mock.calls[0]!;
+    expect(String(info)).toContain(first.sessionId);
+  });
+
+  it("resumes the bound session unchanged when it is not archived", async () => {
+    const { center, created, resumed } = await harness();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Cold",
+      sessionId: "session-cold",
+    });
+    await center.acceptInbound(channel.id, secret, {
+      id: "evt-1",
+      text: "wake up",
+    });
+    await center.acceptInbound(channel.id, secret, {
+      id: "evt-2",
+      text: "still there",
+    });
+    expect(resumed).toHaveLength(1);
+    expect(created).toHaveLength(0);
+    const channels = await center.listChannels();
+    expect(channels[0]!.sessionId).toBe("session-cold");
+  });
+
+  it("leaves everything unchanged when workspaceRegistry is not mounted", async () => {
+    const { center, created } = await harnessWithoutWorkspaceRegistry();
+    const { channel, secret } = await center.createChannel({
+      provider: "webhook",
+      name: "Fake connect",
+      agentPreset: "restricted",
+    });
+    const first = await center.acceptInbound(channel.id, secret, {
+      id: "msg-1",
+      text: "hello",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    const second = await center.acceptInbound(channel.id, secret, {
+      id: "msg-2",
+      text: "again",
+      conversation: { key: "chat-1", kind: "p2p" },
+    });
+    expect(created).toHaveLength(1);
+    expect(second.sessionId).toBe(first.sessionId);
+  });
+
+  it("rebinds a channel's fixed single-session binding when it is archived", async () => {
+    const { center, created, archivedSessionIds } = await harness();
+    const fallback = await center.createChannel({
+      provider: "webhook",
+      name: "Legacy",
+      sessionId: "session-a",
+      agentPreset: "restricted",
+    });
+    archivedSessionIds.push("session-a");
+
+    const routed = await center.acceptInbound(
+      fallback.channel.id,
+      fallback.secret,
+      { id: "evt-1", text: "no conversation field" },
+    );
+    expect(routed.sessionId).not.toBe("session-a");
+    expect(created).toHaveLength(1);
+    const channels = await center.listChannels();
+    expect(channels[0]!.sessionId).toBe(routed.sessionId);
   });
 });
 
