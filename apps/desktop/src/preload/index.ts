@@ -118,6 +118,7 @@ const api = {
       tabId: string;
       webContentsId: number;
       active?: boolean;
+      sessionId?: string;
     }) => ipcRenderer.invoke("embedded-browser:register-tab", input),
     unregisterTab: (tabId: string) =>
       ipcRenderer.invoke("embedded-browser:unregister-tab", tabId),
@@ -129,14 +130,20 @@ const api = {
     ) => ipcRenderer.invoke("embedded-browser:command", tabId, command),
     detectDevServers: () =>
       ipcRenderer.invoke("embedded-browser:detect-dev-servers"),
-    onCreateRequested: (cb: () => void) => {
-      const handler = () => cb();
+    onCreateRequested: (cb: (event: { sessionId?: string }) => void) => {
+      // Older main builds sent no payload; treat that as "no owning session".
+      const handler = (_event: unknown, payload?: { sessionId?: string }) =>
+        cb(payload ?? {});
       ipcRenderer.on("embedded-browser:create-tab", handler);
       return () => ipcRenderer.off("embedded-browser:create-tab", handler);
     },
-    onFocusRequested: (cb: (event: { tabId: string }) => void) => {
-      const handler = (_event: unknown, payload: { tabId: string }) =>
-        cb(payload);
+    onFocusRequested: (
+      cb: (event: { tabId: string; sessionId?: string }) => void,
+    ) => {
+      const handler = (
+        _event: unknown,
+        payload: { tabId: string; sessionId?: string },
+      ) => cb(payload);
       ipcRenderer.on("embedded-browser:focus", handler);
       return () => ipcRenderer.off("embedded-browser:focus", handler);
     },

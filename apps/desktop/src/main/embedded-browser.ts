@@ -10,7 +10,15 @@ import {
   type IpcMainInvokeEvent,
   type WebContents,
 } from "electron";
-import type { DshNativeOperation } from "./dsh-native-gateway";
+import type {
+  DshNativeCallContext,
+  DshNativeOperation,
+} from "./dsh-native-gateway";
+import {
+  BrowserTabIndex,
+  browserTabKey,
+  type BrowserTabRecord,
+} from "./embedded-browser-tabs";
 
 const MAX_TAB_ID_LENGTH = 160;
 const MAX_SNAPSHOT_CHARS = 18_000;
@@ -34,9 +42,11 @@ interface ConsoleEntry {
   timestamp: number;
 }
 
-interface BrowserTabEntry {
+interface BrowserTabEntry extends BrowserTabRecord {
   key: string;
   tabId: string;
+  /** The chat session that owns this tab; absent for session-less tabs. */
+  sessionId?: string;
   owner: WebContents;
   contents: WebContents;
   console: ConsoleEntry[];
@@ -212,11 +222,7 @@ function resolveElementScript(target: string, operation: string): string {
 }
 
 class EmbeddedBrowserController {
-  private readonly tabs = new Map<string, BrowserTabEntry>();
-  private readonly registrationWaiters = new Set<
-    (entry: BrowserTabEntry) => void
-  >();
-  private activeKey: string | null = null;
+  private readonly tabs = new BrowserTabIndex<BrowserTabEntry>();
   private ipcRegistered = false;
   private hostWindowResolver: (() => BrowserWindow | null) | null = null;
 
@@ -237,10 +243,6 @@ class EmbeddedBrowserController {
     return designated && !designated.isDestroyed() ? designated : null;
   }
 
-  private key(ownerId: number, tabId: string): string {
-    return `${ownerId}:${tabId}`;
-  }
-
   private validateTabId(tabId: unknown): string {
     if (
       typeof tabId !== "string" ||
@@ -254,56 +256,58 @@ class EmbeddedBrowserController {
 
   private entryFor(owner: WebContents, tabIdValue: unknown): BrowserTabEntry {
     const tabId = this.validateTabId(tabIdValue);
-    const entry = this.tabs.get(this.key(owner.id, tabId));
+    const entry = this.tabs.get(browserTabKey(owner.id, tabId));
     if (!entry || entry.contents.isDestroyed()) {
       throw new Error("The embedded browser tab is no longer available");
     }
     return entry;
   }
 
-  private activeEntry(): BrowserTabEntry {
-    const entry = this.activeKey ? this.tabs.get(this.activeKey) : undefined;
-    if (!entry || entry.contents.isDestroyed()) {
-      throw new Error("No Amiba browser tab is available in the workbench.");
-    }
-    return entry;
-  }
+  /**
+   * The tab a call acts on.
+   *
+   * `sessionId` scopes the lookup to the session that made the call, so a
+   * task running in the background gets its own tab instead of driving the
+   * conversation on screen. A call with no session (the user clicking "open
+   * browser") keeps the original global behaviour.
+   */
+  private async ensureActiveEntry(
+    sessionId?: string,
+  ): Promise<BrowserTabEntry> {
+    const existing = this.tabs.active(sessionId);
+    if (existing) return existing;
 
-  private async ensureActiveEntry(): Promise<BrowserTabEntry> {
-    try {
-      return this.activeEntry();
-    } catch {
-      const owner = this.hostWindow();
-      if (!owner || owner.isDestroyed()) {
-        throw new Error(
-          "No Amiba window is available for the built-in browser.",
-        );
-      }
-      return await new Promise<BrowserTabEntry>((resolve, reject) => {
-        let settled = false;
-        const finish = (entry?: BrowserTabEntry, error?: Error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          this.registrationWaiters.delete(onRegistered);
-          if (entry) resolve(entry);
-          else reject(error);
-        };
-        const onRegistered = (entry: BrowserTabEntry) => finish(entry);
-        const timer = setTimeout(
-          () =>
-            finish(
-              undefined,
-              new Error(
-                "Amiba could not create a browser tab for the Agent in time.",
-              ),
-            ),
-          5_000,
-        );
-        this.registrationWaiters.add(onRegistered);
-        owner.webContents.send("embedded-browser:create-tab");
-      });
+    const owner = this.hostWindow();
+    if (!owner || owner.isDestroyed()) {
+      throw new Error("No Amiba window is available for the built-in browser.");
     }
+    return await new Promise<BrowserTabEntry>((resolve, reject) => {
+      let settled = false;
+      const finish = (entry?: BrowserTabEntry, error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stopWaiting();
+        if (entry) resolve(entry);
+        else reject(error);
+      };
+      const timer = setTimeout(
+        () =>
+          finish(
+            undefined,
+            new Error(
+              "Amiba could not create a browser tab for the Agent in time.",
+            ),
+          ),
+        5_000,
+      );
+      // The waiter is bucketed by session: a tab another session registers
+      // while we wait is not ours to take.
+      const stopWaiting = this.tabs.addRegistrationWaiter(sessionId, (entry) =>
+        finish(entry),
+      );
+      owner.webContents.send("embedded-browser:create-tab", { sessionId });
+    });
   }
 
   private pageState(entry: BrowserTabEntry): BrowserPageState {
@@ -322,7 +326,12 @@ class EmbeddedBrowserController {
   }
 
   private async ensureVisible(entry: BrowserTabEntry): Promise<void> {
-    this.send(entry, "embedded-browser:focus", { tabId: entry.tabId });
+    // The owning session travels with the focus so the renderer brings the
+    // right workbench record forward — never the one currently on screen.
+    this.send(entry, "embedded-browser:focus", {
+      tabId: entry.tabId,
+      sessionId: entry.sessionId,
+    });
     // Give React one frame plus the pane transition's initial layout pass so
     // capturePage and coordinate-based browser actions see a real viewport.
     await new Promise((resolve) => setTimeout(resolve, 220));
@@ -330,9 +339,10 @@ class EmbeddedBrowserController {
 
   private async withAgentActivity<T>(
     action: string,
+    context: DshNativeCallContext,
     task: (entry: BrowserTabEntry) => Promise<T>,
   ): Promise<T> {
-    const entry = await this.ensureActiveEntry();
+    const entry = await this.ensureActiveEntry(context.sessionId);
     await this.ensureVisible(entry);
     this.send(entry, "embedded-browser:agent-activity", {
       action,
@@ -358,7 +368,12 @@ class EmbeddedBrowserController {
       "embedded-browser:register-tab",
       (
         event,
-        input: { tabId: string; webContentsId: number; active?: boolean },
+        input: {
+          tabId: string;
+          webContentsId: number;
+          active?: boolean;
+          sessionId?: string;
+        },
       ) => this.registerTab(event, input),
     );
     ipcMain.handle("embedded-browser:unregister-tab", (event, tabId: string) =>
@@ -379,7 +394,12 @@ class EmbeddedBrowserController {
 
   private registerTab(
     event: IpcMainInvokeEvent,
-    input: { tabId: string; webContentsId: number; active?: boolean },
+    input: {
+      tabId: string;
+      webContentsId: number;
+      active?: boolean;
+      sessionId?: string;
+    },
   ): BrowserPageState {
     const tabId = this.validateTabId(input?.tabId);
     if (!Number.isInteger(input?.webContentsId)) {
@@ -396,23 +416,26 @@ class EmbeddedBrowserController {
       throw new Error("Only an attached Amiba browser WebView can register");
     }
 
-    const key = this.key(event.sender.id, tabId);
+    const sessionId =
+      typeof input.sessionId === "string" && input.sessionId.trim()
+        ? input.sessionId
+        : undefined;
+    const key = browserTabKey(event.sender.id, tabId);
     const existing = this.tabs.get(key);
     if (existing?.contents.id === guest.id) {
-      if (input.active) this.activeKey = key;
+      if (input.active) this.tabs.activate(existing);
       return this.pageState(existing);
     }
 
     const entry: BrowserTabEntry = {
       key,
       tabId,
+      sessionId,
       owner: event.sender,
       contents: guest,
       console: [],
     };
-    this.tabs.set(key, entry);
-    if (input.active || !this.activeKey) this.activeKey = key;
-    for (const resolve of [...this.registrationWaiters]) resolve(entry);
+    this.tabs.add(entry, input.active === true);
 
     guest.setWindowOpenHandler(({ url }) => {
       void guest.loadURL(normalizeEmbeddedBrowserUrl(url));
@@ -428,27 +451,13 @@ class EmbeddedBrowserController {
       });
       if (entry.console.length > MAX_CONSOLE_MESSAGES) entry.console.shift();
     });
-    guest.once("destroyed", () => {
-      this.tabs.delete(key);
-      if (this.activeKey === key) {
-        this.activeKey =
-          [...this.tabs.values()].find(
-            (candidate) => !candidate.contents.isDestroyed(),
-          )?.key ?? null;
-      }
-    });
+    guest.once("destroyed", () => this.tabs.delete(key));
     return this.pageState(entry);
   }
 
   private unregisterTab(owner: WebContents, tabIdValue: unknown): void {
     const tabId = this.validateTabId(tabIdValue);
-    const key = this.key(owner.id, tabId);
-    this.tabs.delete(key);
-    if (this.activeKey === key) {
-      this.activeKey =
-        [...this.tabs.values()].find((entry) => !entry.contents.isDestroyed())
-          ?.key ?? null;
-    }
+    this.tabs.delete(browserTabKey(owner.id, tabId));
   }
 
   private setActiveTab(
@@ -456,7 +465,7 @@ class EmbeddedBrowserController {
     tabIdValue: unknown,
   ): BrowserPageState {
     const entry = this.entryFor(owner, tabIdValue);
-    this.activeKey = entry.key;
+    this.tabs.activate(entry);
     return this.pageState(entry);
   }
 
@@ -466,7 +475,7 @@ class EmbeddedBrowserController {
     command: BrowserCommand,
   ): Promise<BrowserPageState> {
     const entry = this.entryFor(owner, tabIdValue);
-    this.activeKey = entry.key;
+    this.tabs.activate(entry);
     if (!command || typeof command !== "object") {
       throw new Error("A browser command is required");
     }
@@ -494,8 +503,8 @@ class EmbeddedBrowserController {
     return [
       {
         name: "amiba_browser_open",
-        call: (args) =>
-          this.withAgentActivity("navigate", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("navigate", context, async (entry) => {
             await entry.contents.loadURL(
               normalizeEmbeddedBrowserUrl(requiredString(args, "url")),
             );
@@ -507,8 +516,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_snapshot",
-        call: () =>
-          this.withAgentActivity("snapshot", async (entry) => {
+        call: (_args, context) =>
+          this.withAgentActivity("snapshot", context, async (entry) => {
             const snapshot = objectArguments(
               await entry.contents.executeJavaScript(
                 snapshotScript(MAX_SNAPSHOT_CHARS),
@@ -523,8 +532,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_click",
-        call: (args) =>
-          this.withAgentActivity("click", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("click", context, async (entry) => {
             const target = requiredString(args, "target");
             const result = objectArguments(
               await entry.contents.executeJavaScript(
@@ -545,8 +554,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_type",
-        call: (args) =>
-          this.withAgentActivity("type", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("type", context, async (entry) => {
             const target = requiredString(args, "target");
             const text = typeof args.text === "string" ? args.text : "";
             const operation = `
@@ -579,8 +588,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_press",
-        call: (args) =>
-          this.withAgentActivity("press", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("press", context, async (entry) => {
             const raw = requiredString(args, "key");
             const parts = raw
               .split("+")
@@ -624,8 +633,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_scroll",
-        call: (args) =>
-          this.withAgentActivity("scroll", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("scroll", context, async (entry) => {
             const direction = ["up", "down", "left", "right"].includes(
               String(args.direction),
             )
@@ -655,8 +664,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_screenshot",
-        call: () =>
-          this.withAgentActivity("screenshot", async (entry) => {
+        call: (_args, context) =>
+          this.withAgentActivity("screenshot", context, async (entry) => {
             const image = await entry.contents.capturePage();
             const state = this.pageState(entry);
             return {
@@ -677,8 +686,8 @@ class EmbeddedBrowserController {
       },
       {
         name: "amiba_browser_console",
-        call: (args) =>
-          this.withAgentActivity("console", async (entry) => {
+        call: (args, context) =>
+          this.withAgentActivity("console", context, async (entry) => {
             const messages = entry.console.slice(-100);
             if (args.clear === true) entry.console.length = 0;
             return textResult("Visible browser console messages.", {
