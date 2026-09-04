@@ -97,12 +97,6 @@ export interface SessionsListViewProps {
   /** Disable rename/archive affordances for read-only rows. */
   allowActionsFor?: (session: SessionMeta) => boolean;
   /**
-   * Declarative per-row badges (`amiba.sessions.item.badge` contributions,
-   * already resolved to display strings by the caller). Rendered as small
-   * chips right after the row title. Absent/empty means no chips.
-   */
-  itemBadges?: (session: SessionMeta) => readonly string[];
-  /**
    * `amiba.sessions.item.menu` contributions. Appended to each row's "more"
    * (⋯) menu after the built-in actions (rename/branch/archive/export), with
    * a separator before the first visible plugin item.
@@ -140,7 +134,6 @@ export function SessionsListView({
   rowIconFor,
   indentRows = false,
   allowActionsFor,
-  itemBadges,
   itemMenuItems,
 }: SessionsListViewProps) {
   const { t } = useT();
@@ -302,7 +295,6 @@ export function SessionsListView({
               rowIconFor={rowIconFor}
               indentRows={indentRows}
               allowActionsFor={allowActionsFor}
-              itemBadges={itemBadges}
               itemMenuItems={itemMenuItems}
             />
           );
@@ -347,7 +339,6 @@ export interface SessionRowsListProps {
   rowIconFor?: (session: SessionMeta) => ReactNode;
   indentRows?: boolean;
   allowActionsFor?: (session: SessionMeta) => boolean;
-  itemBadges?: (session: SessionMeta) => readonly string[];
   itemMenuItems?: readonly SessionListMenuItem[];
 }
 
@@ -377,7 +368,6 @@ export function SessionRowsList({
   rowIconFor,
   indentRows = false,
   allowActionsFor,
-  itemBadges,
   itemMenuItems,
 }: SessionRowsListProps) {
   const { t } = useT();
@@ -411,7 +401,6 @@ export function SessionRowsList({
             icon={rowIconFor?.(s)}
             nested={indentRows}
             allowActions={allowActionsFor?.(s) ?? true}
-            badges={itemBadges?.(s) ?? []}
             itemMenuItems={itemMenuItems}
           />
         ))}
@@ -447,8 +436,6 @@ interface SessionRowProps {
   icon?: ReactNode;
   nested?: boolean;
   allowActions: boolean;
-  /** Resolved `amiba.sessions.item.badge` chip texts, in registration order. */
-  badges?: readonly string[];
   /**
    * `amiba.sessions.item.menu` contributions, unfiltered — this row resolves
    * its own visible subset via `resolveMenuItems`.
@@ -472,7 +459,6 @@ function SessionRow({
   icon,
   nested,
   allowActions,
-  badges = [],
   itemMenuItems = [],
 }: SessionRowProps) {
   const { t } = useT();
@@ -650,19 +636,6 @@ function SessionRow({
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
           {session.title?.trim() || t("chat.untitled")}
         </span>
-        {badges.length > 0 ? (
-          <span className="flex shrink-0 items-center gap-1">
-            {badges.map((text, index) => (
-              <span
-                key={`${text}-${index}`}
-                data-testid="session-badge"
-                className="rounded bg-muted px-1 py-0.5 text-[10px] leading-none text-muted-foreground"
-              >
-                {text}
-              </span>
-            ))}
-          </span>
-        ) : null}
       </button>
       {allowActions && !selecting ? (
         <span

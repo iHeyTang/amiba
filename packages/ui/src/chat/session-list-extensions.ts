@@ -1,23 +1,22 @@
 /**
- * Generic, plugin-facing extension points for the session history list:
- * declarative badges, a "group" that pulls claimed sessions into their own
- * section, and row "more" (⋯) menu items. This module is core UI — it
- * carries no plugin semantics (no "steward", no "adopted"), only the shapes
- * a plugin's contribution takes and the pure functions the list renders
- * through. `packages/ui/src/chat/SessionsListView.tsx` is the one renderer;
+ * Generic, plugin-facing extension points for the session history list: a
+ * "group" that pulls claimed sessions into their own section, and row
+ * "more" (⋯) menu items. This module is core UI — it carries no plugin
+ * semantics (no "steward", no "adopted"), only the shapes a plugin's
+ * contribution takes and the pure functions the list renders through.
+ * `packages/ui/src/chat/SessionsListView.tsx` is the one renderer;
  * `plugins/dsh-plugin-ui-shell` is the one place that turns DSH slot
- * registrations (`amiba.sessions.item.badge` / `amiba.sessions.list.group` /
- * `amiba.sessions.item.menu`) into the arrays these functions take.
+ * registrations (`amiba.sessions.list.group` / `amiba.sessions.item.menu`)
+ * into the arrays these functions take.
  */
 
 /**
- * Core-owned, read-only subset of `SessionMeta` a badge/group/menu resolver
- * may read. Deliberately narrower than `SessionMeta` — a plugin's `resolve`/
- * `claim`/`visible` face should not depend on presentation-only fields
- * (archived, …) that have nothing to do with what a badge, group, or menu
- * item means.
+ * Core-owned, read-only subset of `SessionMeta` a group/menu resolver may
+ * read. Deliberately narrower than `SessionMeta` — a plugin's `claim`/
+ * `visible` face should not depend on presentation-only fields (archived,
+ * …) that have nothing to do with what a group or menu item means.
  */
-export interface SessionBadgeTarget {
+export interface SessionListItemTarget {
   id: string;
   title: string;
   agent?: { profileId?: string };
@@ -26,24 +25,10 @@ export interface SessionBadgeTarget {
 }
 
 /**
- * One `amiba.sessions.item.badge` registration, projected by the shell into
+ * One `amiba.sessions.item.menu` registration, projected by the shell into
  * a plain object the list can render without knowing about DSH slots.
- * `resolve(session)`:
- *   - `true`   → render `label` as the chip text.
- *   - a string → render that string as the chip text.
- *   - `false`/`null` → no chip for this session.
- */
-export interface SessionBadgeSource {
-  id: string;
-  order: number;
-  label: string;
-  resolve: (session: SessionBadgeTarget) => string | boolean | null;
-}
-
-/**
- * One `amiba.sessions.item.menu` registration, projected the same way as a
- * badge source. Appended to a session row's "more" (⋯) menu after the
- * built-in actions (rename/branch/archive/export/delete).
+ * Appended to a session row's "more" (⋯) menu after the built-in actions
+ * (rename/branch/archive/export/delete).
  *   - `visible(session)` — omitted means always visible; `false` hides this
  *     item for that session (e.g. already handled, not applicable).
  *   - `run(session)` — invoked on click. The list catches a throw/rejection
@@ -52,21 +37,21 @@ export interface SessionBadgeSource {
 export interface SessionListMenuItem {
   id: string;
   label: string;
-  visible?: (session: SessionBadgeTarget) => boolean;
-  run: (session: SessionBadgeTarget) => void | Promise<void>;
+  visible?: (session: SessionListItemTarget) => boolean;
+  run: (session: SessionListItemTarget) => void | Promise<void>;
 }
 
 /**
  * One `amiba.sessions.list.group` registration, projected the same way as a
- * badge/menu source. `claim(session)` reports whether this group takes
- * ownership of a session — a claimed session is pulled out of the list's
- * normal channel/date buckets and rendered under this group's own section
- * instead (see `partitionSessionGroups`).
+ * menu source. `claim(session)` reports whether this group takes ownership
+ * of a session — a claimed session is pulled out of the list's normal
+ * channel/date buckets and rendered under this group's own section instead
+ * (see `partitionSessionGroups`).
  */
 export interface SessionListGroup {
   id: string;
   label: string;
-  claim: (session: SessionBadgeTarget) => boolean;
+  claim: (session: SessionListItemTarget) => boolean;
 }
 
 /** One plugin group's section, in `groups` order, holding its claimed rows. */
@@ -93,7 +78,7 @@ export interface SessionListGroupPartition<T> {
  * existing channel/date bucketing re-sorts it downstream).
  */
 export function partitionSessionGroups<
-  T extends SessionBadgeTarget & { updatedAt?: number },
+  T extends SessionListItemTarget & { updatedAt?: number },
 >(
   sessions: readonly T[],
   groups: readonly SessionListGroup[],
@@ -120,7 +105,7 @@ export function partitionSessionGroups<
  * `visible` is always kept; one with `visible` is kept only when it returns
  * `true`. Order is preserved from the input.
  */
-export function resolveMenuItems<T extends SessionBadgeTarget>(
+export function resolveMenuItems<T extends SessionListItemTarget>(
   session: T,
   items: readonly SessionListMenuItem[],
 ): SessionListMenuItem[] {
@@ -140,29 +125,11 @@ export function resolveMenuItems<T extends SessionBadgeTarget>(
  * same way it would filter it out of a channel section.
  */
 export function matchesSessionQuery(
-  session: SessionBadgeTarget,
+  session: SessionListItemTarget,
   query: string,
   untitledLabel: string,
 ): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (session.title || untitledLabel).toLowerCase().includes(q);
-}
-
-/**
- * Resolves the chip texts for one session against an ordered list of badge
- * sources. Callers pass `badges` pre-sorted by `order` — this function does
- * not re-sort, so the returned order is exactly the input order.
- */
-export function resolveBadgeTexts(
-  session: SessionBadgeTarget,
-  badges: readonly SessionBadgeSource[],
-): string[] {
-  const texts: string[] = [];
-  for (const badge of badges) {
-    const result = badge.resolve(session);
-    if (result === true) texts.push(badge.label);
-    else if (typeof result === "string" && result.length > 0) texts.push(result);
-  }
-  return texts;
 }

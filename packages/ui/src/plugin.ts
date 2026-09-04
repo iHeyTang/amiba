@@ -43,21 +43,18 @@ export {
   type ComposerDockSheetProps,
   type ComposerDockTone,
 } from "./chat/ComposerDockSheet";
-// Session-list extension points: a plugin's `amiba.sessions.item.badge` /
-// `amiba.sessions.list.group` / `amiba.sessions.item.menu` inject face is
-// typed against `SessionBadgeTarget`; the pure helpers are exported so a
-// plugin's own tests can exercise its `resolve`/`claim`/`visible`
-// predicates without the shell.
+// Session-list extension points: a plugin's `amiba.sessions.list.group` /
+// `amiba.sessions.item.menu` inject face is typed against
+// `SessionListItemTarget`; the pure helpers are exported so a plugin's own
+// tests can exercise its `claim`/`visible` predicates without the shell.
 export {
   matchesSessionQuery,
   partitionSessionGroups,
-  resolveBadgeTexts,
   resolveMenuItems,
-  type SessionBadgeSource,
-  type SessionBadgeTarget,
   type SessionListGroup,
   type SessionListGroupBucket,
   type SessionListGroupPartition,
+  type SessionListItemTarget,
   type SessionListMenuItem,
 } from "./chat/session-list-extensions";
 export { Input } from "./primitives/input";

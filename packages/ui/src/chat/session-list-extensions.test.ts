@@ -3,21 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   matchesSessionQuery,
   partitionSessionGroups,
-  resolveBadgeTexts,
   resolveMenuItems,
-  type SessionBadgeSource,
-  type SessionBadgeTarget,
   type SessionListGroup,
+  type SessionListItemTarget,
   type SessionListMenuItem,
 } from "./session-list-extensions";
 
-const s = (id: string, extra: Partial<SessionBadgeTarget> = {}): SessionBadgeTarget => ({
+const s = (id: string, extra: Partial<SessionListItemTarget> = {}): SessionListItemTarget => ({
   id,
   title: id,
   ...extra,
 });
 
-interface DatedTarget extends SessionBadgeTarget {
+interface DatedTarget extends SessionListItemTarget {
   updatedAt: number;
 }
 
@@ -134,58 +132,6 @@ describe("matchesSessionQuery", () => {
   it("falls back to untitledLabel for a session with an empty title", () => {
     expect(matchesSessionQuery(s("a", { title: "" }), "untitled", "Untitled chat")).toBe(true);
     expect(matchesSessionQuery(s("a", { title: "" }), "steward", "Untitled chat")).toBe(false);
-  });
-});
-
-describe("resolveBadgeTexts", () => {
-  const stewardBadge: SessionBadgeSource = {
-    id: "steward",
-    order: 0,
-    label: "Steward",
-    resolve: (session) => session.source === "steward",
-  };
-  const channelBadge: SessionBadgeSource = {
-    id: "channel",
-    order: 1,
-    label: "Channel",
-    resolve: (session) => session.source ?? null,
-  };
-  const neverBadge: SessionBadgeSource = {
-    id: "never",
-    order: 2,
-    label: "Never",
-    resolve: () => false,
-  };
-  const nullBadge: SessionBadgeSource = {
-    id: "null",
-    order: 3,
-    label: "Null",
-    resolve: () => null,
-  };
-
-  it("uses the registered label when resolve returns true", () => {
-    expect(resolveBadgeTexts(s("a", { source: "steward" }), [stewardBadge])).toEqual(["Steward"]);
-  });
-
-  it("uses the returned string when resolve returns a string", () => {
-    expect(resolveBadgeTexts(s("a", { source: "lark" }), [channelBadge])).toEqual(["lark"]);
-  });
-
-  it("skips badges whose resolve returns false or null", () => {
-    expect(resolveBadgeTexts(s("a"), [neverBadge, nullBadge])).toEqual([]);
-  });
-
-  it("preserves the given badge order in the output", () => {
-    expect(
-      resolveBadgeTexts(s("a", { source: "steward" }), [channelBadge, stewardBadge]),
-    ).toEqual(["steward", "Steward"]);
-    expect(
-      resolveBadgeTexts(s("a", { source: "steward" }), [stewardBadge, channelBadge]),
-    ).toEqual(["Steward", "steward"]);
-  });
-
-  it("returns an empty array for an empty badge list", () => {
-    expect(resolveBadgeTexts(s("a"), [])).toEqual([]);
   });
 });
 

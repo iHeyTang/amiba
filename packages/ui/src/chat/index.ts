@@ -38,13 +38,11 @@ export { SessionDrawer } from "./SessionDrawer";
 export {
   matchesSessionQuery,
   partitionSessionGroups,
-  resolveBadgeTexts,
   resolveMenuItems,
-  type SessionBadgeSource,
-  type SessionBadgeTarget,
   type SessionListGroup,
   type SessionListGroupBucket,
   type SessionListGroupPartition,
+  type SessionListItemTarget,
   type SessionListMenuItem,
 } from "./session-list-extensions";
 export {
