@@ -50,16 +50,38 @@ describe("dsh-plugin-browser-core", () => {
     });
 
     const definition = definitions.get("amiba_browser_open") as {
-      execute(args: unknown, exec: { signal: AbortSignal }): Promise<unknown>;
+      execute(
+        args: unknown,
+        exec: { signal: AbortSignal; agent?: unknown },
+      ): Promise<unknown>;
     };
     await definition.execute(
       { url: "https://example.com" },
-      { signal: new AbortController().signal },
+      {
+        signal: new AbortController().signal,
+        agent: { session: { id: "session-background" } },
+      },
     );
+    // The owning session travels with the call: a tab opened from a task the
+    // user is not looking at must not land in the session on screen.
     expect(call).toHaveBeenCalledWith(
       "amiba_browser_open",
       { url: "https://example.com" },
       expect.any(AbortSignal),
+      { sessionId: "session-background" },
+    );
+
+    // A non-agent call (the user clicking "open browser") keeps the global,
+    // session-less behaviour.
+    await definition.execute(
+      { url: "https://example.com/manual" },
+      { signal: new AbortController().signal },
+    );
+    expect(call).toHaveBeenLastCalledWith(
+      "amiba_browser_open",
+      { url: "https://example.com/manual" },
+      expect.any(AbortSignal),
+      { sessionId: undefined },
     );
 
     unregister();
