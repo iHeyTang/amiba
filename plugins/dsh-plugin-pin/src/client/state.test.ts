@@ -22,6 +22,48 @@ function fakeStorage(initial: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Like `fakeStorage`, but `get()` doesn't resolve on its own — each call
+ * snapshots `data` synchronously (mirroring a real storage read that
+ * captures state at request time, not at response time) and queues a
+ * resolver; the test drives responses one at a time with
+ * `resolveNextGet()`. Lets a test land a `pin()`/`unpin()` — and its own
+ * synchronous `storage.set()` — while a `load()`'s read is still pending,
+ * to exercise `state.ts`'s racing-mutation merge.
+ */
+function deferredStorage(initial: Record<string, unknown> = {}) {
+  const data = { ...initial };
+  const pending: Array<() => void> = [];
+  const get = vi.fn((keys?: string | string[]) => {
+    const snapshot = { ...data };
+    return new Promise<Record<string, unknown>>((resolve) => {
+      pending.push(() => {
+        if (keys === undefined) {
+          resolve(snapshot);
+          return;
+        }
+        const list = Array.isArray(keys) ? keys : [keys];
+        const out: Record<string, unknown> = {};
+        for (const key of list) out[key] = snapshot[key];
+        resolve(out);
+      });
+    });
+  });
+  return {
+    data,
+    resolveNextGet: () => {
+      const next = pending.shift();
+      next?.();
+    },
+    get,
+    set: vi.fn(async (patch: Record<string, unknown>) => {
+      Object.assign(data, patch);
+    }),
+    remove: vi.fn(async () => {}),
+    watch: vi.fn(() => () => {}),
+  };
+}
+
 describe("createPinState", () => {
   it("starts with an empty set before load()", () => {
     const state = createPinState(fakeStorage());
@@ -116,5 +158,58 @@ describe("createPinState", () => {
     unsubscribe();
     await state.pin("session-a");
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  describe("racing pin()/unpin() against an in-flight load()", () => {
+    it("pin() during an in-flight load() survives and merges with the loaded ids", async () => {
+      const storage = deferredStorage({ [PIN_SESSION_IDS_KEY]: ["session-a"] });
+      const state = createPinState(storage);
+
+      const loadPromise = state.load();
+      // Lands while the read above is still pending — `index.tsx` wires the
+      // interactive faces right after firing `load()`, so this is the
+      // exact window the fix closes.
+      await state.pin("session-b");
+      storage.resolveNextGet();
+      await loadPromise;
+
+      expect(state.isPinned("session-a")).toBe(true);
+      expect(state.isPinned("session-b")).toBe(true);
+      expect(new Set(storage.data[PIN_SESSION_IDS_KEY] as string[])).toEqual(
+        new Set(["session-a", "session-b"]),
+      );
+    });
+
+    it("unpin() during an in-flight load() removes an id also present in the loaded set", async () => {
+      const storage = deferredStorage({ [PIN_SESSION_IDS_KEY]: ["session-a", "session-b"] });
+      const state = createPinState(storage);
+
+      // Prime in-memory state to match storage with a first, uncontested load.
+      const firstLoad = state.load();
+      storage.resolveNextGet();
+      await firstLoad;
+      expect(state.isPinned("session-a")).toBe(true);
+
+      const secondLoad = state.load();
+      await state.unpin("session-a"); // races the second load's read
+      storage.resolveNextGet();
+      await secondLoad;
+
+      expect(state.isPinned("session-a")).toBe(false);
+      expect(state.isPinned("session-b")).toBe(true);
+      expect(storage.data[PIN_SESSION_IDS_KEY]).not.toContain("session-a");
+    });
+
+    it("does not persist again when load() finishes with no racing mutation", async () => {
+      const storage = deferredStorage({ [PIN_SESSION_IDS_KEY]: ["session-a"] });
+      const state = createPinState(storage);
+
+      const loadPromise = state.load();
+      storage.resolveNextGet();
+      await loadPromise;
+
+      expect(state.isPinned("session-a")).toBe(true);
+      expect(storage.set).not.toHaveBeenCalled();
+    });
   });
 });

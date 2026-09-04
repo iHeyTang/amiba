@@ -51,12 +51,15 @@ function NoopComponent(): ReactNode {
 
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const state = createPinState(getPlatform().storage);
-  // Fire-and-forget: `state.load()` never rejects (it tolerates a missing
-  // or malformed stored value internally) and notifies subscribers once it
-  // resolves, so the row/group re-renders with the persisted set as soon
-  // as it's available — the same "don't block apply on a read" convention
-  // the steward uses for `ensureStewardSession`/`refreshAdopted`.
-  void state.load();
+  // Awaited (not fire-and-forget): this is a single storage round-trip, and
+  // awaiting it here removes the common-case window where an interactive
+  // pin/unpin could race the initial read. `state.load()` never rejects
+  // (it tolerates a missing or malformed stored value internally); the
+  // merge/re-persist logic inside it (see `state.ts`) is the remaining
+  // safety net for a load that's still triggered again later (or any
+  // mutation that manages to land between this await and the slots being
+  // registered below).
+  await state.load();
 
   const fiber = ctx.inject(["slots"], (injectedCtx) => {
     // Session row ⋯ menu: "置顶"/"取消置顶" are mutually exclusive per row
