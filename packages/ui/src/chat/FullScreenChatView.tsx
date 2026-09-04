@@ -44,7 +44,7 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
-import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
+import { filterSearchMatches, isRuntimeOwnedSession, visibleChatSessions } from "./session-visibility";
 import type {
   SessionListGroup,
   SessionListMenuItem,
@@ -498,22 +498,38 @@ function FullScreenChatViewInner({
     [sessions.searchHistory, hiddenSessionPresets],
   );
 
+  // Active session object — looked up in the full session list (not
+  // `chatSessions`) so a session hidden from the history list (the steward's
+  // own conversation, bound to a plugin-hidden preset) still resolves here
+  // when it is the one currently open.
+  const activeSession = useMemo(
+    () => sessions.sessions.find((s) => s.id === sessions.activeId),
+    [sessions.activeId, sessions.sessions],
+  );
+
   // Active chat-session title — one of the top-bar placeholder sources.
-  // Looked up in the full session list (not `chatSessions`) so a session
-  // hidden from the history list still shows a title when it is open.
-  const activeChatTitle = useMemo<string>(() => {
-    if (!sessions.activeId) return "";
-    const found = sessions.sessions.find((s) => s.id === sessions.activeId);
-    return found?.title?.trim() || "";
-  }, [sessions.activeId, sessions.sessions]);
+  const activeChatTitle = useMemo<string>(
+    () => activeSession?.title?.trim() || "",
+    [activeSession],
+  );
 
   // External title override pushed via ``useSetSessionTitle`` from anywhere in
   // the subtree. Highest-priority slot in the placeholder chain.
   const externalTitleOverride = useSessionTitle();
 
   const chatTopBarPlaceholder = externalTitleOverride || activeChatTitle;
+  // A session bound to a plugin-hidden preset is runtime-owned (the steward's
+  // own conversation is the first case): its title is pinned host-side, so
+  // the top bar renders it as plain text rather than an editable control.
+  const isActiveSessionRuntimeOwned = isRuntimeOwnedSession(
+    activeSession,
+    hiddenSessionPresets,
+  );
   const canRenameActiveChatTitle = Boolean(
-    sessions.activeId && activeChatTitle && !externalTitleOverride,
+    sessions.activeId &&
+      activeChatTitle &&
+      !externalTitleOverride &&
+      !isActiveSessionRuntimeOwned,
   );
   const renameActiveChatTitle = useCallback(
     (title: string) => {

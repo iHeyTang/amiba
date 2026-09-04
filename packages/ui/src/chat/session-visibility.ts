@@ -20,6 +20,19 @@
 
 type VisibilityCandidate = { archived?: boolean; agent?: { profileId?: string } };
 
+function normalizePresetId(id: string): string {
+  return id.trim().toLocaleLowerCase();
+}
+
+function isHiddenPresetSession(
+  session: VisibilityCandidate,
+  hidden: ReadonlySet<string> | null,
+): boolean {
+  if (!hidden?.size) return false;
+  const preset = session.agent?.profileId?.trim().toLocaleLowerCase();
+  return !!(preset && hidden.has(preset));
+}
+
 /**
  * The filter every session list surface uses: drops archived sessions and
  * sessions bound to a hidden preset.
@@ -28,13 +41,31 @@ export function visibleChatSessions<T extends VisibilityCandidate>(
   sessions: readonly T[],
   hiddenPresets?: ReadonlySet<string>,
 ): T[] {
-  const hidden = hiddenPresets ? new Set([...hiddenPresets].map((id) => id.trim().toLocaleLowerCase())) : null;
+  const hidden = hiddenPresets ? new Set([...hiddenPresets].map(normalizePresetId)) : null;
   return sessions.filter((session) => {
     if (session.archived) return false;
-    if (!hidden?.size) return true;
-    const preset = session.agent?.profileId?.trim().toLocaleLowerCase();
-    return !(preset && hidden.has(preset));
+    return !isHiddenPresetSession(session, hidden);
   });
+}
+
+/**
+ * A session bound to a preset a plugin asked to hide is runtime-owned: the
+ * plugin (the steward is the first case) controls its identity, so nothing
+ * in the chrome may rename it, even though — unlike `visibleChatSessions` —
+ * this predicate does not care about `archived`, since the only caller today
+ * checks the *active* session, which is never archived while open.
+ *
+ * Lives next to `visibleChatSessions` so both the list filter and the
+ * top-bar rename gate agree on what "hidden preset" means (same
+ * case-insensitive comparison), without either call site re-deriving it.
+ */
+export function isRuntimeOwnedSession<T extends VisibilityCandidate>(
+  session: T | undefined,
+  hiddenPresets?: ReadonlySet<string>,
+): boolean {
+  if (!session || !hiddenPresets?.size) return false;
+  const hidden = new Set([...hiddenPresets].map(normalizePresetId));
+  return isHiddenPresetSession(session, hidden);
 }
 
 /**

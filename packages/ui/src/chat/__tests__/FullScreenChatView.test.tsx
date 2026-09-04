@@ -149,7 +149,14 @@ import FullScreenChatView from "../FullScreenChatView";
 import { APP_SIDEBAR_DEFAULT_WIDTH } from "../../navigation/sidebar-layout";
 
 function makeSessions() {
-  const session = {
+  const session: {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    messageCount: number;
+    agent?: { profileId?: string };
+  } = {
     id: "session-1",
     title: "Existing conversation",
     createdAt: 1,
@@ -406,6 +413,29 @@ describe("FullScreenChatView new-chat home", () => {
       "Saved on blur",
     );
     expect(header).not.toHaveClass("app-no-drag");
+  });
+
+  it("renders a runtime-owned session's title as plain text, not an editable control", async () => {
+    const sessions = makeSessions();
+    sessions.sessions = [
+      { ...sessions.sessions[0], agent: { profileId: "steward" } },
+    ];
+    mocks.useSessions.mockReturnValue(sessions);
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+        hiddenSessionPresets={new Set(["steward"])}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "chat.rename" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Existing conversation")).toBeInTheDocument();
   });
 
   it("can ignore the persisted sidebar destination on app startup", async () => {
