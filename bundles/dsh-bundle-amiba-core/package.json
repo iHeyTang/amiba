@@ -27,6 +27,7 @@
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
     "@amiba/dsh-plugin-model-plane": "workspace:*",
     "@amiba/dsh-plugin-notification-hub": "workspace:*",
+    "@amiba/dsh-plugin-pin": "workspace:*",
     "@amiba/dsh-plugin-schedule-adapter": "workspace:*",
     "@amiba/dsh-plugin-skills": "workspace:*",
     "@amiba/dsh-plugin-steward": "workspace:*",

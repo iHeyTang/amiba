@@ -95,6 +95,9 @@
         root: !!js dshHomePath('amiba-steward')
         agentPresetsRoot: !!js dshHomePath('.agent-presets')
 
+    - id: amiba-pin
+      name: "@amiba/dsh-plugin-pin"
+
     - id: amiba-schedule-adapter
       name: "@amiba/dsh-plugin-schedule-adapter"
       config:
