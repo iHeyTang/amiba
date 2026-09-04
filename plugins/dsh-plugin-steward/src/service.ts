@@ -193,6 +193,27 @@ export class StewardService {
     }
   }
 
+  /**
+   * Name a newly created task session after its task so it doesn't sit as
+   * "未命名对话" forever: DSH's auto-title only folds HUMAN `user/message`s,
+   * and every message the steward sends into a task session is
+   * plugin-sourced (see `DISPATCH_FOOTER`'s call site below), so no title is
+   * ever derived on its own. Renamed once, at creation, via the same
+   * explicit-rename mechanism as `pinStewardTitle`; a later user rename in
+   * the UI wins from then on since this is never called again for an
+   * existing task. Only `dispatch()`'s `newTask` branch calls this —
+   * adopted sessions already carry their own title and are deliberately
+   * left alone. Best-effort: a failure is logged and swallowed so it can
+   * never block dispatch.
+   */
+  private async pinNewTaskTitle(agent: Agent, task: StewardTask): Promise<void> {
+    try {
+      this.ctx.sessionTitle.rename(agent.session, task.title);
+    } catch (error) {
+      this.log.warn(`steward: failed to name the new task session ${task.sessionId}: ${String(error)}`);
+    }
+  }
+
   private ensureStewardAgent(): Promise<Agent> {
     // Never mint (or adopt) an agent after unload has begun: a report racing
     // `dispose()` would otherwise leave a live steward nobody owns.
@@ -320,6 +341,7 @@ export class StewardService {
       const sessionId = `session-${randomUUID()}`;
       task = this.newTaskRecord({ title, sessionId, cwd, origin: "created", lastReportedSeq: -1 });
       agent = await this.createTaskAgent(task);
+      await this.pinNewTaskTitle(agent, task);
       await this.store.mutate((state) => ({ ...state, tasks: [...state.tasks, task] }));
       created = true;
     } else {

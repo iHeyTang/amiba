@@ -166,6 +166,46 @@ describe("StewardService — dispatch", () => {
   });
 });
 
+describe("StewardService — new task session title", () => {
+  it("names a new task session after its task, before the followup", async () => {
+    const { service, ctx, live } = harness();
+    const result = await service.dispatch({ newTask: { title: "写周报" }, message: "go" });
+    const session = live.get(result.sessionId)!.session;
+    expect(ctx.sessionTitle.rename).toHaveBeenCalledWith(session, "写周报");
+    const renameOrder = ctx.sessionTitle.rename.mock.invocationCallOrder[0]!;
+    const followupOrder = live.get(result.sessionId)!.followup.mock.invocationCallOrder[0]!;
+    expect(renameOrder).toBeLessThan(followupOrder);
+  });
+
+  it("does not rename when dispatching to an existing task", async () => {
+    const { service, ctx } = harness();
+    const first = await service.dispatch({ newTask: { title: "A" }, message: "start" });
+    ctx.sessionTitle.rename.mockClear();
+    await service.dispatch({ taskId: first.taskId, message: "again" });
+    expect(ctx.sessionTitle.rename).not.toHaveBeenCalled();
+  });
+
+  it("does not rename an adopted session", async () => {
+    const { service, ctx, persist } = harness();
+    persist("session-x", [
+      { type: "turn/start", seq: 0, time: 1, data: { turn: 0 } },
+      { type: "turn/end", seq: 1, time: 2, data: { turn: 0, reason: { kind: "completed" } } },
+    ]);
+    await service.adopt({ sessionId: "session-x" });
+    expect(ctx.sessionTitle.rename).not.toHaveBeenCalled();
+  });
+
+  it("swallows a rename failure and still dispatches", async () => {
+    const { service, ctx, live } = harness();
+    ctx.sessionTitle.rename.mockImplementationOnce(() => {
+      throw new Error("rename exploded");
+    });
+    const result = await service.dispatch({ newTask: { title: "B" }, message: "go" });
+    expect(result.created).toBe(true);
+    expect(live.get(result.sessionId)!.followup).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("StewardService — adopt / read / close", () => {
   it("adopts a persisted session by id, idempotently, starting reports from its current tail", async () => {
     const { service, persist } = harness();
