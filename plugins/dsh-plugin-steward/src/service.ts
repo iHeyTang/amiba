@@ -17,17 +17,18 @@ import {
   pendingAskUser,
 } from "./reply-fold.js";
 import type { StewardStore } from "./store.js";
-import type {
-  AdoptInput,
-  AdoptResult,
-  DispatchInput,
-  DispatchResult,
-  StewardState,
-  StewardTask,
-  TaskTurnView,
+import {
+  STEWARD_SOURCE,
+  type AdoptInput,
+  type AdoptResult,
+  type DispatchInput,
+  type DispatchResult,
+  type StewardState,
+  type StewardTask,
+  type TaskTurnView,
 } from "./types.js";
 
-export const STEWARD_SOURCE = "amiba-steward";
+export { STEWARD_SOURCE } from "./types.js";
 
 /** Appended to every dispatched message so a managed session asks in text, not via the guarded tool. */
 export const DISPATCH_FOOTER =

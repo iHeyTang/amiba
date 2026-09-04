@@ -1,12 +1,13 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 // Type-only: SlotMap entries for `amiba.sessions.item.badge` /
-// `amiba.sessions.list.group` / `amiba.sessions.item.menu`.
+// `amiba.sessions.list.group` / `amiba.sessions.item.menu` /
+// `amiba.message.source`.
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
-import { STEWARD_PRESET_ID, type AdoptResult, type StewardTask } from "../types.js";
+import { STEWARD_PRESET_ID, STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
 import { StewardNavigation } from "./StewardNavigation.js";
 import { createStewardClientState, stewardBadgeFace, stewardGroupFace, stewardMenuFace } from "./state.js";
 
@@ -201,8 +202,25 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           NoopComponent,
         ),
       );
+      // Chat bubble attribution: messages the steward dispatches carry
+      // `source.plugin === STEWARD_SOURCE` (see `service.ts`'s relay send),
+      // so the bubble shows "来自 大管家" instead of the raw plugin id. Purely
+      // declarative — no business face, see `amiba.message.source`'s doc
+      // comment in dsh-plugin-ui-shell.
+      const disposeMessageSource = injectedCtx.slots.inject("amiba.message.source", () =>
+        injectedCtx.slots.register(
+          {
+            name: "amiba.message.source",
+            id: STEWARD_SOURCE,
+            order: 50,
+            label: copy,
+          },
+          NoopComponent,
+        ),
+      );
       return () => {
         clearInterval(refreshIntervalId);
+        disposeMessageSource();
         disposeMenu();
         disposeGroup();
         disposeBadge();

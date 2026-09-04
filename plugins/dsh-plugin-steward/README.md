@@ -31,4 +31,6 @@ steward summarises it for the user.
   adopted). All three read a client-side adopted-id set that's refreshed at
   apply, right after a successful adopt, and on a 20s interval while the
   plugin is mounted. The steward session itself is hidden from history via
-  ui-shell's `amibaSessionVisibility`.
+  ui-shell's `amibaSessionVisibility`. A message the steward dispatches into a
+  managed session carries a 「来自 大管家」 attribution on its chat bubble, via
+  a declarative `amiba.message.source` registration.

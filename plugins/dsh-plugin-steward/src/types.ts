@@ -3,6 +3,16 @@
 /** The steward's own agent preset id — shared by the host seeder and the client's hidePreset call. */
 export const STEWARD_PRESET_ID = "amiba-steward";
 
+/**
+ * The plugin id the host writes into a dispatched message's `source.plugin`
+ * (see `service.ts`'s `STEWARD_SOURCE` re-export) and the id the client
+ * registers under `amiba.message.source` (see `client/index.tsx`) so the
+ * chat bubble labels those messages "来自 大管家". Kept here, not in
+ * `service.ts`, because the client bundle must not import `service.ts`
+ * (it pulls in Node built-ins) but does need this exact id.
+ */
+export const STEWARD_SOURCE = "amiba-steward";
+
 export type StewardTaskStatus = "idle" | "running" | "needs_input" | "done" | "failed";
 
 export interface StewardTask {
