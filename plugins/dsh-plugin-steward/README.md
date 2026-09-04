@@ -22,13 +22,12 @@ steward summarises it for the user.
   user-sourced rename, which pins the title and stops auto-summarization. A
   rename failure is logged and swallowed; it never blocks boot.
 - Client half: a workspace navigation entry beside 定时任务, and registrations
-  into the shell's generic session-list slots — `amiba.sessions.item.badge`
-  marks every adopted session with a 「大管家」 chip, `amiba.sessions.list.group`
+  into the shell's generic session-list slots — `amiba.sessions.list.group`
   pulls every adopted session out of the sidebar's normal channel/date
   sections into its own 「大管家」 section at the top, and
   `amiba.sessions.item.menu` adds a "交给大管家" item to a session row's ⋯
   menu (hidden on the steward's own session and on sessions already
-  adopted). All three read a client-side adopted-id set that's refreshed at
+  adopted). Both read a client-side adopted-id set that's refreshed at
   apply, right after a successful adopt, and on a 20s interval while the
   plugin is mounted. The steward session itself is hidden from history via
   ui-shell's `amibaSessionVisibility`. A message the steward dispatches into a

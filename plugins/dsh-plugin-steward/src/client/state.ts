@@ -1,7 +1,6 @@
 import type {
-  SessionBadgeContribution,
-  SessionBadgeTarget,
   SessionGroupContribution,
+  SessionListItemTarget,
   SessionMenuContribution,
 } from "@amiba/dsh-plugin-ui-shell/client";
 
@@ -44,33 +43,22 @@ export function createStewardClientState(): StewardClientState {
 }
 
 /**
- * The `amiba.sessions.item.badge` business face: a session carries the
- * 「大管家」 badge exactly when it's in the live adopted set. `resolve` reads
+ * The `amiba.sessions.list.group` business face: a session is claimed by the
+ * 「大管家」group exactly when it's in the live adopted set. `claim` reads
  * `state.adoptedSessionIds()` at CALL time (not at registration time), so a
  * later `state.setAdopted(...)` — from the periodic refresh, an adopt, or
  * the initial apply-time fetch in `index.tsx` — is reflected the next time
- * the host calls `resolve` for that session, with no extra plumbing needed.
- */
-export function stewardBadgeFace(state: StewardClientState): SessionBadgeContribution {
-  return {
-    resolve: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
-    // `state.subscribe` already notifies on every `setAdopted(...)` — the
-    // periodic refresh, an adopt, and the initial apply-time fetch all
-    // route through it — so it's also exactly the right signal for the
-    // shell: fire it and the session list re-renders this badge instead of
-    // waiting for some unrelated render to pick up the fresh value.
-    subscribe: state.subscribe,
-  };
-}
-
-/**
- * The `amiba.sessions.list.group` business face: a session is claimed by the
- * 「大管家」group exactly when it's in the live adopted set — same live read
- * as `stewardBadgeFace`, keyed as `claim` instead of `resolve`.
+ * the host calls `claim` for that session, with no extra plumbing needed.
  */
 export function stewardGroupFace(state: StewardClientState): SessionGroupContribution {
   return {
-    claim: (session: SessionBadgeTarget) => state.adoptedSessionIds().has(session.id),
+    claim: (session: SessionListItemTarget) => state.adoptedSessionIds().has(session.id),
+    // `state.subscribe` already notifies on every `setAdopted(...)` — the
+    // periodic refresh, an adopt, and the initial apply-time fetch all
+    // route through it — so it's also exactly the right signal for the
+    // shell: fire it and the session list re-renders this group membership
+    // instead of waiting for some unrelated render to pick up the fresh
+    // value.
     subscribe: state.subscribe,
   };
 }
@@ -97,9 +85,9 @@ export interface StewardMenuDeps {
  */
 export function stewardMenuFace(state: StewardClientState, deps: StewardMenuDeps): SessionMenuContribution {
   return {
-    visible: (session: SessionBadgeTarget) =>
+    visible: (session: SessionListItemTarget) =>
       session.id !== state.stewardSessionId() && !state.adoptedSessionIds().has(session.id),
-    run: async (session: SessionBadgeTarget) => {
+    run: async (session: SessionListItemTarget) => {
       const result = await deps.adopt(session.id);
       if (result.kind === "adopted") {
         state.setAdopted([...state.adoptedSessionIds(), result.task.sessionId]);
