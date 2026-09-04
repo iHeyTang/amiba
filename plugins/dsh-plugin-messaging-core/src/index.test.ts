@@ -709,6 +709,36 @@ describe("archived = closed: a bound session that got archived starts fresh", ()
     const channels = await center.listChannels();
     expect(channels[0]!.sessionId).toBe(routed.sessionId);
   });
+
+  it("serializes concurrent inbounds on an archived fixed-session channel into one fresh session", async () => {
+    const { center, created, archivedSessionIds } = await harness();
+    const fallback = await center.createChannel({
+      provider: "webhook",
+      name: "Legacy",
+      sessionId: "session-a",
+      agentPreset: "restricted",
+    });
+    archivedSessionIds.push("session-a");
+
+    const [a, b] = await Promise.all([
+      center.acceptInbound(fallback.channel.id, fallback.secret, {
+        id: "evt-1",
+        text: "race one",
+      }),
+      center.acceptInbound(fallback.channel.id, fallback.secret, {
+        id: "evt-2",
+        text: "race two",
+      }),
+    ]);
+    // Exactly one fresh session must be created, and both inbounds bind to
+    // it — the same single-flight guarantee `resolveConversationSession`
+    // already has via `conversationCreates`, applied to the fixed-session
+    // (`channel.sessionId`) path.
+    expect(created).toHaveLength(1);
+    expect(a.sessionId).toBe(b.sessionId);
+    const channels = await center.listChannels();
+    expect(channels[0]!.sessionId).toBe(a.sessionId);
+  });
 });
 
 describe("default model injection for IM sessions", () => {
@@ -972,6 +1002,47 @@ describe("outbound delivery retry", () => {
     expect(outbox[0]?.attempts).toBe(DELIVERY_MAX_ATTEMPTS);
     expect(outbox[0]?.nextAttemptAt).toBeUndefined();
     expect(outbox[0]?.lastError).toBe("provider_unregistered");
+  });
+
+  it("drops a reply whose session was archived between the turn/end event and delivery, instead of delivering it to the rebound conversation", async () => {
+    const { center, archivedSessionIds, loggerCalls } = await harness();
+    const deliver = vi.fn(async () => undefined);
+    center.registerProvider({
+      id: "webhook-with-deliver",
+      name: "Webhook",
+      description: "Test transport",
+      supportsInbound: true,
+      supportsOutbound: true,
+      deliver,
+    });
+    const { channel } = await center.store.create({
+      provider: "webhook-with-deliver",
+      name: "Reply channel",
+      sessionId: "session-a",
+    });
+    // Mirrors `reconcileSession`'s `queueReply`: the reply was produced while
+    // session-a was still current — this is the durable outbox entry, seeded
+    // directly rather than via a real turn/end event.
+    await seedDelivery(center, channel.id, "delivery-archived");
+
+    // The session is archived after the reply was queued but before delivery
+    // runs — e.g. a concurrent inbound rebound the conversation to a fresh
+    // session in the meantime.
+    archivedSessionIds.push("session-a");
+
+    await center.start();
+
+    expect(deliver).not.toHaveBeenCalled();
+    // Settled terminal — same shape as the DELIVERY_MAX_ATTEMPTS case above
+    // (entry stays for diagnostics, `nextAttemptAt` cleared so it is never
+    // attempted again) rather than a new "archived" outbox status.
+    const outbox = await center.store.listOutbox();
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.nextAttemptAt).toBeUndefined();
+    expect(outbox[0]?.lastError).toBe("session_archived");
+    expect(loggerCalls.warn).toHaveBeenCalled();
+    const [warning] = loggerCalls.warn.mock.calls.at(-1)!;
+    expect(String(warning)).toContain("delivery-archived");
   });
 });
 

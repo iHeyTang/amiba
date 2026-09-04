@@ -341,6 +341,7 @@ export class MessageChannelCenter {
   private readonly providers = new Map<string, MessageChannelProvider>();
   private readonly resumes = new Map<string, Promise<Agent>>();
   private readonly conversationCreates = new Map<string, Promise<string>>();
+  private readonly channelCreates = new Map<string, Promise<string>>();
   private recovery: Promise<void> | null = null;
   private deliveryPump: Promise<void> | null = null;
   private started = false;
@@ -608,26 +609,39 @@ export class MessageChannelCenter {
    * `resolveConversationSession` entirely — left untouched, `acceptInbound`
    * already rejects it as `conversation_required`.
    */
-  private async resolveChannelSession(
+  private resolveChannelSession(
     channel: StoredMessageChannel,
   ): Promise<string> {
     if (!channel.sessionId || !this.isSessionArchived(channel.sessionId))
-      return channel.sessionId;
+      return Promise.resolve(channel.sessionId);
+    // Single-flight per channel, same shape as `resolveConversationSession`'s
+    // `conversationCreates`: two inbounds racing in on this fixed-session
+    // channel while `channel.sessionId` is archived would otherwise both
+    // read the same stale id, both create a session, and orphan the loser's.
+    const key = channel.id;
+    const existing = this.channelCreates.get(key);
+    if (existing) return existing;
     const previousSessionId = channel.sessionId;
-    this.ctx
-      .logger("amiba-messaging-core")
-      .info(
-        `Channel ${channel.id} was bound to archived session ${previousSessionId}; starting a fresh session.`,
-      );
-    const { sessionId, dispose } = await this.createBoundSession(channel);
-    try {
-      await this.store.update(channel.id, { sessionId });
-    } catch (error) {
-      await dispose();
-      throw error;
-    }
-    this.approvals.cancelForSession(previousSessionId);
-    return sessionId;
+    const resolve = (async () => {
+      this.ctx
+        .logger("amiba-messaging-core")
+        .info(
+          `Channel ${channel.id} was bound to archived session ${previousSessionId}; starting a fresh session.`,
+        );
+      const { sessionId, dispose } = await this.createBoundSession(channel);
+      try {
+        await this.store.update(channel.id, { sessionId });
+      } catch (error) {
+        await dispose();
+        throw error;
+      }
+      this.approvals.cancelForSession(previousSessionId);
+      return sessionId;
+    })().finally(() => {
+      this.channelCreates.delete(key);
+    });
+    this.channelCreates.set(key, resolve);
+    return resolve;
   }
 
   private resolveConversationSession(
@@ -916,6 +930,26 @@ export class MessageChannelCenter {
     channel: StoredMessageChannel,
     delivery: StoredOutboundDelivery,
   ): Promise<void> {
+    // `reconcileSession` queued this reply while `delivery.envelope.sessionId`
+    // was still current; the session can have been archived since — e.g. a
+    // concurrent inbound rebound the conversation to a fresh session — by
+    // the time the pump gets around to actually delivering it. Delivering it
+    // now would land a reply from the old, archived session into a
+    // conversation that has moved on. Retrying later can never help (the
+    // session stays archived), so settle it terminal immediately instead of
+    // going through the backoff schedule — same shape (`nextAttemptAt`
+    // cleared, entry kept for diagnostics) `failDelivery` already uses once
+    // DELIVERY_MAX_ATTEMPTS is reached, not a new outbox status.
+    if (this.isSessionArchived(delivery.envelope.sessionId)) {
+      this.ctx
+        .logger("amiba-messaging-core")
+        .warn(
+          `Dropping outbound delivery ${delivery.id}: its session ${delivery.envelope.sessionId} was archived before delivery; the conversation has since moved on.`,
+        );
+      await this.store.markDeliveryFailed(delivery.id, "session_archived", undefined);
+      this.approvals.abandonPrompt(delivery.id);
+      return;
+    }
     try {
       await provider.deliver!(channel, delivery.envelope);
       await this.store.markDelivered(delivery.id);
