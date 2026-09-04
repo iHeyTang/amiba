@@ -204,6 +204,75 @@ describe("legacy archive/tombstone migration", () => {
     expect(mocks.storage[HIDDEN_KEY]).toBeUndefined();
   });
 
+  it("leaves both legacy keys and the marker alone when the host is unreachable", async () => {
+    // Post-upgrade first load with the DSH connection not up yet: every
+    // archive call fails with a transport error, so nothing was handled and
+    // the drain must stay pending rather than silently dropping the ids.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.archiveSession.mockImplementation(async () => {
+      throw new Error("connection refused");
+    });
+    mocks.storage[LOCAL_META_KEY] = { filed: { archived: true, unread: true } };
+    mocks.storage[HIDDEN_KEY] = ["bare"];
+    mocks.summaries = [summary("filed", 10), summary("bare", 20)];
+
+    await loadIndex();
+
+    expect(archiveCallIds().sort()).toEqual(["bare", "filed"]);
+    expect(mocks.storage[MIGRATION_KEY]).toBeUndefined();
+    expect(mocks.storage[HIDDEN_KEY]).toEqual(["bare"]);
+    expect(mocks.storage[LOCAL_META_KEY]).toEqual({
+      filed: { archived: true, unread: true },
+    });
+    expect(mocks.removed).not.toContain(HIDDEN_KEY);
+
+    // The next load — host back up — drains what the failed pass left behind.
+    mocks.archiveSession.mockImplementation(async (id: string) => {
+      if (!mocks.archived.includes(id)) mocks.archived = [...mocks.archived, id];
+      return { archivedSessionIds: mocks.archived };
+    });
+    const index = await loadIndex();
+
+    expect(archivedIds(index).sort()).toEqual(["bare", "filed"]);
+    expect(mocks.storage[MIGRATION_KEY]).toBe(true);
+    expect(mocks.storage[HIDDEN_KEY]).toBeUndefined();
+    expect(mocks.storage[LOCAL_META_KEY]).toEqual({ filed: { unread: true } });
+    warn.mockRestore();
+  });
+
+  it("keeps only the ids the host actually refused, and stays unmarked", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.archiveSession.mockImplementation(async (id: string) => {
+      if (id === "flaky") throw new Error("temporarily unavailable");
+      if (id === "gone") {
+        throw Object.assign(new Error("no such session"), {
+          code: "session-not-found",
+        });
+      }
+      mocks.archived = [...mocks.archived, id];
+      return { archivedSessionIds: mocks.archived };
+    });
+    mocks.storage[LOCAL_META_KEY] = {
+      flaky: { archived: true, unread: true },
+      filed: { archived: true },
+    };
+    mocks.storage[HIDDEN_KEY] = ["gone", "bare"];
+    mocks.summaries = [summary("filed", 10), summary("bare", 20)];
+
+    const index = await loadIndex();
+
+    expect(archivedIds(index).sort()).toEqual(["bare", "filed"]);
+    // `gone` was answered by the host (session-not-found) — handled, dropped;
+    // `bare` archived fine, so the tombstone key drained completely.
+    expect(mocks.storage[HIDDEN_KEY]).toBeUndefined();
+    // Only the id that genuinely failed keeps its legacy marker.
+    expect(mocks.storage[LOCAL_META_KEY]).toEqual({
+      flaky: { archived: true, unread: true },
+    });
+    expect(mocks.storage[MIGRATION_KEY]).toBeUndefined();
+    warn.mockRestore();
+  });
+
   it("marks itself done even with nothing to drain", async () => {
     mocks.summaries = [summary("kept", 10)];
 

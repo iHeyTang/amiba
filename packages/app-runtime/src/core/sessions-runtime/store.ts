@@ -110,9 +110,20 @@ function legacyHiddenIds(value: unknown): string[] {
  * legacy keys are then cleared — the sidecar keeps its remaining fields
  * (unread / titleManual / agent / parentSessionId / branchMessageId).
  *
- * A single id failing (`session-not-found` for a log DSH never had, or any
- * other RPC error) is logged and skipped: it must not make the whole session
- * index unloadable. The marker is written regardless, so this runs once.
+ * The drain is the ONLY record that those sessions were ever hidden, so it
+ * must never destroy that record on a pass the host could not answer:
+ *
+ *   - `session-not-found` is a real host answer for a log DSH never had —
+ *     the id counts as HANDLED and is dropped.
+ *   - any other per-id failure keeps that id in the legacy key it came from,
+ *     so the next load retries just that id.
+ *   - the marker is written only once nothing is left pending; a pass that
+ *     handled nothing at all (a wholesale RPC/transport failure, e.g. the DSH
+ *     connection not yet up on the first post-upgrade load) writes nothing —
+ *     legacy keys and marker stay exactly as they were.
+ *
+ * A failure is always logged and never propagated: it must not make the whole
+ * session index unloadable.
  */
 async function migrateLegacyArchiveState(
   local: Record<string, SessionLocalMeta>,
@@ -124,17 +135,27 @@ async function migrateLegacyArchiveState(
   ]);
   if (stored[ARCHIVE_MIGRATION_KEY]) return local;
 
-  const pending = new Set<string>();
+  const localPending = new Set<string>();
   for (const [id, meta] of Object.entries(local)) {
-    if ((meta as { archived?: boolean } | undefined)?.archived) pending.add(id);
+    if ((meta as { archived?: boolean } | undefined)?.archived) {
+      localPending.add(id);
+    }
   }
-  for (const id of legacyHiddenIds(stored[RUNTIME_HIDDEN_SESSIONS_KEY])) {
-    pending.add(id);
-  }
-  for (const id of pending) {
+  const hiddenPending = new Set(
+    legacyHiddenIds(stored[RUNTIME_HIDDEN_SESSIONS_KEY]),
+  );
+
+  const unhandled = new Set<string>();
+  let handledAny = false;
+  for (const id of new Set([...localPending, ...hiddenPending])) {
     try {
       await archiveSession(id);
+      handledAny = true;
     } catch (error) {
+      // A host that answers "no such session" IS reachable, and the id has
+      // nothing left to archive — treat it as drained.
+      if (runtimeErrorCode(error) === "session-not-found") handledAny = true;
+      else unhandled.add(id);
       console.warn(
         `[agent-sessions] archive migration skipped ${JSON.stringify(id)}:`,
         error,
@@ -142,18 +163,32 @@ async function migrateLegacyArchiveState(
     }
   }
 
+  // Nothing got through: assume the host, not the ids, is the problem and
+  // leave every legacy key untouched so the next load retries the whole set.
+  if (unhandled.size > 0 && !handledAny) return local;
+
   const next: Record<string, SessionLocalMeta> = {};
   for (const [id, meta] of Object.entries(local)) {
-    const { archived: _archived, ...rest } = (meta ?? {}) as SessionLocalMeta & {
+    const { archived, ...rest } = (meta ?? {}) as SessionLocalMeta & {
       archived?: boolean;
     };
-    if (Object.keys(rest).length > 0) next[id] = rest;
+    // Keep the flag only where the host refused it — that id is retried.
+    const kept: SessionLocalMeta = unhandled.has(id)
+      ? ({ ...rest, ...(archived ? { archived } : {}) } as SessionLocalMeta)
+      : (rest as SessionLocalMeta);
+    if (Object.keys(kept).length > 0) next[id] = kept;
   }
+  const hiddenLeft = [...hiddenPending].filter((id) => unhandled.has(id));
   await storage.set({
     [LOCAL_META_KEY]: next,
-    [ARCHIVE_MIGRATION_KEY]: true,
+    ...(hiddenLeft.length > 0 ? { [RUNTIME_HIDDEN_SESSIONS_KEY]: hiddenLeft } : {}),
+    // Only a fully drained pass ends the migration; anything left pending
+    // keeps the marker off so the next load picks the remainder back up.
+    ...(unhandled.size === 0 ? { [ARCHIVE_MIGRATION_KEY]: true } : {}),
   });
-  await storage.remove(RUNTIME_HIDDEN_SESSIONS_KEY);
+  if (hiddenLeft.length === 0) {
+    await storage.remove(RUNTIME_HIDDEN_SESSIONS_KEY);
+  }
   return next;
 }
 
