@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  translateCardAction,
   translateReceiveEvent,
+  type LarkCardActionEvent,
   type LarkReceiveEvent,
 } from "./translate.js";
 
@@ -258,5 +260,101 @@ describe("translateReceiveEvent", () => {
 
     const result = translateReceiveEvent(event as unknown as LarkReceiveEvent, botOpenId);
     expect(result).toBeNull();
+  });
+});
+
+describe("translateCardAction", () => {
+  function event(overrides: Partial<LarkCardActionEvent> = {}): LarkCardActionEvent {
+    return {
+      context: { open_message_id: "om_1", open_chat_id: "oc_1" },
+      operator: { open_id: "ou_operator_1" },
+      action: {
+        tag: "button",
+        value: { approvalId: "amiba-approval-1", decision: "allowed-once" },
+      },
+      ...overrides,
+    };
+  }
+
+  it("translates an approve click", () => {
+    expect(translateCardAction(event())).toEqual({
+      approvalId: "amiba-approval-1",
+      decision: "allowed-once",
+      operatorOpenId: "ou_operator_1",
+      messageId: "om_1",
+    });
+  });
+
+  it("translates a reject click", () => {
+    const result = translateCardAction(
+      event({
+        action: {
+          tag: "button",
+          value: { approvalId: "amiba-approval-1", decision: "rejected" },
+        },
+      }),
+    );
+    expect(result?.decision).toBe("rejected");
+  });
+
+  it("falls back to the top-level open_message_id when context is absent", () => {
+    const result = translateCardAction(
+      event({ context: undefined, open_message_id: "om_fallback" }),
+    );
+    expect(result?.messageId).toBe("om_fallback");
+  });
+
+  it("returns null when neither context nor top-level carries a message id", () => {
+    expect(translateCardAction(event({ context: undefined }))).toBeNull();
+  });
+
+  it("returns null when the operator open_id is missing", () => {
+    expect(translateCardAction(event({ operator: {} }))).toBeNull();
+  });
+
+  it("returns null when action.value is missing", () => {
+    expect(translateCardAction(event({ action: { tag: "button" } }))).toBeNull();
+  });
+
+  it("returns null when action.value.approvalId is missing or empty", () => {
+    expect(
+      translateCardAction(
+        event({ action: { tag: "button", value: { decision: "allowed-once" } } }),
+      ),
+    ).toBeNull();
+    expect(
+      translateCardAction(
+        event({
+          action: { tag: "button", value: { approvalId: "", decision: "allowed-once" } },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when action.value.decision is not a recognized outcome", () => {
+    expect(
+      translateCardAction(
+        event({
+          action: {
+            tag: "button",
+            value: { approvalId: "amiba-approval-1", decision: "maybe" },
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for a click on an unrelated card (no approvalId in value at all)", () => {
+    expect(
+      translateCardAction(
+        event({ action: { tag: "button", value: { someOtherField: 1 } } }),
+      ),
+    ).toBeNull();
+  });
+
+  it("never throws on a malformed event", () => {
+    expect(translateCardAction(null as unknown as LarkCardActionEvent)).toBeNull();
+    expect(translateCardAction(undefined as unknown as LarkCardActionEvent)).toBeNull();
+    expect(translateCardAction({} as LarkCardActionEvent)).toBeNull();
   });
 });

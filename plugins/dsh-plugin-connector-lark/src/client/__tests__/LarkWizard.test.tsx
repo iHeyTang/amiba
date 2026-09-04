@@ -55,6 +55,54 @@ function FakeBasicsFields({
 
 const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
 
+/**
+ * Stand-in for `host.kit.ApprovalField` (connector-core owns the real one
+ * and its own tests): a single radio pair plus a minutes input, enough to
+ * drive and assert the wizard's own `approval` state without depending on
+ * connector-core's actual component.
+ */
+function FakeApprovalField({
+  approval,
+  onApprovalChange,
+}: {
+  approval: { mode: "timeout" | "wait"; timeoutMs: number };
+  onApprovalChange(value: { mode: "timeout" | "wait"; timeoutMs: number }): void;
+}) {
+  return (
+    <div>
+      <label>
+        超时拒绝
+        <input
+          checked={approval.mode === "timeout"}
+          onChange={() => onApprovalChange({ mode: "timeout", timeoutMs: approval.timeoutMs })}
+          type="radio"
+        />
+      </label>
+      <label>
+        一直等
+        <input
+          checked={approval.mode === "wait"}
+          onChange={() => onApprovalChange({ mode: "wait", timeoutMs: approval.timeoutMs })}
+          type="radio"
+        />
+      </label>
+      <label>
+        等待分钟数
+        <input
+          onChange={(e) =>
+            onApprovalChange({
+              mode: "timeout",
+              timeoutMs: Number(e.target.value) * 60_000,
+            })
+          }
+          type="number"
+          value={Math.round(approval.timeoutMs / 60_000)}
+        />
+      </label>
+    </div>
+  );
+}
+
 function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
   return {
     providerId: "lark",
@@ -65,7 +113,10 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
       pollOnboarding: vi.fn(),
       cancelOnboarding: vi.fn(async () => ({}) as never),
     } as never,
-    kit: { BasicsFields: FakeBasicsFields as never },
+    kit: {
+      BasicsFields: FakeBasicsFields as never,
+      ApprovalField: FakeApprovalField as never,
+    },
     back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
@@ -179,8 +230,38 @@ describe("LarkWizard", () => {
       name: "Sales",
       agentPreset: "restricted",
       config: { appId: "cli_x", appSecret: "secret", domain: "feishu" },
+      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
     expect(host.done).toHaveBeenCalledWith({ id: "c1" });
+  });
+
+  it("renders the approval field in both the scan and manual tabs", async () => {
+    render(<LarkWizard host={hostWith()} />);
+    expect(screen.getByText("超时拒绝")).toBeInTheDocument();
+
+    await userEvent.click(manualTab());
+    expect(screen.getByText("超时拒绝")).toBeInTheDocument();
+  });
+
+  it("submits the manual form with the approval value the user picked", async () => {
+    const host = hostWith();
+    render(<LarkWizard host={host} />);
+    await userEvent.click(manualTab());
+    typeName();
+    fireEvent.change(screen.getByLabelText("App ID"), {
+      target: { value: "cli_x" },
+    });
+    fireEvent.change(screen.getByLabelText(/App [Ss]ecret/), {
+      target: { value: "secret" },
+    });
+    await userEvent.click(screen.getByText("一直等"));
+    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
+
+    expect(host.adapter.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approval: { mode: "wait", timeoutMs: 10 * 60_000 },
+      }),
+    );
   });
 
   it("translates a create failure code instead of rendering the raw code", async () => {

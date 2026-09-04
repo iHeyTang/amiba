@@ -21,7 +21,7 @@ vi.mock("@larksuiteoapi/node-sdk", () => ({
   registerApp: vi.fn(),
 }));
 
-import { Client } from "@larksuiteoapi/node-sdk";
+import { Client, EventDispatcher, WSClient } from "@larksuiteoapi/node-sdk";
 
 import {
   createLarkProvider,
@@ -50,6 +50,8 @@ function fakeApi(overrides: Partial<ApiLike> = {}): ApiLike {
     sendCard: vi.fn(async () => undefined),
     addReaction: vi.fn(async () => "reaction_1"),
     removeReaction: vi.fn(async () => undefined),
+    sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+    updateInteractiveCard: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -113,6 +115,51 @@ function fakeDeps(options?: {
     logs,
   };
   return deps;
+}
+
+/** A minimal `ApprovalPrompt`-shaped request; the runtime only reads these
+ * fields (and `signal`) — see `provider.ts`'s `requestApproval`. */
+function fakeApprovalRequest(
+  overrides: Partial<{
+    approvalId: string;
+    seq: number;
+    toolName: string;
+    reason?: string;
+    sessionId: string;
+    signal: AbortSignal;
+  }> = {},
+) {
+  return {
+    approvalId: "amiba-approval-1",
+    seq: 1,
+    toolName: "shell.exec",
+    reason: "rm -rf /tmp/cache",
+    sessionId: "session-1",
+    signal: new AbortController().signal,
+    ...overrides,
+  };
+}
+
+function fakeCardActionEvent(overrides: {
+  messageId?: string;
+  operatorOpenId?: string;
+  approvalId?: string;
+  decision?: string;
+} = {}) {
+  return {
+    context: {
+      open_message_id: overrides.messageId ?? "om_card_1",
+      open_chat_id: "oc_1",
+    },
+    operator: { open_id: overrides.operatorOpenId ?? "ou_operator_1" },
+    action: {
+      tag: "button",
+      value: {
+        approvalId: overrides.approvalId ?? "amiba-approval-1",
+        decision: overrides.decision ?? "allowed-once",
+      },
+    },
+  };
 }
 
 function fakeOnboardHandle(
@@ -642,6 +689,339 @@ describe("createLarkProvider", () => {
     });
   });
 
+  // --- Approval cards: runtime.requestApproval / announceApprovalOutcome --
+
+  describe("runtime.requestApproval", () => {
+    it("sends the approval card to the conversation and returns the card message id internally", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest();
+      void runtime.requestApproval!({ key: "oc_1", kind: "p2p" }, request);
+      await flushMicrotasks();
+
+      expect(api.sendInteractiveCard).toHaveBeenCalledTimes(1);
+      const [chatId, card] = (api.sendInteractiveCard as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      expect(chatId).toBe("oc_1");
+      expect(card).toMatchObject({ schema: "2.0" });
+    });
+
+    it("resolves with { outcome: 'allowed-once', by } when the approve button is clicked", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest();
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onCardAction?.(
+        fakeCardActionEvent({ operatorOpenId: "ou_operator_1", decision: "allowed-once" }),
+      );
+
+      await expect(pending).resolves.toEqual({
+        outcome: "allowed-once",
+        by: "ou_operator_1",
+      });
+    });
+
+    it("resolves with { outcome: 'rejected', by } when the reject button is clicked", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest();
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onCardAction?.(
+        fakeCardActionEvent({ operatorOpenId: "ou_operator_2", decision: "rejected" }),
+      );
+
+      await expect(pending).resolves.toEqual({
+        outcome: "rejected",
+        by: "ou_operator_2",
+      });
+    });
+
+    it("ignores a card-action callback for a different approvalId", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest({ approvalId: "amiba-approval-1" });
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const callbacks = deps.wsCallbacks!;
+      // Unrelated approval, same chat/card key space.
+      callbacks.onCardAction?.(fakeCardActionEvent({ approvalId: "some-other-approval" }));
+      await flushMicrotasks();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
+
+      // The real click still resolves it.
+      callbacks.onCardAction?.(fakeCardActionEvent({ approvalId: "amiba-approval-1" }));
+      await expect(pending).resolves.toEqual({
+        outcome: "allowed-once",
+        by: "ou_operator_1",
+      });
+    });
+
+    it("ignores a card-action callback for a different (superseded) card message id", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest();
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onCardAction?.(fakeCardActionEvent({ messageId: "om_wrong_card" }));
+      await flushMicrotasks();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
+    });
+
+    it("only ever resolves once: a second click after the first is a no-op", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const request = fakeApprovalRequest();
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onCardAction?.(
+        fakeCardActionEvent({ operatorOpenId: "ou_first", decision: "allowed-once" }),
+      );
+      // A second click for the same approval must not throw or change the
+      // already-settled outcome.
+      expect(() =>
+        callbacks.onCardAction?.(
+          fakeCardActionEvent({ operatorOpenId: "ou_second", decision: "rejected" }),
+        ),
+      ).not.toThrow();
+
+      await expect(pending).resolves.toEqual({ outcome: "allowed-once", by: "ou_first" });
+    });
+
+    it("never resolves once request.signal aborts, and detaches the abort listener", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const controller = new AbortController();
+      const request = fakeApprovalRequest({ signal: controller.signal });
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      controller.abort();
+      await flushMicrotasks();
+
+      // A click arriving after the abort must not resolve the abandoned promise.
+      const callbacks = deps.wsCallbacks!;
+      callbacks.onCardAction?.(fakeCardActionEvent());
+      await flushMicrotasks();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
+    });
+
+    it("cleans up an already-aborted signal without ever registering a listener leak", async () => {
+      const deps = fakeDeps();
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const controller = new AbortController();
+      controller.abort();
+      const request = fakeApprovalRequest({ signal: controller.signal });
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        request,
+      );
+      await flushMicrotasks();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
+    });
+
+    it("returns null (text fallback) when sendInteractiveCard throws", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => {
+          throw new Error("lark_send_interactive_card_failed:230002");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const reply = await runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+
+      expect(reply).toBeNull();
+      expect(
+        deps.logs.some((line) => line.includes("lark_send_interactive_card_failed")),
+      ).toBe(true);
+    });
+  });
+
+  describe("runtime.announceApprovalOutcome", () => {
+    function fakeNotice(overrides: Partial<{
+      approvalId: string;
+      seq: number;
+      toolName: string;
+      outcome: "allowed-once" | "rejected" | "cancelled" | "unavailable";
+      reason: "answered" | "timeout" | "desktop" | "cancelled";
+    }> = {}) {
+      return {
+        approvalId: "amiba-approval-1",
+        seq: 1,
+        toolName: "shell.exec",
+        outcome: "allowed-once" as const,
+        reason: "answered" as const,
+        ...overrides,
+      };
+    }
+
+    it("patches the sent card with the settled variant", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      void runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await flushMicrotasks();
+
+      await runtime.announceApprovalOutcome!(
+        { key: "oc_1", kind: "p2p" },
+        fakeNotice(),
+      );
+
+      expect(api.updateInteractiveCard).toHaveBeenCalledTimes(1);
+      const [messageId, card] = (api.updateInteractiveCard as ReturnType<typeof vi.fn>)
+        .mock.calls[0]!;
+      expect(messageId).toBe("om_card_1");
+      expect(card).toMatchObject({ schema: "2.0" });
+    });
+
+    it("is a no-op when no card was ever sent for that approvalId", async () => {
+      const api = fakeApi();
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      await expect(
+        runtime.announceApprovalOutcome!(
+          { key: "oc_1", kind: "p2p" },
+          fakeNotice({ approvalId: "never-sent" }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(api.updateInteractiveCard).not.toHaveBeenCalled();
+    });
+
+    it("logs but does not throw when updateInteractiveCard fails", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+        updateInteractiveCard: vi.fn(async () => {
+          throw new Error("lark_update_interactive_card_failed:230002");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      void runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await flushMicrotasks();
+
+      await expect(
+        runtime.announceApprovalOutcome!({ key: "oc_1", kind: "p2p" }, fakeNotice()),
+      ).resolves.toBeUndefined();
+      expect(
+        deps.logs.some((line) => line.includes("lark_update_interactive_card_failed")),
+      ).toBe(true);
+    });
+
+    it("clears the pending click resolver too, so a late click after settlement is inert", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await flushMicrotasks();
+
+      // Settled by another path (e.g. a text reply) before any click arrives.
+      await runtime.announceApprovalOutcome!(
+        { key: "oc_1", kind: "p2p" },
+        fakeNotice({ reason: "answered", outcome: "rejected" }),
+      );
+
+      const callbacks = deps.wsCallbacks!;
+      expect(() => callbacks.onCardAction?.(fakeCardActionEvent())).not.toThrow();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
+    });
+  });
+
   // --- Contract item 4: runtime.stop() --------------------------------
 
   describe("runtime.stop", () => {
@@ -708,6 +1088,30 @@ describe("createLarkProvider", () => {
         },
       );
       expect(api.removeReaction).not.toHaveBeenCalled();
+    });
+
+    it("clears pending approval-card state on stop(): a late click after stop never resolves", async () => {
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(async () => ({ messageId: "om_card_1" })),
+      });
+      const deps = fakeDeps({ api });
+      const handle = fakeHandle();
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(handle);
+
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await flushMicrotasks();
+
+      await runtime.stop();
+
+      const callbacks = deps.wsCallbacks!;
+      expect(() => callbacks.onCardAction?.(fakeCardActionEvent())).not.toThrow();
+
+      const race = await Promise.race([pending, Promise.resolve("still-pending")]);
+      expect(race).toBe("still-pending");
     });
   });
 
@@ -994,6 +1398,130 @@ describe("realLarkDeps.createApiClient — business-level (res.code) failures", 
     await expect(api.sendCard("oc_1", "**hi**")).rejects.toThrow(
       "invalid card schema",
     );
+  });
+
+  it("sendInteractiveCard posts msg_type interactive and returns the message id", async () => {
+    const create = vi.fn(async () => ({
+      code: 0,
+      data: { message_id: "om_card_1" },
+    }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: {
+        message: { create, patch: vi.fn() },
+        messageReaction: { create: vi.fn(), delete: vi.fn() },
+      },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+    const card = { schema: "2.0" };
+
+    await expect(api.sendInteractiveCard("oc_1", card)).resolves.toEqual({
+      messageId: "om_card_1",
+    });
+    expect(create).toHaveBeenCalledWith({
+      params: { receive_id_type: "chat_id" },
+      data: {
+        receive_id: "oc_1",
+        msg_type: "interactive",
+        content: JSON.stringify(card),
+      },
+    });
+  });
+
+  it("sendInteractiveCard rejects on a non-zero response code", async () => {
+    const create = vi.fn(async () => ({ code: 230002, msg: "no permission" }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: { message: { create, patch: vi.fn() }, messageReaction: { create: vi.fn(), delete: vi.fn() } },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+    await expect(api.sendInteractiveCard("oc_1", {})).rejects.toThrow("no permission");
+  });
+
+  it("sendInteractiveCard rejects when the response carries no message_id", async () => {
+    const create = vi.fn(async () => ({ code: 0, data: {} }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: { message: { create, patch: vi.fn() }, messageReaction: { create: vi.fn(), delete: vi.fn() } },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+    await expect(api.sendInteractiveCard("oc_1", {})).rejects.toThrow(
+      "lark_send_interactive_card_missing_message_id",
+    );
+  });
+
+  it("updateInteractiveCard patches the message content by message_id", async () => {
+    const patch = vi.fn(async () => ({ code: 0 }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: { message: { create: vi.fn(), patch }, messageReaction: { create: vi.fn(), delete: vi.fn() } },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+    const card = { schema: "2.0" };
+    await expect(api.updateInteractiveCard("om_card_1", card)).resolves.toBeUndefined();
+    expect(patch).toHaveBeenCalledWith({
+      data: { content: JSON.stringify(card) },
+      path: { message_id: "om_card_1" },
+    });
+  });
+
+  it("updateInteractiveCard rejects on a non-zero response code", async () => {
+    const patch = vi.fn(async () => ({ code: 230002, msg: "message not found" }));
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      im: { message: { create: vi.fn(), patch }, messageReaction: { create: vi.fn(), delete: vi.fn() } },
+      auth: { tenantAccessToken: { internal: vi.fn() } },
+      request: vi.fn(),
+    }));
+
+    const api = realLarkDeps.createApiClient(validConfig);
+    await expect(api.updateInteractiveCard("om_card_1", {})).rejects.toThrow(
+      "message not found",
+    );
+  });
+});
+
+// This regression-locks the SDK-level decision documented in
+// `realLarkDeps.createWsClient`'s own comment block: `card.action.trigger`
+// is registered on the SAME `EventDispatcher` instance as
+// `im.message.receive_v1`, rather than switching to `LarkChannel` or a
+// second connection.
+describe("realLarkDeps.createWsClient — dispatcher registration", () => {
+  it("registers both im.message.receive_v1 and card.action.trigger, wiring each to the matching callback", () => {
+    const registerMock = vi.fn().mockReturnThis();
+    (EventDispatcher as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      register: registerMock,
+    }));
+    (WSClient as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      start: vi.fn(),
+      close: vi.fn(),
+    }));
+
+    const onEvent = vi.fn();
+    const onCardAction = vi.fn();
+    realLarkDeps.createWsClient(validConfig, { onEvent, onCardAction });
+
+    expect(registerMock).toHaveBeenCalledTimes(1);
+    const handles = registerMock.mock.calls[0]![0] as Record<
+      string,
+      (data: unknown) => void
+    >;
+    expect(Object.keys(handles)).toEqual(
+      expect.arrayContaining(["im.message.receive_v1", "card.action.trigger"]),
+    );
+
+    handles["card.action.trigger"]!({ raw: "card" });
+    expect(onCardAction).toHaveBeenCalledWith({ raw: "card" });
+
+    handles["im.message.receive_v1"]!({ raw: "message" });
+    expect(onEvent).toHaveBeenCalledWith({ raw: "message" });
   });
 });
 

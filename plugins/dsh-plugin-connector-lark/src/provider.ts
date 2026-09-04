@@ -17,8 +17,14 @@ import type {
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
+  buildApprovalCard,
+  buildSettledCard,
+} from "./approval-card.js";
+import {
   larkConfigSchema,
+  translateCardAction,
   translateReceiveEvent,
+  type LarkCardActionEvent,
   type LarkConnectorConfig,
   type LarkReceiveEvent,
 } from "./translate.js";
@@ -36,6 +42,18 @@ export interface LarkWsCallbacks {
   onReconnected?: () => void;
   /** Raw im.message.receive_v1 payload; deps registers this on the dispatcher. */
   onEvent?: (event: LarkReceiveEvent) => void | Promise<void>;
+  /**
+   * Raw card.action.trigger (v2) payload — a click on one of
+   * `buildApprovalCard`'s two buttons, or on any other card this connect
+   * ever sent. Delivered over the SAME WS long connection as `onEvent`
+   * (confirmed via the installed SDK: `LarkChannel`'s own dispatcher
+   * registers `'card.action.trigger'` on the identical low-level
+   * `EventDispatcher` class this provider already uses for
+   * `im.message.receive_v1` — see the `realLarkDeps.createWsClient`
+   * verification comment below), so no second connection or `LarkChannel`
+   * rewrite is needed to receive it.
+   */
+  onCardAction?: (event: LarkCardActionEvent) => void | Promise<void>;
 }
 
 /** Thin seam over `WSClient` — only what the provider core needs. */
@@ -56,6 +74,16 @@ export interface ApiLike {
   /** Adds a reaction to `messageId`; resolves with the reaction id (needed to remove it later). */
   addReaction(messageId: string, emoji: string): Promise<string>;
   removeReaction(messageId: string, reactionId: string): Promise<void>;
+  /**
+   * Sends a Lark card v2 payload (`buildApprovalCard`'s output) and returns
+   * the `message_id` Lark assigned — needed so `updateInteractiveCard` can
+   * later flip the same card to its settled state. Distinct from `sendCard`
+   * (which renders `deliver()`'s markdown text and discards the id): the
+   * approval flow always needs the id back, `deliver()` never does.
+   */
+  sendInteractiveCard(chatId: string, card: object): Promise<{ messageId: string }>;
+  /** Replaces an already-sent card's content in place (`im.message.patch`). */
+  updateInteractiveCard(messageId: string, card: object): Promise<void>;
 }
 
 /**
@@ -240,6 +268,27 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
       // read across a stop()/start() cycle — `stop()` clears it outright.
       const reactions = new Map<string, string>();
 
+      // Per-start approval-card ledgers, both keyed by `approvalId` and
+      // cleared wholesale on `stop()` (same lifecycle as `reactions`):
+      //  - `cardMessages` remembers the `message_id` `sendInteractiveCard`
+      //    returned, so `announceApprovalOutcome` — called well after the
+      //    click (or timeout, or never) — can still find the card to patch.
+      //    Populated in `requestApproval` on a successful send; consumed
+      //    (read + deleted) in `announceApprovalOutcome`, which is the only
+      //    guaranteed-eventually-called hook for a natively presented
+      //    question (messaging-core's contract — see `types.ts`), so it is
+      //    also this ledger's sole cleanup point besides `stop()`.
+      //  - `pendingClicks` holds the `resolve` for the promise
+      //    `requestApproval` is currently awaiting, so the WS card-action
+      //    handler below can settle it. Removed the moment it is used
+      //    (matched click) or made moot (the request's own `signal`
+      //    aborts) — never left around for a second click to find.
+      const cardMessages = new Map<string, string>();
+      const pendingClicks = new Map<
+        string,
+        (reply: { outcome: "allowed-once" | "rejected"; by?: string } | null) => void
+      >();
+
       const ws = deps.createWsClient(config, {
         onReady: () => safeSetStatus({ state: "ready" }),
         onReconnected: () => safeSetStatus({ state: "ready" }),
@@ -275,6 +324,21 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
             );
           }
         },
+        onCardAction: (event) => {
+          if (stopped) return;
+          const click = translateCardAction(event);
+          if (!click) return; // not a recognizable approval-button click
+          // Cross-check against the card THIS approval actually sent —
+          // rejects a stale click replayed against a card that has since
+          // been superseded (a different approvalId happened to reuse the
+          // same chat) as well as a genuinely unrelated card's click that
+          // happened to carry an `{approvalId, decision}`-shaped value.
+          if (cardMessages.get(click.approvalId) !== click.messageId) return;
+          const resolve = pendingClicks.get(click.approvalId);
+          if (!resolve) return; // already settled by another path, or a second click
+          pendingClicks.delete(click.approvalId);
+          resolve({ outcome: click.decision, by: click.operatorOpenId });
+        },
       });
 
       await ws.start();
@@ -287,6 +351,15 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
           // on the last inbound message) — never worth a network round trip
           // during shutdown, so just drop the ledger and stay fast/idempotent.
           reactions.clear();
+          // Any promise `requestApproval` callers are still awaiting is
+          // simply abandoned here (never resolved) — exactly what the
+          // `ConnectorRuntime.requestApproval` contract allows for a
+          // question settled by another path; messaging-core's own
+          // `dispose()` already resolves the OUTER question as `cancelled`
+          // when this plugin unloads, so nothing is left hanging above this
+          // layer either.
+          cardMessages.clear();
+          pendingClicks.clear();
           ws.close({ force: false });
         },
         async deliver(conversation, envelope): Promise<void> {
@@ -317,6 +390,90 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
               `amiba-connector-lark: sendCard failed, falling back to sendText: ${String(error)}`,
             );
             await api.sendText(conversation.key, envelope.text);
+          }
+        },
+        // ---------------------------------------------------------------
+        // requestApproval / announceApprovalOutcome — plan §1/§4:
+        // `.worktable/im-approval/plan.md`. Both methods are typed
+        // structurally against `ConnectorRuntime`'s own declaration in
+        // `@amiba/dsh-plugin-connector-core` (which imports the real
+        // `ApprovalPrompt`/`ApprovalReply`/`ApprovalOutcomeNotice` from
+        // `@amiba/dsh-plugin-messaging-core`) — this file names none of
+        // those three types directly, since this package only depends on
+        // connector-core, never on messaging-core (see `approval-card.ts`'s
+        // header comment for why that is fine: `request`/`notice` below are
+        // checked against `buildApprovalCard`/`buildSettledCard`'s own
+        // structural mirrors at the call site).
+        //
+        // Sender validation: `channel.allowedSenders` lives entirely in
+        // messaging-core (`center.ts`'s `acceptInbound`) and is never
+        // handed down to a `ConnectorRuntime` — this provider has no
+        // channel object to check a click's operator against. Per the task
+        // brief's own escape hatch, `requestApproval` therefore does NOT
+        // gate on who clicked; it forwards the clicking operator's
+        // `open_id` as `ApprovalReply.by` and lets the caller (today:
+        // nobody — messaging-core's relay only stores `by`, it does not
+        // yet re-validate it) decide. In practice this is an acceptable
+        // gap: the card was only ever sent to the one chat the question's
+        // session is bound to, so only someone already in that chat/DM can
+        // click it at all.
+        // ---------------------------------------------------------------
+        async requestApproval(conversation, request) {
+          const card = buildApprovalCard(request);
+          let sent: { messageId: string };
+          try {
+            sent = await api.sendInteractiveCard(conversation.key, card);
+          } catch (error) {
+            deps.log?.(
+              `amiba-connector-lark: sendInteractiveCard failed for approval ${request.approvalId}, falling back to text: ${String(error)}`,
+            );
+            return null;
+          }
+          if (stopped) return null;
+          cardMessages.set(request.approvalId, sent.messageId);
+
+          return new Promise((resolve) => {
+            const settleOnce = (
+              reply: { outcome: "allowed-once" | "rejected"; by?: string } | null,
+            ): void => {
+              pendingClicks.delete(request.approvalId);
+              request.signal.removeEventListener("abort", onAbort);
+              resolve(reply);
+            };
+            // Wrap the caller's resolve so a matching click ALSO tears down
+            // the abort listener — otherwise a request that gets answered
+            // natively (the common case) would leak one listener per
+            // approval for the lifetime of `request.signal`.
+            pendingClicks.set(request.approvalId, settleOnce);
+
+            // Per the `ConnectorRuntime.requestApproval` contract: on
+            // abort (the question was settled by another path — a text
+            // reply, a timeout, the desktop) this must NOT resolve at all,
+            // only stop waiting and let the card sit until
+            // `announceApprovalOutcome` flips it. Just unregister so a
+            // late click can no longer resolve an abandoned promise.
+            function onAbort(): void {
+              pendingClicks.delete(request.approvalId);
+            }
+            if (request.signal.aborted) {
+              onAbort();
+              return;
+            }
+            request.signal.addEventListener("abort", onAbort, { once: true });
+          });
+        },
+        async announceApprovalOutcome(conversation, notice): Promise<void> {
+          void conversation; // the card is addressed by messageId, not chat id
+          const messageId = cardMessages.get(notice.approvalId);
+          cardMessages.delete(notice.approvalId);
+          pendingClicks.delete(notice.approvalId);
+          if (!messageId) return; // nothing was ever sent natively for this one
+          try {
+            await api.updateInteractiveCard(messageId, buildSettledCard(notice));
+          } catch (error) {
+            deps.log?.(
+              `amiba-connector-lark: updateInteractiveCard failed for approval ${notice.approvalId}: ${String(error)}`,
+            );
           }
         },
       };
@@ -457,6 +614,13 @@ interface MessageCreateResponse {
   data?: { message_id?: string };
 }
 
+/** `client.im.message.patch`'s response never carries a payload of its own —
+ * `{ code?, msg?, data?: {} }` per the installed type decls. */
+interface PatchMessageResponse {
+  code?: number;
+  msg?: string;
+}
+
 /**
  * Verified against the installed 1.73.0 type decls: `reaction_id` is always
  * under `data`, never top-level. The top-level `reaction_id` field here is a
@@ -482,9 +646,45 @@ function markdownCard(markdown: string): unknown {
 
 export const realLarkDeps: LarkDeps = {
   createWsClient(config, callbacks): WsLike {
+    // `card.action.trigger` is registered on the SAME low-level
+    // `EventDispatcher` as `im.message.receive_v1` rather than switching
+    // this provider to the SDK's higher-level `LarkChannel` wrapper. Two
+    // things confirmed this is the right (least-invasive) call before
+    // writing it, both from the installed 1.73.0 SDK itself:
+    //   1. `EventDispatcher.register<T = {}>(handles: IHandles & T)` types
+    //      `IHandles` (the built-in `im.*`/`drive.*`/... event names) but
+    //      the generic `& T` still lets an extra key like
+    //      `'card.action.trigger'` type-check — TS infers `T` from the
+    //      literal. `IHandles` itself does not (and structurally cannot,
+    //      per its own doc comment on `callbacks` vs `events`) list
+    //      callback names.
+    //   2. `LarkChannel` itself — the "do it properly" alternative floated
+    //      in the task brief — is not a thin card-callback shim: reading
+    //      its `registerDispatcherHandlers()` in `lib/index.js` shows it
+    //      does exactly this same `new EventDispatcher(...).register({
+    //      'im.message.receive_v1': ..., 'card.action.trigger': ..., ... })`
+    //      call internally, then layers its OWN message-normalization,
+    //      dedup/lock/queue safety pipeline, and policy engine on top —
+    //      none of which this provider wants (it already has its own
+    //      `translateReceiveEvent`, typing-reaction ledger, and markdown
+    //      card fallback, all covered by the existing test suite).
+    //      Adopting `LarkChannel` would mean replacing that whole
+    //      provider, a much larger and riskier change than one more
+    //      dispatcher key.
+    // At the wire level a card click arrives as a WS "event" frame exactly
+    // like `im.message.receive_v1` (`WSClient#handleEventData` in the
+    // SDK's `lib/index.js` dispatches BOTH through the identical
+    // `eventDispatcher.invoke(...)` call), so no second connection is
+    // needed. Returning nothing from the handler below is a deliberate,
+    // minimal ack (Lark ack's the click with a bare `{code:0}`, no toast);
+    // the card is updated later, out of band, via `updateInteractiveCard`
+    // once messaging-core calls `announceApprovalOutcome` — see
+    // `provider.ts`'s `requestApproval`/`announceApprovalOutcome`.
     const dispatcher = new EventDispatcher({}).register({
       "im.message.receive_v1": (data) =>
         callbacks.onEvent?.(data as LarkReceiveEvent),
+      "card.action.trigger": (data: unknown) =>
+        callbacks.onCardAction?.(data as LarkCardActionEvent),
     });
     const ws = new WSClient({
       appId: config.appId,
@@ -571,6 +771,36 @@ export const realLarkDeps: LarkDeps = {
         })) as ReactionResponse;
         if (res.code) {
           throw new Error(res.msg ?? `lark_remove_reaction_failed:${res.code}`);
+        }
+      },
+      async sendInteractiveCard(chatId, card): Promise<{ messageId: string }> {
+        const res = (await client.im.message.create({
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: chatId,
+            msg_type: "interactive",
+            content: JSON.stringify(card),
+          },
+        })) as MessageCreateResponse;
+        if (res.code) {
+          throw new Error(res.msg ?? `lark_send_interactive_card_failed:${res.code}`);
+        }
+        const messageId = res.data?.message_id;
+        if (!messageId) {
+          throw new Error("lark_send_interactive_card_missing_message_id");
+        }
+        return { messageId };
+      },
+      async updateInteractiveCard(messageId, card): Promise<void> {
+        // `im.message.patch` — 更新已发送的消息卡片 (update an already-sent
+        // card in place). Distinct from `im.message.update` (text/post
+        // only; its own SDK doc comment points here for cards).
+        const res = (await client.im.message.patch({
+          data: { content: JSON.stringify(card) },
+          path: { message_id: messageId },
+        })) as PatchMessageResponse;
+        if (res.code) {
+          throw new Error(res.msg ?? `lark_update_interactive_card_failed:${res.code}`);
         }
       },
     };

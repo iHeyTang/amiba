@@ -31,6 +31,35 @@ type OnboardingView = Awaited<
   ReturnType<ConnectWizardHost["adapter"]["pollOnboarding"]>
 >;
 
+/**
+ * The connect's approval-wait setting (`MessageChannelApproval` in
+ * connector-core, not imported by name here — this wizard depends on
+ * nothing from connector-core but the `host` prop, per the file doc comment
+ * below, so the type is derived structurally from the one place the host
+ * already carries it: the `approval` field `host.adapter.create` accepts).
+ */
+type Approval = NonNullable<
+  Parameters<ConnectWizardHost["adapter"]["create"]>[0]["approval"]
+>;
+
+/**
+ * This wizard's own default before the user touches the field — `timeout`,
+ * 10 minutes. Mirrors connector-core's `wizard-kit.tsx#defaultApproval()`
+ * (and, one level further down, messaging-core's own
+ * `DEFAULT_CHANNEL_APPROVAL`) by VALUE rather than by import: connector-
+ * core's `./client` entry re-exports the `ApprovalField` component (reached
+ * through `host.kit`, see `submit()`/the manual-tab JSX below) but not the
+ * `defaultApproval` helper or the `MessageChannelApproval` type by name, and
+ * this plugin does not reach into connector-core's internal module paths to
+ * get them. Omitting `approval` from `adapter.create` entirely would work
+ * too (messaging-core defaults to the same 10 minutes) — seeding local state
+ * with it explicitly is only so the field has something to show before the
+ * user picks.
+ */
+function defaultApproval(): Approval {
+  return { mode: "timeout", timeoutMs: 10 * 60_000 };
+}
+
 /** Poll cadence for `adapter.pollOnboarding` while a scan session is pending. */
 const ONBOARD_POLL_INTERVAL_MS = 1500;
 
@@ -127,6 +156,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState("feishu");
+  const [approval, setApproval] = useState<Approval>(defaultApproval());
 
   const appIdId = useId();
   const appSecretId = useId();
@@ -376,6 +406,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
           appSecret: trimmedAppSecret,
           domain,
         },
+        approval,
       });
       current.done(connect);
     } catch (cause) {
@@ -396,7 +427,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   // Handed over on the host rather than imported: each plugin client is its
   // own bundle, so the shared parts travel with the seat.
-  const { BasicsFields } = host.kit;
+  const { BasicsFields, ApprovalField } = host.kit;
 
   return (
     <WizardFrame
@@ -485,14 +516,17 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
               </p>
             )}
           </div>
-          <BasicsFields
-            className="grid-cols-1"
-            name={name}
-            onNameChange={setName}
-            onPresetChange={setPreset}
-            preset={preset}
-            presets={host.presets}
-          />
+          <div className="grid grid-cols-1 gap-4">
+            <BasicsFields
+              className="grid-cols-1"
+              name={name}
+              onNameChange={setName}
+              onPresetChange={setPreset}
+              preset={preset}
+              presets={host.presets}
+            />
+            <ApprovalField approval={approval} onApprovalChange={setApproval} />
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -503,6 +537,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
             preset={preset}
             presets={host.presets}
           />
+          <ApprovalField approval={approval} onApprovalChange={setApproval} />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor={appIdId}>

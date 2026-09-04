@@ -225,3 +225,90 @@ export function translateReceiveEvent(
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+/**
+ * Lark/Feishu `card.action.trigger` (v2) event payload subset — the raw
+ * shape a click on `buildApprovalCard`'s buttons delivers over the same WS
+ * long connection `im.message.receive_v1` arrives on (confirmed against the
+ * installed `@larksuiteoapi/node-sdk` 1.73.0 type declarations,
+ * `RawCardActionEvent`: message/chat ids nest under `context` for this
+ * event version, with top-level fields kept only as a fallback for older/
+ * alternate surfaces). Hand-rolled here — like `LarkReceiveEvent` above —
+ * rather than importing the SDK's own type, so `translateCardAction` stays
+ * a pure function with no SDK dependency.
+ */
+export interface LarkCardActionEvent {
+  context?: {
+    open_message_id?: string;
+    open_chat_id?: string;
+  };
+  open_message_id?: string;
+  open_chat_id?: string;
+  token?: string;
+  operator?: {
+    open_id?: string;
+    user_id?: string;
+    union_id?: string;
+    name?: string;
+  };
+  action?: {
+    value?: unknown;
+    tag?: string;
+    name?: string;
+    option?: string;
+    timezone?: string;
+  };
+}
+
+/**
+ * What `provider.ts` needs to resolve a pending approval: which question
+ * (`approvalId`), which way the human clicked (`decision`), who clicked
+ * (`operatorOpenId` — forwarded as `ApprovalReply.by`; this connector has no
+ * visibility into `channel.allowedSenders`, so it does not itself gate on
+ * who clicked, see `provider.ts`'s `requestApproval` doc comment), and which
+ * card message the click landed on (`messageId` — cross-checked against the
+ * message this connect actually sent for that `approvalId`, so a stale
+ * click on an already-superseded card can't resolve the wrong question).
+ */
+export interface LarkCardActionTranslation {
+  approvalId: string;
+  decision: "allowed-once" | "rejected";
+  operatorOpenId: string;
+  messageId: string;
+}
+
+/**
+ * Translates a `card.action.trigger` event into the approval decision it
+ * carries, or `null` for anything that isn't a recognizable click on one of
+ * `buildApprovalCard`'s two buttons (a click on some OTHER card this
+ * connect ever sent, a malformed/partial payload, `action.value` missing
+ * the `{ approvalId, decision }` shape this provider itself put there).
+ * Never throws.
+ */
+export function translateCardAction(
+  event: LarkCardActionEvent,
+): LarkCardActionTranslation | null {
+  try {
+    if (typeof event !== "object" || event === null) return null;
+
+    const messageId = event.context?.open_message_id ?? event.open_message_id;
+    if (typeof messageId !== "string" || messageId === "") return null;
+
+    const operatorOpenId = event.operator?.open_id;
+    if (typeof operatorOpenId !== "string" || operatorOpenId === "") return null;
+
+    const value = event.action?.value;
+    if (typeof value !== "object" || value === null) return null;
+    const record = value as Record<string, unknown>;
+
+    const approvalId = record.approvalId;
+    if (typeof approvalId !== "string" || approvalId === "") return null;
+
+    const decision = record.decision;
+    if (decision !== "allowed-once" && decision !== "rejected") return null;
+
+    return { approvalId, decision, operatorOpenId, messageId };
+  } catch {
+    return null;
+  }
+}
