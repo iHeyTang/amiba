@@ -299,9 +299,9 @@ describe("StewardService — reporting", () => {
     for (const event of turnEvents(0, "周报写好了，在 report.md")) emit(sessionId, event);
     await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
     const message = live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
-    expect(message.content[0]!.text).toContain("【任务汇报】写周报");
-    expect(message.content[0]!.text).toContain("结果：完成");
-    expect(message.content[0]!.text).toContain("周报写好了，在 report.md");
+    // Compact header — task id + outcome, no `---` separator, no title (the
+    // collapsed row's summary already carries the title) — then the content.
+    expect(message.content[0]!.text).toBe(`task ${taskId} · 完成\n\n周报写好了，在 report.md`);
     // A report is an ACCOUNT of a finished turn, not a message anyone
     // addressed to the steward — `notice`, so the transcript collapses it
     // into a context row keyed by this summary instead of showing it as
@@ -324,7 +324,8 @@ describe("StewardService — reporting", () => {
     await vi.waitFor(() => expect(live.get(stewardId)!.followup).toHaveBeenCalledTimes(1));
     const message = live.get(stewardId)!.followup.mock.calls[0]![0] as { content: Array<{ text: string }>; source: Record<string, unknown> };
     const text = message.content[0]!.text;
-    expect(text).toContain("结果：失败（error: rate limited）");
+    expect(text).toContain(`task ${taskId} · 失败（error: rate limited）`);
+    expect(text).not.toContain("---");
     // The row's one line reuses the body's outcome vocabulary verbatim.
     expect(message.source).toMatchObject({ form: "notice", summary: "任务汇报：B — 失败（error: rate limited）" });
     const task = (await service.listTasks())[0]!;
