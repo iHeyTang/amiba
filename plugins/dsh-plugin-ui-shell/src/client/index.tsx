@@ -272,6 +272,7 @@ function AmibaRoot({
   sessionItemMenuItems,
   messageSources,
   useSessions,
+  useWorkspaces,
 }: AmibaRootProps): ReactNode {
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -294,6 +295,7 @@ function AmibaRoot({
       sessionItemMenuItems={sessionItemMenuItems}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
+      useOfficialWorkspaces={useWorkspaces}
     />
   );
 }
