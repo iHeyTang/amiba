@@ -361,17 +361,19 @@ describe("projectRuntimeSessionHistory", () => {
     ]);
   });
 
-  it("keeps a plugin notice, and a plugin message with no form at all", () => {
+  it("drops a plugin notice and a plugin message with no form: injected context, not conversation", () => {
+    // A guard's `notice` (repeat-tool-reminder's "you are repeating the same
+    // call") and an undeclared-form injection are model context. DSH's own
+    // transcript shows them as collapsed context rows, never as the user
+    // speaking; rendering them as attributed user bubbles put a plugin's
+    // words in the person's mouth.
     for (const source of [
-      { kind: "plugin", plugin: "amiba-im", form: "notice" },
+      { kind: "plugin", plugin: "repeat-tool-reminder", form: "notice", summary: "x × 3" },
       { kind: "plugin", plugin: "amiba-im" },
     ]) {
-      const messages = projectRuntimeSessionHistory(pluginUserMessage(source));
-      expect(messages).toHaveLength(1);
-      expect(messages[0]?.origin).toEqual({
-        kind: "plugin",
-        plugin: "amiba-im",
-      });
+      expect(projectRuntimeSessionHistory(pluginUserMessage(source))).toEqual(
+        [],
+      );
     }
   });
 

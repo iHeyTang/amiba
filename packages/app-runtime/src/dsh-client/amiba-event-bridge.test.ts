@@ -103,13 +103,28 @@ describe("DshAmibaEventBridge", () => {
         }),
       ),
     ).toEqual([])
-    // Injected model context is not conversation.
+    // Injected model context is not conversation — a guard's `notice`
+    // included: it must never surface live as a user bubble either.
     expect(
       bridge.accept(
         userMessage({
           id: "m3",
           source: { kind: "plugin", plugin: "ctx", form: "snapshot" },
           content: [{ type: "text", text: "state" }],
+        }),
+      ),
+    ).toEqual([])
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m3n",
+          source: {
+            kind: "plugin",
+            plugin: "repeat-tool-reminder",
+            form: "notice",
+            summary: "amiba_browser_click × 5",
+          },
+          content: [{ type: "text", text: "You are repeating the exact same tool call" }],
         }),
       ),
     ).toEqual([])

@@ -27,25 +27,30 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * `ContextForm` values (`@deepseek-ai/dsh-llm`) whose plugin-produced
+ * The ONE `ContextForm` value (`@deepseek-ai/dsh-llm`) whose plugin-produced
  * user-role message is CONVERSATION material — something addressed to this
- * session that a person should see in the transcript:
+ * session that a person should see in the transcript as a user turn:
  *
- *   - `relay`  — a message another agent (or a connector's remote human)
- *                addressed to this one. The steward's task brief and an IM
- *                connector's inbound message are both this.
- *   - `notice` — a one-off account of something that just happened.
+ *   - `relay` — "a message another agent addressed to this one". The
+ *               steward's task brief and an IM connector's inbound message
+ *               are both this, and both stamp it explicitly.
  *
- * Everything else a plugin injects is MODEL CONTEXT, not conversation:
- * `instructions` (workspace files the model must follow), `catalog` (an
- * inventory republished as it changes), `snapshot` (current state superseded
- * by the next one) and `recall` (material lifted out of another session's
- * log) are all machinery the transcript would only be noisier for showing —
- * which is why the projection dropped every non-user source before this
- * module existed. An ABSENT `form` is treated as conversation too: it is the
- * shape a producer sends when it is simply speaking to the session.
+ * Every other shape a plugin injects is MODEL CONTEXT, not conversation, and
+ * the bar is deliberately this strict: a kept message renders as the USER
+ * speaking (with an attribution chip), so anything less than an explicit
+ * "this was addressed to the session" puts a plugin's words in the person's
+ * mouth. `instructions` (workspace files the model must follow), `catalog`
+ * (an inventory republished as it changes), `snapshot` (current state
+ * superseded by the next one) and `recall` (material lifted out of another
+ * session's log) are machinery. `notice` — "a one-off account of something
+ * that just happened" — is machinery too: a guard's reminder to the MODEL
+ * (repeat-tool-reminder's "you are repeating the same call") is the
+ * canonical notice, and DSH's own transcript shows it as a collapsed
+ * context row keyed by its `summary`, never as a user bubble. An ABSENT
+ * `form` is what DSH documents as "presented as opaque content": undeclared
+ * context, dropped for the same reason.
  */
-const CONVERSATIONAL_FORMS: ReadonlySet<string> = new Set(["relay", "notice"])
+const CONVERSATIONAL_FORMS: ReadonlySet<string> = new Set(["relay"])
 
 /** What a `user/message`'s `source` says about showing that message. */
 export interface VisibleUserMessage {
@@ -62,8 +67,9 @@ export interface VisibleUserMessage {
  *
  * - `kind: "user"` (or no source at all) — the person typed it. Kept, no
  *   attribution.
- * - `kind: "plugin"` with a conversational `form` and a `plugin` name — kept
- *   and attributed to that plugin (see {@link CONVERSATIONAL_FORMS}).
+ * - `kind: "plugin"` with `form: "relay"` and a `plugin` name — kept and
+ *   attributed to that plugin (see {@link CONVERSATIONAL_FORMS}). Any other
+ *   form, or no form, is injected context and dropped.
  * - `kind: "plugin"` with NO `plugin` name — dropped. `plugin` is required by
  *   the DSH source type, so this shape is malformed; there is nothing to
  *   attribute it to, and a plugin-produced message that cannot say who
@@ -82,8 +88,7 @@ export function visibleUserMessage(value: unknown): VisibleUserMessage | null {
   if (kind === undefined || kind === "user") return {}
   if (kind !== "plugin") return null
   const form = source?.form
-  if (typeof form === "string" && !CONVERSATIONAL_FORMS.has(form)) return null
-  if (form !== undefined && typeof form !== "string") return null
+  if (typeof form !== "string" || !CONVERSATIONAL_FORMS.has(form)) return null
   const plugin = typeof source?.plugin === "string" ? source.plugin : ""
   return plugin ? { origin: { kind: "plugin", plugin } } : null
 }
