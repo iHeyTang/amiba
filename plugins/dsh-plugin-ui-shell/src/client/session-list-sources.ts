@@ -1,9 +1,5 @@
 import { resolveSlotLabel, type SlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
-import type {
-  SessionBadgeSource,
-  SessionListFilter,
-  SessionListMenuItem,
-} from "@amiba/ui";
+import type { SessionBadgeSource, SessionListMenuItem } from "@amiba/ui";
 
 /**
  * Minimal shape of one stored slot registration this module reads — a
@@ -31,10 +27,10 @@ export interface ContributionsSource<T> {
 /**
  * One contribution's own change-notification hook, read off its `inject()`
  * business face when present — the `subscribe` half of
- * `SessionBadgeContribution` / `SessionFilterContribution` in `index.tsx`.
+ * `SessionBadgeContribution` / `SessionMenuContribution` in `index.tsx`.
  * Structural and generic on purpose: this module has no notion of "badge"
- * vs "filter", only "a business face that may optionally know how to signal
- * its own changes".
+ * vs "menu item", only "a business face that may optionally know how to
+ * signal its own changes".
  */
 type ContributionSubscribe = (listener: () => void) => () => void;
 
@@ -187,7 +183,6 @@ export function createSlotContributionsSource<T extends { order: number }>(
 }
 
 const SESSION_BADGE_SLOT = "amiba.sessions.item.badge";
-const SESSION_FILTER_SLOT = "amiba.sessions.list.filter";
 const SESSION_MENU_SLOT = "amiba.sessions.item.menu";
 
 /**
@@ -220,42 +215,13 @@ export function createSessionBadgesSource(
   );
 }
 
-/** One `amiba.sessions.list.filter` contribution, `order` kept for sorting. */
-export type SessionFilterRow = SessionListFilter & { order: number };
-
-/**
- * The `amiba.sessions.list.filter` contributions source — same shape as
- * `createSessionBadgesSource`, keyed off a `test` business face instead of
- * `resolve`.
- */
-export function createSessionFiltersSource(
-  ctx: SlotContributionsCtx,
-): ContributionsSource<SessionFilterRow> {
-  return createSlotContributionsSource<SessionFilterRow>(
-    ctx,
-    SESSION_FILTER_SLOT,
-    (entry, face) => {
-      const id = entry.options.id ?? "";
-      if (!id) return null;
-      const test = (face as { test?: SessionListFilter["test"] } | undefined)?.test;
-      if (typeof test !== "function") return null;
-      return {
-        id,
-        order: entry.options.order ?? 0,
-        label: resolveSlotLabel(entry.options.label) ?? id,
-        test,
-      };
-    },
-  );
-}
-
 /** One `amiba.sessions.item.menu` contribution, `order` kept for sorting. */
 export type SessionMenuItemRow = SessionListMenuItem & { order: number };
 
 /**
  * The `amiba.sessions.item.menu` contributions source — same shape as
- * `createSessionBadgesSource`/`createSessionFiltersSource`, keyed off a
- * `run` business face (the only required one; `visible` is optional and
+ * `createSessionBadgesSource`, keyed off a `run` business face (the only
+ * required one; `visible` is optional and
  * defaults to "always visible" the same way `SessionListMenuItem.visible`
  * does downstream in `resolveMenuItems`).
  */

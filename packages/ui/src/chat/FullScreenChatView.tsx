@@ -46,10 +46,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
 import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
-import type {
-  SessionListFilter,
-  SessionListMenuItem,
-} from "./session-list-extensions";
+import type { SessionListMenuItem } from "./session-list-extensions";
 import ChatSurface from "./ChatSurface";
 import type {
   ComposerModelPickerRenderer,
@@ -295,12 +292,6 @@ export interface FullScreenChatViewProps {
    */
   itemBadges?: (session: SessionMeta) => readonly string[];
   /**
-   * Tri-state history filters for the sidebar history list — forwarded
-   * verbatim to `<Sidebar filters>`. Only the sidebar's own list is
-   * filtered; the command palette is unaffected.
-   */
-  filters?: readonly SessionListFilter[];
-  /**
    * `amiba.sessions.item.menu` contributions for the sidebar history list —
    * forwarded verbatim to `<Sidebar itemMenuItems>`.
    */
@@ -340,7 +331,6 @@ function FullScreenChatViewInner({
   restoreSidebarViewOnMount = true,
   hiddenSessionPresets,
   itemBadges,
-  filters,
   itemMenuItems,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
@@ -852,7 +842,6 @@ function FullScreenChatViewInner({
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
             itemBadges={itemBadges}
-            filters={filters}
             itemMenuItems={itemMenuItems}
           />
         </div>

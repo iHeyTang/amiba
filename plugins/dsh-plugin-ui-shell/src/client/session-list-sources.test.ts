@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createSessionBadgesSource,
-  createSessionFiltersSource,
   createSessionMenuItemsSource,
   createSlotContributionsSource,
   type SlotContributionEntry,
@@ -169,28 +168,6 @@ describe("createSessionBadgesSource", () => {
       { options: { id: "no-inject" } },
     ]);
     const source = createSessionBadgesSource(ctx);
-    expect(source.getSnapshot()).toEqual([]);
-  });
-});
-
-describe("createSessionFiltersSource", () => {
-  it("reads the test face", () => {
-    const test = vi.fn(() => false);
-    const { ctx } = fakeSlots([
-      {
-        options: { id: "adopted", order: 1, label: "Adopted" },
-        inject: () => ({ test }),
-      },
-    ]);
-    const source = createSessionFiltersSource(ctx);
-    const [row] = source.getSnapshot();
-    expect(row).toMatchObject({ id: "adopted", order: 1, label: "Adopted" });
-    expect(row?.test).toBe(test);
-  });
-
-  it("drops an entry with no test function", () => {
-    const { ctx } = fakeSlots([{ options: { id: "broken" }, inject: () => ({}) }]);
-    const source = createSessionFiltersSource(ctx);
     expect(source.getSnapshot()).toEqual([]);
   });
 });

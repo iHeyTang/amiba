@@ -1,13 +1,12 @@
 /**
  * Generic, plugin-facing extension points for the session history list:
- * declarative badges, tri-state filters, and row "more" (⋯) menu items. This
- * module is core UI — it carries no plugin semantics (no "steward", no
- * "adopted"), only the shapes a plugin's contribution takes and the pure
- * functions the list renders through. `packages/ui/src/chat/SessionsListView.tsx`
- * is the one renderer; `plugins/dsh-plugin-ui-shell` is the one place that
- * turns DSH slot registrations (`amiba.sessions.item.badge` /
- * `amiba.sessions.list.filter` / `amiba.sessions.item.menu`) into the arrays
- * these functions take.
+ * declarative badges and row "more" (⋯) menu items. This module is core
+ * UI — it carries no plugin semantics (no "steward", no "adopted"), only
+ * the shapes a plugin's contribution takes and the pure functions the list
+ * renders through. `packages/ui/src/chat/SessionsListView.tsx` is the one
+ * renderer; `plugins/dsh-plugin-ui-shell` is the one place that turns DSH
+ * slot registrations (`amiba.sessions.item.badge` / `amiba.sessions.item.menu`)
+ * into the arrays these functions take.
  */
 
 /**
@@ -40,21 +39,6 @@ export interface SessionBadgeSource {
 }
 
 /**
- * One `amiba.sessions.list.filter` registration, projected the same way.
- * `test(session)` reports whether the session matches this filter's
- * predicate; the list's tri-state chip decides whether matches, non-matches,
- * or everything is kept.
- */
-export interface SessionListFilter {
-  id: string;
-  label: string;
-  test: (session: SessionBadgeTarget) => boolean;
-}
-
-/** A filter chip's selection: unset, "keep matches", or "keep non-matches". */
-export type SessionFilterState = boolean | null;
-
-/**
  * One `amiba.sessions.item.menu` registration, projected the same way as a
  * badge/filter source. Appended to a session row's "more" (⋯) menu after the
  * built-in actions (rename/pin/branch/archive/export/delete).
@@ -80,27 +64,6 @@ export function resolveMenuItems<T extends SessionBadgeTarget>(
   items: readonly SessionListMenuItem[],
 ): SessionListMenuItem[] {
   return items.filter((item) => item.visible?.(session) ?? true);
-}
-
-/**
- * Applies every filter whose state is non-null, AND-combined. A filter left
- * at `null` (including one with no entry in `states` at all) does not
- * constrain the result. With no active filters, `sessions` is returned
- * unchanged (same array reference not guaranteed, same elements are).
- */
-export function applyTriStateFilters<T extends SessionBadgeTarget>(
-  sessions: readonly T[],
-  filters: readonly SessionListFilter[],
-  states: Readonly<Record<string, SessionFilterState | undefined>>,
-): T[] {
-  const active = filters.filter((filter) => {
-    const state = states[filter.id];
-    return state === true || state === false;
-  });
-  if (active.length === 0) return sessions.slice();
-  return sessions.filter((session) =>
-    active.every((filter) => filter.test(session) === states[filter.id]),
-  );
 }
 
 /**

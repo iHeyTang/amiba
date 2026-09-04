@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyTriStateFilters,
   resolveBadgeTexts,
   resolveMenuItems,
   type SessionBadgeSource,
   type SessionBadgeTarget,
-  type SessionListFilter,
   type SessionListMenuItem,
 } from "./session-list-extensions";
 
@@ -14,73 +12,6 @@ const s = (id: string, extra: Partial<SessionBadgeTarget> = {}): SessionBadgeTar
   id,
   title: id,
   ...extra,
-});
-
-describe("applyTriStateFilters", () => {
-  const adopted: SessionListFilter = {
-    id: "adopted",
-    label: "Steward",
-    test: (session) => session.source === "steward",
-  };
-  const branched: SessionListFilter = {
-    id: "branched",
-    label: "Branched",
-    test: (session) => Boolean(session.parentSessionId),
-  };
-  const sessions = [
-    s("a", { source: "steward" }),
-    s("b", { source: "steward", parentSessionId: "a" }),
-    s("c"),
-    s("d", { parentSessionId: "a" }),
-  ];
-
-  it("returns the input unchanged when no filter is active (all null)", () => {
-    expect(applyTriStateFilters(sessions, [adopted, branched], {})).toEqual(sessions);
-    expect(
-      applyTriStateFilters(sessions, [adopted, branched], { adopted: null, branched: null }),
-    ).toEqual(sessions);
-  });
-
-  it("returns the input unchanged when there are no filters at all", () => {
-    expect(applyTriStateFilters(sessions, [], { adopted: true })).toEqual(sessions);
-  });
-
-  it("true keeps only matches", () => {
-    expect(applyTriStateFilters(sessions, [adopted], { adopted: true }).map((x) => x.id)).toEqual([
-      "a",
-      "b",
-    ]);
-  });
-
-  it("false keeps only non-matches", () => {
-    expect(applyTriStateFilters(sessions, [adopted], { adopted: false }).map((x) => x.id)).toEqual(
-      ["c", "d"],
-    );
-  });
-
-  it("ANDs two active filters together", () => {
-    expect(
-      applyTriStateFilters(sessions, [adopted, branched], {
-        adopted: true,
-        branched: true,
-      }).map((x) => x.id),
-    ).toEqual(["b"]);
-    expect(
-      applyTriStateFilters(sessions, [adopted, branched], {
-        adopted: true,
-        branched: false,
-      }).map((x) => x.id),
-    ).toEqual(["a"]);
-  });
-
-  it("ignores a filter left null while another is active", () => {
-    expect(
-      applyTriStateFilters(sessions, [adopted, branched], {
-        adopted: true,
-        branched: null,
-      }).map((x) => x.id),
-    ).toEqual(["a", "b"]);
-  });
 });
 
 describe("resolveBadgeTexts", () => {
