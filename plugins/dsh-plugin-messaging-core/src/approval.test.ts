@@ -199,6 +199,7 @@ async function boundChannel(
   center: MessageChannelCenter,
   provider: MessageChannelProvider,
   approval?: { mode: "timeout" | "wait"; timeoutMs: number },
+  allowedSenders?: string[],
 ) {
   center.registerProvider(provider);
   const created = await center.createChannel({
@@ -206,6 +207,7 @@ async function boundChannel(
     name: "Ops room",
     agentPreset: "restricted",
     ...(approval ? { approval } : {}),
+    ...(allowedSenders ? { allowedSenders } : {}),
   });
   const inbound = await center.acceptInbound(created.channel.id, created.secret, {
     id: "evt-seed",
@@ -932,6 +934,147 @@ describe("IM approval delivery failure", () => {
       await expect(outcome).resolves.toBe("allowed-once");
       expect(desktop).toHaveBeenCalledTimes(1);
       expect(provider.deliver.mock.calls.length).toBeGreaterThanOrEqual(8);
+      await flushIo();
+    },
+  );
+});
+
+/**
+ * plan.md §2「谁能审批」/ §5「回调来自不允许的发送者 → 忽略并记 warn，不结算」.
+ * A native surface (an interactive card in a group chat) is visible to
+ * everyone in that chat, so the relay hands the provider the SAME sender
+ * rule inbound text already passes — and re-checks it itself on the way
+ * back, so a provider that forgets to call it can never grant a tool call.
+ */
+describe("IM approval sender gate", () => {
+  function holdingProvider() {
+    let prompt: ApprovalPrompt | undefined;
+    let release!: (reply: ApprovalReply | null) => void;
+    const requestApproval = vi.fn<
+      NonNullable<MessageChannelProvider["requestApproval"]>
+    >(async (_channel, _conversation, request_) => {
+      prompt = request_;
+      return new Promise<ApprovalReply | null>((resolve) => {
+        release = resolve;
+      });
+    });
+    const provider = imProvider({
+      requestApproval,
+      announceApprovalOutcome: vi.fn(async () => undefined),
+    });
+    return {
+      provider,
+      seen: () => prompt,
+      release: (reply: ApprovalReply | null) => release(reply),
+    };
+  }
+
+  it("hands the provider a canAnswer mirroring the channel's allowedSenders", async () => {
+    const { center, dispatch } = await harness();
+    const held = holdingProvider();
+    const { sessionId } = await boundChannel(center, held.provider, undefined, [
+      "u-1",
+      "u-9",
+    ]);
+
+    const outcome = dispatch(request(sessionId));
+    await vi.waitFor(() => expect(held.seen()).toBeDefined());
+    const prompt = held.seen()!;
+    await expect(prompt.canAnswer("u-1")).resolves.toBe(true);
+    await expect(prompt.canAnswer("u-9")).resolves.toBe(true);
+    await expect(prompt.canAnswer("u-2")).resolves.toBe(false);
+    await expect(prompt.canAnswer(undefined)).resolves.toBe(false);
+
+    held.release({ outcome: "allowed-once", by: "u-1" });
+    await expect(outcome).resolves.toBe("allowed-once");
+  });
+
+  it("lets anyone in the conversation answer when no allowlist is set", async () => {
+    const { center, dispatch } = await harness();
+    const held = holdingProvider();
+    const { sessionId } = await boundChannel(center, held.provider);
+
+    const outcome = dispatch(request(sessionId));
+    await vi.waitFor(() => expect(held.seen()).toBeDefined());
+    const prompt = held.seen()!;
+    await expect(prompt.canAnswer("whoever")).resolves.toBe(true);
+    await expect(prompt.canAnswer(undefined)).resolves.toBe(true);
+
+    held.release({ outcome: "rejected", by: "whoever" });
+    await expect(outcome).resolves.toBe("rejected");
+  });
+
+  it("re-reads the allowlist at call time rather than the snapshot", async () => {
+    const { center, dispatch } = await harness();
+    const held = holdingProvider();
+    const { sessionId, channelId } = await boundChannel(
+      center,
+      held.provider,
+      undefined,
+      ["u-1"],
+    );
+
+    const outcome = dispatch(request(sessionId));
+    await vi.waitFor(() => expect(held.seen()).toBeDefined());
+    const prompt = held.seen()!;
+    await expect(prompt.canAnswer("u-2")).resolves.toBe(false);
+
+    // The operator edits the allowlist while the card is still waiting.
+    await center.updateChannel(channelId, { allowedSenders: ["u-2"] });
+    await expect(prompt.canAnswer("u-2")).resolves.toBe(true);
+    await expect(prompt.canAnswer("u-1")).resolves.toBe(false);
+
+    held.release({ outcome: "allowed-once", by: "u-2" });
+    await expect(outcome).resolves.toBe("allowed-once");
+  });
+
+  it.each([
+    ["a sender outside the allowlist", "intruder"],
+    ["no sender at all", undefined],
+  ])(
+    "never settles on a native reply from %s: it warns and degrades to text",
+    async (_label, by) => {
+      const { center, dispatch, logger } = await harness();
+      const announceApprovalOutcome = vi.fn(async () => undefined);
+      const provider = imProvider({
+        requestApproval: vi.fn<
+          NonNullable<MessageChannelProvider["requestApproval"]>
+        >(async () => ({
+          outcome: "allowed-once",
+          ...(by ? { by } : {}),
+        })),
+        announceApprovalOutcome,
+      });
+      const { sessionId, channelId, secret } = await boundChannel(
+        center,
+        provider,
+        undefined,
+        ["u-1"],
+      );
+
+      const outcome = dispatch(request(sessionId));
+      // The forged answer is dropped and the question keeps waiting — as the
+      // text prompt now queued on the very same channel proves.
+      await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalled());
+      expect(
+        (provider.deliver.mock.calls[0]?.[1] as { text: string }).text,
+      ).toContain("需要审批 #1");
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("may not answer"),
+      );
+      await expect(
+        Promise.race([outcome, Promise.resolve("still-pending")]),
+      ).resolves.toBe("still-pending");
+
+      // An allowed sender's text answer still settles it afterwards.
+      const consumed = await center.acceptInbound(channelId, secret, {
+        id: "evt-answer",
+        text: "拒绝 #1",
+        sender: "u-1",
+        conversation: { key: "chat-1", kind: "group" },
+      });
+      expect(consumed).toMatchObject({ consumedAsApproval: true });
+      await expect(outcome).resolves.toBe("rejected");
       await flushIo();
     },
   );

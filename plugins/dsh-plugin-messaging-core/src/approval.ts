@@ -49,6 +49,21 @@ export interface ApprovalPrompt {
   readonly sessionId: string;
   readonly signal: AbortSignal;
   readonly deadlineAt?: number;
+  /**
+   * Whether `sender` (a provider sender id, the same space as the channel's
+   * `allowedSenders` and as `InboundMessageEnvelope.sender`) may answer THIS
+   * question. Providers MUST await it before resolving from a native surface
+   * — an interactive card in a group chat is clickable by everyone who can
+   * see it, while `allowedSenders` says who may drive the bot at all — and a
+   * click that fails it is ignored with a warning, leaving the question
+   * waiting (plan §2/§5).
+   *
+   * Async because the answer is re-derived from the channel row on every
+   * call: an operator can edit the allowlist while a card sits unanswered,
+   * and the connector-core wrapper additionally re-reads its own connect row
+   * (owners / pairing) the same way.
+   */
+  readonly canAnswer: (sender: string | undefined) => Promise<boolean>;
 }
 
 /** A human's answer collected by a provider's own surface. */
@@ -428,6 +443,29 @@ export class ApprovalRelay {
       }
       req.signal?.addEventListener("abort", onAbort, { once: true });
 
+      /**
+       * The channel's own sender rule, re-derived per call. The snapshot
+       * `channel` taken when the question was raised can go stale while a
+       * card waits (an operator edits `allowedSenders`), so the row is read
+       * fresh; a row that has since disappeared — or a store read that
+       * fails — falls back to the snapshot rather than opening the gate.
+       */
+      const canAnswer = async (sender: string | undefined): Promise<boolean> => {
+        let current = channel;
+        try {
+          current =
+            (await this.host.store.list()).find(
+              (item) => item.id === channel.id,
+            ) ?? channel;
+        } catch {
+          // Keep the snapshot: a read failure must never widen the gate.
+        }
+        return (
+          current.allowedSenders.length === 0 ||
+          (sender !== undefined && current.allowedSenders.includes(sender))
+        );
+      };
+
       const prompt: ApprovalPrompt = {
         approvalId,
         seq: entry.seq,
@@ -436,6 +474,7 @@ export class ApprovalRelay {
         sessionId,
         signal: controller.signal,
         ...(deadlineAt === undefined ? {} : { deadlineAt }),
+        canAnswer,
       };
 
       if (provider.requestApproval) {
@@ -457,11 +496,25 @@ export class ApprovalRelay {
           );
         } else if (raced.kind === "reply") {
           if (raced.reply) {
-            entry.settle({
-              outcome: raced.reply.outcome,
-              reason: "answered",
-              ...(raced.reply.by ? { by: raced.reply.by } : {}),
-            });
+            // Defense in depth (plan §2/§5): the provider is contractually
+            // required to have run `prompt.canAnswer` before resolving, but
+            // a provider bug must never be able to grant a tool call. Re-run
+            // the same gate here; a reply that fails it settles NOTHING —
+            // the question degrades to the text protocol, whose own sender
+            // rule is enforced by `acceptInbound`, and keeps waiting.
+            const by = raced.reply.by;
+            if (await canAnswer(by)) {
+              entry.settle({
+                outcome: raced.reply.outcome,
+                reason: "answered",
+                ...(by ? { by } : {}),
+              });
+            } else {
+              entry.presentation = "text";
+              this.host.warn(
+                `Channel ${channel.id} reported an approval answer for ${approvalId} from ${by ?? "an unidentified sender"}, who may not answer it; ignoring the answer and falling back to the text prompt.`,
+              );
+            }
           } else {
             // `null` is the provider saying "I cannot present this one" —
             // the text protocol is the fallback, not an error.
