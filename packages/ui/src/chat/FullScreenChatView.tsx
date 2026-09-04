@@ -1219,7 +1219,16 @@ function ContentHeader({
             {title ? (
               <span
                 className={cn(
-                  "pointer-events-none shrink-0 text-muted-foreground",
+                  // `inline-flex items-center justify-center` on an explicit
+                  // h-4/w-4 box (matching the icon's own size) is load-bearing:
+                  // a plain inline `span` around an SVG establishes a text line
+                  // box sized by the ambient line-height, and the SVG's default
+                  // `vertical-align: baseline` then plants it off that line's
+                  // baseline rather than its center — a few px off from the
+                  // title text next to it. Flex sizes the box to exactly the
+                  // icon's own height, so the surrounding `items-center`
+                  // containers center the icon and the title on the same line.
+                  "pointer-events-none inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground",
                   sidebarCollapsed && "ml-2",
                 )}
               >
