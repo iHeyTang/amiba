@@ -4,6 +4,7 @@ import z from "@deepseek-ai/schemastery";
 import { applyMessageCenter } from "./center.js";
 import { applyMessagingRemote } from "./remote-service.js";
 
+export * from "./approval.js";
 export * from "./center.js";
 export * from "./store.js";
 
@@ -12,6 +13,11 @@ export const inject = [
   "agents",
   "agentPresets",
   "sessionPersistence",
+  // The tool-approval waterfall this plugin answers for IM-bound sessions.
+  // Composed by dsh-base ahead of every product bundle, so requiring it costs
+  // nothing; the relay still checks for it before registering, which keeps
+  // headless harnesses (and any runtime that drops it) working.
+  "approval",
 ];
 
 export interface Config {

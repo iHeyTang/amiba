@@ -9,8 +9,17 @@ import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
+  ApprovalRelay,
+  type ApprovalOutcomeNotice,
+  type ApprovalPrompt,
+  type ApprovalReply,
+} from "./approval.js";
+import {
   hashChannelSecret,
   MessageCenterStore,
+  MIN_APPROVAL_TIMEOUT_MS,
+  resolveChannelApproval,
+  type MessageChannelApproval,
   type MessageChannelDeliveryStatus,
   type StoredConversationBinding,
   type StoredMessageChannel,
@@ -27,6 +36,8 @@ export interface MessageChannelView {
   outboundUrl?: string;
   allowedSenders: string[];
   agentPreset?: string;
+  /** Always present in the view: older rows read back the default policy. */
+  approval: MessageChannelApproval;
   createdAt: string;
   updatedAt: string;
   delivery: MessageChannelDeliveryStatus;
@@ -52,6 +63,30 @@ export interface MessageChannelProvider {
   deliver?(
     channel: StoredMessageChannel,
     envelope: OutboundMessageEnvelope,
+  ): Promise<void>;
+  /**
+   * Present one tool-approval question on the provider's own surface (a Lark
+   * interactive card, a DingTalk AI card…) and resolve with the human's
+   * answer. Resolve `null` — never throw for it — when this particular
+   * question cannot be presented natively; messaging-core then falls back to
+   * its text protocol on the same channel. A throw is treated the same way,
+   * with a warning. The prompt's `signal` aborts when the question is settled
+   * by any other path, so a native surface can stop waiting.
+   */
+  requestApproval?(
+    channel: StoredMessageChannel,
+    conversation: InboundConversationRef,
+    request: ApprovalPrompt,
+  ): Promise<ApprovalReply | null>;
+  /**
+   * Called after a natively presented question settles — whoever won — so the
+   * card can flip to its result state. Providers without a native surface can
+   * omit it: messaging-core posts a text notice instead.
+   */
+  announceApprovalOutcome?(
+    channel: StoredMessageChannel,
+    conversation: InboundConversationRef,
+    notice: ApprovalOutcomeNotice,
   ): Promise<void>;
 }
 
@@ -87,7 +122,22 @@ function view(
   },
 ): MessageChannelView {
   const { secretHash: _secretHash, ...safe } = channel;
-  return { ...safe, delivery };
+  return { ...safe, approval: resolveChannelApproval(channel), delivery };
+}
+
+/**
+ * Guard the channel's approval policy at the seam that writes it. `wait` keeps
+ * `timeoutMs` (the wizard's last chosen value) but never applies it; `timeout`
+ * needs a window long enough for a human to notice a message.
+ */
+function assertApproval(approval: MessageChannelApproval | undefined): void {
+  if (approval === undefined) return;
+  if (approval.mode !== "timeout" && approval.mode !== "wait")
+    throw new Error("invalid_channel_approval");
+  if (!Number.isSafeInteger(approval.timeoutMs) || approval.timeoutMs <= 0)
+    throw new Error("invalid_channel_approval");
+  if (approval.mode === "timeout" && approval.timeoutMs < MIN_APPROVAL_TIMEOUT_MS)
+    throw new Error("invalid_channel_approval");
 }
 
 function contentText(value: unknown): string {
@@ -292,11 +342,25 @@ export class MessageChannelCenter {
   private recovery: Promise<void> | null = null;
   private deliveryPump: Promise<void> | null = null;
   private started = false;
+  /** Answers DSH tool approvals for sessions bound to an IM conversation. */
+  readonly approvals: ApprovalRelay;
 
   constructor(
     private readonly ctx: Context,
     readonly store: MessageCenterStore,
   ) {
+    this.approvals = new ApprovalRelay(ctx, {
+      store,
+      providerFor: (channel) => this.providers.get(channel.provider),
+      queueOutbound: async (envelope) => {
+        await this.store.queueOutbound(envelope);
+        void this.pumpDeliveries();
+      },
+      cancelOutbound: (envelopeId) => this.store.markDelivered(envelopeId),
+      warn: (message) =>
+        this.ctx.logger("amiba-messaging-core").warn(message),
+    });
+    this.approvals.register();
     ctx.on("session/event", (session, event) => {
       if (event.type === "turn/end") {
         void this.reconcileSession(session).catch((error) => {
@@ -366,12 +430,14 @@ export class MessageChannelCenter {
     agentPreset?: string;
     outboundUrl?: string;
     allowedSenders?: string[];
+    approval?: MessageChannelApproval;
   }): Promise<{ channel: MessageChannelView; secret: string }> {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
     if (!input.name.trim()) throw new Error("invalid_channel");
     if (!input.sessionId?.trim() && !input.agentPreset?.trim())
       throw new Error("invalid_channel");
+    assertApproval(input.approval);
     const result = await this.store.create(input);
     try {
       await provider.validate?.(result.channel);
@@ -388,6 +454,7 @@ export class MessageChannelCenter {
   ): Promise<MessageChannelView> {
     const previous = (await this.store.list()).find((item) => item.id === id);
     if (!previous) throw new Error("channel_not_found");
+    assertApproval(patch.approval);
     const channel = await this.store.update(id, patch);
     const provider = this.providers.get(channel.provider);
     if (!provider) throw new Error("provider_not_found");
@@ -400,6 +467,7 @@ export class MessageChannelCenter {
         enabled: previous.enabled,
         outboundUrl: previous.outboundUrl ?? "",
         allowedSenders: previous.allowedSenders,
+        ...(previous.approval ? { approval: previous.approval } : {}),
       });
       throw error;
     }
@@ -527,7 +595,13 @@ export class MessageChannelCenter {
     channelId: string,
     secret: string,
     envelope: InboundMessageEnvelope,
-  ): Promise<{ accepted: boolean; duplicate: boolean; sessionId: string }> {
+  ): Promise<{
+    accepted: boolean;
+    duplicate: boolean;
+    sessionId: string;
+    /** True when the message answered a pending approval instead of the model. */
+    consumedAsApproval?: boolean;
+  }> {
     const channel = (await this.store.list()).find(
       (item) => item.id === channelId,
     );
@@ -548,6 +622,27 @@ export class MessageChannelCenter {
       ? await this.resolveConversationSession(channel, envelope.conversation)
       : channel.sessionId;
     if (!sessionId) throw new Error("conversation_required");
+    const receiptKey = `${channel.id}:${envelope.id.trim()}`;
+    // An approval answer is consumed here, BEFORE it can become a user turn:
+    // the sender already passed this channel's `allowedSenders` rule above, so
+    // whoever may talk to the bot may also answer its approvals (plan §2).
+    // Anything the protocol cannot parse — or aimed at a number nobody is
+    // waiting on — falls through to the normal inbound path untouched.
+    if (
+      this.approvals.answerFromText(
+        sessionId,
+        envelope.text,
+        envelope.sender,
+      )
+    ) {
+      const fresh = await this.store.acceptReceipt(receiptKey);
+      return {
+        accepted: true,
+        duplicate: !fresh,
+        sessionId,
+        consumedAsApproval: true,
+      };
+    }
     const agent = await this.ensureAgent(sessionId);
     const message = createUserMessage({
       content: [{ type: "text", text: envelope.text.trim() }],
@@ -557,7 +652,6 @@ export class MessageChannelCenter {
         form: "relay",
       },
     });
-    const receiptKey = `${channel.id}:${envelope.id}`;
     const acceptedAt = new Date().toISOString();
     const fresh = await this.store.acceptInbound({
       key: receiptKey,

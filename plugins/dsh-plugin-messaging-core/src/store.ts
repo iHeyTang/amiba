@@ -15,6 +15,34 @@ export interface StoredConversationBinding {
   updatedAt: string;
 }
 
+/**
+ * How long a channel waits for a human to answer a tool-approval question
+ * relayed into the IM conversation. `timeout` settles `rejected` once
+ * `timeoutMs` elapses (the model then continues with a refusal); `wait` never
+ * settles on its own and holds the tool call until somebody answers or the
+ * turn is cancelled.
+ */
+export interface MessageChannelApproval {
+  mode: "timeout" | "wait";
+  timeoutMs: number;
+}
+
+/** Applied to channels stored before the field existed (plan §2/§4). */
+export const DEFAULT_CHANNEL_APPROVAL: MessageChannelApproval = {
+  mode: "timeout",
+  timeoutMs: 600_000,
+};
+
+/** Floor for `timeoutMs` — a shorter window cannot reach a human in an IM. */
+export const MIN_APPROVAL_TIMEOUT_MS = 10_000;
+
+/** The channel's effective approval policy, defaulted for older rows. */
+export function resolveChannelApproval(
+  channel: Pick<StoredMessageChannel, "approval">,
+): MessageChannelApproval {
+  return channel.approval ?? DEFAULT_CHANNEL_APPROVAL;
+}
+
 export interface StoredMessageChannel {
   id: string;
   provider: string;
@@ -25,6 +53,7 @@ export interface StoredMessageChannel {
   outboundUrl?: string;
   allowedSenders: string[];
   agentPreset?: string;
+  approval?: MessageChannelApproval;
   createdAt: string;
   updatedAt: string;
 }
@@ -101,6 +130,15 @@ function normalizeStringList(value: unknown): string[] {
     .filter(Boolean))].slice(0, 500);
 }
 
+function normalizeApproval(value: unknown): MessageChannelApproval | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  if (row.mode !== "timeout" && row.mode !== "wait") return undefined;
+  if (!Number.isSafeInteger(row.timeoutMs) || (row.timeoutMs as number) <= 0)
+    return undefined;
+  return { mode: row.mode, timeoutMs: row.timeoutMs as number };
+}
+
 function normalizeChannel(value: unknown): StoredMessageChannel | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -125,6 +163,9 @@ function normalizeChannel(value: unknown): StoredMessageChannel | null {
     allowedSenders: normalizeStringList(row.allowedSenders),
     ...(typeof row.agentPreset === "string" && row.agentPreset
       ? { agentPreset: row.agentPreset }
+      : {}),
+    ...(normalizeApproval(row.approval)
+      ? { approval: normalizeApproval(row.approval)! }
       : {}),
     createdAt: typeof row.createdAt === "string" ? row.createdAt : now,
     updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : now,
@@ -226,6 +267,23 @@ export function generateChannelSecret(): string {
   return `amiba_${randomBytes(32).toString("base64url")}`;
 }
 
+function pushOutbound(
+  document: MessageCenterDocument,
+  envelope: StoredOutboundEnvelope,
+): void {
+  if (document.outbox.some((item) => item.id === envelope.id)) return;
+  const now = new Date().toISOString();
+  document.outbox.push({
+    id: envelope.id,
+    channelId: envelope.channelId,
+    envelope,
+    attempts: 0,
+    nextAttemptAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 export class MessageCenterStore {
   readonly path: string;
   private chain: Promise<unknown> = Promise.resolve();
@@ -306,6 +364,7 @@ export class MessageCenterStore {
     outboundUrl?: string;
     allowedSenders?: string[];
     agentPreset?: string;
+    approval?: MessageChannelApproval;
   }): Promise<{ channel: StoredMessageChannel; secret: string }> {
     return this.mutate((document) => {
       const secret = generateChannelSecret();
@@ -320,6 +379,9 @@ export class MessageCenterStore {
         ...(input.outboundUrl?.trim() ? { outboundUrl: input.outboundUrl.trim() } : {}),
         allowedSenders: normalizeStringList(input.allowedSenders),
         ...(input.agentPreset?.trim() ? { agentPreset: input.agentPreset.trim() } : {}),
+        ...(normalizeApproval(input.approval)
+          ? { approval: normalizeApproval(input.approval)! }
+          : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -330,6 +392,7 @@ export class MessageCenterStore {
 
   update(id: string, patch: Partial<Pick<StoredMessageChannel,
     "name" | "sessionId" | "enabled" | "outboundUrl" | "allowedSenders" | "agentPreset"
+    | "approval"
   >>): Promise<StoredMessageChannel> {
     return this.mutate((document) => {
       const index = document.channels.findIndex((item) => item.id === id);
@@ -353,6 +416,9 @@ export class MessageCenterStore {
           : patch.agentPreset.trim()
             ? { agentPreset: patch.agentPreset.trim() }
             : { agentPreset: undefined }),
+        ...(patch.approval === undefined
+          ? {}
+          : { approval: normalizeApproval(patch.approval) }),
         updatedAt: new Date().toISOString(),
       };
       document.channels[index] = channel;
@@ -420,19 +486,19 @@ export class MessageCenterStore {
       const index = document.pending.findIndex((item) => item.key === pendingKey);
       if (index < 0) return false;
       document.pending.splice(index, 1);
-      if (!document.outbox.some((item) => item.id === envelope.id)) {
-        const now = new Date().toISOString();
-        document.outbox.push({
-          id: envelope.id,
-          channelId: envelope.channelId,
-          envelope,
-          attempts: 0,
-          nextAttemptAt: now,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+      pushOutbound(document, envelope);
       return true;
+    });
+  }
+
+  /**
+   * Queue an outbound message that answers no pending inbound record — the
+   * approval relay's prompts and outcome notices. Same durable outbox, same
+   * pump, same backoff as a turn reply; only the correlation differs.
+   */
+  queueOutbound(envelope: StoredOutboundEnvelope): Promise<void> {
+    return this.mutate((document) => {
+      pushOutbound(document, envelope);
     });
   }
 

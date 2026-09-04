@@ -848,3 +848,87 @@ describe("outbound delivery retry", () => {
     expect(outbox[0]?.lastError).toBe("provider_unregistered");
   });
 });
+
+describe("channel approval policy", () => {
+  it("reads back the default policy for channels stored before the field existed", async () => {
+    const { center } = await harness();
+    const created = await center.createChannel({
+      provider: "webhook",
+      name: "Legacy channel",
+      sessionId: "session-a",
+    });
+    expect(created.channel.approval).toEqual({
+      mode: "timeout",
+      timeoutMs: 600_000,
+    });
+    // The default is applied on read, never written into the stored row.
+    expect((await center.store.list())[0]?.approval).toBeUndefined();
+  });
+
+  it("persists an explicit policy through create and update", async () => {
+    const { center } = await harness();
+    const created = await center.createChannel({
+      provider: "webhook",
+      name: "Ops",
+      sessionId: "session-a",
+      approval: { mode: "wait", timeoutMs: 600_000 },
+    });
+    expect(created.channel.approval).toEqual({
+      mode: "wait",
+      timeoutMs: 600_000,
+    });
+    const updated = await center.updateChannel(created.channel.id, {
+      approval: { mode: "timeout", timeoutMs: 900_000 },
+    });
+    expect(updated.approval).toEqual({ mode: "timeout", timeoutMs: 900_000 });
+    expect((await center.store.list())[0]?.approval).toEqual({
+      mode: "timeout",
+      timeoutMs: 900_000,
+    });
+  });
+
+  it("refuses a policy that no human could answer", async () => {
+    const { center } = await harness();
+    await expect(
+      center.createChannel({
+        provider: "webhook",
+        name: "Ops",
+        sessionId: "session-a",
+        approval: { mode: "asap", timeoutMs: 600_000 } as never,
+      }),
+    ).rejects.toThrow("invalid_channel_approval");
+    await expect(
+      center.createChannel({
+        provider: "webhook",
+        name: "Ops",
+        sessionId: "session-a",
+        approval: { mode: "timeout", timeoutMs: 5_000 },
+      }),
+    ).rejects.toThrow("invalid_channel_approval");
+    await expect(
+      center.createChannel({
+        provider: "webhook",
+        name: "Ops",
+        sessionId: "session-a",
+        approval: { mode: "timeout", timeoutMs: 1.5 } as never,
+      }),
+    ).rejects.toThrow("invalid_channel_approval");
+    expect(await center.store.list()).toHaveLength(0);
+
+    const created = await center.createChannel({
+      provider: "webhook",
+      name: "Ops",
+      sessionId: "session-a",
+      approval: { mode: "wait", timeoutMs: 600_000 },
+    });
+    await expect(
+      center.updateChannel(created.channel.id, {
+        approval: { mode: "timeout", timeoutMs: 1_000 },
+      }),
+    ).rejects.toThrow("invalid_channel_approval");
+    expect((await center.store.list())[0]?.approval).toEqual({
+      mode: "wait",
+      timeoutMs: 600_000,
+    });
+  });
+});

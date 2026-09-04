@@ -8,6 +8,7 @@ import type {
   MessageChannelProviderView,
   MessageChannelView,
 } from "./center.js";
+import type { MessageChannelApproval } from "./store.js";
 
 export interface MessageChannelInput {
   provider: string;
@@ -15,6 +16,7 @@ export interface MessageChannelInput {
   sessionId: string;
   outboundUrl?: string;
   allowedSenders?: string[];
+  approval?: MessageChannelApproval;
 }
 
 export type MessageChannelPatch = Partial<
@@ -32,6 +34,11 @@ export interface MessageChannelSecret {
   secret: string;
 }
 
+const approvalSchema = z.object({
+  mode: z.union([z.literal("timeout"), z.literal("wait")]),
+  timeoutMs: z.number(),
+});
+
 const deliverySchema = z.object({
   pendingInbound: z.number(),
   queuedOutbound: z.number(),
@@ -47,6 +54,7 @@ const channelSchema = z.object({
   enabled: z.boolean(),
   outboundUrl: z.string().optional(),
   allowedSenders: z.array(z.string()),
+  approval: approvalSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   delivery: deliverySchema,
@@ -67,6 +75,7 @@ const inputSchema = z.object({
   sessionId: z.string(),
   outboundUrl: z.string().optional(),
   allowedSenders: z.array(z.string()).optional(),
+  approval: approvalSchema.optional(),
 });
 
 const patchSchema = z.object({
@@ -74,6 +83,7 @@ const patchSchema = z.object({
   sessionId: z.string().optional(),
   outboundUrl: z.string().optional(),
   allowedSenders: z.array(z.string()).optional(),
+  approval: approvalSchema.optional(),
   enabled: z.boolean().optional(),
 });
 
