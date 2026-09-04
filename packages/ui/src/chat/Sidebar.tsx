@@ -9,7 +9,6 @@
  */
 import {
   Archive,
-  ArchiveRestore,
   CheckSquare,
   Folder,
   List,
@@ -19,7 +18,6 @@ import {
   MoreHorizontal,
   Plus,
   Settings,
-  Trash2,
   X,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -74,14 +72,16 @@ export interface SidebarProps {
   sessionsReady: boolean;
   onOpenSession: (id: string) => void;
   onRenameSession: (id: string, title: string) => void;
-  onDeleteSession: (id: string) => void;
-  onArchiveSession?: (id: string, archived: boolean) => void | Promise<void>;
+  /**
+   * Archive on the host — the ONLY "take this off my list" action Amiba
+   * has. It is one-way (DSH ships no unarchive) and non-destructive: the
+   * archived view still browses and opens these sessions.
+   */
+  onArchiveSession?: (id: string) => void | Promise<void>;
   onBranchSession?: (id: string) => void | Promise<void>;
   onExportSession?: (id: string) => void | Promise<void>;
-  onBulkSessions?: (
-    ids: string[],
-    action: "archive" | "unarchive" | "delete",
-  ) => void | Promise<void>;
+  /** Batch form of `onArchiveSession`, for the list's selection mode. */
+  onArchiveSessions?: (ids: string[]) => void | Promise<void>;
   onRefreshSessions: () => void | Promise<void>;
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
@@ -133,11 +133,10 @@ export function Sidebar({
   sessionsReady,
   onOpenSession,
   onRenameSession,
-  onDeleteSession,
   onArchiveSession,
   onBranchSession,
   onExportSession,
-  onBulkSessions,
+  onArchiveSessions,
   onRefreshSessions,
   historyLayout,
   onHistoryLayoutChange,
@@ -166,10 +165,6 @@ export function Sidebar({
       historySessions.filter((session) => selectedSessionIds.has(session.id)),
     [historySessions, selectedSessionIds],
   );
-  const selectedSessionsAreArchived =
-    selectedSessions.length > 0 &&
-    selectedSessions.every((session) => session.archived);
-
   const leaveSessionSelection = () => {
     setSelectingSessions(false);
     setSelectedSessionIds(new Set());
@@ -182,11 +177,9 @@ export function Sidebar({
       return next;
     });
   };
-  const runBulkSessionAction = async (
-    action: "archive" | "unarchive" | "delete",
-  ) => {
-    if (!onBulkSessions || selectedSessionIds.size === 0) return;
-    await onBulkSessions(Array.from(selectedSessionIds), action);
+  const runBulkArchive = async () => {
+    if (!onArchiveSessions || selectedSessionIds.size === 0) return;
+    await onArchiveSessions(Array.from(selectedSessionIds));
     leaveSessionSelection();
   };
   const groupedSectionOrder = useMemo(() => {
@@ -302,7 +295,6 @@ export function Sidebar({
               activeId={activeSessionId}
               onOpen={onOpenSession}
               onRename={onRenameSession}
-              onDelete={onDeleteSession}
               onArchive={onArchiveSession}
               onBranch={onBranchSession}
               onExport={onExportSession}
@@ -328,36 +320,10 @@ export function Sidebar({
                 })}
               </span>
               <SessionBulkButton
-                label={
-                  selectedSessionsAreArchived
-                    ? t("sidepanel.sessions.unarchive")
-                    : t("sidepanel.sessions.archive")
-                }
-                icon={
-                  selectedSessionsAreArchived ? <ArchiveRestore /> : <Archive />
-                }
+                label={t("sidepanel.sessions.archive")}
+                icon={<Archive />}
                 disabled={!selectedSessionIds.size}
-                onClick={() =>
-                  void runBulkSessionAction(
-                    selectedSessionsAreArchived ? "unarchive" : "archive",
-                  )
-                }
-              />
-              <SessionBulkButton
-                label={t("chat.delete")}
-                icon={<Trash2 />}
-                destructive
-                disabled={!selectedSessionIds.size}
-                onClick={() => {
-                  if (
-                    confirm(
-                      t("sidepanel.sessions.bulkDeleteConfirm", {
-                        count: selectedSessionIds.size,
-                      }),
-                    )
-                  )
-                    void runBulkSessionAction("delete");
-                }}
+                onClick={() => void runBulkArchive()}
               />
               <SessionBulkButton
                 label={t("common.cancel")}
@@ -374,7 +340,7 @@ export function Sidebar({
                 layout={historyLayout}
                 onLayoutChange={onHistoryLayoutChange}
                 onStartSelection={
-                  onBulkSessions
+                  onArchiveSessions
                     ? () => {
                         setSelectedSessionIds(new Set());
                         setSelectingSessions(true);
@@ -397,7 +363,6 @@ export function Sidebar({
           query={historyQuery}
           onOpen={onOpenSession}
           onRename={onRenameSession}
-          onDelete={onDeleteSession}
           onArchive={onArchiveSession}
           onBranch={onBranchSession}
           onExport={onExportSession}
@@ -466,13 +431,11 @@ function SessionBulkButton({
   label,
   icon,
   disabled,
-  destructive,
   onClick,
 }: {
   label: string;
   icon: ReactNode;
   disabled?: boolean;
-  destructive?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -482,10 +445,7 @@ function SessionBulkButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:h-3.5 [&_svg]:w-3.5",
-        destructive && "hover:bg-destructive/10 hover:text-destructive",
-      )}
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:h-3.5 [&_svg]:w-3.5"
     >
       {icon}
     </button>

@@ -125,7 +125,6 @@ import { PendingQueueRail } from "./internal/PendingQueueRail";
 import { useApprovals } from "./internal/useApprovals";
 import { useConversationWorkspace } from "./internal/useConversationWorkspace";
 import {
-  pendingQueueStorageKey,
   previewPendingTurn,
   usePendingQueue,
   type PendingChatTurn,
@@ -137,9 +136,9 @@ import { useStreamBuffer } from "./internal/useStreamBuffer";
 // now live in @amiba/chat-ui (alongside the rendering components).
 // Imported below in the consolidated import block.
 
-// PendingChatTurn / previewPendingTurn / pendingQueueStorageKey now
-// live in internal/usePendingQueue.ts (the queue subsystem owns its own
-// types + helpers). Imported above.
+// PendingChatTurn / previewPendingTurn now live in
+// internal/usePendingQueue.ts (the queue subsystem owns its own types +
+// helpers). Imported above.
 
 // URL opening stays host-owned so the shared chat surface never acquires
 // Electron privileges directly.
@@ -2321,13 +2320,6 @@ export default function ChatSurface({
           }
         }}
         onRename={(id, title) => void sessions.rename(id, title)}
-        onDelete={(id) => {
-          // Clean up the per-session persisted queue alongside the
-          // session itself. Best-effort: storage failures here only
-          // cost a stale key, they don't affect session deletion.
-          void getPlatform().storage.remove(pendingQueueStorageKey(id));
-          void sessions.remove(id);
-        }}
         onRefresh={() => void sessions.refresh()}
       />
     </div>

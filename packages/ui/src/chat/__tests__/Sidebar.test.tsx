@@ -41,7 +41,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     sessionsReady: true,
     onOpenSession: vi.fn(),
     onRenameSession: vi.fn(),
-    onDeleteSession: vi.fn(),
     onRefreshSessions: vi.fn(),
     historyLayout: "timeline" as const,
     onHistoryLayoutChange: vi.fn(),
@@ -371,7 +370,7 @@ describe("Sidebar", () => {
 
   it("keeps bulk selection inside the overflow menu", async () => {
     const props = setup({
-      onBulkSessions: vi.fn(),
+      onArchiveSessions: vi.fn(),
     });
     const header = screen.getByTestId("sessions-header");
     expect(header).toHaveClass("pr-1.5");
@@ -397,8 +396,15 @@ describe("Sidebar", () => {
 
     await userEvent.click(screen.getByText("First chat"));
     expect(header).toHaveTextContent("1 selected");
+    // Archive is the ONLY batch action now — no bulk remove, no unarchive.
+    expect(
+      screen.queryByRole("button", { name: "Remove" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Unarchive" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Archive" }));
-    expect(props.onBulkSessions).toHaveBeenCalledWith(["s1"], "archive");
+    expect(props.onArchiveSessions).toHaveBeenCalledWith(["s1"]);
   });
 
   it("reuses the grouped status slot for selection without shifting titles", async () => {
@@ -409,7 +415,7 @@ describe("Sidebar", () => {
     };
     setup({
       historyLayout: "grouped",
-      onBulkSessions: vi.fn(),
+      onArchiveSessions: vi.fn(),
     });
 
     await userEvent.click(

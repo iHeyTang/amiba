@@ -17,7 +17,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof SessionsListView>>
     query: "",
     onOpen: vi.fn(),
     onRename: vi.fn(),
-    onDelete: vi.fn(),
     ...overrides,
   };
   render(<SessionsListView {...props} />);
@@ -42,7 +41,7 @@ describe("SessionsListView badges", () => {
   });
 });
 
-describe("SessionsListView menu items", () => {
+describe("SessionsListView session actions", () => {
   function rowFor(title: string) {
     return screen.getByText(title).closest(".group") as HTMLElement;
   }
@@ -53,6 +52,73 @@ describe("SessionsListView menu items", () => {
       within(row).getByRole("button", { name: "More actions" }),
     );
   }
+
+  it("offers archive as the only destructive-ish action — never remove", async () => {
+    const user = userEvent.setup();
+    setup({ onArchive: vi.fn() });
+    await openRowMenu(user, "First chat");
+
+    expect(
+      screen.getByRole("menuitem", { name: "Archive" }),
+    ).toBeInTheDocument();
+    // Amiba has no session delete any more: DSH keeps the log, and the only
+    // "take this off my list" action is the host archive.
+    for (const label of ["Remove", "Remove from Amiba", "Unarchive"]) {
+      expect(
+        screen.queryByRole("menuitem", { name: label }),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("offers no archive action on a row that is already archived", async () => {
+    // DSH ships no unarchive yet, so an archived row simply has neither.
+    const user = userEvent.setup();
+    setup({
+      sessions: [
+        {
+          id: "s1",
+          title: "First chat",
+          createdAt: 1,
+          updatedAt: 3,
+          archived: true,
+        },
+      ],
+      onArchive: vi.fn(),
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Archived" }),
+    );
+    await openRowMenu(user, "First chat");
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Archive" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Unarchive" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens an archived session from the archived view", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    setup({
+      sessions: [
+        { id: "s1", title: "First chat", createdAt: 1, updatedAt: 3 },
+        {
+          id: "s9",
+          title: "Filed chat",
+          createdAt: 1,
+          updatedAt: 2,
+          archived: true,
+        },
+      ],
+      onOpen,
+    });
+    await user.click(screen.getByRole("button", { name: "Archived" }));
+    await user.click(screen.getByText("Filed chat"));
+
+    expect(onOpen).toHaveBeenCalledWith("s9");
+  });
 
   it("appends a visible plugin item after the built-ins with a separator", async () => {
     const user = userEvent.setup();
