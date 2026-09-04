@@ -11,13 +11,11 @@
 
 import {
   Archive,
-  ArchiveRestore,
   CheckSquare,
   Download,
   GitBranch,
   MoreHorizontal,
   Pencil,
-  Trash2,
 } from "lucide-react";
 import {
   useEffect,
@@ -48,8 +46,11 @@ export interface SessionsListViewProps {
   query: string;
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
-  onDelete: (id: string) => void;
-  onArchive?: (id: string, archived: boolean) => void | Promise<void>;
+  /**
+   * Archive on the host. One-way — DSH has no unarchive RPC — so the action
+   * is offered only on rows that are not archived yet.
+   */
+  onArchive?: (id: string) => void | Promise<void>;
   onBranch?: (id: string) => void | Promise<void>;
   onExport?: (id: string) => void | Promise<void>;
   selecting?: boolean;
@@ -93,7 +94,7 @@ export interface SessionsListViewProps {
   rowIconFor?: (session: SessionMeta) => ReactNode;
   /** Align rows beneath a tree-group label rather than with the group icon. */
   indentRows?: boolean;
-  /** Disable rename/delete affordances for read-only rows. */
+  /** Disable rename/archive affordances for read-only rows. */
   allowActionsFor?: (session: SessionMeta) => boolean;
   /**
    * Declarative per-row badges (`amiba.sessions.item.badge` contributions,
@@ -103,8 +104,8 @@ export interface SessionsListViewProps {
   itemBadges?: (session: SessionMeta) => readonly string[];
   /**
    * `amiba.sessions.item.menu` contributions. Appended to each row's "more"
-   * (⋯) menu after the built-in actions (rename/pin/branch/archive/export/
-   * delete), with a separator before the first visible plugin item.
+   * (⋯) menu after the built-in actions (rename/branch/archive/export), with
+   * a separator before the first visible plugin item.
    * Visibility is re-evaluated per row via `resolveMenuItems`.
    */
   itemMenuItems?: readonly SessionListMenuItem[];
@@ -119,7 +120,6 @@ export function SessionsListView({
   query,
   onOpen,
   onRename,
-  onDelete,
   onArchive,
   onBranch,
   onExport,
@@ -331,7 +331,6 @@ export function SessionsListView({
               activeId={activeId}
               onOpen={onOpen}
               onRename={onRename}
-              onDelete={onDelete}
               onArchive={onArchive}
               onBranch={onBranch}
               onExport={onExport}
@@ -379,8 +378,7 @@ export interface SessionRowsListProps {
   activeId: string;
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
-  onDelete: (id: string) => void;
-  onArchive?: (id: string, archived: boolean) => void | Promise<void>;
+  onArchive?: (id: string) => void | Promise<void>;
   onBranch?: (id: string) => void | Promise<void>;
   onExport?: (id: string) => void | Promise<void>;
   selecting?: boolean;
@@ -410,7 +408,6 @@ export function SessionRowsList({
   activeId,
   onOpen,
   onRename,
-  onDelete,
   onArchive,
   onBranch,
   onExport,
@@ -445,10 +442,7 @@ export function SessionRowsList({
             active={s.id === activeId}
             onOpen={() => onOpen(s.id)}
             onRename={(title) => onRename(s.id, title)}
-            onDelete={() => onDelete(s.id)}
-            onArchive={
-              onArchive ? (archived) => onArchive(s.id, archived) : undefined
-            }
+            onArchive={onArchive ? () => onArchive(s.id) : undefined}
             onBranch={onBranch ? () => onBranch(s.id) : undefined}
             onExport={onExport ? () => onExport(s.id) : undefined}
             selecting={selecting}
@@ -484,8 +478,7 @@ interface SessionRowProps {
   active: boolean;
   onOpen: () => void;
   onRename: (title: string) => void;
-  onDelete: () => void;
-  onArchive?: (archived: boolean) => void | Promise<void>;
+  onArchive?: () => void | Promise<void>;
   onBranch?: () => void | Promise<void>;
   onExport?: () => void | Promise<void>;
   selecting: boolean;
@@ -510,7 +503,6 @@ function SessionRow({
   active,
   onOpen,
   onRename,
-  onDelete,
   onArchive,
   onBranch,
   onExport,
@@ -585,15 +577,15 @@ function SessionRow({
           },
         ]
       : []),
-    ...(onArchive
+    // Archive is one-way (DSH ships no unarchive), so an already-archived
+    // row simply has no archive action.
+    ...(onArchive && !session.archived
       ? [
           {
             id: "archive",
-            icon: session.archived ? <ArchiveRestore /> : <Archive />,
-            label: session.archived
-              ? t("sidepanel.sessions.unarchive")
-              : t("sidepanel.sessions.archive"),
-            onSelect: () => void onArchive(!session.archived),
+            icon: <Archive />,
+            label: t("sidepanel.sessions.archive"),
+            onSelect: () => void onArchive(),
           },
         ]
       : []),
@@ -607,22 +599,6 @@ function SessionRow({
           },
         ]
       : []),
-    {
-      id: "delete",
-      destructive: true,
-      icon: <Trash2 />,
-      label: t("chat.delete"),
-      onSelect: () => {
-        if (
-          confirm(
-            t("sidepanel.sessions.deleteConfirm", {
-              title: session.title?.trim() || t("chat.untitled"),
-            }),
-          )
-        )
-          onDelete();
-      },
-    },
   ];
   // `amiba.sessions.item.menu` contributions: appended after the built-in
   // actions above, first visible one carrying the divider. A throwing/

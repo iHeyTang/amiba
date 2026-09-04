@@ -811,10 +811,7 @@ function FullScreenChatViewInner({
             sessionsReady={sessions.ready}
             onOpenSession={(id) => void onOpenSession(id)}
             onRenameSession={(id, title) => void sessions.rename(id, title)}
-            onDeleteSession={(id) => void sessions.remove(id)}
-            onArchiveSession={(id, archived) =>
-              sessions.setArchived(id, archived)
-            }
+            onArchiveSession={(id) => sessions.archiveSession(id)}
             onBranchSession={async (id) => {
               await sessions.branchSession(id);
             }}
@@ -841,7 +838,7 @@ function FullScreenChatViewInner({
                 );
               }
             }}
-            onBulkSessions={(ids, action) => sessions.bulkUpdate(ids, action)}
+            onArchiveSessions={(ids) => sessions.archiveSessions(ids)}
             onRefreshSessions={() => void sessions.refresh()}
             historyLayout={historyLayout}
             onHistoryLayoutChange={onHistoryLayoutChange}

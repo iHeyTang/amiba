@@ -1,10 +1,4 @@
-import {
-  Check,
-  Pencil,
-  Trash2,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, Pencil, X, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../primitives";
@@ -21,15 +15,13 @@ import { TopSection } from "./TopSection";
 interface Props {
   open: boolean;
   sessions: SessionMeta[];
-  /** ids currently shown as tabs in the header (not deleted, just maybe closed). */
+  /** ids currently shown as tabs in the header (open, or merely closed). */
   openTabIds: string[];
   activeId: string;
   onClose: () => void;
   /** Open the session as a tab and activate it. */
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void;
-  /** Hide from Amiba history and close its tab; DSH keeps the event log. */
-  onDelete: (id: string) => void;
   /**
    * Re-fetch the session index. Fires once each time the drawer opens
    * so rows authored by external session authors (DSH plugins / CLI)
@@ -96,7 +88,6 @@ export function SessionDrawer({
   onClose,
   onOpen,
   onRename,
-  onDelete,
   onRefresh,
 }: Props) {
   const { t } = useT();
@@ -269,7 +260,6 @@ export function SessionDrawer({
                                 setEditingId(null);
                               }}
                               onCancelEdit={() => setEditingId(null)}
-                              onDelete={() => onDelete(s.id)}
                             />
                           ))}
                         </ul>
@@ -301,7 +291,6 @@ interface RowProps {
   onStartEdit: () => void;
   onCommitEdit: () => void;
   onCancelEdit: () => void;
-  onDelete: () => void;
 }
 
 function SessionRow({
@@ -315,7 +304,6 @@ function SessionRow({
   onStartEdit,
   onCommitEdit,
   onCancelEdit,
-  onDelete,
 }: RowProps) {
   const { t } = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -402,21 +390,6 @@ function SessionRow({
             icon={Pencil}
             title={t("sidepanel.sessions.rename")}
             onClick={onStartEdit}
-          />
-          <RowAction
-            icon={Trash2}
-            title={t("sidepanel.sessions.deletePermanently")}
-            onClick={() => {
-              if (
-                confirm(
-                  t("sidepanel.sessions.deleteConfirm", {
-                    title: displayTitle,
-                  }),
-                )
-              ) {
-                onDelete();
-              }
-            }}
           />
         </div>
       )}
