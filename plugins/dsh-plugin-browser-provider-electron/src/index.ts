@@ -13,8 +13,15 @@ export function apply(ctx: Context): void {
     id: "electron-visible",
     name: "Electron Visible Browser",
     priority: 100,
-    call: (operation, argumentsValue, signal) =>
-      runtime.amibaRuntimeGateway.call(operation, argumentsValue, signal),
+    // Forward the owning session so Electron main can put the tab in the
+    // workbench of the session that asked for it — not the visible one.
+    call: (operation, argumentsValue, signal, context) =>
+      runtime.amibaRuntimeGateway.call(
+        operation,
+        argumentsValue,
+        signal,
+        context,
+      ),
   };
   ctx.effect(
     () => ctx.amibaBrowser.registerProvider(provider),
