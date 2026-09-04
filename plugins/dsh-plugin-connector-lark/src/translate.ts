@@ -263,9 +263,10 @@ export interface LarkCardActionEvent {
 /**
  * What `provider.ts` needs to resolve a pending approval: which question
  * (`approvalId`), which way the human clicked (`decision`), who clicked
- * (`operatorOpenId` — forwarded as `ApprovalReply.by`; this connector has no
- * visibility into `channel.allowedSenders`, so it does not itself gate on
- * who clicked, see `provider.ts`'s `requestApproval` doc comment), and which
+ * (`operatorOpenId` — checked against the prompt's own `canAnswer` before
+ * anything is settled, and forwarded as `ApprovalReply.by`; it is the SAME
+ * open_id space `translateReceiveEvent` reads inbound `sender` from, which
+ * is what makes that check line up with `channel.allowedSenders`), and which
  * card message the click landed on (`messageId` — cross-checked against the
  * message this connect actually sent for that `approvalId`, so a stale
  * click on an already-superseded card can't resolve the wrong question).
@@ -281,8 +282,9 @@ export interface LarkCardActionTranslation {
  * Translates a `card.action.trigger` event into the approval decision it
  * carries, or `null` for anything that isn't a recognizable click on one of
  * `buildApprovalCard`'s two buttons (a click on some OTHER card this
- * connect ever sent, a malformed/partial payload, `action.value` missing
- * the `{ approvalId, decision }` shape this provider itself put there).
+ * connect ever sent, an action that isn't a button at all, a
+ * malformed/partial payload, `action.value` missing the
+ * `{ approvalId, decision }` shape this provider itself put there).
  * Never throws.
  */
 export function translateCardAction(
@@ -296,6 +298,12 @@ export function translateCardAction(
 
     const operatorOpenId = event.operator?.open_id;
     if (typeof operatorOpenId !== "string" || operatorOpenId === "") return null;
+
+    // Only OUR OWN two buttons carry an approval decision. Checking the tag
+    // first keeps a future card type that happens to put an
+    // `{approvalId, decision}`-shaped payload on some other element (a
+    // select's `option`, an input's value) from being misread as a click.
+    if (event.action?.tag !== "button") return null;
 
     const value = event.action?.value;
     if (typeof value !== "object" || value === null) return null;

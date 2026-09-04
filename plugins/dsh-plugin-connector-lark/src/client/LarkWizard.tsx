@@ -42,24 +42,6 @@ type Approval = NonNullable<
   Parameters<ConnectWizardHost["adapter"]["create"]>[0]["approval"]
 >;
 
-/**
- * This wizard's own default before the user touches the field — `timeout`,
- * 10 minutes. Mirrors connector-core's `wizard-kit.tsx#defaultApproval()`
- * (and, one level further down, messaging-core's own
- * `DEFAULT_CHANNEL_APPROVAL`) by VALUE rather than by import: connector-
- * core's `./client` entry re-exports the `ApprovalField` component (reached
- * through `host.kit`, see `submit()`/the manual-tab JSX below) but not the
- * `defaultApproval` helper or the `MessageChannelApproval` type by name, and
- * this plugin does not reach into connector-core's internal module paths to
- * get them. Omitting `approval` from `adapter.create` entirely would work
- * too (messaging-core defaults to the same 10 minutes) — seeding local state
- * with it explicitly is only so the field has something to show before the
- * user picks.
- */
-function defaultApproval(): Approval {
-  return { mode: "timeout", timeoutMs: 10 * 60_000 };
-}
-
 /** Poll cadence for `adapter.pollOnboarding` while a scan session is pending. */
 const ONBOARD_POLL_INTERVAL_MS = 1500;
 
@@ -156,7 +138,12 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState("feishu");
-  const [approval, setApproval] = useState<Approval>(defaultApproval());
+  // Seeded from the kit (`host.kit.defaultApproval`), the same place
+  // `ApprovalField` itself comes from — so the `timeout`/10-minute literal
+  // lives in connector-core alone and this wizard carries no copy of it.
+  const [approval, setApproval] = useState<Approval>(() =>
+    host.kit.defaultApproval(),
+  );
 
   const appIdId = useId();
   const appSecretId = useId();
@@ -324,6 +311,11 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
         provider: current.providerId,
         name: trimmedName,
         agentPreset: preset,
+        // The scan path creates its connect on the host side once the QR is
+        // approved, so the approval-wait choice has to travel WITH the
+        // onboarding request — there is no later `adapter.create` call to
+        // carry it the way the manual tab's `submit()` does.
+        approval,
       });
       // Same stale-response concern as `poll`, extended: the wizard may have
       // unmounted while `beginOnboarding` was in flight (`mountedRef`), or it

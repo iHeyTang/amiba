@@ -352,6 +352,26 @@ describe("translateCardAction", () => {
     ).toBeNull();
   });
 
+  it.each([
+    ["a select's option", "select_static"],
+    ["an input", "input"],
+    ["no tag at all", undefined],
+  ])(
+    "returns null for an approval-shaped value carried by %s rather than a button",
+    (_label, tag) => {
+      expect(
+        translateCardAction(
+          event({
+            action: {
+              ...(tag ? { tag } : {}),
+              value: { approvalId: "amiba-approval-1", decision: "allowed-once" },
+            },
+          }),
+        ),
+      ).toBeNull();
+    },
+  );
+
   it("never throws on a malformed event", () => {
     expect(translateCardAction(null as unknown as LarkCardActionEvent)).toBeNull();
     expect(translateCardAction(undefined as unknown as LarkCardActionEvent)).toBeNull();

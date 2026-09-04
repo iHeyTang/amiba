@@ -116,6 +116,9 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
     kit: {
       BasicsFields: FakeBasicsFields as never,
       ApprovalField: FakeApprovalField as never,
+      // The wizard seeds its own approval state from the kit rather than
+      // carrying a copy of connector-core's literal.
+      defaultApproval: () => ({ mode: "timeout", timeoutMs: 600_000 }),
     },
     back: vi.fn(),
     done: vi.fn(),
@@ -198,7 +201,34 @@ describe("LarkWizard", () => {
       provider: "lark",
       name: "Sales",
       agentPreset: "restricted",
+      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
+  });
+
+  it("carries the scan tab's approval choice into beginOnboarding", async () => {
+    const begin = vi.fn(async () => ({ sessionId: "s1", state: "pending" }));
+    const host = hostWith({
+      adapter: {
+        create: vi.fn(),
+        beginOnboarding: begin,
+        pollOnboarding: vi.fn(async () => ({ sessionId: "s1", state: "pending" })),
+        cancelOnboarding: vi.fn(async () => ({})),
+      } as never,
+    });
+    render(<LarkWizard host={host} />);
+    typeName();
+    // The scan path has no later `adapter.create` call to carry the choice,
+    // so it has to ride along with the onboarding request itself.
+    await userEvent.click(screen.getByText("一直等"));
+    await act(async () => {
+      fireEvent.click(beginButton());
+    });
+
+    expect(begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approval: { mode: "wait", timeoutMs: 10 * 60_000 },
+      }),
+    );
   });
 
   it("goes back to the platform picker and closes through the host", async () => {
@@ -331,6 +361,7 @@ describe("LarkWizard", () => {
       provider: "lark",
       name: "Sales",
       agentPreset: "restricted",
+      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
     await flush(1600);
     expect(poll).toHaveBeenCalledWith("s1");

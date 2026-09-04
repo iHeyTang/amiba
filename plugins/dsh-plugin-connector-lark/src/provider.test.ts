@@ -118,7 +118,9 @@ function fakeDeps(options?: {
 }
 
 /** A minimal `ApprovalPrompt`-shaped request; the runtime only reads these
- * fields (and `signal`) — see `provider.ts`'s `requestApproval`. */
+ * fields (plus `signal` and `canAnswer`) — see `provider.ts`'s
+ * `requestApproval`. `canAnswer` defaults to open (the caller's channel has
+ * no allowlist and everyone is an owner); tests that care pass their own. */
 function fakeApprovalRequest(
   overrides: Partial<{
     approvalId: string;
@@ -127,6 +129,7 @@ function fakeApprovalRequest(
     reason?: string;
     sessionId: string;
     signal: AbortSignal;
+    canAnswer: (sender: string | undefined) => Promise<boolean>;
   }> = {},
 ) {
   return {
@@ -136,6 +139,7 @@ function fakeApprovalRequest(
     reason: "rm -rf /tmp/cache",
     sessionId: "session-1",
     signal: new AbortController().signal,
+    canAnswer: async () => true,
     ...overrides,
   };
 }
@@ -902,6 +906,187 @@ describe("createLarkProvider", () => {
       expect(reply).toBeNull();
       expect(
         deps.logs.some((line) => line.includes("lark_send_interactive_card_failed")),
+      ).toBe(true);
+    });
+
+    // plan.md §2/§5: a card in a group chat is clickable by everyone who can
+    // see it, so every click is gated on the caller's own `canAnswer`.
+    describe("sender gate", () => {
+      it("settles on a click from an operator canAnswer admits", async () => {
+        const deps = fakeDeps();
+        const provider = createLarkProvider(deps);
+        const runtime = await provider.start(fakeHandle());
+        const canAnswer = vi.fn(async (sender?: string) => sender === "ou_boss");
+
+        const pending = runtime.requestApproval!(
+          { key: "oc_1", kind: "p2p" },
+          fakeApprovalRequest({ canAnswer }),
+        );
+        await flushMicrotasks();
+
+        deps.wsCallbacks!.onCardAction?.(
+          fakeCardActionEvent({ operatorOpenId: "ou_boss" }),
+        );
+
+        await expect(pending).resolves.toEqual({
+          outcome: "allowed-once",
+          by: "ou_boss",
+        });
+        expect(canAnswer).toHaveBeenCalledWith("ou_boss");
+      });
+
+      it("ignores a click canAnswer refuses, keeps waiting, warns, and leaves the card alone", async () => {
+        const api = fakeApi();
+        const deps = fakeDeps({ api });
+        const provider = createLarkProvider(deps);
+        const runtime = await provider.start(fakeHandle());
+
+        const pending = runtime.requestApproval!(
+          { key: "oc_1", kind: "p2p" },
+          fakeApprovalRequest({
+            canAnswer: async (sender) => sender === "ou_boss",
+          }),
+        );
+        await flushMicrotasks();
+
+        deps.wsCallbacks!.onCardAction?.(
+          fakeCardActionEvent({ operatorOpenId: "ou_bystander", decision: "allowed-once" }),
+        );
+        await flushMicrotasks();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+        expect(api.updateInteractiveCard).not.toHaveBeenCalled();
+        expect(
+          deps.logs.some(
+            (line) =>
+              line.includes("ou_bystander") && line.includes("may not answer"),
+          ),
+        ).toBe(true);
+
+        // The question is still live: an allowed operator's later click
+        // settles it exactly as if the first click had never happened.
+        deps.wsCallbacks!.onCardAction?.(
+          fakeCardActionEvent({ operatorOpenId: "ou_boss", decision: "rejected" }),
+        );
+        await expect(pending).resolves.toEqual({
+          outcome: "rejected",
+          by: "ou_boss",
+        });
+      });
+
+      it("refuses the click when canAnswer itself throws", async () => {
+        const deps = fakeDeps();
+        const provider = createLarkProvider(deps);
+        const runtime = await provider.start(fakeHandle());
+
+        const pending = runtime.requestApproval!(
+          { key: "oc_1", kind: "p2p" },
+          fakeApprovalRequest({
+            canAnswer: async () => {
+              throw new Error("store_unreadable");
+            },
+          }),
+        );
+        await flushMicrotasks();
+
+        deps.wsCallbacks!.onCardAction?.(fakeCardActionEvent());
+        await flushMicrotasks();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+        expect(
+          deps.logs.some((line) => line.includes("store_unreadable")),
+        ).toBe(true);
+      });
+
+      it("warns on an ignored callback for an unknown approvalId and for a superseded card", async () => {
+        const deps = fakeDeps();
+        const provider = createLarkProvider(deps);
+        const runtime = await provider.start(fakeHandle());
+
+        void runtime.requestApproval!(
+          { key: "oc_1", kind: "p2p" },
+          fakeApprovalRequest(),
+        );
+        await flushMicrotasks();
+
+        deps.wsCallbacks!.onCardAction?.(
+          fakeCardActionEvent({ approvalId: "some-other-approval" }),
+        );
+        deps.wsCallbacks!.onCardAction?.(
+          fakeCardActionEvent({ messageId: "om_wrong_card" }),
+        );
+        await flushMicrotasks();
+
+        expect(
+          deps.logs.filter((line) => line.includes("ignoring a card action")),
+        ).toHaveLength(2);
+      });
+    });
+
+    it("retracts the card to 已取消 when stop() lands while the send is in flight", async () => {
+      let release!: (value: { messageId: string }) => void;
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(
+          () =>
+            new Promise<{ messageId: string }>((resolve) => {
+              release = resolve;
+            }),
+        ),
+      });
+      const deps = fakeDeps({ api });
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(fakeHandle());
+
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await runtime.stop();
+      // The card was already delivered by the time stop() finished; without
+      // the retraction it would sit in the chat with live buttons nothing
+      // tracks, next to the text prompt messaging-core falls back to.
+      release({ messageId: "om_card_1" });
+
+      await expect(pending).resolves.toBeNull();
+      expect(api.updateInteractiveCard).toHaveBeenCalledTimes(1);
+      const [messageId, card] = (
+        api.updateInteractiveCard as ReturnType<typeof vi.fn>
+      ).mock.calls[0]!;
+      expect(messageId).toBe("om_card_1");
+      expect(JSON.stringify(card)).toContain("已取消");
+    });
+
+    it("still returns null when the post-stop retraction itself fails", async () => {
+      let release!: (value: { messageId: string }) => void;
+      const api = fakeApi({
+        sendInteractiveCard: vi.fn(
+          () =>
+            new Promise<{ messageId: string }>((resolve) => {
+              release = resolve;
+            }),
+        ),
+        updateInteractiveCard: vi.fn(async () => {
+          throw new Error("lark_update_card_failed:230002");
+        }),
+      });
+      const deps = fakeDeps({ api });
+      const provider = createLarkProvider(deps);
+      const runtime = await provider.start(fakeHandle());
+
+      const pending = runtime.requestApproval!(
+        { key: "oc_1", kind: "p2p" },
+        fakeApprovalRequest(),
+      );
+      await runtime.stop();
+      release({ messageId: "om_card_1" });
+
+      await expect(pending).resolves.toBeNull();
+      expect(
+        deps.logs.some((line) => line.includes("could not retract")),
       ).toBe(true);
     });
   });

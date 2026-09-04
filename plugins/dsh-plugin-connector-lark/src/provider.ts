@@ -278,15 +278,21 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
       //    guaranteed-eventually-called hook for a natively presented
       //    question (messaging-core's contract — see `types.ts`), so it is
       //    also this ledger's sole cleanup point besides `stop()`.
-      //  - `pendingClicks` holds the `resolve` for the promise
-      //    `requestApproval` is currently awaiting, so the WS card-action
-      //    handler below can settle it. Removed the moment it is used
-      //    (matched click) or made moot (the request's own `signal`
+      //  - `pendingClicks` holds the `settle` for the promise
+      //    `requestApproval` is currently awaiting, plus that request's own
+      //    `canAnswer` gate, so the WS card-action handler below can check
+      //    who clicked before settling it. Removed the moment it is used
+      //    (matched, allowed click) or made moot (the request's own `signal`
       //    aborts) — never left around for a second click to find.
       const cardMessages = new Map<string, string>();
       const pendingClicks = new Map<
         string,
-        (reply: { outcome: "allowed-once" | "rejected"; by?: string } | null) => void
+        {
+          settle(
+            reply: { outcome: "allowed-once" | "rejected"; by?: string } | null,
+          ): void;
+          canAnswer(sender: string | undefined): Promise<boolean>;
+        }
       >();
 
       const ws = deps.createWsClient(config, {
@@ -333,11 +339,52 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
           // been superseded (a different approvalId happened to reuse the
           // same chat) as well as a genuinely unrelated card's click that
           // happened to carry an `{approvalId, decision}`-shaped value.
-          if (cardMessages.get(click.approvalId) !== click.messageId) return;
-          const resolve = pendingClicks.get(click.approvalId);
-          if (!resolve) return; // already settled by another path, or a second click
-          pendingClicks.delete(click.approvalId);
-          resolve({ outcome: click.decision, by: click.operatorOpenId });
+          if (cardMessages.get(click.approvalId) !== click.messageId) {
+            deps.log?.(
+              `amiba-connector-lark: ignoring a card action for approval ${click.approvalId}: it came from ${click.messageId}, not the card this connect sent`,
+            );
+            return;
+          }
+          const pending = pendingClicks.get(click.approvalId);
+          if (!pending) {
+            // Already settled by another path, or a second click on a card
+            // whose result face hasn't landed yet (plan §5).
+            deps.log?.(
+              `amiba-connector-lark: ignoring a card action for approval ${click.approvalId}: nothing is waiting on it any more`,
+            );
+            return;
+          }
+          // Who may answer is the caller's rule, not this connector's:
+          // `canAnswer` is messaging-core's `allowedSenders` narrowed by
+          // connector-core's owners/pairing gate, both re-read at click
+          // time. `operator.open_id` is the same identity space inbound
+          // messages carry as `sender`, so the two agree (plan §2). Async,
+          // hence the detached task — the WS ack does not wait on it.
+          void (async () => {
+            let allowed = false;
+            try {
+              allowed = await pending.canAnswer(click.operatorOpenId);
+            } catch (error) {
+              deps.log?.(
+                `amiba-connector-lark: could not check who may answer approval ${click.approvalId}: ${String(error)}`,
+              );
+            }
+            if (!allowed) {
+              // Ignored, NOT settled and NOT acknowledged on the card: the
+              // question keeps waiting for someone who may answer it
+              // (plan §5「回调来自不允许的发送者 → 忽略并记 warn，不结算」).
+              deps.log?.(
+                `amiba-connector-lark: ignoring approval ${click.approvalId} clicked by ${click.operatorOpenId}: that operator may not answer it`,
+              );
+              return;
+            }
+            if (stopped) return;
+            // Re-read after the await: another click (or an abort) may have
+            // settled this question while the gate was in flight.
+            const current = pendingClicks.get(click.approvalId);
+            if (current !== pending) return;
+            current.settle({ outcome: click.decision, by: click.operatorOpenId });
+          })();
         },
       });
 
@@ -405,18 +452,13 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         // checked against `buildApprovalCard`/`buildSettledCard`'s own
         // structural mirrors at the call site).
         //
-        // Sender validation: `channel.allowedSenders` lives entirely in
-        // messaging-core (`center.ts`'s `acceptInbound`) and is never
-        // handed down to a `ConnectorRuntime` — this provider has no
-        // channel object to check a click's operator against. Per the task
-        // brief's own escape hatch, `requestApproval` therefore does NOT
-        // gate on who clicked; it forwards the clicking operator's
-        // `open_id` as `ApprovalReply.by` and lets the caller (today:
-        // nobody — messaging-core's relay only stores `by`, it does not
-        // yet re-validate it) decide. In practice this is an acceptable
-        // gap: the card was only ever sent to the one chat the question's
-        // session is bound to, so only someone already in that chat/DM can
-        // click it at all.
+        // Sender validation (plan §2/§5): a card in a group chat is
+        // clickable by everyone who can see it, so `onCardAction` above
+        // gates every click on `request.canAnswer` — the caller's own rule
+        // (messaging-core's `channel.allowedSenders`, narrowed by
+        // connector-core's `owners`/`pairing`), re-read at click time. This
+        // provider never decides who may answer; it only asks, and forwards
+        // the allowed operator's `open_id` as `ApprovalReply.by`.
         // ---------------------------------------------------------------
         async requestApproval(conversation, request) {
           const card = buildApprovalCard(request);
@@ -429,7 +471,32 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
             );
             return null;
           }
-          if (stopped) return null;
+          if (stopped) {
+            // `stop()` ran while the send was in flight: it already cleared
+            // both ledgers, so registering the card now would leave an entry
+            // nothing can ever settle or flip. The card itself is already in
+            // the chat, though — retract it to its 「已取消」 face rather
+            // than leaving live buttons that do nothing next to the text
+            // prompt messaging-core is about to fall back to. Best effort:
+            // a failure here only leaves the card as it was.
+            try {
+              await api.updateInteractiveCard(
+                sent.messageId,
+                buildSettledCard({
+                  approvalId: request.approvalId,
+                  seq: request.seq,
+                  toolName: request.toolName,
+                  outcome: "cancelled",
+                  reason: "cancelled",
+                }),
+              );
+            } catch (error) {
+              deps.log?.(
+                `amiba-connector-lark: could not retract the approval card for ${request.approvalId} after stop(): ${String(error)}`,
+              );
+            }
+            return null;
+          }
           cardMessages.set(request.approvalId, sent.messageId);
 
           return new Promise((resolve) => {
@@ -444,7 +511,10 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
             // the abort listener — otherwise a request that gets answered
             // natively (the common case) would leak one listener per
             // approval for the lifetime of `request.signal`.
-            pendingClicks.set(request.approvalId, settleOnce);
+            pendingClicks.set(request.approvalId, {
+              settle: settleOnce,
+              canAnswer: (sender) => request.canAnswer(sender),
+            });
 
             // Per the `ConnectorRuntime.requestApproval` contract: on
             // abort (the question was settled by another path — a text
