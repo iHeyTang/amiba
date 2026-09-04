@@ -45,11 +45,7 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
-import {
-  activeChatSessions,
-  filterSearchMatches,
-  visibleChatSessions,
-} from "./session-visibility";
+import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
 import type {
   SessionListGroup,
   SessionListMenuItem,
@@ -492,21 +488,14 @@ function FullScreenChatViewInner({
   }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
 
   // External session authors wake their owning session instead of minting a
-  // parallel transcript, so the chat list filters on exactly one thing: the
-  // agent presets a plugin asked to hide. No local id convention may hide a
-  // valid DSH session. Archived rows deliberately stay in — the sidebar's own
-  // Active/Archived toggle owns that split, and it cannot render the toggle
-  // at all unless an archived row reaches it.
+  // parallel transcript, so the chat list filters on exactly two things: the
+  // agent presets a plugin asked to hide, and archived rows (Amiba has no
+  // unarchive UI, matching DSH's own client). No local id convention may
+  // hide a valid DSH session. The sidebar's history list and the command
+  // palette share this one filtered list.
   const chatSessions = useMemo(
     () => visibleChatSessions(sessions.sessions, hiddenSessionPresets),
     [sessions.sessions, hiddenSessionPresets],
-  );
-
-  // The command palette is a quick picker with no archived view of its own,
-  // so its list drops archived rows (its search results do too, below).
-  const paletteSessions = useMemo(
-    () => activeChatSessions(chatSessions),
-    [chatSessions],
   );
 
   // The palette swaps to its own search results as soon as the user types, so
@@ -1004,7 +993,7 @@ function FullScreenChatViewInner({
       <CommandPalette
         open={palette.open}
         onOpenChange={palette.setOpen}
-        sessions={paletteSessions}
+        sessions={chatSessions}
         onOpenSession={(id) => void onOpenSession(id)}
         onNewChat={() => void onNewChatAndShow()}
         onOpenSettings={() => openSettings()}

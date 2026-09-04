@@ -65,9 +65,10 @@ function groupSessionsByDate(
     { label: t("sidepanel.sessions.group.older"), items: [] },
   ];
 
-  // Quick-Ask's drawer is a quick picker for resuming live work — it has no
-  // Active/Archived toggle of its own, so archived rows stay out on purpose.
-  // The main sidebar's archived view is where they are found again.
+  // Quick-Ask's drawer is a quick picker for resuming live work, so archived
+  // rows stay out on purpose — same rule the main sidebar's history list now
+  // applies everywhere (DSH ships no unarchive, so there is currently no UI
+  // path back to an archived session).
   const rest = sessions
     .filter((s) => !s.archived)
     .sort((a, b) => b.updatedAt - a.updatedAt);

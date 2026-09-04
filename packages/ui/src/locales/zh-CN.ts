@@ -453,8 +453,6 @@ export const zhCN: UiMessages = {
   "sidepanel.sessions.selected": "已选择 {count} 项",
   "sidepanel.sessions.select": "批量选择",
   "sidepanel.sessions.archive": "归档",
-  "sidepanel.sessions.active": "当前",
-  "sidepanel.sessions.archived": "已归档",
   "sidepanel.sessions.branch": "创建分支",
   "sidepanel.sessions.export": "导出",
   "sidepanel.sessions.more": "更多任务操作",

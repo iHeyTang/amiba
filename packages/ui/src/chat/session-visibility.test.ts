@@ -1,18 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  activeChatSessions,
-  filterSearchMatches,
-  visibleChatSessions,
-} from "./session-visibility";
+import { filterSearchMatches, visibleChatSessions } from "./session-visibility";
 
 const s = (id: string, profileId?: string, archived = false) => ({ id, archived, agent: profileId ? { profileId } : undefined });
 
 describe("visibleChatSessions", () => {
-  it("keeps archived sessions and drops only sessions bound to a hidden preset", () => {
+  it("drops archived sessions and sessions bound to a hidden preset", () => {
     const sessions = [s("a", "standard"), s("b", "hidden-preset"), s("c", "standard", true), s("d")];
-    expect(visibleChatSessions(sessions, new Set(["hidden-preset"])).map((x) => x.id)).toEqual(["a", "c", "d"]);
-    expect(visibleChatSessions(sessions).map((x) => x.id)).toEqual(["a", "b", "c", "d"]);
+    expect(visibleChatSessions(sessions, new Set(["hidden-preset"])).map((x) => x.id)).toEqual(["a", "d"]);
+    expect(visibleChatSessions(sessions).map((x) => x.id)).toEqual(["a", "b", "d"]);
   });
 
   it("hides an archived session that is also bound to a hidden preset", () => {
@@ -26,16 +22,8 @@ describe("visibleChatSessions", () => {
   });
 });
 
-describe("activeChatSessions", () => {
-  it("drops archived sessions on top of the hidden-preset filter", () => {
-    const sessions = [s("a", "standard"), s("b", "hidden-preset"), s("c", "standard", true), s("d")];
-    expect(activeChatSessions(sessions, new Set(["hidden-preset"])).map((x) => x.id)).toEqual(["a", "d"]);
-    expect(activeChatSessions(sessions).map((x) => x.id)).toEqual(["a", "b", "d"]);
-  });
-});
-
 describe("filterSearchMatches", () => {
-  it("applies the quick-picker filter to history-search results", async () => {
+  it("applies the visibility filter to history-search results", async () => {
     const search = vi.fn(async () => [s("a", "standard"), s("b", "hidden-preset"), s("c", "standard", true)]);
     const filtered = filterSearchMatches(search, new Set(["hidden-preset"]))!;
     expect((await filtered("q")).map((x) => x.id)).toEqual(["a"]);

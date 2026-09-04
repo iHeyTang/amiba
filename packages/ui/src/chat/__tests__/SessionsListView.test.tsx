@@ -72,6 +72,8 @@ describe("SessionsListView session actions", () => {
 
   it("offers no archive action on a row that is already archived", async () => {
     // DSH ships no unarchive yet, so an archived row simply has neither.
+    // (SessionsListView itself no longer filters archived rows out — that is
+    // the caller's job now — so an archived row passed in still renders.)
     const user = userEvent.setup();
     setup({
       sessions: [
@@ -85,9 +87,6 @@ describe("SessionsListView session actions", () => {
       ],
       onArchive: vi.fn(),
     });
-    await user.click(
-      screen.getByRole("button", { name: "Archived" }),
-    );
     await openRowMenu(user, "First chat");
 
     expect(
@@ -98,9 +97,7 @@ describe("SessionsListView session actions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens an archived session from the archived view", async () => {
-    const user = userEvent.setup();
-    const onOpen = vi.fn();
+  it("renders whatever sessions it is given, with no Active/Archived toggle", () => {
     setup({
       sessions: [
         { id: "s1", title: "First chat", createdAt: 1, updatedAt: 3 },
@@ -112,12 +109,12 @@ describe("SessionsListView session actions", () => {
           archived: true,
         },
       ],
-      onOpen,
     });
-    await user.click(screen.getByRole("button", { name: "Archived" }));
-    await user.click(screen.getByText("Filed chat"));
 
-    expect(onOpen).toHaveBeenCalledWith("s9");
+    expect(screen.getByText("First chat")).toBeInTheDocument();
+    expect(screen.getByText("Filed chat")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Active" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archived" })).not.toBeInTheDocument();
   });
 
   it("appends a visible plugin item after the built-ins with a separator", async () => {

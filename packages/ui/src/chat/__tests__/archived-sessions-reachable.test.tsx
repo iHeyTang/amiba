@@ -1,19 +1,19 @@
 /**
- * Integration guard for the one bug the unit tests could not see: the sidebar
- * list is fed through `visibleChatSessions`, so if that helper drops archived
- * rows, `SessionsListView`'s own Active/Archived toggle never renders and an
- * archived session becomes unreachable for good (DSH has no unarchive yet).
- *
- * These tests therefore render the REAL `Sidebar` over the REAL helper output
- * rather than handing `SessionsListView` a pre-built `sessions` prop.
+ * Integration guard for the sidebar's session-list visibility: archived rows
+ * and hidden-preset rows must never render, and the archive actions (single
+ * + batch) must still work even though there is no way back to an archived
+ * row afterward (DSH ships no unarchive yet — this will be revisited once it
+ * does). These tests render the REAL `Sidebar` so a regression in either
+ * `visibleChatSessions` or `Sidebar`'s own defensive filtering shows up here,
+ * not just in the unit tests for the helper.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Sidebar } from "../Sidebar";
 import type { SessionMeta } from "@amiba/app-runtime/core";
+import { Sidebar, type SidebarProps } from "../Sidebar";
 import { visibleChatSessions } from "../session-visibility";
 
 const workspaceBindings = vi.hoisted(() => ({
@@ -56,58 +56,91 @@ const ALL_SESSIONS: SessionMeta[] = [
   },
 ];
 
-function setup(onOpenSession = vi.fn()) {
-  render(
-    <Sidebar
-      onNewChat={vi.fn()}
-      sessions={visibleChatSessions(ALL_SESSIONS, new Set(["steward"]))}
-      activeSessionId=""
-      sessionsReady
-      onOpenSession={onOpenSession}
-      onRenameSession={vi.fn()}
-      onRefreshSessions={vi.fn()}
-      historyLayout="timeline"
-      onHistoryLayoutChange={vi.fn()}
-      onOpenSettings={vi.fn()}
-    />,
-  );
-  return { onOpenSession };
+function renderSidebar(
+  sessions: SessionMeta[],
+  overrides: Partial<SidebarProps> = {},
+) {
+  const props: SidebarProps = {
+    onNewChat: vi.fn(),
+    sessions,
+    activeSessionId: "",
+    sessionsReady: true,
+    onOpenSession: vi.fn(),
+    onRenameSession: vi.fn(),
+    onRefreshSessions: vi.fn(),
+    historyLayout: "timeline",
+    onHistoryLayoutChange: vi.fn(),
+    onOpenSettings: vi.fn(),
+    ...overrides,
+  };
+  const view = render(<Sidebar {...props} />);
+  return { ...view, props };
 }
 
-describe("archived sessions stay reachable in the sidebar", () => {
-  it("keeps archived rows out of the active view but shows them under the toggle", async () => {
-    const user = userEvent.setup();
-    setup();
+describe("sidebar session list visibility", () => {
+  it("never renders archived rows, even when the host forwards them unfiltered", () => {
+    renderSidebar(ALL_SESSIONS);
 
     expect(screen.getByText("Live chat")).toBeInTheDocument();
     expect(screen.queryByText("Filed chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("Steward filed chat")).not.toBeInTheDocument();
+    // The Active/Archived toggle is gone — there is no path to these rows.
+    expect(screen.queryByRole("button", { name: "Active" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archived" })).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "Archived" }));
+  it("never renders hidden-preset rows once the host filters with visibleChatSessions", () => {
+    renderSidebar(visibleChatSessions(ALL_SESSIONS, new Set(["steward"])));
 
-    expect(screen.getByText("Filed chat")).toBeInTheDocument();
+    expect(screen.getByText("Live chat")).toBeInTheDocument();
+    expect(screen.queryByText("Steward chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("Steward filed chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("Filed chat")).not.toBeInTheDocument();
+  });
+});
+
+describe("archiving from the sidebar", () => {
+  it("archives a single session, which disappears once the host reflects it as archived", async () => {
+    const user = userEvent.setup();
+    const onArchiveSession = vi.fn();
+    const liveOnly: SessionMeta[] = [{ id: "s1", title: "Live chat", createdAt: 1, updatedAt: 3 }];
+    const { rerender, props } = renderSidebar(liveOnly, { onArchiveSession });
+
+    const row = screen.getByText("Live chat").closest(".group") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+
+    expect(onArchiveSession).toHaveBeenCalledWith("s1");
+
+    // The host archives on its side and reflects the change back down —
+    // Sidebar itself owns no archived state.
+    rerender(
+      <Sidebar
+        {...props}
+        sessions={[{ ...liveOnly[0], archived: true }]}
+      />,
+    );
+
     expect(screen.queryByText("Live chat")).not.toBeInTheDocument();
   });
 
-  it("opens an archived session from the archived view", async () => {
+  it("batch-archives the selected sessions", async () => {
     const user = userEvent.setup();
-    const { onOpenSession } = setup();
+    const onArchiveSessions = vi.fn();
+    renderSidebar(
+      [
+        { id: "s1", title: "Live chat", createdAt: 1, updatedAt: 3 },
+        { id: "s2", title: "Other chat", createdAt: 1, updatedAt: 2 },
+      ],
+      { onArchiveSessions },
+    );
 
-    await user.click(screen.getByRole("button", { name: "Archived" }));
-    await user.click(screen.getByText("Filed chat"));
+    await user.click(screen.getByRole("button", { name: "More task actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Select tasks" }));
 
-    expect(onOpenSession).toHaveBeenCalledWith("s9");
-  });
+    await user.click(screen.getByText("Live chat"));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
 
-  it("shows hidden-preset sessions in neither view, archived or not", async () => {
-    const user = userEvent.setup();
-    setup();
-
-    expect(screen.queryByText("Steward chat")).not.toBeInTheDocument();
-    expect(screen.queryByText("Steward filed chat")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Archived" }));
-
-    expect(screen.queryByText("Steward chat")).not.toBeInTheDocument();
-    expect(screen.queryByText("Steward filed chat")).not.toBeInTheDocument();
+    expect(onArchiveSessions).toHaveBeenCalledWith(["s1"]);
   });
 });

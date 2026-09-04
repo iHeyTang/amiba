@@ -75,7 +75,7 @@ export interface SidebarProps {
   /**
    * Archive on the host — the ONLY "take this off my list" action Amiba
    * has. It is one-way (DSH ships no unarchive) and non-destructive: the
-   * archived view still browses and opens these sessions.
+   * session itself is untouched, it simply leaves every list surface.
    */
   onArchiveSession?: (id: string) => void | Promise<void>;
   onBranchSession?: (id: string) => void | Promise<void>;
@@ -156,8 +156,15 @@ export function Sidebar({
     () => new Set(),
   );
 
+  // Archived sessions get no UI entry (DSH ships no unarchive, matching its
+  // own client's behavior of hiding archived rows from every grouping
+  // surface) — dropped here so a caller that forwards an unfiltered session
+  // list still can't surface one.
   const historySessions = useMemo(
-    () => [...sessions].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    () =>
+      sessions
+        .filter((session) => !session.archived)
+        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [sessions],
   );
   const selectedSessions = useMemo(
@@ -217,30 +224,20 @@ export function Sidebar({
   const historyQuery = "";
   const untitledLabel = t("chat.untitled");
   /**
-   * `amiba.sessions.list.group` contributions applied to the NON-ARCHIVED
-   * sessions once, here — never inside `SessionsListView`. A claimed session
-   * renders under its own top-level section (below, ahead of "最近任务"),
-   * never inside `SessionsListView`'s channel/workspace sections too.
-   * Archived sessions are deliberately excluded from partitioning (a plugin
-   * group claims live sessions only) and are folded back into `rest` so
-   * `SessionsListView`'s own active/archived toggle keeps working exactly
-   * as it did before groups existed.
+   * `amiba.sessions.list.group` contributions applied once, here — never
+   * inside `SessionsListView`. A claimed session renders under its own
+   * top-level section (below, ahead of "最近任务"), never inside
+   * `SessionsListView`'s channel/workspace sections too. `historySessions`
+   * already excludes archived rows, so there is nothing archived left to
+   * fold back into `rest`.
    */
   const groupPartition = useMemo(() => {
-    const claimable = historySessions.filter(
-      (session) =>
-        !session.archived &&
-        matchesSessionQuery(session, historyQuery, untitledLabel),
+    const claimable = historySessions.filter((session) =>
+      matchesSessionQuery(session, historyQuery, untitledLabel),
     );
     return partitionSessionGroups(claimable, groups ?? []);
   }, [historySessions, groups, historyQuery, untitledLabel]);
-  const restSessions = useMemo(
-    () => [
-      ...groupPartition.rest,
-      ...historySessions.filter((session) => session.archived),
-    ],
-    [groupPartition.rest, historySessions],
-  );
+  const restSessions = groupPartition.rest;
   // Collapse state for the plugin-group sections, keyed by group id —
   // separate from `SessionsListView`'s own per-channel collapse state,
   // since these sections now render outside it entirely.
