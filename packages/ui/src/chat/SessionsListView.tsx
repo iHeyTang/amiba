@@ -144,7 +144,6 @@ export function SessionsListView({
   itemMenuItems,
 }: SessionsListViewProps) {
   const { t } = useT();
-  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     if (onRefresh) void onRefresh();
@@ -160,11 +159,7 @@ export function SessionsListView({
    */
   const channelSections = useMemo(() => {
     const untitledLabel = t("chat.untitled");
-    const live = sessions.filter(
-      (s) =>
-        Boolean(s.archived) === showArchived &&
-        matchesSessionQuery(s, query, untitledLabel),
-    );
+    const live = sessions.filter((s) => matchesSessionQuery(s, query, untitledLabel));
 
     const bySource = new Map<string, SessionMeta[]>();
     for (const s of live) {
@@ -237,15 +232,7 @@ export function SessionsListView({
       }
     }
     return sections;
-  }, [
-    sessions,
-    query,
-    t,
-    sectionLabelFor,
-    groupKeyFor,
-    sectionOrder,
-    showArchived,
-  ]);
+  }, [sessions, query, t, sectionLabelFor, groupKeyFor, sectionOrder]);
 
   const totalMatching = useMemo(
     () => channelSections.reduce((s, sec) => s + sec.items.length, 0),
@@ -273,33 +260,6 @@ export function SessionsListView({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-      {sessions.some((session) => session.archived) ? (
-        <div className="sticky top-0 z-10 flex min-h-8 items-center gap-1 bg-background/95 px-1 py-1 backdrop-blur">
-          <div className="flex rounded-full bg-muted/70 p-0.5 text-[10px]">
-            <button
-              type="button"
-              className={cn(
-                "rounded-full px-2 py-0.5",
-                !showArchived && "bg-background text-foreground shadow-sm",
-              )}
-              onClick={() => setShowArchived(false)}
-            >
-              {t("sidepanel.sessions.active")}
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-full px-2 py-0.5",
-                showArchived && "bg-background text-foreground shadow-sm",
-              )}
-              onClick={() => setShowArchived(true)}
-            >
-              {t("sidepanel.sessions.archived")}
-            </button>
-          </div>
-          <span className="flex-1" />
-        </div>
-      ) : null}
       {totalMatching === 0 ? (
         showSectionHeaders ? (
           <TopSection

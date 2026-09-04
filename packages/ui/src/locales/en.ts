@@ -500,8 +500,6 @@ export const en = {
   "sidepanel.sessions.selected": "{count} selected",
   "sidepanel.sessions.select": "Select tasks",
   "sidepanel.sessions.archive": "Archive",
-  "sidepanel.sessions.active": "Active",
-  "sidepanel.sessions.archived": "Archived",
   "sidepanel.sessions.branch": "Create branch",
   "sidepanel.sessions.export": "Export",
   "sidepanel.sessions.more": "More task actions",
