@@ -558,6 +558,19 @@ describe("StewardService — archived sessions", () => {
     expect((await service.listTasks()).map((t) => t.id)).toEqual([taskId]);
   });
 
+  it("refuses to adopt an already-archived session", async () => {
+    const { service, persist, reflectServices } = harness();
+    persist("session-x", [
+      { type: "turn/start", seq: 0, time: 1, data: { turn: 0 } },
+      { type: "turn/end", seq: 1, time: 2, data: { turn: 0, reason: { kind: "completed" } } },
+    ]);
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: ["session-x"] });
+    await expect(service.adopt({ sessionId: "session-x" })).rejects.toThrow(/archived/u);
+    // No task row should have been created for it — a refused adopt is not
+    // the same as an adopt-then-immediately-close.
+    expect(await service.listTasks(true)).toEqual([]);
+  });
+
   it("tells the caller an archived task is closed instead of returning stale turns", async () => {
     const { service, reflectServices } = harness();
     const { taskId, sessionId } = await service.dispatch({ newTask: { title: "E" }, message: "go" });

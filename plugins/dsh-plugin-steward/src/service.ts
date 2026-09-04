@@ -520,6 +520,11 @@ export class StewardService {
       sessionId = hits[0]!.header.id;
     }
     if (sessionId === state.stewardSessionId) throw new Error("steward: the steward's own session cannot be adopted");
+    // `sessionQuery.searchSessions` (titleQuery path above) does not exclude
+    // archived sessions, and an explicit `sessionId` can name one directly —
+    // refuse up front instead of creating a task row the very next
+    // `listTasks`/`dispatch` call would just close again.
+    if (this.isArchived(sessionId)) throw new Error(`steward: session "${sessionId}" is archived and cannot be adopted`);
     const bound = state.tasks.find((task) => task.sessionId === sessionId);
     if (bound) return { kind: "adopted", task: bound, existing: true };
     const inspected = await this.ctx.sessionPersistence.inspect(sessionId);
