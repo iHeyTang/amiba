@@ -1,9 +1,15 @@
 import type { ManagedMcpServer } from "@amiba/dsh-plugin-mcp-manager";
 import type {
+  ApprovalOutcomeNotice,
+  ApprovalPrompt,
+  ApprovalReply,
   InboundConversationRef,
   InboundMessageEnvelope,
+  MessageChannelApproval,
   OutboundMessageEnvelope,
 } from "@amiba/dsh-plugin-messaging-core";
+
+export type { MessageChannelApproval };
 
 export interface ConversationRef extends InboundConversationRef {}
 
@@ -32,6 +38,33 @@ export interface ConnectorRuntime {
   deliver(
     conversation: ConversationRef,
     envelope: OutboundMessageEnvelope,
+  ): Promise<void>;
+  /**
+   * Present one tool-approval question on this connector's own surface (a
+   * Lark interactive card, a DingTalk AI card…) and resolve with the human's
+   * answer. Resolve `null` — never throw for it — when this particular
+   * connect cannot present the question natively; connector-core then bridges
+   * that `null` straight through to messaging-core, which falls back to its
+   * text protocol on the same channel. A throw is bridged through the same
+   * way, with a warning logged by messaging-core. `request.signal` aborts
+   * when the question is settled by any other path (a text reply, a timeout,
+   * the desktop answering first), so a native surface can stop waiting and
+   * retract its card.
+   */
+  requestApproval?(
+    conversation: ConversationRef,
+    request: ApprovalPrompt,
+  ): Promise<ApprovalReply | null>;
+  /**
+   * Called after a natively presented question settles — whoever won — so the
+   * card can flip to its result state. Only invoked for a question this same
+   * runtime's `requestApproval` presented successfully (returned non-null,
+   * didn't throw); a connector without a native surface can omit both
+   * methods entirely.
+   */
+  announceApprovalOutcome?(
+    conversation: ConversationRef,
+    notice: ApprovalOutcomeNotice,
   ): Promise<void>;
 }
 
@@ -119,6 +152,9 @@ export interface ConnectView {
   owners: string[];
   agentPreset?: string;
   channelId?: string;
+  /** The connect's approval-wait setting, when one has been chosen. Absent
+   * means the bound channel's default applies (10-minute timeout). */
+  approval?: MessageChannelApproval;
   status: ConnectorStatus;
   createdAt: string;
   updatedAt: string;

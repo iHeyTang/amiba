@@ -64,6 +64,12 @@ function fakeMessageCenter() {
     }),
   );
   const removeChannel = vi.fn(async (_channelId: string) => true);
+  const updateChannel = vi.fn(
+    async (channelId: string, patch: Record<string, unknown>) => ({
+      id: channelId,
+      ...patch,
+    }),
+  );
   const registerProvider = vi.fn((provider: MessageChannelProvider) => {
     providers.set(provider.id, provider);
     return () => {
@@ -76,6 +82,7 @@ function fakeMessageCenter() {
     acceptInbound,
     conversationForSession,
     removeChannel,
+    updateChannel,
     registerProvider,
     listConversations: vi.fn(async () => []),
     unbindConversation: vi.fn(async () => true),
@@ -360,6 +367,39 @@ describe("AmibaConnectorsRemoteService", () => {
     expect(
       listed.connects.find((connect) => connect.id === created.id)?.owners,
     ).toEqual(["alice", "bob"]);
+  });
+
+  it("createConnect forwards approval, and setApproval round-trips a change through messageCenter.updateChannel and listConnects", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const { service } = buildService(center);
+
+    const created = await service.createConnect({
+      provider: "fake",
+      name: "Approval-aware",
+      agentPreset: "restricted",
+      config: {},
+      approval: { mode: "wait", timeoutMs: 600_000 },
+    });
+    expect(created.approval).toEqual({ mode: "wait", timeoutMs: 600_000 });
+    expect(messageCenter.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ approval: { mode: "wait", timeoutMs: 600_000 } }),
+    );
+
+    const updated = await service.setApproval(created.id, {
+      mode: "timeout",
+      timeoutMs: 120_000,
+    });
+    expect(updated.approval).toEqual({ mode: "timeout", timeoutMs: 120_000 });
+    expect(messageCenter.updateChannel).toHaveBeenCalledWith("channel-1", {
+      approval: { mode: "timeout", timeoutMs: 120_000 },
+    });
+
+    const listed = await service.listConnects();
+    expect(
+      listed.connects.find((connect) => connect.id === created.id)?.approval,
+    ).toEqual({ mode: "timeout", timeoutMs: 120_000 });
   });
 
   it("setEnabled toggles the connect's enabled state", async () => {

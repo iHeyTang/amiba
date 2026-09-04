@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { MessageChannelProvider } from "@amiba/dsh-plugin-messaging-core";
+import type {
+  ApprovalOutcomeNotice,
+  ApprovalPrompt,
+  MessageChannelProvider,
+} from "@amiba/dsh-plugin-messaging-core";
 
 import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
@@ -66,6 +70,12 @@ function fakeMessageCenter() {
     removeChannelCalls.push(channelId);
     return true;
   });
+  const updateChannel = vi.fn(
+    async (channelId: string, patch: Record<string, unknown>) => ({
+      id: channelId,
+      ...patch,
+    }),
+  );
   const registerProvider = vi.fn((provider: MessageChannelProvider) => {
     // Mirrors the real MessageChannelCenter.registerProvider (center.ts:287-288),
     // which throws on a duplicate provider id instead of silently overwriting
@@ -87,6 +97,7 @@ function fakeMessageCenter() {
     conversationForSession,
     removeChannel,
     removeChannelCalls,
+    updateChannel,
     registerProvider,
     listConversations: vi.fn(async () => []),
     unbindConversation: vi.fn(async () => true),
@@ -193,6 +204,76 @@ function fakeOnboardingProvider(id = "fake-onboard") {
   });
   const provider: ConnectorProvider = { ...base.provider, onboard };
   return { ...base, provider, onboard, gate, getHandle: () => handle };
+}
+
+/**
+ * A `fakeProvider` whose runtime optionally implements the approval
+ * capability (`requestApproval` / `announceApprovalOutcome`), for exercising
+ * `bridgeRequestApproval` / `bridgeAnnounceApprovalOutcome` in isolation.
+ * `withApproval: false` mirrors a connector runtime that never implemented
+ * the capability at all (e.g. a provider mid-migration, or one that will
+ * never present natively).
+ */
+function fakeApprovalProvider(options?: { withApproval?: boolean; id?: string }) {
+  const withApproval = options?.withApproval !== false;
+  const starts: ConnectorHandle[] = [];
+  const requestApproval = vi.fn(
+    async () => ({ outcome: "allowed-once" as const, by: "u1" }),
+  );
+  const announceApprovalOutcome = vi.fn(async () => undefined);
+  const runtimes: ConnectorRuntime[] = [];
+  const validate = vi.fn(async () => undefined);
+  const start = vi.fn(async (handle: ConnectorHandle) => {
+    starts.push(handle);
+    const runtime: ConnectorRuntime = {
+      stop: vi.fn(async () => undefined),
+      deliver: vi.fn(async () => undefined),
+      ...(withApproval ? { requestApproval, announceApprovalOutcome } : {}),
+    };
+    runtimes.push(runtime);
+    return runtime;
+  });
+  const provider: ConnectorProvider = {
+    id: options?.id ?? "fake-approval",
+    name: "Fake Approval Connector",
+    description: "Fake connector for approval-bridge tests",
+    configSchema: {},
+    validate,
+    start,
+    capabilities: vi.fn(() => []),
+  };
+  return {
+    provider,
+    starts,
+    runtimes,
+    requestApproval,
+    announceApprovalOutcome,
+    start,
+  };
+}
+
+function fakeApprovalPrompt(overrides?: Partial<ApprovalPrompt>): ApprovalPrompt {
+  return {
+    approvalId: "approval-1",
+    seq: 1,
+    toolName: "bash",
+    sessionId: "session-1",
+    signal: new AbortController().signal,
+    ...overrides,
+  };
+}
+
+function fakeApprovalOutcomeNotice(
+  overrides?: Partial<ApprovalOutcomeNotice>,
+): ApprovalOutcomeNotice {
+  return {
+    approvalId: "approval-1",
+    seq: 1,
+    toolName: "bash",
+    outcome: "allowed-once",
+    reason: "answered",
+    ...overrides,
+  };
 }
 
 /**
@@ -1650,5 +1731,286 @@ describe("ConnectorCenter onboarding", () => {
     expect(center.pollOnboarding(bystanderView.sessionId).state).toBe(
       "pending",
     );
+  });
+});
+
+describe("approval bridge", () => {
+  it("bridge requestApproval forwards to the live runtime and returns its reply", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes } = fakeApprovalProvider();
+    center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake-approval",
+      name: "Approval",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+    const conversation = { key: "chat-1", kind: "p2p" as const };
+    const request = fakeApprovalPrompt();
+
+    const reply = await bridge.requestApproval(
+      { id: "channel-1" } as never,
+      conversation,
+      request,
+    );
+
+    expect(reply).toEqual({ outcome: "allowed-once", by: "u1" });
+    expect(runtimes[0]!.requestApproval).toHaveBeenCalledWith(
+      conversation,
+      request,
+    );
+  });
+
+  it("bridge requestApproval resolves null when the runtime never implemented the capability", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes } = fakeApprovalProvider({
+      withApproval: false,
+    });
+    center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake-approval",
+      name: "No native approval",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+
+    const reply = await bridge.requestApproval(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+
+    expect(reply).toBeNull();
+    expect(runtimes[0]!.requestApproval).toBeUndefined();
+  });
+
+  it("bridge requestApproval resolves null once the connect is disabled", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider } = fakeApprovalProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake-approval",
+      name: "Will be disabled",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+
+    const reply = await bridge.requestApproval(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+
+    expect(reply).toBeNull();
+  });
+
+  it("bridge requestApproval throws connector_not_found when no connect owns the channel", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider } = fakeApprovalProvider();
+    center.registerProvider(provider);
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+
+    await expect(
+      bridge.requestApproval(
+        { id: "no-such-channel" } as never,
+        { key: "chat-1", kind: "p2p" },
+        fakeApprovalPrompt(),
+      ),
+    ).rejects.toThrow("connector_not_found");
+  });
+
+  it("bridge requestApproval propagates a runtime error rather than swallowing it", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, requestApproval } = fakeApprovalProvider();
+    requestApproval.mockRejectedValueOnce(new Error("card_api_down"));
+    center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake-approval",
+      name: "Flaky card API",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+
+    await expect(
+      bridge.requestApproval(
+        { id: "channel-1" } as never,
+        { key: "chat-1", kind: "p2p" },
+        fakeApprovalPrompt(),
+      ),
+    ).rejects.toThrow("card_api_down");
+  });
+
+  it("bridge announceApprovalOutcome forwards to the live runtime", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes } = fakeApprovalProvider();
+    center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake-approval",
+      name: "Announce",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.announceApprovalOutcome)
+      throw new Error("bridge provider missing announceApprovalOutcome");
+    const conversation = { key: "chat-1", kind: "p2p" as const };
+    const notice = fakeApprovalOutcomeNotice();
+
+    await bridge.announceApprovalOutcome(
+      { id: "channel-1" } as never,
+      conversation,
+      notice,
+    );
+
+    expect(runtimes[0]!.announceApprovalOutcome).toHaveBeenCalledWith(
+      conversation,
+      notice,
+    );
+  });
+
+  it("bridge announceApprovalOutcome no-ops when the runtime lacks the capability", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider } = fakeApprovalProvider({ withApproval: false });
+    center.registerProvider(provider);
+    await center.createConnect({
+      provider: "fake-approval",
+      name: "No native card",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.announceApprovalOutcome)
+      throw new Error("bridge provider missing announceApprovalOutcome");
+
+    await expect(
+      bridge.announceApprovalOutcome(
+        { id: "channel-1" } as never,
+        { key: "chat-1", kind: "p2p" },
+        fakeApprovalOutcomeNotice(),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("bridge announceApprovalOutcome no-ops once the connect is disabled", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes } = fakeApprovalProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake-approval",
+      name: "Will be disabled",
+      config: {},
+      agentPreset: "restricted",
+    });
+    await center.setEnabled(view.id, false);
+
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.announceApprovalOutcome)
+      throw new Error("bridge provider missing announceApprovalOutcome");
+
+    await bridge.announceApprovalOutcome(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalOutcomeNotice(),
+    );
+
+    expect(runtimes[0]!.announceApprovalOutcome).not.toHaveBeenCalled();
+  });
+});
+
+describe("approval config plumbing", () => {
+  it("createConnect forwards approval into messageCenter.createChannel and the stored/view record", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const approval = { mode: "wait" as const, timeoutMs: 600_000 };
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Waits forever",
+      config: {},
+      agentPreset: "restricted",
+      approval,
+    });
+
+    expect(messageCenter.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ approval }),
+    );
+    expect(view.approval).toEqual(approval);
+    const row = (await store.list()).find((item) => item.id === view.id);
+    expect(row?.approval).toEqual(approval);
+  });
+
+  it("createConnect omits approval from messageCenter.createChannel and the view when none is given", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Default policy",
+      config: {},
+      agentPreset: "restricted",
+    });
+
+    const call = messageCenter.createChannel.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(call?.approval).toBeUndefined();
+    expect(view.approval).toBeUndefined();
+  });
+
+  it("setApproval updates both the bound channel and the connect's own record", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Adjustable",
+      config: {},
+      agentPreset: "restricted",
+    });
+    const approval = { mode: "timeout" as const, timeoutMs: 120_000 };
+
+    const updated = await center.setApproval(view.id, approval);
+
+    expect(messageCenter.updateChannel).toHaveBeenCalledWith("channel-1", {
+      approval,
+    });
+    expect(updated.approval).toEqual(approval);
+    const row = (await store.list()).find((item) => item.id === view.id);
+    expect(row?.approval).toEqual(approval);
+  });
+
+  it("setApproval throws connect_not_found for an unknown id", async () => {
+    const { center } = await harness();
+
+    await expect(
+      center.setApproval("no-such-connect", {
+        mode: "timeout",
+        timeoutMs: 60_000,
+      }),
+    ).rejects.toThrow("connect_not_found");
   });
 });

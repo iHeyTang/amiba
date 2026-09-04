@@ -7,6 +7,7 @@ import { z } from "zod";
 import type {
   ConnectorProviderView,
   ConnectView,
+  MessageChannelApproval,
   OnboardingView,
 } from "./types.js";
 
@@ -15,6 +16,8 @@ export interface CreateConnectInput {
   name: string;
   agentPreset: string;
   config: Record<string, unknown>;
+  /** Absent uses the bound channel's default (10-minute timeout). */
+  approval?: MessageChannelApproval;
 }
 
 export interface BeginOnboardingInput {
@@ -55,6 +58,14 @@ const providerViewSchema = z.object({
 
 // No secret or config field: ConnectView never carries credential material,
 // and this schema must never grow one either.
+// Mirrors messaging-core's own MessageChannelApproval shape; timeoutMs is
+// validated more strictly (>= MIN_APPROVAL_TIMEOUT_MS in `timeout` mode) by
+// messageCenter.createChannel/updateChannel itself, not on the wire here.
+const approvalSchema = z.object({
+  mode: z.enum(["timeout", "wait"]),
+  timeoutMs: z.number().int().positive(),
+});
+
 const connectViewSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -64,6 +75,7 @@ const connectViewSchema = z.object({
   owners: z.array(z.string()),
   agentPreset: z.string().optional(),
   channelId: z.string().optional(),
+  approval: approvalSchema.optional(),
   status: connectorStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -74,6 +86,7 @@ const createConnectInputSchema = z.object({
   name: z.string().min(1),
   agentPreset: z.string().min(1),
   config: z.record(z.string(), z.unknown()),
+  approval: approvalSchema.optional(),
 });
 
 const beginOnboardingInputSchema = z.object({
@@ -118,6 +131,7 @@ function codec<T>(schema: z.ZodType<T>, typeSymbol: string) {
 const stringCodec = codec(z.string(), "typescript#string");
 const booleanCodec = codec(z.boolean(), "typescript#boolean");
 const ownersCodec = codec(z.array(z.string()), "@amiba/connectors#owners");
+const approvalCodec = codec(approvalSchema, "@amiba/connectors#approval");
 
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
@@ -137,6 +151,10 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       setOwners(
         id: string,
         owners: string[],
+      ): Promise<RemoteResult<ConnectView>>;
+      setApproval(
+        id: string,
+        approval: MessageChannelApproval,
       ): Promise<RemoteResult<ConnectView>>;
       beginOnboarding(
         input: BeginOnboardingInput,
@@ -168,6 +186,10 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaConnectors/setOwners": (
       id: string,
       owners: string[],
+    ) => Promise<RemoteResult<ConnectView>>;
+    "amibaConnectors/setApproval": (
+      id: string,
+      approval: MessageChannelApproval,
     ) => Promise<RemoteResult<ConnectView>>;
     "amibaConnectors/beginOnboarding": (
       input: BeginOnboardingInput,
@@ -261,6 +283,19 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
           wire: "owners",
           source: "json",
           codec: ownersCodec,
+        },
+      ],
+      codec(connectViewSchema, "@amiba/connectors#connect"),
+    ),
+    descriptor(
+      "setApproval",
+      [
+        { name: "id", wire: "id", source: "json", codec: stringCodec },
+        {
+          name: "approval",
+          wire: "approval",
+          source: "json",
+          codec: approvalCodec,
         },
       ],
       codec(connectViewSchema, "@amiba/connectors#connect"),

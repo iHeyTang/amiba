@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import type { Context } from "@deepseek-ai/cordis";
 import type {
+  ApprovalOutcomeNotice,
+  ApprovalPrompt,
+  ApprovalReply,
+  InboundConversationRef,
+  MessageChannelApproval,
   MessageChannelCenter,
   MessageChannelProvider,
   OutboundMessageEnvelope,
@@ -164,6 +169,10 @@ export class ConnectorCenter {
       supportsOutbound: true,
       deliver: async (channel, envelope) =>
         this.bridgeDeliver(channel, envelope),
+      requestApproval: async (channel, conversation, request) =>
+        this.bridgeRequestApproval(channel, conversation, request),
+      announceApprovalOutcome: async (channel, conversation, notice) =>
+        this.bridgeAnnounceApprovalOutcome(channel, conversation, notice),
     };
 
     let disposed = false;
@@ -315,6 +324,7 @@ export class ConnectorCenter {
     name: string;
     config: unknown;
     agentPreset: string;
+    approval?: MessageChannelApproval;
   }): Promise<ConnectView> {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
@@ -331,6 +341,7 @@ export class ConnectorCenter {
       provider: input.provider,
       name: input.name,
       agentPreset,
+      ...(input.approval ? { approval: input.approval } : {}),
     });
 
     let channelId: string | undefined;
@@ -339,6 +350,7 @@ export class ConnectorCenter {
         provider: `connector-${provider.id}`,
         name: input.name,
         agentPreset,
+        ...(input.approval ? { approval: input.approval } : {}),
       });
       channelId = created.channel.id;
 
@@ -590,6 +602,30 @@ export class ConnectorCenter {
     return this.toView(updated);
   }
 
+  /**
+   * Updates the connect's approval-wait policy. The bound channel is the
+   * behavioral source of truth — `messageCenter.updateChannel` is where the
+   * mode enum and `MIN_APPROVAL_TIMEOUT_MS` floor are actually enforced
+   * (`assertApproval`), so it runs first and a rejected value never reaches
+   * this connect's own store mirror. A connect that has no bound channel yet
+   * (mid-creation, never reached by a caller in practice since
+   * `createConnect` rolls the whole connect back on any failure) just
+   * updates the mirror.
+   */
+  async setApproval(
+    id: string,
+    approval: MessageChannelApproval,
+  ): Promise<ConnectView> {
+    const rows = await this.store.list();
+    const row = rows.find((item) => item.id === id);
+    if (!row) throw new Error("connect_not_found");
+    if (row.channelId) {
+      await this.messageCenter.updateChannel(row.channelId, { approval });
+    }
+    const updated = await this.store.update(id, { approval });
+    return this.toView(updated);
+  }
+
   async removeConnect(id: string): Promise<boolean> {
     const rows = await this.store.list();
     const row = rows.find((item) => item.id === id);
@@ -628,6 +664,7 @@ export class ConnectorCenter {
       owners: row.owners,
       ...(row.agentPreset ? { agentPreset: row.agentPreset } : {}),
       ...(row.channelId ? { channelId: row.channelId } : {}),
+      ...(row.approval ? { approval: row.approval } : {}),
       status: this.computeStatus(row),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -868,5 +905,56 @@ export class ConnectorCenter {
       },
       envelope,
     );
+  }
+
+  /**
+   * Bridges messaging-core's `requestApproval` to the owning connect's live
+   * runtime. Unlike `bridgeDeliver`, a structurally-normal "can't present
+   * this one" state — the connect is disabled, its runtime hasn't started
+   * (or finished stopping), or the runtime never implemented the capability
+   * — resolves `null` rather than throwing: `null` is messaging-core's own
+   * signal to fall back to its text protocol on the same channel (see
+   * `MessageChannelProvider.requestApproval`'s contract), not an error.
+   * `connector_not_found` (no connect owns this channel at all) still
+   * throws, same as `bridgeDeliver`, since that is a genuine inconsistency
+   * rather than an ordinary "not live right now".
+   */
+  private async bridgeRequestApproval(
+    channel: StoredMessageChannel,
+    conversation: InboundConversationRef,
+    request: ApprovalPrompt,
+  ): Promise<ApprovalReply | null> {
+    const rows = await this.store.list();
+    const row = rows.find((item) => item.channelId === channel.id);
+    if (!row) throw new Error("connector_not_found");
+
+    const live = this.live.get(row.id);
+    if (!row.enabled || !live) return null;
+    if (!live.runtime.requestApproval) return null;
+
+    return live.runtime.requestApproval(conversation, request);
+  }
+
+  /**
+   * Bridges messaging-core's `announceApprovalOutcome` the same way. This is
+   * only ever called by messaging-core for a question this same runtime's
+   * `requestApproval` presented natively, so a disabled/not-live connect or a
+   * runtime without the capability is a no-op rather than an error — there is
+   * no card left to update.
+   */
+  private async bridgeAnnounceApprovalOutcome(
+    channel: StoredMessageChannel,
+    conversation: InboundConversationRef,
+    notice: ApprovalOutcomeNotice,
+  ): Promise<void> {
+    const rows = await this.store.list();
+    const row = rows.find((item) => item.channelId === channel.id);
+    if (!row) throw new Error("connector_not_found");
+
+    const live = this.live.get(row.id);
+    if (!row.enabled || !live) return;
+    if (!live.runtime.announceApprovalOutcome) return;
+
+    await live.runtime.announceApprovalOutcome(conversation, notice);
   }
 }

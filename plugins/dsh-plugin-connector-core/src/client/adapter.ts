@@ -4,6 +4,7 @@ import type { RemoteResult } from "@deepseek-ai/dsh-typert-protocol";
 import type {
   ConnectorProviderView,
   ConnectView,
+  MessageChannelApproval,
   OnboardingView,
 } from "../types.js";
 
@@ -12,6 +13,8 @@ export interface CreateConnectInput {
   name: string;
   agentPreset: string;
   config: Record<string, unknown>;
+  /** Absent uses the bound channel's default (10-minute timeout). */
+  approval?: MessageChannelApproval;
 }
 
 export interface BeginOnboardingInput {
@@ -37,6 +40,7 @@ export interface ConnectAdapter {
   setEnabled(id: string, enabled: boolean): Promise<ConnectView>;
   remove(id: string): Promise<{ id: string; deleted: boolean }>;
   setOwners(id: string, owners: string[]): Promise<ConnectView>;
+  setApproval(id: string, approval: MessageChannelApproval): Promise<ConnectView>;
   beginOnboarding(input: BeginOnboardingInput): Promise<OnboardingView>;
   pollOnboarding(sessionId: string): Promise<OnboardingView>;
   cancelOnboarding(sessionId: string): Promise<OnboardingView>;
@@ -73,6 +77,7 @@ export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
     setEnabled: (id, enabled) => valueOf(remote.setEnabled(id, enabled)),
     remove: (id) => valueOf(remote.removeConnect(id)),
     setOwners: (id, owners) => valueOf(remote.setOwners(id, owners)),
+    setApproval: (id, approval) => valueOf(remote.setApproval(id, approval)),
     beginOnboarding: (input) => valueOf(remote.beginOnboarding(input)),
     pollOnboarding: (sessionId) => valueOf(remote.pollOnboarding(sessionId)),
     cancelOnboarding: (sessionId) =>

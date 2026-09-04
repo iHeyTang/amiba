@@ -22,6 +22,7 @@ const create = vi.fn();
 const setEnabled = vi.fn();
 const remove = vi.fn();
 const setOwners = vi.fn();
+const setApproval = vi.fn();
 // `ConnectAdapter` (Task 2) gained the onboarding trio; Task 4 is where
 // `DshSettingsConnect` starts calling them (scan mode in the add-connect
 // dialog) — see the "scan mode" describe block below.
@@ -36,6 +37,7 @@ const adapter = {
   setEnabled,
   remove,
   setOwners,
+  setApproval,
   beginOnboarding,
   pollOnboarding,
   cancelOnboarding,

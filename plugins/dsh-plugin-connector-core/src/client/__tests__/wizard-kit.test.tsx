@@ -2,7 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { BasicsFields, connectWizardKit, defaultPresetId } from "../wizard-kit";
+import {
+  ApprovalField, BasicsFields, connectWizardKit, defaultApproval, defaultPresetId,
+} from "../wizard-kit";
+import type { MessageChannelApproval } from "../../types";
 
 const presets = [
   { id: "full", label: "Full", isDefault: false },
@@ -61,5 +64,83 @@ describe("wizard kit", () => {
   it("exposes BasicsFields on the kit", () => {
     expect(connectWizardKit.BasicsFields).toBe(BasicsFields);
     expect(vi.isMockFunction(connectWizardKit.BasicsFields)).toBe(false);
+  });
+});
+
+function ApprovalHarness({ initial }: { initial?: MessageChannelApproval }) {
+  const [approval, setApproval] = useState<MessageChannelApproval>(
+    initial ?? defaultApproval(),
+  );
+  return (
+    <>
+      <ApprovalField approval={approval} onApprovalChange={setApproval} />
+      <output data-testid="approval-state">{JSON.stringify(approval)}</output>
+    </>
+  );
+}
+
+describe("ApprovalField", () => {
+  it("defaultApproval is a 10-minute timeout", () => {
+    expect(defaultApproval()).toEqual({ mode: "timeout", timeoutMs: 600_000 });
+  });
+
+  it("renders the default timeout mode with a 10-minute value and the wait option unchecked", () => {
+    render(<ApprovalHarness />);
+    const timeoutRadio = screen.getByRole("radio", { name: /超时拒绝|Reject after/ });
+    const waitRadio = screen.getByRole("radio", { name: /一直等|Wait indefinitely/ });
+    expect(timeoutRadio).toBeChecked();
+    expect(waitRadio).not.toBeChecked();
+    expect(screen.getByLabelText(/超时拒绝前等待的分钟数|Minutes before rejecting/)).toHaveValue(10);
+  });
+
+  it("switching to wait keeps the previous minutes value and disables its input", () => {
+    render(<ApprovalHarness />);
+    fireEvent.click(screen.getByRole("radio", { name: /一直等|Wait indefinitely/ }));
+
+    expect(screen.getByTestId("approval-state")).toHaveTextContent(
+      '"mode":"wait"',
+    );
+    expect(screen.getByLabelText(/超时拒绝前等待的分钟数|Minutes before rejecting/)).toBeDisabled();
+  });
+
+  it("switching back to timeout from wait restores the timeoutMs the minutes field carried", () => {
+    render(<ApprovalHarness initial={{ mode: "wait", timeoutMs: 300_000 }} />);
+    fireEvent.click(screen.getByRole("radio", { name: /超时拒绝|Reject after/ }));
+
+    expect(screen.getByTestId("approval-state")).toHaveTextContent(
+      '{"mode":"timeout","timeoutMs":300000}',
+    );
+  });
+
+  it("editing the minutes field emits an updated timeoutMs in milliseconds", () => {
+    render(<ApprovalHarness />);
+    fireEvent.change(
+      screen.getByLabelText(/超时拒绝前等待的分钟数|Minutes before rejecting/),
+      { target: { value: "30" } },
+    );
+
+    expect(screen.getByTestId("approval-state")).toHaveTextContent(
+      '{"mode":"timeout","timeoutMs":1800000}',
+    );
+  });
+
+  it("floors an invalid or sub-minimum minutes edit at 1 minute instead of emitting garbage", () => {
+    render(<ApprovalHarness />);
+    const minutesInput = screen.getByLabelText(/超时拒绝前等待的分钟数|Minutes before rejecting/);
+
+    fireEvent.change(minutesInput, { target: { value: "0" } });
+    expect(screen.getByTestId("approval-state")).toHaveTextContent(
+      '{"mode":"timeout","timeoutMs":60000}',
+    );
+
+    fireEvent.change(minutesInput, { target: { value: "not-a-number" } });
+    expect(screen.getByTestId("approval-state")).toHaveTextContent(
+      '{"mode":"timeout","timeoutMs":60000}',
+    );
+  });
+
+  it("exposes ApprovalField on the kit", () => {
+    expect(connectWizardKit.ApprovalField).toBe(ApprovalField);
+    expect(vi.isMockFunction(connectWizardKit.ApprovalField)).toBe(false);
   });
 });

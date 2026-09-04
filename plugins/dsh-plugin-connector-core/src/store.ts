@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import type { MessageChannelApproval } from "@amiba/dsh-plugin-messaging-core";
+
 export interface StoredConnect {
   id: string;
   provider: string;
@@ -11,6 +13,16 @@ export interface StoredConnect {
   owners: string[];
   agentPreset?: string;
   channelId?: string;
+  /**
+   * Mirrors the bound channel's approval-wait policy, kept here purely so
+   * `ConnectView` can surface the connect's current setting without a round
+   * trip through messaging-core. The channel itself (`messageCenter`) is the
+   * behavioral source of truth: `setApproval` always writes both, and
+   * `createConnect` forwards this straight into `messageCenter.createChannel`.
+   * Absent here means the same as absent on the channel — messaging-core's
+   * default (10-minute timeout) applies.
+   */
+  approval?: MessageChannelApproval;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +30,15 @@ export interface StoredConnect {
 interface ConnectorDocument {
   version: 1;
   connects: StoredConnect[];
+}
+
+function normalizeApproval(value: unknown): MessageChannelApproval | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  if (row.mode !== "timeout" && row.mode !== "wait") return undefined;
+  if (!Number.isSafeInteger(row.timeoutMs) || (row.timeoutMs as number) <= 0)
+    return undefined;
+  return { mode: row.mode, timeoutMs: row.timeoutMs as number };
 }
 
 function normalizeConnect(value: unknown): StoredConnect | null {
@@ -30,6 +51,7 @@ function normalizeConnect(value: unknown): StoredConnect | null {
     typeof row.createdAt !== "string" ||
     typeof row.updatedAt !== "string"
   ) return null;
+  const approval = normalizeApproval(row.approval);
   return {
     id: row.id,
     provider: row.provider,
@@ -45,6 +67,7 @@ function normalizeConnect(value: unknown): StoredConnect | null {
     ...(typeof row.channelId === "string" && row.channelId
       ? { channelId: row.channelId }
       : {}),
+    ...(approval ? { approval } : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -106,6 +129,7 @@ export class ConnectorStore {
     provider: string;
     name: string;
     agentPreset?: string;
+    approval?: MessageChannelApproval;
   }): Promise<StoredConnect> {
     return this.mutate((document) => {
       const now = new Date().toISOString();
@@ -117,6 +141,7 @@ export class ConnectorStore {
         pairing: true,
         owners: [],
         ...(input.agentPreset?.trim() ? { agentPreset: input.agentPreset.trim() } : {}),
+        ...(input.approval ? { approval: input.approval } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -128,7 +153,10 @@ export class ConnectorStore {
   update(
     id: string,
     patch: Partial<
-      Pick<StoredConnect, "name" | "enabled" | "pairing" | "owners" | "agentPreset" | "channelId">
+      Pick<
+        StoredConnect,
+        "name" | "enabled" | "pairing" | "owners" | "agentPreset" | "channelId" | "approval"
+      >
     >,
   ): Promise<StoredConnect> {
     return this.mutate((document) => {
@@ -142,6 +170,7 @@ export class ConnectorStore {
         ...(patch.owners ? { owners: [...new Set(patch.owners)] } : {}),
         ...(patch.agentPreset !== undefined ? { agentPreset: patch.agentPreset } : {}),
         ...(patch.channelId !== undefined ? { channelId: patch.channelId } : {}),
+        ...(patch.approval !== undefined ? { approval: patch.approval } : {}),
         updatedAt: new Date().toISOString(),
       };
       document.connects[index] = next;

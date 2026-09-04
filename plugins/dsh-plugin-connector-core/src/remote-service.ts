@@ -3,6 +3,7 @@ import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 
 import type { ConnectorCenter } from "./center.js";
 import type { BeginOnboardingInput, CreateConnectInput } from "./remote.js";
+import type { MessageChannelApproval } from "./types.js";
 
 // Exported (unlike messaging-core's private equivalent) so remote-service.test.ts
 // can construct it directly and drive its @Remote methods as plain instance
@@ -63,6 +64,11 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
   @Remote
   setOwners(id: string, owners: string[]) {
     return this.center.setOwners(id, owners);
+  }
+
+  @Remote
+  setApproval(id: string, approval: MessageChannelApproval) {
+    return this.center.setApproval(id, approval);
   }
 
   @Remote
