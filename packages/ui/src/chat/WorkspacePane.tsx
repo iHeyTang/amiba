@@ -221,6 +221,12 @@ interface WorkspacePaneContextValue {
   closeTab(id: string): void;
   openBrowser(): void;
   newBrowserTab(): void;
+  /**
+   * Opens `url` in the embedded browser — a new tab, or the tab already
+   * showing that page. Returns false when the host has no embedded browser
+   * so the caller can fall back to a file tab.
+   */
+  openBrowserUrl(url: string): boolean;
   updateBrowserTab(
     browserTabId: string,
     patch: Partial<EmbeddedBrowserResource>,
@@ -255,6 +261,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   closeTab: () => {},
   openBrowser: () => {},
   newBrowserTab: () => {},
+  openBrowserUrl: () => false,
   updateBrowserTab: () => {},
   openFile: () => {},
   openReview: () => {},
@@ -547,7 +554,10 @@ function WorkspaceTabButton({
           tab.resource.kind === "file" ? tab.resource.path : labels.primary
         }
       >
-        <WorkspaceTabIcon resource={tab.resource} className="h-3.5 w-3.5 shrink-0" />
+        <WorkspaceTabIcon
+          resource={tab.resource}
+          className="h-3.5 w-3.5 shrink-0"
+        />
         <span className="min-w-0 truncate text-[11px] font-medium tracking-[-0.01em]">
           {labels.primary}
         </span>
@@ -898,16 +908,31 @@ export function WorkspacePaneProvider({
   );
 
   const activateBrowser = useCallback(
-    (forceNew: boolean) => {
-      if (!browserAdapter) return;
+    (forceNew: boolean, url?: string) => {
+      if (!browserAdapter) return false;
       updateActiveSession((state) => {
-        const existing = [...state.tabs]
-          .reverse()
-          .find((tab) => tab.resource.kind === "browser");
-        if (existing && !forceNew) {
+        const browserTabs = state.tabs.filter(
+          (tab) => tab.resource.kind === "browser",
+        );
+        // A URL open re-focuses a tab already on that page instead of
+        // stacking duplicates; a plain open reuses the latest browser tab.
+        const existing = url
+          ? browserTabs.find(
+              (tab) =>
+                tab.resource.kind === "browser" && tab.resource.url === url,
+            )
+          : forceNew
+            ? undefined
+            : browserTabs.at(-1);
+        if (existing) {
           return { ...state, activeTabId: existing.id };
         }
         const resource = createEmbeddedBrowserResource();
+        if (url) {
+          resource.url = url;
+          resource.address = url;
+          resource.loading = true;
+        }
         const tab: WorkspacePaneTab = {
           id: resourceKey(resource),
           resource,
@@ -921,6 +946,7 @@ export function WorkspacePaneProvider({
       });
       setBrowserRequestVersion((current) => current + 1);
       persistOpen(true);
+      return true;
     },
     [browserAdapter, persistOpen, updateActiveSession],
   );
@@ -931,6 +957,10 @@ export function WorkspacePaneProvider({
   );
   const newBrowserTab = useCallback(
     () => activateBrowser(true),
+    [activateBrowser],
+  );
+  const openBrowserUrl = useCallback(
+    (url: string) => activateBrowser(false, url),
     [activateBrowser],
   );
 
@@ -997,11 +1027,7 @@ export function WorkspacePaneProvider({
         }
       }
     },
-    [
-      capability?.development,
-      sessionId,
-      updateCheckpoints,
-    ],
+    [capability?.development, sessionId, updateCheckpoints],
   );
 
   const markActiveCheckpointChanged = useCallback(
@@ -1104,12 +1130,7 @@ export function WorkspacePaneProvider({
         }));
       }
     },
-    [
-      capability,
-      markActiveCheckpointChanged,
-      sessionId,
-      updateActiveSession,
-    ],
+    [capability, markActiveCheckpointChanged, sessionId, updateActiveSession],
   );
 
   const value = useMemo<WorkspacePaneContextValue>(
@@ -1146,6 +1167,7 @@ export function WorkspacePaneProvider({
         }),
       openBrowser,
       newBrowserTab,
+      openBrowserUrl,
       updateBrowserTab,
       openFile,
       openReview,
@@ -1173,6 +1195,7 @@ export function WorkspacePaneProvider({
       open,
       openFile,
       newBrowserTab,
+      openBrowserUrl,
       openReview,
       openToolEvent,
       persistOpen,
@@ -4080,11 +4103,7 @@ function WorkspaceRecoveryPointsView() {
   );
 }
 
-export function WorkspacePane({
-  visible = true,
-}: {
-  visible?: boolean;
-}) {
+export function WorkspacePane({ visible = true }: { visible?: boolean }) {
   const pane = useWorkspacePane();
   const { t } = useT();
   const [mode, setMode] = useState<WorkbenchMode>("files");
@@ -4234,8 +4253,7 @@ export function WorkspacePane({
           // is not fixed (it also hosts an open plugin seat), so it publishes
           // its measured width and the tabs reserve exactly that.
           style={{
-            paddingRight:
-              "var(--amiba-workbench-controls-inset, 2.75rem)",
+            paddingRight: "var(--amiba-workbench-controls-inset, 2.75rem)",
           }}
         >
           {pane.sessionId || pane.tabs.length > 0 ? (

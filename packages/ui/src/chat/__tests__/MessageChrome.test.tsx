@@ -9,6 +9,7 @@ vi.mock("@amiba/i18n", () => ({
 import { Bubble, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
+import { WorkspaceFileOpenerContext } from "../workspace-file-links";
 
 /** Expand the aggregated process disclosure a completed bubble folds
  *  its tool evidence behind. */
@@ -77,6 +78,48 @@ describe("chat message chrome", () => {
         ]),
       }),
     );
+  });
+
+  it("opens a changed file from the review entry when the shell can open files", async () => {
+    const open = vi.fn();
+    render(
+      <WorkspaceFileOpenerContext.Provider value={open}>
+        <MessageTurns
+          messages={
+            [
+              { uiId: "user-1", role: "user", content: "Change the app" },
+              {
+                uiId: "assistant-1",
+                role: "assistant",
+                content: "Done",
+                toolProgress: [
+                  {
+                    tool: "write",
+                    toolCallId: "write-1",
+                    status: "completed",
+                    result: {
+                      files_modified: [
+                        "/Users/me/annual-report/年度汇报PPT.html",
+                      ],
+                    },
+                  },
+                ],
+              },
+            ] as UiMessage[]
+          }
+          onReviewWorkspaceChanges={vi.fn()}
+        />
+      </WorkspaceFileOpenerContext.Provider>,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Users/me/annual-report/年度汇报PPT.html",
+      }),
+    );
+    expect(open).toHaveBeenCalledWith({
+      path: "/Users/me/annual-report/年度汇报PPT.html",
+    });
   });
 
   it("does not show the file review entry while the turn is streaming", () => {
@@ -555,9 +598,9 @@ describe("chat message chrome", () => {
       }),
     );
 
-    expect(
-      screen.getAllByText("sidepanel.trace.actions.useTool"),
-    ).toHaveLength(2);
+    expect(screen.getAllByText("sidepanel.trace.actions.useTool")).toHaveLength(
+      2,
+    );
     // Summary + one nested thought fold per execution-only step.
     expect(
       screen.getAllByRole("button", {
@@ -638,9 +681,7 @@ describe("chat message chrome", () => {
     const narrationExecution = container.querySelector(
       "[data-execution-summary]",
     );
-    expect(
-      narrationExecution!.contains(narration),
-    ).toBeTruthy();
+    expect(narrationExecution!.contains(narration)).toBeTruthy();
   });
 
   it("keeps legacy assistant rows in text then tool order", () => {
@@ -889,9 +930,7 @@ describe("chat message chrome", () => {
       screen.queryByText(/Long internal instructions/),
     ).not.toBeInTheDocument();
     await userEvent.click(skillButton);
-    expect(
-      screen.getByText(/Long internal instructions/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Long internal instructions/)).toBeInTheDocument();
   });
 
   it("uses native evidence for code, tasks, and memory changes", async () => {

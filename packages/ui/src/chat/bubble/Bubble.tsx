@@ -42,6 +42,10 @@ import {
   workspaceReviewResourceFromEvents,
   type WorkspaceReviewResource,
 } from "../workspace-review";
+import {
+  chatMarkdownComponents,
+  useWorkspaceFileOpener,
+} from "../workspace-file-links";
 
 /**
  * Resolves the plugin id on a message's `origin` to a name to show the user.
@@ -60,6 +64,43 @@ export type MessageSourceLabelResolver = (
 export const MessageSourceLabelContext = createContext<
   MessageSourceLabelResolver | undefined
 >(undefined);
+
+/**
+ * "The session is currently paused on a user interaction" — an open
+ * ask-user question or an undecided approval. The HOST that owns pending
+ * state (ChatSurface) provides it; the bubble only consumes it to decide
+ * whether the narration before the pause is still the user's answering
+ * basis (kept visible) or already ordinary process content (folded), and
+ * to keep the trailing "working" indicator quiet while nothing is running.
+ * Tools never register here: pausing through the official interaction
+ * seams (ctx.userQuestions, approvals) IS the declaration.
+ */
+export const AwaitingUserInputContext = createContext(false);
+
+/**
+ * The tail of a turn that is still running. Between the model finishing a
+ * line of prose and its next tool call landing (generating a large `write`
+ * body can take a long while), no new event reaches the transcript: the
+ * process row already reads as completed ("worked for 14s") and the text
+ * sits still, so without this line the only sign of life is the composer's
+ * stop button. Rendered after settled body text whenever the message is
+ * still streaming; the empty-stream and tools-only states have their own
+ * pulsing labels and never reach it.
+ */
+function TurnRunningIndicator() {
+  const { t } = useT();
+  return (
+    <div
+      data-testid="turn-running"
+      className="inline-flex min-h-7 items-center px-1.5 text-[11px] text-muted-foreground"
+      aria-live="polite"
+    >
+      <span className="agent-thinking-text">
+        {t("sidepanel.trace.working")}
+      </span>
+    </div>
+  );
+}
 
 export interface BubbleProps {
   m: UiMessage;
@@ -103,6 +144,7 @@ export function Bubble({
 }: BubbleProps) {
   const { t } = useT();
   const resolveMessageSourceLabel = useContext(MessageSourceLabelContext);
+  const awaitingUserInput = useContext(AwaitingUserInputContext);
 
   if (m.role === "user") {
     const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
@@ -218,6 +260,11 @@ export function Bubble({
       !trace.hasRunningTool &&
       trace.reasoningText.length === 0;
 
+    // Body text that is still streaming ends in Streamdown's caret, but
+    // once the prose settles and the model moves on to its next call there
+    // is nothing animated left on screen — say the turn is still running.
+    const showRunning = !!m.streaming && hasBody && !awaitingUserInput;
+
     return (
       <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
         {(hasReasoningFold || traceVisible) && (
@@ -272,6 +319,7 @@ export function Bubble({
         )}
         {hasBody && (
           <Streamdown
+            components={chatMarkdownComponents}
             mode={m.streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
             caret="circle"
@@ -281,6 +329,7 @@ export function Bubble({
             {trace.bodyText}
           </Streamdown>
         )}
+        {showRunning && <TurnRunningIndicator />}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
           <AgentDestinationChip
             url={m.agentFinalUrl}
@@ -540,6 +589,7 @@ function TraceDisclosure({
       {expanded && (
         <div className="ml-[7px] border-l border-border/60 py-1.5 pl-4 pr-1">
           <Streamdown
+            components={chatMarkdownComponents}
             mode={streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
             caret="circle"
@@ -619,6 +669,7 @@ function LiveReasoningPane({ text }: { text: string }) {
       className="ml-[7px] max-h-40 overflow-y-auto border-l border-border/60 py-1 pl-3 pr-1"
     >
       <Streamdown
+        components={chatMarkdownComponents}
         mode="static"
         parseIncompleteMarkdown
         className="chat-md chat-md--reasoning break-words px-1.5 text-xs text-muted-foreground/85"
@@ -754,6 +805,7 @@ function ExecutionDisclosure({
               if (details.length === 1) {
                 return (
                   <Streamdown
+                    components={chatMarkdownComponents}
                     key={detail.id}
                     mode="static"
                     parseIncompleteMarkdown
@@ -775,6 +827,7 @@ function ExecutionDisclosure({
             if (detail.kind === "narration") {
               return (
                 <Streamdown
+                  components={chatMarkdownComponents}
                   key={detail.id}
                   mode="static"
                   parseIncompleteMarkdown
@@ -1008,10 +1061,7 @@ type AssistantFlowItem =
 function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   const timeline = message.assistantTimeline ?? [];
   const tools = new Map(
-    (message.toolProgress ?? []).map((event) => [
-      event.toolCallId,
-      event,
-    ]),
+    (message.toolProgress ?? []).map((event) => [event.toolCallId, event]),
   );
   const approvals = new Map(
     (message.approvalRecords ?? []).map((record) => [
@@ -1102,17 +1152,6 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   return flow;
 }
 
-/**
- * "The session is currently paused on a user interaction" — an open
- * ask-user question or an undecided approval. The HOST that owns pending
- * state (ChatSurface) provides it; the bubble only consumes it to decide
- * whether the narration before the pause is still the user's answering
- * basis (kept visible) or already ordinary process content (folded).
- * Tools never register here: pausing through the official interaction
- * seams (ctx.userQuestions, approvals) IS the declaration.
- */
-export const AwaitingUserInputContext = createContext(false);
-
 function InterleavedAssistantFlow({
   message,
   suppressRunBoundary = false,
@@ -1152,7 +1191,9 @@ function InterleavedAssistantFlow({
   // "declared" itself, and gets this treatment with no registration.
   const lastSegment = flow.at(-1);
   const awaitingUser =
-    awaitingUserInput && !!message.streaming && lastSegment?.kind === "execution";
+    awaitingUserInput &&
+    !!message.streaming &&
+    lastSegment?.kind === "execution";
   const { head: processSegments, tail: resultSegments } = splitTrailingTextRun(
     awaitingUser ? flow.slice(0, -1) : flow,
   );
@@ -1172,6 +1213,13 @@ function InterleavedAssistantFlow({
     .trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
+  // With result text on screen the process row shows its completed label
+  // and the only animation is the text caret, which stops with the prose;
+  // the turn itself may still be running (its next tool call is being
+  // generated). Keep a pulsing tail until the stream ends — unless the
+  // session is paused on the user, where "working" would be a lie.
+  const showRunning =
+    resultStreaming && resultText.length > 0 && !awaitingUserInput;
 
   // The thought stream joins the same aggregate as the tools: one collapsed
   // process row whose summary reads "思考了 X 秒 · N 次工具调用", with the
@@ -1207,6 +1255,7 @@ function InterleavedAssistantFlow({
         )}
         {resultText.length > 0 && (
           <Streamdown
+            components={chatMarkdownComponents}
             mode={resultStreaming ? "streaming" : "static"}
             parseIncompleteMarkdown
             caret="circle"
@@ -1216,6 +1265,7 @@ function InterleavedAssistantFlow({
             {resultText}
           </Streamdown>
         )}
+        {showRunning && <TurnRunningIndicator />}
       </div>
       {!message.streaming &&
         message.agentFinalUrl &&
@@ -1405,9 +1455,7 @@ export function MessageTurns({
         const reviewResource = turn.replies.some((message) => message.streaming)
           ? null
           : workspaceReviewResourceFromEvents(
-              turn.replies.flatMap(
-                (message) => message.toolProgress ?? [],
-              ),
+              turn.replies.flatMap((message) => message.toolProgress ?? []),
               `turn:${turn.user?.uiId ?? i}`,
             );
         return (
@@ -1473,28 +1521,30 @@ function WorkspaceChangesCard({
   onReview(resource: WorkspaceReviewResource): void | Promise<void>;
 }) {
   const { t } = useT();
+  const openFile = useWorkspaceFileOpener();
   const [expanded, setExpanded] = useState(false);
   const review = parseWorkspaceReview(resource.entries);
   const visibleFiles = expanded ? review.files : review.files.slice(0, 3);
   const remaining = Math.max(0, review.files.length - visibleFiles.length);
 
+  // A quiet footnote under the turn, not a second card: one slim summary
+  // line with the review action, then the touched files — each a link into
+  // the workbench when the shell can open files.
   return (
     <section
       aria-label={t("workspacePane.filesChanged", {
         count: review.files.length,
       })}
-      className="overflow-hidden rounded-xl border border-border/60 bg-background shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+      className="overflow-hidden rounded-lg border border-border/45 bg-muted/[0.16]"
     >
-      <div className="flex min-h-16 items-center gap-3 px-3 py-2.5">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/65 text-muted-foreground">
-          <FileDiff className="h-[18px] w-[18px]" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-xs font-medium text-foreground">
+      <div className="flex min-h-8 items-center gap-2 px-2.5 py-1">
+        <FileDiff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+        <span className="flex min-w-0 flex-1 items-baseline gap-2 text-[11px] text-muted-foreground">
+          <span className="truncate">
             {t("workspacePane.filesChanged", { count: review.files.length })}
           </span>
           {review.additions > 0 || review.deletions > 0 ? (
-            <span className="mt-0.5 flex items-center gap-2 font-mono text-[10.5px] tabular-nums">
+            <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] tabular-nums">
               <span className="text-emerald-600 dark:text-emerald-400">
                 +{review.additions}
               </span>
@@ -1507,24 +1557,16 @@ function WorkspaceChangesCard({
         <button
           type="button"
           onClick={() => void onReview(resource)}
-          className="inline-flex h-8 shrink-0 items-center rounded-lg border border-border/70 bg-background px-3 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          className="inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
         >
           {t("workspacePane.review")}
         </button>
       </div>
-      <ul className="border-t border-border/45 px-3 py-1.5">
-        {visibleFiles.map((file) => (
-          <li
-            key={file.path}
-            className="flex min-h-8 min-w-0 items-center gap-3 text-[11px]"
-          >
-            <span
-              className="min-w-0 flex-1 truncate font-mono text-foreground/72"
-              title={file.path}
-            >
-              {compactWorkspacePath(file.path, 6)}
-            </span>
-            <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+      <ul className="border-t border-border/35 px-2.5 py-1">
+        {visibleFiles.map((file) => {
+          const label = compactWorkspacePath(file.path, 6);
+          const stats = (
+            <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] tabular-nums">
               {file.additions > 0 ? (
                 <span className="text-emerald-600 dark:text-emerald-400">
                   +{file.additions}
@@ -1536,14 +1578,39 @@ function WorkspaceChangesCard({
                 </span>
               ) : null}
             </span>
-          </li>
-        ))}
+          );
+          return (
+            <li
+              key={file.path}
+              className="flex min-h-7 min-w-0 items-center gap-3 text-[11px]"
+            >
+              {openFile ? (
+                <button
+                  type="button"
+                  onClick={() => void openFile({ path: file.path })}
+                  title={t("sidepanel.trace.searchResults.openFile")}
+                  className="min-w-0 flex-1 truncate text-left font-mono text-foreground/72 transition-colors hover:text-primary hover:underline focus:outline-none focus-visible:text-primary"
+                >
+                  {label}
+                </button>
+              ) : (
+                <span
+                  className="min-w-0 flex-1 truncate font-mono text-foreground/72"
+                  title={file.path}
+                >
+                  {label}
+                </span>
+              )}
+              {stats}
+            </li>
+          );
+        })}
         {remaining > 0 || expanded ? (
           <li>
             <button
               type="button"
               onClick={() => setExpanded((current) => !current)}
-              className="inline-flex min-h-8 items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex min-h-7 items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               {expanded ? (
                 <ChevronUp className="h-3.5 w-3.5" />

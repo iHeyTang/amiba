@@ -80,6 +80,13 @@ import {
 } from "./bubble/question-seat";
 import { useWorkspacePane } from "./WorkspacePane";
 import {
+  WorkspaceFileOpenerContext,
+  isHtmlPreviewPath,
+  resolveWorkspaceFilePath,
+  workspaceFileUrl,
+  type WorkspaceFileLink,
+} from "./workspace-file-links";
+import {
   Composer,
   type ComposerDensity,
   type ComposerHandle,
@@ -550,6 +557,26 @@ export default function ChatSurface({
     // restored workspace becomes authoritative and the transient draft can go.
     if (workspacePath) pendingWorkspacePathRef.current = null;
   }, [workspacePath]);
+
+  // A file the agent named in its reply (inline code, or a row on the
+  // files-changed card). HTML lands in the embedded browser as a rendered
+  // page — that is what "here is your report" means — everything else, and
+  // any host without a browser, opens as a file tab.
+  const openWorkspaceFile = useCallback(
+    (link: WorkspaceFileLink) => {
+      if (isHtmlPreviewPath(link.path)) {
+        const absolute = resolveWorkspaceFilePath(link.path, workspacePath);
+        if (
+          absolute &&
+          workspacePane.openBrowserUrl(workspaceFileUrl(absolute))
+        ) {
+          return;
+        }
+      }
+      workspacePane.openFile(link.path, link.line);
+    },
+    [workspacePane, workspacePath],
+  );
   // Hidden file-input ref + onChange handler are owned by
   // `useComposerAttachments` — see `fileInputProps` below.
   /** Composer instance — exposes focus/select via ComposerHandle.
@@ -1176,7 +1203,10 @@ export default function ChatSurface({
     }
   }
 
-  function handleStreamAborted(sessionId: string, assistantUiId?: string): void {
+  function handleStreamAborted(
+    sessionId: string,
+    assistantUiId?: string,
+  ): void {
     // A NAMED bubble that isn't the one being streamed here is a displaced
     // host-started run: the engine settling its assistant bubble as the
     // local turn that replaced it begins. Stop that bubble spinning and
@@ -1284,7 +1314,10 @@ export default function ChatSurface({
         // inside the updater so it reads the queued state, not the render
         // that fired the event.
         sessions.setActiveMessages((prev) =>
-          withHostAssistantPlaceholder(prev as UiMessage[], event.assistantUiId),
+          withHostAssistantPlaceholder(
+            prev as UiMessage[],
+            event.assistantUiId,
+          ),
         );
         break;
       case "userMessage": {
@@ -2143,18 +2176,24 @@ export default function ChatSurface({
                     <MessageSourceLabelContext.Provider
                       value={messageSourceLabel}
                     >
-                      <MessageTurns
-                        messages={messages}
-                        onReviewWorkspaceChanges={
-                          workspacePane.enabled
-                            ? workspacePane.openReview
-                            : undefined
+                      <WorkspaceFileOpenerContext.Provider
+                        value={
+                          workspacePane.enabled ? openWorkspaceFile : undefined
                         }
-                        restorableTurnOrdinals={restorableTurnOrdinals}
-                        onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
-                        onOpenAgentDestination={openAgentDestination}
-                        onBranchUserMessage={branchUserMessage}
-                      />
+                      >
+                        <MessageTurns
+                          messages={messages}
+                          onReviewWorkspaceChanges={
+                            workspacePane.enabled
+                              ? workspacePane.openReview
+                              : undefined
+                          }
+                          restorableTurnOrdinals={restorableTurnOrdinals}
+                          onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
+                          onOpenAgentDestination={openAgentDestination}
+                          onBranchUserMessage={branchUserMessage}
+                        />
+                      </WorkspaceFileOpenerContext.Provider>
                     </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>

@@ -293,6 +293,38 @@
   border: 1px solid hsl(var(--border) / 0.7);
 }
 
+/* Inline code that names a workspace file is wrapped in a button that opens
+ * it in the workbench. The button is invisible chrome; the pill itself
+ * lights up in the accent on hover so the affordance reads as a link. */
+.chat-md.chat-md .chat-md-file-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.chat-md.chat-md .chat-md-file-link:focus-visible {
+  outline: none;
+}
+.chat-md.chat-md .chat-md-file-link [data-streamdown="inline-code"] {
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.chat-md.chat-md .chat-md-file-link:hover [data-streamdown="inline-code"],
+.chat-md.chat-md
+  .chat-md-file-link:focus-visible
+  [data-streamdown="inline-code"] {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.45);
+  background: hsl(var(--primary) / 0.08);
+}
+
 /* Code block — flatten Streamdown's default two-box layout into a single
  * box, with copy/download buttons absolutely anchored to the inner body's
  * top-right corner.
