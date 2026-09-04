@@ -19,6 +19,21 @@ const IMAGE_MEDIA_TYPES = new Set<ImageMediaType>([
   "image/gif",
 ]);
 
+/**
+ * Who a browser operation belongs to.
+ *
+ * A background task session drives the same tools as the session on screen,
+ * so every call carries its owning session. Without it the visible workbench
+ * is the only place a provider can put a tab, and a task the user is not
+ * looking at hijacks the conversation they ARE looking at.
+ *
+ * `sessionId` is absent for calls that have no agent behind them (the user
+ * clicking "open browser"); those keep the provider's global behaviour.
+ */
+export interface BrowserCallContext {
+  sessionId?: string;
+}
+
 export interface BrowserProvider {
   id: string;
   name: string;
@@ -27,6 +42,7 @@ export interface BrowserProvider {
     operation: BrowserOperation,
     argumentsValue: Record<string, unknown>,
     signal: AbortSignal,
+    context: BrowserCallContext,
   ): Promise<unknown>;
 }
 
@@ -331,6 +347,7 @@ export class AmibaBrowserService {
                 tool.name,
                 record(args) ?? {},
                 exec.signal,
+                { sessionId: exec.agent?.session.id },
               ),
               tool.name,
             ),
