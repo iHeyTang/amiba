@@ -390,10 +390,15 @@ export class MessageCenterStore {
     });
   }
 
+  /**
+   * Patch one channel. Every key is optional and `undefined` means "leave
+   * alone"; `approval: null` is the explicit clear, so a caller rolling a row
+   * back to "no policy of its own" can express that (an omitted `approval`
+   * could only ever set a value).
+   */
   update(id: string, patch: Partial<Pick<StoredMessageChannel,
     "name" | "sessionId" | "enabled" | "outboundUrl" | "allowedSenders" | "agentPreset"
-    | "approval"
-  >>): Promise<StoredMessageChannel> {
+  >> & { approval?: MessageChannelApproval | null }): Promise<StoredMessageChannel> {
     return this.mutate((document) => {
       const index = document.channels.findIndex((item) => item.id === id);
       if (index < 0) throw new Error("channel_not_found");
@@ -418,7 +423,9 @@ export class MessageCenterStore {
             : { agentPreset: undefined }),
         ...(patch.approval === undefined
           ? {}
-          : { approval: normalizeApproval(patch.approval) }),
+          : patch.approval === null
+            ? { approval: undefined }
+            : { approval: normalizeApproval(patch.approval) }),
         updatedAt: new Date().toISOString(),
       };
       document.channels[index] = channel;

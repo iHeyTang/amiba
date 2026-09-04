@@ -931,4 +931,40 @@ describe("channel approval policy", () => {
       timeoutMs: 600_000,
     });
   });
+
+  it("rolls a rejected update back to having no policy of its own", async () => {
+    const { center } = await harness();
+    let reject = false;
+    center.registerProvider({
+      id: "picky",
+      name: "Picky",
+      description: "Refuses the update",
+      supportsInbound: true,
+      supportsOutbound: true,
+      validate: () => {
+        if (reject) throw new Error("provider_says_no");
+      },
+    });
+    const created = await center.createChannel({
+      provider: "picky",
+      name: "Ops",
+      sessionId: "session-a",
+    });
+    expect((await center.store.list())[0]?.approval).toBeUndefined();
+
+    reject = true;
+    await expect(
+      center.updateChannel(created.channel.id, {
+        approval: { mode: "wait", timeoutMs: 600_000 },
+      }),
+    ).rejects.toThrow("provider_says_no");
+    // The row carried no policy of its own before the rejected patch, so the
+    // rollback has to CLEAR the field again — leaving the rejected value in
+    // place would silently apply a policy the provider refused.
+    expect((await center.store.list())[0]?.approval).toBeUndefined();
+    expect((await center.listChannels())[0]?.approval).toEqual({
+      mode: "timeout",
+      timeoutMs: 600_000,
+    });
+  });
 });

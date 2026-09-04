@@ -102,7 +102,14 @@ interface Settlement {
   outcome: ApprovalOutcome;
   reason: ApprovalSettlementReason;
   by?: string;
+  /** Post nothing to the IM — teardown, or a channel that cannot carry it. */
   silent?: boolean;
+  /**
+   * The relay gave up on this question: the answerer must resolve it with
+   * `next()` (the desktop backstop of plan §0/§5) instead of returning
+   * `outcome`. Only the permanent-delivery-failure path sets it.
+   */
+  delegate?: boolean;
 }
 
 interface PendingApproval {
@@ -133,7 +140,14 @@ const ALLOW_WORDS = new Set(["同意", "yes", "ok", "approve"]);
 
 export interface ParsedApprovalReply {
   outcome: ApprovalDecision;
-  seq?: number;
+  /**
+   * The number the reply named, `undefined` when it named none (meaning "the
+   * oldest question"), and `null` when it named one we cannot use — a digit
+   * run past `Number.MAX_SAFE_INTEGER`. A named-but-unusable target must NOT
+   * silently degrade to "oldest": the sender pointed at something specific,
+   * so it matches nothing and travels on as an ordinary message.
+   */
+  seq?: number | null;
 }
 
 /** Parse one inbound message as an approval answer, or `null` if it is not. */
@@ -141,11 +155,12 @@ export function parseApprovalReply(text: string): ParsedApprovalReply | null {
   const match = APPROVAL_REPLY.exec(text.trim());
   if (!match) return null;
   const word = match[1]!.toLowerCase();
-  const seq = match[2] ? Number.parseInt(match[2], 10) : undefined;
-  return {
-    outcome: ALLOW_WORDS.has(word) ? "allowed-once" : "rejected",
-    ...(seq !== undefined && Number.isSafeInteger(seq) ? { seq } : {}),
-  };
+  const outcome: ApprovalDecision = ALLOW_WORDS.has(word)
+    ? "allowed-once"
+    : "rejected";
+  if (match[2] === undefined) return { outcome };
+  const seq = Number.parseInt(match[2], 10);
+  return { outcome, seq: Number.isSafeInteger(seq) ? seq : null };
 }
 
 function promptText(pending: PendingApproval): string {
@@ -220,7 +235,13 @@ export function readApprovalId(
  */
 export class ApprovalRelay {
   private readonly pending = new Map<string, PendingApproval>();
-  /** Next short number per conversation; dropped when nothing is pending. */
+  /**
+   * Next short number per conversation. Monotonic for the lifetime of the
+   * relay and never reset: recycling `#1` once the queue drains would let a
+   * late "同意 #1" — typed while question #1 was still on screen, delivered
+   * after it timed out — silently grant a DIFFERENT tool call that happens to
+   * have been numbered #1 in turn.
+   */
   private readonly sequences = new Map<string, number>();
   private registered = false;
   private disposed = false;
@@ -261,30 +282,63 @@ export class ApprovalRelay {
   }
 
   /** Pending questions of one conversation, oldest first. */
-  private pendingFor(sessionId: string): PendingApproval[] {
+  private pendingFor(channelId: string, sessionId: string): PendingApproval[] {
     return [...this.pending.values()]
-      .filter((item) => item.sessionId === sessionId && !item.settled)
+      .filter(
+        (item) =>
+          item.channelId === channelId &&
+          item.sessionId === sessionId &&
+          !item.settled,
+      )
       .sort((left, right) => left.seq - right.seq);
   }
 
   /**
-   * Try to consume an inbound message as an answer to a pending approval.
-   * Returns true when it was consumed — the caller must then NOT turn it into
-   * a user turn (plan §3). Anything unparseable, or aimed at a number nobody
-   * is waiting on, returns false and travels the normal inbound path.
+   * The pending question an inbound message would answer, if any. Split out
+   * of `answerFromText` so the caller can claim the message's receipt BEFORE
+   * anything is settled — a redelivered answer must not settle whatever is
+   * pending now.
    */
-  answerFromText(sessionId: string, text: string, by?: string): boolean {
+  private textTarget(
+    channelId: string,
+    sessionId: string,
+    text: string,
+  ): { target: PendingApproval; outcome: ApprovalDecision } | undefined {
     const parsed = parseApprovalReply(text);
-    if (!parsed) return false;
-    const waiting = this.pendingFor(sessionId);
-    if (!waiting.length) return false;
+    if (!parsed || parsed.seq === null) return undefined;
+    const waiting = this.pendingFor(channelId, sessionId);
     const target =
       parsed.seq === undefined
         ? waiting[0]
         : waiting.find((item) => item.seq === parsed.seq);
-    if (!target) return false;
-    target.settle({
-      outcome: parsed.outcome,
+    return target ? { target, outcome: parsed.outcome } : undefined;
+  }
+
+  /**
+   * True when this inbound message would be consumed as an approval answer.
+   * The caller uses it to decide whether to claim the message's receipt on
+   * the approval path instead of the ordinary inbound path.
+   */
+  matchesPending(channelId: string, sessionId: string, text: string): boolean {
+    return this.textTarget(channelId, sessionId, text) !== undefined;
+  }
+
+  /**
+   * Consume an inbound message as an answer to a pending approval. Returns
+   * true when it was consumed — the caller must then NOT turn it into a user
+   * turn (plan §3). Anything unparseable, or aimed at a number nobody is
+   * waiting on, returns false and travels the normal inbound path.
+   */
+  answerFromText(
+    channelId: string,
+    sessionId: string,
+    text: string,
+    by?: string,
+  ): boolean {
+    const match = this.textTarget(channelId, sessionId, text);
+    if (!match) return false;
+    match.target.settle({
+      outcome: match.outcome,
       reason: "answered",
       ...(by ? { by } : {}),
     });
@@ -297,10 +351,9 @@ export class ApprovalRelay {
     return seq;
   }
 
+  /** Drop a settled record. The conversation's counter deliberately stays. */
   private forget(pending: PendingApproval): void {
     this.pending.delete(pending.approvalId);
-    const key = `${pending.channelId}:${pending.conversationKey}`;
-    if (!this.pendingFor(pending.sessionId).length) this.sequences.delete(key);
   }
 
   private readonly answer: ApprovalAnswerer = async (req, next) => {
@@ -420,12 +473,30 @@ export class ApprovalRelay {
       if (!entry.settled && entry.presentation === "text") {
         const queued = await this.deliverPrompt(channel, entry);
         if (!queued) {
+          // Settle before forgetting: the record is going away, but its
+          // deadline timer and abort listener would otherwise stay armed and
+          // fire against a question nobody is tracking any more.
+          entry.settle({
+            outcome: "unavailable",
+            reason: "cancelled",
+            silent: true,
+          });
           this.forget(entry);
           return next();
         }
       }
 
       const result = settlement ?? (await settled);
+      // The prompt exhausted the outbox's retry budget: this channel cannot
+      // reach the human at all, so hand the question to the next answerer
+      // (the desktop) exactly as an undeliverable channel does — plan §5's
+      // "再失败则 next()". `next()` only exists inside this callback, which is
+      // why the promise is held open until the outbox gives up rather than
+      // settled as `unavailable` from the delivery loop.
+      if (result.delegate) {
+        this.forget(entry);
+        return next();
+      }
       await this.settleSideEffects(channel, conversation, entry, result);
       this.forget(entry);
       return result.outcome;
@@ -444,6 +515,26 @@ export class ApprovalRelay {
       return next();
     }
   };
+
+  /**
+   * The outbox has permanently given up on `envelopeId`. When it carried a
+   * pending question's prompt, that question can never reach the IM: settle
+   * it so the answerer wakes up and delegates to the desktop backstop.
+   */
+  abandonPrompt(envelopeId: string): void {
+    for (const entry of this.pending.values()) {
+      if (entry.settled || entry.promptEnvelopeId !== envelopeId) continue;
+      this.host.warn(
+        `Approval prompt ${envelopeId} could not be delivered; handing approval ${entry.approvalId} to the next answerer.`,
+      );
+      entry.settle({
+        outcome: "unavailable",
+        reason: "cancelled",
+        silent: true,
+        delegate: true,
+      });
+    }
+  }
 
   /**
    * Queue the text prompt on the same durable outbox as turn replies, so the
@@ -490,6 +581,12 @@ export class ApprovalRelay {
   ): Promise<void> {
     if (settlement.silent) return;
     // A prompt that never made it out of the outbox must not surface later.
+    // Note the outcome notice below is still queued in that case (e.g. a
+    // timeout notice for a prompt whose first delivery attempt had not run
+    // yet): it is the same conversation and the same transport, so if the
+    // notice lands the human learns the question expired, and if it does not
+    // it fails the same way the prompt did. Deliberate — do not gate the
+    // notice on the prompt having been delivered.
     if (pending.promptEnvelopeId) {
       await this.host
         .cancelOutbound(pending.promptEnvelopeId)

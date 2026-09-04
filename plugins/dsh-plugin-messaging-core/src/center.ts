@@ -130,8 +130,10 @@ function view(
  * `timeoutMs` (the wizard's last chosen value) but never applies it; `timeout`
  * needs a window long enough for a human to notice a message.
  */
-function assertApproval(approval: MessageChannelApproval | undefined): void {
-  if (approval === undefined) return;
+function assertApproval(
+  approval: MessageChannelApproval | null | undefined,
+): void {
+  if (approval === undefined || approval === null) return;
   if (approval.mode !== "timeout" && approval.mode !== "wait")
     throw new Error("invalid_channel_approval");
   if (!Number.isSafeInteger(approval.timeoutMs) || approval.timeoutMs <= 0)
@@ -467,7 +469,10 @@ export class MessageChannelCenter {
         enabled: previous.enabled,
         outboundUrl: previous.outboundUrl ?? "",
         allowedSenders: previous.allowedSenders,
-        ...(previous.approval ? { approval: previous.approval } : {}),
+        // `null` clears the field: a row that had no policy of its own must
+        // roll back to having none (and so read as the default), not keep the
+        // rejected patch's value.
+        approval: previous.approval ?? null,
       });
       throw error;
     }
@@ -628,14 +633,22 @@ export class MessageChannelCenter {
     // whoever may talk to the bot may also answer its approvals (plan §2).
     // Anything the protocol cannot parse — or aimed at a number nobody is
     // waiting on — falls through to the normal inbound path untouched.
-    if (
-      this.approvals.answerFromText(
-        sessionId,
-        envelope.text,
-        envelope.sender,
-      )
-    ) {
+    if (this.approvals.matchesPending(channel.id, sessionId, envelope.text)) {
+      // Claim the receipt FIRST. A transport that redelivers an answer we
+      // already consumed must not settle whatever question is pending now:
+      // "同意" sent for question #1 must never grant question #2 because the
+      // network duplicated it after #1 closed.
+      // In the narrow window between the probe and this write the question
+      // may have settled on its own (a deadline); the answer then grants
+      // nothing, but its receipt is ours, so it stays consumed either way.
       const fresh = await this.store.acceptReceipt(receiptKey);
+      if (fresh)
+        this.approvals.answerFromText(
+          channel.id,
+          sessionId,
+          envelope.text,
+          envelope.sender,
+        );
       return {
         accepted: true,
         duplicate: !fresh,
@@ -843,6 +856,10 @@ export class MessageChannelCenter {
           Date.now() + Math.min(60 * 60_000, 2_000 * 2 ** attempts),
         ).toISOString();
     await this.store.markDeliveryFailed(delivery.id, reason, retryAt);
+    // Out of retries: an approval prompt sitting in this envelope will never
+    // reach its conversation, so wake the relay and let it delegate to the
+    // desktop answerer instead of holding the tool call open.
+    if (terminal) this.approvals.abandonPrompt(delivery.id);
     this.ctx
       .logger("amiba-messaging-core")
       .error(

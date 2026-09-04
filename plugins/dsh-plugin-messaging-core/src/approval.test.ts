@@ -308,6 +308,36 @@ describe("IM approval relay", () => {
     await expect(dispatch(request(sessionId))).resolves.toBe("allowed-once");
     expect(desktop).toHaveBeenCalledTimes(1);
   });
+
+  it("disarms a question before handing it to the desktop", async () => {
+    const { center, desktop, dispatch } = await harness();
+    let promptAborted = false;
+    const provider = imProvider({
+      supportsOutbound: false,
+      deliver: undefined,
+      requestApproval: vi.fn<NonNullable<MessageChannelProvider["requestApproval"]>>(
+        async (_channel, _conversation, prompt) => {
+          prompt.signal.addEventListener("abort", () => {
+            promptAborted = true;
+          });
+          return null;
+        },
+      ),
+    });
+    const { sessionId } = await boundChannel(center, provider as never);
+    const controller = new AbortController();
+    await expect(
+      dispatch(request(sessionId, { signal: controller.signal })),
+    ).resolves.toBe("allowed-once");
+    expect(desktop).toHaveBeenCalledTimes(1);
+    // Handing over settles the record silently, so its deadline timer and its
+    // listener on the asking turn come off and the provider is told to stop
+    // waiting — rather than being left armed against a forgotten question.
+    expect(promptAborted).toBe(true);
+    controller.abort();
+    await flushIo();
+    expect(provider.deliver).toBeUndefined();
+  });
 });
 
 /**
@@ -373,10 +403,11 @@ describe("IM approval text protocol", () => {
     });
     await expect(second).resolves.toBe("rejected");
 
-    // Nothing pending any more: the short numbers restart at #1.
+    // The counter never rewinds, even with nothing pending: a stale "同意 #1"
+    // must not be able to grant a later question.
     const third = dispatch(request(sessionId, { askId: "ask-3", callId: "call-3" }));
     await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalledTimes(3));
-    expect(deliveredTexts(provider)[2]).toContain("需要审批 #1");
+    expect(deliveredTexts(provider)[2]).toContain("需要审批 #3");
     await center.acceptInbound(channelId, secret, {
       id: "evt-c",
       text: "no",
@@ -669,4 +700,239 @@ describe("IM approval settlement", () => {
     expect(provider.announceApprovalOutcome).toHaveBeenCalledTimes(1);
     expect(provider.deliver).not.toHaveBeenCalled();
   });
+});
+
+describe("IM approval replay and numbering safety", () => {
+  it("never lets a redelivered answer settle a different question", async () => {
+    const { center, dispatch } = await harness();
+    const provider = imProvider();
+    const { sessionId, channelId, secret } = await boundChannel(center, provider);
+
+    const first = dispatch(request(sessionId, { askId: "ask-1", callId: "call-1" }));
+    await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalledTimes(1));
+    await center.acceptInbound(channelId, secret, {
+      id: "evt-1",
+      text: "同意",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    await expect(first).resolves.toBe("allowed-once");
+
+    const second = dispatch(request(sessionId, { askId: "ask-2", callId: "call-2" }));
+    await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalledTimes(2));
+    let settled = false;
+    void second.then(() => {
+      settled = true;
+    });
+
+    // The transport redelivers the answer that already closed #1. Its receipt
+    // is claimed, so it must be reported as a duplicate and #2 must stay open.
+    const replay = await center.acceptInbound(channelId, secret, {
+      id: "evt-1",
+      text: "同意",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    expect(replay).toMatchObject({ duplicate: true, consumedAsApproval: true });
+    await flushIo();
+    expect(settled).toBe(false);
+
+    await center.acceptInbound(channelId, secret, {
+      id: "evt-2",
+      text: "拒绝",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    await expect(second).resolves.toBe("rejected");
+  });
+
+  it("keeps the numbers monotonic so a stale numbered answer matches nothing", async () => {
+    useDeadlineTimers();
+    const { center, dispatch, followup } = await harness();
+    const provider = imProvider();
+    const { sessionId, channelId, secret } = await boundChannel(center, provider);
+
+    const first = dispatch(request(sessionId, { askId: "ask-1", callId: "call-1" }));
+    await until(() => provider.deliver.mock.calls.length === 1);
+    vi.advanceTimersByTime(600_000);
+    await expect(first).resolves.toBe("rejected");
+    await until(() => provider.deliver.mock.calls.length === 2);
+
+    const second = dispatch(request(sessionId, { askId: "ask-2", callId: "call-2" }));
+    await until(() => provider.deliver.mock.calls.length === 3);
+    expect(deliveredTexts(provider)[2]).toContain("需要审批 #2");
+    followup.mockClear();
+
+    // Typed while #1 was still on screen, delivered after it expired: the
+    // number now names nothing, so it is an ordinary message, not a grant.
+    const stale = await center.acceptInbound(channelId, secret, {
+      id: "evt-stale",
+      text: "同意 #1",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    expect(stale.consumedAsApproval).toBeUndefined();
+    expect(followup).toHaveBeenCalledTimes(1);
+    let settled = false;
+    void second.then(() => {
+      settled = true;
+    });
+    await flushIo();
+    expect(settled).toBe(false);
+
+    await center.acceptInbound(channelId, secret, {
+      id: "evt-2",
+      text: "同意 #2",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    await expect(second).resolves.toBe("allowed-once");
+  });
+
+  it("treats a number it cannot represent as naming nothing", async () => {
+    const { center, dispatch, followup } = await harness();
+    const provider = imProvider();
+    const { sessionId, channelId, secret } = await boundChannel(center, provider);
+    const outcome = dispatch(request(sessionId));
+    await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalledTimes(1));
+    followup.mockClear();
+
+    const huge = await center.acceptInbound(channelId, secret, {
+      id: "evt-huge",
+      text: "同意 #99999999999999999999",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    expect(huge.consumedAsApproval).toBeUndefined();
+    expect(followup).toHaveBeenCalledTimes(1);
+
+    await center.acceptInbound(channelId, secret, {
+      id: "evt-plain",
+      text: "同意",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    await expect(outcome).resolves.toBe("allowed-once");
+  });
+
+  it("ignores an answer sent on another channel that shares the session", async () => {
+    const { center, dispatch, followup } = await harness();
+    const provider = imProvider();
+    const { sessionId, channelId, secret } = await boundChannel(center, provider);
+    const outcome = dispatch(request(sessionId));
+    await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalledTimes(1));
+
+    // A second channel pinned to the SAME session: whoever may talk to it is
+    // not necessarily in the conversation that was asked.
+    center.registerProvider(imProvider({ id: "im-other" }));
+    const other = await center.createChannel({
+      provider: "im-other",
+      name: "Side channel",
+      sessionId,
+    });
+    followup.mockClear();
+    const strayAnswer = await center.acceptInbound(
+      other.channel.id,
+      other.secret,
+      { id: "evt-other", text: "同意 #1", sender: "u-9" },
+    );
+    expect(strayAnswer.consumedAsApproval).toBeUndefined();
+    expect(followup).toHaveBeenCalledTimes(1);
+    let settled = false;
+    void outcome.then(() => {
+      settled = true;
+    });
+    await flushIo();
+    expect(settled).toBe(false);
+
+    await center.acceptInbound(channelId, secret, {
+      id: "evt-owner",
+      text: "拒绝 #1",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    await expect(outcome).resolves.toBe("rejected");
+  });
+
+  it("claims a question with a synthetic id when the log carries no ask", async () => {
+    const { center, dispatch } = await harness();
+    const requestApproval = vi.fn<
+      NonNullable<MessageChannelProvider["requestApproval"]>
+    >(async (): Promise<ApprovalReply> => ({ outcome: "rejected" }));
+    const provider = imProvider({ requestApproval });
+    const { sessionId } = await boundChannel(center, provider);
+
+    // No `approval/asked` event to pair with (an older DSH, or a request the
+    // service dispatched before appending): the relay still answers, under an
+    // id of its own, so the two answerers cannot collide on it.
+    await expect(
+      dispatch(request(sessionId, { askId: null })),
+    ).resolves.toBe("rejected");
+    const prompt = requestApproval.mock.calls[0]?.[2] as unknown as ApprovalPrompt;
+    expect(prompt.approvalId).toMatch(/^amiba-approval-[0-9a-f-]+$/u);
+  });
+});
+
+/**
+ * Fakes the clock the delivery pump rides on: its recovery interval, the
+ * backoff timer, and `Date` — the backoff compares wall-clock stamps, so it
+ * has to move with the timers. `setImmediate` stays real, which is what
+ * `flushIo` uses to let the store's file writes drain between attempts.
+ */
+function useDeliveryTimers(): void {
+  vi.useFakeTimers({
+    toFake: [
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "Date",
+    ],
+  });
+}
+
+async function runDeliveryAttempts(
+  done: () => boolean,
+  rounds = 24,
+): Promise<void> {
+  for (let index = 0; index < rounds && !done(); index += 1) {
+    // Longer than the largest backoff step, so every round is one attempt.
+    vi.advanceTimersByTime(600_000);
+    await flushIo(60);
+  }
+}
+
+describe("IM approval delivery failure", () => {
+  it.each([
+    ["timeout", { mode: "timeout" as const, timeoutMs: 24 * 60 * 60_000 }],
+    ["wait", { mode: "wait" as const, timeoutMs: 600_000 }],
+  ])(
+    "hands a prompt the outbox gave up on to the desktop (%s policy)",
+    async (_label, approval) => {
+      useDeliveryTimers();
+      const { center, desktop, dispatch } = await harness();
+      const provider = imProvider({
+        deliver: vi.fn(async () => {
+          throw new Error("im gateway down");
+        }),
+      });
+      const { sessionId } = await boundChannel(center, provider, approval);
+      await center.start();
+
+      const outcome = dispatch(request(sessionId));
+      let settled = false;
+      void outcome.then(() => {
+        settled = true;
+      });
+      await until(() => provider.deliver.mock.calls.length >= 1);
+      await runDeliveryAttempts(() => settled);
+
+      // Every retry burned: the relay stops holding the tool call open and
+      // resolves through `next()`, i.e. with the desktop answerer's verdict.
+      await expect(outcome).resolves.toBe("allowed-once");
+      expect(desktop).toHaveBeenCalledTimes(1);
+      expect(provider.deliver.mock.calls.length).toBeGreaterThanOrEqual(8);
+      await flushIo();
+    },
+  );
 });
