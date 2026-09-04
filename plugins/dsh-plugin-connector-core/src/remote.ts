@@ -24,6 +24,8 @@ export interface BeginOnboardingInput {
   provider: string;
   name: string;
   agentPreset: string;
+  /** Absent uses the bound channel's default (10-minute timeout). */
+  approval?: MessageChannelApproval;
 }
 
 export interface AmibaConnectorsProvidersSnapshot {
@@ -93,6 +95,7 @@ const beginOnboardingInputSchema = z.object({
   provider: z.string().min(1),
   name: z.string().min(1),
   agentPreset: z.string().min(1),
+  approval: approvalSchema.optional(),
 });
 
 const onboardingStateSchema = z.enum([

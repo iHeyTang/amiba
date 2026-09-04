@@ -259,8 +259,21 @@ function fakeApprovalPrompt(overrides?: Partial<ApprovalPrompt>): ApprovalPrompt
     toolName: "bash",
     sessionId: "session-1",
     signal: new AbortController().signal,
+    // Stands in for messaging-core's own channel-level rule (an empty
+    // `allowedSenders` admits everyone); the bridge's job is to narrow it
+    // further with the connect's owners.
+    canAnswer: async () => true,
     ...overrides,
   };
+}
+
+/** The prompt the bridge actually handed the runtime — the wrapped one. */
+function wrappedPrompt(
+  requestApproval: ReturnType<typeof vi.fn>,
+): ApprovalPrompt {
+  const call = requestApproval.mock.calls[0];
+  if (!call) throw new Error("runtime.requestApproval was never called");
+  return call[1] as ApprovalPrompt;
 }
 
 function fakeApprovalOutcomeNotice(
@@ -1759,9 +1772,14 @@ describe("approval bridge", () => {
     );
 
     expect(reply).toEqual({ outcome: "allowed-once", by: "u1" });
+    // Everything but `canAnswer` travels through untouched; `canAnswer` is
+    // deliberately replaced with the owners-narrowed wrapper below.
     expect(runtimes[0]!.requestApproval).toHaveBeenCalledWith(
       conversation,
-      request,
+      { ...request, canAnswer: expect.any(Function) },
+    );
+    expect(wrappedPrompt(runtimes[0]!.requestApproval as never).canAnswer).not.toBe(
+      request.canAnswer,
     );
   });
 
@@ -2069,5 +2087,168 @@ describe("approval config plumbing", () => {
         timeoutMs: 60_000,
       }),
     ).rejects.toThrow("connect_not_found");
+  });
+});
+
+/**
+ * plan.md §2: a native approval card is answerable by exactly the people who
+ * may drive the connect through text — messaging-core's channel rule
+ * (`allowedSenders`, carried on the prompt's own `canAnswer`) AND this
+ * layer's `routeInbound` rule (`owners` / `pairing`), both re-read at click
+ * time rather than snapshotted when the card was sent.
+ */
+describe("approval bridge sender gate", () => {
+  async function liveConnect(options?: { owners?: string[] }) {
+    const { center, messageCenter } = await harness();
+    const { provider, runtimes, requestApproval } = fakeApprovalProvider();
+    center.registerProvider(provider);
+    const connect = await center.createConnect({
+      provider: "fake-approval",
+      name: "Approval",
+      config: {},
+      agentPreset: "restricted",
+    });
+    // `setOwners` is what clears `pairing` — the same call the operator's
+    // own owners edit goes through.
+    if (options?.owners) await center.setOwners(connect.id, options.owners);
+    const bridge = messageCenter.registerProvider.mock.calls[0]?.[0];
+    if (!bridge?.requestApproval)
+      throw new Error("bridge provider missing requestApproval");
+    return { center, bridge, connect, runtimes, requestApproval };
+  }
+
+  it("admits an owner and refuses everyone else", async () => {
+    const { bridge, requestApproval } = await liveConnect({ owners: ["u1"] });
+
+    await bridge.requestApproval!(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+
+    const prompt = wrappedPrompt(requestApproval);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(true);
+    await expect(prompt.canAnswer("u2")).resolves.toBe(false);
+    await expect(prompt.canAnswer(undefined)).resolves.toBe(false);
+  });
+
+  it("refuses everyone while the connect is still pairing", async () => {
+    const { bridge, requestApproval } = await liveConnect();
+
+    await bridge.requestApproval!(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+
+    // A fresh connect is `pairing: true` with no owners yet: nobody has been
+    // admitted, so nobody may approve a tool call from its card either.
+    await expect(wrappedPrompt(requestApproval).canAnswer("u1")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("re-reads the connect row at click time, not when the card was sent", async () => {
+    const { center, bridge, connect, requestApproval } = await liveConnect({
+      owners: ["u1"],
+    });
+
+    await bridge.requestApproval!(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+    const prompt = wrappedPrompt(requestApproval);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(true);
+
+    await center.setOwners(connect.id, ["u2"]);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(false);
+    await expect(prompt.canAnswer("u2")).resolves.toBe(true);
+  });
+
+  it("refuses once the connect is disabled or gone", async () => {
+    const { center, bridge, connect, requestApproval } = await liveConnect({
+      owners: ["u1"],
+    });
+
+    await bridge.requestApproval!(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      fakeApprovalPrompt(),
+    );
+    const prompt = wrappedPrompt(requestApproval);
+
+    await center.setEnabled(connect.id, false);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(false);
+
+    await center.removeConnect(connect.id);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(false);
+  });
+
+  it("never widens the channel's own rule: an owner the channel refuses is refused", async () => {
+    const { bridge, requestApproval } = await liveConnect({ owners: ["u1"] });
+
+    await bridge.requestApproval!(
+      { id: "channel-1" } as never,
+      { key: "chat-1", kind: "p2p" },
+      // messaging-core's allowlist admits u2 only; u1 owns the connect.
+      fakeApprovalPrompt({ canAnswer: async (sender) => sender === "u2" }),
+    );
+
+    const prompt = wrappedPrompt(requestApproval);
+    await expect(prompt.canAnswer("u1")).resolves.toBe(false);
+    await expect(prompt.canAnswer("u2")).resolves.toBe(false);
+  });
+});
+
+describe("onboarding approval-wait setting", () => {
+  it("forwards the scan flow's approval choice onto the connect and its channel", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, gate } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const approval = { mode: "wait" as const, timeoutMs: 600_000 };
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Scanned",
+      agentPreset: "restricted",
+      approval,
+    });
+
+    gate.resolve({ config: { token: "xyz" } });
+    await vi.waitFor(() => {
+      expect(center.pollOnboarding(view.sessionId).state).toBe("completed");
+    });
+
+    // Both halves of a connect carry it: the connect row (read back through
+    // the view) and the messaging channel the connect is bound to.
+    expect(center.pollOnboarding(view.sessionId).connect?.approval).toEqual(
+      approval,
+    );
+    expect(messageCenter.createChannel).toHaveBeenCalledWith(
+      expect.objectContaining({ approval }),
+    );
+  });
+
+  it("leaves the default in force when the scan flow chooses no approval policy", async () => {
+    const { center, messageCenter } = await harness();
+    const { provider, gate } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+
+    const view = center.beginOnboarding({
+      provider: "fake-onboard",
+      name: "Scanned",
+      agentPreset: "restricted",
+    });
+
+    gate.resolve({ config: { token: "xyz" } });
+    await vi.waitFor(() => {
+      expect(center.pollOnboarding(view.sessionId).state).toBe("completed");
+    });
+
+    expect(center.pollOnboarding(view.sessionId).connect?.approval).toBeUndefined();
+    expect(messageCenter.createChannel).toHaveBeenCalledWith(
+      expect.not.objectContaining({ approval: expect.anything() }),
+    );
   });
 });

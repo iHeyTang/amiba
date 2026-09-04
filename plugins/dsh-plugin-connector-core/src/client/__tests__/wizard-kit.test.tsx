@@ -143,4 +143,12 @@ describe("ApprovalField", () => {
     expect(connectWizardKit.ApprovalField).toBe(ApprovalField);
     expect(vi.isMockFunction(connectWizardKit.ApprovalField)).toBe(false);
   });
+
+  it("exposes defaultApproval on the kit so wizards need no literal of their own", () => {
+    expect(connectWizardKit.defaultApproval).toBe(defaultApproval);
+    expect(connectWizardKit.defaultApproval()).toEqual({
+      mode: "timeout",
+      timeoutMs: 600_000,
+    });
+  });
 });

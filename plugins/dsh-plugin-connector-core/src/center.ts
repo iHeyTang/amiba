@@ -400,6 +400,11 @@ export class ConnectorCenter {
     provider: string;
     name: string;
     agentPreset: string;
+    /** Forwarded verbatim into `createConnect` when the flow completes, so a
+     * scan-to-connect wizard's approval-wait choice lands on the connect and
+     * its channel exactly as the manual form's does. Absent leaves
+     * messaging-core's own default (10-minute timeout) in force. */
+    approval?: MessageChannelApproval;
   }): OnboardingView {
     this.sweepOnboardings();
 
@@ -467,6 +472,7 @@ export class ConnectorCenter {
           name,
           config: result.config,
           agentPreset,
+          ...(input.approval ? { approval: input.approval } : {}),
         });
         const current = this.onboardings.get(id);
         if (!current) return;
@@ -945,7 +951,42 @@ export class ConnectorCenter {
     if (!row.enabled || !live) return null;
     if (!live.runtime.requestApproval) return null;
 
-    return live.runtime.requestApproval(conversation, request);
+    return live.runtime.requestApproval(
+      conversation,
+      this.narrowApproval(row.id, request),
+    );
+  }
+
+  /**
+   * Narrows a prompt's `canAnswer` with THIS layer's own sender rule — the
+   * mirror of `routeInbound`'s `pairing` / `owners` gate — so a native
+   * approval surface (a card everyone in a group chat can click) admits
+   * exactly the senders whose text messages the same connect would relay
+   * (plan §2/§5).
+   *
+   * Both rules are re-evaluated on every call, never snapshotted when the
+   * card was sent: a card can sit unanswered for the whole approval window
+   * while the operator edits owners, disables the connect, or removes it.
+   * A row that is gone, disabled or still `pairing` (nobody admitted yet)
+   * refuses everyone, and the channel-level rule the prompt arrived with is
+   * only ever narrowed, never widened.
+   */
+  private narrowApproval(
+    connectId: string,
+    request: ApprovalPrompt,
+  ): ApprovalPrompt {
+    return {
+      ...request,
+      canAnswer: async (sender) => {
+        if (sender === undefined) return false;
+        if (!(await request.canAnswer(sender))) return false;
+        const row = (await this.store.list()).find(
+          (item) => item.id === connectId,
+        );
+        if (!row || !row.enabled || row.pairing) return false;
+        return row.owners.includes(sender);
+      },
+    };
   }
 
   /**

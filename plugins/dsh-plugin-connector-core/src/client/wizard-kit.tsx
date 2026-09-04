@@ -187,7 +187,17 @@ export function ApprovalField({
 export interface ConnectWizardKit {
   BasicsFields: typeof BasicsFields;
   ApprovalField: typeof ApprovalField;
+  /** The seed value for `ApprovalField`'s state. Travels on the kit rather
+   * than through an import for the same reason the components do: a provider
+   * wizard lives in its own bundle and depends on no runtime value of this
+   * package, only on the `host` prop it is handed — so this is the one place
+   * the `{ timeout, 10 minutes }` literal has to exist for every wizard. */
+  defaultApproval: typeof defaultApproval;
 }
 
 /** Handed to every provider wizard on `host.kit` (each plugin client is its own bundle, so parts travel on the host, not through imports). */
-export const connectWizardKit: ConnectWizardKit = { BasicsFields, ApprovalField };
+export const connectWizardKit: ConnectWizardKit = {
+  BasicsFields,
+  ApprovalField,
+  defaultApproval,
+};

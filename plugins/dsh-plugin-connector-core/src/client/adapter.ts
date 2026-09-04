@@ -21,6 +21,8 @@ export interface BeginOnboardingInput {
   provider: string;
   name: string;
   agentPreset: string;
+  /** Absent uses the bound channel's default (10-minute timeout). */
+  approval?: MessageChannelApproval;
 }
 
 /**
