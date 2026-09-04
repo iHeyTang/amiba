@@ -532,6 +532,104 @@ export class MessageChannelCenter {
       : undefined;
   }
 
+  /**
+   * The optional `ctx.workspaceRegistry` service (`@deepseek-ai/dsh-workspace`):
+   * the DSH-wide, durable set of archived session ids. "Archived = closed" is
+   * the rule across every Amiba plugin — DSH's archive is a grouping-surface
+   * fact only, and the kernel still lets anyone resume and prompt an archived
+   * session — so messaging-core treats a channel or conversation still bound
+   * to one as needing a fresh session, same as `defaultAgentOptions` above:
+   * read via `ctx.reflect.get` (a non-throwing, point-in-time lookup), never
+   * declared in `inject` (this cordis version's array-form `inject` has no
+   * optional flag — see the identical note on dsh-plugin-steward's and
+   * dsh-plugin-connector-core's own `inject`), so absence — headless
+   * runtimes, this plugin's own tests — simply means nothing is archived.
+   */
+  private workspaceRegistry(): { readonly archivedSessionIds: readonly string[] } | undefined {
+    return this.ctx.reflect?.get?.("workspaceRegistry") as
+      | { readonly archivedSessionIds: readonly string[] }
+      | undefined;
+  }
+
+  private isSessionArchived(sessionId: string): boolean {
+    return (
+      this.workspaceRegistry()?.archivedSessionIds.includes(sessionId as never) ??
+      false
+    );
+  }
+
+  /**
+   * Create a brand-new session for `channel`, exactly the way the very first
+   * inbound message on a binding does: same preset, same cwd default, same
+   * default-model seed. Shared by first-time conversation binding and by the
+   * archived-session rebind paths below so "start over" always means the
+   * same recipe.
+   */
+  private async createBoundSession(
+    channel: StoredMessageChannel,
+  ): Promise<{ sessionId: string; dispose: () => Promise<void> }> {
+    const sessionId = `session-${randomUUID()}`;
+    const runtime = this.ctx as MessageRuntimeContext;
+    const agentOptions = this.defaultAgentOptions();
+    const handle = await this.ctx.agents.create({
+      sessionId: sessionId as never,
+      // Agent presets (e.g. `restricted`'s persona section) reference
+      // `{{cwd}}`, resolved from `agent.session.header.cwd`. IM-originated
+      // sessions have no workspace of their own — mirror the desktop
+      // host's own default for a no-workspace session (dsh-host-apiproxy)
+      // by seeding the runtime process's own working directory, a valid
+      // absolute path, rather than leaving it unset and failing prompt
+      // assembly on the first turn. The RESUME path can't inject a cwd —
+      // it comes from the persisted session header — so only CREATE needs
+      // this; a session created with a cwd carries it into future resumes.
+      meta: {
+        cwd: process.cwd(),
+        ...(channel.agentPreset ? { agentPreset: channel.agentPreset } : {}),
+      },
+      ...(agentOptions ? { agentOptions } : {}),
+      setup: async (agentCtx: Context) => {
+        try {
+          await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
+        } catch (error) {
+          this.ctx
+            .logger("amiba-messaging-core")
+            .warn(
+              `Could not mount agent preset "${String(channel.agentPreset)}" for channel ${channel.id} (session ${sessionId}); continuing without it: ${String(error)}`,
+            );
+        }
+      },
+    });
+    return { sessionId, dispose: () => handle.dispose().catch(() => undefined) };
+  }
+
+  /**
+   * `channel.sessionId`'s fixed single-session binding (no per-conversation
+   * routing). An empty string means the channel relies on
+   * `resolveConversationSession` entirely — left untouched, `acceptInbound`
+   * already rejects it as `conversation_required`.
+   */
+  private async resolveChannelSession(
+    channel: StoredMessageChannel,
+  ): Promise<string> {
+    if (!channel.sessionId || !this.isSessionArchived(channel.sessionId))
+      return channel.sessionId;
+    const previousSessionId = channel.sessionId;
+    this.ctx
+      .logger("amiba-messaging-core")
+      .info(
+        `Channel ${channel.id} was bound to archived session ${previousSessionId}; starting a fresh session.`,
+      );
+    const { sessionId, dispose } = await this.createBoundSession(channel);
+    try {
+      await this.store.update(channel.id, { sessionId });
+    } catch (error) {
+      await dispose();
+      throw error;
+    }
+    this.approvals.cancelForSession(previousSessionId);
+    return sessionId;
+  }
+
   private resolveConversationSession(
     channel: StoredMessageChannel,
     conversation: InboundConversationRef,
@@ -544,38 +642,21 @@ export class MessageChannelCenter {
         channel.id,
         conversation.key,
       );
-      if (bound) return bound.sessionId;
-      const sessionId = `session-${randomUUID()}`;
-      const runtime = this.ctx as MessageRuntimeContext;
-      const agentOptions = this.defaultAgentOptions();
-      const handle = await this.ctx.agents.create({
-        sessionId: sessionId as never,
-        // Agent presets (e.g. `restricted`'s persona section) reference
-        // `{{cwd}}`, resolved from `agent.session.header.cwd`. IM-originated
-        // sessions have no workspace of their own — mirror the desktop
-        // host's own default for a no-workspace session (dsh-host-apiproxy)
-        // by seeding the runtime process's own working directory, a valid
-        // absolute path, rather than leaving it unset and failing prompt
-        // assembly on the first turn. The RESUME path can't inject a cwd —
-        // it comes from the persisted session header — so only CREATE needs
-        // this; a session created with a cwd carries it into future resumes.
-        meta: {
-          cwd: process.cwd(),
-          ...(channel.agentPreset ? { agentPreset: channel.agentPreset } : {}),
-        },
-        ...(agentOptions ? { agentOptions } : {}),
-        setup: async (agentCtx: Context) => {
-          try {
-            await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
-          } catch (error) {
-            this.ctx
-              .logger("amiba-messaging-core")
-              .warn(
-                `Could not mount agent preset "${String(channel.agentPreset)}" for channel ${channel.id} (session ${sessionId}); continuing without it: ${String(error)}`,
-              );
-          }
-        },
-      });
+      if (bound && !this.isSessionArchived(bound.sessionId)) return bound.sessionId;
+      if (bound) {
+        // Amiba's session "delete" is becoming DSH's host-side archive, and
+        // archived = closed everywhere in Amiba. Start over exactly like the
+        // very first inbound message on this binding — new session, same
+        // preset/cwd — and cancel any approval question still waiting on the
+        // old one: it can never be answered, since every future inbound
+        // message on this conversation now routes to the new session.
+        this.ctx
+          .logger("amiba-messaging-core")
+          .info(
+            `Conversation ${channel.id}:${conversation.key} was bound to archived session ${bound.sessionId}; starting a fresh session.`,
+          );
+      }
+      const { sessionId, dispose } = await this.createBoundSession(channel);
       try {
         await this.store.bindConversation({
           channelId: channel.id,
@@ -585,9 +666,10 @@ export class MessageChannelCenter {
           sessionId,
         });
       } catch (error) {
-        await handle.dispose().catch(() => undefined);
+        await dispose();
         throw error;
       }
+      if (bound) this.approvals.cancelForSession(bound.sessionId);
       return sessionId;
     })().finally(() => {
       this.conversationCreates.delete(key);
@@ -625,7 +707,7 @@ export class MessageChannelCenter {
 
     const sessionId = envelope.conversation
       ? await this.resolveConversationSession(channel, envelope.conversation)
-      : channel.sessionId;
+      : await this.resolveChannelSession(channel);
     if (!sessionId) throw new Error("conversation_required");
     const receiptKey = `${channel.id}:${envelope.id.trim()}`;
     // An approval answer is consumed here, BEFORE it can become a user turn:

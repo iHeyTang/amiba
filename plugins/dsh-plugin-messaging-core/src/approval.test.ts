@@ -50,7 +50,13 @@ async function harness(options: { approvalService?: boolean } = {}) {
   const answerers: Answerer[] = [];
   const disposers: Array<() => unknown> = [];
   const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
-  const reflectServices = new Map<string, unknown>();
+  // The DSH-wide archived-session set (`ctx.workspaceRegistry`). A plain
+  // mutable array so a test can archive a session in place and have
+  // messaging-core's `isSessionArchived` see it on its next read.
+  const archivedSessionIds: string[] = [];
+  const reflectServices = new Map<string, unknown>([
+    ["workspaceRegistry", { archivedSessionIds }],
+  ]);
   if (options.approvalService !== false) reflectServices.set("approval", {});
 
   const ctx = {
@@ -136,6 +142,7 @@ async function harness(options: { approvalService?: boolean } = {}) {
     dispatch,
     logger,
     disposers,
+    archivedSessionIds,
     disposeAll: async () => {
       for (const cleanup of disposers.splice(0)) await cleanup();
     },
@@ -301,6 +308,52 @@ describe("IM approval relay", () => {
     });
     expect(consumed).toMatchObject({ consumedAsApproval: true });
     await expect(pendingOutcome).resolves.toBe("allowed-once");
+  });
+
+  it("does not answer for the archived session after the conversation rebinds", async () => {
+    const { center, dispatch, archivedSessionIds } = await harness();
+    const provider = imProvider({
+      requestApproval: vi.fn<NonNullable<MessageChannelProvider["requestApproval"]>>(
+        async () => null,
+      ),
+    });
+    const { sessionId: oldSessionId, channelId, secret } = await boundChannel(
+      center,
+      provider,
+    );
+
+    const pendingOutcome = dispatch(
+      request(oldSessionId, { reason: "runs git push" }),
+    );
+    await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalled());
+
+    // The conversation's bound session gets archived (Amiba's "delete") while
+    // its approval question is still waiting on an IM reply.
+    archivedSessionIds.push(oldSessionId);
+
+    const rebind = await center.acceptInbound(channelId, secret, {
+      id: "evt-rebind",
+      text: "still there?",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    expect(rebind.sessionId).not.toBe(oldSessionId);
+
+    // The stranded question is settled closed, not left hanging forever —
+    // no future inbound message can ever route to the archived session again.
+    await expect(pendingOutcome).resolves.toBe("cancelled");
+
+    // A late "同意 #1" now lands in the rebound conversation, which has no
+    // pending question of its own: it must NOT be consumed as an approval
+    // answer for the archived session's (forgotten) question.
+    const late = await center.acceptInbound(channelId, secret, {
+      id: "evt-late",
+      text: "同意 #1",
+      sender: "u-1",
+      conversation: { key: "chat-1", kind: "group" },
+    });
+    expect(late.sessionId).toBe(rebind.sessionId);
+    expect(late.consumedAsApproval).toBeUndefined();
   });
 
   it("delegates to the desktop when the channel cannot deliver the fallback", async () => {
