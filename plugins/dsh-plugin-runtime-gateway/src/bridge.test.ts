@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  AMIBA_SESSION_ARGUMENT_KEY,
   AmibaRuntimeGatewayClient,
   registerNativeTools,
   supportedInputSchema,
@@ -90,6 +91,44 @@ describe("Amiba DSH runtime gateway", () => {
     expect(() => new AmibaRuntimeGatewayClient({ url: "http://127.0.0.1:4000", token: "short" })).toThrow(
       /token/u,
     );
+  });
+
+  it("carries the calling session to Electron under the reserved argument key", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return jsonResponse({ ok: true, result: { content: [] } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new AmibaRuntimeGatewayClient({ url: "http://127.0.0.1:4000", token: TOKEN });
+    const signal = new AbortController().signal;
+
+    // The gateway wire has no context channel, so the owning session rides
+    // along as a reserved argument key that Electron strips before the
+    // operation ever sees its arguments.
+    await client.call("amiba_browser_open", { url: "https://example.com" }, signal, {
+      sessionId: "session-background",
+    });
+    expect(bodies.at(-1)).toEqual({
+      name: "amiba_browser_open",
+      arguments: {
+        url: "https://example.com",
+        [AMIBA_SESSION_ARGUMENT_KEY]: "session-background",
+      },
+    });
+
+    // A session-less call must not invent the key.
+    await client.call("amiba_browser_open", { url: "https://example.com" }, signal);
+    expect(bodies.at(-1)).toEqual({
+      name: "amiba_browser_open",
+      arguments: { url: "https://example.com" },
+    });
+    await client.call("amiba_browser_open", { url: "https://example.com" }, signal, {});
+    expect(bodies.at(-1)).toEqual({
+      name: "amiba_browser_open",
+      arguments: { url: "https://example.com" },
+    });
+    vi.unstubAllGlobals();
   });
 
   it("calls Electron while exposing the stable DSH-owned tool name", async () => {

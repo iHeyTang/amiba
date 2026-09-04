@@ -20,6 +20,22 @@ const IMAGE_MEDIA_TYPES = new Set<ImageMediaType>([
   "image/gif",
 ]);
 
+/**
+ * Reserved argument key carrying the session a native call belongs to.
+ *
+ * The gateway wire is `{ name, arguments }` and has no context channel, so
+ * the owning session travels as one reserved key inside `arguments`. The
+ * desktop main process strips it in its operation router before an operation
+ * ever sees its arguments — no native operation declares it, and no model
+ * can set it (it is not in any published input schema).
+ */
+export const AMIBA_SESSION_ARGUMENT_KEY = "amibaSessionId";
+
+/** Who a native call belongs to; absent for calls with no agent behind them. */
+export interface RuntimeGatewayCallContext {
+  sessionId?: string;
+}
+
 export interface RuntimeGatewayConfig {
   url: string;
   token: string;
@@ -260,12 +276,17 @@ export class AmibaRuntimeGatewayClient {
     name: string,
     args: unknown,
     signal: AbortSignal,
+    context?: RuntimeGatewayCallContext,
   ): Promise<unknown> {
+    const argumentsValue = { ...(record(args) ?? {}) };
+    if (context?.sessionId) {
+      argumentsValue[AMIBA_SESSION_ARGUMENT_KEY] = context.sessionId;
+    }
     const response = await this.request("/call", {
       method: "POST",
       signal,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, arguments: record(args) ?? {} }),
+      body: JSON.stringify({ name, arguments: argumentsValue }),
     });
     const source = record(response);
     if (source?.ok !== true || !("result" in (source ?? {}))) {
