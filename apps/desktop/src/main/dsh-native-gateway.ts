@@ -12,7 +12,25 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
  */
 export interface DshNativeOperation {
   name: string;
-  call(argumentsValue: Record<string, unknown>): Promise<unknown> | unknown;
+  call(
+    argumentsValue: Record<string, unknown>,
+    context: DshNativeCallContext,
+  ): Promise<unknown> | unknown;
+}
+
+/**
+ * Reserved argument key naming the chat session a call belongs to.
+ *
+ * The gateway wire is `{ name, arguments }` and has no context channel, so
+ * `@amiba/dsh-plugin-runtime-gateway` puts the session in the arguments under
+ * this key. The router below lifts it out; no operation declares it, and it
+ * appears in no published input schema, so no model can set it.
+ */
+export const SESSION_ARGUMENT_KEY = "amibaSessionId";
+
+/** Who a native call belongs to; absent for calls with no agent behind them. */
+export interface DshNativeCallContext {
+  sessionId?: string;
 }
 
 export interface DshNativeGateway {
@@ -82,7 +100,11 @@ export function createDshNativeOperationRouter(
     async call(name, argumentsValue) {
       const operation = operationMap.get(name);
       if (!operation) throw new Error(`Unknown native operation: ${name}`);
-      return operation.call(record(argumentsValue));
+      const { [SESSION_ARGUMENT_KEY]: session, ...args } =
+        record(argumentsValue);
+      return operation.call(args, {
+        sessionId: typeof session === "string" && session ? session : undefined,
+      });
     },
   };
 }
