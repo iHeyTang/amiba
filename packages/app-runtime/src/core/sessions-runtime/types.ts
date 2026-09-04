@@ -107,11 +107,14 @@ export interface SessionsController {
 
   rename: (id: string, title: string) => Promise<void>;
 
-  setArchived: (id: string, archived: boolean) => Promise<void>;
-  bulkUpdate: (
-    ids: string[],
-    action: "archive" | "unarchive" | "delete",
-  ) => Promise<void>;
+  /**
+   * Archive on the host (DSH `workspace.archiveSession`). One-way: DSH has
+   * no unarchive RPC yet, and Amiba has no session delete at all — the log
+   * survives, and the archived view still opens it.
+   */
+  archiveSession: (id: string) => Promise<void>;
+  /** Batch form of {@link archiveSession}, for the list's selection mode. */
+  archiveSessions: (ids: string[]) => Promise<void>;
   branchSession: (id: string, messageId?: number) => Promise<string>;
   exportSession: (id: string) => Promise<Record<string, unknown>>;
   searchHistory: (query: string) => Promise<SessionMeta[]>;
@@ -122,9 +125,6 @@ export interface SessionsController {
 
   /** Clear the local unread marker. Opening a session calls this automatically. */
   markRead: (id: string) => Promise<void>;
-
-  /** Hide a DSH session locally and remove it from open tabs. */
-  remove: (id: string) => Promise<void>;
 
   clearActiveMessages: () => Promise<void>;
 

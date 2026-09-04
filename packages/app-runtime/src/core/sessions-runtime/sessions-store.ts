@@ -56,8 +56,8 @@ import {
   type SessionMeta,
 } from "../sessions";
 import {
+  archiveSession as archiveHostSession,
   deriveTitleFromMessages,
-  dropMessages,
   loadIndex,
   loadSessionMeta,
   loadMessages,
@@ -550,7 +550,7 @@ export class SessionsStore {
   };
 
   // -------------------------------------------------------------------------
-  // Action: rename / remove / titles
+  // Action: rename / archive / titles
   // -------------------------------------------------------------------------
 
   rename = async (id: string, title: string): Promise<void> => {
@@ -570,40 +570,40 @@ export class SessionsStore {
     await this.persistIndex(next);
   };
 
-  setArchived = async (id: string, archived: boolean): Promise<void> => {
-    const index = this.state.sessions.findIndex((session) => session.id === id);
-    if (index < 0 || Boolean(this.state.sessions[index].archived) === archived) return;
-    const next = this.state.sessions.slice();
-    next[index] = { ...next[index], archived, updatedAt: Date.now() };
-    this.commit({ sessions: next });
-    await this.persistIndex(next);
-    if (archived && this.state.openTabIds.includes(id)) {
-      await this.closeTab(id);
+  /**
+   * Archive on the HOST. DSH owns the archive set (`workspace.archiveSession`
+   * answers with the full updated set, and pushes it to every other client),
+   * so nothing about it is persisted locally — the reply is projected onto
+   * the in-memory index and that is the whole write.
+   *
+   * There is no unarchive: DSH does not offer one yet. Archiving is the only
+   * "get this out of my list" action Amiba has, and it is not destructive —
+   * the session log survives and the archived view still opens it.
+   */
+  archiveSession = async (id: string): Promise<void> => {
+    if (!id) return;
+    this.applyArchivedSet(await archiveHostSession(id));
+    if (this.state.openTabIds.includes(id)) await this.closeTab(id);
+  };
+
+  /** Batch archive. Sequential so one failure cannot orphan the rest. */
+  archiveSessions = async (ids: string[]): Promise<void> => {
+    for (const id of Array.from(new Set(ids)).filter(Boolean)) {
+      await this.archiveSession(id);
     }
   };
 
-  bulkUpdate = async (
-    ids: string[],
-    action: "archive" | "unarchive" | "delete",
-  ): Promise<void> => {
-    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
-    if (action === "delete") {
-      for (const id of uniqueIds) await this.remove(id);
-      return;
-    }
-    const idSet = new Set(uniqueIds);
-    const next = this.state.sessions.map((session) =>
-      idSet.has(session.id)
-        ? {
-            ...session,
-            archived: action === "archive",
-            updatedAt: Date.now(),
-          }
-        : session,
-    );
-    this.commit({ sessions: next });
-    await this.persistIndex(next);
-  };
+  /** Project the host's archive set onto the in-memory index. */
+  private applyArchivedSet(archivedIds: ReadonlySet<string>): void {
+    let changed = false;
+    const next = this.state.sessions.map((session) => {
+      const archived = archivedIds.has(session.id) ? true : undefined;
+      if (Boolean(session.archived) === Boolean(archived)) return session;
+      changed = true;
+      return { ...session, archived };
+    });
+    if (changed) this.commit({ sessions: next });
+  }
 
   branchSession = async (id: string, messageId?: number): Promise<string> => {
     const runtime = getPlatform().agentSessions;
@@ -662,24 +662,6 @@ export class SessionsStore {
     next[idx] = { ...next[idx], unread: undefined };
     this.commit({ sessions: next });
     await this.persistIndex(next);
-  };
-
-  remove = async (id: string): Promise<void> => {
-    const filteredIndex = this.state.sessions.filter((s) => s.id !== id);
-    this.commit({ sessions: filteredIndex });
-    await this.persistIndex(filteredIndex);
-    await dropMessages(id);
-
-    const tabs = this.state.openTabIds;
-    if (tabs.includes(id)) {
-      const i = tabs.indexOf(id);
-      const remaining = tabs.slice(0, i).concat(tabs.slice(i + 1));
-      this.commit({ openTabIds: remaining });
-      if (id === this.state.activeId) {
-        const replacement = remaining[i] ?? remaining[i - 1] ?? "";
-        await this.activateOpen(replacement);
-      }
-    }
   };
 
   clearActiveMessages = async (): Promise<void> => {

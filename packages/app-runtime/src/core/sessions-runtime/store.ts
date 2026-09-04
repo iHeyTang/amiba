@@ -17,7 +17,15 @@ import {
 
 export { SOURCE_LOCAL };
 
+/**
+ * Legacy local-delete tombstones (`[{ id, hiddenAt }]`, or bare ids before
+ * that). Amiba no longer deletes sessions at all — DSH has no destructive
+ * delete and its archive is the real, host-owned equivalent — so this key is
+ * only ever READ once, by the migration below, and then dropped.
+ */
 const RUNTIME_HIDDEN_SESSIONS_KEY = "sessions.runtime-hidden";
+/** Set once the legacy archive/tombstone drain has run. */
+const ARCHIVE_MIGRATION_KEY = "sessions.archive-migrated";
 let lastSavedIndex: Map<string, SessionMeta> | null = null;
 let lastSavedLocalMeta: Record<string, SessionLocalMeta> = {};
 
@@ -25,6 +33,34 @@ function sessionsAdapter() {
   const adapter = getPlatform().agentSessions;
   if (!adapter) throw new Error("DSH sessions are unavailable.");
   return adapter;
+}
+
+/**
+ * The archive set lives on DSH's workspace registry — `workspace.list`
+ * returns it as the reconnect baseline and `workspace.archiveSession`
+ * returns the full updated set — so the workspaces adapter, not the sessions
+ * one, is the archive's platform face.
+ */
+function workspacesAdapter() {
+  const adapter = getPlatform().agentWorkspaces;
+  if (!adapter) throw new Error("DSH workspaces are unavailable.");
+  return adapter;
+}
+
+/** Registry-global archive set, as the host currently knows it. */
+export async function loadArchivedSessionIds(): Promise<Set<string>> {
+  const { archivedSessionIds } = await workspacesAdapter().list();
+  return new Set(archivedSessionIds);
+}
+
+/**
+ * Archive one session on the host and return the full updated set. There is
+ * no unarchive RPC yet ("a future unarchive restores its position"), so this
+ * is deliberately one-way.
+ */
+export async function archiveSession(id: string): Promise<Set<string>> {
+  const { archivedSessionIds } = await workspacesAdapter().archiveSession(id);
+  return new Set(archivedSessionIds);
 }
 
 function runtimeErrorCode(error: unknown): string | undefined {
@@ -48,75 +84,81 @@ async function writeLocalMeta(
   await getPlatform().storage.set({ [LOCAL_META_KEY]: meta });
 }
 
-/**
- * A deletion is a local tombstone (DSH has no destructive delete), and it
- * carries the time it was made. Anything the session does on the host AFTER
- * that time — a plugin resuming it, another client writing a turn — is new
- * activity the user never deleted, so the tombstone stops applying. Without
- * the timestamp a resumed session became invisible forever: alive on the
- * host, gone from every list, and unreachable even by id.
- */
-type SessionTombstone = { id: string; hiddenAt: number };
-
-type TombstoneRead = {
-  /** id → deletion time. */
-  tombstones: Map<string, number>;
-  /** A legacy or malformed entry was given a time and must be written back. */
-  migrated: boolean;
-};
-
-function parseTombstones(value: unknown, now: number): TombstoneRead {
-  const tombstones = new Map<string, number>();
-  let migrated = false;
-  if (!Array.isArray(value)) return { tombstones, migrated };
+/** Ids in a legacy `sessions.runtime-hidden` value, in either stored shape. */
+function legacyHiddenIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
   for (const entry of value) {
-    // Legacy shape: a bare id with no recorded time. Adopt `now`, which keeps
-    // the deletion in force until the session's next activity.
+    // Oldest shape: a bare id. Later shape: `{ id, hiddenAt }`.
     if (typeof entry === "string") {
-      if (!entry) continue;
-      tombstones.set(entry, now);
-      migrated = true;
+      if (entry) ids.push(entry);
       continue;
     }
     if (!entry || typeof entry !== "object") continue;
-    const { id, hiddenAt } = entry as Partial<SessionTombstone>;
-    if (typeof id !== "string" || !id) continue;
-    if (typeof hiddenAt === "number" && Number.isFinite(hiddenAt)) {
-      tombstones.set(id, hiddenAt);
-    } else {
-      tombstones.set(id, now);
-      migrated = true;
+    const { id } = entry as { id?: unknown };
+    if (typeof id === "string" && id) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * One-time drain of the two legacy local keys into DSH's own archive.
+ *
+ * Both of them meant "the user does not want to see this session": the
+ * sidecar's `archived` flag and the delete tombstone. DSH now owns that
+ * decision, so every id in either key is archived on the host once, and the
+ * legacy keys are then cleared — the sidecar keeps its remaining fields
+ * (unread / titleManual / agent / parentSessionId / branchMessageId).
+ *
+ * A single id failing (`session-not-found` for a log DSH never had, or any
+ * other RPC error) is logged and skipped: it must not make the whole session
+ * index unloadable. The marker is written regardless, so this runs once.
+ */
+async function migrateLegacyArchiveState(
+  local: Record<string, SessionLocalMeta>,
+): Promise<Record<string, SessionLocalMeta>> {
+  const storage = getPlatform().storage;
+  const stored = await storage.get([
+    ARCHIVE_MIGRATION_KEY,
+    RUNTIME_HIDDEN_SESSIONS_KEY,
+  ]);
+  if (stored[ARCHIVE_MIGRATION_KEY]) return local;
+
+  const pending = new Set<string>();
+  for (const [id, meta] of Object.entries(local)) {
+    if ((meta as { archived?: boolean } | undefined)?.archived) pending.add(id);
+  }
+  for (const id of legacyHiddenIds(stored[RUNTIME_HIDDEN_SESSIONS_KEY])) {
+    pending.add(id);
+  }
+  for (const id of pending) {
+    try {
+      await archiveSession(id);
+    } catch (error) {
+      console.warn(
+        `[agent-sessions] archive migration skipped ${JSON.stringify(id)}:`,
+        error,
+      );
     }
   }
-  return { tombstones, migrated };
-}
 
-async function readTombstones(): Promise<TombstoneRead> {
-  const value = (
-    await getPlatform().storage.get([RUNTIME_HIDDEN_SESSIONS_KEY])
-  )[RUNTIME_HIDDEN_SESSIONS_KEY];
-  return parseTombstones(value, Date.now());
-}
-
-async function writeTombstones(
-  tombstones: Map<string, number>,
-): Promise<void> {
-  const value: SessionTombstone[] = [...tombstones].map(([id, hiddenAt]) => ({
-    id,
-    hiddenAt,
-  }));
-  await getPlatform().storage.set({ [RUNTIME_HIDDEN_SESSIONS_KEY]: value });
-}
-
-async function hideRuntimeSession(id: string): Promise<void> {
-  const { tombstones } = await readTombstones();
-  tombstones.set(id, Date.now());
-  await writeTombstones(tombstones);
+  const next: Record<string, SessionLocalMeta> = {};
+  for (const [id, meta] of Object.entries(local)) {
+    const { archived: _archived, ...rest } = (meta ?? {}) as SessionLocalMeta & {
+      archived?: boolean;
+    };
+    if (Object.keys(rest).length > 0) next[id] = rest;
+  }
+  await storage.set({
+    [LOCAL_META_KEY]: next,
+    [ARCHIVE_MIGRATION_KEY]: true,
+  });
+  await storage.remove(RUNTIME_HIDDEN_SESSIONS_KEY);
+  return next;
 }
 
 function pickLocalFields(session: SessionMeta): SessionLocalMeta {
   const result: SessionLocalMeta = {};
-  if (session.archived) result.archived = true;
   if (session.unread) result.unread = true;
   if (session.titleManual) result.titleManual = true;
   if (session.agent) result.agent = normalizeAgentContext(session.agent);
@@ -129,7 +171,6 @@ function pickLocalFields(session: SessionMeta): SessionLocalMeta {
 
 function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
   return (
-    Boolean(a.archived) === Boolean(b.archived) &&
     Boolean(a.unread) === Boolean(b.unread) &&
     Boolean(a.titleManual) === Boolean(b.titleManual) &&
     JSON.stringify(a.agent ?? null) === JSON.stringify(b.agent ?? null) &&
@@ -142,17 +183,21 @@ type SessionSummaryLike = Awaited<
   ReturnType<ReturnType<typeof sessionsAdapter>["list"]>
 >[number];
 
-/** One host summary + its local sidecar → the renderer's SessionMeta. */
+/**
+ * One host summary + the host archive set + its local sidecar → the
+ * renderer's SessionMeta. `archived` is projected from the host set alone.
+ */
 function toSessionMeta(
   summary: SessionSummaryLike,
   sidecar: SessionLocalMeta | undefined,
+  archivedIds: ReadonlySet<string>,
 ): SessionMeta {
   return {
     id: summary.sessionId,
     title: summary.title ?? "",
     createdAt: summary.updatedAt,
     updatedAt: summary.updatedAt,
-    archived: sidecar?.archived,
+    archived: archivedIds.has(summary.sessionId) ? true : undefined,
     unread: sidecar?.unread,
     titleManual: sidecar?.titleManual,
     parentSessionId: summary.parentSessionId ?? sidecar?.parentSessionId,
@@ -173,47 +218,37 @@ function toSessionMeta(
  * or the composer falls back to the roster default and the first submit is
  * rejected by the host as a preset change.
  *
- * This is the explicit open-by-id path: every caller reaches it because a
- * user or a plugin asked for THIS session. So a tombstone does not hide the
- * session here — opening it is itself the undo, and the tombstone is lifted.
+ * An archived session stays openable: archiving hides a session from the
+ * active list, it does not take it away.
  */
 export async function loadSessionMeta(
   id: string,
 ): Promise<SessionMeta | undefined> {
-  const [summaries, local, { tombstones, migrated }] = await Promise.all([
+  const [summaries, local, archivedIds] = await Promise.all([
     sessionsAdapter().list(),
     readLocalMeta(),
-    readTombstones(),
+    loadArchivedSessionIds(),
   ]);
   const summary = summaries.find((item) => item.sessionId === id);
   if (!summary) return undefined;
-  if (tombstones.delete(id) || migrated) await writeTombstones(tombstones);
-  return toSessionMeta(summary, local[id]);
+  return toSessionMeta(summary, local[id], archivedIds);
 }
 
 export async function loadIndex(): Promise<SessionMeta[]> {
-  const [summaries, local, { tombstones, migrated }] = await Promise.all([
+  // The drain runs BEFORE the archive set is read, so a session it archives
+  // is already projected as archived by this very load.
+  const local = await migrateLegacyArchiveState(await readLocalMeta());
+  const [summaries, archivedIds] = await Promise.all([
     sessionsAdapter().list(),
-    readLocalMeta(),
-    readTombstones(),
+    loadArchivedSessionIds(),
   ]);
   lastSavedLocalMeta = local;
-  let tombstonesChanged = migrated;
   const result = summaries
-    .filter((summary) => {
-      if (summary.blank) return false;
-      const hiddenAt = tombstones.get(summary.sessionId);
-      if (hiddenAt === undefined) return true;
-      // Activity after the deletion means the session lived on: show it
-      // again and forget the tombstone.
-      if (summary.updatedAt <= hiddenAt) return false;
-      tombstones.delete(summary.sessionId);
-      tombstonesChanged = true;
-      return true;
-    })
-    .map((summary) => toSessionMeta(summary, local[summary.sessionId]))
+    .filter((summary) => !summary.blank)
+    .map((summary) =>
+      toSessionMeta(summary, local[summary.sessionId], archivedIds),
+    )
     .sort((a, b) => b.updatedAt - a.updatedAt);
-  if (tombstonesChanged) await writeTombstones(tombstones);
   lastSavedIndex = new Map(
     result.map((session) => [session.id, { ...session }]),
   );
@@ -317,11 +352,6 @@ export async function saveMessages(
   _id: string,
   _messages: SessionMessage[],
 ): Promise<void> {}
-
-/** DSH has no destructive delete RPC; removal is a recoverable local tombstone. */
-export async function dropMessages(id: string): Promise<void> {
-  if (id) await hideRuntimeSession(id);
-}
 
 export function newSessionMeta(
   options: {

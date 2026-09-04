@@ -14,6 +14,11 @@ export interface SessionMeta {
   createdAt: number
   /** Last activity time (last message append, last rename). */
   updatedAt: number
+  /**
+   * Projected from the HOST archive set (DSH `workspace.archiveSession` /
+   * `host/archived-sessions-changed`), never from the local sidecar. DSH
+   * has no unarchive RPC yet, so this only ever goes from unset to true.
+   */
   archived?: boolean
   /** Branch provenance retained when this task was forked from another task. */
   parentSessionId?: string
@@ -48,9 +53,15 @@ import type { ChatMessage } from "./chat-messages"
 /** Readable alias used by session projections; identical to ChatMessage. */
 export type SessionMessage = ChatMessage
 
-/** UI-only per-session flags that don't have a counterpart in the engine. */
+/**
+ * UI-only per-session flags that don't have a counterpart in the engine.
+ *
+ * `archived` is deliberately NOT here: archiving is host state owned by DSH's
+ * workspace registry, so the sidecar must not carry a second, divergent copy.
+ * Legacy values written before that move are drained by the one-time
+ * migration in `sessions-runtime/store.ts`.
+ */
 export interface SessionLocalMeta {
-  archived?: boolean
   unread?: boolean
   titleManual?: boolean
   agent?: AgentExecutionContext
@@ -67,5 +78,5 @@ export const SESSION_KEYS = {
   index: "sessions.index",
 } as const
 
-/** Storage key for local-only UI metadata (archived / unread / titleManual). */
+/** Storage key for local-only UI metadata (unread / titleManual / agent). */
 export const LOCAL_META_KEY = "sessions.local-meta" as const
