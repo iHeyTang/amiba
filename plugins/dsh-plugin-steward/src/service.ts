@@ -286,9 +286,29 @@ export class StewardService {
 
   // ── tasks ────────────────────────────────────────────────────────────
 
+  /**
+   * Every task not owned by an archived session, closing any that just
+   * became archived along the way. An archived session's task is dropped
+   * from the result UNCONDITIONALLY — unlike an ordinary closed task, which
+   * `includeDone` can still surface — because the client's badge/group faces
+   * poll `listTasks(true)` to decide 「大管家」 membership (see
+   * `client/index.tsx`'s `refreshAdopted`): once a session is archived it
+   * must stop claiming that group/badge, and dropping the row from every
+   * `listTasks` call (rather than adding a new `archived` field the client
+   * would need to learn) is what actually achieves that with the shape the
+   * client already handles.
+   */
   async listTasks(includeDone = false): Promise<StewardTask[]> {
     const { tasks } = await this.store.read();
-    return includeDone ? tasks : tasks.filter((task) => task.status !== "done");
+    const active: StewardTask[] = [];
+    for (const task of tasks) {
+      if (this.isArchived(task.sessionId)) {
+        if (task.status !== "done") await this.updateTask(task.id, { status: "done" });
+        continue;
+      }
+      active.push(task);
+    }
+    return includeDone ? active : active.filter((task) => task.status !== "done");
   }
 
   private async updateTask(taskId: string, patch: Partial<StewardTask>): Promise<StewardTask> {
@@ -347,6 +367,16 @@ export class StewardService {
       created = true;
     } else {
       task = await this.findTask(input.taskId!);
+      // An archived session is never resumed: the user archived it (Amiba's
+      // "delete" is becoming a DSH archive), so the task it backed is over.
+      // Close it with the same vocabulary `closeTask` uses and refuse the
+      // dispatch instead of silently reviving a session the user put away —
+      // the thrown message reaches the steward's own model as this tool
+      // call's failure, so it dispatches a fresh task instead.
+      if (this.isArchived(task.sessionId)) {
+        await this.updateTask(task.id, { status: "done" });
+        throw new Error(`steward: task "${task.id}" was closed because its session was archived; dispatch a new task instead`);
+      }
       try {
         agent = await this.ensureTaskAgent(task);
       } catch (error) {
@@ -386,6 +416,31 @@ export class StewardService {
   private agentOptionsSpread(): { agentOptions?: { provider: string; model: string } } {
     const agentOptions = this.defaultAgentOptions();
     return agentOptions ? { agentOptions } : {};
+  }
+
+  /**
+   * The optional `ctx.workspaceRegistry` service (`@deepseek-ai/dsh-workspace`):
+   * the DSH-wide, durable set of archived session ids. Read via
+   * `ctx.reflect.get`, the same non-throwing, point-in-time lookup as
+   * `defaultAgentOptions` above and for the same reason — the service is
+   * mounted unconditionally by the DSH host runtime, but is never in
+   * `inject` (see the comment on `index.ts`'s own `inject`), and this
+   * plugin's own tests may still omit it.
+   */
+  private workspaceRegistry(): { readonly archivedSessionIds: readonly string[] } | undefined {
+    const service = (this.ctx as { reflect?: { get?(name: string): unknown } }).reflect?.get?.("workspaceRegistry") as
+      | { archivedSessionIds: readonly string[] }
+      | undefined;
+    return service;
+  }
+
+  /**
+   * Whether DSH's registry-global archive set already contains this session.
+   * Absence of the registry itself (see `workspaceRegistry` above) means
+   * "nothing is archived" — never a reason to treat every task as archived.
+   */
+  private isArchived(sessionId: string): boolean {
+    return this.workspaceRegistry()?.archivedSessionIds.includes(sessionId as never) ?? false;
   }
 
   private guardAskUser(agentCtx: Context): void {
@@ -484,6 +539,13 @@ export class StewardService {
 
   async readTask(taskId: string, turns = 3): Promise<TaskTurnView[]> {
     const task = await this.findTask(taskId);
+    // Say so instead of quietly returning turns from a session the user put
+    // away: close the task (same vocabulary as `closeTask`/`dispatch` above)
+    // and refuse, rather than pretending it still has fresh content to read.
+    if (this.isArchived(task.sessionId)) {
+      if (task.status !== "done") await this.updateTask(task.id, { status: "done" });
+      throw new Error(`steward: task "${taskId}" is closed — its session was archived`);
+    }
     const live = this.ctx.agents.get(task.sessionId as never) as Agent | undefined;
     const events = live ? live.session.events : (await this.ctx.sessionPersistence.inspect(task.sessionId)).events;
     return completedTurns(events, -1)
@@ -506,7 +568,16 @@ export class StewardService {
   private async taskBySession(sessionId: string): Promise<StewardTask | undefined> {
     const state = await this.store.read();
     if (sessionId === state.stewardSessionId) return undefined;
-    return state.tasks.find((task) => task.sessionId === sessionId && task.status !== "done");
+    const task = state.tasks.find((row) => row.sessionId === sessionId && row.status !== "done");
+    if (!task) return undefined;
+    // A `turn/end`/`tool/call`/`tool/result` arriving for a now-archived
+    // session must never revive the task it belongs to (flag needs_input,
+    // reconcile a turn, ...) — close it in place and report nothing.
+    if (this.isArchived(sessionId)) {
+      await this.updateTask(task.id, { status: "done" });
+      return undefined;
+    }
+    return task;
   }
 
   private async handleSessionEvent(session: Session, event: SessionEvent): Promise<void> {
@@ -591,6 +662,14 @@ export class StewardService {
     if (this.disposed) return;
     const task = await this.findTask(taskId);
     if (task.status === "done") return;
+    // Reached directly from `recover()` at boot, which bypasses
+    // `taskBySession`'s own archived check — guard here too so a task whose
+    // session was archived while the runtime was down is closed instead of
+    // reported on and revived.
+    if (this.isArchived(task.sessionId)) {
+      await this.updateTask(taskId, { status: "done" });
+      return;
+    }
     const turns = completedTurns(events, task.lastReportedSeq);
     for (const turn of turns) {
       await this.deliver(
