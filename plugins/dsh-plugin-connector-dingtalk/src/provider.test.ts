@@ -128,6 +128,7 @@ function approvalPrompt(overrides: Partial<{
   sessionId: string;
   signal: AbortSignal;
   deadlineAt?: number;
+  canAnswer: (sender: string | undefined) => Promise<boolean>;
 }> = {}) {
   return {
     approvalId: "appr_1",
@@ -135,6 +136,9 @@ function approvalPrompt(overrides: Partial<{
     toolName: "run_shell",
     sessionId: "session-1",
     signal: new AbortController().signal,
+    // Open by default (no allowlist, everyone an owner); tests that care
+    // about who may answer pass their own.
+    canAnswer: async () => true,
     ...overrides,
   };
 }
@@ -609,7 +613,7 @@ describe("createDingtalkProvider", () => {
       await expect(pending).resolves.toEqual({ outcome: "allowed-once", by: "first" });
     });
 
-    it("resolves null when request.signal aborts, and a late card callback afterward is a no-op", async () => {
+    it("never resolves once request.signal aborts, and a late card callback afterward is a no-op", async () => {
       const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
       const deps = fakeDeps({ createCard });
       const handle = fakeHandle();
@@ -623,15 +627,25 @@ describe("createDingtalkProvider", () => {
       );
       await flush();
       controller.abort();
+      await flush();
 
-      await expect(pending).resolves.toBeNull();
+      // Resolving `null` here would read as "couldn't present natively",
+      // flipping messaging-core's presentation to text and skipping the
+      // `announceApprovalOutcome` that still has to flip this live card.
+      await expect(
+        Promise.race([pending, Promise.resolve("still-pending")]),
+      ).resolves.toBe("still-pending");
 
       expect(() =>
         deps.handlers!.onCardCallback({ params: { approvalId: "appr_1", decision: "allowed-once" } }),
       ).not.toThrow();
+      await flush();
+      await expect(
+        Promise.race([pending, Promise.resolve("still-pending")]),
+      ).resolves.toBe("still-pending");
     });
 
-    it("resolves null immediately when request.signal is already aborted before the call", async () => {
+    it("sends no card at all when request.signal is already aborted before the call", async () => {
       const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
       const deps = fakeDeps({ createCard });
       const handle = fakeHandle();
@@ -645,7 +659,11 @@ describe("createDingtalkProvider", () => {
         approvalPrompt({ approvalId: "appr_1", signal: controller.signal }),
       );
 
+      // No card exists, so nothing is orphaned and nothing is left for
+      // `announceApprovalOutcome` to flip — `null` is safe (and correct)
+      // only in this branch.
       expect(reply).toBeNull();
+      expect(createCard).not.toHaveBeenCalled();
     });
 
     it("resolves every still-pending native request to null when the connect is stopped", async () => {
@@ -669,6 +687,145 @@ describe("createDingtalkProvider", () => {
 
       await expect(pendingA).resolves.toBeNull();
       await expect(pendingB).resolves.toBeNull();
+    });
+
+    // plan.md §2/§5: a card in a group conversation is clickable by everyone
+    // who can see it, so every callback is gated on the caller's own rule.
+    describe("sender gate", () => {
+      async function started(canAnswer: (sender: string | undefined) => Promise<boolean>) {
+        const createCard = vi.fn(async () => ({ cardInstanceId: "inst_1" }));
+        const deps = fakeDeps({ createCard });
+        const provider = createDingtalkProvider(deps);
+        const runtime = await provider.start(fakeHandle());
+        const pending = runtime.requestApproval!(
+          { key: "cid_1", kind: "group" },
+          approvalPrompt({ approvalId: "appr_1", canAnswer }),
+        );
+        await flush();
+        return { deps, pending };
+      }
+
+      it("settles on a callback from a user canAnswer admits", async () => {
+        const canAnswer = vi.fn(async (sender?: string) => sender === "boss");
+        const { deps, pending } = await started(canAnswer);
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "boss",
+        });
+
+        await expect(pending).resolves.toEqual({
+          outcome: "allowed-once",
+          by: "boss",
+        });
+        expect(canAnswer).toHaveBeenCalledWith("boss");
+      });
+
+      it("ignores a callback canAnswer refuses, keeps waiting, and warns", async () => {
+        const { deps, pending } = await started(async (sender) => sender === "boss");
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "bystander",
+        });
+        await flush();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+        expect(
+          deps.logs.some(
+            (line) => line.includes("bystander") && line.includes("may not answer"),
+          ),
+        ).toBe(true);
+
+        // Still live: an allowed user's later click settles it.
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "rejected" },
+          userId: "boss",
+        });
+        await expect(pending).resolves.toEqual({ outcome: "rejected", by: "boss" });
+      });
+
+      it("refuses a callback that names no user at all", async () => {
+        const { deps, pending } = await started(async (sender) => sender !== undefined);
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+        });
+        await flush();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+      });
+
+      it("refuses the callback when canAnswer itself throws", async () => {
+        const { deps, pending } = await started(async () => {
+          throw new Error("store_unreadable");
+        });
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "boss",
+        });
+        await flush();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+        expect(deps.logs.some((line) => line.includes("store_unreadable"))).toBe(true);
+      });
+
+      it("refuses a callback naming another conversation or another card instance", async () => {
+        const { deps, pending } = await started(async () => true);
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "boss",
+          openConversationId: "cid_other",
+        });
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "boss",
+          outTrackId: "inst_other",
+        });
+        await flush();
+
+        await expect(
+          Promise.race([pending, Promise.resolve("still-pending")]),
+        ).resolves.toBe("still-pending");
+        expect(deps.logs.filter((line) => line.includes("ignoring a card callback"))).toHaveLength(2);
+
+        // The matching conversation and instance still settle it.
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_1", decision: "allowed-once" },
+          userId: "boss",
+          openConversationId: "cid_1",
+          outTrackId: "inst_1",
+        });
+        await expect(pending).resolves.toEqual({ outcome: "allowed-once", by: "boss" });
+      });
+
+      it("warns on a callback for an approvalId nothing is waiting on", async () => {
+        const deps = fakeDeps({
+          createCard: vi.fn(async () => ({ cardInstanceId: "inst_1" })),
+        });
+        const provider = createDingtalkProvider(deps);
+        await provider.start(fakeHandle());
+
+        deps.handlers!.onCardCallback({
+          params: { approvalId: "appr_ghost", decision: "allowed-once" },
+        });
+        await flush();
+
+        expect(
+          deps.logs.some(
+            (line) =>
+              line.includes("appr_ghost") && line.includes("nothing is waiting on it"),
+          ),
+        ).toBe(true);
+      });
     });
 
     it("resolves null when the connect is stopped while the card send is still in flight", async () => {

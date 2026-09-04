@@ -198,7 +198,22 @@ export type DingtalkApprovalDecision = "allowed-once" | "rejected";
 export interface DingtalkCardCallback {
   readonly approvalId: string;
   readonly decision: DingtalkApprovalDecision;
+  /** Who clicked, as a staff userId — the same identity space
+   * `translateRobotMessage` prefers for an inbound envelope's `sender`
+   * (`senderStaffId`), which is what lets `provider.ts` check it against the
+   * prompt's `canAnswer`. Absent when the frame carries no `userId`; the
+   * gate then refuses, since an unidentified clicker can never be shown to
+   * be on an allowlist. */
   readonly operatorUserId?: string;
+  /** The card instance the click landed on, when the frame names one — the
+   * same `outTrackId` `realDingtalkDeps.createCard` wrote. Cross-checked
+   * against the instance this connect actually created for that approval,
+   * so a click replayed against some other card cannot settle it. */
+  readonly outTrackId?: string;
+  /** The conversation the click came from, when the frame names one.
+   * Cross-checked against the conversation the card was created into: a
+   * card in chat A must never settle an approval raised in chat B. */
+  readonly conversationKey?: string;
 }
 
 /**
@@ -254,13 +269,33 @@ export function translateCardCallback(raw: unknown): DingtalkCardCallback | null
       return null;
     }
 
-    const result: { approvalId: string; decision: DingtalkApprovalDecision; operatorUserId?: string } = {
+    const result: {
+      approvalId: string;
+      decision: DingtalkApprovalDecision;
+      operatorUserId?: string;
+      outTrackId?: string;
+      conversationKey?: string;
+    } = {
       approvalId,
       decision,
     };
     const userId = record.userId;
     if (typeof userId === "string" && userId !== "") {
       result.operatorUserId = userId;
+    }
+    // Both cross-check fields are OPTIONAL on the way in (the frame shape is
+    // unverified — see this function's doc comment) and are only ever used
+    // to REFUSE a mismatch in `provider.ts`, never to admit one: a frame
+    // that carries neither still has to match on `approvalId`, whose card
+    // instance was created into exactly one conversation.
+    const outTrackId = record.outTrackId;
+    if (typeof outTrackId === "string" && outTrackId !== "") {
+      result.outTrackId = outTrackId;
+    }
+    const conversationKey =
+      record.openConversationId ?? record.conversationId;
+    if (typeof conversationKey === "string" && conversationKey !== "") {
+      result.conversationKey = conversationKey;
     }
     return result;
   } catch {

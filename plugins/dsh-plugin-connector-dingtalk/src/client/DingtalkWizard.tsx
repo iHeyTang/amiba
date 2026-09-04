@@ -36,23 +36,6 @@ function useT() {
  * unrecognised message still falls back to the raw string — better a real
  * message than nothing.
  */
-/**
- * The wizard's own seed for the approval-wait field, before the user
- * touches it: `timeout`, 10 minutes — the same numeric default
- * messaging-core applies when a channel's `approval` is omitted entirely
- * (`DEFAULT_CHANNEL_APPROVAL`) and connector-core's own
- * `wizard-kit.tsx#defaultApproval()` mirrors for the same reason. Defined
- * locally rather than importing that helper because it isn't re-exported
- * from `@amiba/dsh-plugin-connector-core/client`'s public surface today
- * (only its TYPES are, via `ConnectWizardKit`/`ApprovalFieldProps`) — this
- * task's brief scopes changes to this plugin only, so the two literals stay
- * independently defined rather than reaching into connector-core to add an
- * export for one call site.
- */
-function defaultApproval(): MessageChannelApproval {
-  return { mode: "timeout", timeoutMs: 10 * 60_000 };
-}
-
 const KNOWN_CREATE_ERRORS: Record<string, string> = {
   agent_preset_required: "options.connect.dsh.error.agent_preset_required",
   provider_not_found: "options.connect.dsh.error.provider_not_found",
@@ -97,7 +80,13 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [enableTools, setEnableTools] = useState(false);
-  const [approval, setApproval] = useState<MessageChannelApproval>(defaultApproval());
+  // Seeded from the kit (`host.kit.defaultApproval`), the same place
+  // `ApprovalField` itself comes from: each plugin client is its own bundle,
+  // so parts travel on the host rather than through imports — which is what
+  // keeps the `timeout`/10-minute literal in connector-core alone.
+  const [approval, setApproval] = useState<MessageChannelApproval>(() =>
+    host.kit.defaultApproval(),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

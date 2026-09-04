@@ -200,6 +200,13 @@ interface CardApprovalReply {
  * for the lifecycle. */
 interface PendingApproval {
   readonly cardInstanceId: string;
+  /** The conversation the card was created into — a callback that names a
+   * different one must never settle this question (plan §5). */
+  readonly conversationKey: string;
+  /** The caller's own sender rule for THIS question: messaging-core's
+   * `channel.allowedSenders` narrowed by connector-core's `owners`/
+   * `pairing` gate, re-read at click time. */
+  canAnswer(sender: string | undefined): Promise<boolean>;
   /** Present exactly while nobody has settled this yet. `undefined` once a
    * click, an abort, or `stop()` has resolved the `requestApproval` promise
    * — a further card callback for the same id is then a no-op. */
@@ -225,6 +232,26 @@ function settlePendingApproval(entry: PendingApproval, reply: CardApprovalReply 
   entry.detachAbort?.();
   entry.detachAbort = undefined;
   resolve(reply);
+}
+
+/**
+ * Stops waiting on an entry WITHOUT resolving its promise — the abort path.
+ *
+ * Per `ConnectorRuntime.requestApproval`'s contract (and connector-lark's
+ * identical reading of it): `request.signal` aborts precisely when the
+ * question was settled by some other path, so messaging-core's own `settled`
+ * promise has already won its race. Resolving `null` here instead would be
+ * read as "this connect could not present the question natively", flipping
+ * the relay's `presentation` to `"text"` and skipping the
+ * `announceApprovalOutcome` that flips this card to 已超时拒绝 /
+ * 已在桌面处理 — today only masked by a microtask-ordering accident. So:
+ * detach, forget the resolver, and let the card sit until it is announced.
+ */
+function abandonPendingApproval(entry: PendingApproval): void {
+  if (!entry.resolve) return;
+  entry.resolve = undefined;
+  entry.detachAbort?.();
+  entry.detachAbort = undefined;
 }
 
 /**
@@ -312,10 +339,64 @@ export function createDingtalkProvider(
           const entry = pendingApprovals.get(callback.approvalId);
           // Mismatched id (not ours, or for a connect that never displayed
           // it) and a second click on an already-settled card both land
-          // here as "no resolver waiting" — both are silently ignored, per
-          // plan §5 ("同一审批多次回答 → 第一次生效，其余忽略").
-          if (!entry || !entry.resolve) return;
-          settlePendingApproval(entry, { outcome: callback.decision, by: callback.operatorUserId });
+          // here as "no resolver waiting" — both are ignored with a warn,
+          // per plan §5 ("同一审批多次回答 → 第一次生效，其余忽略").
+          if (!entry || !entry.resolve) {
+            deps.log?.(
+              `amiba-connector-dingtalk: ignoring a card callback for approval ${callback.approvalId}: nothing is waiting on it`,
+            );
+            return;
+          }
+          // Cross-conversation guard: a card created into chat A must not
+          // settle a question raised in chat B. Both fields are optional on
+          // the (unverified) callback frame and are only ever used to
+          // REFUSE a mismatch — a frame carrying neither still had to match
+          // on `approvalId`, whose card instance exists in one conversation.
+          if (
+            callback.outTrackId !== undefined &&
+            callback.outTrackId !== entry.cardInstanceId
+          ) {
+            deps.log?.(
+              `amiba-connector-dingtalk: ignoring a card callback for approval ${callback.approvalId}: it names card ${callback.outTrackId}, not ${entry.cardInstanceId}`,
+            );
+            return;
+          }
+          if (
+            callback.conversationKey !== undefined &&
+            callback.conversationKey !== entry.conversationKey
+          ) {
+            deps.log?.(
+              `amiba-connector-dingtalk: ignoring a card callback for approval ${callback.approvalId}: it came from conversation ${callback.conversationKey}, not ${entry.conversationKey}`,
+            );
+            return;
+          }
+          // Who may answer is the caller's rule (plan §2), re-read at click
+          // time; `userId` is the staff id space inbound envelopes carry as
+          // `sender`. Async, hence the detached task — the platform ack in
+          // `handleCardFrame` does not wait on it.
+          void (async () => {
+            let allowed = false;
+            try {
+              allowed = await entry.canAnswer(callback.operatorUserId);
+            } catch (error) {
+              deps.log?.(
+                `amiba-connector-dingtalk: could not check who may answer approval ${callback.approvalId}: ${String(error)}`,
+              );
+            }
+            if (!allowed) {
+              // Ignored, NOT settled and NOT acknowledged on the card: the
+              // question keeps waiting for someone who may answer it.
+              deps.log?.(
+                `amiba-connector-dingtalk: ignoring approval ${callback.approvalId} clicked by ${callback.operatorUserId ?? "an unidentified user"}: that user may not answer it`,
+              );
+              return;
+            }
+            if (stopped || !entry.resolve) return;
+            settlePendingApproval(entry, {
+              outcome: callback.decision,
+              by: callback.operatorUserId,
+            });
+          })();
         },
         onDown: () => safeSetStatus({ state: "connecting" }),
       });
@@ -382,6 +463,13 @@ export function createDingtalkProvider(
         },
         async requestApproval(conversation, request) {
           if (!deps.createCard) return null;
+          // Already settled elsewhere before this even ran (a desktop
+          // answer, a cancelled run): there is nothing to ask, so don't put
+          // a card into the conversation that would be orphaned the moment
+          // it lands. `null` is safe here precisely because the question is
+          // already closed — no card exists for `announceApprovalOutcome`
+          // to flip, and the relay's own `settled` promise has already won.
+          if (request.signal.aborted) return null;
 
           const content = buildApprovalCardPrompt({
             seq: request.seq,
@@ -412,14 +500,23 @@ export function createDingtalkProvider(
           if (stopped) return null;
 
           return new Promise<CardApprovalReply | null>((resolve) => {
-            const entry: PendingApproval = { cardInstanceId: created.cardInstanceId, resolve };
+            const entry: PendingApproval = {
+              cardInstanceId: created.cardInstanceId,
+              conversationKey: conversation.key,
+              canAnswer: (sender) => request.canAnswer(sender),
+              resolve,
+            };
             pendingApprovals.set(request.approvalId, entry);
 
+            // The card IS in the conversation now, so both abort paths
+            // below abandon rather than resolve — see
+            // `abandonPendingApproval`: the question was settled elsewhere
+            // and `announceApprovalOutcome` still has to flip this card.
             if (request.signal.aborted) {
-              settlePendingApproval(entry, null);
+              abandonPendingApproval(entry);
               return;
             }
-            const onAbort = () => settlePendingApproval(entry, null);
+            const onAbort = () => abandonPendingApproval(entry);
             request.signal.addEventListener("abort", onAbort, { once: true });
             entry.detachAbort = () => request.signal.removeEventListener("abort", onAbort);
           });

@@ -336,4 +336,38 @@ describe("translateCardCallback", () => {
   it("returns null for an empty object (never throws)", () => {
     expect(translateCardCallback({})).toBeNull();
   });
+
+  it("carries the card instance and conversation the callback names, when it names them", () => {
+    expect(
+      translateCardCallback({
+        params: { approvalId: "appr_5", decision: "allowed-once" },
+        userId: "staff_1",
+        outTrackId: "amiba-approval-appr_5",
+        openConversationId: "cid_1",
+      }),
+    ).toEqual({
+      approvalId: "appr_5",
+      decision: "allowed-once",
+      operatorUserId: "staff_1",
+      outTrackId: "amiba-approval-appr_5",
+      conversationKey: "cid_1",
+    });
+  });
+
+  it("falls back to conversationId, and omits both cross-check fields when absent or empty", () => {
+    expect(
+      translateCardCallback({
+        params: { approvalId: "appr_5", decision: "rejected" },
+        conversationId: "cid_2",
+      })?.conversationKey,
+    ).toBe("cid_2");
+
+    const bare = translateCardCallback({
+      params: { approvalId: "appr_5", decision: "rejected" },
+      outTrackId: "",
+      openConversationId: "",
+    });
+    expect(bare).not.toHaveProperty("outTrackId");
+    expect(bare).not.toHaveProperty("conversationKey");
+  });
 });

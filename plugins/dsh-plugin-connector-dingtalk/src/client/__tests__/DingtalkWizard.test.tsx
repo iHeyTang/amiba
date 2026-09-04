@@ -112,7 +112,13 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
       pollOnboarding: vi.fn(),
       cancelOnboarding: vi.fn(async () => ({}) as never),
     } as never,
-    kit: { BasicsFields: FakeBasicsFields as never, ApprovalField: FakeApprovalField as never },
+    kit: {
+      BasicsFields: FakeBasicsFields as never,
+      ApprovalField: FakeApprovalField as never,
+      // The wizard seeds its own approval state from the kit rather than
+      // carrying a copy of connector-core's literal.
+      defaultApproval: () => ({ mode: "timeout", timeoutMs: 600_000 }),
+    },
     back: vi.fn(),
     done: vi.fn(),
     cancel: vi.fn(),
