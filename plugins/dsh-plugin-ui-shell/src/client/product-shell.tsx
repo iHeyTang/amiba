@@ -12,7 +12,10 @@ import {
   getPlatform,
   type AgentModelSelection,
 } from "@amiba/app-runtime/platform";
-import type { SessionListState } from "@deepseek-ai/dsh-client-runtime/client";
+import type {
+  SessionListState,
+  WorkspaceListState,
+} from "@deepseek-ai/dsh-client-runtime/client";
 import type {
   PropsRenderSlots,
   SnapshotSelectorHook,
@@ -27,7 +30,11 @@ import {
   useSettingsShell,
   type SettingsOnboardingStepsSource,
 } from "./settings-shell.js";
-import { officialListFingerprint } from "./official-index-sync.js";
+import {
+  officialArchivedFingerprint,
+  officialListFingerprint,
+  useOfficialIndexRefresh,
+} from "./official-index-sync.js";
 import type { HiddenPresetsSource } from "./session-visibility.js";
 import type {
   ContributionsSource,
@@ -355,6 +362,15 @@ interface ProductShellProps {
    * adoption forbids.
    */
   useOfficialSessions: SnapshotSelectorHook<SessionListState>;
+  /**
+   * The framework's `useWorkspaces` standard hook, from the same
+   * `GlobalStandardProps` kit. The archive set is workspace-registry state,
+   * not session-list state — `workspace.list` returns it as the reconnect
+   * baseline and `host/archived-sessions-changed` pushes the full set — so it
+   * is a SECOND live source Amiba's own index has to follow. REQUIRED for the
+   * same reason as `useOfficialSessions`.
+   */
+  useOfficialWorkspaces: SnapshotSelectorHook<WorkspaceListState>;
 }
 
 export function AmibaProductShell(props: ProductShellProps): ReactElement {
@@ -379,6 +395,7 @@ function ProductShellInner({
   sessionItemMenuItems,
   messageSources,
   useOfficialSessions,
+  useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
   const platform = getPlatform();
@@ -463,10 +480,17 @@ function ProductShellInner({
   // Amiba's own index whenever the facts it renders change, so the sidebar
   // does not wait for the next open-by-id or window switch.
   const officialFingerprint = useOfficialSessions(officialListFingerprint);
-  useEffect(() => {
-    if (!sessions.ready) return;
-    void sessions.refresh();
-  }, [officialFingerprint, sessions.ready, sessions.refresh]);
+  // Second trigger, second store: archiving is host-global and arrives on
+  // the workspaces store (`host/archived-sessions-changed` carries the full
+  // set), so a session archived here, in another window, or by the official
+  // workspace browser must re-read Amiba's index too — that read is what
+  // moves the row into the 「已归档」 view.
+  const officialArchived = useOfficialWorkspaces(officialArchivedFingerprint);
+  useOfficialIndexRefresh(
+    [officialFingerprint, officialArchived],
+    sessions.ready,
+    sessions.refresh,
+  );
   const activeIdRef = useRef(sessions.activeId);
   activeIdRef.current = sessions.activeId;
   const mentionProviders = useMemo(
