@@ -1,15 +1,14 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
-// Type-only: SlotMap entries for the official conversation header seats.
-import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
+// Type-only: SlotMap entries for `amiba.sessions.item.badge` /
+// `amiba.sessions.list.filter` / `amiba.sessions.item.menu`.
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
 import { STEWARD_PRESET_ID, type AdoptResult, type StewardTask } from "../types.js";
-import { AdoptAction } from "./AdoptAction.js";
 import { StewardNavigation } from "./StewardNavigation.js";
-import { createStewardClientState, stewardBadgeFace, stewardFilterFace } from "./state.js";
+import { createStewardClientState, stewardBadgeFace, stewardFilterFace, stewardMenuFace } from "./state.js";
 
 export const name = "amiba-steward-ui";
 export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVisibility"];
@@ -45,6 +44,13 @@ async function valueOf<T>(promise: Promise<{ ok: true; value: T } | { ok: false;
 
 function copy() {
   return document.documentElement.lang.toLowerCase().startsWith("zh") ? "大管家" : "Steward";
+}
+
+/** Same resolution style as `copy()` above — the `steward.adopt` i18n
+ *  strings, read outside React since the registered menu component is
+ *  never mounted (see `NoopComponent`'s doc comment). */
+function adoptCopy() {
+  return document.documentElement.lang.toLowerCase().startsWith("zh") ? "交给大管家" : "Hand to steward";
 }
 
 /**
@@ -92,10 +98,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         listTasks(true).then((tasks) => state.setAdopted(tasks.map((task) => task.sessionId))).catch(() => undefined);
       const adopt = (sessionId: string): Promise<AdoptResult> =>
         valueOf(remote.adopt({ sessionId })).then((result) => {
-          // `AdoptAction` already adds `result.task.sessionId` to the local
-          // set optimistically; this refetches from the host so the set
-          // stays correct even if adopt routed to a different/existing
-          // session than the one that was clicked (see `AdoptResult`).
+          // `stewardMenuFace`'s `run` already adds `result.task.sessionId`
+          // to the local set optimistically; this refetches from the host
+          // so the set stays correct even if adopt routed to a
+          // different/existing session than the one that was clicked (see
+          // `AdoptResult`).
           if (result.kind === "adopted") void refreshAdopted();
           return result;
         });
@@ -179,25 +186,24 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           NoopComponent,
         ),
       );
-      const disposeAdopt = injectedCtx.slots.inject("conversation.session.header.actions", () =>
+      // Session row ⋯ menu: "交给大管家" on every ordinary, not-yet-adopted
+      // session. `stewardMenuFace` reads/writes the same `state` as the
+      // badge/filter above, so adopting from here flips those live too.
+      const disposeMenu = injectedCtx.slots.inject("amiba.sessions.item.menu", () =>
         injectedCtx.slots.register(
           {
-            name: "conversation.session.header.actions",
+            name: "amiba.sessions.item.menu",
             id: "steward-adopt",
             order: 50,
-            inject: () => ({ state, adopt }),
+            label: adoptCopy,
+            inject: () => stewardMenuFace(state, { adopt, refreshAdopted }),
           },
-          (
-            props: PropsRuntime<"conversation.session.header.actions"> & {
-              state: typeof state;
-              adopt: typeof adopt;
-            },
-          ) => <AdoptAction sessionId={String(props.sessionId)} state={props.state} adopt={props.adopt} />,
+          NoopComponent,
         ),
       );
       return () => {
         clearInterval(refreshIntervalId);
-        disposeAdopt();
+        disposeMenu();
         disposeFilter();
         disposeBadge();
         disposeNavigation();

@@ -14,12 +14,14 @@ steward summarises it for the user.
   to pick up changes to the seeded composition (persona, compaction, …).
 - Managed task sessions get `ask_user_question` guarded off; they ask in plain
   text instead, and the steward relays the question.
-- Client half: a workspace navigation entry beside 定时任务, a "交给大管家" header
-  action on ordinary sessions, and registrations into the shell's generic
-  session-list slots — `amiba.sessions.item.badge` marks every adopted
-  session with a 「大管家」 chip, and `amiba.sessions.list.filter` adds a
-  「大管家」 chip to the sidebar's filter row so the list can narrow to just
-  adopted (or just un-adopted) sessions. Both read a client-side adopted-id
-  set that's refreshed at apply, right after a successful adopt, and on a
-  20s interval while the plugin is mounted. The steward session itself is
-  hidden from history via ui-shell's `amibaSessionVisibility`.
+- Client half: a workspace navigation entry beside 定时任务, and registrations
+  into the shell's generic session-list slots — `amiba.sessions.item.badge`
+  marks every adopted session with a 「大管家」 chip, `amiba.sessions.list.filter`
+  adds a 「大管家」 chip to the sidebar's filter row so the list can narrow to
+  just adopted (or just un-adopted) sessions, and `amiba.sessions.item.menu`
+  adds a "交给大管家" item to a session row's ⋯ menu (hidden on the steward's
+  own session and on sessions already adopted). All three read a
+  client-side adopted-id set that's refreshed at apply, right after a
+  successful adopt, and on a 20s interval while the plugin is mounted. The
+  steward session itself is hidden from history via ui-shell's
+  `amibaSessionVisibility`.
