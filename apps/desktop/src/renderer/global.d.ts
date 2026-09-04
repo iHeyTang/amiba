@@ -121,6 +121,8 @@ interface AmibaBridgeApi {
   };
   /** Open the conversation selected from a desktop notification. */
   onOpenSession(cb: (payload: { sessionId: string }) => void): () => void;
+  /** Open the settings dialog; fired by the application menu (⌘, / Ctrl+,). */
+  onOpenSettings(cb: () => void): () => void;
 }
 
 declare global {

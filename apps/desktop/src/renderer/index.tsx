@@ -17,6 +17,7 @@ function removeStartupScreen(): void {
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
 let shellReady = false;
 const pendingSessionIds: string[] = [];
+let pendingOpenSettings = false;
 
 function dispatchOpenSession(sessionId: string): void {
   window.dispatchEvent(
@@ -34,6 +35,26 @@ window.amiba.onOpenSession(({ sessionId }) => {
   dispatchOpenSession(target);
 });
 
+// The application menu's Settings… entry (⌘, / Ctrl+,) funnels into the
+// same `open-settings` layout action every other settings entry path uses
+// (see `useSettingsShell` in dsh-plugin-ui-shell), so the dialog opens on
+// whichever section the hash last addressed.
+function dispatchOpenSettings(): void {
+  window.dispatchEvent(
+    new CustomEvent("amiba:dsh-layout-action", {
+      detail: { action: "open-settings" },
+    }),
+  );
+}
+
+window.amiba.onOpenSettings(() => {
+  if (!shellReady) {
+    pendingOpenSettings = true;
+    return;
+  }
+  dispatchOpenSettings();
+});
+
 function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
   if (document.querySelector("[data-amiba-product-shell]")) {
     shellReady = true;
@@ -49,6 +70,10 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
       window.queueMicrotask(() => {
         for (const sessionId of pendingSessionIds.splice(0)) {
           dispatchOpenSession(sessionId);
+        }
+        if (pendingOpenSettings) {
+          pendingOpenSettings = false;
+          dispatchOpenSettings();
         }
       });
       resolve();

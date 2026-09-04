@@ -43,6 +43,21 @@ ipcRenderer.on(
   },
 );
 
+// Same buffering story for the application menu's Settings… entry: the
+// click may have just created the primary window, so the request can land
+// before the renderer's listener exists. A boolean is enough — repeated
+// requests collapse into one open.
+const openSettingsListeners = new Set<() => void>();
+let pendingOpenSettings = false;
+
+ipcRenderer.on("ui:open-settings", () => {
+  if (openSettingsListeners.size === 0) {
+    pendingOpenSettings = true;
+    return;
+  }
+  for (const listener of openSettingsListeners) listener();
+});
+
 const api = {
   windowChrome: {
     topBarHeightPx: WINDOW_TITLE_BAR_HEIGHT,
@@ -397,6 +412,18 @@ const api = {
       });
     }
     return () => openSessionListeners.delete(cb);
+  },
+
+  /** Open the settings dialog; fired by the application menu (⌘, / Ctrl+,). */
+  onOpenSettings: (cb: () => void) => {
+    openSettingsListeners.add(cb);
+    if (pendingOpenSettings) {
+      pendingOpenSettings = false;
+      queueMicrotask(() => {
+        if (openSettingsListeners.has(cb)) cb();
+      });
+    }
+    return () => openSettingsListeners.delete(cb);
   },
 };
 

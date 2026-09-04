@@ -3,6 +3,7 @@ import path from "node:path";
 import type net from "node:net";
 import {
   BrowserWindow,
+  Menu,
   app,
   ipcMain,
   nativeImage,
@@ -36,6 +37,7 @@ import {
   showPluginNotification,
 } from "./notifier-window";
 import { pluginNotificationOperation } from "./plugin-notification";
+import { buildAppMenuTemplate } from "./app-menu";
 import {
   createQuickAskWindow,
   destroyQuickAskWindow,
@@ -262,6 +264,26 @@ function summonWindow() {
  */
 function summonQuickAskFromHotkey(): void {
   summonQuickAsk({});
+}
+
+/**
+ * Raise the primary window and open its settings dialog. Target of the
+ * application menu's `Settings…` (⌘, / Ctrl+,). The chord is app-wide, so
+ * it also fires while the Quick-Ask popup or the notifier has focus — the
+ * dialog lives only in the main window, hence the summon first.
+ */
+function openSettingsInMainWindow(summon: () => void): void {
+  summon();
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  const send = () => {
+    if (!win.isDestroyed()) win.webContents.send("ui:open-settings");
+  };
+  if (win.webContents.isLoadingMainFrame()) {
+    win.webContents.once("did-finish-load", send);
+  } else {
+    send();
+  }
 }
 
 /** Raise the primary window and route its renderer to a persisted session. */
@@ -577,6 +599,18 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    // Replace Electron's implicit default menu (which has no Preferences
+    // entry) before any window exists so ⌘, / Ctrl+, is live from the first
+    // frame. Every standard role is re-declared in the template.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(
+        buildAppMenuTemplate({
+          platform: process.platform,
+          appName: app.name,
+          onOpenSettings: () => openSettingsInMainWindow(summonWindow),
+        }),
+      ),
+    );
     try {
       _dshNativeGateway = await startDshNativeGateway([
         ...embeddedBrowserController.platformOperations(),
