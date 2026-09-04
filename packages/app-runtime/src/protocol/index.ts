@@ -23,6 +23,22 @@ export interface PluginMessageOrigin {
   plugin: string;
 }
 
+/**
+ * A user-role message that is an ACCOUNT of something that just happened
+ * rather than something addressed to this session — DSH's `notice` context
+ * form ("a one-off account of something that just happened; it supersedes
+ * nothing"): a steward task report, a guard's reminder to the model.
+ *
+ * It rides a user-role message because that is where the model reads it, but
+ * nobody said it to anyone, so a surface must not render it as the person
+ * speaking. `summary` is the producer's own one-line account (bounded by DSH
+ * to 120 characters) and is the whole of what a collapsed row needs to show;
+ * the message's `content` is the full body behind it.
+ */
+export interface MessageNotice {
+  summary: string;
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
@@ -34,6 +50,13 @@ export interface ChatMessage {
    * composer. Absent means the ordinary case: the user typed it.
    */
   origin?: PluginMessageOrigin;
+  /**
+   * Set when this message is an account of an event rather than a turn in the
+   * conversation. Surfaces render it as a collapsed context row keyed by
+   * `summary`, never as a user bubble. Always accompanied by an `origin`:
+   * only a producer other than the person can file one.
+   */
+  notice?: MessageNotice;
 }
 
 /**
@@ -391,6 +414,8 @@ export type StreamEvent =
       uiId: string;
       content: string;
       origin?: ChatMessage["origin"];
+      /** Present iff this is an account, not a turn — see {@link MessageNotice}. */
+      notice?: ChatMessage["notice"];
     }
   | { kind: "done"; agentFinalUrl?: string; agentFinalTitle?: string }
   /**

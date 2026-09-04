@@ -163,9 +163,10 @@ export class DshAmibaEventBridge {
       // own message is already on screen — the composer appends its bubble
       // before it submits — and echoing it would land a second bubble under
       // a different id, so a source with no `origin` produces nothing here.
-      // Everything else about the mapping (which forms count, the words,
-      // the `uiId`) comes from the same module the durable-log projection
-      // reads, so the live bubble and the reloaded one are one message.
+      // Everything else about the mapping (which forms count, whether the
+      // message is a turn or an account, the words, the `uiId`) comes from
+      // the same module the durable-log projection reads, so the live bubble
+      // and the reloaded one are one message.
       const visible = visibleUserMessage(data.source)
       if (!visible?.origin) return []
       return [
@@ -176,6 +177,7 @@ export class DshAmibaEventBridge {
             uiId: userMessageUiId(data.id, source.seq),
             content: userMessageText(data.content).text,
             origin: visible.origin,
+            ...(visible.notice ? { notice: visible.notice } : {}),
           },
         },
       ]

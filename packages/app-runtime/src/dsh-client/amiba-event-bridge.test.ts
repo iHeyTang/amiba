@@ -103,8 +103,7 @@ describe("DshAmibaEventBridge", () => {
         }),
       ),
     ).toEqual([])
-    // Injected model context is not conversation — a guard's `notice`
-    // included: it must never surface live as a user bubble either.
+    // Injected model context is not conversation.
     expect(
       bridge.accept(
         userMessage({
@@ -114,6 +113,9 @@ describe("DshAmibaEventBridge", () => {
         }),
       ),
     ).toEqual([])
+    // A `notice` is an ACCOUNT, not a turn: it reaches the surface with its
+    // summary so the surface can collapse it into a context row — the same
+    // shape the durable-log projection produces, under the same id.
     expect(
       bridge.accept(
         userMessage({
@@ -125,6 +127,22 @@ describe("DshAmibaEventBridge", () => {
             summary: "amiba_browser_click × 5",
           },
           content: [{ type: "text", text: "You are repeating the exact same tool call" }],
+        }),
+      )[0]?.event,
+    ).toEqual({
+      kind: "userMessage",
+      uiId: "dsh:m3n",
+      content: "You are repeating the exact same tool call",
+      origin: { kind: "plugin", plugin: "repeat-tool-reminder" },
+      notice: { summary: "amiba_browser_click × 5" },
+    })
+    // A notice with no summary has nothing to show collapsed — malformed.
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m3s",
+          source: { kind: "plugin", plugin: "repeat-tool-reminder", form: "notice" },
+          content: [{ type: "text", text: "no summary" }],
         }),
       ),
     ).toEqual([])

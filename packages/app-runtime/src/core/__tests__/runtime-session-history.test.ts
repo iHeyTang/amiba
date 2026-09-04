@@ -361,14 +361,39 @@ describe("projectRuntimeSessionHistory", () => {
     ]);
   });
 
-  it("drops a plugin notice and a plugin message with no form: injected context, not conversation", () => {
-    // A guard's `notice` (repeat-tool-reminder's "you are repeating the same
-    // call") and an undeclared-form injection are model context. DSH's own
-    // transcript shows them as collapsed context rows, never as the user
-    // speaking; rendering them as attributed user bubbles put a plugin's
-    // words in the person's mouth.
+  it("keeps a plugin notice as an account, carrying the summary its row shows", () => {
+    // A `notice` is "a one-off account of something that just happened" —
+    // nobody addressed it to anyone, so it is not a user turn. It still
+    // belongs in the transcript, as the collapsed context row DSH's own
+    // transcript shows it as, keyed by the producer's `summary`.
+    expect(
+      projectRuntimeSessionHistory(
+        pluginUserMessage({
+          kind: "plugin",
+          plugin: "amiba-steward",
+          form: "notice",
+          summary: "任务汇报：写周报 — 完成",
+        }),
+      ),
+    ).toEqual([
+      {
+        role: "user",
+        content: "帮我看下这个任务",
+        origin: { kind: "plugin", plugin: "amiba-steward" },
+        notice: { summary: "任务汇报：写周报 — 完成" },
+        uiId: "dsh:m1",
+        runtimeSeq: 4,
+      },
+    ]);
+  });
+
+  it("drops a summary-less notice and a plugin message with no form", () => {
+    // The DSH source type requires a `notice` to carry its one-line account;
+    // without one the collapsed row has nothing to show, so the message is
+    // malformed rather than renderable. An undeclared form is what DSH
+    // documents as opaque context: model machinery, not transcript material.
     for (const source of [
-      { kind: "plugin", plugin: "repeat-tool-reminder", form: "notice", summary: "x × 3" },
+      { kind: "plugin", plugin: "repeat-tool-reminder", form: "notice" },
       { kind: "plugin", plugin: "amiba-im" },
     ]) {
       expect(projectRuntimeSessionHistory(pluginUserMessage(source))).toEqual(

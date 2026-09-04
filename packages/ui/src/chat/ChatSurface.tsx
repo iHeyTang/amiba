@@ -1325,10 +1325,15 @@ export default function ChatSurface({
         // the durable-log projection derives, so re-reading history (a tab
         // switch, a reload) lands on the same bubble instead of a second
         // one — and an event that arrives after the read is a no-op.
-        const { uiId, content, origin } = event;
+        const { uiId, content, origin, notice } = event;
         sessions.setActiveMessages((prev) => {
           const arr = prev as UiMessage[];
-          const next = withHostUserMessage(arr, { uiId, content, origin });
+          const next = withHostUserMessage(arr, {
+            uiId,
+            content,
+            origin,
+            notice,
+          });
           if (next !== arr) void sessions.touchSession(sessionId, next);
           return next;
         });

@@ -102,6 +102,84 @@ function TurnRunningIndicator() {
   );
 }
 
+/**
+ * One collapsed row for a message that ACCOUNTS for something rather than
+ * saying it — DSH's `notice` form (a steward task report, a guard's reminder
+ * to the model). The producer wrote the one-line `summary` for exactly this
+ * row, so collapsed it needs nothing else; expanding reveals the full body
+ * through the assistant bubble's own markdown renderer, because a report is
+ * a document (tables, lists) and reading it as raw pipes was the bug.
+ *
+ * Deliberately the same quiet shape as the execution-summary row: a notice
+ * is a footnote to the conversation, not a turn in it.
+ */
+function MessageNoticeRow({
+  summary,
+  label,
+  body,
+}: {
+  summary: string;
+  /** The producer's display name; empty when the message named no plugin. */
+  label: string;
+  body: string;
+}) {
+  const { t } = useT();
+  const [expanded, setExpanded] = useState(false);
+  const hasBody = body.trim().length > 0;
+
+  return (
+    <div className="min-w-0 text-sm" data-testid="message-notice">
+      <button
+        type="button"
+        disabled={!hasBody}
+        aria-expanded={hasBody ? expanded : undefined}
+        title={
+          hasBody
+            ? expanded
+              ? t("sidepanel.trace.collapseDetails")
+              : t("sidepanel.trace.expandDetails")
+            : undefined
+        }
+        onClick={() => hasBody && setExpanded((value) => !value)}
+        className={cn(
+          "group/notice inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          hasBody
+            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            : "cursor-default",
+        )}
+      >
+        <span className="min-w-0 truncate">
+          {label ? `${label} · ${summary}` : summary}
+        </span>
+        {hasBody && (
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "h-3 w-3 shrink-0 opacity-45 transition-transform group-hover/notice:opacity-70",
+              expanded && "rotate-90",
+            )}
+          />
+        )}
+      </button>
+      {expanded && hasBody && (
+        <div
+          data-selection="text"
+          className="ml-[7px] min-w-0 border-l border-border/60 py-1.5 pl-3 pr-1"
+        >
+          <Streamdown
+            components={chatMarkdownComponents}
+            mode="static"
+            parseIncompleteMarkdown
+            className="chat-md break-words text-xs text-muted-foreground/85"
+          >
+            {body}
+          </Streamdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export interface BubbleProps {
   m: UiMessage;
   /** Turn-level renderers use this after moving execution details into one summary. */
@@ -147,6 +225,24 @@ export function Bubble({
   const awaitingUserInput = useContext(AwaitingUserInputContext);
 
   if (m.role === "user") {
+    // An ACCOUNT of something that happened (a steward task report, a guard's
+    // reminder) rather than a turn somebody took. It rides a user-role
+    // message because that is where the model reads it, but nobody said it
+    // to anybody — so it gets the quiet collapsed row, not the user card.
+    if (m.notice) {
+      const producer = m.origin?.kind === "plugin" ? m.origin.plugin : "";
+      return (
+        <MessageNoticeRow
+          summary={m.notice.summary}
+          label={
+            producer
+              ? (resolveMessageSourceLabel?.(producer) ?? producer)
+              : ""
+          }
+          body={stripManagedResourceContext(bubbleTextContent(m.content))}
+        />
+      );
+    }
     const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
     const fileBadges = m.attachmentBadges ?? [];
     const hasReferences = fileBadges.length > 0;

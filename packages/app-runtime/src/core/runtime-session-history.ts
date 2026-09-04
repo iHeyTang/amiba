@@ -279,10 +279,13 @@ export function projectRuntimeSessionHistory(
       const message = messageFromEvent(event);
       // Which producers' user-role messages the conversation shows, and what
       // they are attributed to, is one shared decision with the live bridge
-      // — see `visibleUserMessage`. A plugin-dispatched message (the steward
-      // relaying a task brief, an IM connector relaying an inbound message)
-      // is conversation and keeps an `origin`; injected model context and
-      // tool results are not, and are still dropped here.
+      // — see `visibleUserMessage`. A plugin-RELAYED message (the steward's
+      // task brief, an IM connector's inbound message) is conversation and
+      // keeps an `origin`; a plugin NOTICE (a task report, a guard's
+      // reminder) is an account rather than a turn and additionally carries
+      // its `notice` summary, which the surface renders as a collapsed row;
+      // injected model context and tool results are neither, and are still
+      // dropped here.
       const visible = visibleUserMessage(message?.source);
       if (!visible) continue;
       // Words and attachment envelopes are separated by the same shared
@@ -293,6 +296,7 @@ export function projectRuntimeSessionHistory(
         role: "user",
         content: text,
         ...(visible.origin ? { origin: visible.origin } : {}),
+        ...(visible.notice ? { notice: visible.notice } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),
         uiId: userMessageUiId(message?.id, event.seq),
         runtimeSeq: event.seq,
