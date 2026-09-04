@@ -622,8 +622,21 @@ export class ConnectorCenter {
     if (row.channelId) {
       await this.messageCenter.updateChannel(row.channelId, { approval });
     }
-    const updated = await this.store.update(id, { approval });
-    return this.toView(updated);
+    try {
+      const updated = await this.store.update(id, { approval });
+      return this.toView(updated);
+    } catch (error) {
+      // Same discipline as createConnect: a two-store write must not leave
+      // the channel on the new policy while the connect's mirror (what the
+      // settings UI shows) still carries the old one. `null` clears a mirror
+      // that had no policy of its own, matching messaging-core's rollback.
+      if (row.channelId) {
+        await this.messageCenter
+          .updateChannel(row.channelId, { approval: row.approval ?? null })
+          .catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   async removeConnect(id: string): Promise<boolean> {

@@ -2003,6 +2003,63 @@ describe("approval config plumbing", () => {
     expect(row?.approval).toEqual(approval);
   });
 
+  it("setApproval rolls the channel back to its previous policy when the connect store write fails", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const original = { mode: "wait" as const, timeoutMs: 600_000 };
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Rollback",
+      config: {},
+      agentPreset: "restricted",
+      approval: original,
+    });
+    messageCenter.updateChannel.mockClear();
+    const update = vi
+      .spyOn(store, "update")
+      .mockRejectedValueOnce(new Error("disk_full"));
+
+    await expect(
+      center.setApproval(view.id, { mode: "timeout", timeoutMs: 120_000 }),
+    ).rejects.toThrow("disk_full");
+
+    expect(messageCenter.updateChannel).toHaveBeenNthCalledWith(1, "channel-1", {
+      approval: { mode: "timeout", timeoutMs: 120_000 },
+    });
+    expect(messageCenter.updateChannel).toHaveBeenNthCalledWith(2, "channel-1", {
+      approval: original,
+    });
+    update.mockRestore();
+    const row = (await store.list()).find((item) => item.id === view.id);
+    expect(row?.approval).toEqual(original);
+  });
+
+  it("setApproval clears the channel policy on rollback when the connect had none", async () => {
+    const { center, messageCenter, store } = await harness();
+    const { provider } = fakeProvider();
+    center.registerProvider(provider);
+    const view = await center.createConnect({
+      provider: "fake",
+      name: "Rollback default",
+      config: {},
+      agentPreset: "restricted",
+    });
+    messageCenter.updateChannel.mockClear();
+    const update = vi
+      .spyOn(store, "update")
+      .mockRejectedValueOnce(new Error("disk_full"));
+
+    await expect(
+      center.setApproval(view.id, { mode: "timeout", timeoutMs: 120_000 }),
+    ).rejects.toThrow("disk_full");
+
+    expect(messageCenter.updateChannel).toHaveBeenLastCalledWith("channel-1", {
+      approval: null,
+    });
+    update.mockRestore();
+  });
+
   it("setApproval throws connect_not_found for an unknown id", async () => {
     const { center } = await harness();
 
