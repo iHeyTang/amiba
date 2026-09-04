@@ -533,8 +533,8 @@ describe("StewardService — archived sessions", () => {
     expect(await service.listTasks()).toEqual([]);
     // An ordinary closed task still surfaces with includeDone; the archived
     // one never does — that's what actually drops it from the client's
-    // 「大管家」 badge/group poll (`listTasks(true)`), unlike a task the user
-    // just finished with `steward_close_task`.
+    // 「大管家」 group poll (`listTasks(true)`), unlike a task the user just
+    // finished with `steward_close_task`.
     const withDone = await service.listTasks(true);
     expect(withDone.map((t) => t.id)).toEqual([closedId]);
     const stored = (await service.snapshot()).tasks.find((t) => t.id === archivedId)!;

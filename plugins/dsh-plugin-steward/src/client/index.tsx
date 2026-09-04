@@ -1,15 +1,14 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
-// Type-only: SlotMap entries for `amiba.sessions.item.badge` /
-// `amiba.sessions.list.group` / `amiba.sessions.item.menu` /
-// `amiba.message.source`.
+// Type-only: SlotMap entries for `amiba.sessions.list.group` /
+// `amiba.sessions.item.menu` / `amiba.message.source`.
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
 import { STEWARD_PRESET_ID, STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
 import { StewardNavigation } from "./StewardNavigation.js";
-import { createStewardClientState, stewardBadgeFace, stewardGroupFace, stewardMenuFace } from "./state.js";
+import { createStewardClientState, stewardGroupFace, stewardMenuFace } from "./state.js";
 
 export const name = "amiba-steward-ui";
 export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVisibility"];
@@ -55,11 +54,11 @@ function adoptCopy() {
 }
 
 /**
- * The registered component for `amiba.sessions.item.badge` /
- * `amiba.sessions.list.group` — never rendered. The shell reads these
+ * The registered component for `amiba.sessions.list.group` /
+ * `amiba.sessions.item.menu` — never rendered. The shell reads these
  * registrations by enumerating `entriesOfSlot` and calling `options.label` /
- * `inject().resolve` / `inject().claim` directly (see
- * `createSessionBadgesSource` / `createSessionGroupsSource` in
+ * `inject().claim` / `inject().run` directly (see
+ * `createSessionGroupsSource` / `createSessionMenuItemsSource` in
  * `dsh-plugin-ui-shell`'s `session-list-sources.ts`); it never mounts the
  * component through a slot renderer. A component is still required to
  * satisfy `ctx.slots.register`'s signature, exactly like `settings.section`
@@ -92,9 +91,9 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         });
       const listTasks = (includeDone: boolean): Promise<StewardTask[]> => valueOf(remote.listTasks(includeDone));
       // `listTasks(true)` (include done) so a task's session keeps its
-      // 大管家 badge/group membership even after the task itself finishes —
-      // the managed set is about "did the steward ever adopt this session",
-      // not "is it still active".
+      // 大管家 group membership even after the task itself finishes — the
+      // managed set is about "did the steward ever adopt this session", not
+      // "is it still active".
       const refreshAdopted = () =>
         listTasks(true).then((tasks) => state.setAdopted(tasks.map((task) => task.sessionId))).catch(() => undefined);
       const adopt = (sessionId: string): Promise<AdoptResult> =>
@@ -112,8 +111,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       void ensureStewardSession().catch(() => undefined);
       void refreshAdopted();
       // Task completion, and adoption from another client/window, don't
-      // notify this client — poll so the badge/group set stays close to
-      // the host's truth without a push channel.
+      // notify this client — poll so the group set stays close to the
+      // host's truth without a push channel.
       const refreshIntervalId = setInterval(() => void refreshAdopted(), REFRESH_INTERVAL_MS);
 
       const disposeHidden = injectedCtx.amibaSessionVisibility.hidePreset(STEWARD_PRESET_ID);
@@ -155,26 +154,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           StewardNavigation as (props: PropsRuntime<"amiba.workspace.navigation">) => ReactNode,
         ),
       );
-      // Session list: mark every session the steward has ever adopted with
-      // a 「大管家」 badge, and group those same sessions into their own
-      // 「大管家」 section at the top of the sidebar. Both faces read
-      // `state.adoptedSessionIds()` live (see `stewardBadgeFace`/
-      // `stewardGroupFace` in `state.ts`), so `refreshAdopted()` above — at
-      // apply, after an adopt, and every `REFRESH_INTERVAL_MS` — is all
-      // that's needed to keep them current; the registered component itself
-      // is never rendered (see `NoopComponent`'s doc comment).
-      const disposeBadge = injectedCtx.slots.inject("amiba.sessions.item.badge", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.sessions.item.badge",
-            id: NAV_ID,
-            order: 50,
-            label: copy,
-            inject: () => stewardBadgeFace(state),
-          },
-          NoopComponent,
-        ),
-      );
+      // Session list: group every session the steward has ever adopted into
+      // its own 「大管家」 section at the top of the sidebar. `claim` reads
+      // `state.adoptedSessionIds()` live (see `stewardGroupFace` in
+      // `state.ts`), so `refreshAdopted()` above — at apply, after an
+      // adopt, and every `REFRESH_INTERVAL_MS` — is all that's needed to
+      // keep it current; the registered component itself is never rendered
+      // (see `NoopComponent`'s doc comment).
       const disposeGroup = injectedCtx.slots.inject("amiba.sessions.list.group", () =>
         injectedCtx.slots.register(
           {
@@ -189,7 +175,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       );
       // Session row ⋯ menu: "交给大管家" on every ordinary, not-yet-adopted
       // session. `stewardMenuFace` reads/writes the same `state` as the
-      // badge/group above, so adopting from here flips those live too.
+      // group above, so adopting from here flips that live too.
       const disposeMenu = injectedCtx.slots.inject("amiba.sessions.item.menu", () =>
         injectedCtx.slots.register(
           {
@@ -223,7 +209,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         disposeMessageSource();
         disposeMenu();
         disposeGroup();
-        disposeBadge();
         disposeNavigation();
         disposeHidden();
       };

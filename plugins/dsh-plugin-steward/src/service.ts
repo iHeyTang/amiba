@@ -290,10 +290,10 @@ export class StewardService {
    * Every task not owned by an archived session, closing any that just
    * became archived along the way. An archived session's task is dropped
    * from the result UNCONDITIONALLY — unlike an ordinary closed task, which
-   * `includeDone` can still surface — because the client's badge/group faces
-   * poll `listTasks(true)` to decide 「大管家」 membership (see
+   * `includeDone` can still surface — because the client's group face polls
+   * `listTasks(true)` to decide 「大管家」 membership (see
    * `client/index.tsx`'s `refreshAdopted`): once a session is archived it
-   * must stop claiming that group/badge, and dropping the row from every
+   * must stop claiming that group, and dropping the row from every
    * `listTasks` call (rather than adding a new `archived` field the client
    * would need to learn) is what actually achieves that with the shape the
    * client already handles.
