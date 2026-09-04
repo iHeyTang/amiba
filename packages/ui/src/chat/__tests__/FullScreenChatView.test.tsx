@@ -272,14 +272,8 @@ describe("FullScreenChatView new-chat home", () => {
       onFocusRequested: vi.fn(() => () => {}),
       onAgentActivity: vi.fn(() => () => {}),
     };
-    // The pane's open state is persisted, so a task that left it open must not
-    // resurrect a workbench on a surface that has no task to act on.
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") return { [key]: "chats" };
-      const keys = Array.isArray(key) ? key : [key];
-      if (keys.includes("settings.chat.workspacePaneOpen")) {
-        return { "settings.chat.workspacePaneOpen": true };
-      }
       return {};
     });
 
