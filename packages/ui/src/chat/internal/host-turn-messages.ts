@@ -37,6 +37,28 @@ export function withHostAssistantPlaceholder(
 }
 
 /**
+ * Stops a bubble spinning without otherwise touching it — used when the
+ * engine settles a HOST-started run that a local submit displaced.
+ *
+ * Deliberately not the `[stopped]` seal `markCurrentAssistantStopped`
+ * applies: the displaced turn was not cancelled, it is still running on the
+ * host and the next history read returns it complete. Marking partial text
+ * as stopped would be a claim that disappears on reload.
+ */
+export function settleStreamingMessage(
+  messages: readonly UiMessage[],
+  assistantUiId: string,
+): UiMessage[] {
+  const index = messages.findIndex(
+    (message) => message.uiId === assistantUiId && message.streaming,
+  );
+  if (index < 0) return messages as UiMessage[];
+  const next = (messages as UiMessage[]).slice();
+  next[index] = { ...next[index]!, streaming: false };
+  return next;
+}
+
+/**
  * Appends a user message the host put into the session (a plugin dispatching
  * on the user's behalf), carrying its `origin` so the bubble can say who it
  * came from. The person's own messages never arrive this way — the composer

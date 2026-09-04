@@ -113,6 +113,55 @@ describe("DshAmibaEventBridge", () => {
         }),
       ),
     ).toEqual([])
+    // A plugin source with no name cannot be attributed — dropped here and
+    // dropped by the projection, so it never appears on reload either.
+    expect(
+      bridge.accept(
+        userMessage({
+          id: "m4",
+          source: { kind: "plugin", form: "relay" },
+          content: [{ type: "text", text: "anonymous" }],
+        }),
+      ),
+    ).toEqual([])
+  })
+
+  it("strips attachment envelopes exactly as the durable projection does", () => {
+    const bridge = new DshAmibaEventBridge()
+    const event = bridge.accept({
+      rpcId: "rpc",
+      payload: {
+        type: "session/event",
+        sessionId: "s",
+        event: {
+          type: "user/message",
+          seq: 1,
+          time: 10,
+          data: {
+            id: "m1",
+            source: { kind: "plugin", plugin: "amiba-im", form: "relay" },
+            content: [
+              {
+                type: "text",
+                text:
+                  "<file-attachment>\n" +
+                  'Name: "shot.png"\n' +
+                  'Kind: "image"\n' +
+                  'Mime: "image/png"\n' +
+                  "Size: 12 bytes\n" +
+                  'Attachment-ID: "att_9"\n' +
+                  "</file-attachment>\n\n" +
+                  "看看这个",
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as DshMuxEnvelope)[0]?.event
+    // The identical wire shape yields the identical cleaned text from the
+    // projection — see "strips an attachment envelope from a plugin-relayed
+    // message too" in runtime-session-history.test.ts.
+    expect(event).toMatchObject({ kind: "userMessage", content: "看看这个" })
   })
 
   it("preserves DSH rpcId for answerable frames", () => {

@@ -327,4 +327,57 @@ describe("DshChatEngineClient host-started turns", () => {
     ]);
     engine.dispose();
   });
+
+  it("settles the host bubble when the user takes the session back", async () => {
+    // The host turn never reaches its own terminal frame before the person
+    // submits: without an explicit settle its bubble would spin forever,
+    // because the local state replaces the passive one and every remaining
+    // frame is then dropped.
+    const engine = new DshChatEngineClient({
+      // No terminal frame: the host turn is still in flight when the person
+      // submits, which is the whole point.
+      client: scriptedClient([TURN_START, CHUNK]),
+    });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((sessionId, event) => {
+      if (sessionId === "session-1") events.push(event);
+    });
+
+    engine.subscribe("session-1");
+    await eventually(() =>
+      expect(events.map((event) => event.kind)).toEqual([
+        "begin",
+        "turn",
+        "chunk",
+      ]),
+    );
+    const hostBubble = (
+      events[0] as Extract<StreamEvent, { kind: "begin" }>
+    ).assistantUiId;
+
+    engine.submit(payload({ history: [{ role: "user", content: "actually…" }] }));
+
+    // The host run is settled BEFORE the local turn begins, and names its
+    // own bubble — the surface has already primed for the local one, so an
+    // unnamed abort would seal the wrong message.
+    expect(events.map((event) => event.kind)).toEqual([
+      "begin",
+      "turn",
+      "chunk",
+      "aborted",
+      "begin",
+    ]);
+    expect(events[3]).toEqual({ kind: "aborted", assistantUiId: hostBubble });
+    expect(
+      (events[4] as Extract<StreamEvent, { kind: "begin" }>).assistantUiId,
+    ).toBe("assistant-1");
+
+    // Whatever the host turn emits from here belongs to a run this window no
+    // longer follows: the local run owns the session.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      events.filter((event) => event.kind === "aborted"),
+    ).toHaveLength(1);
+    engine.dispose();
+  });
 });

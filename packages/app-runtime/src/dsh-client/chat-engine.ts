@@ -281,12 +281,19 @@ export class DshChatEngineClient implements ChatEngineClient {
    *
    * The one rule that keeps it from double-delivering is the `controller`
    * check: while a local run owns a session, ITS iterator is already emitting
-   * every frame and the watcher stays out entirely. The check is safe against
-   * the watcher lagging behind that run, because a passive run can only be
-   * OPENED by a `turn` frame — the first frame of a turn, which necessarily
-   * arrives while the local controller is still set — and every later kind is
-   * gated on a passive state existing. Stragglers from a finished local turn
-   * therefore find no passive state and are dropped rather than replayed.
+   * every frame and the watcher stays out entirely.
+   *
+   * The precise invariant, since the check runs at PROCESSING time on the
+   * watcher's own socket rather than at frame time: a passive run can only
+   * be OPENED by a `turn` frame, and every later kind is gated on a passive
+   * state already existing, so ordinary lag (the watcher a few frames behind
+   * the local run) replays nothing — the stragglers find no passive state.
+   * What this does NOT rule out is a watcher lagging a WHOLE turn: if its
+   * socket is far enough behind that it processes the local turn's
+   * `turn/start` only after `run()` has finished and cleared the controller,
+   * it would open a passive run and replay that turn. Accepted: it needs the
+   * two sockets to diverge by an entire turn, and the worst outcome is a
+   * duplicated bubble on one turn, not corrupted state.
    */
   private observePassiveFrame(sessionId: string, event: StreamEvent): void {
     const state = this.states.get(sessionId);
@@ -556,6 +563,28 @@ export class DshChatEngineClient implements ChatEngineClient {
         message: "A stream is already in progress for this session.",
       });
       return;
+    }
+    if (current?.passive && current.streaming) {
+      // The local state below replaces the passive one, after which
+      // `observePassiveFrame` drops every remaining frame of the host turn
+      // — including its terminal event. Settle the host bubble here or it
+      // spins forever.
+      //
+      // It has to NAME the bubble. By the time `submit()` runs, the surface
+      // has already primed its accumulators for the LOCAL turn, so an
+      // unnamed `aborted` would seal the brand-new local bubble as
+      // `[stopped]` and reject the very turn being submitted. The host turn
+      // itself is not cancelled — DSH queues the new prompt behind it and
+      // the completed turn reappears in full on the next history read —
+      // so the surface only stops the spinner rather than stamping
+      // `[stopped]` onto text that is about to be superseded.
+      this.emit(payload.sessionId, {
+        kind: "aborted",
+        ...(current.assistantUiId
+          ? { assistantUiId: current.assistantUiId }
+          : {}),
+      });
+      this.states.delete(payload.sessionId);
     }
     const controller = new AbortController();
     const state = initialState(payload.sessionId, payload.assistantUiId);

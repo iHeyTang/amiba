@@ -103,6 +103,7 @@ import {
   type UiMessage,
 } from "./internal/types";
 import {
+  settleStreamingMessage,
   withHostAssistantPlaceholder,
   withHostUserMessage,
 } from "./internal/host-turn-messages";
@@ -1175,7 +1176,22 @@ export default function ChatSurface({
     }
   }
 
-  function handleStreamAborted(sessionId: string): void {
+  function handleStreamAborted(sessionId: string, assistantUiId?: string): void {
+    // A NAMED bubble that isn't the one being streamed here is a displaced
+    // host-started run: the engine settling its assistant bubble as the
+    // local turn that replaced it begins. Stop that bubble spinning and
+    // leave everything about the local turn — the primed accumulators, the
+    // pending-turn promise, `busy` — completely alone.
+    if (
+      assistantUiId &&
+      sessionId === sessions.activeId &&
+      assistantUiId !== stream.getCurrentAssistantUiId()
+    ) {
+      sessions.setActiveMessages((prev) =>
+        settleStreamingMessage(prev as UiMessage[], assistantUiId),
+      );
+      return;
+    }
     // `sendQueueItemNow` already sealed the previous turn locally AND
     // fired the next one. The pendingTurnRef now points at the *new*
     // turn — rejecting it (or re-running the seal logic) would either
@@ -1251,7 +1267,8 @@ export default function ChatSurface({
       // tab would never resolve.
       if (event.kind === "done")
         handleStreamDone(sessionId, event.agentFinalUrl, event.agentFinalTitle);
-      else if (event.kind === "aborted") handleStreamAborted(sessionId);
+      else if (event.kind === "aborted")
+        handleStreamAborted(sessionId, event.assistantUiId);
       else if (event.kind === "error") handleStreamError(sessionId, event);
       return;
     }
@@ -1334,7 +1351,7 @@ export default function ChatSurface({
         handleStreamDone(sessionId, event.agentFinalUrl, event.agentFinalTitle);
         break;
       case "aborted":
-        handleStreamAborted(sessionId);
+        handleStreamAborted(sessionId, event.assistantUiId);
         break;
       case "error":
         handleStreamError(sessionId, event);

@@ -289,6 +289,42 @@ describe("projectRuntimeSessionHistory", () => {
     ]);
   });
 
+  it("strips an attachment envelope from a plugin-relayed message too", () => {
+    // Same cleaning the live bridge applies — see the bridge's own test,
+    // which asserts the identical text off the identical wire shape.
+    const messages = projectRuntimeSessionHistory([
+      {
+        event: {
+          type: "user/message",
+          seq: 1,
+          time: 2,
+          data: {
+            id: "m1",
+            source: { kind: "plugin", plugin: "amiba-im", form: "relay" },
+            content: [
+              {
+                type: "text",
+                text:
+                  "<file-attachment>\n" +
+                  'Name: "shot.png"\n' +
+                  'Kind: "image"\n' +
+                  'Mime: "image/png"\n' +
+                  "Size: 12 bytes\n" +
+                  'Attachment-ID: "att_9"\n' +
+                  "</file-attachment>\n\n" +
+                  "看看这个",
+              },
+            ],
+          },
+        },
+      },
+    ] as never);
+    expect(messages[0]?.content).toBe("看看这个");
+    expect(messages[0]?.attachmentBadges?.map((badge) => badge.name)).toEqual([
+      "shot.png",
+    ]);
+  });
+
   function pluginUserMessage(source: Record<string, unknown>) {
     return [
       {
@@ -351,6 +387,17 @@ describe("projectRuntimeSessionHistory", () => {
         [],
       );
     }
+  });
+
+  it("drops a plugin message with no plugin name, exactly as the bridge does", () => {
+    // `plugin` is required by the DSH source type: a message that cannot say
+    // who produced it must not be passed off as the user's own words, and
+    // keeping it here would make it appear on reload but never live.
+    expect(
+      projectRuntimeSessionHistory(
+        pluginUserMessage({ kind: "plugin", form: "relay" }),
+      ),
+    ).toEqual([]);
   });
 
   it("leaves a message the person typed unattributed", () => {

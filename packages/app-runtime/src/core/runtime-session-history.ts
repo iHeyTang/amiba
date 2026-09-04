@@ -8,14 +8,13 @@ import {
   toolResultWireRecord,
 } from "../dsh-client/tool-wire";
 import {
-  userMessageTextParts,
+  userMessageText,
   userMessageUiId,
   visibleUserMessage,
 } from "../dsh-client/user-message-source";
 import type { ToolProgress } from "./runtime-protocol";
 import type { SessionMessage } from "./sessions";
 
-import { splitFileAttachmentsFromPrompt } from "./attachments/format";
 import type { AttachmentBadge } from "./attachments/types";
 
 type RuntimeSessionMessage = SessionMessage & {
@@ -286,20 +285,13 @@ export function projectRuntimeSessionHistory(
       // tool results are not, and are still dropped here.
       const visible = visibleUserMessage(message?.source);
       if (!visible) continue;
-      // Text parts are processed one by one: since the two-part wire format,
-      // the attachment metadata is its own part (splits to badges and empty
-      // text); legacy sessions carry one merged part, which the same call
-      // splits in place.
-      const badges: AttachmentBadge[] = [];
-      const texts: string[] = [];
-      for (const part of userMessageTextParts(message?.content)) {
-        const split = splitFileAttachmentsFromPrompt(part);
-        badges.push(...split.badges);
-        if (split.text) texts.push(split.text);
-      }
+      // Words and attachment envelopes are separated by the same shared
+      // helper the live bridge uses, so a message reads identically whether
+      // it arrived on the wire or was reloaded from the durable log.
+      const { text, badges } = userMessageText(message?.content);
       output.push({
         role: "user",
-        content: texts.join("\n"),
+        content: text,
         ...(visible.origin ? { origin: visible.origin } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),
         uiId: userMessageUiId(message?.id, event.seq),

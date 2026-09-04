@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  settleStreamingMessage,
   withHostAssistantPlaceholder,
   withHostUserMessage,
 } from "../host-turn-messages";
@@ -48,5 +49,24 @@ describe("withHostUserMessage", () => {
     expect(
       withHostUserMessage(existing, { uiId: "dsh:m1", content: "去查一下" }),
     ).toBe(existing);
+  });
+});
+
+describe("settleStreamingMessage", () => {
+  it("stops the named bubble spinning without altering its text", () => {
+    // The displaced host turn keeps running on the host; stamping
+    // "[stopped]" onto partial text would be a claim that vanishes on the
+    // next history read.
+    const next = settleStreamingMessage(existing, "host_1");
+    expect(next).toEqual([
+      existing[0],
+      { uiId: "host_1", role: "assistant", content: "on it", streaming: false },
+    ]);
+  });
+
+  it("is a no-op for an unknown id or an already-settled bubble", () => {
+    expect(settleStreamingMessage(existing, "host_missing")).toBe(existing);
+    const settled = settleStreamingMessage(existing, "host_1");
+    expect(settleStreamingMessage(settled, "host_1")).toBe(settled);
   });
 });

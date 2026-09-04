@@ -1,5 +1,8 @@
 import type { PluginMessageOrigin } from "@amiba/app-runtime/protocol"
 
+import { splitFileAttachmentsFromPrompt } from "../core/attachments/format"
+import type { AttachmentBadge } from "../core/attachments/types"
+
 /**
  * The ONE projection of a DSH `user/message` frame's `source` and `content`.
  *
@@ -59,10 +62,16 @@ export interface VisibleUserMessage {
  *
  * - `kind: "user"` (or no source at all) — the person typed it. Kept, no
  *   attribution.
- * - `kind: "plugin"` with a conversational `form` — kept and attributed to
- *   the plugin (see {@link CONVERSATIONAL_FORMS}). A malformed registration
- *   with no `plugin` name is still kept, just unattributed: the message is
- *   real conversation either way and hiding it is the bug this replaced.
+ * - `kind: "plugin"` with a conversational `form` and a `plugin` name — kept
+ *   and attributed to that plugin (see {@link CONVERSATIONAL_FORMS}).
+ * - `kind: "plugin"` with NO `plugin` name — dropped. `plugin` is required by
+ *   the DSH source type, so this shape is malformed; there is nothing to
+ *   attribute it to, and a plugin-produced message that cannot say who
+ *   produced it is exactly the thing the transcript should not silently
+ *   pass off as the user's own words. Dropping is also what keeps the two
+ *   consumers symmetrical: the live bridge maps a `userMessage` event only
+ *   when there IS an origin, so any other answer here would mean a message
+ *   that appears on reload but never live.
  * - `kind: "tool"` / `kind: "model"` / any future kind — dropped. A tool
  *   result rides a user-role message on the wire and is rendered by the
  *   assistant turn's own tool chips, never as a user bubble.
@@ -76,31 +85,54 @@ export function visibleUserMessage(value: unknown): VisibleUserMessage | null {
   if (typeof form === "string" && !CONVERSATIONAL_FORMS.has(form)) return null
   if (form !== undefined && typeof form !== "string") return null
   const plugin = typeof source?.plugin === "string" ? source.plugin : ""
-  return plugin ? { origin: { kind: "plugin", plugin } } : {}
+  return plugin ? { origin: { kind: "plugin", plugin } } : null
+}
+
+/** A message's words, with its `<file-attachment>` envelopes lifted out. */
+export interface UserMessageText {
+  /** The text a person reads: every envelope removed, parts joined by `\n`. */
+  text: string
+  /** One badge per attachment the envelopes described, in wire order. */
+  badges: AttachmentBadge[]
 }
 
 /**
- * The `text` parts of a message's `content`, in order. A plain-string content
- * (older logs) counts as a single part.
+ * The readable text of a `user/message`'s `content`, and the attachments its
+ * envelopes describe.
  *
- * Parts stay SPLIT rather than pre-joined because the durable projection
- * still has to run each one through the attachment-envelope splitter: since
- * the two-part wire format the attachment metadata is its own part, while
- * legacy sessions carry one merged part that the same splitter divides in
- * place. Callers with no attachment concern (the live bridge) join with
- * `"\n"`, exactly as the projection does after splitting.
+ * Each `text` part is passed through the attachment splitter individually
+ * rather than the joined string: since the two-part wire format the
+ * attachment metadata is its own part (splitting it leaves empty text and
+ * yields badges), while legacy sessions carry one merged part that the same
+ * splitter divides in place. A plain-string `content` (older logs) counts as
+ * a single part.
+ *
+ * Both consumers call this, so a relayed message carrying an envelope reads
+ * the same live as it does after a reload — the bridge simply has nowhere to
+ * put `badges` yet (`StreamEvent.userMessage` carries text only, and
+ * attachments are a composer feature no plugin relay uses today), while the
+ * durable projection renders them as chips.
  */
-export function userMessageTextParts(content: unknown): string[] {
-  if (typeof content === "string") return [content]
-  if (!Array.isArray(content)) return []
+export function userMessageText(content: unknown): UserMessageText {
+  const parts =
+    typeof content === "string"
+      ? [content]
+      : Array.isArray(content)
+        ? content.flatMap((part) => {
+            const item = record(part)
+            return item?.type === "text" && typeof item.text === "string"
+              ? [item.text]
+              : []
+          })
+        : []
+  const badges: AttachmentBadge[] = []
   const texts: string[] = []
-  for (const part of content) {
-    const item = record(part)
-    if (item?.type === "text" && typeof item.text === "string") {
-      texts.push(item.text)
-    }
+  for (const part of parts) {
+    const split = splitFileAttachmentsFromPrompt(part)
+    badges.push(...split.badges)
+    if (split.text) texts.push(split.text)
   }
-  return texts
+  return { text: texts.join("\n"), badges }
 }
 
 /**

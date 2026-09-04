@@ -393,7 +393,13 @@ export type StreamEvent =
       origin?: ChatMessage["origin"];
     }
   | { kind: "done"; agentFinalUrl?: string; agentFinalTitle?: string }
-  | { kind: "aborted" }
+  /**
+   * `assistantUiId` names the bubble this settles when it is NOT the one the
+   * surface is currently streaming — a HOST-started run displaced by a local
+   * submit. Absent (the ordinary case) means "the run in progress", which
+   * the surface seals as `[stopped]`.
+   */
+  | { kind: "aborted"; assistantUiId?: string }
   | { kind: "error"; message: string; status?: number; hint?: string };
 
 export interface ChatEngineClient {

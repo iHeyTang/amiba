@@ -6,7 +6,7 @@ import type {
 import type { DshMuxEnvelope, DshSessionEvent } from "./index"
 import { toolCallWireRecord, toolResultWireRecord } from "./tool-wire"
 import {
-  userMessageTextParts,
+  userMessageText,
   userMessageUiId,
   visibleUserMessage,
 } from "./user-message-source"
@@ -162,10 +162,10 @@ export class DshAmibaEventBridge {
       // Only a PLUGIN-dispatched message becomes a live event. The person's
       // own message is already on screen — the composer appends its bubble
       // before it submits — and echoing it would land a second bubble under
-      // a different id. Everything about the mapping (which forms count,
-      // the text, the `uiId`) comes from the same module the durable-log
-      // projection reads, so the live bubble and the reloaded one are the
-      // same message.
+      // a different id, so a source with no `origin` produces nothing here.
+      // Everything else about the mapping (which forms count, the words,
+      // the `uiId`) comes from the same module the durable-log projection
+      // reads, so the live bubble and the reloaded one are one message.
       const visible = visibleUserMessage(data.source)
       if (!visible?.origin) return []
       return [
@@ -174,7 +174,7 @@ export class DshAmibaEventBridge {
           event: {
             kind: "userMessage",
             uiId: userMessageUiId(data.id, source.seq),
-            content: userMessageTextParts(data.content).join("\n"),
+            content: userMessageText(data.content).text,
             origin: visible.origin,
           },
         },
