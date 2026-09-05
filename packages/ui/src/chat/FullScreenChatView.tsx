@@ -1207,7 +1207,11 @@ function ContentHeader({
                   // title text next to it. Flex sizes the box to exactly the
                   // icon's own height, so the surrounding `items-center`
                   // containers center the icon and the title on the same line.
-                  "pointer-events-none inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground",
+                  // The 1px downward nudge is optical: a 13px CJK title's
+                  // ideographic glyphs sit visibly lower than the geometric
+                  // middle of their line box (PingFang/Inter metrics), so a
+                  // mathematically centered 16px glyph reads as sitting high.
+                  "pointer-events-none inline-flex h-4 w-4 shrink-0 translate-y-px items-center justify-center text-muted-foreground",
                   sidebarCollapsed && "ml-2",
                 )}
               >
