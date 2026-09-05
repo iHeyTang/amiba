@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 
 import type { Context } from "@deepseek-ai/cordis";
 // Type-only: loads dsh-agent's `ctx.agents` module augmentation.
@@ -39,6 +40,16 @@ export class CronService {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private readonly running = new Set<string>();
+  /**
+   * Wall-clock instant up to which fires have been accounted for. A fire is
+   * due when the task's next instant strictly after this watermark (and after
+   * its own last run / last edit) is at or before now. Anchoring on the last
+   * check rather than on `now - 1` is what lets a timer that wakes a
+   * millisecond late — every real timer does — still see the instant it was
+   * armed for. Startup seeds it with the start time: fires missed while the
+   * process was down are `catchUp`'s business, not this loop's.
+   */
+  private checkedAt: number | null = null;
 
   constructor(
     private readonly ctx: Context,
@@ -49,6 +60,7 @@ export class CronService {
   async start(): Promise<void> {
     const tasks = await this.store.list();
     const startedAt = this.now();
+    this.checkedAt = startedAt;
     for (const task of tasks) {
       const missed = missedRunAt(task, startedAt);
       if (missed !== null) void this.fire(task.id);
@@ -133,6 +145,9 @@ export class CronService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     const now = this.now();
+    // First arm establishes the watermark: nothing before this instant is
+    // this loop's to fire.
+    this.checkedAt ??= now;
     const upcoming = (await this.store.list())
       .map((task) => nextRunAt(task, now))
       .filter((instant): instant is number => instant !== null);
@@ -151,21 +166,70 @@ export class CronService {
   private async wake(): Promise<void> {
     if (this.disposed) return;
     const now = this.now();
+    const since = this.checkedAt ?? now;
+    this.checkedAt = now;
     const due = (await this.store.list()).filter((task) => {
-      const at = nextRunAt(task, now - 1);
+      // A task edited or run after the last check measures from that point,
+      // so a rule created past today's instant waits for tomorrow's.
+      const from = Math.max(since, task.updatedAt, task.lastRunAt ?? 0);
+      const at = nextRunAt(task, from);
       return at !== null && at <= now;
     });
     for (const task of due) {
-      await this.fire(task.id).catch(() => undefined);
+      await this.fire(task.id).catch((error: unknown) => {
+        this.warn(
+          `task "${task.name}" (${task.id}) failed to fire: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
     }
     await this.arm();
+  }
+
+  private warn(message: string): void {
+    const logger = (
+      this.ctx as { logger?: (name: string) => { warn(message: string): void } }
+    ).logger;
+    try {
+      logger?.("amiba-cron").warn(message);
+    } catch {
+      // No logger on this context (unit harness); the run is still recorded.
+    }
+  }
+
+  /**
+   * The host's current default model, read the way messaging-core and the
+   * steward do: `agentDefaultModel` is mounted by the host runtime but is
+   * never in `inject` (no optional flag in this cordis), so a point-in-time
+   * `reflect.get` — absent means "let the kernel pick".
+   */
+  private defaultAgentOptions(): { provider: string; model: string } | undefined {
+    const service = (
+      this.ctx as {
+        reflect?: { get?(name: string): unknown };
+      }
+    ).reflect?.get?.("agentDefaultModel") as
+      | { currentSelection?(): { provider: string; model: string } | undefined }
+      | undefined;
+    const selection = service?.currentSelection?.();
+    return selection
+      ? { provider: selection.provider, model: selection.model }
+      : undefined;
   }
 
   /** Spawn one fresh session seeded with a user message; retire it on idle. */
   private async spawnSession(prompt: string, rpcTag: string): Promise<string> {
     const sessionId = `session-${randomUUID()}`;
+    const agentOptions = this.defaultAgentOptions();
     const handle = await this.ctx.agents.create({
       sessionId: SessionId(sessionId) as never,
+      // A cron run has no workspace of its own. Seed the user's home — the
+      // same default the desktop host and the steward use — because a
+      // session created without `cwd` fails its first turn: agent presets
+      // reference `{{cwd}}` in prompt assembly.
+      meta: { cwd: homedir() },
+      ...(agentOptions ? { agentOptions } : {}),
     });
     handle.agent.followup(
       createUserMessage({
