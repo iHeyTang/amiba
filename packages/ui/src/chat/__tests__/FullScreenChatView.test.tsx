@@ -279,14 +279,8 @@ describe("FullScreenChatView new-chat home", () => {
       onFocusRequested: vi.fn(() => () => {}),
       onAgentActivity: vi.fn(() => () => {}),
     };
-    // The pane's open state is persisted, so a task that left it open must not
-    // resurrect a workbench on a surface that has no task to act on.
     mocks.storageGet.mockImplementation(async (key: string | string[]) => {
       if (key === "settings.chat.sidebarView") return { [key]: "chats" };
-      const keys = Array.isArray(key) ? key : [key];
-      if (keys.includes("settings.chat.workspacePaneOpen")) {
-        return { "settings.chat.workspacePaneOpen": true };
-      }
       return {};
     });
 
@@ -550,14 +544,16 @@ describe("FullScreenChatView new-chat home", () => {
 
   it("opens browser pages as workbench tabs and keeps every workspace control visible", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
-    let requestBrowserTab: (() => void) | null = null;
+    let requestBrowserTab:
+      | ((event: { sessionId?: string }) => void)
+      | null = null;
     mocks.embeddedBrowser = {
       registerTab: vi.fn().mockResolvedValue({}),
       unregisterTab: vi.fn().mockResolvedValue(undefined),
       setActiveTab: vi.fn().mockResolvedValue({}),
       command: vi.fn().mockResolvedValue({}),
       detectDevServers: vi.fn().mockResolvedValue([]),
-      onCreateRequested: vi.fn((listener: () => void) => {
+      onCreateRequested: vi.fn((listener: (event: { sessionId?: string }) => void) => {
         requestBrowserTab = listener;
         return () => {};
       }),
@@ -598,7 +594,7 @@ describe("FullScreenChatView new-chat home", () => {
     expect(controls?.children[1]).toBe(terminalToggle);
     expect(controls?.children[2]).toBe(workbenchToggle);
 
-    act(() => requestBrowserTab?.());
+    act(() => requestBrowserTab?.({}));
     expect(
       screen.queryByRole("button", { name: "workspacePane.openTerminal" }),
     ).toBeInTheDocument();

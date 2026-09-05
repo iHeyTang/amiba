@@ -65,7 +65,10 @@ import {
   WorkspaceTerminalToggle,
   useWorkspacePane,
 } from "./WorkspacePane";
-import { EmbeddedBrowserToggle } from "./EmbeddedBrowserPane";
+import {
+  EmbeddedBrowserHost,
+  EmbeddedBrowserToggle,
+} from "./EmbeddedBrowserPane";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
   clampAppSidebarWidth,
@@ -319,9 +322,33 @@ export default function FullScreenChatView(props: FullScreenChatViewProps) {
         capability={props.capabilities?.workspaceInspector}
         sessionId={sessions.activeId}
       >
-        <FullScreenChatViewInner {...props} />
+        <EmbeddedBrowserMount>
+          <FullScreenChatViewInner {...props} />
+        </EmbeddedBrowserMount>
       </WorkspacePaneProvider>
     </SessionTitleProvider>
+  );
+}
+
+/**
+ * Mounts the embedded browser's `<webview>`s once, ABOVE the workbench.
+ *
+ * They cannot live inside the workbench: it renders only the visible
+ * session, so a background task could never get a tab attached (main's
+ * five-second registration wait simply timed out), and switching tabs would
+ * re-parent a live `<webview>`, which reloads its page.
+ */
+function EmbeddedBrowserMount({ children }: { children: ReactNode }) {
+  const pane = useWorkspacePane();
+  return (
+    <EmbeddedBrowserHost
+      tabs={pane.browserTabs}
+      shownSessionId={pane.sessionId}
+      shownTabId={pane.visibleBrowserTabId}
+      onUpdateTab={pane.updateBrowserTabIn}
+    >
+      {children}
+    </EmbeddedBrowserHost>
   );
 }
 
@@ -356,7 +383,6 @@ function FullScreenChatViewInner({
   const [sidebarWidth, setSidebarWidth] = useState(APP_SIDEBAR_DEFAULT_WIDTH);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMotion, setSidebarMotion] = useState<SidebarMotion>("idle");
-  const [terminalOpen, setTerminalOpen] = useState(false);
   const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
     DEFAULT_HISTORY_LAYOUT,
   );
@@ -740,18 +766,11 @@ function FullScreenChatViewInner({
     !sidebarCollapsed && sidebarMotion === "idle";
   const headerIconBoxesVisible = sidebarMotion === "idle";
 
-  useEffect(() => {
-    if (sidebarView !== "chats" || !sessions.activeId) {
-      setTerminalOpen(false);
-    }
-  }, [sessions.activeId, sidebarView]);
-
   // The workbench belongs to a task: its files, terminal and browser all act
-  // on one. The id-less chat home has no task, so the whole workbench — pane,
-  // terminal drawer and edge controls alike — stays off there. Gating only the
-  // controls would be worse than not gating at all: the pane's open state is
-  // persisted, so a task that left it open would resurrect a 520px panel on
-  // the home surface with no control left to close it.
+  // on one, and its state (open, tabs, mode, terminal drawer) is kept per
+  // session by `WorkspacePaneProvider`. The id-less chat home has no task, so
+  // the whole workbench — pane, terminal drawer and edge controls alike —
+  // stays off there.
   const workbenchVisible = sidebarView === "chats" && Boolean(sessions.activeId);
 
   // Measure the edge-control row so the workbench tab strip can reserve its
@@ -954,8 +973,8 @@ function FullScreenChatViewInner({
         </div>
         <WorkspaceTerminalPanel
           visible={workbenchVisible}
-          open={terminalOpen}
-          onClose={() => setTerminalOpen(false)}
+          open={workspacePane.terminalOpen}
+          onClose={() => workspacePane.setTerminalOpen(false)}
         />
         {workbenchVisible && (
           <div
@@ -982,8 +1001,10 @@ function FullScreenChatViewInner({
               }}
             />
             <WorkspaceTerminalToggle
-              open={terminalOpen}
-              onToggle={() => setTerminalOpen((current) => !current)}
+              open={workspacePane.terminalOpen}
+              onToggle={() =>
+                workspacePane.setTerminalOpen(!workspacePane.terminalOpen)
+              }
               showUnavailable
             />
             <WorkspacePaneToggle showUnavailable />

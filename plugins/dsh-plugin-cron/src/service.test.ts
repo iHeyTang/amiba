@@ -19,6 +19,12 @@ function harness(now: () => number) {
   const ctx = {
     agents: { create },
     amibaNotifications: { post: (input: unknown) => posted.push(input) },
+    reflect: {
+      get: (name: string) =>
+        name === "agentDefaultModel"
+          ? { currentSelection: () => ({ provider: "p", model: "m" }) }
+          : undefined,
+    },
   };
   const store = new DshCronStore(mkdtempSync(join(tmpdir(), "amiba-cron-")));
   const service = new CronService(ctx as never, store, now);
@@ -87,6 +93,26 @@ describe("cron service", () => {
     service.dispose();
   });
 
+  it("seeds the fresh session with an absolute cwd and the default model selection", async () => {
+    // A session without `cwd` fails its first turn: agent presets reference
+    // `{{cwd}}` during prompt assembly (seen live as `prompt variable
+    // "{{cwd}}" has no value for this assembly`).
+    const { service, create } = harness(() => 4_000_000);
+    const created = await service.create({
+      name: "x",
+      prompt: "y",
+      rule: { kind: "every", everySeconds: 3600 },
+    });
+    await service.runNow(created.id);
+    const options = create.mock.calls[0]![0] as {
+      meta?: { cwd?: string };
+      agentOptions?: { provider: string; model: string };
+    };
+    expect(options.meta?.cwd).toMatch(/^\//u);
+    expect(options.agentOptions).toEqual({ provider: "p", model: "m" });
+    service.dispose();
+  });
+
   it("disposes the run's agent handle once it goes idle — never leaks it", async () => {
     const { service, dispose, whenIdle } = harness(() => 3_000_000);
     const created = await service.create({
@@ -126,5 +152,105 @@ describe("cron service", () => {
     await restarted.start();
     await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     restarted.dispose();
+  });
+});
+
+describe("cron timer loop", () => {
+  // 2026-09-05 09:00 Asia/Shanghai.
+  const NINE_AM_SHANGHAI = Date.UTC(2026, 8, 5, 1, 0, 0);
+  const daily = { kind: "daily", time: "09:00", timeZone: "Asia/Shanghai" } as const;
+
+  it("fires a daily task when the timer wakes shortly AFTER the target instant", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = NINE_AM_SHANGHAI - 1_000;
+      const { service, create } = harness(() => now);
+      await service.create({ name: "digest", prompt: "go", rule: daily });
+
+      // Real timers never wake early and routinely wake a millisecond late.
+      now = NINE_AM_SHANGHAI + 1;
+      await vi.advanceTimersByTimeAsync(1_001);
+
+      // The wake reads and writes the store on real fs promises.
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () => {
+        const [task] = await service.list();
+        expect(task!.lastRunAt).toBe(NINE_AM_SHANGHAI + 1);
+      });
+      service.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fires an interval task that comes due while the timer was pending", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 5_000_000;
+      const { service, create } = harness(() => now);
+      await service.create({
+        name: "poll",
+        prompt: "go",
+        rule: { kind: "every", everySeconds: 300 },
+      });
+
+      now += 300_000 + 7;
+      await vi.advanceTimersByTimeAsync(300_007);
+
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      service.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not fire the same daily instant twice across consecutive wakes", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = NINE_AM_SHANGHAI - 1_000;
+      const { service, create } = harness(() => now);
+      await service.create({ name: "digest", prompt: "go", rule: daily });
+
+      now = NINE_AM_SHANGHAI + 1;
+      await vi.advanceTimersByTimeAsync(1_001);
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      // Something else re-arms and wakes the loop a minute later.
+      await service.update((await service.list())[0]!.id, { catchUp: false });
+      now = NINE_AM_SHANGHAI + 60_000;
+      await vi.advanceTimersByTimeAsync(60_000);
+      await service.list(); // settle the wake's store round-trip
+
+      expect(create).toHaveBeenCalledTimes(1);
+      service.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a task created after today's fire point waits for tomorrow even when another task wakes the loop", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = NINE_AM_SHANGHAI + 30 * 60_000; // 09:30
+      const { service, create } = harness(() => now);
+      await service.create({ name: "late", prompt: "go", rule: daily });
+      await service.create({
+        name: "poll",
+        prompt: "go",
+        rule: { kind: "every", everySeconds: 300 },
+      });
+
+      now += 300_000 + 1;
+      await vi.advanceTimersByTimeAsync(300_001);
+
+      // Only the interval task ran; the daily one is due tomorrow.
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      const tasks = await service.list();
+      expect(tasks.find((task) => task.name === "poll")!.lastRunAt).toBeDefined();
+      expect(tasks.find((task) => task.name === "late")!.lastRunAt).toBeUndefined();
+      expect(create).toHaveBeenCalledTimes(1);
+      service.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
