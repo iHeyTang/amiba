@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from "../../primitives/dialog";
 import { SettingsDialog } from "../SettingsDialog";
 
 function Harness({ onClose }: { onClose?: () => void } = {}) {
@@ -52,6 +53,39 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("dialog", { name: "Settings panel" })).toBe(dialog);
   });
 
+  it("uses the shared dialog enter and exit motion contract", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "duration-200",
+      "data-[state=open]:animate-in",
+      "data-[state=closed]:animate-out",
+      "data-[state=open]:fade-in-0",
+      "data-[state=closed]:fade-out-0",
+      "data-[state=open]:zoom-in-95",
+      "data-[state=closed]:zoom-out-95",
+    );
+    expect(
+      document.querySelector('[data-ui-overlay="dialog-overlay"]'),
+    ).toHaveClass(
+      "duration-200",
+      "data-[state=open]:animate-in",
+      "data-[state=closed]:animate-out",
+    );
+
+    await user.keyboard("{Escape}");
+    expect(
+      document.querySelector('[data-ui-overlay="dialog"]'),
+    ).toHaveAttribute("data-state", "closed");
+    await waitFor(() => {
+      expect(
+        document.querySelector("[data-amiba-settings-dialog]"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("reports its open state on the trigger, as the official shell does", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -87,13 +121,15 @@ describe("SettingsDialog", () => {
   it("closes on an outside (mask) click but not on a click inside the panel", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    const { container } = render(<Harness onClose={onClose} />);
+    render(<Harness onClose={onClose} />);
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
     await user.click(screen.getByRole("button", { name: "Inside" }));
     expect(onClose).not.toHaveBeenCalled();
 
-    const mask = container.querySelector<HTMLElement>('[aria-hidden="true"]');
+    const mask = document.querySelector<HTMLElement>(
+      '[data-ui-overlay="dialog-overlay"]',
+    );
     expect(mask).not.toBeNull();
     await user.click(mask!);
     expect(onClose).toHaveBeenCalledOnce();
@@ -108,4 +144,40 @@ describe("SettingsDialog", () => {
     await user.keyboard("{Escape}");
     expect(trigger).toHaveFocus();
   });
+});
+
+it("closes only the top layer on each Escape: details, picker, then settings", async () => {
+  const user = userEvent.setup();
+  const closeSettings = vi.fn();
+  function NestedSettings() {
+    const [open, setOpen] = useState(true);
+    return <SettingsDialog open={open} titleId="nested-settings" onClose={() => { setOpen(false); closeSettings(); }}>
+      <h1 id="nested-settings">Settings</h1>
+      <Dialog>
+        <DialogTrigger>Choose model</DialogTrigger>
+        <DialogContent>
+          <DialogTitle>Model picker</DialogTitle><DialogDescription>Choose a model</DialogDescription>
+          <Dialog>
+            <DialogTrigger>Model details</DialogTrigger>
+            <DialogContent>
+              <DialogTitle>Details</DialogTitle><DialogDescription>Model information</DialogDescription>
+            </DialogContent>
+          </Dialog>
+        </DialogContent>
+      </Dialog>
+    </SettingsDialog>;
+  }
+  render(<NestedSettings />);
+  await user.click(screen.getByRole("button", {name:"Choose model"}));
+  await user.click(screen.getByRole("button", {name:"Model details"}));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", {name:"Details"})).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", {name:"Model picker"})).toBeVisible();
+  expect(closeSettings).not.toHaveBeenCalled();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", {name:"Model picker"})).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", {name:"Settings"})).toBeVisible();
+  expect(closeSettings).not.toHaveBeenCalled();
+  await user.keyboard("{Escape}");
+  expect(closeSettings).toHaveBeenCalledOnce();
 });

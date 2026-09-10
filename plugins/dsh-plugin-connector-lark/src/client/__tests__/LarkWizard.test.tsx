@@ -55,55 +55,9 @@ function FakeBasicsFields({
 
 const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
 
-/**
- * Stand-in for `host.kit.ApprovalField` (connector-core owns the real one
- * and its own tests): a single radio pair plus a minutes input, enough to
- * drive and assert the wizard's own `approval` state without depending on
- * connector-core's actual component.
- */
-function FakeApprovalField({
-  approval,
-  onApprovalChange,
-}: {
-  approval: { mode: "timeout" | "wait"; timeoutMs: number };
-  onApprovalChange(value: { mode: "timeout" | "wait"; timeoutMs: number }): void;
-}) {
-  return (
-    <div>
-      <label>
-        超时拒绝
-        <input
-          checked={approval.mode === "timeout"}
-          onChange={() => onApprovalChange({ mode: "timeout", timeoutMs: approval.timeoutMs })}
-          type="radio"
-        />
-      </label>
-      <label>
-        一直等
-        <input
-          checked={approval.mode === "wait"}
-          onChange={() => onApprovalChange({ mode: "wait", timeoutMs: approval.timeoutMs })}
-          type="radio"
-        />
-      </label>
-      <label>
-        等待分钟数
-        <input
-          onChange={(e) =>
-            onApprovalChange({
-              mode: "timeout",
-              timeoutMs: Number(e.target.value) * 60_000,
-            })
-          }
-          type="number"
-          value={Math.round(approval.timeoutMs / 60_000)}
-        />
-      </label>
-    </div>
-  );
-}
-
-function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
+function hostWith(
+  overrides: Partial<ConnectWizardHost> = {},
+): ConnectWizardHost {
   return {
     providerId: "lark",
     presets,
@@ -115,9 +69,7 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
     } as never,
     kit: {
       BasicsFields: FakeBasicsFields as never,
-      ApprovalField: FakeApprovalField as never,
-      // The wizard seeds its own approval state from the kit rather than
-      // carrying a copy of connector-core's literal.
+      ApprovalField: () => null,
       defaultApproval: () => ({ mode: "timeout", timeoutMs: 600_000 }),
     },
     back: vi.fn(),
@@ -147,32 +99,33 @@ function typeName(value = "Sales") {
   fireEvent.change(screen.getByLabelText("连接名称"), { target: { value } });
 }
 
-/** The header's icon-only close (aria-labelled) vs the footer's own cancel button. */
-function cancelControls() {
-  const all = screen.getAllByRole("button", { name: /取消|Cancel/ });
-  return {
-    headerClose: all.filter((b) => !b.textContent?.trim())[0] as HTMLElement,
-    footerCancel: all.filter((b) => Boolean(b.textContent?.trim()))[0] as HTMLElement,
-  };
-}
+const closeButton = () => screen.getByRole("button", { name: /关闭|Close/ });
 
 const beginButton = () =>
   screen.getByRole("button", { name: /开始扫码|scanning/i });
-const manualTab = () => screen.getByRole("tab", { name: /手动填写|Manual/ });
-const scanTab = () => screen.getByRole("tab", { name: /扫码接入|Scan to connect/ });
+const manualButton = () =>
+  screen.getByRole("button", { name: /手动填写|manually/ });
+const returnToScanButton = () =>
+  screen.getByRole("button", { name: /返回扫码|Back to scanning/ });
 
 afterEach(() => vi.useRealTimers());
 
 describe("LarkWizard", () => {
-  it("renders its own header and tabs", () => {
-    render(<LarkWizard host={hostWith()} />);
+  it("opens directly in scan mode with manual setup as a fallback", () => {
+    render(<LarkWizard host={hostWith({ back: undefined })} />);
     expect(
       screen.getByRole("heading", { name: /接入飞书|Connect Feishu/ }),
     ).toBeInTheDocument();
+    expect(beginButton()).toBeInTheDocument();
+    expect(manualButton()).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("App ID")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: /扫码接入|Scan to connect/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(manualTab()).toHaveAttribute("aria-selected", "false");
+      screen.queryByRole("button", { name: /返回连接器|Back to connectors/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /取消|Cancel/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("seeds the name from the host prefill", () => {
@@ -187,7 +140,10 @@ describe("LarkWizard", () => {
       adapter: {
         create: vi.fn(),
         beginOnboarding: begin,
-        pollOnboarding: vi.fn(async () => ({ sessionId: "s1", state: "pending" })),
+        pollOnboarding: vi.fn(async () => ({
+          sessionId: "s1",
+          state: "pending",
+        })),
         cancelOnboarding: vi.fn(async () => ({})),
       } as never,
     });
@@ -201,52 +157,49 @@ describe("LarkWizard", () => {
       provider: "lark",
       name: "Sales",
       agentPreset: "restricted",
-      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
   });
 
-  it("carries the scan tab's approval choice into beginOnboarding", async () => {
+  it("inherits the shared approval policy when beginning onboarding", async () => {
     const begin = vi.fn(async () => ({ sessionId: "s1", state: "pending" }));
     const host = hostWith({
       adapter: {
         create: vi.fn(),
         beginOnboarding: begin,
-        pollOnboarding: vi.fn(async () => ({ sessionId: "s1", state: "pending" })),
+        pollOnboarding: vi.fn(async () => ({
+          sessionId: "s1",
+          state: "pending",
+        })),
         cancelOnboarding: vi.fn(async () => ({})),
       } as never,
     });
     render(<LarkWizard host={host} />);
     typeName();
-    // The scan path has no later `adapter.create` call to carry the choice,
-    // so it has to ride along with the onboarding request itself.
-    await userEvent.click(screen.getByText("一直等"));
     await act(async () => {
       fireEvent.click(beginButton());
     });
 
     expect(begin).toHaveBeenCalledWith(
-      expect.objectContaining({
-        approval: { mode: "wait", timeoutMs: 10 * 60_000 },
-      }),
+      expect.not.objectContaining({ approval: expect.anything() }),
     );
   });
 
-  it("goes back to the platform picker and closes through the host", async () => {
+  it("returns to the connector directory and closes through the host", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /换个平台|Change platform/ }),
+      screen.getByRole("button", { name: /返回连接器|Back to connectors/ }),
     );
     expect(host.back).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(cancelControls().headerClose);
+    await userEvent.click(closeButton());
     expect(host.cancel).toHaveBeenCalledTimes(1);
   });
 
   it("submits the manual form with appId/appSecret/domain and calls done", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
-    await userEvent.click(manualTab());
+    await userEvent.click(manualButton());
     typeName();
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
@@ -260,38 +213,8 @@ describe("LarkWizard", () => {
       name: "Sales",
       agentPreset: "restricted",
       config: { appId: "cli_x", appSecret: "secret", domain: "feishu" },
-      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
     expect(host.done).toHaveBeenCalledWith({ id: "c1" });
-  });
-
-  it("renders the approval field in both the scan and manual tabs", async () => {
-    render(<LarkWizard host={hostWith()} />);
-    expect(screen.getByText("超时拒绝")).toBeInTheDocument();
-
-    await userEvent.click(manualTab());
-    expect(screen.getByText("超时拒绝")).toBeInTheDocument();
-  });
-
-  it("submits the manual form with the approval value the user picked", async () => {
-    const host = hostWith();
-    render(<LarkWizard host={host} />);
-    await userEvent.click(manualTab());
-    typeName();
-    fireEvent.change(screen.getByLabelText("App ID"), {
-      target: { value: "cli_x" },
-    });
-    fireEvent.change(screen.getByLabelText(/App [Ss]ecret/), {
-      target: { value: "secret" },
-    });
-    await userEvent.click(screen.getByText("一直等"));
-    await userEvent.click(screen.getByRole("button", { name: /添加|Add/ }));
-
-    expect(host.adapter.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        approval: { mode: "wait", timeoutMs: 10 * 60_000 },
-      }),
-    );
   });
 
   it("translates a create failure code instead of rendering the raw code", async () => {
@@ -306,7 +229,7 @@ describe("LarkWizard", () => {
       } as never,
     });
     render(<LarkWizard host={host} />);
-    await userEvent.click(manualTab());
+    await userEvent.click(manualButton());
     typeName();
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
@@ -318,18 +241,17 @@ describe("LarkWizard", () => {
 
     expect(
       screen.getByText(
-        /创建连接前请先选择 Agent Preset。|Choose an agent preset before creating this connect\./,
+        /创建连接前请先选择智能体预设。|Choose an agent preset before creating this connect\./,
       ),
     ).toBeInTheDocument();
     // The point of the mapping: the wire code never reaches the user.
-    expect(screen.getByText(/[Aa]gent [Pp]reset/)).toBeInTheDocument();
     expect(screen.queryByText("agent_preset_required")).not.toBeInTheDocument();
     expect(host.done).not.toHaveBeenCalled();
   });
 
   it("secret field is a password input", async () => {
     render(<LarkWizard host={hostWith()} />);
-    await userEvent.click(manualTab());
+    await userEvent.click(manualButton());
     expect(screen.getByLabelText(/App [Ss]ecret/)).toHaveAttribute(
       "type",
       "password",
@@ -361,7 +283,6 @@ describe("LarkWizard", () => {
       provider: "lark",
       name: "Sales",
       agentPreset: "restricted",
-      approval: { mode: "timeout", timeoutMs: 10 * 60_000 },
     });
     await flush(1600);
     expect(poll).toHaveBeenCalledWith("s1");
@@ -495,7 +416,7 @@ describe("LarkWizard", () => {
     screen.getByAltText(/二维码|QR/);
 
     await act(async () => {
-      fireEvent.click(manualTab());
+      fireEvent.click(manualButton());
     });
 
     expect(cancel).toHaveBeenCalledTimes(1);
@@ -507,9 +428,7 @@ describe("LarkWizard", () => {
     expect(poll).not.toHaveBeenCalled();
   });
 
-  // Re-selecting the tab you are already on is not a mode CHANGE, so it must
-  // not tear down a live scan: the QR the user is looking at stays on screen.
-  it("re-selecting the active scan tab leaves the live session alone", async () => {
+  it("returns from manual setup with the account fields intact and a fresh scan entry", async () => {
     vi.useFakeTimers();
     const poll = vi.fn(async () => ({
       sessionId: "s1",
@@ -537,18 +456,53 @@ describe("LarkWizard", () => {
     screen.getByAltText(/二维码|QR/);
 
     await act(async () => {
-      fireEvent.click(scanTab());
+      fireEvent.click(manualButton());
     });
 
-    expect(cancel).not.toHaveBeenCalled();
-    expect(screen.getByAltText(/二维码|QR/)).toBeInTheDocument();
-
-    // A real change still cancels exactly once (the existing behaviour).
+    expect(cancel).toHaveBeenCalledWith("s1");
     await act(async () => {
-      fireEvent.click(manualTab());
+      fireEvent.click(returnToScanButton());
     });
     expect(cancel).toHaveBeenCalledTimes(1);
-    expect(cancel).toHaveBeenCalledWith("s1");
+    expect(screen.queryByAltText(/二维码|QR/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("连接名称")).toHaveValue("Sales");
+    expect(beginButton()).toBeEnabled();
+    expect(host.adapter.beginOnboarding).toHaveBeenCalledTimes(1);
+    poll.mockClear();
+    await flush(3000);
+    expect(poll).not.toHaveBeenCalled();
+  });
+
+  it("can restart scanning after leaving a slow request and ignores its stale failure", async () => {
+    let rejectOld!: (error: Error) => void;
+    const begin = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOld = reject;
+          }),
+      )
+      .mockResolvedValueOnce({
+        sessionId: "s2",
+        state: "pending",
+        qrUrl: "https://example.invalid/qr",
+      });
+    const host = hostWith();
+    host.adapter.beginOnboarding = begin;
+    render(<LarkWizard host={host} />);
+    typeName();
+    await userEvent.click(beginButton());
+    expect(beginButton()).toBeDisabled();
+    await userEvent.click(manualButton());
+    await userEvent.click(returnToScanButton());
+    expect(beginButton()).toBeEnabled();
+    await userEvent.click(beginButton());
+    expect(screen.getByAltText(/二维码|QR/)).toBeInTheDocument();
+    await act(async () => rejectOld(new Error("stale scan error")));
+    expect(screen.queryByText("stale scan error")).not.toBeInTheDocument();
+    expect(screen.getByAltText(/二维码|QR/)).toBeInTheDocument();
+    expect(begin).toHaveBeenCalledTimes(2);
   });
 
   // The retired per-provider dialog gated creation on a connect name AND a
@@ -561,7 +515,7 @@ describe("LarkWizard", () => {
     const { unmount } = render(<LarkWizard host={host} />);
     expect(beginButton()).toBeDisabled();
 
-    await userEvent.click(manualTab());
+    await userEvent.click(manualButton());
     fireEvent.change(screen.getByLabelText("App ID"), {
       target: { value: "cli_x" },
     });
@@ -584,7 +538,7 @@ describe("LarkWizard", () => {
   it("cancels the wizard through the host", async () => {
     const host = hostWith();
     render(<LarkWizard host={host} />);
-    await userEvent.click(cancelControls().footerCancel);
+    await userEvent.click(closeButton());
     expect(host.cancel).toHaveBeenCalledTimes(1);
   });
 });

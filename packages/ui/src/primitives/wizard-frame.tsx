@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "./cn";
@@ -11,8 +11,10 @@ export interface WizardTab {
 }
 
 export interface WizardFrameProps {
-  /** Platform mark shown in the header tile; omit for a plain title. */
+  /** Platform mark shown in the header; omit for a plain title. */
   icon?: ReactNode;
+  /** Branded app icons own their surface; generic glyphs use the default tile. */
+  iconAppearance?: "tile" | "bare";
   title: string;
   subtitle?: string;
   tabs?: WizardTab[];
@@ -20,6 +22,9 @@ export interface WizardFrameProps {
   hint?: ReactNode;
   /** The screen's own buttons, footer-right. */
   actions?: ReactNode;
+  /** Optional in-flow navigation, shown at the top-left of the frame. */
+  onBack?: () => void;
+  backLabel?: string;
   onClose?: () => void;
   closeLabel?: string;
   className?: string;
@@ -41,44 +46,90 @@ export interface WizardFrameProps {
  * own bundles without knowing which seat mounted them.
  */
 export function WizardFrame({
-  icon, title, subtitle, tabs, hint, actions, onClose, closeLabel, className, children,
+  icon,
+  iconAppearance = "tile",
+  title,
+  subtitle,
+  tabs,
+  hint,
+  actions,
+  onBack,
+  backLabel,
+  onClose,
+  closeLabel,
+  className,
+  children,
 }: WizardFrameProps) {
   const hasFooter = Boolean(hint) || Boolean(actions);
+  const closeButton = onClose ? (
+    <button
+      aria-label={closeLabel ?? "Close"}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onClose}
+      type="button"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  ) : null;
   return (
-    <section className={cn("flex min-w-0 flex-col", className)} data-wizard-frame="">
-      <header className="flex items-start gap-3 px-4 pt-4 [.amiba-dock-sheet_&]:pt-3">
-        {icon ? (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-primary/25 bg-background text-primary shadow-sm">
-            {icon}
-          </span>
+    <section
+      className={cn("flex min-w-0 flex-col", className)}
+      data-wizard-frame=""
+    >
+      <header className="px-6 pt-5 [.amiba-dock-sheet_&]:px-4 [.amiba-dock-sheet_&]:pt-3">
+        {onBack ? (
+          <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+            <button
+              className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onBack}
+              type="button"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel ?? "Back"}
+            </button>
+            {closeButton}
+          </div>
         ) : null}
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold leading-[22px]">{title}</h2>
-          {subtitle ? (
-            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{subtitle}</p>
+        <div className="flex items-start gap-3.5">
+          {icon ? (
+            <span
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center",
+                iconAppearance === "bare"
+                  ? "[&>img]:h-full [&>img]:w-full [&>svg]:h-full [&>svg]:w-full"
+                  : "rounded-xl bg-muted/40 text-primary",
+              )}
+              data-wizard-icon={iconAppearance}
+            >
+              {icon}
+            </span>
           ) : null}
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold leading-6 tracking-[-0.02em]">
+              {title}
+            </h2>
+            {subtitle ? (
+              <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                {subtitle}
+              </p>
+            ) : null}
+          </div>
+          {!onBack ? closeButton : null}
         </div>
-        {onClose ? (
-          <button
-            aria-label={closeLabel ?? "Close"}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-            onClick={onClose}
-            type="button"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
       </header>
       {tabs && tabs.length > 0 ? (
-        <div className="mt-3 flex gap-5 border-b border-border/90 px-4" role="tablist">
+        <div
+          className="mx-6 mt-5 flex w-fit items-center gap-1 rounded-lg bg-muted/35 p-1 [.amiba-dock-sheet_&]:mx-4"
+          role="tablist"
+        >
           {tabs.map((tab) => (
             <button
               aria-selected={tab.active}
               className={cn(
-                "-mb-px border-b-2 pb-2 pt-1 text-[13px] font-medium transition-colors",
+                "h-8 rounded-md px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab.active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-foreground"
+                  : "text-muted-foreground hover:bg-background/45 hover:text-foreground",
               )}
               key={tab.id}
               onClick={tab.onSelect}
@@ -90,10 +141,12 @@ export function WizardFrame({
           ))}
         </div>
       ) : null}
-      <div className="px-4 pb-1 pt-4">{children}</div>
+      <div className="px-6 pb-1 pt-5 [.amiba-dock-sheet_&]:px-4">
+        {children}
+      </div>
       {hasFooter ? (
-        <footer className="mt-3 flex items-center gap-2 border-t border-border/70 px-4 pb-4 pt-3 [.amiba-dock-sheet_&]:pb-0">
-          <div className="mr-auto flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        <footer className="mt-3 flex flex-wrap items-center gap-2 px-6 pb-5 pt-2 [.amiba-dock-sheet_&]:px-4 [.amiba-dock-sheet_&]:pb-0">
+          <div className="mr-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             {hint}
           </div>
           {actions}

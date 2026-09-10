@@ -1,22 +1,22 @@
 /**
  * `ctx.amibaSessionVisibility`: lets a feature plugin keep every session
- * bound to one of its agent presets out of the chat history list. The
+ * identified by its owned session IDs out of the chat history list. The
  * product shell subscribes to `source` and hands the set to
- * `<FullScreenChatView hiddenSessionPresets>`; sessions stay openable by id.
+ * `<FullScreenChatView hiddenSessionIds>`; sessions stay openable by id.
  */
 export interface AmibaSessionVisibility {
-  /** Hide sessions whose agent preset is `presetId`; returns the disposer. */
-  hidePreset(presetId: string): () => void;
-  hiddenPresets(): ReadonlySet<string>;
+  /** Hide exactly the owned `sessionId`; returns the disposer. */
+  hideSession(sessionId: string): () => void;
+  hiddenSessions(): ReadonlySet<string>;
   subscribe(listener: () => void): () => void;
 }
 
-export interface HiddenPresetsSource {
+export interface HiddenSessionsSource {
   getSnapshot: () => ReadonlySet<string>;
   subscribe: (listener: () => void) => () => void;
 }
 
-export function createSessionVisibility(): AmibaSessionVisibility & { source: HiddenPresetsSource } {
+export function createSessionVisibility(): AmibaSessionVisibility & { source: HiddenSessionsSource } {
   const counts = new Map<string, number>();
   const listeners = new Set<() => void>();
   let snapshot: ReadonlySet<string> = new Set();
@@ -31,8 +31,8 @@ export function createSessionVisibility(): AmibaSessionVisibility & { source: Hi
     };
   };
   return {
-    hidePreset(presetId) {
-      const id = presetId.trim();
+    hideSession(sessionId) {
+      const id = sessionId.trim();
       counts.set(id, (counts.get(id) ?? 0) + 1);
       publish();
       let disposed = false;
@@ -45,7 +45,7 @@ export function createSessionVisibility(): AmibaSessionVisibility & { source: Hi
         publish();
       };
     },
-    hiddenPresets: () => snapshot,
+    hiddenSessions: () => snapshot,
     subscribe,
     source: { getSnapshot: () => snapshot, subscribe },
   };

@@ -1,6 +1,6 @@
 import { useT } from "@amiba/i18n";
 import { Command } from "cmdk";
-import { Check, Loader2, RotateCcw } from "lucide-react";
+import { Check, Info, Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
@@ -11,6 +11,7 @@ import {
   cn,
   type DialogOverlayVariant,
 } from "../primitives";
+import { ModelDetailsDialog } from "./ModelDetailsDialog";
 import { ModelSummary, ModelSummaryOption } from "./ModelSummary";
 import {
   resolveModelPreviewMetadata,
@@ -337,7 +338,10 @@ function ModelCommandItem({
   provider: string;
   value: string;
 }) {
+  const { t } = useT();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   return (
+    <>
     <Command.Item
       aria-current={isCurrent ? "true" : undefined}
       data-current={isCurrent || undefined}
@@ -348,15 +352,19 @@ function ModelCommandItem({
       {model ? (
         <ModelSummary
           action={
-            isCurrent ? (
-              <Check
-                aria-hidden
-                className="h-3.5 w-3.5 shrink-0 text-foreground"
-              />
-            ) : undefined
+            <span className="flex items-center gap-1">
+              {isCurrent && <Check aria-hidden className="h-3.5 w-3.5 shrink-0 text-foreground" />}
+              <button type="button"
+                aria-label={t("options.models.details.openFor", { name: label })}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onKeyDown={event => event.stopPropagation()}
+                onClick={event => { event.stopPropagation(); setDetailsOpen(true); }}>
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </span>
           }
           className="min-w-0 flex-1"
-          displayName={label !== model ? label : description}
+          displayName={label !== model ? label : undefined}
           icon={icon}
           metadata={metadata}
           model={model}
@@ -381,5 +389,8 @@ function ModelCommandItem({
         />
       )}
     </Command.Item>
+    {model && <ModelDetailsDialog open={detailsOpen} onOpenChange={setDetailsOpen}
+      model={model} name={label} provider={provider} description={description} metadata={metadata} />}
+    </>
   );
 }

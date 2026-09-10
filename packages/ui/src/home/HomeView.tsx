@@ -34,6 +34,7 @@ import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
 import { AmibaLogo } from "../primitives";
 import { cn } from "../primitives";
+import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts";
 
 /**
  * Draft hand-off INTO the home composer: a plain string a host queues
@@ -45,6 +46,7 @@ import { cn } from "../primitives";
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
+  triggerRuntime?: ComposerTriggerRuntime;
   /** Where to send the user when they hit "Open in tab" / submit chat. */
   onOpenChat: () => void;
   /** TabBar gear / top-bar gear → open Settings. */
@@ -104,6 +106,7 @@ function Home({
   hideInternalHeader,
   panelMode,
   modelPicker,
+  triggerRuntime,
 }: HomeViewProps) {
   const { t, language } = useT();
   const sessions = useSessions();
@@ -418,6 +421,7 @@ function Home({
             })()
           )}
           <Composer
+            triggerRuntime={triggerRuntime}
             ref={inputRef}
             value={input}
             onChange={setInput}

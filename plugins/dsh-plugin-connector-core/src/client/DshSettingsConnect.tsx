@@ -1,19 +1,10 @@
-import {
-  Cable,
-  Check,
-  CircleAlert,
-  Loader2,
-  Plus,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Cable, CircleAlert, Loader2, Plus, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
-  Badge,
   Button,
+  cn,
   Input,
   PageContent,
   ScrollArea,
@@ -23,45 +14,33 @@ import {
 
 import { AddConnectModal } from "./AddConnectModal.js";
 import type { ConnectAdapter } from "./adapter.js";
+import { ConnectorDetailPage, DetailStatus } from "./ConnectorDetailPage.js";
+import { ConnectAccountPage } from "./ConnectAccountPage.js";
 import { describeError } from "./describe-error.js";
 import { connectI18n } from "./i18n.js";
-import { useConnectWizardProviderIds } from "./wizard-registry.js";
-import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
+import { useConnectorUIProviderIds } from "./connector-ui-registry.js";
 import type {
-  ConnectorProviderView,
-  ConnectorStatus,
-  ConnectView,
-} from "../types.js";
+  ConnectorUIRegistry,
+  PresetOption,
+} from "./connector-ui-registry.js";
+import type { ConnectorProviderView, ConnectView } from "../types.js";
 
-/**
- * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
- * Every call site in this file should use this, not the bare `usePluginT`,
- * so overlay-covered keys resolve locally instead of depending on the host
- * `options.connect.*` bundle. Mirrors `DshSettingsMessaging`'s `useT()`.
- */
+/** The connection plugin owns its own copy and settings shell. */
 function useT() {
   return usePluginT(connectI18n);
 }
 
-/**
- * Plain, directly-testable props — deliberately NOT `PropsRuntime<"settings
- * .section">`. That runtime type pulls in framework-mandatory members
- * (`close`, `useSessions`, `useWorkspaces` from `@deepseek-ai/dsh-client-
- * runtime`'s `GlobalStandardProps`/`SettingsSectionOwnerProps` module
- * augmentation) that only the real slot machinery can supply, which would
- * make this component impossible to `render()` directly in a unit test.
- * `./index.tsx` registers a thin wrapper typed with the full runtime props
- * and forwards just `adapter` here — the same split
- * `DshSettingsMessaging`/`MessagingSettings` uses in the messaging-core
- * sibling.
- */
+type ConnectorDirectoryFilter = "all" | "connected" | "unconnected";
+
 export interface DshSettingsConnectProps {
+  renderAccess?(recordId: string): import("react").ReactNode;
   adapter: ConnectAdapter;
-  registry: ConnectWizardRegistry;
+  registry: ConnectorUIRegistry;
   loadPresets: () => Promise<PresetOption[]>;
 }
 
 export function DshSettingsConnect({
+  renderAccess,
   adapter,
   registry,
   loadPresets,
@@ -72,18 +51,17 @@ export function DshSettingsConnect({
   // the plugin unloads, either of which can happen while this page is already
   // mounted. Without it the `registry.get` reads below (row icons) and the
   // picker inside `AddConnectModal` would stay frozen at their mount-time view.
-  useConnectWizardProviderIds(registry);
+  const wizardProviderIds = useConnectorUIProviderIds(registry);
   const [providers, setProviders] = useState<ConnectorProviderView[]>([]);
   const [connects, setConnects] = useState<ConnectView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [expandedOwnersId, setExpandedOwnersId] = useState<string | null>(
-    null,
-  );
-  const [ownerDraft, setOwnerDraft] = useState("");
+  const [addingProviderId, setAddingProviderId] = useState<string | null>(null);
+  const [detailProviderId, setDetailProviderId] = useState<string | null>(null);
+  const [directoryQuery, setDirectoryQuery] = useState("");
+  const [directoryFilter, setDirectoryFilter] =
+    useState<ConnectorDirectoryFilter>("all");
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [presets, setPresets] = useState<PresetOption[]>([]);
 
   const refresh = useCallback(async () => {
@@ -111,11 +89,11 @@ export function DshSettingsConnect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapter]);
 
-  // Presets are loaded lazily, the first time the add flow opens — not on
+  // Presets are loaded lazily, the first time a provider flow opens — not on
   // every mount — since fetching them costs a round trip nobody needs until
   // the user actually starts adding a connect.
   useEffect(() => {
-    if (!adding) return;
+    if (!addingProviderId && !accountId) return;
     let cancelled = false;
     void loadPresets().then((list) => {
       if (!cancelled) setPresets(list);
@@ -123,51 +101,88 @@ export function DshSettingsConnect({
     return () => {
       cancelled = true;
     };
-  }, [adding, loadPresets]);
+  }, [addingProviderId, accountId, loadPresets]);
 
-  async function mutate(id: string, operation: () => Promise<unknown>) {
-    setBusyId(id);
-    setError(null);
-    try {
-      await operation();
-      await refresh();
-    } catch (cause) {
-      setError(describeError(t, cause));
-    } finally {
-      setBusyId(null);
+  const account = connects.find((item) => item.id === accountId);
+
+  const connectCountByProvider = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const connect of connects) {
+      counts.set(connect.provider, (counts.get(connect.provider) ?? 0) + 1);
     }
-  }
+    return counts;
+  }, [connects]);
 
-  function toggleOwners(id: string) {
-    setExpandedOwnersId((current) => (current === id ? null : id));
-    setOwnerDraft("");
-  }
+  const directoryCounts = useMemo(
+    () => ({
+      all: providers.length,
+      connected: providers.filter(
+        (provider) => (connectCountByProvider.get(provider.id) ?? 0) > 0,
+      ).length,
+      unconnected: providers.filter(
+        (provider) => (connectCountByProvider.get(provider.id) ?? 0) === 0,
+      ).length,
+    }),
+    [connectCountByProvider, providers],
+  );
 
-  function addOwner(connect: ConnectView) {
-    const value = ownerDraft.trim();
-    if (!value || connect.owners.includes(value)) return;
-    setOwnerDraft("");
-    void mutate(connect.id, () =>
-      adapter.setOwners(connect.id, [...connect.owners, value]),
-    );
-  }
+  const visibleProviders = useMemo(() => {
+    const needle = directoryQuery.trim().toLocaleLowerCase();
+    return providers.filter((provider) => {
+      const connectCount = connectCountByProvider.get(provider.id) ?? 0;
+      if (directoryFilter === "connected" && connectCount === 0) return false;
+      if (directoryFilter === "unconnected" && connectCount > 0) return false;
+      if (!needle) return true;
+      const connectNames = connects
+        .filter((connect) => connect.provider === provider.id)
+        .map((connect) => connect.name)
+        .join(" ");
+      const tagline = registry.get(provider.id)?.tagline ?? "";
+      return `${provider.name} ${provider.description} ${tagline} ${connectNames}`
+        .toLocaleLowerCase()
+        .includes(needle);
+    });
+  }, [
+    connectCountByProvider,
+    connects,
+    directoryFilter,
+    directoryQuery,
+    providers,
+    registry,
+    wizardProviderIds,
+  ]);
 
-  function removeOwner(connect: ConnectView, owner: string) {
-    void mutate(connect.id, () =>
-      adapter.setOwners(
-        connect.id,
-        connect.owners.filter((existing) => existing !== owner),
-      ),
-    );
-  }
+  const detailProvider = detailProviderId
+    ? providers.find((provider) => provider.id === detailProviderId)
+    : undefined;
+  const detailConnects = detailProvider
+    ? connects.filter((connect) => connect.provider === detailProvider.id)
+    : [];
+
+  const directoryFilters: Array<{
+    id: ConnectorDirectoryFilter;
+    label: string;
+  }> = [
+    { id: "all", label: t("options.connect.dsh.directory.filter.all") },
+    {
+      id: "connected",
+      label: t("options.connect.dsh.directory.filter.connected"),
+    },
+    {
+      id: "unconnected",
+      label: t("options.connect.dsh.directory.filter.unconnected"),
+    },
+  ];
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ScrollArea className="min-h-0 flex-1">
-        <PageContent bodyClassName="space-y-4" className="pt-3" size="md">
-          <SettingsPageDescription>
-            {t("options.connect.dsh.description")}
-          </SettingsPageDescription>
+        <PageContent bodyClassName="space-y-8" className="pt-3" size="lg">
+          {detailProvider || account ? null : (
+            <SettingsPageDescription className="max-w-2xl">
+              {t("options.connect.dsh.description")}
+            </SettingsPageDescription>
+          )}
 
           {error ? (
             <div
@@ -179,83 +194,174 @@ export function DshSettingsConnect({
             </div>
           ) : null}
 
-          <div className="flex items-start justify-end gap-3">
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                disabled={providers.length === 0}
-                onClick={() => setAdding(true)}
-                size="sm"
-              >
-                <Plus />
-                {t("options.connect.dsh.add")}
-              </Button>
-              {providers.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">
-                  {t("options.connect.dsh.noProviders")}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
           {loading && !connects.length && !providers.length ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 px-4 py-10 text-xs text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 rounded-lg bg-muted/20 px-4 py-10 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               {t("options.connect.dsh.loading")}
             </div>
-          ) : connects.length ? (
-            <div className="space-y-2">
-              {connects.map((connect) => (
-                <ConnectRow
-                  busy={busyId === connect.id}
-                  connect={connect}
-                  key={connect.id}
-                  onAddOwner={() => addOwner(connect)}
-                  onCancelRemove={() => setRemovingId(null)}
-                  onConfirmRemove={() =>
-                    void mutate(connect.id, async () => {
-                      await adapter.remove(connect.id);
-                      setRemovingId(null);
-                    })
-                  }
-                  onOwnerDraftChange={setOwnerDraft}
-                  onRemoveOwner={(owner) => removeOwner(connect, owner)}
-                  onStartRemove={() => setRemovingId(connect.id)}
-                  onToggleEnabled={() =>
-                    void mutate(connect.id, () =>
-                      adapter.setEnabled(connect.id, !connect.enabled),
-                    )
-                  }
-                  onToggleOwners={() => toggleOwners(connect.id)}
-                  ownerDraft={ownerDraft}
-                  ownersExpanded={expandedOwnersId === connect.id}
-                  providerIcon={registry.get(connect.provider)?.icon}
-                  providerName={
-                    providers.find((item) => item.id === connect.provider)
-                      ?.name ?? connect.provider
-                  }
-                  removing={removingId === connect.id}
-                />
-              ))}
-            </div>
+          ) : account ? (
+            <ConnectAccountPage
+              key={account.id}
+              adapter={adapter}
+              connect={account}
+              accessPanel={renderAccess?.(account.id)}
+              entry={registry.get(account.provider)}
+              provider={providers.find((item) => item.id === account.provider)}
+              presets={presets}
+              onBack={() => {
+                setAccountId(null);
+                setDetailProviderId(account.provider);
+              }}
+              onChanged={refresh}
+              onRemoved={() => setAccountId(null)}
+            />
+          ) : detailProvider ? (
+            <ConnectorDetailPage
+              canAdd={wizardProviderIds.includes(detailProvider.id)}
+              connects={detailConnects}
+              entry={registry.get(detailProvider.id)}
+              onOpenAccount={setAccountId}
+              onAdd={() => setAddingProviderId(detailProvider.id)}
+              onBack={() => setDetailProviderId(null)}
+              provider={detailProvider}
+            />
           ) : (
-            <div className="rounded-xl border border-dashed border-border/70 px-4 py-10 text-center">
-              <Cable className="mx-auto h-5 w-5 text-muted-foreground" />
-              <p className="mt-3 text-sm font-medium">
-                {t("options.connect.dsh.empty")}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("options.connect.dsh.emptyDescription")}
-              </p>
-              <Button
-                className="mt-4"
-                disabled={providers.length === 0}
-                onClick={() => setAdding(true)}
-                size="sm"
+            <>
+              <section
+                aria-labelledby="connector-directory-title"
+                className="space-y-4"
               >
-                <Plus />
-                {t("options.connect.dsh.add")}
-              </Button>
-            </div>
+                <h2
+                  className="text-[15px] font-semibold tracking-[-0.01em]"
+                  id="connector-directory-title"
+                >
+                  {t("options.connect.dsh.directory.title")}
+                </h2>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative min-w-56 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+                    <Input
+                      aria-label={t("options.connect.dsh.directory.search")}
+                      className="h-9 pl-9 text-sm"
+                      onChange={(event) =>
+                        setDirectoryQuery(event.target.value)
+                      }
+                      placeholder={t("options.connect.dsh.directory.search")}
+                      value={directoryQuery}
+                    />
+                  </div>
+                  <div
+                    aria-label={t("options.connect.dsh.directory.filter.label")}
+                    className="flex items-center gap-1"
+                    role="group"
+                  >
+                    {directoryFilters.map((filter) => (
+                      <button
+                        aria-pressed={directoryFilter === filter.id}
+                        className={cn(
+                          "h-8 rounded-md px-2.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          directoryFilter === filter.id
+                            ? "bg-muted/65 font-medium text-foreground"
+                            : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
+                        )}
+                        key={filter.id}
+                        onClick={() => setDirectoryFilter(filter.id)}
+                        type="button"
+                      >
+                        {filter.label}
+                        <span className="ml-1.5 tabular-nums opacity-60">
+                          {directoryCounts[filter.id]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {providers.length === 0 ? (
+                  <DirectoryState
+                    description={t("options.connect.dsh.noProviders")}
+                    title={t("options.connect.dsh.directory.empty")}
+                  />
+                ) : visibleProviders.length === 0 ? (
+                  <DirectoryState
+                    description={t(
+                      "options.connect.dsh.directory.noResultsDescription",
+                    )}
+                    title={t("options.connect.dsh.directory.noResults")}
+                  />
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {visibleProviders.map((provider) => {
+                      const entry = registry.get(provider.id);
+                      return (
+                        <ConnectorDirectoryCard
+                          canAdd={wizardProviderIds.includes(provider.id)}
+                          connectCount={
+                            connectCountByProvider.get(provider.id) ?? 0
+                          }
+                          description={entry?.tagline ?? provider.description}
+                          icon={entry?.icon}
+                          key={provider.id}
+                          onAdd={() => setAddingProviderId(provider.id)}
+                          onOpenDetails={() => setDetailProviderId(provider.id)}
+                          provider={provider}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section
+                aria-labelledby="connected-accounts-title"
+                className="space-y-4"
+              >
+                <h2
+                  className="flex items-baseline gap-2 text-[15px] font-semibold tracking-[-0.01em]"
+                  id="connected-accounts-title"
+                >
+                  {t("options.connect.dsh.accounts.title")}
+                  <span className="text-[13px] font-normal tabular-nums text-muted-foreground">
+                    {connects.length}
+                  </span>
+                </h2>
+
+                {connects.length ? (
+                  <div className="space-y-1">
+                    {connects.map((connect) => (
+                      <button
+                        key={connect.id}
+                        type="button"
+                        onClick={() => setAccountId(connect.id)}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ProviderLogo
+                          icon={registry.get(connect.provider)?.icon}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {connect.name}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {providers.find(
+                              (item) => item.id === connect.provider,
+                            )?.name ?? connect.provider}
+                          </span>
+                        </span>
+                        <DetailStatus status={connect.status} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-muted/20 px-4 py-7 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {t("options.connect.dsh.empty")}
+                    </p>
+                  </div>
+                )}
+              </section>
+            </>
           )}
         </PageContent>
       </ScrollArea>
@@ -263,209 +369,127 @@ export function DshSettingsConnect({
       <AddConnectModal
         adapter={adapter}
         onCreated={() => {
-          setAdding(false);
+          setAddingProviderId(null);
           void refresh();
         }}
-        onOpenChange={setAdding}
-        open={adding}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingProviderId(null);
+            void refresh();
+          }
+        }}
+        open={addingProviderId !== null}
         presets={presets}
-        providers={providers}
+        providerId={addingProviderId}
         registry={registry}
       />
     </div>
   );
 }
 
-/**
- * Server-driven: `ConnectorCenter#toView` (via `computeStatus`) is the only
- * place that decides `off` vs `connecting` vs a recorded status — this
- * component just renders whatever `status` says, with no client-side
- * `!enabled` special case of its own (M2a had one; removed once the center
- * became authoritative for the `off` state — see task-4-brief.md).
- */
-function ConnectStatusBadge({ status }: { status: ConnectorStatus }) {
-  const { t } = useT();
-  if (status.state === "off") {
-    return (
-      <Badge variant="outline">{t("options.connect.dsh.status.off")}</Badge>
-    );
-  }
-  if (status.state === "ready") {
-    return <Badge variant="default">{t("options.connect.dsh.status.ready")}</Badge>;
-  }
-  if (status.state === "connecting") {
-    return (
-      <Badge variant="secondary">
-        {t("options.connect.dsh.status.connecting")}
-      </Badge>
-    );
-  }
-  if (status.state === "degraded") {
-    return (
-      <Badge variant="secondary">
-        {t("options.connect.dsh.status.degraded", { detail: status.detail })}
-      </Badge>
-    );
-  }
+function DirectoryState({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) {
   return (
-    <Badge variant="destructive">
-      {t("options.connect.dsh.status.error", { detail: status.detail })}
-    </Badge>
+    <div className="rounded-lg bg-muted/20 px-4 py-7 text-center">
+      <p className="text-sm font-medium">{title}</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">{description}</p>
+    </div>
   );
 }
 
-function ConnectRow({
-  busy,
-  connect,
-  onAddOwner,
-  onCancelRemove,
-  onConfirmRemove,
-  onOwnerDraftChange,
-  onRemoveOwner,
-  onStartRemove,
-  onToggleEnabled,
-  onToggleOwners,
-  ownerDraft,
-  ownersExpanded,
-  providerIcon,
-  providerName,
-  removing,
+function ProviderLogo({ icon }: { icon?: ReactNode }) {
+  return icon ? (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center [&>img]:h-full [&>img]:w-full [&>svg]:h-full [&>svg]:w-full"
+      data-provider-logo=""
+    >
+      {icon}
+    </span>
+  ) : (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/45 text-muted-foreground">
+      <Cable className="h-[18px] w-[18px]" />
+    </span>
+  );
+}
+
+function ConnectorDirectoryCard({
+  canAdd,
+  connectCount,
+  description,
+  icon,
+  onAdd,
+  onOpenDetails,
+  provider,
 }: {
-  busy: boolean;
-  connect: ConnectView;
-  onAddOwner(): void;
-  onCancelRemove(): void;
-  onConfirmRemove(): void;
-  onOwnerDraftChange(value: string): void;
-  onRemoveOwner(owner: string): void;
-  onStartRemove(): void;
-  onToggleEnabled(): void;
-  onToggleOwners(): void;
-  ownerDraft: string;
-  ownersExpanded: boolean;
-  providerIcon?: ReactNode;
-  providerName: string;
-  removing: boolean;
+  canAdd: boolean;
+  connectCount: number;
+  description: string;
+  icon?: ReactNode;
+  onAdd(): void;
+  onOpenDetails(): void;
+  provider: ConnectorProviderView;
 }) {
   const { t } = useT();
+  const addLabel =
+    connectCount > 0
+      ? t("options.connect.dsh.directory.addAnother", {
+          provider: provider.name,
+        })
+      : t("options.connect.dsh.directory.addAccount", {
+          provider: provider.name,
+        });
+  const detailLabel = t("options.connect.dsh.directory.viewDetails", {
+    provider: provider.name,
+  });
   return (
-    <article className="group overflow-hidden rounded-xl border border-border/65 bg-background">
-      <div className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-border/60 bg-muted/30 text-muted-foreground">
-          {providerIcon ?? <Cable className="h-[18px] w-[18px]" />}
-        </span>
+    <article
+      className="group grid min-h-[5.5rem] grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg bg-transparent px-3 py-3 transition-colors hover:bg-muted/35 focus-within:bg-muted/35"
+      data-connector-provider={provider.id}
+    >
+      <button
+        aria-label={detailLabel}
+        className="flex min-w-0 items-start gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpenDetails}
+        type="button"
+      >
+        <ProviderLogo icon={icon} />
         <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{connect.name}</span>
-            <ConnectStatusBadge status={connect.status} />
-          </span>
-          <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-            {providerName}
-          </span>
-        </span>
-        <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          {removing ? (
-            <>
-              <span className="text-[11px] text-destructive">
-                {t("options.connect.dsh.confirmRemove")}
-              </span>
-              <Button
-                disabled={busy}
-                onClick={onConfirmRemove}
-                size="sm"
-                variant="destructive"
-              >
-                {busy ? <Loader2 className="animate-spin" /> : <Check />}
-                {t("options.connect.dsh.confirmRemoveAction")}
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={onCancelRemove}
-                size="sm"
-                variant="ghost"
-              >
-                {t("options.connect.dsh.cancel")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                disabled={busy}
-                onClick={onToggleEnabled}
-                size="sm"
-                variant="ghost"
-              >
-                {connect.enabled
-                  ? t("options.connect.dsh.disable")
-                  : t("options.connect.dsh.enable")}
-              </Button>
-              <Button onClick={onToggleOwners} size="sm" variant="ghost">
-                <Users className="h-3.5 w-3.5" />
-                {t("options.connect.dsh.owners", {
-                  count: connect.owners.length,
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate text-sm font-semibold">
+              {provider.name}
+            </span>
+            {connectCount > 0 ? (
+              <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
+                {t("options.connect.dsh.directory.accountCount", {
+                  count: connectCount,
                 })}
-              </Button>
-              <Button
-                className="text-destructive hover:text-destructive"
-                disabled={busy}
-                onClick={onStartRemove}
-                size="sm"
-                variant="ghost"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {t("options.connect.dsh.remove")}
-              </Button>
-            </>
-          )}
+              </span>
+            ) : null}
+          </span>
+          <span className="mt-1 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">
+            {description}
+          </span>
+          {!canAdd ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {t("options.connect.dsh.directory.setupUnavailable")}
+            </span>
+          ) : null}
         </span>
-      </div>
-      {ownersExpanded ? (
-        <div className="space-y-2 border-t border-border/45 bg-muted/10 px-4 py-3">
-          <p className="text-[10px] leading-4 text-muted-foreground">
-            {t("options.connect.dsh.pairingExplanation")}
-          </p>
-          <ul className="space-y-1">
-            {connect.owners.length ? (
-              connect.owners.map((owner) => (
-                <li
-                  className="flex items-center justify-between gap-2 text-xs"
-                  key={owner}
-                >
-                  <span className="min-w-0 truncate">{owner}</span>
-                  <button
-                    aria-label={t("options.connect.dsh.ownersRemove", {
-                      owner,
-                    })}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => onRemoveOwner(owner)}
-                    type="button"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))
-            ) : (
-              <li className="text-[10px] text-muted-foreground">
-                {t("options.connect.dsh.ownersEmpty")}
-              </li>
-            )}
-          </ul>
-          <div className="flex items-center gap-2">
-            <Input
-              onChange={(event) => onOwnerDraftChange(event.target.value)}
-              placeholder={t("options.connect.dsh.ownersAddPlaceholder")}
-              value={ownerDraft}
-            />
-            <Button
-              disabled={!ownerDraft.trim()}
-              onClick={onAddOwner}
-              size="sm"
-            >
-              {t("options.connect.dsh.ownersAdd")}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      </button>
+      <button
+        aria-label={addLabel}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={!canAdd}
+        onClick={onAdd}
+        type="button"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
     </article>
   );
 }

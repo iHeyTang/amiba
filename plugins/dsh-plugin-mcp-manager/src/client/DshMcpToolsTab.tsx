@@ -1,3 +1,4 @@
+import type { McpDependencyView } from "../dependencies.js";
 import {
   CheckCircle2,
   CircleAlert,
@@ -71,7 +72,11 @@ export interface McpSaveInput {
 }
 
 export interface McpToolsAdapter {
-  list(): Promise<{ servers: McpServerView[]; toolsOnly: true }>;
+  list(): Promise<{
+    servers: McpServerView[];
+    toolsOnly: true;
+    dependencies?: McpDependencyView[];
+  }>;
   save(input: McpSaveInput): Promise<{ server: McpServerView }>;
   remove(serverName: string): Promise<void>;
 }
@@ -256,17 +261,18 @@ export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
   const [items, setItems] = useState<McpServerView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<McpServerView | "new" | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<McpServerView | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [dependencies, setDependencies] = useState<McpDependencyView[]>([]);
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setItems((await adapter.list()).servers);
+      const snapshot = await adapter.list();
+      setItems(snapshot.servers);
+      setDependencies(snapshot.dependencies ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -366,6 +372,43 @@ export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
         </div>
       ) : null}
 
+      {dependencies.length > 0 ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">
+            {t("externalTools.mcp.dependencies")}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {t("externalTools.mcp.dependencies.config")}
+          </p>
+          <ul className={MODEL_SETTINGS_SURFACE_CLASS}>
+            {dependencies.map((item) => (
+              <li
+                key={item.connectionId}
+                className="space-y-1 border-b border-border/40 p-4 last:border-b-0"
+              >
+                <div className="text-sm font-medium">
+                  {item.service} · {item.name}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t("externalTools.mcp.dependencies.provider")}:{" "}
+                  {item.provider}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t("externalTools.mcp.dependencies.consumers")}:{" "}
+                  {item.consumers.join("、") ||
+                    t("externalTools.mcp.dependencies.none")}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t(`externalTools.mcp.dependencies.${item.state}`)} ·{" "}
+                  {item.instances}{" "}
+                  {t("externalTools.mcp.dependencies.instances")}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {loading && items.length === 0 ? (
         <div className={MODEL_SETTINGS_SURFACE_CLASS}>
           <div className="h-14 animate-pulse bg-muted/20" />
@@ -403,7 +446,7 @@ export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
                       {item.serverName}
                     </span>
                     <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/75">
-                      DSH MCP ·{" "}
+                      MCP ·{" "}
                       {item.transport === "streamable-http" ? "HTTP" : "STDIO"}
                     </span>
                   </span>

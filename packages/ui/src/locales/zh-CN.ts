@@ -19,6 +19,7 @@ export const zhCN: UiMessages = {
   "common.loading": "加载中…",
   "common.saving": "保存中…",
   "common.copy": "复制",
+  "common.copied": "已复制",
   "common.retry": "重试",
   "common.untitled": "未命名",
 
@@ -209,6 +210,7 @@ export const zhCN: UiMessages = {
   "composer.notice.hideDetails": "收起",
   "composer.mention.typeToSearch": "输入关键词搜索",
   "composer.mention.noResults": "无匹配结果",
+  "composer.mention.unavailable": "此来源暂不可用，请检查连接与授权",
 
   "newtab.dropOverlay": "拖入文件以附加",
   // Preference page
@@ -235,6 +237,9 @@ export const zhCN: UiMessages = {
   "options.preference.theme.auto": "自动",
   "options.preference.theme.light": "浅色",
   "options.preference.theme.dark": "深色",
+  "options.preference.timeFormat": "时间格式",
+  "options.preference.timeFormat.12h": "12 小时制",
+  "options.preference.timeFormat.24h": "24 小时制",
   "options.preference.accent": "配色",
   "options.preference.accent.violet": "电光紫",
   "options.preference.accent.coral": "灼焰橙",
@@ -384,6 +389,8 @@ export const zhCN: UiMessages = {
   "sidepanel.queue.delete": "删除",
   "sidepanel.queue.editing": "此消息正在输入框中编辑",
   "sidepanel.message.branch": "从这里创建分支",
+  "sidepanel.message.expand": "展开完整消息",
+  "sidepanel.message.collapse": "收起消息",
   "sidepanel.message.notPersisted": "这条消息还在保存，请稍后再试。",
   "sidepanel.message.restoreWorkspace": "恢复文件到此处",
   "sidepanel.message.restoreWorkspaceConfirm":

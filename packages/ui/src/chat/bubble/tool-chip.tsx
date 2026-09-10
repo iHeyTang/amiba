@@ -1,7 +1,7 @@
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, useSyncExternalStore } from "react";
 
 import { useWorkspacePane } from "../WorkspacePane";
 import {
@@ -45,7 +45,7 @@ function ToolTarget({
  * {@link ToolChip}, so an unclaimed tool name renders exactly this and
  * nothing else.
  */
-function ToolChipRow({ event }: { event: ToolProgress }) {
+function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "summary" }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
   // Force a re-render every second while running so the duration ticks
@@ -73,6 +73,7 @@ function ToolChipRow({ event }: { event: ToolProgress }) {
 
   return (
     <ToolRowFrame
+      presentation={mode}
       icon={presentation.icon}
       action={presentation.action}
       target={
@@ -110,8 +111,16 @@ function ToolChipRow({ event }: { event: ToolProgress }) {
  * {@link ToolChipRow} directly, which is also what the host's dispatch falls
  * back to for every unclaimed name.
  */
-export function ToolChip({ event }: { event: ToolProgress }) {
+const emptySubscribe = () => () => {};
+const idleRequest = {callId:"",version:0};
+const emptyRequest = () => idleRequest;
+export function ToolChip({ event, mode = "row" }: { event: ToolProgress; mode?: "row" | "summary" }) {
   const seat = useToolCallSeat();
+  const navigation = seat?.navigation;
+  const request = useSyncExternalStore(navigation?.subscribe ?? emptySubscribe, navigation?.getSnapshot ?? emptyRequest);
+  const ref = useRef<HTMLDivElement>(null);
+  const revealVersion = request.callId === event.toolCallId ? request.version : 0;
+  useEffect(()=>{ if (mode === "row" && revealVersion) ref.current?.scrollIntoView?.({block:"center",behavior:"smooth"}); },[revealVersion, mode]);
   const workspacePane = useWorkspacePane();
   const openFile = useCallback(
     (path: string) => workspacePane.openFile(path),
@@ -125,6 +134,9 @@ export function ToolChip({ event }: { event: ToolProgress }) {
     () =>
       block
         ? {
+            presentation: mode,
+            revealToolCall: navigation?.reveal,
+            revealVersion,
             callId: event.toolCallId,
             toolName: toolCallBlockName(block),
             block,
@@ -132,12 +144,13 @@ export function ToolChip({ event }: { event: ToolProgress }) {
             openFile,
           }
         : null,
-    [block, event.toolCallId, openFile, seat?.cwd],
+    [block, event.toolCallId, openFile, seat?.cwd, mode, navigation, revealVersion],
   );
 
-  const fallback = <ToolChipRow event={event} />;
-  if (!seat || !owner) return fallback;
-  return seat.render({ owner, fallback });
+  const fallback = <ToolChipRow event={event} mode={mode} />;
+  const row = seat?.render && owner ? seat.render({ owner, fallback }) : fallback;
+  if (mode === "summary") return <>{row}</>;
+  return <div ref={ref}>{row}{seat?.activity?.({ callId: event.toolCallId })}</div>;
 }
 
 /** Stack-of-chips fallback for messages without an interleaved timeline. */

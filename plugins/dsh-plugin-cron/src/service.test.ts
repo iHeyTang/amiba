@@ -54,13 +54,25 @@ describe("cron service", () => {
   it("refuses empty names, empty prompts, and bad rules at the boundary", async () => {
     const { service } = harness(() => 0);
     await expect(
-      service.create({ name: " ", prompt: "x", rule: { kind: "every", everySeconds: 3600 } }),
+      service.create({
+        name: " ",
+        prompt: "x",
+        rule: { kind: "every", everySeconds: 3600 },
+      }),
     ).rejects.toThrow(/name is required/u);
     await expect(
-      service.create({ name: "x", prompt: "", rule: { kind: "every", everySeconds: 3600 } }),
+      service.create({
+        name: "x",
+        prompt: "",
+        rule: { kind: "every", everySeconds: 3600 },
+      }),
     ).rejects.toThrow(/prompt is required/u);
     await expect(
-      service.create({ name: "x", prompt: "x", rule: { kind: "every", everySeconds: 5 } }),
+      service.create({
+        name: "x",
+        prompt: "x",
+        rule: { kind: "every", everySeconds: 5 },
+      }),
     ).rejects.toThrow(/at least 300/u);
     service.dispose();
   });
@@ -158,7 +170,11 @@ describe("cron service", () => {
 describe("cron timer loop", () => {
   // 2026-09-05 09:00 Asia/Shanghai.
   const NINE_AM_SHANGHAI = Date.UTC(2026, 8, 5, 1, 0, 0);
-  const daily = { kind: "daily", time: "09:00", timeZone: "Asia/Shanghai" } as const;
+  const daily = {
+    kind: "daily",
+    time: "09:00",
+    timeZone: "Asia/Shanghai",
+  } as const;
 
   it("fires a daily task when the timer wakes shortly AFTER the target instant", async () => {
     vi.useFakeTimers();
@@ -245,12 +261,101 @@ describe("cron timer loop", () => {
       // Only the interval task ran; the daily one is due tomorrow.
       await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
       const tasks = await service.list();
-      expect(tasks.find((task) => task.name === "poll")!.lastRunAt).toBeDefined();
-      expect(tasks.find((task) => task.name === "late")!.lastRunAt).toBeUndefined();
+      expect(
+        tasks.find((task) => task.name === "poll")!.lastRunAt,
+      ).toBeDefined();
+      expect(
+        tasks.find((task) => task.name === "late")!.lastRunAt,
+      ).toBeUndefined();
       expect(create).toHaveBeenCalledTimes(1);
       service.dispose();
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("durable cron run history", () => {
+  it("keeps every run and completion through a service restart", async () => {
+    let now = 1000;
+    const { service, store } = harness(() => now);
+    const task = await service.create({
+      name: "digest",
+      prompt: "go",
+      rule: { kind: "every", everySeconds: 300 },
+    });
+    const first = await service.runNow(task.id);
+    now = 2000;
+    const second = await service.runNow(task.id);
+    await vi.waitFor(async () =>
+      expect(
+        (await service.list())[0]?.runs?.every(
+          (run) => run.finishedAt !== undefined,
+        ),
+      ).toBe(true),
+    );
+    service.dispose();
+    const restarted = new CronService(
+      {} as never,
+      new DshCronStore(store.path.replace(/\/tasks.json$/u, "")),
+      () => now,
+    );
+    const [loaded] = await restarted.list();
+    expect(loaded?.runs?.map((run) => run.sessionId)).toEqual([
+      second.lastSessionId,
+      first.lastSessionId,
+    ]);
+    expect(loaded?.runs).toHaveLength(2);
+    restarted.dispose();
+  });
+
+  it("recovers earlier runs from persisted origins and keeps the legacy last run", async () => {
+    const { service, store } = harness(() => 1000);
+    const task = await service.create({
+      name: "digest",
+      prompt: "go",
+      rule: { kind: "every", everySeconds: 300 },
+    });
+    await store.mutate((tasks) =>
+      tasks.map((entry) => ({
+        ...entry,
+        lastSessionId: "latest",
+        lastRunAt: 900,
+      })),
+    );
+    service.dispose();
+    const inspect = vi.fn(async (id: string) => ({
+      events: [
+        {
+          type: "user/message",
+          time: 500,
+          data: {
+            source: {
+              kind: "user",
+              rpcId: id === "old" ? `cron:${task.id}:abc-123` : "desktop:abc",
+            },
+          },
+        },
+        { type: "turn/end", time: 600 },
+      ],
+    }));
+    const restarted = new CronService(
+      { sessionPersistence: { inspect } } as never,
+      store,
+      () => 1000,
+    );
+    const [loaded] = await restarted.list(["old", "ordinary"]);
+    expect(loaded?.runs).toEqual([
+      { sessionId: "latest", startedAt: 900 },
+      { sessionId: "old", startedAt: 500, finishedAt: 600 },
+    ]);
+    await restarted.list(["old", "ordinary"]);
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(
+      (
+        await new DshCronStore(store.path.replace(/\/tasks.json$/u, "")).list()
+      )[0]?.runs,
+    ).toHaveLength(2);
+    restarted.dispose();
   });
 });

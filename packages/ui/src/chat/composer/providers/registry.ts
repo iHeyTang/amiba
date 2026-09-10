@@ -10,6 +10,7 @@ export interface ProviderRegistry {
 }
 
 export interface ProviderRegistryContext {
+  sources?: readonly import("@amiba/extension-sdk").InputTriggerSource[]
   /** Session the built-in sources are asked about. */
   sessionId?: string
   /**
@@ -47,7 +48,7 @@ export function buildProviderRegistry(
   const revision = context.revision ?? new DraftRevision()
   const builtin = context.omitBuiltins
     ? []
-    : localTriggerSources(context.sessionId).map((source) =>
+    : [...localTriggerSources(context.sessionId), ...(context.sources ?? [])].map((source) =>
         sourceToProvider(source, {
           sessionId: context.sessionId,
           claims,

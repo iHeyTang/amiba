@@ -1,4 +1,3 @@
-import { getPlatform } from "@amiba/app-runtime/platform";
 import { useMemo, useSyncExternalStore } from "react";
 
 import {
@@ -161,56 +160,11 @@ export interface OfficialLocaleSnapshot {
  * The official locale service as Amiba consumes it: structurally the
  * LocaleFace `getSnapshot`/`subscribe` pair that `LocaleRuntime` publishes
  * (and that `ctx.slots.installLocale` consumes for the framework `t` seat).
- * Amiba reads the same snapshot the official Language row reads.
+ * Amiba reads the same snapshot the UI Shell language-row shadow reads.
  */
 export interface OfficialLocaleSource {
   getSnapshot(): OfficialLocaleSnapshot;
   subscribe(onChange: () => void): () => void;
-}
-
-// ---------------------------------------------------------------------------
-// Legacy preference — retained ONLY for the one-time migration
-// ---------------------------------------------------------------------------
-//
-// `settings.ui.language` has no writer left in the product. The single
-// remaining reader is the migration in the ui-shell locale bridge, which
-// carries a pre-existing `en` / `zh-CN` choice over to the official service
-// once and then stamps the key back to `auto`. `auto` is the value that needs
-// no migration (it always meant "follow the browser", which is exactly what
-// the official service does while nothing has been chosen), so writing it is
-// both the truthful new state and the marker that the migration is done.
-
-/** @deprecated Retained for the one-time migration only. */
-export type LanguagePreference = "auto" | "en" | "zh-CN";
-
-export const LANG_PREF_STORAGE_KEY = "settings.ui.language";
-export const DEFAULT_LANGUAGE_PREFERENCE: LanguagePreference = "auto";
-
-function normalizeStoredLang(v: unknown): LanguagePreference {
-  if (v === "en" || v === "zh-CN" || v === "auto") return v;
-  return DEFAULT_LANGUAGE_PREFERENCE;
-}
-
-/** Read the retired preference. Migration only — nothing else may consult it. */
-export async function loadLanguagePreference(): Promise<LanguagePreference> {
-  try {
-    const r = await getPlatform().storage.get([LANG_PREF_STORAGE_KEY]);
-    return normalizeStoredLang(r[LANG_PREF_STORAGE_KEY]);
-  } catch {
-    return DEFAULT_LANGUAGE_PREFERENCE;
-  }
-}
-
-/**
- * Stamp the retired preference back to `auto`, which is simultaneously the
- * truthful post-migration state and the "already migrated" marker: a later
- * launch reads `auto`, finds nothing to carry over, and leaves the official
- * selection alone.
- */
-export async function markLanguagePreferenceMigrated(): Promise<void> {
-  await getPlatform().storage.set({
-    [LANG_PREF_STORAGE_KEY]: DEFAULT_LANGUAGE_PREFERENCE,
-  });
 }
 
 // ---------------------------------------------------------------------------

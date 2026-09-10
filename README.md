@@ -12,6 +12,8 @@ dual-write migration layer.
 
 ## Architecture
 
+Core and plugin data upgrade conventions: [data-upgrades.md](docs/data-upgrades.md) (design only; no pre-release legacy migrations).
+
 ```text
 React UI
    │ typed PlatformAdapter / ChatEngineClient
@@ -22,7 +24,7 @@ Electron main
    │           ├─ @amiba/dsh-plugin-model-plane (canonical plane + DSH projection)
    │           ├─ @amiba/dsh-plugin-memory
    │           ├─ @amiba/dsh-plugin-messaging-core
-   │           ├─ @amiba/dsh-plugin-messaging-channel-webhook
+   │           ├─ @amiba/dsh-plugin-connector-webhook
    │           ├─ @amiba/dsh-plugin-attachments
    │           ├─ @amiba/dsh-plugin-mcp-manager
    │           ├─ @amiba/dsh-plugin-runtime-inventory
@@ -98,6 +100,13 @@ pnpm install
 pnpm runtime:prepare
 pnpm dev:desktop
 ```
+
+`pnpm dev:desktop` watches every workspace Amiba plugin with a Client entry.
+Saving UI or plugin source incrementally rebuilds only affected Client bundles
+and automatically refreshes the current window through DSH's rebuild channel;
+normally there is no need to rerun `runtime:rebuild` or restart the desktop app.
+Host-plugin, dependency-manifest, and Cordis-patch changes still require a dev
+process restart.
 
 Useful verification commands:
 

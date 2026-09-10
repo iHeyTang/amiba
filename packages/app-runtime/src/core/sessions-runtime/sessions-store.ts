@@ -286,13 +286,29 @@ export class SessionsStore {
    * broadcast.
    *
    * Treats the freshly fetched list the same way the cross-window
-   * watcher does: drop refs to sessions deleted upstream, leave open
-   * tabs alone otherwise. Idempotent — when nothing changed, the
+   * watcher does: update history while retaining open sessions that have
+   * not appeared in the host history yet. When nothing changed, the
    * commit short-circuits via the reference-equality guard.
    */
+  private refreshRevision = 0;
+
   refresh = async (): Promise<void> => {
     if (!this.initialized) return;
-    const next = await loadIndex();
+    const revision = ++this.refreshRevision;
+    const before = new Map(this.state.sessions.map((session) => [session.id, session]));
+    const loaded = await loadIndex();
+    if (revision !== this.refreshRevision) return;
+    // A viewer may open a result while the host list request is in flight.
+    // Keep local acknowledgements made AFTER that request started.
+    const current = new Map(this.state.sessions.map((session) => [session.id, session]));
+    const next = loaded.map((session) => {
+      const latest = current.get(session.id);
+      const previous = before.get(session.id);
+      if (latest && (latest.readAt !== previous?.readAt || latest.unread !== previous?.unread)) {
+        return { ...session, readAt: latest.readAt, unread: latest.unread };
+      }
+      return session;
+    });
     const snapshot = JSON.stringify(next);
     if (snapshot === this.lastWrittenIndexHash) return;
     this.lastWrittenIndexHash = snapshot;
@@ -306,9 +322,8 @@ export class SessionsStore {
   /**
    * Only ``sessions.index`` is cross-window. When another window mints
    * a new session, renames one, or deletes one, the broadcast lands
-   * here. We reflect the index change locally and, if a session that
-   * was open in THIS window got deleted upstream, prune the dangling
-   * reference from our local ``openTabIds`` / ``activeId``.
+   * here. We reflect history changes without letting a partial index
+   * discard this window's open drafts or selection.
    */
   private onStorageChange = (changes: StorageChangeMap): void => {
     const indexChange = changes[SESSION_KEYS.index];
@@ -322,33 +337,23 @@ export class SessionsStore {
   };
 
   /**
-   * Apply an externally-changed ``sessions.index``. Pruning the
-   * dangling references is the only sync this window does in response
-   * to other windows' actions — we deliberately don't follow another
-   * window's ``activeId`` (per-window selection is the whole point of
-   * the redesign).
+   * The history index excludes blank host sessions and local drafts that
+   * only materialize on first submit. Absence is not a deletion signal
+   * (DSH supports archiving, not deletion). Retain missing open rows until
+   * the host supplies their metadata; selection and messages stay local.
    */
   private applyExternalIndex(next: SessionMeta[]): void {
-    const known = new Set(next.map((s) => s.id));
-    const prevTabs = this.state.openTabIds;
-    const prunedTabs = prevTabs.filter((id) => known.has(id));
-    const tabsChanged = prunedTabs.length !== prevTabs.length;
-    const activeDeleted =
-      !!this.state.activeId && !known.has(this.state.activeId);
-    if (activeDeleted) {
-      // Another window deleted our active session — drop the selection
-      // and land back on the home/empty surface.
-      ++this.switchToken;
-      this.commit({
-        sessions: next,
-        openTabIds: tabsChanged ? prunedTabs : this.state.openTabIds,
-        activeId: "",
-        activeMessages: [],
-      });
-    } else if (tabsChanged) {
-      this.commit({ sessions: next, openTabIds: prunedTabs });
-    } else {
-      this.commit({ sessions: next });
+    const known = new Set(next.map((session) => session.id));
+    const open = new Set(this.state.openTabIds);
+    if (this.state.activeId) open.add(this.state.activeId);
+    const retained = this.state.sessions.filter(
+      (session) => open.has(session.id) && !known.has(session.id),
+    );
+    this.commit({ sessions: retained.length ? [...retained, ...next] : next });
+    for (const [id, activityAt] of this.pendingUnread) {
+      if (!known.has(id)) continue;
+      this.pendingUnread.delete(id);
+      void this.markUnread(id, activityAt);
     }
   }
 
@@ -388,13 +393,16 @@ export class SessionsStore {
       await flush;
       return;
     }
-    await this.markRead(id);
-    if (id === this.state.activeId) return;
+    if (id === this.state.activeId) {
+      await this.markRead(id);
+      return;
+    }
     await this.flushActiveBeforeSwitch();
     const token = ++this.switchToken;
     const next = await loadMessages(id);
     if (token !== this.switchToken) return;
     this.commit({ activeId: id, activeMessages: next });
+    await this.markRead(id);
   }
 
   /**
@@ -641,25 +649,33 @@ export class SessionsStore {
   // Action: local unread state
   // -------------------------------------------------------------------------
 
-  markUnread = async (id: string): Promise<void> => {
+  private readonly pendingUnread = new Map<string, number>();
+
+  markUnread = async (id: string, activityAt = Date.now()): Promise<void> => {
     if (!this.state.ready) await this.initialize();
-    // A completion visible in the current conversation has already been read.
-    if (!id || id === this.state.activeId) return;
+    // Visibility belongs to the caller: an active tab can be behind another view.
+    if (!id) return;
     const idx = this.state.sessions.findIndex((session) => session.id === id);
-    if (idx < 0 || this.state.sessions[idx].unread) return;
+    if (idx < 0) {
+      this.pendingUnread.set(id, Math.max(activityAt, this.pendingUnread.get(id) ?? 0));
+      return;
+    }
+    if ((this.state.sessions[idx].readAt ?? -Infinity) >= activityAt || this.state.sessions[idx].unread) return;
     const next = this.state.sessions.slice();
     next[idx] = { ...next[idx], unread: true };
     this.commit({ sessions: next });
     await this.persistIndex(next);
   };
 
-  markRead = async (id: string): Promise<void> => {
+  markRead = async (id: string, activityAt = Date.now()): Promise<void> => {
     if (!this.state.ready) await this.initialize();
     if (!id) return;
     const idx = this.state.sessions.findIndex((session) => session.id === id);
-    if (idx < 0 || !this.state.sessions[idx].unread) return;
+    this.pendingUnread.delete(id);
+    if (idx < 0) return;
+    if (!this.state.sessions[idx].unread && (this.state.sessions[idx].readAt ?? -Infinity) >= activityAt) return;
     const next = this.state.sessions.slice();
-    next[idx] = { ...next[idx], unread: undefined };
+    next[idx] = { ...next[idx], unread: undefined, readAt: Math.max(activityAt, next[idx].readAt ?? -Infinity) };
     this.commit({ sessions: next });
     await this.persistIndex(next);
   };

@@ -90,6 +90,7 @@ describe("DshAmibaEventBridge", () => {
       // and the reloaded one collide instead of appearing twice.
       uiId: "dsh:m1",
       content: "帮我看下这个任务",
+      sentAt: 10,
       origin: { kind: "plugin", plugin: "amiba-steward" },
     })
 
@@ -133,6 +134,7 @@ describe("DshAmibaEventBridge", () => {
       kind: "userMessage",
       uiId: "dsh:m3n",
       content: "You are repeating the exact same tool call",
+      sentAt: 10,
       origin: { kind: "plugin", plugin: "repeat-tool-reminder" },
       notice: { summary: "amiba_browser_click × 5" },
     })

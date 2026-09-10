@@ -6,6 +6,7 @@ import type {
 import type { DshMuxEnvelope, DshSessionEvent } from "./index"
 import { toolCallWireRecord, toolResultWireRecord } from "./tool-wire"
 import {
+  presentationNotice,
   userMessageText,
   userMessageUiId,
   visibleUserMessage,
@@ -158,6 +159,10 @@ export class DshAmibaEventBridge {
     view: unknown,
   ): BridgedDshEvent[] {
     const data = source.data
+    if (source.type === "amiba/notice") {
+      const notice = presentationNotice(data)
+      return notice ? [{ sessionId, event: { kind: "userMessage", ...notice, sentAt: source.time } }] : []
+    }
     if (source.type === "user/message") {
       // Only a PLUGIN-dispatched message becomes a live event. The person's
       // own message is already on screen — the composer appends its bubble
@@ -176,6 +181,7 @@ export class DshAmibaEventBridge {
             kind: "userMessage",
             uiId: userMessageUiId(data.id, source.seq),
             content: userMessageText(data.content).text,
+            sentAt: source.time,
             origin: visible.origin,
             ...(visible.notice ? { notice: visible.notice } : {}),
           },

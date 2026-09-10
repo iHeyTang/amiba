@@ -160,6 +160,7 @@ export async function readManagedPdf(
 
 const ATTACHMENT_SOURCE = {
   kind: "dsh-plugin",
+  distribution: "builtin",
   id: "amiba-attachments",
   name: "Amiba Attachments",
   packageName: "@amiba/dsh-plugin-attachments",

@@ -37,6 +37,7 @@ export function TriggerMenuPlugin({
         sessionId,
         claims: trigger.claims,
         revision: trigger.revision,
+        sources: trigger.draftSources,
       }),
     [extraProviders, sessionId, trigger],
   );
@@ -52,6 +53,7 @@ export function TriggerMenuPlugin({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     if (!state) {
       setGroups([]);
       setError(null);
@@ -61,6 +63,7 @@ export function TriggerMenuPlugin({
     }
     const query = state.query;
     const hit: TriggerHitContext = {
+      signal: controller.signal,
       position: state.position,
       span: {
         start: state.span.start,
@@ -106,9 +109,7 @@ export function TriggerMenuPlugin({
                 : undefined;
             return { provider: p, label, items, hint: emptyHint };
           },
-          () => {
-            throw p.id;
-          },
+          () => ({ provider: p, label, items: [] as MenuItem[], hint: t("composer.mention.unavailable") }),
         );
       }),
     )
@@ -147,6 +148,7 @@ export function TriggerMenuPlugin({
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [state, registry, t]);
 

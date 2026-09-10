@@ -33,6 +33,13 @@ export type CronRule =
       everySeconds: number;
     };
 
+export interface CronRun {
+  sessionId: string;
+  startedAt: number;
+  /** The agent became idle; inspect the conversation for its outcome. */
+  finishedAt?: number;
+}
+
 export interface CronTask {
   id: string;
   name: string;
@@ -50,6 +57,8 @@ export interface CronTask {
   lastRunAt?: number;
   /** Session spawned by the most recent run. */
   lastSessionId?: string;
+  /** Durable history, newest run first. Older stores may only have lastSessionId. */
+  runs?: CronRun[];
 }
 
 export interface CronTaskCreateInput {

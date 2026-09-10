@@ -1,3 +1,6 @@
+import { createToolNavigation } from "./bubble/tool-navigation";
+import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
+import type { MessageNoticeRenderer } from "./bubble/Bubble";
 /**
  * Full-screen chat surface — two direct side-by-side panes. Each pane owns
  * its own header so the window chrome reinforces the sidebar/content split
@@ -39,7 +42,7 @@ import { cn } from "../primitives";
 import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
 import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
-import type { MessagesMaxWidth } from "./internal/types";
+import type { MessagesMaxWidth, UiMessage } from "./internal/types";
 import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
@@ -207,6 +210,11 @@ export interface FullScreenChatViewProps {
      * seat, forwarded through ChatSurface to the internal Composer's card.
      */
     inputOverlay?: ReactNode;
+    /** Session-scoped plugin notices and tool annotations. */
+    notice?: MessageNoticeRenderer;
+    progress?: () => ReactNode;
+    toolAnnotation?: (owner: { callId: string }) => ReactNode;
+    workbenchPanel?: (owner: WorkbenchPanelOwner) => ReactNode;
     /**
      * renderSlot-backed dispatch of the official keyed `tool.call.toolview`
      * seat, forwarded through ChatSurface to every tool row in the
@@ -291,7 +299,7 @@ export interface FullScreenChatViewProps {
    * command palette (they stay openable by id). Provided by ui-shell's
    * `amibaSessionVisibility` seam.
    */
-  hiddenSessionPresets?: ReadonlySet<string>;
+  hiddenSessionIds?: ReadonlySet<string>;
   /**
    * `amiba.sessions.item.menu` contributions for the sidebar history list —
    * forwarded verbatim to `<Sidebar itemMenuItems>`.
@@ -366,7 +374,7 @@ function FullScreenChatViewInner({
   mentionProviders,
   triggerRuntime,
   restoreSidebarViewOnMount = true,
-  hiddenSessionPresets,
+  hiddenSessionIds,
   itemMenuItems,
   groups,
   messageSourceLabel,
@@ -374,6 +382,7 @@ function FullScreenChatViewInner({
   useResolvedTheme();
   const { t } = useT();
   const sessions = useSessions();
+  const toolNavigation = useMemo(createToolNavigation, [sessions.activeId]);
   const palette = useCommandPalette();
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
@@ -495,6 +504,7 @@ function FullScreenChatViewInner({
         // then land in the same render, so the status glyph stays mounted and
         // can transition from a breathing halo to a quiet static dot.
         if (completedInBackground) void sessions.markUnread(sessionId);
+        else if (event.kind !== "aborted") void sessions.markRead(sessionId);
         setSessionFailed(sessionId, event.kind === "error");
         setSessionRunning(sessionId, false);
       }
@@ -504,7 +514,11 @@ function FullScreenChatViewInner({
       unsubscribeSnapshots();
       unsubscribeEvents();
     };
-  }, [client, sessions.activeId, sessions.markUnread, sidebarView]);
+  }, [client, sessions.activeId, sessions.markUnread, sessions.markRead, sidebarView]);
+
+  useEffect(() => {
+    if (sidebarView === "chats" && sessions.activeId) void sessions.markRead(sessions.activeId);
+  }, [sidebarView, sessions.activeId, sessions.markRead]);
 
   // External session authors wake their owning session instead of minting a
   // parallel transcript, so the chat list filters on exactly two things: the
@@ -513,20 +527,20 @@ function FullScreenChatViewInner({
   // hide a valid DSH session. The sidebar's history list and the command
   // palette share this one filtered list.
   const chatSessions = useMemo(
-    () => visibleChatSessions(sessions.sessions, hiddenSessionPresets),
-    [sessions.sessions, hiddenSessionPresets],
+    () => visibleChatSessions(sessions.sessions, hiddenSessionIds),
+    [sessions.sessions, hiddenSessionIds],
   );
 
   // The palette swaps to its own search results as soon as the user types, so
   // that path needs the same filter or a hidden session reappears there.
   const searchChatSessions = useMemo(
-    () => filterSearchMatches(sessions.searchHistory, hiddenSessionPresets),
-    [sessions.searchHistory, hiddenSessionPresets],
+    () => filterSearchMatches(sessions.searchHistory, hiddenSessionIds),
+    [sessions.searchHistory, hiddenSessionIds],
   );
 
   // Active session object — looked up in the full session list (not
   // `chatSessions`) so a session hidden from the history list (the steward's
-  // own conversation, bound to a plugin-hidden preset) still resolves here
+  // own conversation, identified by its exact session ID) still resolves here
   // when it is the one currently open.
   const activeSession = useMemo(
     () => sessions.sessions.find((s) => s.id === sessions.activeId),
@@ -544,12 +558,12 @@ function FullScreenChatViewInner({
   const externalTitleOverride = useSessionTitle();
 
   const chatTopBarPlaceholder = externalTitleOverride || activeChatTitle;
-  // A session bound to a plugin-hidden preset is runtime-owned (the steward's
+  // A session ID explicitly claimed by its plugin is runtime-owned (the steward's
   // own conversation is the first case): its title is pinned host-side, so
   // the top bar renders it as plain text rather than an editable control.
   const isActiveSessionRuntimeOwned = isRuntimeOwnedSession(
     activeSession,
-    hiddenSessionPresets,
+    hiddenSessionIds,
   );
   const canRenameActiveChatTitle = Boolean(
     sessions.activeId &&
@@ -948,7 +962,7 @@ function FullScreenChatViewInner({
                   messagesMaxWidth={messagesWidth}
                   client={client}
                   capabilities={capabilities}
-                  slots={slots}
+                  slots={{...slots, toolNavigation}}
                   openSettings={openSettings}
                   openAgentDestination={openAgentDestination}
                   mentionProviders={mentionProviders}
@@ -969,7 +983,12 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
-          <WorkspacePane visible={workbenchVisible} />
+          <WorkspacePane visible={workbenchVisible} renderPanel={slots?.workbenchPanel} inspectToolCall={callId => {
+            const event = (sessions.activeMessages as UiMessage[]).flatMap(message => message.toolProgress ?? []).find(event => event.toolCallId === callId);
+            if (!event) return false;
+            toolNavigation.reveal(callId);
+            return true;
+          }} />
         </div>
         <WorkspaceTerminalPanel
           visible={workbenchVisible}

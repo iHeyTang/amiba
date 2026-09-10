@@ -8,6 +8,7 @@ const externals = new Set([
   "@deepseek-ai/cordis",
   "@deepseek-ai/dsh-credentials",
   "@deepseek-ai/dsh-settings",
+  "@deepseek-ai/dsh-llm",
   "@deepseek-ai/dsh-typert-protocol",
   "@deepseek-ai/schemastery",
   "zod",

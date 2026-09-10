@@ -12,7 +12,7 @@
  *     menu, over the SAME sources and through the SAME editor verbs.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReferenceResolver } from "../expandMentions";
 import {
   localReferenceResolver,
@@ -25,10 +25,12 @@ import type {
   ComposerTriggerRuntime,
   SubmitOutcome,
   TriggerGuard,
+  InputTriggerSource,
 } from "./contracts";
 import { DraftRevision } from "./editor-ops";
 
 export interface ComposerTriggerSession {
+  readonly draftSources: readonly InputTriggerSource[];
   readonly claims: CommandClaimStore;
   readonly revision: DraftRevision;
   /** The official controller, when the host runtime resolved one. */
@@ -64,6 +66,7 @@ export function useComposerTriggers(
   options: UseComposerTriggersOptions,
 ): ComposerTriggerSession {
   const { runtime, sessionId, disabled = false } = options;
+  const draftSources = useSyncExternalStore(runtime?.subscribe ?? noSubscribe, runtime?.draftSources ?? emptySources, emptySources);
   const claims = useMemo(() => new CommandClaimStore(), []);
   const revision = useMemo(() => new DraftRevision(), []);
   const attemptRef = useRef(false);
@@ -102,11 +105,12 @@ export function useComposerTriggers(
 
   const resolver = useMemo<ReferenceResolver>(() => {
     if (controller !== undefined) return controller;
-    return localReferenceResolver(localTriggerSources(sessionId));
-  }, [controller, sessionId]);
+    return localReferenceResolver([...localTriggerSources(sessionId), ...draftSources]);
+  }, [controller, sessionId, draftSources]);
 
   return useMemo<ComposerTriggerSession>(
     () => ({
+      draftSources,
       claims,
       revision,
       controller,
@@ -128,6 +132,10 @@ export function useComposerTriggers(
         attemptRef.current = inFlight;
       },
     }),
-    [claims, controller, resolver, revision, runtime, sessionId],
+    [claims, controller, resolver, revision, runtime, sessionId, draftSources],
   );
 }
+
+const EMPTY_SOURCES: readonly InputTriggerSource[] = [];
+const emptySources = () => EMPTY_SOURCES;
+const noSubscribe = () => () => {};

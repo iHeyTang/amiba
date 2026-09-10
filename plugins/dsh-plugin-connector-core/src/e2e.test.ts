@@ -44,15 +44,24 @@ function fakeAgentsCtx() {
     session: { id, header: { id, agentPreset: "standard" }, events: [] },
     inbox: { nextTurn: [], nextStep: [] },
   });
-  const resume = vi.fn(async ({ resumeSessionId }: { resumeSessionId: string }) => {
-    // Not exercised by this e2e flow: every session here is freshly created
-    // by conversation-scoped routing, never resumed from a cold store.
-    throw new Error(`session_not_found:${resumeSessionId}`);
-  });
-  const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> = [];
+  const resume = vi.fn(
+    async ({ resumeSessionId }: { resumeSessionId: string }) => {
+      // Not exercised by this e2e flow: every session here is freshly created
+      // by conversation-scoped routing, never resumed from a cold store.
+      throw new Error(`session_not_found:${resumeSessionId}`);
+    },
+  );
+  const created: Array<{ sessionId: string; meta?: Record<string, unknown> }> =
+    [];
   const dispose = vi.fn(async () => undefined);
   const create = vi.fn(
-    async ({ sessionId, meta }: { sessionId: string; meta?: Record<string, unknown> }) => {
+    async ({
+      sessionId,
+      meta,
+    }: {
+      sessionId: string;
+      meta?: Record<string, unknown>;
+    }) => {
       const agent = makeAgent(sessionId);
       live.set(sessionId, agent);
       created.push({ sessionId, ...(meta ? { meta } : {}) });
@@ -131,7 +140,12 @@ function fakeMcpManager() {
 function fakeAppliers(mcp: ReturnType<typeof fakeMcpManager>) {
   const appliers = new Map<
     string,
-    { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
+    {
+      apply: (
+        connect: StoredConnect,
+        decl: CapabilityDecl,
+      ) => Promise<() => void>;
+    }
   >();
   appliers.set("mcp", {
     apply: async (_connect, decl) => {
@@ -159,22 +173,23 @@ function fakeConnectorProvider() {
     runtimes.push(runtime);
     return runtime as unknown as ConnectorRuntime;
   });
-  const capabilities = vi.fn(
-    (): CapabilityDecl[] => [
-      {
-        kind: "mcp",
-        spec: {
-          serverName: "e2e-fake",
-          transport: "stdio",
-          command: "echo",
-          args: [],
-          env: {},
-          enabled: true,
-        },
+  const capabilities = vi.fn((): CapabilityDecl[] => [
+    {
+      kind: "mcp",
+      service: { id: "test.mcp", name: "Test MCP", version: "1", shareable: true },
+      identity: "fixture-account", tools: [{ name: "read", title: "Read" }],
+      spec: {
+        serverName: "e2e-fake",
+        transport: "stdio",
+        command: "echo",
+        args: [],
+        env: {},
+        enabled: true,
       },
-    ],
-  );
+    },
+  ]);
   const provider: ConnectorProvider = {
+    messaging: { ownerPairing: true },
     id: "fakeim",
     name: "Fake IM",
     description: "Fake platform provider for the M1 e2e acceptance test",
@@ -199,9 +214,13 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
   let providerFake: ReturnType<typeof fakeConnectorProvider>;
   let acceptInboundSpy!: ReturnType<typeof spyAcceptInbound>;
 
+  let channelId!: string;
   let connectView!: Awaited<ReturnType<ConnectorCenter["createConnect"]>>;
   let handle!: ConnectorHandle;
-  let runtime!: { stop: ReturnType<typeof vi.fn>; deliver: ReturnType<typeof vi.fn> };
+  let runtime!: {
+    stop: ReturnType<typeof vi.fn>;
+    deliver: ReturnType<typeof vi.fn>;
+  };
   let sessionId!: string;
 
   beforeAll(async () => {
@@ -243,7 +262,9 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
 
     expect(providerFake.validate).toHaveBeenCalledWith({ token: "t" });
     expect(providerFake.start).toHaveBeenCalledTimes(1);
-    expect(connectView.channelId).toBeTruthy();
+    channelId = (await connectorStore.list())[0]!.channelId!;
+    expect(channelId).toBeTruthy();
+    expect(connectView).not.toHaveProperty("channelId");
     expect(connectView.status).toEqual({ state: "connecting" });
 
     handle = providerFake.starts[0]!;
@@ -279,7 +300,9 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
     // A brand-new session was created (conversation-scoped routing, no prior
     // binding for chat-1) carrying the connect's agentPreset.
     expect(agentsCtx.created).toHaveLength(1);
-    expect(agentsCtx.created[0]!.meta).toMatchObject({ agentPreset: "standard" });
+    expect(agentsCtx.created[0]!.meta).toMatchObject({
+      agentPreset: "standard",
+    });
     sessionId = agentsCtx.created[0]!.sessionId;
 
     // The session's fake Agent received followup() with the inbound text.
@@ -294,7 +317,7 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
     const pending = await messageCenter.store.listPending(sessionId);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.text).toBe("hello agent");
-    expect(pending[0]?.channelId).toBe(connectView.channelId);
+    expect(pending[0]?.channelId).toBe(channelId);
   });
 
   it("stage 3: firing the completed turn/end event reconciles the pending reply", async () => {
@@ -313,7 +336,7 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
           content: [{ type: "text", text: "hello agent" }],
           source: {
             kind: "plugin",
-            plugin: `amiba-message:${connectView.channelId}`,
+            plugin: `amiba-message:${channelId}`,
             form: "relay",
           },
         },
@@ -341,7 +364,9 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
       },
     ];
 
-    const agent = agentsCtx.live.get(sessionId) as { session: { events: unknown[] } };
+    const agent = agentsCtx.live.get(sessionId) as {
+      session: { events: unknown[] };
+    };
     agent.session.events = events;
     agentsCtx.listeners.get("session/event")?.(
       agent.session as never,
@@ -365,7 +390,7 @@ describe("M1 acceptance: fake-provider end-to-end mechanism loop", () => {
       expect.objectContaining({
         text: "done!",
         sessionId,
-        channelId: connectView.channelId,
+        channelId: channelId,
       }),
     );
     expect(await messageCenter.store.listOutbox()).toHaveLength(0);

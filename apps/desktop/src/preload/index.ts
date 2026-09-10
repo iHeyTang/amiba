@@ -59,6 +59,10 @@ ipcRenderer.on("ui:open-settings", () => {
 });
 
 const api = {
+  embeddedPage: {
+    request: (input: import("../shared/embedded-page").EmbeddedPageRequest) =>
+      ipcRenderer.invoke("embedded-page:request", input) as Promise<void>,
+  },
   windowChrome: {
     topBarHeightPx: WINDOW_TITLE_BAR_HEIGHT,
     leftInsetPx: process.platform === "darwin" ? MAC_TRAFFIC_LIGHT_RESERVE : 0,

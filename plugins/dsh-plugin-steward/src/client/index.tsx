@@ -1,3 +1,4 @@
+import { TOOLVIEWS } from "./toolviews.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 // Type-only: SlotMap entries for `amiba.sessions.list.group` /
@@ -6,7 +7,7 @@ import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
-import { STEWARD_PRESET_ID, STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
+import { STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
 import { StewardNavigation } from "./StewardNavigation.js";
 import { createStewardClientState, stewardGroupFace, stewardMenuFace } from "./state.js";
 
@@ -78,14 +79,27 @@ function openSession(sessionId: string): void {
 }
 
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
+  ctx.effect(() => {
+    const disposers = TOOLVIEWS.map(({ key, component }) => ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, component)));
+    return () => { for (const dispose of disposers) dispose(); };
+  });
   const disposeRemote = await ctx.remote.$mount(AMIBA_STEWARD_REMOTE);
   const state = createStewardClientState();
   const fiber = ctx.inject(
     ["slots", "remote.amibaSteward", "layout", "sessions", "amibaSessionVisibility"],
     (injectedCtx) => {
       const remote: StewardRemote = injectedCtx.remote.amibaSteward;
+      let disposeHidden = () => {};
+      let hiddenSessionId: string | undefined;
+      let disposed = false;
       const ensureStewardSession = () =>
         valueOf(remote.ensureStewardSession()).then(({ sessionId }) => {
+          if (disposed) throw new Error("Steward client disposed");
+          if (hiddenSessionId !== sessionId) {
+            disposeHidden();
+            disposeHidden = injectedCtx.amibaSessionVisibility.hideSession(sessionId);
+            hiddenSessionId = sessionId;
+          }
           state.setStewardSessionId(sessionId);
           return sessionId;
         });
@@ -115,7 +129,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       // host's truth without a push channel.
       const refreshIntervalId = setInterval(() => void refreshAdopted(), REFRESH_INTERVAL_MS);
 
-      const disposeHidden = injectedCtx.amibaSessionVisibility.hidePreset(STEWARD_PRESET_ID);
       // `ctx.sessions` resolves inconsistently in this package's TS program:
       // the plugin's server half pulls in `@deepseek-ai/dsh-session`'s
       // `SessionStore` (`list(): Session[]`) and the client half pulls in
@@ -155,7 +168,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         ),
       );
       // Session list: group every session the steward has ever adopted into
-      // its own 「大管家」 section at the top of the sidebar. `claim` reads
+      // its own 「大管家」 section below the built-in recent-tasks section.
+      // `claim` reads
       // `state.adoptedSessionIds()` live (see `stewardGroupFace` in
       // `state.ts`), so `refreshAdopted()` above — at apply, after an
       // adopt, and every `REFRESH_INTERVAL_MS` — is all that's needed to
@@ -205,6 +219,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         ),
       );
       return () => {
+        disposed = true;
         clearInterval(refreshIntervalId);
         disposeMessageSource();
         disposeMenu();

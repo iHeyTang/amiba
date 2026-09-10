@@ -20,6 +20,27 @@ class AmibaMcpRemoteService extends TypertRemoteService {
   }
 
   @Remote
+  listAccess() { return this.manager.access.list(); }
+
+  @Remote
+  async approveAccess(id: string, connectionId: string, approvalToken: string) {
+    await this.manager.access.approve(id, connectionId, approvalToken);
+    return this.manager.access.list();
+  }
+
+  @Remote
+  async revokeAccess(id: string) {
+    await this.manager.access.revoke(id);
+    return this.manager.access.list();
+  }
+
+  @Remote
+  async retryAccess(id: string) {
+    await this.manager.access.retry(id);
+    return this.manager.access.list();
+  }
+
+  @Remote
   save(input: McpSaveInput) {
     return this.manager.save(input);
   }

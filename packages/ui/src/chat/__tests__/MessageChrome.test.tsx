@@ -22,6 +22,60 @@ function expandProcess() {
 }
 
 describe("chat message chrome", () => {
+  it("keeps background notices in the current turn without user controls", () => {
+    const { container } = render(
+      <MessageTurns messages={[
+        { uiId: "prompt", role: "user", content: "Run the job" },
+        { uiId: "reply", role: "assistant", content: "Job started" },
+        { uiId: "notice", role: "user", content: "Background job completed",
+          origin: { kind: "plugin", plugin: "tool-jobs" },
+          notice: { summary: "Job completed" } },
+        { uiId: "result", role: "assistant", content: "Here is the result" },
+        { uiId: "next", role: "user", content: "Thanks" },
+      ]} />,
+    );
+    expect(container.querySelectorAll("[data-conversation-user-turn]")).toHaveLength(2);
+    expect(screen.getAllByTestId("user-message-actions")).toHaveLength(2);
+    const notice = screen.getByTestId("message-notice");
+    expect(notice.closest("[data-conversation-user-turn]")).toHaveAttribute(
+      "data-conversation-user-turn", "prompt",
+    );
+    expect(notice.closest(".sticky")).toBeNull();
+    expect(screen.getByText("Here is the result").closest("[data-conversation-user-turn]"))
+      .toHaveAttribute("data-conversation-user-turn", "prompt");
+  });
+
+  it.each(["background-job", "third-party-build"])("folds %s notices by explicit execution ownership across turns", kind => {
+    const { container } = render(<MessageTurns sessionId="s1" messages={[
+      { uiId: "prompt", role: "user", content: "Read the file" },
+      { uiId: "work", role: "assistant", content: "", processMs: 1000,
+        toolProgress: [{tool:"read", toolCallId:"read-1", status:"completed", args:{path:"README.md"}, result:{content:"hello"}}] },
+      { uiId: "next", role: "user", content: "Another task" },
+      { uiId: "notice", role: "user", content: "Completed",
+        notice: { summary: "README completed", placement: {kind:"execution",sessionId:"s1",callId:"read-1"}, reference: {kind, sessionId:"s1", id:"tool-1"} } },
+    ] as UiMessage[]} />);
+    expect(screen.queryByTestId("message-notice")).toBeNull();
+    expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
+    expandProcess();
+    const notice=screen.getByText("README completed");
+    expect(notice.closest("[data-execution-summary]")).not.toBeNull();
+    expect(notice.closest("[data-conversation-user-turn]")).toHaveAttribute("data-conversation-user-turn","prompt");
+  });
+  it.each([
+    undefined,
+    {kind:"standalone"},
+    {kind:"execution",sessionId:"other",callId:"read-1"},
+    {kind:"execution",sessionId:"s1",callId:"missing"},
+  ])("does not infer execution ownership from an entity reference: %j", placement => {
+    render(<MessageTurns sessionId="s1" messages={[
+      {uiId:"prompt",role:"user",content:"Read"},
+      {uiId:"work",role:"assistant",content:"",toolProgress:[{tool:"read",toolCallId:"read-1",status:"completed",args:{path:"README.md"}}]},
+      {uiId:"notice",role:"user",content:"Finished",notice:{summary:"Independent notice",placement,reference:{kind:"anything",sessionId:"s1",id:"x"}}},
+    ] as UiMessage[]}/>);
+    expect(screen.getByText("Independent notice")).toBeInTheDocument();
+    expect(screen.getByText("Independent notice").closest("[data-execution-summary]")).toBeNull();
+  });
+
   it("shows completed file changes as a turn-level review entry", async () => {
     const onReview = vi.fn();
     render(
@@ -179,6 +233,82 @@ describe("chat message chrome", () => {
     expect(onRestore).toHaveBeenCalledOnce();
     expect(onRestore).toHaveBeenCalledWith(
       expect.objectContaining({ uiId: "user-1" }),
+      0,
+    );
+  });
+
+  it("places timestamp and tooltip-backed user actions below the bubble", async () => {
+    const user = userEvent.setup();
+    const onBranch = vi.fn();
+    const sentAt = Date.parse("2026-09-05T09:08:00.000Z");
+    render(
+      <MessageTurns
+        messages={[
+          {
+            uiId: "user-actions",
+            role: "user",
+            content: "Copy this message",
+            sentAt,
+          },
+        ]}
+        onBranchUserMessage={onBranch}
+      />,
+    );
+
+    const bubble = screen
+      .getByText("Copy this message")
+      .closest('[data-selection="text"]');
+    const actions = screen.getByTestId("user-message-actions");
+    expect(bubble).not.toContainElement(actions);
+    expect(
+      bubble!.compareDocumentPosition(actions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(actions).toHaveClass("h-7", "justify-end");
+    expect(actions).toHaveClass(
+      "opacity-0",
+      "pointer-events-none",
+      "group-hover:opacity-100",
+      "group-hover:pointer-events-auto",
+      "group-focus-within:opacity-100",
+      "group-focus-within:pointer-events-auto",
+    );
+    expect(actions.className).not.toMatch(/\bbg-|\bborder/);
+
+    const time = actions.querySelector("time");
+    expect(time).toHaveAttribute(
+      "datetime",
+      new Date(sentAt).toISOString(),
+    );
+    expect(time).toHaveTextContent(new Date(sentAt).toLocaleDateString("en", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }));
+
+    const copy = screen.getByRole("button", { name: "common.copy" });
+    const branch = screen.getByRole("button", {
+      name: "sidepanel.message.branch",
+    });
+    expect(copy).not.toHaveAttribute("title");
+    expect(copy).toHaveClass("hover:bg-accent/70");
+    expect(branch.querySelector(".lucide-git-fork")).not.toBeNull();
+
+    await user.hover(copy);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("common.copy");
+    expect(
+      document.querySelector('[data-ui-overlay="tooltip"]'),
+    ).not.toBeNull();
+    await user.unhover(copy);
+
+    await user.click(copy);
+    expect(await navigator.clipboard.readText()).toBe("Copy this message");
+    expect(
+      screen.getByRole("button", { name: "common.copied" }),
+    ).toBeInTheDocument();
+
+    await user.click(branch);
+    expect(onBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ uiId: "user-actions" }),
       0,
     );
   });
@@ -422,7 +552,7 @@ describe("chat message chrome", () => {
     })[1]!;
     await userEvent.click(nestedThought);
     expect(
-      screen.getByText("Inspect the repository before answering."),
+      screen.getAllByText("Inspect the repository before answering.").at(-1)!,
     ).toBeInTheDocument();
     await userEvent.click(nestedThought);
 
@@ -682,6 +812,94 @@ describe("chat message chrome", () => {
       "[data-execution-summary]",
     );
     expect(narrationExecution!.contains(narration)).toBeTruthy();
+  });
+
+  it("keeps streamed narration mounted across tools and folds it only on completion", () => {
+    const before = "I will inspect the directory.";
+    const after = "Here is the final summary.";
+    let message: UiMessage = {
+      uiId: "stable-flow", role: "assistant", streaming: true, content: before,
+      assistantTimeline: [{ kind: "text", id: "before", text: before }],
+    };
+    const { container, rerender } = render(<Bubble m={message} />);
+    const narration = screen.getByText(before);
+    message = {
+      ...message,
+      toolProgress: [{ tool: "search_files", toolCallId: "search", status: "running" }],
+      assistantTimeline: [...message.assistantTimeline!, { kind: "tool", id: "tool", toolCallId: "search" }],
+    };
+    rerender(<Bubble m={message} />);
+    expect(screen.getByText(before)).toBe(narration);
+    expect(narration.closest("[data-execution-summary]")).toBeNull();
+    const execution = container.querySelector("[data-execution-summary]")!;
+    expect(narration.compareDocumentPosition(execution) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    message = {
+      ...message, content: before + after,
+      toolProgress: [{ ...message.toolProgress![0]!, status: "completed" }],
+      assistantTimeline: [...message.assistantTimeline!, { kind: "text", id: "after", text: after }],
+    };
+    rerender(<Bubble m={message} />);
+    expect(screen.getByText(before)).toBe(narration);
+    expect(screen.getByText(after)).toBeVisible();
+    const intermediate = screen.getByText(after);
+    message = {
+      ...message,
+      toolProgress: [...message.toolProgress!, { tool: "search_files", toolCallId: "search-again", status: "running" }],
+      assistantTimeline: [...message.assistantTimeline!, { kind: "tool", id: "tool-again", toolCallId: "search-again" }],
+    };
+    rerender(<Bubble m={message} />);
+    expect(screen.getByText(before)).toBe(narration);
+    expect(screen.getByText(after)).toBe(intermediate);
+    message = {
+      ...message, content: before + after + "All done.",
+      assistantTimeline: [...message.assistantTimeline!, { kind: "text", id: "final", text: "All done." }],
+    };
+    rerender(<Bubble m={message} />);
+    expect(screen.getByText(after)).toBe(intermediate);
+    rerender(<Bubble m={{ ...message, streaming: false }} />);
+    expect(screen.queryByText(before)).not.toBeInTheDocument();
+    expect(screen.queryByText(after)).not.toBeInTheDocument();
+    expect(screen.getByText("All done.")).toBeVisible();
+    expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
+    fireEvent.click(container.querySelector("[data-execution-summary] button")!);
+    expect(screen.getByText(before)).toBeVisible();
+  });
+
+  it.each([false, true])("respects reduced motion (%s) when completing a live turn", (reducedMotion) => {
+    let height = 300;
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
+      x: 0, y: 0, top: 0, left: 0, right: 400, bottom: height, width: 400, height, toJSON() {},
+    }));
+    const originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "animate");
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({ cancel }));
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });
+    const media = vi.spyOn(window, "matchMedia").mockReturnValue({ matches: reducedMotion } as MediaQueryList);
+    try {
+      const message: UiMessage = {
+        uiId: "animate-flow", role: "assistant", streaming: true, content: "Checking.Done.",
+        toolProgress: [{ tool: "search_files", toolCallId: "search", status: "completed" }],
+        assistantTimeline: [
+          { kind: "text", id: "before", text: "Checking." },
+          { kind: "tool", id: "tool", toolCallId: "search" },
+          { kind: "text", id: "after", text: "Done." },
+        ],
+      };
+      const { rerender, unmount } = render(<Bubble m={message} />);
+      expect(animate).not.toHaveBeenCalled();
+      height = 100;
+      rerender(<Bubble m={{ ...message, streaming: false }} />);
+      expect(screen.queryByText("Checking.")).not.toBeInTheDocument();
+      expect(screen.getByText("Done.")).toBeVisible();
+      expect(animate).toHaveBeenCalledTimes(reducedMotion ? 0 : 2);
+      unmount();
+      expect(cancel).toHaveBeenCalledTimes(reducedMotion ? 0 : 2);
+    } finally {
+      bounds.mockRestore();
+      media.mockRestore();
+      if (originalAnimate) Object.defineProperty(HTMLElement.prototype, "animate", originalAnimate);
+      else Reflect.deleteProperty(HTMLElement.prototype, "animate");
+    }
   });
 
   it("keeps legacy assistant rows in text then tool order", () => {
@@ -1211,4 +1429,14 @@ describe("chat message chrome", () => {
       }),
     ).toHaveLength(1);
   });
+});
+
+it("renders reasoning-tool-reasoning in timeline order without a merged first thought",async()=>{
+ const {container}=render(<Bubble m={{uiId:"split",role:"assistant",content:"",reasoning:"before toolafter tool",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed",args:{command:"echo ok"},durationMs:7}],assistantTimeline:[{kind:"reasoning",id:"r1",text:"before tool"},{kind:"tool",id:"t",toolCallId:"c"},{kind:"reasoning",id:"r2",text:"after tool"}]} as UiMessage}/>);
+ fireEvent.click(container.querySelector('button[aria-expanded="false"]')!);
+ for(const button of Array.from(container.querySelectorAll('button[aria-expanded="false"]'))){if(!button.textContent?.includes("echo ok"))fireEvent.click(button);}
+ const before=screen.getAllByText("before tool").at(-1)!;const after=screen.getAllByText("after tool").at(-1)!;const tool=screen.getByText("echo ok");
+ expect(before.compareDocumentPosition(tool)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(tool.compareDocumentPosition(after)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(screen.queryByText("before toolafter tool")).toBeNull();
 });

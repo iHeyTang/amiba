@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Components } from "streamdown";
+import { parseReferenceHref, ReferenceButton } from "../reference-request";
 
 /**
  * A file the conversation named that the user can jump to: an inline `code`
@@ -176,4 +177,8 @@ export function WorkspaceInlineCode({
 /** Pass to every chat `<Streamdown components>` so paths link uniformly. */
 export const chatMarkdownComponents: Components = {
   inlineCode: WorkspaceInlineCode,
+  a: ({ href, children, node: _node, ...props }) => {
+    const ref = parseReferenceHref(href);
+    return ref ? <ReferenceButton source={ref.source} reference={ref.ref}>{children}</ReferenceButton> : <a href={href} {...props}>{children}</a>;
+  },
 };

@@ -1,0 +1,73 @@
+{
+  "name": "@amiba/dsh-plugin-resources",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Account-bound resources shared by people, input references and agents.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./protocol": {
+      "types": "./lib/protocol.d.ts",
+      "default": "./lib/protocol.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@amiba/dsh-plugin-ui-shell"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-catalog": "workspace:*",
+    "@amiba/extension-sdk": "workspace:*",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*",
+    "@amiba/ui": "workspace:*",
+    "@deepseek-ai/dsh-tools": "catalog:",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
+    "lucide-react": "^0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "22.9.0",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "jsdom": "^25.0.1",
+    "typescript": "5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.4"
+  }
+}

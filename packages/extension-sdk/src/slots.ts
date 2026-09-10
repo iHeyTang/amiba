@@ -367,6 +367,14 @@ export type ConversationInputOverlayOwnerProps = OwnerOf<"conversation.input.ove
  * packages. Named re-exports, not bare `import type {}` inclusions: those are
  * elided at declaration emit (the settings.section lesson).
  */
+/** Amiba render surface hint; summary output must be inline and non-interactive. */
+declare module "@deepseek-ai/dsh-client-ui-tool/client" {
+  interface ToolCallOwnerProps {
+    presentation?: "row" | "summary";
+    revealToolCall?: (callId: string) => void;
+    revealVersion?: number;
+  }
+}
 export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
 export type {
   RunningToolCall,
@@ -514,13 +522,32 @@ export type AmibaRootSlot = (typeof AMIBA_ROOT_SLOTS)[number];
  * child of its own `settings.section` entry and dispatches it with
  * `renderSlot` (the same pattern as the catalog plugin's `amiba.tools.panel`).
  */
+/** Display-only catalog contributions; callable models stay in their owning service. */
+export interface AmibaProviderInventory {
+  id: string;
+  name: string;
+  available: boolean;
+  models: Array<{ id: string; name: string; description?: string; outputModalities?: string[]; supported: boolean; enabled?: boolean; pending?: boolean; onEnabledChange?: (enabled: boolean) => void }>;
+}
+export interface AmibaModelsExtensionOwner {
+  onModelsChange?: (source: string, providers: AmibaProviderInventory[]) => void;
+}
+
 export interface AmibaAgentPresetSectionOwner {
   /** The agent preset (profile) whose detail tab strip this section renders
    *  under — scopes the section's content to that preset. */
   profileId: string;
 }
 
+export interface AmibaSessionActivity {
+  sessions: readonly { id: string; unread?: boolean; readAt?: number; archived?: boolean }[];
+  visibleSessionId: string;
+  markUnread(id: string, activityAt?: number): Promise<void>;
+  markRead(id: string, activityAt?: number): Promise<void>;
+}
+
 export interface AmibaWorkspaceViewOwner {
+  sessionActivity?: AmibaSessionActivity;
   chromeHeightPx?: number;
   topBarLeftInset?: number;
   sidebarCollapsed?: boolean;
@@ -528,6 +555,7 @@ export interface AmibaWorkspaceViewOwner {
 }
 
 export interface AmibaWorkspaceNavigationOwner {
+  sessionActivity?: AmibaSessionActivity;
   activeView?: string;
 }
 
@@ -668,6 +696,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       owner: AmibaComposerModelPickerOwner;
     };
     "amiba.settings.content.overlay": { kind: "list"; scope: "root" };
+    "amiba.models.extension": { kind: "list"; scope: "root"; owner: AmibaModelsExtensionOwner };
     "amiba.agentPreset.section": {
       kind: "list";
       scope: "root";
@@ -698,4 +727,19 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
      */
     "shell.overlay": { kind: "list"; scope: "root" };
   }
+}
+
+/** Declarative Markdown contributions. The shell collects the extension face. */
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "amiba.markdown.extension": { kind: "list"; scope: "root" };
+  }
+}
+/** A plugin-owned tab and panel in the session workbench. */
+export interface WorkbenchPanelOwner {
+  placement: "tab" | "content";
+  activePanel: string | null;
+  openPanel(id: string): void;
+  inspectToolCall(callId: string): boolean;
+  renderMarkdown(text: string): ReturnType<typeof import("@amiba/markdown").ChatMarkdown>;
 }

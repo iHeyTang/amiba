@@ -61,7 +61,11 @@ describe("projectRuntimeSessionHistory", () => {
     ]);
 
     expect(messages).toHaveLength(2);
-    expect(messages[0]).toMatchObject({ role: "user", content: "inspect" });
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "inspect",
+      sentAt: 2,
+    });
     expect(messages[1]).toMatchObject({
       role: "assistant",
       content: "done",
@@ -357,6 +361,7 @@ describe("projectRuntimeSessionHistory", () => {
         origin: { kind: "plugin", plugin: "amiba-steward" },
         uiId: "dsh:m1",
         runtimeSeq: 4,
+        sentAt: 2,
       },
     ]);
   });
@@ -383,6 +388,7 @@ describe("projectRuntimeSessionHistory", () => {
         notice: { summary: "任务汇报：写周报 — 完成" },
         uiId: "dsh:m1",
         runtimeSeq: 4,
+        sentAt: 2,
       },
     ]);
   });
@@ -433,4 +439,20 @@ describe("projectRuntimeSessionHistory", () => {
     );
     expect(messages[0]?.origin).toBeUndefined();
   });
+});
+
+it("keeps reasoning on either side of a tool in separate timeline segments",()=>{
+ const events=[
+  {type:"turn/start",data:{turn:1}},
+  {type:"assistant/chunk",data:{chunk:{type:"reasoning-delta",text:"before "}}},
+  {type:"assistant/chunk",data:{chunk:{type:"reasoning-delta",text:"tool"}}},
+  {type:"tool/call",data:{callId:"c1",name:"read",arguments:"{}"}},
+  {type:"assistant/chunk",data:{chunk:{type:"reasoning-delta",text:"after tool"}}},
+  {type:"turn/end",data:{}},
+ ];
+ const rows=projectRuntimeSessionHistory(events.map((event,seq)=>({event:{...event,seq,time:seq+1}})));
+ const row=rows.find(row=>row.role==="assistant")!;
+ expect(row.assistantTimeline?.map(item=>item.kind)).toEqual(["reasoning","tool","reasoning"]);
+ expect(row.assistantTimeline?.[0]).toMatchObject({startedAt:2,endedAt:3});
+ expect(row.assistantTimeline?.filter(item=>item.kind==="reasoning").map(item=>item.text)).toEqual(["before tool","after tool"]);
 });

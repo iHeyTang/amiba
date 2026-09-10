@@ -252,7 +252,7 @@ export function SessionsListView({
     : (emptyLabel ?? t("chat.noSessions"));
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+    <div className="pb-2">
       {totalMatching === 0 ? (
         showSectionHeaders ? (
           <TopSection

@@ -27,6 +27,18 @@ test("extracts and absolutizes the host-composed DSH client graph", () => {
   );
 });
 
+test("preserves module arrival edges separately from plugin injection edges", () => {
+  const entry = { id: "@amiba/dsh-plugin-catalog", url: "/plugins/@amiba/dsh-plugin-catalog/client.js", rev: "one",
+    inject: ["@amiba/dsh-plugin-ui-shell"], external: ["@amiba/dsh-plugin-ui-shell/client"] };
+  const html = `<script>window.__DSH_BOOT__ = ${JSON.stringify({ rev: "one", entries: [entry] })}</script>`;
+  const graph = extractDshClientBootGraph(html, "http://127.0.0.1:43123");
+  assert.deepEqual(graph.entries[0].external, entry.external);
+  assert.deepEqual(graph.entries[0].inject, entry.inject);
+  for (const external of ["wrong", [1], [null]]) {
+    assert.throws(() => extractDshClientBootGraph(`<script>window.__DSH_BOOT__ = ${JSON.stringify({ rev: "one", entries: [{ ...entry, external }] })}</script>`, "http://127.0.0.1:43123"), /invalid external edges/);
+  }
+});
+
 test("extracts only same-runtime DSH Web Shell assets", () => {
   const html = `<!doctype html><html><head>
     <link rel="stylesheet" crossorigin href="/assets/index-abc.css">
@@ -92,7 +104,7 @@ test("carries the inline bootstrap facade, and not the boot global", () => {
   ]);
 });
 
-test("drops the unreachable HMR dev channel, unless something injects it", () => {
+test("drops fiber HMR because desktop development reloads the document", () => {
   const graphHtml = (entries) =>
     `<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: "r", entries })}</script>`;
   const hmr = {
@@ -106,14 +118,14 @@ test("drops the unreachable HMR dev channel, unless something injects it", () =>
     url: "/plugins/@amiba/dsh-plugin-ui-shell/client.js?rev=b",
     rev: "b",
   };
-  // Its SSE endpoint is a relative URL that resolves against OUR document
-  // origin, never the runtime — an endless 404 loop, so it is dropped ...
+  // The desktop renderer owns the SSE channel and reloads the whole document;
+  // fiber-swapping the root owner would leave a transient empty root slot.
   assert.deepEqual(
     extractDshClientBootGraph(graphHtml([hmr, shell]), "http://127.0.0.1:43123")
       .entries.map((entry) => entry.id),
     ["@amiba/dsh-plugin-ui-shell"],
   );
-  // ... but never out from under an entry that injects it, which would strand
+  // Never remove it from under an entry that injects it, which would strand
   // that entry waiting on a service instead.
   const dependent = { ...shell, inject: ["@deepseek-ai/dsh-client-hmr"] };
   assert.deepEqual(

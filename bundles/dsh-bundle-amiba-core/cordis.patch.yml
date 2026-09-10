@@ -13,6 +13,13 @@
     - id: amiba-capability-catalog
       name: "@amiba/dsh-plugin-catalog"
       config:
+        shippedBundles:
+          - "@deepseek-ai/dsh-base"
+          - "@deepseek-ai/dsh-headless"
+          - "@deepseek-ai/dsh-web-app"
+          - "@amiba/dsh-bundle-amiba-core"
+          - "@amiba/dsh-bundle-amiba-web"
+          - "@amiba/dsh-bundle-amiba-desktop"
         apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
 
     - id: amiba-browser-core
@@ -35,6 +42,14 @@
       config:
         root: !!js dshHomePath('amiba-tool-activity')
 
+    - id: amiba-media
+      name: "@amiba/dsh-plugin-media"
+      config:
+        root: !!js dshHomePath('amiba-media')
+
+    - id: llm-tokendance
+      name: "@amiba/dsh-plugin-provider-tokendance"
+
     - id: amiba-model-plane
       name: "@amiba/dsh-plugin-model-plane"
       config:
@@ -43,11 +58,8 @@
     - id: amiba-memory
       name: "@amiba/dsh-plugin-memory"
       config:
-        root: !!js dshHomePath('amiba-memory')
-        apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
-        memoryCharLimit: 24000
-        userCharLimit: 12000
-        entryCharLimit: 2000
+        memosRoot: !!js dshHomePath('amiba-memos')
+        viewerPort: !!js Number(process.env.AMIBA_MEMOS_VIEWER_PORT || 18801)
 
     - id: amiba-attachments
       name: "@amiba/dsh-plugin-attachments"
@@ -69,12 +81,14 @@
       name: "@amiba/dsh-plugin-connector-core"
       config:
         root: !!js dshHomePath('amiba-connectors')
-        agentPresetsRoot: !!js dshHomePath('.agent-presets')
         cliRoot: !!js dshHomePath('amiba-cli')
         skillsRoot: !!js dshHomePath('skills')
 
     - id: amiba-connector-lark
       name: "@amiba/dsh-plugin-connector-lark"
+
+    - id: amiba-resources
+      name: "@amiba/dsh-plugin-resources"
 
     - id: amiba-connector-dingtalk
       name: "@amiba/dsh-plugin-connector-dingtalk"
@@ -89,11 +103,19 @@
       config:
         root: !!js dshHomePath('amiba-cron')
 
+    - id: amiba-session-features
+      name: "@amiba/dsh-plugin-session-features"
+
     - id: amiba-steward
       name: "@amiba/dsh-plugin-steward"
       config:
         root: !!js dshHomePath('amiba-steward')
-        agentPresetsRoot: !!js dshHomePath('.agent-presets')
+
+    - id: amiba-session-storage
+      name: "@amiba/dsh-plugin-session-storage"
+
+    - id: amiba-background-jobs
+      name: "@amiba/dsh-plugin-background-jobs"
 
     - id: amiba-pin
       name: "@amiba/dsh-plugin-pin"
@@ -108,3 +130,6 @@
 
     - id: schedule
       name: "@deepseek-ai/dsh-schedule"
+
+    - id: amiba-media-minimax
+      name: "@amiba/dsh-plugin-media-minimax"

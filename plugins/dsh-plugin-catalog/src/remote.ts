@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { ToolSourceDescriptor } from "./provenance.js";
 
 export interface ToolSchemaView {
+  id?: string;
   name: string;
   description?: string;
   parameters: unknown;
@@ -18,6 +19,7 @@ export interface ToolInventory {
 }
 
 const sourceSchema = z.object({
+  distribution: z.enum(["builtin", "user"]),
   kind: z.enum(["dsh-core", "dsh-plugin", "mcp-server"]),
   id: z.string(),
   name: z.string(),
@@ -30,11 +32,16 @@ const sourceSchema = z.object({
   ]),
   dynamic: z.boolean(),
   provider: z.string().optional(),
+  displayName: z.string().optional(),
+  serviceId: z.string().optional(),
+  serviceName: z.string().optional(),
+  declaredBy: z.string().optional(),
 });
 
 const inventorySchema = z.object({
   tools: z.array(
     z.object({
+      id: z.string().optional(),
       name: z.string(),
       description: z.string().optional(),
       parameters: z.unknown(),

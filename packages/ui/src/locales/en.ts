@@ -42,6 +42,7 @@ export const en = {
   "common.loading": "Loading…",
   "common.saving": "Saving…",
   "common.copy": "Copy",
+  "common.copied": "Copied",
   "common.retry": "Retry",
   "common.untitled": "Untitled",
 
@@ -238,6 +239,7 @@ export const en = {
   "composer.notice.hideDetails": "Hide",
   "composer.mention.typeToSearch": "Type a keyword to search",
   "composer.mention.noResults": "No results",
+  "composer.mention.unavailable": "Source unavailable. Check connection and permissions.",
 
   "newtab.dropOverlay": "Drop files to attach",
   // Preference page
@@ -265,17 +267,19 @@ export const en = {
   "options.preference.theme.auto": "Auto",
   "options.preference.theme.light": "Light",
   "options.preference.theme.dark": "Dark",
+  "options.preference.timeFormat": "Time format",
+  "options.preference.timeFormat.12h": "12-hour",
+  "options.preference.timeFormat.24h": "24-hour",
   "options.preference.accent": "Accent",
   "options.preference.accent.violet": "Electric Violet",
   "options.preference.accent.coral": "Vivid Coral",
   "options.preference.accent.cyan": "Electric Cyan",
   "options.preference.accent.lime": "Acid Lime",
   "options.preference.accent.graphite": "Graphite",
-  // No `options.preference.language*` keys: the 语言 row is the official
-  // locale plugin's own, registered into `settings.general.item` and
-  // localized from its `settings.locale` namespace. Amiba's competing row
-  // was retired when the official locale service became the single language
-  // authority.
+  // No `options.preference.language*` keys: the language cell is localized
+  // from the official locale plugin's `settings.locale` namespace. UI Shell
+  // shadows only its pixels with @amiba/ui; the retired product preference
+  // stays gone and the official locale service remains the single authority.
   "options.preference.newtab.wallpaper.label": "Daily wallpaper",
 
   // Models / DSH model config
@@ -424,6 +428,8 @@ export const en = {
   "sidepanel.queue.delete": "Delete",
   "sidepanel.queue.editing": "This message is being edited in the composer",
   "sidepanel.message.branch": "Branch from here",
+  "sidepanel.message.expand": "Show full message",
+  "sidepanel.message.collapse": "Collapse message",
   "sidepanel.message.notPersisted":
     "This message is still being saved. Try again in a moment.",
   "sidepanel.message.restoreWorkspace": "Restore files to here",

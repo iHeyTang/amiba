@@ -123,6 +123,26 @@ describe("WorkspacePane responsive behavior", () => {
     });
   });
 
+  it("opens plugin panels in the workbench and restores each session's selection", async () => {
+    const capability = { files: {} } as WorkspaceInspectorCapability;
+    function TestPane({ sessionId }: { sessionId: string }) {
+      return <WorkspacePaneProvider sessionId={sessionId} capability={capability}>
+        <Probe />
+        <WorkspacePane renderPanel={owner => owner.placement === "tab"
+          ? <button role="tab" aria-selected={owner.activePanel === "example"} onClick={() => owner.openPanel("example")}>Plugin panel</button>
+          : <div>Plugin content: {owner.activePanel}</div>}/>
+      </WorkspacePaneProvider>;
+    }
+    const view = render(<TestPane sessionId="plugin-session-one"/>);
+    fireEvent.click(screen.getByText("Plugin panel"));
+    expect(screen.getByText("Plugin content: example")).toBeInTheDocument();
+    expect(screen.getByRole("button", {name:"toggle workspace"})).toHaveAttribute("aria-pressed", "true");
+    view.rerender(<TestPane sessionId="plugin-session-two"/>);
+    expect(screen.queryByText("Plugin content: example")).toBeNull();
+    view.rerender(<TestPane sessionId="plugin-session-one"/>);
+    expect(screen.getByText("Plugin content: example")).toBeInTheDocument();
+  });
+
   it("allows the workbench to remain open when the viewport is compact", async () => {
     const capability = {
       files: {},

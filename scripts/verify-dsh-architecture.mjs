@@ -86,13 +86,20 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-connector-lark",
       "@amiba/dsh-plugin-cron",
       "@amiba/dsh-plugin-mcp-manager",
+      "@amiba/dsh-plugin-media",
+      "@amiba/dsh-plugin-media-minimax",
       "@amiba/dsh-plugin-memory",
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",
       "@amiba/dsh-plugin-notification-hub",
       "@amiba/dsh-plugin-pin",
+      "@amiba/dsh-plugin-provider-tokendance",
+      "@amiba/dsh-plugin-resources",
       "@amiba/dsh-plugin-schedule-adapter",
       "@amiba/dsh-plugin-skills",
+      "@amiba/dsh-plugin-session-features",
+      "@amiba/dsh-plugin-session-storage",
+      "@amiba/dsh-plugin-background-jobs",
       "@amiba/dsh-plugin-steward",
       "@amiba/dsh-plugin-usage",
     ],
@@ -102,7 +109,8 @@ const bundleSpecs = [
     name: "@amiba/dsh-bundle-amiba-web",
     plugins: [
       "@amiba/dsh-plugin-agent-preset",
-      "@amiba/dsh-plugin-messaging-channel-webhook",
+      "@amiba/dsh-plugin-connector-webhook",
+      "@amiba/dsh-plugin-markdown",
       "@amiba/dsh-plugin-runtime-inventory",
       "@amiba/dsh-plugin-ui-shell",
     ],
@@ -183,7 +191,14 @@ for (const packageName of pluginPackages) {
         Math.max(0, (match.index ?? 0) - 200),
         match.index,
       );
-      if (!beforeRegistration.includes("ctx.effect(")) {
+      // Connection-scoped HTTP listeners are owned by ConnectorRuntime.stop,
+      // whose provider registration is itself bound to Cordis. They must not
+      // outlive an account merely because the plugin is still loaded.
+      const connectorOwned = project === "plugins/dsh-plugin-connector-webhook"
+        && /ctx\.effect\(\(\)\s*=>\s*ctx\.amibaConnectors\.registerProvider\(/u.test(body)
+        && /async stop\(\)\s*\{\s*dispose\(\);?\s*\}/u.test(body)
+        && body.includes("const dispose = server.register(");
+      if (!beforeRegistration.includes("ctx.effect(") && !connectorOwned) {
         fail(
           `HTTP registration is not bound to a Cordis effect in ${path.relative(root, file)}`,
         );
@@ -239,7 +254,7 @@ const corePatch = patches[0];
 for (const desktopOrWebOnly of [
   "@amiba/dsh-plugin-browser-provider-electron",
   "@amiba/dsh-plugin-runtime-gateway",
-  "@amiba/dsh-plugin-messaging-channel-webhook",
+  "@amiba/dsh-plugin-connector-webhook",
   "@amiba/dsh-plugin-runtime-inventory",
   "@amiba/dsh-plugin-ui-shell",
   "@amiba/dsh-plugin-agent-preset",
@@ -286,7 +301,7 @@ before(
 );
 before(
   "@amiba/dsh-plugin-messaging-core",
-  "@amiba/dsh-plugin-messaging-channel-webhook",
+  "@amiba/dsh-plugin-connector-webhook",
 );
 // The notification hub composes before its posters (schedule-adapter) and
 // before its desktop delivery sink (runtime-gateway).
@@ -306,10 +321,10 @@ before(
 const uiShellManifest = await json("plugins/dsh-plugin-ui-shell/package.json");
 if (
   JSON.stringify(uiShellManifest.dsh?.client?.inject) !==
-  JSON.stringify(["@deepseek-ai/dsh-client-runtime"])
+  JSON.stringify(["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes"])
 ) {
   fail(
-    "UI shell client graph must depend only on the official DSH client runtime",
+    "UI shell client graph must declare the official runtime and remote API services used by its Markdown bridge",
   );
 }
 const uiShellClient = await text(
@@ -576,16 +591,27 @@ const settingsDialog = code(
   await text("packages/ui/src/settings/SettingsDialog.tsx"),
 );
 for (const [pattern, what] of [
-  [/role="dialog"/u, 'carry role="dialog"'],
-  [/aria-modal="true"/u, "be modal"],
-  [/aria-labelledby=\{titleId\}/u, "name itself from the navigation heading"],
-  [/if\s*\(!open\)\s*return\s*null;/u, "render nothing at all while closed"],
+  [/role=\{open \? "dialog" : undefined\}/u, 'carry role="dialog" while open'],
+  [/aria-modal=\{open \? "true" : undefined\}/u, "be modal while open"],
   [
-    /event\.key === "Escape"/u,
-    "close on Escape (the official shell's document-level listener)",
+    /aria-labelledby=\{open \? titleId : undefined\}/u,
+    "name itself from the navigation heading",
   ],
   [
-    /aria-hidden="true"[\s\S]{0,200}?onClick=\{onClose\}/u,
+    /DIALOG_OVERLAY_MOTION_CLASS/u,
+    "consume the shared Dialog overlay motion contract",
+  ],
+  [
+    /DIALOG_CONTENT_MOTION_CLASS/u,
+    "consume the shared Dialog content motion contract",
+  ],
+  [
+    /setTimeout\(\(\)\s*=>\s*setPresent\(false\),\s*DIALOG_MOTION_MS\)/u,
+    "retain the surface for the shared exit-motion duration",
+  ],
+  [/event\.key (?:===|!==) "Escape"/u, "close on Escape"],
+  [
+    /aria-hidden="true"[\s\S]{0,300}?onClick=\{\(\)\s*=>\s*\{[\s\S]{0,80}?onClose\(\)/u,
     "close on an outside (mask) click",
   ],
   [/restoreTo\.focus\(\)/u, "return focus to the element that opened it"],
@@ -747,36 +773,12 @@ for (const [pattern, what] of [
     );
   }
 }
-// The mapping is the ONLY producer of a setLocale argument, and no member of
-// Amiba's own language axis may be spelled next to that call.
+// Keep the official namespace type contract; the locale bridge only mirrors
+// the active language and performs no preference migration.
 const localeBridge = code(
   await text("plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts"),
 );
 for (const [pattern, what] of [
-  [
-    /const target = toOfficialLocaleId\(preference\);/u,
-    "derive the official id through the mapping rather than passing Amiba's own tag",
-  ],
-  [
-    /locale\.setLocale\(target\);/u,
-    "hand setLocale that derived id and nothing else",
-  ],
-  [
-    /if \(snapshot\.status !== "ready"\) return;/u,
-    "treat a `loading` section as UNKNOWN, not as `never chosen`",
-  ],
-  [
-    /if \(!snapshot\.writable\) \{/u,
-    "refuse to migrate into a section it cannot persist to (memory mode would flip the user once and lose the choice)",
-  ],
-  [
-    /if \(snapshot\.value\?\.preference !== undefined\) \{/u,
-    "treat an ABSENT durable preference as the one and only `never chosen` signal",
-  ],
-  [
-    /if \(preference === "auto"\) return;/u,
-    "skip `auto` — it already maps onto the official never-chosen state",
-  ],
   [
     /const LOCALE_SETTINGS_NAMESPACE: typeof UpstreamLocaleNamespace = "locale";/u,
     "read the OFFICIAL locale settings namespace, annotated with upstream's own const type",
@@ -999,7 +1001,7 @@ for (const scanRoot of ["packages", "plugins", "apps"]) {
 // The shell must still render real strings in a composition with no locale
 // service at all: the compile-time catalogs go in unconditionally, and the
 // official registration is guarded by `locale` ALONE (not by the
-// settingsScope-bearing fiber that owns the authority and the migration).
+// fiber that owns the language authority).
 const shellClient = code(
   await text("plugins/dsh-plugin-ui-shell/src/client/index.tsx"),
 );
@@ -1187,8 +1189,8 @@ for (const [dispatch, what] of [
     "key that dispatch by the WIRE TOOL NAME (entryKey)",
   ],
   [
-    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?fallback:\s*request\.fallback/u,
-    "pass Amiba's own tool row as the dispatch fallback",
+    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?fallback:\s*renderOfficialToolFallback\(request\.owner,\s*request\.fallback\)/u,
+    "pass the official semantic fallback with Amiba's own tool row as its fallback",
   ],
   [
     /renderSlot\(\s*"amiba\.conversation\.question",\s*request\.owner,\s*\{\s*entryKey:\s*request\.owner\.request\.questions\[0\]\?\.id \?\? "",\s*fallback:\s*request\.fallback,?\s*\}\s*\)/u,
@@ -1208,6 +1210,7 @@ for (const [dispatch, what] of [
 // rather than the word being banned outright, and a `kind: "keyed"` not
 // attached to a named child declaration still fails.
 const KEYED_CHILD_DECLARATIONS = new Set([
+  "amiba.conversation.notice",
   "tool.call.toolview",
   "amiba.conversation.question",
 ]);
@@ -1472,9 +1475,8 @@ for (const required of [
   '"settings.section"',
   "id: SECTION_ID",
   "label: () => labels().nav",
-  // Trailing comma on purpose: the inject face also carries the section's
-  // navIcon thunk (the ui-shell navIcon convention, c8f14b9).
-  "inject: () => ({ listMemory, listPresets,",
+  "inject: () => ({ navIcon:",
+  "MemosPanel getStatus={getStatus}",
 ]) {
   if (!memoryClient.includes(required)) {
     fail(`memory Client plugin is missing ${required}`);
@@ -1488,6 +1490,16 @@ if (memoryClient.includes("settings.navigation")) {
 const memoryHost = await text(
   "plugins/dsh-plugin-memory/src/remote-service.ts",
 );
+if (memoryManifest.exports?.["./memory-store"]) {
+  fail("memory must not export the retired memory store");
+}
+for (const file of await sourceFiles("plugins/dsh-plugin-memory/src")) {
+  if (/\.test\.tsx?$/u.test(file)) continue;
+  const body = await readFile(file, "utf8");
+  if (/AmibaMemoryStore|memory-store|Legacy memory|旧版记忆|旧版归档|api\/amiba\/memory/u.test(body)) {
+    fail("memory must use MemOS only, with no archive implementation or compatibility API");
+  }
+}
 if (
   !memoryHost.includes("TypertRemoteService") ||
   !memoryHost.includes("@Remote")
@@ -1510,40 +1522,15 @@ for (const file of await sourceFiles("plugins/dsh-plugin-messaging-core/src")) {
 const messagingManifest = await json(
   "plugins/dsh-plugin-messaging-core/package.json",
 );
-if (
-  JSON.stringify(messagingManifest.dsh?.client?.inject) !==
-  JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
-    "@deepseek-ai/dsh-api-remotes",
-    "@amiba/dsh-plugin-ui-shell",
-  ])
-) {
-  fail(
-    "messaging-core Client plugin must depend on DSH Remote and the slot owner",
-  );
+if (messagingManifest.dsh?.client || messagingManifest.exports?.["./client"]) {
+  fail("messaging-core must remain headless: no client entry or settings registration");
 }
-const messagingClient = await text(
-  "plugins/dsh-plugin-messaging-core/src/client/index.tsx",
-);
-for (const required of [
-  "ctx.remote.$mount(AMIBA_MESSAGING_REMOTE)",
-  '"remote.amibaMessaging"',
-  '"settings.section"',
-  "id: SECTION_ID",
-  "DshSettingsMessaging",
-]) {
-  if (!messagingClient.includes(required)) {
-    fail(`messaging-core Client plugin is missing ${required}`);
+for (const group of ["dependencies", "peerDependencies", "devDependencies"]) {
+  for (const dependency of Object.keys(messagingManifest[group] ?? {})) {
+    if (/react|ui-shell|@amiba\/ui|dsh-client|api-remotes|typert/u.test(dependency)) {
+      fail(`messaging-core must not depend on UI or management Remote: ${dependency}`);
+    }
   }
-}
-const messagingHost = await text(
-  "plugins/dsh-plugin-messaging-core/src/remote-service.ts",
-);
-if (
-  !messagingHost.includes("TypertRemoteService") ||
-  !messagingHost.includes("@Remote")
-) {
-  fail("messaging-core Host plugin must expose management through DSH Typert");
 }
 const connectorManifest = await json(
   "plugins/dsh-plugin-connector-core/package.json",
@@ -1677,13 +1664,13 @@ if (!slotsGuard.includes('"@deepseek-ai/dsh-client-ui-layout/client"')) {
   );
 }
 const webhookManifest = await json(
-  "plugins/dsh-plugin-messaging-channel-webhook/package.json",
+  "plugins/dsh-plugin-connector-webhook/package.json",
 );
 if (
-  webhookManifest.dependencies?.["@amiba/dsh-plugin-messaging-core"] !==
+  webhookManifest.dependencies?.["@amiba/dsh-plugin-connector-core"] !==
   "workspace:*"
 ) {
-  fail("webhook channel must declare its messaging-core project dependency");
+  fail("webhook must register through connector-core, not directly through messaging-core");
 }
 
 const catalogManifest = await json("plugins/dsh-plugin-catalog/package.json");
@@ -1696,14 +1683,10 @@ const catalogClient = await text(
 for (const required of [
   "ctx.remote.$mount(AMIBA_TOOLS_REMOTE)",
   '"settings.section"',
-  '"amiba.tools.panel"',
-  "PropsRenderSlots",
-  "children: {",
-  'renderSlot("amiba.tools.panel"',
 ]) {
   if (!catalogClient.includes(required)) {
     fail(
-      `catalog Client plugin is missing Tools child-slot contract ${required}`,
+      `catalog Client plugin is missing Tools inventory contract ${required}`,
     );
   }
 }
@@ -1799,7 +1782,7 @@ const agentPresetPage = await text(
 // renderSlot-backed render prop, scoped per preset via the owner argument —
 // no DOM slot markers.
 for (const required of [
-  "renderPresetSection?.(section, { profileId: profile.name })",
+  "renderPresetSection?.(section, { profileId: profile.id })",
 ]) {
   if (!agentPresetPage.includes(required)) {
     fail(`Agent-preset detail page is missing renderSlot dispatch ${required}`);
@@ -1818,10 +1801,9 @@ if (
     "@deepseek-ai/dsh-client-runtime",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
-    "@amiba/dsh-plugin-catalog",
   ])
 ) {
-  fail("MCP Client plugin must declare the Tools owner as a client dependency");
+  fail("MCP Client plugin must declare its settings shell dependency");
 }
 const mcpClient = await text(
   "plugins/dsh-plugin-mcp-manager/src/client/index.tsx",
@@ -1829,13 +1811,16 @@ const mcpClient = await text(
 for (const required of [
   "ctx.remote.$mount(AMIBA_MCP_REMOTE)",
   '"remote.amibaMcp"',
-  'slots.inject("amiba.tools.panel"',
-  'name: "amiba.tools.panel"',
+  'slots.inject("settings.section"',
+  'name: "settings.section"',
   "DshMcpToolsTab",
 ]) {
   if (!mcpClient.includes(required)) {
-    fail(`MCP Client plugin is missing child contribution ${required}`);
+    fail(`MCP Client plugin is missing settings contribution ${required}`);
   }
+}
+if (catalogClient.includes("amiba.tools.panel") || mcpClient.includes("amiba.tools.panel")) {
+  fail("Tools must remain an inventory; MCP management belongs in its own settings section");
 }
 const mcpHost = await text("plugins/dsh-plugin-mcp-manager/src/manager.ts");
 if (
@@ -1929,21 +1914,13 @@ if (
 const modelPlaneHost = await text(
   "plugins/dsh-plugin-model-plane/src/index.ts",
 );
-const modelPlaneProjection = await text(
-  "plugins/dsh-plugin-model-plane/src/projection.ts",
-);
-const modelPlaneRemote = await text(
-  "plugins/dsh-plugin-model-plane/src/remote-service.ts",
-);
-if (
-  !modelPlaneHost.includes("new ModelPlaneService") ||
-  !modelPlaneProjection.includes("ctx.credentials") ||
-  !modelPlaneProjection.includes("ctx.settings.mutate") ||
-  !modelPlaneRemote.includes('super(ctx, "amibaModelPlane")')
-) {
-  fail(
-    "Model Plane plugin must persist the canonical plane and project it through official DSH settings/credentials seams",
-  );
+const modelUiNative = await text("plugins/dsh-plugin-model-plane/src/client/native-settings.ts");
+if (modelPlaneHost.includes("applyModelPlaneRemote") ||
+    !modelUiNative.includes("this.api.llm.providers") ||
+    !modelUiNative.includes("this.api.llm.models") ||
+    !modelUiNative.includes("this.api.settings.mutate") ||
+    !modelUiNative.includes("this.api.credentials")) {
+  fail("Model UI must directly consume native DSH APIs without an Amiba provider RPC");
 }
 const fullScreenChat = await text(
   "packages/ui/src/chat/FullScreenChatView.tsx",
@@ -2238,7 +2215,7 @@ const dshPlatformAdapters = await text(
   "packages/app-runtime/src/dsh-client/platform-adapters.ts",
 );
 // Domain remotes (amibaMemory/amibaSkills/amibaTools/amibaSchedules/
-// amibaMessaging/amibaMcp/amibaUsage/amibaModelPlane) are intentionally
+// amibaConnectors/amibaMcp/amibaUsage/amibaModelPlane) are intentionally
 // absent here: the pluginization-convergence migration made those domains
 // fully plugin-owned (their Client plugins mount `ctx.remote` directly),
 // retiring the host platform-adapter hop. Only mechanism-level surfaces

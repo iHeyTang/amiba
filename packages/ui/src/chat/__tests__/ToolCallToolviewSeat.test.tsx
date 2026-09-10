@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@amiba/i18n", () => ({
@@ -8,6 +8,8 @@ vi.mock("@amiba/i18n", () => ({
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 
+import { ToolRowFrame } from "../bubble/tool-row-frame";
+import { Wrench } from "lucide-react";
 import { MessageTurns } from "../bubble/Bubble";
 import {
   ToolCallSeatProvider,
@@ -210,4 +212,34 @@ describe("tool.call.toolview seat", () => {
     expect(dispatch).not.toHaveBeenCalled();
     expect(container.innerHTML).toContain("sidepanel.trace.actions.useTool");
   });
+});
+
+it("uses the plugin's semantic row in the live summary without nested controls", () => {
+  const messages = structuredClone(MESSAGES) as UiMessage[];
+  messages[1]!.streaming = true;
+  messages[1]!.content = "";
+  const active = messages[1]!.toolProgress![1]!;
+  active.status = "running";
+  delete active.wire!.result;
+  const renderer: ToolCallSeatRenderer = ({owner}) => <ToolRowFrame presentation={owner.presentation} icon={Wrench} action="插件动作" target="项目文件" detail={<p>调用详情</p>} onOpen={() => {}} />;
+  const {container} = render(<ToolCallSeatProvider render={renderer}><MessageTurns messages={messages}/></ToolCallSeatProvider>);
+  const summary = container.querySelector("[data-execution-summary] > button")!;
+  expect(summary).toHaveTextContent("插件动作");
+  expect(summary).toHaveTextContent("项目文件");
+  expect(summary.querySelector("button")).toBeNull();
+  expect(summary).not.toHaveTextContent("sidepanel.trace.actions.useTool");
+  fireEvent.click(summary);
+  expect(screen.getAllByText("插件动作")).toHaveLength(3);
+});
+
+it("reveals a tool inside a folded execution group without reopening it after a user collapse",async()=>{
+ const {createToolNavigation}=await import("../bubble/tool-navigation");
+ const navigation=createToolNavigation();
+ const {container}=render(<ToolCallSeatProvider navigation={navigation}><MessageTurns messages={structuredClone(MESSAGES) as UiMessage[]}/></ToolCallSeatProvider>);
+ const toggle=container.querySelector("[data-execution-summary] > button")!;
+ expect(toggle).toHaveAttribute("aria-expanded","false");
+ await act(async()=>navigation.reveal("call-bash"));
+ expect(toggle).toHaveAttribute("aria-expanded","true");
+ fireEvent.click(toggle);
+ expect(toggle).toHaveAttribute("aria-expanded","false");
 });

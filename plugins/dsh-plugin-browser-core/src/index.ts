@@ -155,6 +155,7 @@ const TOOLS: readonly BrowserTool[] = [
 
 const SOURCE: ToolSourceDescriptor = {
   kind: "dsh-plugin",
+  distribution: "builtin",
   id: "amiba-browser-core",
   name: "Amiba Browser",
   packageName: "@amiba/dsh-plugin-browser-core",

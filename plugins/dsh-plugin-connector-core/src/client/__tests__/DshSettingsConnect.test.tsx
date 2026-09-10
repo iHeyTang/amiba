@@ -3,15 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DshSettingsConnect } from "../DshSettingsConnect";
-import { createConnectWizardRegistry } from "../wizard-registry";
-import type { ConnectWizardHost, PresetOption } from "../wizard-registry";
+import { createConnectorUIRegistry } from "../connector-ui-registry";
+import type { ConnectWizardHost, PresetOption } from "../connector-ui-registry";
 import type { ConnectorProviderView, ConnectView } from "../../types";
 
 // Task 4: `DshSettingsConnect` now takes the wizard registry and a preset
 // loader instead of building its own add-connect dialog. A fresh, empty
 // registry is enough for the list/enable/remove/owners/empty tests below —
 // none of them drive the add flow into a provider wizard body.
-const registry = createConnectWizardRegistry();
+const registry = createConnectorUIRegistry();
 const loadPresets = async () => [
   { id: "restricted", label: "Restricted", isDefault: true },
 ];
@@ -22,7 +22,8 @@ const create = vi.fn();
 const setEnabled = vi.fn();
 const remove = vi.fn();
 const setOwners = vi.fn();
-const setApproval = vi.fn();
+const details = vi.fn();
+const update = vi.fn();
 // `ConnectAdapter` (Task 2) gained the onboarding trio; Task 4 is where
 // `DshSettingsConnect` starts calling them (scan mode in the add-connect
 // dialog) — see the "scan mode" describe block below.
@@ -37,7 +38,8 @@ const adapter = {
   setEnabled,
   remove,
   setOwners,
-  setApproval,
+  details,
+  update,
   beginOnboarding,
   pollOnboarding,
   cancelOnboarding,
@@ -67,7 +69,6 @@ const connects: ConnectView[] = [
     pairing: false,
     owners: ["u1", "u2"],
     agentPreset: "restricted",
-    channelId: "channel-1",
     status: { state: "ready" },
     createdAt: "2026-08-15T00:00:00.000Z",
     updatedAt: "2026-08-15T00:00:00.000Z",
@@ -119,10 +120,20 @@ describe("DshSettingsConnect", () => {
     vi.clearAllMocks();
     listProviders.mockResolvedValue(providers);
     list.mockResolvedValue(connects);
+    details.mockImplementation(async (id: string) => ({
+      connect: connects.find((item) => item.id === id),
+      settings: {},
+    }));
   });
 
   it("lists connects with provider name, status badges, and owner counts", async () => {
-    const { container } = render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
+    const { container } = render(
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={registry}
+      />,
+    );
 
     expect(await screen.findByText("Sales bot")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
@@ -135,14 +146,12 @@ describe("DshSettingsConnect", () => {
     // connect-4: a degraded status (e.g. the mcp soft-skip) renders its own
     // badge variant with the detail text, distinct from both ready and error.
     expect(screen.getByText("Degraded: mcp_manager_unavailable")).toBeVisible();
-    expect(screen.getAllByText("Lark")).toHaveLength(3);
-    expect(screen.getByText("Webhook")).toBeVisible();
+    expect(screen.getAllByText("Lark")).toHaveLength(4);
+    expect(screen.getAllByText("Webhook")).toHaveLength(2);
+    expect(screen.getByText(/3 accounts/)).toBeVisible();
     expect(
-      screen.getByRole("button", { name: /2 owners/ }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: /0 owners/ }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: /owners/ }),
+    ).not.toBeInTheDocument();
 
     // Layout rule: no PaneHeaderBar/Scaffold — root is a plain flex column
     // wrapping ScrollArea, per the brief's bullet 6.
@@ -153,137 +162,193 @@ describe("DshSettingsConnect", () => {
       "flex-1",
       "flex-col",
     );
+
+    // Visual hierarchy is carried by spacing and hover surfaces. Connector
+    // entries and account rows must not regress to nested outlined cards or
+    // permanent text-heavy action bars.
+    const directoryCard = container.querySelector(
+      '[data-connector-provider="lark"]',
+    );
+    expect(directoryCard).toHaveClass("bg-transparent");
+    expect(directoryCard).not.toHaveClass("border");
+    expect(directoryCard).not.toHaveClass("shadow-sm");
+    const accountRow = screen.getByText("Sales bot").closest("button");
+    expect(accountRow).not.toHaveClass("border");
+    expect(
+      within(accountRow!).queryByRole("button", { name: "Turn off" }),
+    ).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("text-[10px]");
+    expect(container.innerHTML).not.toContain("text-[11px]");
   });
 
-  it("shows the empty state and a disabled add button with a hint when no providers are installed", async () => {
+  it("shows directory and account empty states when no providers are installed", async () => {
     listProviders.mockResolvedValue([]);
     list.mockResolvedValue([]);
-    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={registry}
+      />,
+    );
 
-    expect(await screen.findByText("No connects yet")).toBeVisible();
+    expect(
+      await screen.findByText("No connector plugins installed"),
+    ).toBeVisible();
     expect(
       screen.getByText(
-        "Install a platform plugin (for example Lark) to add a connect.",
+        "Install a connector plugin and it will appear here automatically.",
       ),
     ).toBeVisible();
-    // Two "Add connect" buttons render here: the header button and the
-    // empty state's own CTA — both must be disabled when there are no
-    // providers.
-    const addButtons = screen.getAllByRole("button", { name: /Add connect/ });
-    expect(addButtons).toHaveLength(2);
-    for (const button of addButtons) {
-      expect(button).toBeDisabled();
-    }
+    expect(screen.getByText("No connected accounts yet")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Add .* account/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows the empty state with an enabled, reachable add flow when providers exist but there are no connects yet", async () => {
+  it("shows all providers on the page and opens a provider wizard directly", async () => {
     const user = userEvent.setup();
+    const directoryRegistry = createConnectorUIRegistry();
+    directoryRegistry.register("lark", {
+      component: () => <div>lark body</div>,
+    });
     listProviders.mockResolvedValue(providers);
     list.mockResolvedValue([]);
-    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={directoryRegistry}
+      />,
+    );
 
-    expect(await screen.findByText("No connects yet")).toBeVisible();
+    expect(await screen.findByText("No connected accounts yet")).toBeVisible();
     expect(
-      screen.queryByText(
-        "Install a platform plugin (for example Lark) to add a connect.",
-      ),
-    ).not.toBeInTheDocument();
-    // Two "Add connect" buttons render here: the header button and the
-    // empty state's own CTA — both must be enabled and reach the same
-    // wizard modal.
-    const addButtons = screen.getAllByRole("button", { name: /Add connect/ });
-    expect(addButtons).toHaveLength(2);
-    for (const button of addButtons) {
-      expect(button).toBeEnabled();
-    }
-
-    await user.click(addButtons[1]!);
+      screen.getByRole("button", { name: "Add Lark account" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Add Webhook account" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Add Lark account" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("lark body")).toBeInTheDocument();
   });
 
-  it("toggles enabled state through adapter.setEnabled and refreshes", async () => {
+  it("opens a provider detail page while keeping add-account as a direct action", async () => {
     const user = userEvent.setup();
-    setEnabled.mockResolvedValue(connectView({ enabled: false }));
-    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
+    const detailRegistry = createConnectorUIRegistry();
+    detailRegistry.register("lark", {
+      component: () => <div>lark wizard</div>,
+      details: () => <p>Lark provider overview</p>,
+      tagline: "Connect a Feishu bot",
+    });
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={detailRegistry}
+      />,
+    );
 
     await screen.findByText("Sales bot");
-    const row = screen.getByText("Sales bot").closest("article")!;
-    await user.click(within(row).getByRole("button", { name: "Turn off" }));
-
-    expect(setEnabled).toHaveBeenCalledWith("connect-1", false);
-    expect(list).toHaveBeenCalledTimes(2);
-  });
-
-  it("removes a connect only after confirming", async () => {
-    const user = userEvent.setup();
-    remove.mockResolvedValue({ id: "connect-1", deleted: true });
-    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
-
-    await screen.findByText("Sales bot");
-    const row = screen.getByText("Sales bot").closest("article")!;
-    await user.click(within(row).getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "View Lark details" }));
 
     expect(
-      within(row).getByText("Remove this connect? This cannot be undone."),
+      screen.getByRole("heading", { level: 1, name: "Lark" }),
     ).toBeVisible();
-    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByText("Lark provider overview")).toBeVisible();
+    expect(screen.getByText("3 connected")).toBeVisible();
+    expect(screen.getByText("Sales bot")).toBeVisible();
+    expect(screen.queryByPlaceholderText("Search connectors")).toBeNull();
 
+    await user.click(screen.getByRole("button", { name: "Connectors" }));
+    expect(screen.getByPlaceholderText("Search connectors")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "View Lark details" }));
     await user.click(
-      within(row).getByRole("button", { name: "Confirm removal" }),
+      screen.getByRole("button", { name: "Add another Lark account" }),
     );
-
-    expect(remove).toHaveBeenCalledWith("connect-1");
-    expect(list).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("lark wizard")).toBeInTheDocument();
   });
 
-  it("adds and removes an owner through the row's owners editor", async () => {
+  it("searches the connector directory and filters by connection state", async () => {
     const user = userEvent.setup();
-    setOwners.mockResolvedValue(connectView({ owners: ["u1", "u2", "u3"] }));
-    render(<DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />);
+    listProviders.mockResolvedValue([
+      ...providers,
+      {
+        id: "slack",
+        name: "Slack",
+        description: "Team messaging connector",
+        supportsOnboarding: false,
+      },
+    ]);
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={registry}
+      />,
+    );
 
-    await screen.findByText("Sales bot");
-    const row = screen.getByText("Sales bot").closest("article")!;
-    await user.click(within(row).getByRole("button", { name: /2 owners/ }));
-
+    const search = await screen.findByRole("textbox", {
+      name: "Search connectors",
+    });
+    await user.type(search, "generic json");
     expect(
-      within(row).getByText(
-        "While this connect is pairing, the first sender to message it is automatically added as an owner.",
-      ),
-    ).toBeVisible();
-    expect(within(row).getByText("u1")).toBeVisible();
+      screen.getByRole("button", { name: "Add another Webhook account" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add another Lark account" }),
+    ).not.toBeInTheDocument();
 
-    await user.type(
-      within(row).getByPlaceholderText("Add owner id"),
-      "u3",
-    );
-    await user.click(within(row).getByRole("button", { name: "Add" }));
-    expect(setOwners).toHaveBeenCalledWith("connect-1", ["u1", "u2", "u3"]);
-
-    await user.click(
-      within(row).getByRole("button", { name: "Remove u1" }),
-    );
-    expect(setOwners).toHaveBeenCalledWith("connect-1", ["u2"]);
+    await user.clear(search);
+    await user.click(screen.getByRole("button", { name: "Not connected 1" }));
+    expect(
+      screen.getByRole("button", { name: "Add Slack account" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add another Lark account" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("opens the wizard modal from the add button and shows the registered provider", async () => {
-    const registry = createConnectWizardRegistry();
-    registry.register("lark", { component: () => <div>lark body</div>, icon: <span data-testid="lark-icon" /> });
-    listProviders.mockResolvedValue([{ id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false }]);
-    list.mockResolvedValue([]);
-    const loadPresets = async () => [{ id: "restricted", label: "Restricted", isDefault: true }];
-    render(<DshSettingsConnect adapter={adapter} registry={registry} loadPresets={loadPresets} />);
-    // Two "添加连接" / "Add connect" buttons render once the empty state's
-    // own CTA exists alongside the header add button — click the first one.
-    await userEvent.click((await screen.findAllByText(/添加连接|Add connect/))[0]!);
-    expect(await screen.findByText("飞书 / Lark")).toBeInTheDocument();
+  it("keeps an already-connected provider addable for another account", async () => {
+    const registry = createConnectorUIRegistry();
+    registry.register("lark", {
+      component: () => <div>lark body</div>,
+      icon: <span data-testid="lark-icon" />,
+    });
+    listProviders.mockResolvedValue([
+      { id: "lark", name: "Lark", description: "", supportsOnboarding: false },
+    ]);
+    list.mockResolvedValue(
+      connects.filter((connect) => connect.provider === "lark"),
+    );
+    const loadPresets = async () => [
+      { id: "restricted", label: "Restricted", isDefault: true },
+    ];
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        registry={registry}
+        loadPresets={loadPresets}
+      />,
+    );
+    const addAnother = await screen.findByRole("button", {
+      name: "Add another Lark account",
+    });
+    expect(addAnother).toBeEnabled();
+    expect(screen.getByText("3 accounts")).toBeVisible();
+    await userEvent.click(addAnother);
+    expect(await screen.findByText("lark body")).toBeInTheDocument();
   });
 
-  // The real page loads presets lazily, only once `adding` flips true, so the
+  // The real page loads presets lazily, only once a directory card opens, so the
   // wizard chrome is already mounted (with an empty list) by the time they
   // land. The mounted body must still end up with the default preset —
   // otherwise the very first add fails with `agent_preset_required`.
   it("hands the mounted wizard body the default preset once the lazy preset load resolves", async () => {
-    const registry = createConnectWizardRegistry();
+    const registry = createConnectorUIRegistry();
     const captured: { host?: ConnectWizardHost } = {};
     registry.register("lark", {
       component: ({ host }: { host: ConnectWizardHost }) => {
@@ -292,7 +357,12 @@ describe("DshSettingsConnect", () => {
       },
     });
     listProviders.mockResolvedValue([
-      { id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false },
+      {
+        id: "lark",
+        name: "飞书 / Lark",
+        description: "",
+        supportsOnboarding: false,
+      },
     ]);
     list.mockResolvedValue([]);
     let resolvePresets!: (list: PresetOption[]) => void;
@@ -303,16 +373,23 @@ describe("DshSettingsConnect", () => {
         }),
     );
     render(
-      <DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />,
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={registry}
+      />,
     );
 
-    await userEvent.click((await screen.findAllByText(/添加连接|Add connect/))[0]!);
-    await userEvent.click(await screen.findByText("飞书 / Lark"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add 飞书 / Lark account" }),
+    );
     expect(await screen.findByText("lark body")).toBeInTheDocument();
     expect(captured.host?.presets.map((p) => p.id)).not.toContain("restricted");
 
     await act(async () => {
-      resolvePresets([{ id: "restricted", label: "Restricted", isDefault: true }]);
+      resolvePresets([
+        { id: "restricted", label: "Restricted", isDefault: true },
+      ]);
     });
     expect(captured.host?.presets.map((p) => p.id)).toContain("restricted");
   });
@@ -321,19 +398,34 @@ describe("DshSettingsConnect", () => {
   // this page has mounted, so the rows have to follow the registry rather than
   // snapshot it: until then the row shows the generic `Cable` fallback.
   it("swaps in a provider icon registered after the page mounted", async () => {
-    const registry = createConnectWizardRegistry();
+    const registry = createConnectorUIRegistry();
     listProviders.mockResolvedValue([
-      { id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false },
+      {
+        id: "lark",
+        name: "飞书 / Lark",
+        description: "",
+        supportsOnboarding: false,
+      },
     ]);
     list.mockResolvedValue([
       {
-        id: "c1", provider: "lark", name: "Sales", enabled: true, pairing: false,
-        owners: [], status: { state: "ready" },
-        createdAt: "2026-08-15T00:00:00.000Z", updatedAt: "2026-08-15T00:00:00.000Z",
+        id: "c1",
+        provider: "lark",
+        name: "Sales",
+        enabled: true,
+        pairing: false,
+        owners: [],
+        status: { state: "ready" },
+        createdAt: "2026-08-15T00:00:00.000Z",
+        updatedAt: "2026-08-15T00:00:00.000Z",
       },
     ]);
     const { container } = render(
-      <DshSettingsConnect adapter={adapter} loadPresets={loadPresets} registry={registry} />,
+      <DshSettingsConnect
+        adapter={adapter}
+        loadPresets={loadPresets}
+        registry={registry}
+      />,
     );
 
     await screen.findByText("Sales");
@@ -346,18 +438,47 @@ describe("DshSettingsConnect", () => {
         icon: <span data-testid="late-lark-icon" />,
       });
     });
-    expect(screen.getByTestId("late-lark-icon")).toBeInTheDocument();
+    expect(screen.getAllByTestId("late-lark-icon")).toHaveLength(2);
   });
 
   it("shows the provider's registry icon on a connect row", async () => {
-    const registry = createConnectWizardRegistry();
-    registry.register("lark", { component: () => null, icon: <span data-testid="lark-row-icon" /> });
-    listProviders.mockResolvedValue([{ id: "lark", name: "飞书 / Lark", description: "", supportsOnboarding: false }]);
-    list.mockResolvedValue([{
-      id: "c1", provider: "lark", name: "Sales", enabled: true, pairing: false,
-      owners: [], status: { state: "ready" }, createdAt: "2026-08-15T00:00:00.000Z", updatedAt: "2026-08-15T00:00:00.000Z",
-    }]);
-    render(<DshSettingsConnect adapter={adapter} registry={registry} loadPresets={async () => []} />);
-    expect(await screen.findByTestId("lark-row-icon")).toBeInTheDocument();
+    const registry = createConnectorUIRegistry();
+    registry.register("lark", {
+      component: () => null,
+      icon: <img alt="" data-testid="lark-row-icon" />,
+    });
+    listProviders.mockResolvedValue([
+      {
+        id: "lark",
+        name: "飞书 / Lark",
+        description: "",
+        supportsOnboarding: false,
+      },
+    ]);
+    list.mockResolvedValue([
+      {
+        id: "c1",
+        provider: "lark",
+        name: "Sales",
+        enabled: true,
+        pairing: false,
+        owners: [],
+        status: { state: "ready" },
+        createdAt: "2026-08-15T00:00:00.000Z",
+        updatedAt: "2026-08-15T00:00:00.000Z",
+      },
+    ]);
+    render(
+      <DshSettingsConnect
+        adapter={adapter}
+        registry={registry}
+        loadPresets={async () => []}
+      />,
+    );
+    const row = (await screen.findByText("Sales")).closest("button")!;
+    const logoSlot = within(row).getByTestId("lark-row-icon").parentElement;
+    expect(logoSlot).toHaveAttribute("data-provider-logo", "");
+    expect(logoSlot).toHaveClass("[&>img]:h-full", "[&>img]:w-full");
+    expect(logoSlot).not.toHaveClass("border", "bg-muted/30", "rounded-[10px]");
   });
 });

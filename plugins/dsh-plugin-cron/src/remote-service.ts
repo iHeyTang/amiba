@@ -1,8 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
-import {
-  Remote,
-  TypertRemoteService,
-} from "@deepseek-ai/dsh-typert-protocol";
+import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 
 import type { CronService } from "./service.js";
 import type { CronTaskCreateInput, CronTaskPatch } from "./types.js";
@@ -16,8 +13,13 @@ class AmibaCronRemoteService extends TypertRemoteService {
   }
 
   @Remote
-  list() {
-    return this.service.list();
+  sessionIds(ids: string[]) {
+    return this.service.sessionIds(ids);
+  }
+
+  @Remote
+  list(sessionIds?: string[]) {
+    return this.service.list(sessionIds);
   }
 
   @Remote

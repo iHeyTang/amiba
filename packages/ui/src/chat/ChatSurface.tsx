@@ -1,3 +1,6 @@
+import type { ToolNavigation } from "./bubble/tool-navigation";
+import { usePrepareMarkdownTurn } from "@amiba/markdown";
+import { MessageNoticeRendererContext, type MessageNoticeRenderer } from "./bubble/Bubble";
 import {
   Bot,
   ChevronDown,
@@ -300,6 +303,11 @@ export interface ChatSurfaceProps {
      * is byte-identical to before.
      */
     inputOverlay?: ReactNode;
+    /** Session-scoped plugin notices and tool annotations. */
+    notice?: MessageNoticeRenderer;
+    progress?: () => ReactNode;
+    toolNavigation?: ToolNavigation;
+    toolAnnotation?: (owner: { callId: string }) => ReactNode;
     /**
      * renderSlot-backed dispatch of the official KEYED `tool.call.toolview`
      * seat, published to every tool row in the conversation. Hosts inside a
@@ -1324,12 +1332,13 @@ export default function ChatSurface({
         // the durable-log projection derives, so re-reading history (a tab
         // switch, a reload) lands on the same bubble instead of a second
         // one — and an event that arrives after the read is a no-op.
-        const { uiId, content, origin, notice } = event;
+        const { uiId, content, sentAt, origin, notice } = event;
         sessions.setActiveMessages((prev) => {
           const arr = prev as UiMessage[];
           const next = withHostUserMessage(arr, {
             uiId,
             content,
+            sentAt,
             origin,
             notice,
           });
@@ -1500,6 +1509,8 @@ export default function ChatSurface({
   // Per-session pendingQueue persistence (load on activate, save on
   // change, hydration-guarded) is owned by `usePendingQueue`.
 
+  const prepareMarkdownTurn = usePrepareMarkdownTurn();
+
   async function runChatTurn(args: {
     text: string;
     attachments: Attachment[];
@@ -1593,6 +1604,7 @@ export default function ChatSurface({
       uiId: shortId("u"),
       role: "user",
       content: text,
+      sentAt: Date.now(),
       ...(workspaceForTurn ? { workspacePath: workspaceForTurn } : {}),
     };
     const assistantMsg: UiMessage = {
@@ -1655,17 +1667,16 @@ export default function ChatSurface({
       },
     ];
 
-    // The recovery point must exist before DSH can dispatch a mutating
-    // tool. Await it here instead of reacting to the later `begin` event,
-    // which can race the first write-file callback.
-    await workspacePane.beginTurn(turnIndex);
-
     // Prime the renderer accumulators before submitting so an immediate DSH
     // event always finds populated state to mutate. Engine snapshots remain
     // the authoritative recovery path after remounts.
     stream.prime(assistantMsg.uiId);
 
+    let submitted = false;
     try {
+      // Create the recovery point before DSH can dispatch a mutating tool.
+      await workspacePane.beginTurn(turnIndex);
+      await prepareMarkdownTurn(sessionId);
       const modelSelection = pendingModelSelectionRef.current;
       pendingModelSelectionRef.current = null;
       await new Promise<void>((resolve, reject) => {
@@ -1695,17 +1706,22 @@ export default function ChatSurface({
             agent: agentForTurn,
             ...(modelSelection ? { modelSelection } : {}),
           });
+          submitted = true;
         } catch (e) {
           pendingTurnRef.current = null;
           reject(e as Error);
         }
       });
     } catch (e) {
-      // The terminal-event handlers (handleStreamAborted /
-      // handleStreamError) have already applied the visible UI changes —
-      // marking the bubble [stopped], surfacing the error banner, etc.
-      // We only log non-abort failures here for debugging.
       const err = e as Error;
+      // Before dispatch there is no engine turn to emit a terminal event.
+      // Settle the placeholder and surface preparation / submit failures here.
+      if (!submitted) {
+        handleStreamError(sessionId, {
+          kind: "error",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
       if (err.name !== "AbortError") {
         console.warn("[sidepanel] stream failed:", err.message);
       }
@@ -2160,7 +2176,10 @@ export default function ChatSurface({
                     composer seats) and this is only the last hop down to
                     ToolChip. `cwd` is the conversation's workspace binding —
                     the `cwd` member of the official owner share. */}
+                <MessageNoticeRendererContext.Provider value={slots?.notice}>
                 <ToolCallSeatProvider
+                  navigation={slots?.toolNavigation}
+                  activity={slots?.toolAnnotation}
                   render={slots?.toolView}
                   cwd={workspacePath}
                 >
@@ -2186,6 +2205,7 @@ export default function ChatSurface({
                         }
                       >
                         <MessageTurns
+                          sessionId={sessions.activeId ?? undefined}
                           messages={messages}
                           onReviewWorkspaceChanges={
                             workspacePane.enabled
@@ -2197,10 +2217,12 @@ export default function ChatSurface({
                           onOpenAgentDestination={openAgentDestination}
                           onBranchUserMessage={branchUserMessage}
                         />
+                        {slots?.progress?.()}
                       </WorkspaceFileOpenerContext.Provider>
                     </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>
+                </MessageNoticeRendererContext.Provider>
 
                 {error && (
                   <ErrorBlock error={error} onOpenSettings={openSettings} />

@@ -471,7 +471,7 @@ describe("Sidebar plugin-group sections", () => {
     claim: (session) => session.source === "steward",
   };
 
-  it("renders a claimed session under a top-level header, ahead of 最近任务, not inside the recent list", () => {
+  it("renders plugin groups after the built-in 最近任务 section", () => {
     setup({
       groups: [stewardGroup],
       sessions: [
@@ -493,28 +493,61 @@ describe("Sidebar plugin-group sections", () => {
 
     const groupHeader = screen.getByText("Steward group");
     const recentHeader = screen.getByText("Recent tasks");
-    // DOCUMENT_POSITION_FOLLOWING on recentHeader (relative to groupHeader)
-    // means groupHeader comes first in document order — a sibling section
-    // ahead of "最近任务", not nested inside it.
+    // The built-in history section always owns the first section position;
+    // slot-registered groups follow it in registration order.
     expect(
-      groupHeader.compareDocumentPosition(recentHeader) &
+      recentHeader.compareDocumentPosition(groupHeader) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     // The claimed session appears exactly once, under the group section —
-    // not duplicated into the recent-tasks list below.
+    // not duplicated into the built-in recent-tasks list.
     expect(screen.getAllByText("Claimed chat")).toHaveLength(1);
     const claimedRow = screen.getByText("Claimed chat");
     expect(
       groupHeader.compareDocumentPosition(claimedRow) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      claimedRow.compareDocumentPosition(recentHeader) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
     // The unclaimed session is unaffected — still in the regular list.
+    expect(screen.getByText("Unclaimed chat")).toBeInTheDocument();
+  });
+
+  it("collapses recent tasks from the title while keeping the menu independent", async () => {
+    setup({
+      groups: [stewardGroup],
+      sessions: [
+        {
+          id: "s1",
+          title: "Claimed chat",
+          createdAt: 1,
+          updatedAt: 2,
+          source: "steward",
+        },
+        {
+          id: "s2",
+          title: "Unclaimed chat",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    const menu = screen.getByRole("button", { name: "More task actions" });
+    const collapse = screen.getByRole("button", { name: "Recent tasks" });
+    expect(collapse).toHaveTextContent("Recent tasks");
+    expect(collapse).not.toContainElement(menu);
+    await userEvent.click(menu);
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    await userEvent.keyboard("{Escape}");
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(collapse);
+    expect(collapse).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Unclaimed chat")).not.toBeInTheDocument();
+    // Collapsing the built-in section does not collapse plugin sections.
+    expect(screen.getByText("Claimed chat")).toBeInTheDocument();
+
+    await userEvent.click(collapse);
     expect(screen.getByText("Unclaimed chat")).toBeInTheDocument();
   });
 

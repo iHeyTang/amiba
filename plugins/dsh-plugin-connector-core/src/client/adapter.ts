@@ -4,26 +4,13 @@ import type { RemoteResult } from "@deepseek-ai/dsh-typert-protocol";
 import type {
   ConnectorProviderView,
   ConnectView,
-  MessageChannelApproval,
+  ConnectDetails,
+  UpdateConnectInput,
   OnboardingView,
 } from "../types.js";
 
-export interface CreateConnectInput {
-  provider: string;
-  name: string;
-  agentPreset: string;
-  config: Record<string, unknown>;
-  /** Absent uses the bound channel's default (10-minute timeout). */
-  approval?: MessageChannelApproval;
-}
-
-export interface BeginOnboardingInput {
-  provider: string;
-  name: string;
-  agentPreset: string;
-  /** Absent uses the bound channel's default (10-minute timeout). */
-  approval?: MessageChannelApproval;
-}
+import type { CreateConnectInput, BeginOnboardingInput } from "../remote.js";
+export type { CreateConnectInput, BeginOnboardingInput } from "../remote.js";
 
 /**
  * Client-facing surface consumed by `DshSettingsConnect` (Task 7). Method
@@ -36,13 +23,14 @@ export interface BeginOnboardingInput {
  * method they'd collide with.
  */
 export interface ConnectAdapter {
+  details(id: string): Promise<ConnectDetails>;
+  update(id: string, input: UpdateConnectInput): Promise<ConnectView>;
   listProviders(): Promise<ConnectorProviderView[]>;
   list(): Promise<ConnectView[]>;
   create(input: CreateConnectInput): Promise<ConnectView>;
   setEnabled(id: string, enabled: boolean): Promise<ConnectView>;
   remove(id: string): Promise<{ id: string; deleted: boolean }>;
   setOwners(id: string, owners: string[]): Promise<ConnectView>;
-  setApproval(id: string, approval: MessageChannelApproval): Promise<ConnectView>;
   beginOnboarding(input: BeginOnboardingInput): Promise<OnboardingView>;
   pollOnboarding(sessionId: string): Promise<OnboardingView>;
   cancelOnboarding(sessionId: string): Promise<OnboardingView>;
@@ -67,6 +55,8 @@ async function valueOf<T>(result: Promise<RemoteResult<T>>): Promise<T> {
 /** Build the `ConnectAdapter` over the mounted `amibaConnectors` remote. */
 export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
   return {
+    details: (id) => valueOf(remote.getConnectDetails(id)),
+    update: (id, input) => valueOf(remote.updateConnect(id, input)),
     listProviders: async () => {
       const snapshot = await valueOf(remote.listProviders());
       return snapshot.providers;
@@ -79,7 +69,6 @@ export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
     setEnabled: (id, enabled) => valueOf(remote.setEnabled(id, enabled)),
     remove: (id) => valueOf(remote.removeConnect(id)),
     setOwners: (id, owners) => valueOf(remote.setOwners(id, owners)),
-    setApproval: (id, approval) => valueOf(remote.setApproval(id, approval)),
     beginOnboarding: (input) => valueOf(remote.beginOnboarding(input)),
     pollOnboarding: (sessionId) => valueOf(remote.pollOnboarding(sessionId)),
     cancelOnboarding: (sessionId) =>

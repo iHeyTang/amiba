@@ -13,7 +13,7 @@ export { DshCronStore } from "./store.js";
 export { assertValidRule, missedRunAt, nextRunAt } from "./rules.js";
 
 export const name = "amiba-cron";
-export const inject = ["agents", "sessions", "tools"];
+export const inject = ["agents", "sessions", "tools", "sessionPersistence"];
 
 export interface Config {
   root: string;

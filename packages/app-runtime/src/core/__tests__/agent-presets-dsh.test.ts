@@ -19,6 +19,7 @@ vi.mock("@amiba/app-runtime/platform", () => ({
 }));
 
 import {
+  getAgentPresets,
   createAgentPreset,
   deleteAgentPreset,
   renameAgentPreset,
@@ -30,6 +31,18 @@ describe("DSH agent preset mutations", () => {
     mocks.copy.mockResolvedValue({ agentPreset: "writer" });
     mocks.remove.mockResolvedValue(undefined);
     mocks.update.mockResolvedValue({});
+  });
+
+  it("preserves official display names separately from preset ids", async () => {
+    mocks.list.mockResolvedValue({ presets: [
+      { id: "standard", name: "标准模式", isDefault: true, trust: "system" },
+      { id: "writer", isDefault: false, trust: "user" },
+    ] });
+    const result = await getAgentPresets();
+    expect(result.active).toBe("standard");
+    expect(result.profiles.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: "standard", name: "标准模式" }, { id: "writer", name: "writer" },
+    ]);
   });
 
   it("creates by copying the current default and passes a display name", async () => {

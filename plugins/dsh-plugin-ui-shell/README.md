@@ -112,8 +112,10 @@ counterpart.
   preference row at the bottom of the General section (Amiba's Appearance
   page), appended below the product's own rows. This seat has a REAL occupant:
   `@deepseek-ai/dsh-client-locale` registers its own `LanguageRow` here
-  (`id: "language"`, `order: 0`) and that row is the product's ONLY 语言
-  control — see "The language authority" below
+  (`id: "language"`, `order: 0`). UI Shell registers the same cell at
+  `priority: -1`, so the product's ONLY 语言 control uses `@amiba/ui`'s
+  standard Select while the official locale service remains its state owner —
+  see "The language authority" below
 - `amiba.settings.content.overlay`
 - `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
   the frame-wide click-through floating layer
@@ -221,8 +223,10 @@ the deliverable.
 
 ## The language authority
 
-`locale-bridge.ts`. The OFFICIAL locale service decides the language, for the
-official/plugin copy AND for Amiba's own. Amiba used to own a
+`locale-bridge.ts` + `language-seat.tsx`. The OFFICIAL locale service decides
+the language, for the official/plugin copy AND for Amiba's own. UI Shell owns
+only the visual shadow of the official `language` cell; it reads and writes
+that same service through an Amiba Select. Amiba used to own a
 second preference (`settings.ui.language`, `auto | en | zh-CN`) with its own
 row in Appearance; once `settings.general.item` was declared, upstream's
 `LanguageRow` landed on the same page and the product showed two 语言 controls
@@ -230,22 +234,15 @@ that did not agree. Amiba's is retired. The explicit "auto" option went with
 it — official has no equivalent, and its never-chosen state already follows the
 browser.
 
-Two jobs:
+Language authority:
 
-- **Authority.** `ctx.inject(["locale", "settingsScope", "connection",
-  "remote"], …)` hands `@amiba/i18n` the official `LocaleRuntime` through
+- **Authority.** `ctx.inject(["locale"], …)` hands `@amiba/i18n` the official `LocaleRuntime` through
   `installOfficialLocale` — the same `getSnapshot`/`subscribe` LocaleFace pair
   the framework's own `t` seat consumes via `ctx.slots.installLocale`. A switch
-  in the official row re-renders Amiba's copy in the same tick, no reload. The
+  in the shadow row re-renders Amiba's copy in the same tick, no reload. The
   guard is `ctx.inject` rather than the plugin's `inject` list on purpose: the
   product shell must mount even where `locale` is absent, and without it Amiba
   simply keeps the browser-derived fallback (what Quick-Ask does).
-- **Migration**, exactly once. See the doc block on
-  `migrateLegacyLanguagePreference` for how "never chosen" is determined — the
-  short version is that it comes from the durable section
-  (`LocaleSettings.preference` absent on a `ready`, `writable` snapshot), never
-  from the active locale, which is indistinguishable from the browser default
-  while nothing is chosen.
 
 **Id mapping.** Official ships `zh` and `en`; Amiba's catalogs are `zh-CN` and
 `en`, and `setLocale` THROWS on an unregistered id. `toOfficialLocaleId` in

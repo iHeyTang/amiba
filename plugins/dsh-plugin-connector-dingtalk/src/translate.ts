@@ -7,7 +7,6 @@ import type { ConnectorInboundEnvelope } from "@amiba/dsh-plugin-connector-core"
 export interface DingtalkConnectorConfig {
   clientId: string;
   clientSecret: string;
-  enableTools: boolean;
   /**
    * Id of a card template pre-designed in the DingTalk developer console's
    * card platform designer, used to send native interactive approval cards
@@ -30,7 +29,6 @@ export interface DingtalkConnectorConfig {
 export const dingtalkConfigSchema = z.object({
   clientId: z.string().min(1, "clientId is required"),
   clientSecret: z.string().min(1, "clientSecret is required"),
-  enableTools: z.boolean().default(false),
   approvalCardTemplateId: z.string().min(1).optional(),
 });
 

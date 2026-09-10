@@ -1,8 +1,12 @@
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
-import { applyToolsHttp } from "./tools-http.js";
+import { applyToolsHttp, toolInventory } from "./tools-http.js";
 import { ToolProvenanceRegistry } from "./provenance.js";
+
+vi.mock("./registration-source.js", async (original) => ({ ...await original<object>(), shippedEntries: () => new Map([["builtin", "fixture"]]) }));
+
+const owner = { fiber: { uid: 1, name: "fixture" }, [Symbol.for("cordis.entry")]: { id: "builtin", options: { id: "builtin", name: "fixture" }, parent: { ctx: {} } } };
 
 const TOKEN = "abcdefghijklmnopqrstuvwxyz-1234567890";
 
@@ -21,12 +25,13 @@ function harness() {
         ]
       : [
           {
-            name: "memory_list",
-            description: "List durable memory",
+            name: "memos_search",
+            description: "Search durable memory",
             parameters: { type: "object", properties: {} },
           },
         ],
   );
+  const definitions = new Map<string, object>();
   const ctx = {
     effect(setup: () => unknown) {
       setup();
@@ -36,15 +41,19 @@ function harness() {
       list: vi
         .fn()
         .mockResolvedValue([
-          { id: "standard" },
-          { id: "code" },
+          { id: "standard", trust: "system" },
+          { id: "code", trust: "system" },
           { id: "broken", broken: "invalid composition" },
         ]),
       standingKeyFor: vi.fn((id: string) =>
         Promise.resolve({ agentPreset: id }),
       ),
     },
-    tools: { schemas },
+    tools: { schemas, registrationContext: () => owner, get: (name: string, scope?: unknown) => {
+      if (!scope && name !== "memos_search") return undefined;
+      if (!definitions.has(name)) definitions.set(name, {});
+      return definitions.get(name);
+    } },
     webServer: {
       register(value: typeof route) {
         route = value;
@@ -53,7 +62,7 @@ function harness() {
     },
   };
   const provenance = new ToolProvenanceRegistry();
-  provenance.register("memory_list", {
+  provenance.register("memos_search", {
     kind: "dsh-plugin",
     id: "amiba-memory",
     name: "Amiba Memory",
@@ -107,7 +116,7 @@ describe("Amiba DSH tool inventory route", () => {
     expect(res.result().status).toBe(200);
     expect(
       res.result().body.value.tools.map((tool: { name: string }) => tool.name),
-    ).toEqual(["memory_list", "read_file", "run_code"]);
+    ).toEqual(["memos_search", "read_file", "run_code"]);
     expect(res.result().body.value.tools[0].source).toMatchObject({
       kind: "dsh-plugin",
       id: "amiba-memory",
@@ -121,4 +130,24 @@ describe("Amiba DSH tool inventory route", () => {
     expect(res.result().status).toBe(200);
     expect(ctx).not.toHaveProperty("agents");
   });
+});
+
+it("keeps inherited globals once and preserves a same-name user override", async () => {
+  const builtin = { name: "search", parameters: {} };
+  const user = { name: "search", parameters: { description: "custom" } };
+  const ctx = {
+    tools: {
+      get: (_name: string, scope?: string) => scope === "custom" ? user : builtin,
+      registrationContext: () => owner,
+      schemas: (scope?: string) => [scope === "custom" ? user : builtin],
+    },
+    agentPresets: {
+      list: async () => [{ id: "official", trust: "system" }, { id: "custom", trust: "user" }],
+      standingKeyFor: async (id: string) => id,
+    },
+  };
+  const result = await toolInventory(ctx as never, new ToolProvenanceRegistry());
+  expect(result.tools).toHaveLength(2);
+  expect(result.tools.map(tool => tool.source.distribution).sort()).toEqual(["builtin", "user"]);
+  expect(new Set(result.tools.map(tool => tool.id)).size).toBe(2);
 });

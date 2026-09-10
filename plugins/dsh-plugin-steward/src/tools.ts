@@ -30,7 +30,7 @@ const OUTPUT: ToolDefinition["output"] = {
   render: (_args, value) => (value as { content?: unknown }).content as never,
 };
 
-/** The steward's ONLY tools: it routes and reports, it never does the work itself. */
+/** Task-management tools added to the selected base preset. */
 export function stewardToolDefinitions(service: StewardService): ToolDefinition[] {
   return [
     {
@@ -118,8 +118,10 @@ export function stewardToolDefinitions(service: StewardService): ToolDefinition[
 }
 
 /** Register into ONE agent scope (the steward's), so no other session sees these tools. */
-export function registerStewardTools(agentCtx: Context, service: StewardService): void {
+export function registerStewardTools(agentCtx: Context, service: StewardService): () => Promise<void> {
+  const disposers: Array<() => unknown> = [];
   for (const definition of stewardToolDefinitions(service)) {
-    agentCtx.effect(() => agentCtx.tools.register(definition), `amiba-steward:${definition.name}`);
+    disposers.push(agentCtx.effect(() => agentCtx.tools.register(definition), `amiba-steward:${definition.name}`));
   }
+  return async () => { for (const dispose of [...disposers].reverse()) await dispose(); };
 }

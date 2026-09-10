@@ -12,7 +12,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
 
 import {
@@ -28,29 +27,9 @@ import {
   useRefetchOnFocus,
 } from "@amiba/ui/plugin";
 
-import { getPlatform } from "@amiba/app-runtime/platform";
-
 import { catalogI18n, type CatalogMessageKey } from "./i18n.js";
-import type { ToolSourceDescriptor, ToolSourceKind } from "../provenance.js";
+import type { ToolSourceDescriptor, ToolSourceKind, ToolDistribution } from "../provenance.js";
 import type { ToolInventory, ToolSchemaView } from "../remote.js";
-
-/**
- * Desktop window-chrome height for headers that double as the window-drag
- * strip (the tool-detail drill-in below); `undefined` off-desktop. The
- * official `settings.section` owner contract is `{ close }` only, so this
- * metric no longer arrives through the section's owner props — the plugin
- * reads the platform's chrome facts directly, the same source the product
- * shell itself uses (`windowChrome.topBarHeightPx`, default 40). Business
- * data still rides the DSH Remote exclusively.
- */
-export function settingsChromeHeightPx(): number | undefined {
-  // Direct-chain member reads only: the architecture verifier allowlists
-  // mechanism facts per direct platform member access, so the platform
-  // handle must not be stored in a variable.
-  return getPlatform().kind === "desktop"
-    ? (getPlatform().windowChrome?.topBarHeightPx ?? 40)
-    : undefined;
-}
 
 /**
  * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`).
@@ -62,7 +41,7 @@ function useT() {
   return usePluginT(catalogI18n);
 }
 
-type SourceFilter = "all" | ToolSourceKind;
+type SourceFilter = "all" | ToolDistribution;
 
 /**
  * Adapter this view renders — the catalog plugin's own runtime tool
@@ -108,6 +87,130 @@ const SOURCES: Array<{
   },
 ];
 
+const GROUPS = [
+  { id: "builtin", icon: Cpu, title: "agentCapabilities.group.builtin", description: "agentCapabilities.group.builtin.description" },
+  { id: "user", icon: Blocks, title: "agentCapabilities.group.user", description: "agentCapabilities.group.user.description" },
+] satisfies Array<{ id: ToolDistribution; icon: LucideIcon; title: CatalogMessageKey; description: CatalogMessageKey }>;
+
+function distribution(source: ToolSourceDescriptor): ToolDistribution {
+  if (!source.distribution) throw new Error("Tool delivery metadata is required");
+  return source.distribution;
+}
+
+const MCP_TOOL_LABELS: Record<string, CatalogMessageKey> = {
+  bitable_v1_appTableRecord_batchCreate: "agentCapabilities.mcp.batchCreate",
+  bitable_v1_appTableRecord_search: "agentCapabilities.mcp.searchRecords",
+  contact_v3_user_batchGetId: "agentCapabilities.mcp.userIds",
+  docx_builtin_import: "agentCapabilities.mcp.importDoc",
+  docx_builtin_search: "agentCapabilities.mcp.searchDoc",
+  docx_v1_document_rawContent: "agentCapabilities.mcp.readDoc",
+  im_v1_chat_search: "agentCapabilities.mcp.searchChat",
+  im_v1_message_create: "agentCapabilities.mcp.sendMessage",
+};
+
+function toolLabel(
+  tool: ToolSchemaView,
+  t: (key: CatalogMessageKey) => string,
+): string {
+  if (tool.source.kind !== "mcp-server") return tool.name;
+  const prefix = `mcp__${tool.source.provider}__`;
+  const raw = tool.name.startsWith(prefix)
+    ? tool.name.slice(prefix.length)
+    : tool.name;
+  const key =
+    tool.source.serviceId === "lark.mcp" ||
+    tool.source.provider?.startsWith("lark-")
+      ? MCP_TOOL_LABELS[raw]
+      : undefined;
+  return key
+    ? t(key)
+    : raw.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function mcpServiceLabel(
+  source: ToolSourceDescriptor,
+  t: (key: CatalogMessageKey) => string,
+): string {
+  const label = source.displayName?.trim();
+  if (label && label !== source.provider) return label;
+  if (source.serviceName) return source.serviceName;
+  return t(
+    source.provider === "lark" || source.provider?.startsWith("lark-")
+      ? "agentCapabilities.mcp.lark"
+      : "agentCapabilities.mcp.service",
+  );
+}
+
+function McpServices({
+  tools,
+  onSelect,
+}: {
+  tools: ToolSchemaView[];
+  onSelect(tool: ToolSchemaView): void;
+}) {
+  const { t } = useT();
+  const services = new Map<string, ToolSchemaView[]>();
+  for (const tool of tools) {
+    // Missing provenance must never merge unrelated tools into one fake server.
+    const id = tool.source.provider ?? tool.name;
+    services.set(id, [...(services.get(id) ?? []), tool]);
+  }
+  return (
+    <section className="border-t border-border/60 first:border-t-0">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <h3 className="text-xs font-semibold">
+          {t("agentCapabilities.dsh.source.mcpServer")}
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          {services.size} {t("agentCapabilities.mcp.servers")} · {tools.length}{" "}
+          {t("agentCapabilities.mcp.tools")}
+        </span>
+      </div>
+      {[...services].map(([id, items]) => (
+        <details key={id} className="group border-t border-border/45">
+          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <Plug className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">
+                {mcpServiceLabel(items[0]!.source, t)}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {items.length} {t("agentCapabilities.mcp.tools")}
+            </span>
+            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+          </summary>
+          <ul className="border-t border-border/40">
+            {items.map((tool) => (
+              <li
+                key={tool.id ?? tool.name}
+                className="border-b border-border/40 last:border-b-0"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelect(tool)}
+                  className="flex w-full items-center gap-3 py-3 pl-11 pr-4 text-left hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      {toolLabel(tool, t)}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {tool.description ||
+                        t("agentCapabilities.dsh.noDescription")}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </section>
+  );
+}
+
 function sourceConfig(kind: ToolSourceKind) {
   return SOURCES.find((source) => source.id === kind) ?? SOURCES[0]!;
 }
@@ -134,21 +237,16 @@ export function DshAgentCapabilitiesPage({
   adapter,
   embedded = false,
   chromeHeightPx,
-  children,
 }: {
   adapter: ToolsDirectoryAdapter;
   embedded?: boolean;
   /** Still needed for the tool-detail drill-in's own back+title header,
    *  which stays local (see the `selectedTool` branch below). */
   chromeHeightPx?: number;
-  /** DSH child-slot contributions owned by the Tools feature plugin. */
-  children?: ReactNode;
 }) {
   const { t } = useT();
   const [inventory, setInventory] = useState<ToolInventory | null>(null);
-  const [selectedTool, setSelectedTool] = useState<ToolSchemaView | null>(
-    null,
-  );
+  const [selectedTool, setSelectedTool] = useState<ToolSchemaView | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +259,7 @@ export function DshAgentCapabilitiesPage({
       setInventory(next);
       setSelectedTool((current) =>
         current
-          ? (next.tools.find((item) => item.name === current.name) ?? null)
+          ? (next.tools.find((item) => (item.id ?? item.name) === (current.id ?? current.name)) ?? null)
           : null,
       );
     } catch (cause) {
@@ -177,19 +275,21 @@ export function DshAgentCapabilitiesPage({
   useRefetchOnFocus(() => void refresh());
 
   const sourceCounts = useMemo(() => {
-    const result = new Map<ToolSourceKind, number>();
+    const result = new Map<ToolDistribution, number>();
     for (const tool of inventory?.tools ?? []) {
-      result.set(tool.source.kind, (result.get(tool.source.kind) ?? 0) + 1);
+      const group = distribution(tool.source);
+      result.set(group, (result.get(group) ?? 0) + 1);
     }
     return result;
   }, [inventory]);
 
   const grouped = useMemo(() => {
-    const result = new Map<ToolSourceKind, ToolSchemaView[]>();
+    const result = new Map<ToolDistribution, ToolSchemaView[]>();
     for (const tool of inventory?.tools ?? []) {
-      if (sourceFilter !== "all" && tool.source.kind !== sourceFilter) continue;
-      result.set(tool.source.kind, [
-        ...(result.get(tool.source.kind) ?? []),
+      const group = distribution(tool.source);
+      if (sourceFilter !== "all" && group !== sourceFilter) continue;
+      result.set(group, [
+        ...(result.get(group) ?? []),
         tool,
       ]);
     }
@@ -214,7 +314,7 @@ export function DshAgentCapabilitiesPage({
               </button>
               <div className="flex min-w-0 flex-col justify-center gap-0.5 leading-tight">
                 <h2 className="truncate text-base font-medium tracking-tight text-foreground">
-                  {selectedTool.name}
+                  {toolLabel(selectedTool, t)}
                 </h2>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {selectedTool.description ||
@@ -226,6 +326,13 @@ export function DshAgentCapabilitiesPage({
         />
         <ScrollArea className="min-h-0 flex-1">
           <PageContent bodyClassName="space-y-5" size="md">
+            <dl className={MODEL_SETTINGS_SURFACE_CLASS}>
+              <ToolMetadataRow
+                label={t("agentCapabilities.mcp.callId")}
+                value={selectedTool.name}
+                mono
+              />
+            </dl>
             <ToolSourceSection source={selectedTool.source} />
             <section className={MODEL_SETTINGS_SECTION_CLASS}>
               <ModelSettingsSectionHeader
@@ -300,7 +407,7 @@ export function DshAgentCapabilitiesPage({
                 className={MODEL_SETTINGS_SURFACE_CLASS}
                 data-tool-settings-surface
               >
-                {SOURCES.map((group) => {
+                {GROUPS.map((group) => {
                   const items = grouped.get(group.id) ?? [];
                   if (items.length === 0) return null;
                   const Icon = group.icon;
@@ -325,10 +432,10 @@ export function DshAgentCapabilitiesPage({
                         </span>
                       </div>
                       <ul className="border-t border-border/45">
-                        {items.map((tool) => (
+                        {items.filter((tool) => tool.source.kind !== "mcp-server").map((tool) => (
                           <li
                             className="border-b border-border/40 last:border-b-0"
-                            key={tool.name}
+                            key={tool.id ?? tool.name}
                           >
                             <button
                               className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
@@ -361,13 +468,15 @@ export function DshAgentCapabilitiesPage({
                           </li>
                         ))}
                       </ul>
+                      {items.some((tool) => tool.source.kind === "mcp-server") ? (
+                        <McpServices tools={items.filter((tool) => tool.source.kind === "mcp-server")} onSelect={setSelectedTool} />
+                      ) : null}
                     </section>
                   );
                 })}
               </div>
             )}
           </section>
-          {children}
         </PageContent>
       </ScrollArea>
     </div>
@@ -381,7 +490,7 @@ function ToolSourceIndex({
   onChange,
 }: {
   active: SourceFilter;
-  counts: Map<ToolSourceKind, number>;
+  counts: Map<ToolDistribution, number>;
   total: number;
   onChange(source: SourceFilter): void;
 }) {
@@ -398,7 +507,7 @@ function ToolSourceIndex({
       title: "agentCapabilities.dsh.source.all",
       count: total,
     },
-    ...SOURCES.map((source) => ({
+    ...GROUPS.map((source) => ({
       id: source.id,
       icon: source.icon,
       title: source.title,
@@ -455,18 +564,23 @@ function ToolSourceSection({ source }: { source: ToolSourceDescriptor }) {
         description={t("agentCapabilities.dsh.source.detail.description")}
       />
       <dl className={MODEL_SETTINGS_SURFACE_CLASS}>
+        <ToolMetadataRow label={t("agentCapabilities.group.label")} value={t(GROUPS.find((group) => group.id === distribution(source))!.title)} />
         <ToolMetadataRow
           label={t("agentCapabilities.dsh.source.category")}
           value={t(category.title)}
         />
         <ToolMetadataRow
           label={t("agentCapabilities.dsh.source.owner")}
-          value={source.name}
+          value={source.declaredBy ?? source.name}
         />
         {source.provider ? (
           <ToolMetadataRow
             label={t("agentCapabilities.dsh.source.provider")}
-            value={source.provider}
+            value={
+              source.kind === "mcp-server"
+                ? mcpServiceLabel(source, t)
+                : source.provider
+            }
           />
         ) : null}
         {source.packageName ? (

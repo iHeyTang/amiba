@@ -1,3 +1,4 @@
+import { dingtalkMcpTools } from "./mcp-tools.js";
 import { DWClient, GET_TOKEN_URL, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DWClientDownStream } from "dingtalk-stream";
 import type {
@@ -134,9 +135,9 @@ export interface DingtalkDeps {
 }
 
 // ---------------------------------------------------------------------------
-// capabilities() — the official DingTalk MCP server, opt-in via config's
-// `enableTools` (default false: the upstream is official-but-experimental,
-// so the conversation loop must stay independent of it). Verified at
+// capabilities() declares the official DingTalk MCP connection. User approval
+// of specific capabilities is owned by MCP Manager; messaging stays independent.
+// Verified at
 // implementation time (`npm view dingtalk-mcp version` + `npm pack
 // dingtalk-mcp@1.1.21` to inspect the published README.md directly):
 //   - package/version: dingtalk-mcp@1.1.21 (pinned into the npx arg itself,
@@ -149,8 +150,9 @@ export interface DingtalkDeps {
 //     mixed-case pair, but that is what the shipped server actually reads.
 //   - `ACTIVE_PROFILES`: comma-separated profile ids; the README's table
 //     confirms `dingtalk-contacts`, `dingtalk-calendar`, and `dingtalk-tasks`
-//     are all valid ids (read-oriented: contacts lookup, calendar, todos —
-//     no message-sending or app-management profile is enabled by default).
+//     are all valid ids. Calendar and task profiles include create/update/delete
+//     operations; this is not a read-only tool set. No message-sending or
+//     app-management profile is enabled by this declaration.
 // ---------------------------------------------------------------------------
 
 const DINGTALK_MCP_PACKAGE = "dingtalk-mcp";
@@ -158,10 +160,12 @@ const DINGTALK_MCP_PINNED_VERSION = "1.1.21";
 const DINGTALK_MCP_ACTIVE_PROFILES = "dingtalk-contacts,dingtalk-calendar,dingtalk-tasks";
 
 function buildCapabilities(config: DingtalkConnectorConfig): CapabilityDecl[] {
-  if (!config.enableTools) return [];
   return [
     {
       kind: "mcp",
+      service: { id: "dingtalk.mcp", name: "钉钉", version: DINGTALK_MCP_PINNED_VERSION },
+      identity: JSON.stringify(["dingtalk", config.clientId]),
+      tools: dingtalkMcpTools,
       spec: {
         serverName: "dingtalk",
         transport: "stdio",
@@ -259,13 +263,14 @@ function abandonPendingApproval(entry: PendingApproval): void {
  * connection (no public IP required), translates inbound robot messages
  * into `ConnectorInboundEnvelope`s, and delivers outbound text via each
  * message's own session webhook. `capabilities()` declares the official
- * `dingtalk-mcp` tool server, strictly opt-in via config `enableTools`.
+ * `dingtalk-mcp` tool server; MCP Manager owns explicit access approval.
  */
 export function createDingtalkProvider(
   deps: DingtalkDeps = realDingtalkDeps,
 ): ConnectorProvider {
   return {
     id: "dingtalk",
+    messaging: { ownerPairing: true },
     name: "钉钉 / DingTalk",
     description: "DingTalk robot over the official Stream Mode long connection.",
     configSchema: dingtalkConfigSchema,

@@ -1,0 +1,41 @@
+{
+  "name": "@amiba/dsh-plugin-session-storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "catalog:"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@types/node": "22.9.0",
+    "typescript": "5.6.3",
+    "vitest": "^2.1.4",
+    "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-session": "catalog:",
+    "@deepseek-ai/dsh-session-persistence": "catalog:",
+    "@deepseek-ai/dsh-storage": "catalog:",
+    "@deepseek-ai/dsh-storage-json": "catalog:",
+    "@deepseek-ai/dsh-storage-domain": "catalog:"
+  }
+}

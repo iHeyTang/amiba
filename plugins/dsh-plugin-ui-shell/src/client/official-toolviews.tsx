@@ -1,22 +1,17 @@
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { useT, type TranslateFn } from "@amiba/i18n";
 import {
+  SemanticToolRow,
+  type SemanticToolSpec,
+  type SemanticEvidenceContext,
+  recordOf,
   CodeEvidence,
   DiffEvidence,
-  EvidenceShell,
   TerminalEvidence,
   TodoEvidence,
-  ToolRowFrame,
   hostnameOf,
   oneline,
   stringValue,
-  toolCallArgs,
-  toolCallDurationMs,
-  toolCallFailed,
-  toolCallResultText,
-  toolCallSettled,
-  toolCallStartedAt,
-  unwrapUntrustedToolResult,
 } from "@amiba/ui/plugin";
 import {
   BookOpen,
@@ -33,9 +28,8 @@ import {
   Target,
   Terminal,
   Users,
-  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 /**
  * The OFFICIAL runtime tools' timeline rows — ui-shell's occupants of the
@@ -46,27 +40,10 @@ import { useEffect, useState, type ReactNode } from "react";
  * way this module registers the runtime's.
  */
 
-interface EvidenceContext {
-  args: Record<string, unknown>;
-  /** Unwrapped result text (untrusted envelopes stripped). */
-  text: string;
-  t: TranslateFn;
-}
-
-interface OfficialToolviewSpec {
-  icon: LucideIcon;
-  action: Parameters<TranslateFn>[0];
-  target?: (args: Record<string, unknown>) => string;
-  /** Success evidence; failures always show the error text instead. */
-  evidence?: (ctx: EvidenceContext) => ReactNode | null;
-  /** Implementation-step tools: expand only when the call failed. */
-  quietSuccess?: boolean;
-}
-
 /** `-old / +new` pseudo-diff for the edit tool's argument pair. */
 function editDiff(args: Record<string, unknown>): string {
-  const oldText = stringValue(args, "old_string");
-  const newText = stringValue(args, "new_string");
+  const oldText = typeof args.old_string === "string" ? args.old_string : "";
+  const newText = typeof args.new_string === "string" ? args.new_string : "";
   if (!oldText && !newText) return "";
   return [
     ...oldText.split("\n").map((line) => `-${line}`),
@@ -77,10 +54,10 @@ function editDiff(args: Record<string, unknown>): string {
 const filePathTarget = (args: Record<string, unknown>) =>
   stringValue(args, "file_path", "path");
 
-const codeText = (ctx: EvidenceContext) =>
+const codeText = (ctx: SemanticEvidenceContext) =>
   ctx.text ? <CodeEvidence text={ctx.text} /> : null;
 
-const SPECS: Record<string, OfficialToolviewSpec> = {
+const SPECS: Record<string, SemanticToolSpec<Parameters<TranslateFn>[0]>> = {
   bash: {
     icon: Terminal,
     action: "shell.tool.runCommand",
@@ -165,17 +142,17 @@ const SPECS: Record<string, OfficialToolviewSpec> = {
   },
   job_output: {
     icon: Terminal,
-    action: "shell.tool.manageJobs",
+    action: (args) => args.wait ? "shell.tool.waitJob" : "shell.tool.readJob",
     evidence: codeText,
   },
   job_list: {
     icon: Terminal,
-    action: "shell.tool.manageJobs",
+    action: "shell.tool.listJobs",
     evidence: codeText,
   },
   job_kill: {
     icon: Terminal,
-    action: "shell.tool.manageJobs",
+    action: "shell.tool.stopJob",
     evidence: codeText,
   },
   create_goal: {
@@ -247,58 +224,114 @@ const SPECS: Record<string, OfficialToolviewSpec> = {
   },
 };
 
-function OfficialToolRow({
-  spec,
-  tag,
-  owner,
-}: {
-  spec: OfficialToolviewSpec;
-  tag: string;
-  owner: ToolCallOwnerProps;
-}) {
-  const { t } = useT();
-  const { block } = owner;
-  const running = toolCallSettled(block) === null;
-  // Live duration ticker, matching the built-in row's cadence.
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => setTick((value) => value + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [running]);
-  void tick;
-
-  const args = toolCallArgs(block);
-  const failed = toolCallFailed(block);
-  const text = unwrapUntrustedToolResult(toolCallResultText(block));
-  const startedAt = toolCallStartedAt(block);
-  const durationMs = running
-    ? startedAt !== undefined
-      ? Date.now() - startedAt
-      : undefined
-    : toolCallDurationMs(block);
-  const action = t(spec.action);
-  const target = spec.target?.(args) ?? "";
-
-  const body = failed
-    ? text && <CodeEvidence text={text} tone="error" />
-    : running || spec.quietSuccess
-      ? null
-      : (spec.evidence?.({ args, text, t }) ?? null);
-  const detail = body ? <EvidenceShell tag={tag}>{body}</EvidenceShell> : undefined;
-
-  return (
-    <ToolRowFrame
-      icon={spec.icon}
-      action={action}
-      target={target || undefined}
-      {...(durationMs === undefined ? {} : { durationMs })}
-      running={running}
-      failed={failed}
-      ariaLabel={[action, target].filter(Boolean).join(" ")}
-      detail={detail}
-    />
-  );
+SPECS.pwsh = SPECS.bash!;
+SPECS.subagent_codex = SPECS.subagent!;
+SPECS.subagent_claude_code = SPECS.subagent!;
+SPECS.run_code = {
+  icon: Terminal,
+  action: "shell.tool.runCode",
+  target: (args) => oneline(stringValue(args, "title", "description", "code")),
+  evidence: (ctx) => (
+    <>
+      <CodeEvidence text={stringValue(ctx.args, "code")} />
+      {codeText(ctx)}
+    </>
+  ),
+};
+SPECS.exit_plan_mode = {
+  icon: ClipboardList,
+  action: "shell.tool.submitPlan",
+  evidence: (ctx) => (
+    <>
+      <CodeEvidence text={stringValue(ctx.args, "plan")} />
+      {codeText(ctx)}
+    </>
+  ),
+};
+SPECS.workflow = {
+  icon: Repeat2,
+  action: "shell.tool.runWorkflow",
+  target: (args) =>
+    oneline(
+      stringValue(recordOf(args.meta) ?? {}, "name") ||
+        stringValue(args, "name"),
+    ),
+  evidence: (ctx) => (
+    <>
+      <CodeEvidence text={stringValue(ctx.args, "code", "script")} />
+      {codeText(ctx)}
+    </>
+  ),
+};
+SPECS.report = {
+  icon: Users,
+  action: "shell.tool.reportProgress",
+  target: (args) => oneline(stringValue(args, "output", "message", "summary")),
+  evidence: (ctx) => (
+    <>
+      <CodeEvidence
+        text={stringValue(ctx.args, "output", "message", "summary")}
+      />
+      {codeText(ctx)}
+    </>
+  ),
+};
+SPECS.str_replace_editor = {
+  icon: FilePenLine,
+  action: (args) =>
+    args.command === "view"
+      ? "shell.tool.readFile"
+      : args.command === "create"
+        ? "shell.tool.writeFile"
+        : "shell.tool.editFile",
+  target: filePathTarget,
+  evidence: (ctx) => {
+    if (ctx.args.command === "str_replace") {
+      const diff = editDiff({
+        old_string: ctx.args.old_str,
+        new_string: ctx.args.new_str,
+      });
+      return (
+        <>
+          <DiffEvidence diff={diff} />
+          {codeText(ctx)}
+        </>
+      );
+    }
+    const content = stringValue(ctx.args, "file_text", "new_str");
+    return (
+      <>
+        {content && <CodeEvidence text={content} />}
+        {codeText(ctx)}
+      </>
+    );
+  },
+};
+for (const key of [
+  "cordis_inspect_list",
+  "cordis_inspect_query",
+  "cordis_inspect_self",
+]) {
+  SPECS[key] = {
+    icon: Search,
+    action: "shell.tool.inspectRuntime",
+    target: (args) =>
+      oneline(stringValue(args, "query", "name", "packageName")),
+    evidence: codeText,
+  };
+}
+for (const [key, action] of Object.entries({
+  cordis_define: "shell.tool.defineRuntime",
+  cordis_run: "shell.tool.runRuntime",
+  cordis_stop: "shell.tool.stopRuntime",
+  cordis_undefine: "shell.tool.removeRuntime",
+})) {
+  SPECS[key] = {
+    icon: Terminal,
+    action: action as Parameters<TranslateFn>[0],
+    target: (args) => oneline(stringValue(args, "pluginId", "name", "id")),
+    evidence: codeText,
+  };
 }
 
 /** One component per wire name, closing over its spec. */
@@ -308,6 +341,21 @@ export const OFFICIAL_TOOLVIEWS: Array<{
 }> = Object.entries(SPECS).map(([key, spec]) => ({
   key,
   component: function OfficialToolview(props: ToolCallOwnerProps) {
-    return <OfficialToolRow spec={spec} tag={key} owner={props} />;
+    const { t } = useT();
+    return <SemanticToolRow spec={spec} tag={key} owner={props} t={t} />;
   },
 }));
+
+/** Intrinsic runtime rows need only the retained call, even while the
+ * session-scoped slot is unavailable (selection handoff / plugin startup).
+ * Reuse the registered components; unknown and plugin-owned names still
+ * belong to the host fallback or their own plugin. */
+export function renderOfficialToolFallback(
+  owner: ToolCallOwnerProps,
+  fallback: ReactNode,
+): ReactNode {
+  const View = OFFICIAL_TOOLVIEWS.find(
+    (entry) => entry.key === owner.toolName,
+  )?.component;
+  return View ? <View {...owner} /> : fallback;
+}

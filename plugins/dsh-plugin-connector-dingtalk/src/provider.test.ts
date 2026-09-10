@@ -22,7 +22,6 @@ import type { DingtalkConnectorConfig } from "./translate.js";
 const validConfig: DingtalkConnectorConfig = {
   clientId: "dt_client_1",
   clientSecret: "dt_secret_1",
-  enableTools: false,
 };
 
 /** Waits a macrotask tick so any queued microtasks (e.g. a `.catch()` on a
@@ -96,6 +95,7 @@ function fakeHandle(config: unknown = validConfig): ConnectorHandle & {
     inbound,
     onInbound: vi.fn(async (envelope: ConnectorInboundEnvelope) => {
       inbound.push(envelope);
+      return undefined;
     }),
     setStatus: (status: ConnectorStatus) => statuses.push(status),
   };
@@ -162,7 +162,7 @@ describe("createDingtalkProvider", () => {
     expect(typeof provider.name).toBe("string");
     expect(provider.configSchema).toBeDefined();
     expect(typeof provider.onboard).toBe("undefined");
-    expect(provider.capabilities(validConfig)).toEqual([]);
+    expect(provider.capabilities(validConfig)).toHaveLength(1);
   });
 
   // --- Contract item 3: validate() -------------------------------------
@@ -172,7 +172,7 @@ describe("createDingtalkProvider", () => {
       const deps = fakeDeps();
       const provider = createDingtalkProvider(deps);
       await expect(
-        provider.validate({ clientId: "", clientSecret: "", enableTools: "nope" }),
+        provider.validate({ clientId: "", clientSecret: "" }),
       ).rejects.toThrow();
       expect(deps.token).not.toHaveBeenCalled();
     });
@@ -321,7 +321,7 @@ describe("createDingtalkProvider", () => {
     });
   });
 
-  // --- Contract item 5: runtime.deliver() -------------------------------
+  // --- Contract item 5: runtime.deliver!() -------------------------------
 
   describe("runtime.deliver", () => {
     it("throws session_webhook_unavailable when no webhook is on file for the conversation", async () => {
@@ -331,7 +331,7 @@ describe("createDingtalkProvider", () => {
       const runtime = await provider.start(handle);
 
       await expect(
-        runtime.deliver({ key: "cid_unknown", kind: "p2p" }, outbound()),
+        runtime.deliver!({ key: "cid_unknown", kind: "p2p" }, outbound()),
       ).rejects.toThrow("session_webhook_unavailable");
       expect(deps.postWebhook).not.toHaveBeenCalled();
     });
@@ -345,7 +345,7 @@ describe("createDingtalkProvider", () => {
       deps.handlers!.onRobotMessage(rawTextMessage());
       await flush();
 
-      await runtime.deliver({ key: "cid_1", kind: "p2p" }, outbound({ text: "pong" }));
+      await runtime.deliver!({ key: "cid_1", kind: "p2p" }, outbound({ text: "pong" }));
 
       expect(deps.postWebhook).toHaveBeenCalledWith(
         "https://oapi.dingtalk.com/robot/sendBySession?session=abc",
@@ -371,7 +371,7 @@ describe("createDingtalkProvider", () => {
       );
       await flush();
 
-      await runtime.deliver({ key: "cid_1", kind: "p2p" }, outbound());
+      await runtime.deliver!({ key: "cid_1", kind: "p2p" }, outbound());
 
       expect(deps.postWebhook).toHaveBeenCalledWith(
         "https://oapi.dingtalk.com/robot/sendBySession?session=new",
@@ -391,7 +391,7 @@ describe("createDingtalkProvider", () => {
       await flush();
 
       await expect(
-        runtime.deliver({ key: "cid_1", kind: "p2p" }, outbound()),
+        runtime.deliver!({ key: "cid_1", kind: "p2p" }, outbound()),
       ).rejects.toThrow("session_webhook_unavailable");
       expect(deps.postWebhook).not.toHaveBeenCalled();
     });
@@ -410,7 +410,7 @@ describe("createDingtalkProvider", () => {
       await flush();
 
       await expect(
-        runtime.deliver({ key: "cid_1", kind: "p2p" }, outbound()),
+        runtime.deliver!({ key: "cid_1", kind: "p2p" }, outbound()),
       ).rejects.toThrow("outbox_send_failed");
     });
   });
@@ -453,7 +453,7 @@ describe("createDingtalkProvider", () => {
       await runtime.stop();
 
       await expect(
-        runtime.deliver({ key: "cid_1", kind: "p2p" }, outbound()),
+        runtime.deliver!({ key: "cid_1", kind: "p2p" }, outbound()),
       ).rejects.toThrow("session_webhook_unavailable");
     });
   });
@@ -996,14 +996,14 @@ describe("createDingtalkProvider", () => {
   // --- Contract item 7: capabilities() ----------------------------------
 
   describe("capabilities", () => {
-    it("returns [] when enableTools is false (default)", () => {
+    it("declares capabilities without starting or granting them", () => {
       const provider = createDingtalkProvider(fakeDeps());
-      expect(provider.capabilities(validConfig)).toEqual([]);
+      expect(provider.capabilities(validConfig)).toHaveLength(1);
     });
 
-    it("declares the dingtalk-mcp server, pinned version, when enableTools is true", () => {
+    it("declares the dingtalk-mcp server with a pinned version", () => {
       const provider = createDingtalkProvider(fakeDeps());
-      const decls = provider.capabilities({ ...validConfig, enableTools: true });
+      const decls = provider.capabilities(validConfig);
       expect(decls).toHaveLength(1);
       const [decl] = decls;
       if (decl?.kind !== "mcp") throw new Error("expected mcp decl");
@@ -1019,7 +1019,7 @@ describe("createDingtalkProvider", () => {
 
     it("puts dingtalk-mcp credentials and profile selection in env, never in argv", () => {
       const provider = createDingtalkProvider(fakeDeps());
-      const [decl] = provider.capabilities({ ...validConfig, enableTools: true });
+      const [decl] = provider.capabilities(validConfig);
       if (decl?.kind !== "mcp" || decl.spec.transport !== "stdio") {
         throw new Error("expected stdio mcp decl");
       }
@@ -1034,7 +1034,7 @@ describe("createDingtalkProvider", () => {
     it("parses config via dingtalkConfigSchema first, throwing on an invalid config before building any decl", () => {
       const provider = createDingtalkProvider(fakeDeps());
       expect(() =>
-        provider.capabilities({ clientId: "", clientSecret: "", enableTools: "nope" }),
+        provider.capabilities({ clientId: "", clientSecret: "" }),
       ).toThrow();
     });
   });

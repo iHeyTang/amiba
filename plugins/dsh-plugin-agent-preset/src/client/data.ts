@@ -23,6 +23,7 @@ export type AgentPresetsApi = Pick<
 const SETTINGS_NAMESPACE = "agent-presets";
 
 export interface AgentPreset {
+  id: string;
   name: string;
   is_default: boolean;
   description: string;
@@ -116,7 +117,8 @@ export function createAgentPresetsAdapter(
           ok: true,
           active,
           profiles: presets.map((item) => ({
-            name: item.id,
+            id: item.id,
+            name: item.name ?? item.id,
             is_default: item.isDefault,
             description: item.description ?? item.name ?? "",
             trust: item.trust,

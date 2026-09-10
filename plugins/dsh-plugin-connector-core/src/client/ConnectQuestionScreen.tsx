@@ -8,13 +8,16 @@ import { describeError } from "./describe-error.js";
 import { connectI18n } from "./i18n.js";
 import { ProviderChooser } from "./ProviderChooser.js";
 import { ProviderScreen } from "./ProviderScreen.js";
-import type { ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
+import type {
+  ConnectorUIRegistry,
+  PresetOption,
+} from "./connector-ui-registry.js";
 import { decodePrefill } from "../connect-wizard-question.js";
 import type { ConnectorProviderView, ConnectView } from "../types.js";
 
 export type ConnectQuestionScreenProps = AmibaConversationQuestionOwner & {
   adapter: ConnectAdapter;
-  registry: ConnectWizardRegistry;
+  registry: ConnectorUIRegistry;
   loadPresets: () => Promise<PresetOption[]>;
 };
 
@@ -59,7 +62,10 @@ export function ConnectQuestionScreen({
 }: ConnectQuestionScreenProps) {
   const { t } = usePluginT(connectI18n);
   const question = request.questions[0];
-  const prefill = useMemo(() => decodePrefill(question?.detail), [question?.detail]);
+  const prefill = useMemo(
+    () => decodePrefill(question?.detail),
+    [question?.detail],
+  );
   const [providerId, setProviderId] = useState(prefill.provider ?? "");
   const [providers, setProviders] = useState<ConnectorProviderView[]>([]);
   const [presets, setPresets] = useState<PresetOption[]>([]);
@@ -126,7 +132,9 @@ export function ConnectQuestionScreen({
           {describeError(t, loadFailure)}
         </p>
       ) : null}
-      {error ? <p className="px-4 pt-2 text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="px-4 pt-2 text-xs text-destructive">{error}</p>
+      ) : null}
       {inFlight ? (
         <p className="px-4 pt-2 text-xs text-muted-foreground">
           {t("options.connect.dsh.loading")}

@@ -1,39 +1,47 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
-import { ModelPlaneService } from "./plane/index.js";
-
-import { dshCredentialVault, dshModelProjection } from "./projection.js";
-import { applyModelPlaneRemote } from "./remote-service.js";
+import { settingsNamespace } from "@deepseek-ai/dsh-settings";
+import { migrateLegacySettings } from "./migrate-legacy.js";
 import { DshModelPlaneStore } from "./store.js";
 
-export * from "./remote.js";
-export * from "./store.js";
-
 export const name = "amiba-model-plane";
-export const inject = ["settings", "credentials"];
-
+export const inject = ["settings"];
 export interface Config {
   root: string;
 }
-
-export const Config: z<Config> = z.object({
-  root: z.string().required(),
+export const Config: z<Config> = z.object({ root: z.string().required() });
+const UiPreferences = z.object({
+  hiddenProviders: z.array(z.string()).default([]),
+  hiddenModels: z.dict(z.array(z.string())).default({}),
 });
-
+/** The host owns only optional UI preferences and one-time migration.
+ * All provider, model, configuration and credential APIs belong to DSH. */
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  const plane = new ModelPlaneService({
-    store: new DshModelPlaneStore(config.root),
-    vault: dshCredentialVault(ctx),
-    projection: dshModelProjection(ctx),
-  });
-  applyModelPlaneRemote(ctx, plane);
-
-  // Re-project durable providers at boot so CLI/Web/Electron all execute the
-  // same canonical model definitions even after a DSH settings reset.
-  const snapshot = await plane.snapshot();
-  await Promise.allSettled(
-    snapshot.providers
-      .filter((provider) => provider.enabled)
-      .map((provider) => plane.prepareProjection(provider.id)),
+  const prefs = await migrateLegacySettings(
+    ctx,
+    new DshModelPlaneStore(config.root),
   );
+  const ns = settingsNamespace("amiba-model-ui");
+  ctx.settings.register(ns, UiPreferences, {
+    base: { hiddenProviders: [], hiddenModels: {} },
+  });
+  const descriptor = ctx.settings.describe().find((d) => d.ns === ns);
+  if (
+    descriptor &&
+    !descriptor.user &&
+    (prefs.hiddenProviders || prefs.hiddenModels)
+  ) {
+    await ctx.settings.mutate(
+      ns,
+      [
+        {
+          op: "set",
+          path: ["hiddenProviders"],
+          value: prefs.hiddenProviders ?? [],
+        },
+        { op: "set", path: ["hiddenModels"], value: prefs.hiddenModels ?? {} },
+      ],
+      descriptor.revision,
+    );
+  }
 }

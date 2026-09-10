@@ -35,8 +35,32 @@ export interface PluginMessageOrigin {
  * to 120 characters) and is the whole of what a collapsed row needs to show;
  * the message's `content` is the full body behind it.
  */
+/** Opaque, session-scoped entity reference. Plugins own kind and resolution. */
+export interface NoticeReference {
+  kind: string;
+  sessionId: string;
+  id: string;
+  /** Optional generation discriminator for reusable entity IDs. */
+  instance?: string;
+}
+/** Display placement is independent of the entity opened by reference. */
+export type NoticePlacement =
+  | { kind: "standalone" }
+  | { kind: "execution"; sessionId: string; callId: string };
+/** Durable UI-only session event: never injected into model context. */
+export interface PresentationNotice {
+  version: 1;
+  id: string;
+  source: string;
+  summary: string;
+  body: string;
+  reference?: NoticeReference;
+  placement?: NoticePlacement;
+}
 export interface MessageNotice {
   summary: string;
+  reference?: NoticeReference;
+  placement?: NoticePlacement;
 }
 
 export interface ChatMessage {
@@ -298,6 +322,7 @@ export interface SubmitPayload {
 
 export type AssistantTimelineItem =
   | { kind: "text"; id: string; text: string }
+  | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string };
 
@@ -413,6 +438,8 @@ export type StreamEvent =
       kind: "userMessage";
       uiId: string;
       content: string;
+      /** Wall-clock time of the durable user-message event. */
+      sentAt: number;
       origin?: ChatMessage["origin"];
       /** Present iff this is an account, not a turn — see {@link MessageNotice}. */
       notice?: ChatMessage["notice"];

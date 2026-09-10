@@ -1,3 +1,4 @@
+import { SessionFeatures } from "@amiba/dsh-plugin-session-features";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const reflectServices = new Map<string, unknown>();
   const setupCtxs = new Map<string, FakeAgentCtx>();
 
-  type FakeAgentCtx = { tools: { guard: ReturnType<typeof vi.fn>; register: ReturnType<typeof vi.fn> }; effect: ReturnType<typeof vi.fn> };
+  type FakeAgentCtx = { systemPrompt: { section: ReturnType<typeof vi.fn> }; tools: { guard: ReturnType<typeof vi.fn>; register: ReturnType<typeof vi.fn> }; effect: ReturnType<typeof vi.fn> };
   type FakeAgent = {
     id: string;
     followup: ReturnType<typeof vi.fn>;
@@ -31,6 +32,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   };
 
   const makeAgentCtx = (): FakeAgentCtx => ({
+    systemPrompt: { section: vi.fn(() => () => undefined) },
     tools: { guard: vi.fn(() => () => undefined), register: vi.fn(() => () => undefined) },
     effect: vi.fn((run: () => unknown) => { run(); return () => undefined; }),
   });
@@ -42,6 +44,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   });
 
   const ctx = {
+    amibaSessionFeatures: new SessionFeatures(),
     agents: {
       get: (id: string) => live.get(id),
       create: vi.fn(async (opts: { sessionId: string; meta?: Record<string, unknown>; agentOptions?: Record<string, unknown>; setup?: (c: unknown) => Promise<unknown> }) => {
@@ -105,7 +108,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const onStewardSetup = vi.fn();
   const service = new StewardService(ctx as never, store, {
     defaultCwd: "/default",
-    presetId: "amiba-steward",
+    basePreset: "standard",
     onStewardSetup,
     now: () => 5_000,
     ...(options.askNoticeDelayMs === undefined ? {} : { askNoticeDelayMs: options.askNoticeDelayMs }),

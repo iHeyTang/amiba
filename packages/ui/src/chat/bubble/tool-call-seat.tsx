@@ -1,3 +1,4 @@
+import type { ToolNavigation } from "./tool-navigation";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
@@ -26,7 +27,9 @@ export interface ToolCallSeatRequest {
 export type ToolCallSeatRenderer = (request: ToolCallSeatRequest) => ReactNode;
 
 interface ToolCallSeat {
-  render: ToolCallSeatRenderer;
+  navigation?: ToolNavigation;
+  render?: ToolCallSeatRenderer;
+  activity?: (owner: { callId: string }) => ReactNode;
   /** Session workspace root, the `cwd` member of the official owner share. */
   cwd?: string;
 }
@@ -58,17 +61,21 @@ const ToolCallSeatContext = createContext<ToolCallSeat | null>(null);
  * @returns the subtree, with the seat published when a renderer exists.
  */
 export function ToolCallSeatProvider({
+  navigation,
+  activity,
   render,
   cwd,
   children,
 }: {
+  navigation?: ToolNavigation;
   render?: ToolCallSeatRenderer;
+  activity?: (owner: { callId: string }) => ReactNode;
   cwd?: string | null;
   children: ReactNode;
 }) {
   const value = useMemo<ToolCallSeat | null>(
-    () => (render ? { render, ...(cwd ? { cwd } : {}) } : null),
-    [render, cwd],
+    () => (render || activity || navigation ? { render, activity, navigation, ...(cwd ? { cwd } : {}) } : null),
+    [render, activity, cwd, navigation],
   );
   return (
     <ToolCallSeatContext.Provider value={value}>

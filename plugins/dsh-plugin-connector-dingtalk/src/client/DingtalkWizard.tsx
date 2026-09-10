@@ -1,4 +1,4 @@
-import { ChevronLeft, Loader2, Lock, Plus } from "lucide-react";
+import { Loader2, Lock, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -6,12 +6,10 @@ import {
   Button,
   Input,
   Label,
-  Switch,
   WizardFrame,
   usePluginT,
   type PluginTranslateFn,
 } from "@amiba/ui/plugin";
-import type { MessageChannelApproval } from "@amiba/dsh-plugin-connector-core";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkMark } from "./brand-mark.js";
@@ -65,7 +63,11 @@ function describeError(t: PluginTranslateFn, cause: unknown): string {
  * aside), so the same screen works in the settings modal and, later, in the
  * composer.
  */
-export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
+export function DingtalkWizard({
+  host,
+}: {
+  host: ConnectWizardHost;
+}): ReactNode {
   const { t } = useT();
   // The seat rebuilds `host` on every render, so `submit` reads the adapter
   // and the `done`/`cancel` callbacks through this ref AT CALL TIME instead
@@ -79,20 +81,11 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
   const [preset, setPreset] = useState(host.prefill?.agentPreset ?? "");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [enableTools, setEnableTools] = useState(false);
-  // Seeded from the kit (`host.kit.defaultApproval`), the same place
-  // `ApprovalField` itself comes from: each plugin client is its own bundle,
-  // so parts travel on the host rather than through imports — which is what
-  // keeps the `timeout`/10-minute literal in connector-core alone.
-  const [approval, setApproval] = useState<MessageChannelApproval>(() =>
-    host.kit.defaultApproval(),
-  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clientIdId = useId();
   const clientSecretId = useId();
-  const toolsId = useId();
 
   // True while this component instance is mounted. `submit` awaits an
   // adapter call that can outlive the component (the modal closes, or the
@@ -112,7 +105,12 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
     const trimmedName = name.trim();
     const trimmedClientId = clientId.trim();
     const trimmedClientSecret = clientSecret.trim();
-    if (!trimmedName || !preset.trim() || !trimmedClientId || !trimmedClientSecret) {
+    if (
+      !trimmedName ||
+      !preset.trim() ||
+      !trimmedClientId ||
+      !trimmedClientSecret
+    ) {
       return;
     }
     setSaving(true);
@@ -128,11 +126,9 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
         config: {
           clientId: trimmedClientId,
           clientSecret: trimmedClientSecret,
-          enableTools,
         },
-        approval,
       });
-      current.done(connect);
+      if (mountedRef.current) current.done(connect);
     } catch (cause) {
       if (mountedRef.current) setError(describeError(t, cause));
     } finally {
@@ -152,46 +148,25 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
 
   // Handed over on the host rather than imported: each plugin client is its
   // own bundle, so the shared parts travel with the seat.
-  const { BasicsFields, ApprovalField } = host.kit;
+  const { BasicsFields } = host.kit;
 
   return (
     <WizardFrame
       actions={
-        <>
-          <Button
-            onClick={() => host.back()}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            {t("options.connect.dsh.wizard.changePlatform")}
-          </Button>
-          <Button
-            onClick={() => host.cancel()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("options.connect.dsh.cancel")}
-          </Button>
-          <Button
-            disabled={saving || !canSubmit}
-            onClick={() => void submit()}
-            size="sm"
-            type="button"
-          >
-            {saving ? <Loader2 className="animate-spin" /> : <Plus />}
-            {t("options.connect.dsh.submit")}
-            {saving ? (
-              <span className="sr-only">
-                {t("options.connect.dsh.loading")}
-              </span>
-            ) : null}
-          </Button>
-        </>
+        <Button
+          disabled={saving || !canSubmit}
+          onClick={() => void submit()}
+          type="button"
+        >
+          {saving ? <Loader2 className="animate-spin" /> : <Plus />}
+          {t("options.connect.dsh.submit")}
+          {saving ? (
+            <span className="sr-only">{t("options.connect.dsh.loading")}</span>
+          ) : null}
+        </Button>
       }
-      closeLabel={t("options.connect.dsh.cancel")}
+      backLabel={t("options.connect.dsh.wizard.changePlatform")}
+      closeLabel={t("options.connect.dsh.close")}
       hint={
         <>
           <Lock className="h-3 w-3" />
@@ -199,11 +174,13 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
         </>
       }
       icon={<DingtalkMark size={20} />}
+      iconAppearance="bare"
+      onBack={host.back}
       onClose={() => host.cancel()}
       subtitle={t("options.connect.dsh.dingtalk.subtitle")}
       title={t("options.connect.dsh.dingtalk.title")}
     >
-      <div className="space-y-4">
+      <div className="space-y-6">
         <BasicsFields
           name={name}
           onNameChange={setName}
@@ -211,42 +188,48 @@ export function DingtalkWizard({ host }: { host: ConnectWizardHost }): ReactNode
           preset={preset}
           presets={host.presets}
         />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor={clientIdId}>
-              {t("options.connect.dsh.dingtalk.clientId")}
-            </Label>
-            <Input
-              id={clientIdId}
-              onChange={(event) => setClientId(event.target.value)}
-              value={clientId}
-            />
+
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("options.connect.dsh.dingtalk.credentials.title")}
+            </h3>
+            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+              {t("options.connect.dsh.dingtalk.credentials.description")}
+            </p>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={clientSecretId}>
-              {t("options.connect.dsh.dingtalk.clientSecret")}
-            </Label>
-            <Input
-              id={clientSecretId}
-              onChange={(event) => setClientSecret(event.target.value)}
-              type="password"
-              value={clientSecret}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor={clientIdId}>
+                {t("options.connect.dsh.dingtalk.clientId")}
+              </Label>
+              <Input
+                id={clientIdId}
+                onChange={(event) => setClientId(event.target.value)}
+                value={clientId}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={clientSecretId}>
+                {t("options.connect.dsh.dingtalk.clientSecret")}
+              </Label>
+              <Input
+                id={clientSecretId}
+                onChange={(event) => setClientSecret(event.target.value)}
+                type="password"
+                value={clientSecret}
+              />
+            </div>
           </div>
-        </div>
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/55 px-3 py-2.5">
-          <Label htmlFor={toolsId}>
-            {t("options.connect.dsh.dingtalk.enableTools")}
-          </Label>
-          <Switch
-            checked={enableTools}
-            id={toolsId}
-            onCheckedChange={setEnableTools}
-          />
-        </div>
-        <ApprovalField approval={approval} onApprovalChange={setApproval} />
+        </section>
+
+
       </div>
-      {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="mt-4 rounded-lg bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
+          {error}
+        </p>
+      ) : null}
     </WizardFrame>
   );
 }

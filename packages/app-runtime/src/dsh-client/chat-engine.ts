@@ -354,6 +354,9 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
       case "reasoning": {
         state.reasoning += event.text;
+        const last = state.timeline.at(-1);
+        if (last?.kind === "reasoning") { last.text += event.text; last.endedAt = Date.now(); }
+        else state.timeline.push({kind:"reasoning",id:`r_${Date.now()}_${state.timeline.length}`,text:event.text,startedAt:Date.now(),endedAt:Date.now()});
         const now = Date.now();
         if (state.reasoningStartedAt === null) state.reasoningStartedAt = now;
         state.reasoningEndedAt = now;
@@ -688,6 +691,7 @@ export class DshChatEngineClient implements ChatEngineClient {
 
   onStreamEvent(listener: StreamListener): () => void {
     this.streamListeners.add(listener);
+    this.ensureInteractionWatcher();
     return () => this.streamListeners.delete(listener);
   }
 

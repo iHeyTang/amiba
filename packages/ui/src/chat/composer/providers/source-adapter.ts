@@ -65,15 +65,15 @@ export function sourceToProvider(
         {
           query,
           position: hit?.position ?? "leading",
-          signal: controller.signal,
+          signal: hit?.signal ?? controller.signal,
         },
       );
       return candidates.map((candidate, index) => {
         const item: MenuItem = {
-          id: `${source.name}:${index}:${candidate.name}`,
+          id: `${source.name}:${candidate.value ?? index}:${candidate.name}`,
           label: candidate.name,
-          ...(candidate.description !== undefined
-            ? { description: candidate.description }
+          ...(candidate.description !== undefined || candidate.hint !== undefined
+            ? { description: [candidate.hint, candidate.description].filter(Boolean).join(" · ") }
             : {}),
         };
         origins.set(item, { source, candidate });

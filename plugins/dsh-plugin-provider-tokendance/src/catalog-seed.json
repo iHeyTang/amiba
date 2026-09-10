@@ -1,0 +1,629 @@
+[
+  {
+    "id": "glm-4.7",
+    "name": "Z.ai: GLM 4.7",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "glm-5",
+    "name": "Z.ai: GLM 5",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "qwen3-max",
+    "name": "Qwen: Qwen3 Max",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "deepseek-v3.2",
+    "name": "DeepSeek: DeepSeek V3.2",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 128000
+  },
+  {
+    "id": "minimax-m2.5",
+    "name": "MiniMax: MiniMax M2.5",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "kimi-k2.5",
+    "name": "MoonshotAI: Kimi K2.5",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "minimax-m2.7",
+    "name": "MiniMax: MiniMax M2.7",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "glm-4.5-air",
+    "name": "Z.ai: GLM 4.5 Air",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 128000
+  },
+  {
+    "id": "glm-4.6v",
+    "name": "Z.ai: GLM 4.6V",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 128000
+  },
+  {
+    "id": "deepseek-ocr-2",
+    "name": "DeepSeek: DeepSeek OCR 2",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 8000
+  },
+  {
+    "id": "step-3.5-flash",
+    "name": "StepFun: Step 3.5 Flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "seed-2.0-pro",
+    "name": "ByteDance Seed: Seed-2.0-Pro",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "seed-2.0-lite",
+    "name": "ByteDance Seed: Seed-2.0-Lite",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "seed-2.0-mini",
+    "name": "ByteDance Seed: Seed-2.0-Mini",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "glm-5v-turbo",
+    "name": "Z.ai: GLM 5V Turbo",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 202752
+  },
+  {
+    "id": "qwen3.6-max-preview",
+    "name": "Qwen: Qwen3.6 Max Preview",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 262144
+  },
+  {
+    "id": "glm-5.1",
+    "name": "Z.ai: GLM 5.1",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 202752
+  },
+  {
+    "id": "qwen3-vl-plus",
+    "name": "Qwen: Qwen3 VL Plus",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "kimi-k2.6",
+    "name": "MoonshotAI: Kimi K2.6",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 262144
+  },
+  {
+    "id": "qwen3.5-plus",
+    "name": "Qwen: Qwen3.5 Plus",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "qwen3.5-flash",
+    "name": "Qwen: Qwen3.5 Flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "deepseek-v4-pro",
+    "name": "DeepSeek: DeepSeek V4 Pro Preview",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "qwen3.6-plus",
+    "name": "Qwen: Qwen3.6 Plus",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "mimo-v2.5-pro",
+    "name": "Xiaomi: MiMo-V2.5-Pro",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "unifuncs-s3",
+    "name": "UniFuncs: Deep Search S3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "unifuncs-u3",
+    "name": "UniFuncs: Deep Research U3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "mimo-v2.5",
+    "name": "Xiaomi: MiMo-V2.5",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "deepseek-chat-v3-0324",
+    "name": "DeepSeek: DeepSeek V3 0324",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 128000
+  },
+  {
+    "id": "mimo-v2.5-tts",
+    "name": "Xiaomi: MiMo-V2.5-TTS",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 8000
+  },
+  {
+    "id": "mimo-v2.5-tts-voicedesign",
+    "name": "Xiaomi: MiMo-V2.5-TTS-VoiceDesign",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 8000
+  },
+  {
+    "id": "mimo-v2.5-tts-voiceclone",
+    "name": "Xiaomi: MiMo-V2.5-TTS-VoiceClone",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 8000
+  },
+  {
+    "id": "qwen3.7-plus",
+    "name": "Qwen: Qwen3.7 Plus",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "qwen3.7-max",
+    "name": "Qwen: Qwen3.7 Max",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "step-3.7-flash",
+    "name": "StepFun: Step 3.7 Flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "unifuncs-u3-pro",
+    "name": "UniFuncs: Deep Research U3 Pro",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "unifuncs-s3-pro",
+    "name": "UniFuncs: Deep Search S3 Pro",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 200000
+  },
+  {
+    "id": "hy3-preview",
+    "name": "Tencent: Hy3 preview",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "kimi-k2.7-code",
+    "name": "MoonshotAI: Kimi K2.7 Code",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 262144
+  },
+  {
+    "id": "mimo-v2.5-pro-ultraspeed",
+    "name": "Xiaomi: MiMo-V2.5-Pro-UltraSpeed",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "glm-5.2",
+    "name": "Z.ai: GLM 5.2",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "seed-evolving",
+    "name": "ByteDance Seed: Seed-Evolving",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "seed-2.1-turbo",
+    "name": "ByteDance Seed: Seed-2.1-Turbo",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "minimax-m3",
+    "name": "MiniMax: MiniMax M3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "seed-2.1-pro",
+    "name": "ByteDance Seed: Seed-2.1-Pro",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "qwen3.8-max",
+    "name": "Qwen: Qwen3.8 Max",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "longcat-2.0",
+    "name": "Meituan: LongCat-2.0",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "hy3",
+    "name": "Tencent: Hy3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "kimi-k3",
+    "name": "MoonshotAI: Kimi K3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "qwen3.5-35b-a3b",
+    "name": "Qwen: Qwen3.5-35B-A3B",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "qwen3-30b-a3b-instruct-2507",
+    "name": "Qwen: Qwen3 30B A3B Instruct 2507",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions"
+    ],
+    "contextWindow": 128000
+  },
+  {
+    "id": "deepseek-v4-flash-0731",
+    "name": "DeepSeek: DeepSeek V4 Flash 0731",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "deepseek-v4-flash",
+    "name": "DeepSeek: DeepSeek V4 Flash Preview",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1048576
+  },
+  {
+    "id": "deepseek-v4-flash-vision-exp",
+    "name": "DeepSeek: DeepSeek V4 Flash Vision Exp",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "glm-5.3",
+    "name": "Z.ai: GLM 5.3",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "dots-3-note-preview",
+    "name": "Dots Studio: Dots3-Note Preview（Free）",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 512000
+  },
+  {
+    "id": "seed-2.0-code",
+    "name": "ByteDance Seed: Seed-2.0-Code",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "ling-3.0-flash",
+    "name": "Ling: Ling-3.0-flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 256000
+  },
+  {
+    "id": "deepseek-v4-pro-0813",
+    "name": "DeepSeek：DeepSeek V4 Pro 0813",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "glm-5.3-flash",
+    "name": "Z.ai: GLM 5.3 Flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "hy4-preview",
+    "name": "Tencent: Hy4 preview",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 1024000
+  },
+  {
+    "id": "qwen3.8-flash",
+    "name": "Qwen: Qwen3.8 Flash",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "qwen3.8-max-0902",
+    "name": "Qwen: Qwen3.8-Max-0902",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "openai-responses"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "spark-x2.5-1.7b",
+    "name": "Xunfei: Spark-X2.5-1.7B",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  },
+  {
+    "id": "spark-x2.5-4b",
+    "name": "Xunfei: Spark-X2.5-4B",
+    "api": "openai-completions",
+    "supportedApis": [
+      "openai-completions",
+      "anthropic-messages"
+    ],
+    "contextWindow": 1000000
+  }
+]

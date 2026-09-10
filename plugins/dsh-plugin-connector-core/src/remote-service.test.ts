@@ -43,7 +43,11 @@ function fakeMessageCenter() {
       if (!input.agentPreset?.trim() && !input.sessionId?.trim())
         throw new Error("invalid_channel");
       return {
-        channel: { id: "channel-1", provider: input.provider, name: input.name },
+        channel: {
+          id: "channel-1",
+          provider: input.provider,
+          name: input.name,
+        },
         secret: "s3cret",
       };
     },
@@ -127,6 +131,8 @@ function fakeMcpManager() {
 const DEFAULT_CAPABILITIES: CapabilityDecl[] = [
   {
     kind: "mcp",
+      service: { id: "test.mcp", name: "Test MCP", version: "1", shareable: true },
+      identity: "fixture-account", tools: [{ name: "read", title: "Read" }],
     spec: {
       serverName: "conn-fake",
       transport: "stdio",
@@ -153,6 +159,7 @@ function fakeProvider(
   });
   const validate = vi.fn(async () => undefined);
   const provider: ConnectorProvider = {
+    messaging: { ownerPairing: true },
     id,
     name: "Fake Connector",
     description: "Fake connector for tests",
@@ -197,7 +204,12 @@ function deferred<T>() {
 function fakeAppliers(mcp: ReturnType<typeof fakeMcpManager>) {
   const appliers = new Map<
     string,
-    { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
+    {
+      apply: (
+        connect: StoredConnect,
+        decl: CapabilityDecl,
+      ) => Promise<() => void>;
+    }
   >();
   appliers.set("mcp", {
     apply: async (_connect, decl) => {
@@ -287,6 +299,7 @@ describe("AmibaConnectorsRemoteService", () => {
           name: "Fake Connector",
           description: "Fake connector for tests",
           supportsOnboarding: false,
+          messaging: { ownerPairing: true },
         },
       ],
     });
@@ -369,39 +382,6 @@ describe("AmibaConnectorsRemoteService", () => {
     ).toEqual(["alice", "bob"]);
   });
 
-  it("createConnect forwards approval, and setApproval round-trips a change through messageCenter.updateChannel and listConnects", async () => {
-    const { center, messageCenter } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-    const { service } = buildService(center);
-
-    const created = await service.createConnect({
-      provider: "fake",
-      name: "Approval-aware",
-      agentPreset: "restricted",
-      config: {},
-      approval: { mode: "wait", timeoutMs: 600_000 },
-    });
-    expect(created.approval).toEqual({ mode: "wait", timeoutMs: 600_000 });
-    expect(messageCenter.createChannel).toHaveBeenCalledWith(
-      expect.objectContaining({ approval: { mode: "wait", timeoutMs: 600_000 } }),
-    );
-
-    const updated = await service.setApproval(created.id, {
-      mode: "timeout",
-      timeoutMs: 120_000,
-    });
-    expect(updated.approval).toEqual({ mode: "timeout", timeoutMs: 120_000 });
-    expect(messageCenter.updateChannel).toHaveBeenCalledWith("channel-1", {
-      approval: { mode: "timeout", timeoutMs: 120_000 },
-    });
-
-    const listed = await service.listConnects();
-    expect(
-      listed.connects.find((connect) => connect.id === created.id)?.approval,
-    ).toEqual({ mode: "timeout", timeoutMs: 120_000 });
-  });
-
   it("setEnabled toggles the connect's enabled state", async () => {
     const { center } = await harness();
     const { provider } = fakeProvider();
@@ -434,9 +414,9 @@ describe("AmibaConnectorsRemoteService onboarding", () => {
     const { service } = buildService(center);
 
     const { providers } = await service.listProviders();
-    expect(providers.find((view) => view.id === "plain")?.supportsOnboarding).toBe(
-      false,
-    );
+    expect(
+      providers.find((view) => view.id === "plain")?.supportsOnboarding,
+    ).toBe(false);
     expect(
       providers.find((view) => view.id === "onboardable")?.supportsOnboarding,
     ).toBe(true);

@@ -1,6 +1,7 @@
 import { getPlatform } from "@amiba/app-runtime/platform";
 
 export interface AgentPreset {
+  id: string;
   name: string;
   path: string;
   is_default: boolean;
@@ -54,7 +55,8 @@ export async function getAgentPresets(): Promise<AgentPresetsResponse> {
       active,
       current: active,
       profiles: roster.presets.map((item) => ({
-        name: item.id,
+        id: item.id,
+        name: item.name ?? item.id,
         path: "",
         is_default: item.isDefault,
         model: null,

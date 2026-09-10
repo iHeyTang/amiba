@@ -1,10 +1,11 @@
 import type { Context } from "@deepseek-ai/cordis";
-
+import { applyMarkdownCapabilities } from "./markdown-capabilities.js";
+export {
+  withMarkdownCapability,
+  type MarkdownRequirement,
+} from "./markdown-capabilities.js";
 export const name = "amiba-ui-shell";
-
-/**
- * The Host half intentionally owns no UI. Its presence lets DSH discover the
- * package's `dsh.client` declaration and serve the browser bundle as a normal
- * DSH plugin. Electron remains a platform host, not a reverse plugin source.
- */
-export function apply(_ctx: Context): void {}
+/** Report client capabilities; native Skills providers decide what to expose. */
+export function apply(ctx: Context): void {
+  applyMarkdownCapabilities(ctx);
+}

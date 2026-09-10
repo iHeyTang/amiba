@@ -10,7 +10,7 @@ export interface NavigationRowProps
   trailing?: ReactNode;
   /**
    * Replace the icon + label pair with arbitrary row content, keeping the
-   * button chrome (hit target, selection treatment, focus ring). The one
+   * button chrome (hit target, selection treatment, focus surface). The one
    * consumer today is the sidebar's Settings row, whose content is the
    * official `settings.trigger` seat — a slot whose contract is that the
    * whole content, icon included, arrives from the registrant. `icon` and
@@ -40,7 +40,7 @@ export function NavigationRow({
       aria-current={active ? "page" : undefined}
       className={cn(
         "app-no-drag group flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm font-normal transition-colors",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
+        "focus-visible:bg-accent/70 focus-visible:text-foreground focus-visible:outline-none",
         active
           ? "bg-secondary text-secondary-foreground"
           : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",

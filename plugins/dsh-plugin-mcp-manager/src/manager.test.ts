@@ -39,10 +39,18 @@ async function makeManager() {
 describe("programmatic managed servers", () => {
   it("registers, merges into supervisor reloads, and unwinds via the disposer", async () => {
     const { manager, reload } = await makeManager();
-    const dispose = await manager.registerManagedServer(stdioServer("conn-lark"));
+    const dispose = await manager.registerManagedServer({
+      ...stdioServer("conn-lark"),
+      displayName: "Work account",
+    });
     await manager.list();
     expect(reload.mock.lastCall?.[0]).toEqual(
-      expect.arrayContaining([expect.objectContaining({ serverName: "conn-lark" })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          serverName: "conn-lark",
+          displayName: "Work account",
+        }),
+      ]),
     );
     // Programmatic servers never enter the persisted view.
     expect((await manager.list()).servers).toHaveLength(0);
@@ -50,7 +58,9 @@ describe("programmatic managed servers", () => {
     dispose();
     await manager.list();
     expect(
-      (reload.mock.lastCall?.[0] as ManagedMcpServer[]).map((s) => s.serverName),
+      (reload.mock.lastCall?.[0] as ManagedMcpServer[]).map(
+        (s) => s.serverName,
+      ),
     ).not.toContain("conn-lark");
     dispose(); // idempotent — no throw
   });
@@ -73,7 +83,9 @@ describe("programmatic managed servers", () => {
 
   it("rejects duplicate names in both directions", async () => {
     const { manager } = await makeManager();
-    const dispose = await manager.registerManagedServer(stdioServer("conn-lark"));
+    const dispose = await manager.registerManagedServer(
+      stdioServer("conn-lark"),
+    );
     // Programmatic-vs-programmatic duplicate (synchronous throw converted to rejected promise)
     await expect(
       manager.registerManagedServer(stdioServer("conn-lark")),
@@ -107,4 +119,75 @@ describe("programmatic managed servers", () => {
     dispose(); // cleanup from first registration
     dispose2(); // cleanup from successful registration
   });
+});
+
+it("does not poison initial startup with a failing managed dependency", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amiba-mcp-start-"));
+  roots.push(root);
+  const reload = vi.fn(async (servers: ManagedMcpServer[]) => {
+    if (servers.some((server) => server.serverName === "bad"))
+      throw new Error("start failed");
+    return {
+      generation: 1,
+      configured: servers.map((server) => server.serverName),
+    };
+  });
+  const manager = new DshMcpManager({} as never, root, undefined, {
+    reload,
+    dispose: vi.fn(async () => {}),
+  });
+  await expect(
+    manager.registerManagedServer(stdioServer("bad")),
+  ).rejects.toThrow("start failed");
+  const release = await manager.registerManagedServer(stdioServer("good"));
+  await release();
+  await manager.dispose();
+  await expect(
+    manager.registerManagedServer(stdioServer("late")),
+  ).rejects.toThrow("disposed");
+});
+
+it("runs the complete dependency-to-supervisor path without persisting plugin credentials", async () => {
+  const { manager, reload } = await makeManager();
+  const owner = { id: "provider", name: "Provider" };
+  await manager.dependencies.registerService(owner, {
+    id: "docs",
+    name: "Documents",
+    version: "1",
+    shareable: true,
+  });
+  await manager.dependencies.registerConnection(owner, {
+    id: "work",
+    name: "Work",
+    serviceId: "docs",
+    identity: "tenant",
+    server: stdioServer("ignored"),
+  });
+  const demand = {
+    owner: { id: "one", name: "One" },
+    serviceId: "docs",
+    version: "1",
+    connectionId: "work",
+    sharing: "shared" as const,
+  };
+  const [a, b] = await Promise.all([
+    manager.dependencies.acquire(demand),
+    manager.dependencies.acquire({
+      ...demand,
+      owner: { id: "two", name: "Two" },
+    }),
+  ]);
+  expect(a.serverName).toBe(b.serverName);
+  expect(reload.mock.lastCall?.[0] as ManagedMcpServer[]).toHaveLength(1);
+  const snapshot = await manager.list();
+  expect(snapshot.servers).toEqual([]);
+  expect(snapshot.dependencies[0]).toMatchObject({
+    consumers: ["One", "Two"],
+    instances: 1,
+  });
+  await a.release();
+  expect((await manager.list()).dependencies[0]?.consumers).toEqual(["Two"]);
+  await b.release();
+  expect(reload.mock.lastCall?.[0]).toEqual([]);
+  await manager.dispose();
 });

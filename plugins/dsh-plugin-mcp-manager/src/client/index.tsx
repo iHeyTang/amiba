@@ -1,21 +1,36 @@
-import type {} from "@amiba/dsh-plugin-catalog/client";
+import { PageContent, ScrollArea } from "@amiba/ui/plugin";
+import { Server } from "lucide-react";
+import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ReactNode } from "react";
 
 import { AMIBA_MCP_REMOTE } from "../remote.js";
 import { DshMcpToolsTab, type McpToolsAdapter } from "./DshMcpToolsTab.js";
+import { McpAccessPanel, type McpAccessAdapter } from "./McpAccessPanel.js";
 
 export const name = "amiba-mcp-manager-ui";
 export const inject = ["slots", "remote"];
 
 type McpRemote = ClientContext["remote"]["amibaMcp"];
-type McpPanelProps = PropsRuntime<"amiba.tools.panel"> & {
+type McpPanelProps = PropsRuntime<"settings.section"> & {
   adapter: McpToolsAdapter;
 };
 
 function McpPanel({ adapter }: McpPanelProps): ReactNode {
-  return <DshMcpToolsTab adapter={adapter} />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <ScrollArea className="min-h-0 flex-1">
+        <PageContent size="lg" bodyClassName="space-y-6">
+          <DshMcpToolsTab adapter={adapter} />
+        </PageContent>
+      </ScrollArea>
+    </div>
+  );
+}
+
+function ConnectionAccess({ configuration, adapter }: PropsRuntime<"amiba.connection.access"> & { adapter: McpAccessAdapter }) {
+  return <McpAccessPanel adapter={adapter} configuration={configuration} />;
 }
 
 function errorOf(value: unknown): Error {
@@ -35,9 +50,16 @@ async function valueOf<T>(promise: Promise<{ ok: true; value: T } | { ok: false;
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_MCP_REMOTE);
   const panelFiber = ctx.inject(
-    ["slots", "remote.amibaMcp"],
+    ["slots", "remote.amibaMcp", "layout"],
     (injectedCtx) => {
       const remote: McpRemote = injectedCtx.remote.amibaMcp;
+      const accessAdapter: McpAccessAdapter = {
+        list: () => valueOf(remote.listAccess()),
+        approve: (id, connectionId, approvalToken) => valueOf(remote.approveAccess(id, connectionId, approvalToken)),
+        revoke: (id) => valueOf(remote.revokeAccess(id)),
+        retry: (id) => valueOf(remote.retryAccess(id)),
+        openConnections: () => injectedCtx.layout.openSettings("connect"),
+      };
       const adapter: McpToolsAdapter = {
         list: () => valueOf(remote.list()),
         save: (input) => valueOf(remote.save(input)),
@@ -45,17 +67,22 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           await valueOf(remote.removeServer(serverName));
         },
       };
-      return injectedCtx.slots.inject("amiba.tools.panel", () =>
+      const connectionAccess = injectedCtx.slots.inject("amiba.connection.access", () =>
+        injectedCtx.slots.register({ name: "amiba.connection.access", id: "mcp", order: 100,
+          inject: () => ({ adapter: accessAdapter }) }, ConnectionAccess));
+      const mcpSection = injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
-            name: "amiba.tools.panel",
+            name: "settings.section",
             id: "mcp",
-            order: 100,
-            inject: () => ({ adapter }),
+            order: 110,
+            label: () => "MCP",
+            inject: () => ({ adapter, navIcon: () => <Server /> }),
           },
           McpPanel,
         ),
       );
+      return () => { connectionAccess(); mcpSection(); };
     },
   );
   await panelFiber;

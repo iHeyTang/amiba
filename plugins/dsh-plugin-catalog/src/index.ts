@@ -12,10 +12,12 @@ export const inject = ["tools", "agentPresets"];
 
 export interface Config {
   apiToken: string;
+  shippedBundles: string[];
 }
 
 export const Config: z<Config> = z.object({
   apiToken: z.string().default(""),
+  shippedBundles: z.array(z.string()).default([]),
 });
 
 /**
@@ -26,7 +28,7 @@ export const Config: z<Config> = z.object({
  * unwind with the plugin's lifecycle.
  */
 export function apply(ctx: Context, config: Config): void {
-  const catalog = new ToolProvenanceRegistry();
+  const catalog = new ToolProvenanceRegistry(config.shippedBundles);
   ctx.provide("amibaToolCatalog", catalog);
   applyToolsRemote(ctx, catalog);
   if (config.apiToken) {

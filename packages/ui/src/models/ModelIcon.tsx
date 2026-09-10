@@ -1,4 +1,25 @@
 /// <reference path="../assets.d.ts" />
+import ai21Icon from "@lobehub/icons-static-svg/icons/ai21.svg";
+import aionlabsIcon from "@lobehub/icons-static-svg/icons/aionlabs.svg";
+import antgroupIcon from "@lobehub/icons-static-svg/icons/antgroup.svg";
+import bytedanceIcon from "@lobehub/icons-static-svg/icons/bytedance.svg";
+import cerebrasIcon from "@lobehub/icons-static-svg/icons/cerebras.svg";
+import cloudflareIcon from "@lobehub/icons-static-svg/icons/cloudflare.svg";
+import hunyuanIcon from "@lobehub/icons-static-svg/icons/hunyuan.svg";
+import ibmIcon from "@lobehub/icons-static-svg/icons/ibm.svg";
+import inceptionIcon from "@lobehub/icons-static-svg/icons/inception.svg";
+import kwaikatIcon from "@lobehub/icons-static-svg/icons/kwaikat.svg";
+import longcatIcon from "@lobehub/icons-static-svg/icons/longcat.svg";
+import microsoftIcon from "@lobehub/icons-static-svg/icons/microsoft.svg";
+import poolsideIcon from "@lobehub/icons-static-svg/icons/poolside.svg";
+import relaceIcon from "@lobehub/icons-static-svg/icons/relace.svg";
+import sparkIcon from "@lobehub/icons-static-svg/icons/spark.svg";
+import upstageIcon from "@lobehub/icons-static-svg/icons/upstage.svg";
+import vercelIcon from "@lobehub/icons-static-svg/icons/vercel.svg";
+import workersaiIcon from "@lobehub/icons-static-svg/icons/workersai.svg";
+import tokendanceIcon from "./assets/tokendance.svg";
+import unifuncsIcon from "./assets/unifuncs.png";
+import dotsIcon from "./assets/dots.png";
 import anthropicIcon from "@lobehub/icons-static-svg/icons/anthropic.svg";
 import arceeIcon from "@lobehub/icons-static-svg/icons/arcee-color.svg";
 import azureAiIcon from "@lobehub/icons-static-svg/icons/azureai-color.svg";
@@ -14,7 +35,7 @@ import githubCopilotIcon from "@lobehub/icons-static-svg/icons/githubcopilot.svg
 import grokIcon from "@lobehub/icons-static-svg/icons/grok.svg";
 import groqIcon from "@lobehub/icons-static-svg/icons/groq.svg";
 import huggingFaceIcon from "@lobehub/icons-static-svg/icons/huggingface-color.svg";
-import kimiIcon from "@lobehub/icons-static-svg/icons/kimi-color.svg";
+import kimiIcon from "@lobehub/icons-static-svg/icons/kimi.svg";
 import kiloCodeIcon from "@lobehub/icons-static-svg/icons/kilocode.svg";
 import lmStudioIcon from "@lobehub/icons-static-svg/icons/lmstudio.svg";
 import metaIcon from "@lobehub/icons-static-svg/icons/meta-color.svg";
@@ -28,7 +49,7 @@ import nvidiaIcon from "@lobehub/icons-static-svg/icons/nvidia-color.svg";
 import ollamaIcon from "@lobehub/icons-static-svg/icons/ollama.svg";
 import openAiIcon from "@lobehub/icons-static-svg/icons/openai.svg";
 import openCodeIcon from "@lobehub/icons-static-svg/icons/opencode.svg";
-import openRouterIcon from "@lobehub/icons-static-svg/icons/openrouter-color.svg";
+import openRouterIcon from "@lobehub/icons-static-svg/icons/openrouter.svg";
 import perplexityIcon from "@lobehub/icons-static-svg/icons/perplexity-color.svg";
 import qwenIcon from "@lobehub/icons-static-svg/icons/qwen-color.svg";
 import siliconCloudIcon from "@lobehub/icons-static-svg/icons/siliconcloud-color.svg";
@@ -43,6 +64,28 @@ import { Cpu } from "lucide-react";
 import { cn } from "../primitives";
 
 const MODEL_ICON_URLS = {
+  ai21: ai21Icon,
+  aionlabs: aionlabsIcon,
+  antgroup: antgroupIcon,
+  bytedance: bytedanceIcon,
+  cerebras: cerebrasIcon,
+  cloudflare: cloudflareIcon,
+  hunyuan: hunyuanIcon,
+  ibm: ibmIcon,
+  inception: inceptionIcon,
+  kwaikat: kwaikatIcon,
+  longcat: longcatIcon,
+  microsoft: microsoftIcon,
+  poolside: poolsideIcon,
+  relace: relaceIcon,
+  spark: sparkIcon,
+  upstage: upstageIcon,
+  vercel: vercelIcon,
+  workersai: workersaiIcon,
+  tokendance: tokendanceIcon,
+  unifuncs: unifuncsIcon,
+  dots: dotsIcon,
+
   anthropic: anthropicIcon,
   arcee: arceeIcon,
   azureai: azureAiIcon,
@@ -87,6 +130,8 @@ const MODEL_ICON_URLS = {
 export type ModelIconName = keyof typeof MODEL_ICON_URLS;
 
 const COLOR_MODEL_ICONS: ReadonlySet<ModelIconName> = new Set([
+  "unifuncs",
+  "dots",
   "arcee",
   "azureai",
   "bedrock",
@@ -98,14 +143,12 @@ const COLOR_MODEL_ICONS: ReadonlySet<ModelIconName> = new Set([
   "gemini",
   "gemma",
   "huggingface",
-  "kimi",
   "meta",
   "minimax",
   "mistral",
   "nova",
   "novita",
   "nvidia",
-  "openrouter",
   "perplexity",
   "qwen",
   "siliconcloud",
@@ -124,6 +167,21 @@ interface ModelFamilyRule {
  * Copilot or OpenRouter should still look like Claude, not like the router.
  */
 const MODEL_FAMILY_RULES: ModelFamilyRule[] = [
+  { icon: "bytedance", pattern: /(^|[/_.:-])(seed|doubao)(?=$|[/_.:-]|\d)/ },
+  { icon: "hunyuan", pattern: /(^|[/_.:-])(hunyuan|hy[3-9])(?=$|[/_.:-])/ },
+  { icon: "antgroup", pattern: /(^|[/_.:-])(ling|ring)(?=$|[/_.:-]|\d)/ },
+  { icon: "longcat", pattern: /(^|[/_.:-])longcat(?=$|[/_.:-])/ },
+  { icon: "spark", pattern: /(^|\/)spark(?=$|[/_.:-])/ },
+  { icon: "unifuncs", pattern: /(^|[/_.:-])unifuncs(?=$|[/_.:-])/ },
+  { icon: "dots", pattern: /(^|[/_.:-])dots(?=$|[/_.:-]|\d)/ },
+  { icon: "ibm", pattern: /(^|[/_.:-])granite(?=$|[/_.:-])/ },
+  { icon: "microsoft", pattern: /(^|[/_.:-])(phi|mai)(?=$|[/_.:-]|\d)/ },
+  { icon: "ai21", pattern: /(^|[/_.:-])jamba(?=$|[/_.:-])/ },
+  { icon: "inception", pattern: /(^|[/_.:-])mercury(?=$|[/_.:-])/ },
+  { icon: "kwaikat", pattern: /(^|[/_.:-])kat-coder(?=$|[/_.:-])/ },
+  { icon: "poolside", pattern: /(^|[/_.:-])laguna(?=$|[/_.:-])/ },
+  { icon: "cohere", pattern: /(^|[/_.:-])north-mini(?=$|[/_.:-])/ },
+  { icon: "upstage", pattern: /(^|[/_.:-])solar(?=$|[/_.:-])/ },
   { icon: "claude", pattern: /(^|[/_.:-])claude(?=$|[/_.:-])/ },
   { icon: "codex", pattern: /(^|[/_.:-])codex(?=$|[/_.:-])/ },
   {
@@ -137,7 +195,7 @@ const MODEL_FAMILY_RULES: ModelFamilyRule[] = [
   {
     icon: "mistral",
     pattern:
-      /(^|[/_.:-])(mistral|mixtral|codestral|ministral|magistral)(?=$|[/_.:-])/,
+      /(^|[/_.:-])(mistral|mixtral|codestral|ministral|magistral|devstral|pixtral|voxtral)(?=$|[/_.:-])/,
   },
   { icon: "qwen", pattern: /(^|[/_.:-])(qwen|qwq)(?=$|[/_.:-]|\d)/ },
   { icon: "meta", pattern: /(^|[/_.:-])llama(?=$|[/_.:-]|\d)/ },
@@ -153,19 +211,64 @@ const MODEL_FAMILY_RULES: ModelFamilyRule[] = [
 ];
 
 const PROVIDER_ICONS: Record<string, ModelIconName> = {
+  ai21: "ai21",
+  aionlabs: "aionlabs",
+  antgroup: "antgroup",
+  bytedance: "bytedance",
+  cerebras: "cerebras",
+  cloudflare: "cloudflare",
+  hunyuan: "hunyuan",
+  ibm: "ibm",
+  inception: "inception",
+  kwaikat: "kwaikat",
+  longcat: "longcat",
+  microsoft: "microsoft",
+  poolside: "poolside",
+  relace: "relace",
+  spark: "spark",
+  upstage: "upstage",
+  vercel: "vercel",
+  workersai: "workersai",
+  tokendance: "tokendance",
+  unifuncs: "unifuncs",
+  dots: "dots",
+  meta: "meta",
+  "ant-ling": "antgroup",
+  inclusionai: "antgroup",
+  "cloudflare-ai-gateway": "cloudflare",
+  "cloudflare-workers-ai": "workersai",
+  "vercel-ai-gateway": "vercel",
+  ai21labs: "ai21",
+  "aion-labs": "aionlabs",
+  "arcee-ai": "arcee",
+  "bytedance-seed": "bytedance",
+  "ibm-granite": "ibm",
+  mistralai: "mistral",
+  kwaipilot: "kwaikat",
+  meituan: "longcat",
+  "dots-studio": "dots",
+  tencent: "hunyuan",
+  qwen: "qwen",
+  qwen3: "qwen",
+  "google-deepmind": "gemini",
+
   alibaba: "qwen",
   anthropic: "anthropic",
   arcee: "arcee",
   "azure-foundry": "azureai",
   bedrock: "bedrock",
+  "amazon-bedrock": "bedrock",
+  "azure-openai-responses": "azureai",
   cohere: "cohere",
   copilot: "githubcopilot",
   "copilot-acp": "githubcopilot",
   deepseek: "deepseek",
+  "deepseek-official": "deepseek",
   fireworks: "fireworks",
   gemini: "gemini",
   "github-copilot": "githubcopilot",
   google: "gemini",
+  "google-vertex": "gemini",
   groq: "groq",
   huggingface: "huggingface",
   "kimi-coding": "kimi",
@@ -178,6 +281,8 @@ const PROVIDER_ICONS: Record<string, ModelIconName> = {
   "minimax-oauth": "minimax",
   mistral: "mistral",
   moonshot: "moonshot",
+  moonshotai: "moonshot",
+  "moonshotai-cn": "moonshot",
   nous: "nousresearch",
   novita: "novita",
   nvidia: "nvidia",
@@ -192,14 +297,21 @@ const PROVIDER_ICONS: Record<string, ModelIconName> = {
   openrouter: "openrouter",
   perplexity: "perplexity",
   "qwen-oauth": "qwen",
+  "qwen-token-plan": "qwen",
+  "qwen-token-plan-cn": "qwen",
   siliconcloud: "siliconcloud",
   stepfun: "stepfun",
   "tencent-tokenhub": "tencent",
   togetherai: "together",
+  together: "together",
   xai: "xai",
   "xai-oauth": "xai",
   xiaomi: "xiaomimimo",
+  "xiaomi-token-plan-cn": "xiaomimimo",
+  "xiaomi-token-plan-sgp": "xiaomimimo",
+  "xiaomi-token-plan-ams": "xiaomimimo",
   zai: "zai",
+  "zai-coding-cn": "zai",
 };
 
 function normalize(value: string): string {
@@ -216,6 +328,14 @@ export function resolveModelIconName(
   );
   if (modelRule) return modelRule.icon;
 
+  // Aggregators preserve owner namespaces (e.g. arcee-ai/trinity-mini).
+  // Use only exact known namespace segments; unknown names keep the transport
+  // provider fallback instead of being assigned an unrelated brand.
+  const segments = normalizedModel.split("/");
+  for (const owner of segments.slice(0, -1)) {
+    const icon = PROVIDER_ICONS[owner];
+    if (icon) return icon;
+  }
   return PROVIDER_ICONS[normalize(provider)] ?? null;
 }
 
@@ -230,11 +350,7 @@ export interface ModelIconProps {
  * only ship a monochrome mark use a CSS mask and inherit the surrounding text
  * color in both light and dark themes.
  */
-export function ModelIcon({
-  className,
-  model,
-  provider,
-}: ModelIconProps) {
+export function ModelIcon({ className, model, provider }: ModelIconProps) {
   const name = resolveModelIconName(provider, model);
 
   if (!name) {
@@ -253,7 +369,11 @@ export function ModelIcon({
       <img
         alt=""
         aria-hidden
-        className={cn("inline-block h-4 w-4 shrink-0 object-contain", className)}
+        className={cn(
+          "inline-block h-4 w-4 shrink-0 object-contain",
+          name !== "unifuncs" && name !== "dots" && "dark:brightness-150",
+          className,
+        )}
         data-model-icon={name}
         src={url}
       />
@@ -267,11 +387,13 @@ export function ModelIcon({
       data-model-icon={name}
       style={{
         backgroundColor: "currentColor",
-        maskImage: `url(${url})`,
+        // Vite embeds SVGs as data URLs containing quotes. An unquoted url()
+        // is invalid CSS and leaves only this element's solid background.
+        maskImage: `url(${JSON.stringify(url)})`,
         maskPosition: "center",
         maskRepeat: "no-repeat",
         maskSize: "contain",
-        WebkitMaskImage: `url(${url})`,
+        WebkitMaskImage: `url(${JSON.stringify(url)})`,
         WebkitMaskPosition: "center",
         WebkitMaskRepeat: "no-repeat",
         WebkitMaskSize: "contain",

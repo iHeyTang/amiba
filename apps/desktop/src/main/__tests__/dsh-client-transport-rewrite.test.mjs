@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { rewriteSocketUrl } from "../../renderer/dsh-client-transport.ts";
+import {
+  installDshClientDevReload,
+  parseDshClientRebuildFrame,
+  rewriteSocketUrl,
+} from "../../renderer/dsh-client-transport.ts";
 
 const RUNTIME = new URL("http://127.0.0.1:64892");
 
@@ -53,4 +57,78 @@ test("non-api and foreign-origin sockets pass through untouched", () => {
     ),
     "wss://example.com/api/events.mux",
   );
+});
+
+test("accepts only complete client rebuilt frames", () => {
+  assert.deepEqual(
+    parseDshClientRebuildFrame(
+      JSON.stringify({ type: "rebuilt", id: "plugin-a", rev: "next" }),
+    ),
+    { type: "rebuilt", id: "plugin-a", rev: "next" },
+  );
+  assert.equal(
+    parseDshClientRebuildFrame(JSON.stringify({ type: "graph", graph: {} })),
+    null,
+  );
+  assert.equal(
+    parseDshClientRebuildFrame(
+      JSON.stringify({ type: "rebuilt", id: "plugin-a" }),
+    ),
+    null,
+  );
+  assert.equal(parseDshClientRebuildFrame("not json"), null);
+});
+
+test("development rebuilt frames refresh the document exactly once", () => {
+  const previousWindow = globalThis.window;
+  const previousEventSource = globalThis.EventSource;
+  let reloads = 0;
+  let source;
+
+  class FakeEventSource extends EventTarget {
+    closed = false;
+
+    constructor(url) {
+      super();
+      assert.equal(url, "/plugins/events");
+      source = this;
+    }
+
+    close() {
+      this.closed = true;
+    }
+
+    emit(data) {
+      const event = new Event("message");
+      Object.defineProperty(event, "data", { value: data });
+      this.dispatchEvent(event);
+    }
+  }
+
+  globalThis.window = {
+    location: {
+      protocol: "http:",
+      reload: () => {
+        reloads += 1;
+      },
+    },
+  };
+  globalThis.EventSource = FakeEventSource;
+  try {
+    const dispose = installDshClientDevReload();
+    source.emit(JSON.stringify({ type: "graph", graph: {} }));
+    assert.equal(reloads, 0);
+    source.emit(
+      JSON.stringify({ type: "rebuilt", id: "plugin-a", rev: "next" }),
+    );
+    source.emit(
+      JSON.stringify({ type: "rebuilt", id: "plugin-b", rev: "later" }),
+    );
+    assert.equal(reloads, 1);
+    assert.equal(source.closed, true);
+    dispose();
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.EventSource = previousEventSource;
+  }
 });

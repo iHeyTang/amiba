@@ -1,5 +1,7 @@
 import {
   ChevronDown,
+  ChevronRight,
+  MessageSquare,
   Loader2,
   MessageSquarePlus,
   Newspaper,
@@ -11,7 +13,7 @@ import {
   SquarePen,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   Button,
   Dialog,
@@ -38,12 +40,10 @@ import {
   usePluginT,
 } from "@amiba/ui/plugin";
 
-import type {
-  CronRule,
-  CronTaskCreateInput,
-  CronTaskView,
-} from "../types.js";
+import type { CronRule, CronTaskCreateInput, CronTaskView } from "../types.js";
 import { cronI18n } from "./i18n.js";
+import { runUnread, taskRuns, type SessionActivity } from "./activity.js";
+import { useCronTasks } from "./use-cron-tasks.js";
 
 function useT() {
   return usePluginT(cronI18n);
@@ -51,7 +51,7 @@ function useT() {
 
 /** Management adapter the client wiring builds over the `amibaCron` remote. */
 export interface CronAdapter {
-  list(): Promise<CronTaskView[]>;
+  list(sessionIds?: string[]): Promise<CronTaskView[]>;
   create(input: CronTaskCreateInput): Promise<CronTaskView>;
   update(id: string, patch: { enabled?: boolean }): Promise<CronTaskView>;
   removeTask(id: string): Promise<void>;
@@ -250,7 +250,9 @@ function CreateDialog({
           </div>
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 px-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm text-foreground">{t("cron.form.catchUp")}</p>
+              <p className="text-sm text-foreground">
+                {t("cron.form.catchUp")}
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {t("cron.form.catchUpHint")}
               </p>
@@ -290,7 +292,9 @@ function TaskRow({
   onRunNow,
   onRemove,
   onOpenSession,
+  sessionActivity,
 }: {
+  sessionActivity?: SessionActivity;
   task: CronTaskView;
   now: number;
   onToggle(enabled: boolean): void;
@@ -299,6 +303,10 @@ function TaskRow({
   onOpenSession(sessionId: string): void;
 }) {
   const { t, language } = useT();
+  const [expanded, setExpanded] = useState(false);
+  const historyId = useId();
+  const runs = taskRuns(task);
+  const unread = runs.some((run) => runUnread(run, sessionActivity));
   const subtitle = [
     ruleLabel(task.rule, t, language),
     !task.enabled
@@ -309,82 +317,182 @@ function TaskRow({
             when: relativeTime(task.nextRunAt, now, t),
           }),
     ...(task.lastRunAt
-      ? [t("cron.row.lastRunAt", { when: relativeTime(task.lastRunAt, now, t) })]
+      ? [
+          t("cron.row.lastRunAt", {
+            when: relativeTime(task.lastRunAt, now, t),
+          }),
+        ]
       : []),
   ].join(" · ");
   return (
     <li
       data-cron-task={task.id}
-      className="group/task flex items-center gap-3 border-b border-border/40 py-3 last:border-b-0"
+      className="group/task border-b border-border/40 py-3 last:border-b-0"
     >
-      <span
-        aria-hidden
-        className={cn(
-          "h-2 w-2 shrink-0 rounded-full",
-          !task.enabled
-            ? "bg-muted-foreground/30"
-            : task.nextRunAt === null
-              ? "bg-muted-foreground/50"
-              : "bg-emerald-500/80",
-        )}
-      />
-      <button
-        type="button"
-        className="min-w-0 flex-1 text-left"
-        disabled={!task.lastSessionId}
-        title={task.lastSessionId ? t("cron.row.openLastRun") : undefined}
-        onClick={() => task.lastSessionId && onOpenSession(task.lastSessionId)}
-      >
-        <div className="truncate text-sm font-medium text-foreground">
-          {task.name}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            !task.enabled
+              ? "bg-muted-foreground/30"
+              : task.nextRunAt === null
+                ? "bg-muted-foreground/50"
+                : "bg-emerald-500/80",
+          )}
+        />
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          aria-expanded={expanded}
+          aria-controls={historyId}
+          title={t("cron.history")}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <span className="truncate">{task.name}</span>
+            {unread && (
+              <span
+                role="status"
+                aria-label={t("cron.unread")}
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--status-session))]"
+              />
+            )}
+          </div>
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+            {subtitle}
+          </div>
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs text-muted-foreground"
+          aria-expanded={expanded}
+          aria-controls={historyId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {t("cron.history")}{" "}
+          <span className="tabular-nums">{runs.length}</span>
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/task:opacity-100 group-focus-within/task:opacity-100">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+                aria-label={t("cron.row.runNow")}
+                onClick={onRunNow}
+              >
+                <Play />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("cron.row.runNow")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
+                aria-label={t("cron.row.delete")}
+                onClick={onRemove}
+              >
+                <Trash2 />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("cron.row.delete")}
+            </TooltipContent>
+          </Tooltip>
         </div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {subtitle}
-        </div>
-      </button>
-      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/task:opacity-100 group-focus-within/task:opacity-100">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
-              aria-label={t("cron.row.runNow")}
-              onClick={onRunNow}
-            >
-              <Play />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("cron.row.runNow")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
-              aria-label={t("cron.row.delete")}
-              onClick={onRemove}
-            >
-              <Trash2 />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("cron.row.delete")}</TooltipContent>
-        </Tooltip>
+        <Switch
+          checked={task.enabled}
+          aria-label={t("cron.row.enable")}
+          onCheckedChange={onToggle}
+          className="shrink-0"
+        />
       </div>
-      <Switch
-        checked={task.enabled}
-        aria-label={t("cron.row.enable")}
-        onCheckedChange={onToggle}
-        className="shrink-0"
-      />
+      {expanded && (
+        <div id={historyId} className="ml-5 mt-2">
+          {runs.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">
+              {t("cron.history.empty")}
+            </p>
+          ) : (
+            <ul
+              aria-label={t("cron.history")}
+              className="max-h-72 overflow-y-auto"
+            >
+              {[...runs]
+                .sort((a, b) => b.startedAt - a.startedAt)
+                .map((run) => (
+                  <li key={run.sessionId}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenSession(run.sessionId)}
+                      title={t("cron.history.open")}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <MessageSquare
+                        aria-hidden
+                        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      />
+                      <time
+                        dateTime={new Date(run.startedAt).toISOString()}
+                        className="tabular-nums"
+                      >
+                        {new Intl.DateTimeFormat(language, {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                          hourCycle: "h23",
+                        }).format(run.startedAt)}
+                      </time>
+                      {runUnread(run, sessionActivity) && (
+                        <span
+                          role="status"
+                          aria-label={t("cron.unread")}
+                          className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--status-session))]"
+                        />
+                      )}
+                      <span className="ml-auto text-muted-foreground">
+                        {t("cron.history.open")}
+                      </span>
+                      <ChevronRight
+                        aria-hidden
+                        className="h-3 w-3 text-muted-foreground"
+                      />
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
     </li>
   );
 }
 
 /** Honest templates: only shapes the rule set actually supports. */
-function suggestions(t: ReturnType<typeof useT>["t"]): Array<
-  CreatePrefill & { icon: typeof Newspaper; schedule: string; description: string }
+function suggestions(
+  t: ReturnType<typeof useT>["t"],
+): Array<
+  CreatePrefill & {
+    icon: typeof Newspaper;
+    schedule: string;
+    description: string;
+  }
 > {
   return [
     {
@@ -409,6 +517,7 @@ function suggestions(t: ReturnType<typeof useT>["t"]): Array<
 }
 
 export interface DshCronPageProps {
+  sessionActivity?: SessionActivity;
   adapter: CronAdapter;
   onOpenSession(sessionId: string): void;
   /**
@@ -425,6 +534,7 @@ export interface DshCronPageProps {
 }
 
 export function DshCronPage({
+  sessionActivity,
   adapter,
   onOpenSession,
   onStartChat,
@@ -435,31 +545,16 @@ export function DshCronPage({
   onExpandSidebar,
 }: DshCronPageProps) {
   const { t } = useT();
-  const [tasks, setTasks] = useState<CronTaskView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tasks, loading, error, setError, refresh } = useCronTasks(
+    adapter,
+    sessionActivity?.sessions.map((session) => session.id),
+  );
   const [creating, setCreating] = useState(false);
   const [prefill, setPrefill] = useState<CreatePrefill | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TaskFilter>("all");
-  const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const now = Date.now();
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setTasks(await adapter.list());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [adapter]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -626,9 +721,7 @@ export function DshCronPage({
                 </button>
               ))}
             </div>
-            {error && (
-              <p className="mt-3 text-xs text-destructive">{error}</p>
-            )}
+            {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
             {loading ? (
               <p className="mt-6 text-sm text-muted-foreground">
                 {t("cron.loading")}
@@ -647,6 +740,7 @@ export function DshCronPage({
                   <TaskRow
                     key={task.id}
                     task={task}
+                    sessionActivity={sessionActivity}
                     now={now}
                     onToggle={(enabled) =>
                       act(adapter.update(task.id, { enabled }))

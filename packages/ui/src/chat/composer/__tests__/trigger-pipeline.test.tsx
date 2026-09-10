@@ -24,9 +24,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@amiba/i18n", () => ({
-  useT: () => ({ t: (key: string) => key }),
-}));
+vi.mock("@amiba/i18n", () => {
+  const t = (key: string) => key;
+  return { useT: () => ({ t }) };
+});
 
 import { Composer } from "../../Composer";
 import { OfficialTriggerMenu } from "../triggers/OfficialTriggerMenu";
@@ -214,6 +215,13 @@ function ControlledComposer(props: {
 import * as React from "react";
 
 describe("a plugin source through the official pipeline", () => {
+  it("resolves the same plugin codec from a home draft without a synthetic session", async () => {
+    const source = fixtureSource(), sources = [source], submitted: string[] = [];
+    const runtime: ComposerTriggerRuntime = { controllerFor: () => undefined, bindEditor: () => () => {}, draftSources: () => sources, subscribe: () => () => {} };
+    render(<ControlledComposer initial="see @[dsh.reference:fixture|alpha|alpha|%40alpha] please" runtime={runtime} onSubmit={(text) => submitted.push(text)} />);
+    const send = await screen.findByRole("button", { name: /send/iu }); act(() => send.click());
+    await waitFor(() => expect(submitted).toEqual(["see <fixture>alpha</fixture> please"]));
+  });
   it("shows its group in Amiba's menu and lands a chip that serializes through its codec", async () => {
     const source = fixtureSource();
     const controller = controllerDouble(source);

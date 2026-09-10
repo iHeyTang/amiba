@@ -3,6 +3,7 @@ export interface DshWebBootEntry {
   url: string;
   rev: string;
   inject?: string[];
+  external?: string[];
   immediately?: boolean;
 }
 
@@ -162,6 +163,9 @@ function parseEntry(value: unknown, baseUrl: URL): DshWebBootEntry {
       `DSH client graph entry ${row.id} has invalid immediately flag.`,
     );
   }
+  if (row.external !== undefined && (!Array.isArray(row.external) || row.external.some((item) => typeof item !== "string"))) {
+    throw new Error(`DSH client graph entry ${row.id} has invalid external edges.`);
+  }
 
   const bundleUrl = new URL(row.url, baseUrl);
   if (bundleUrl.origin !== baseUrl.origin) {
@@ -182,6 +186,7 @@ function parseEntry(value: unknown, baseUrl: URL): DshWebBootEntry {
     ...(row.inject === undefined
       ? {}
       : { inject: [...(row.inject as string[])] }),
+    ...(row.external === undefined ? {} : { external: [...(row.external as string[])] }),
     ...(row.immediately === undefined
       ? {}
       : { immediately: row.immediately }),
@@ -218,13 +223,12 @@ export function extractDshClientBootGraph(
 }
 
 /**
- * `@deepseek-ai/dsh-client-hmr` is DSH's plugin hot-reload channel. It opens
- * `new EventSource("/plugins/events")` — a RELATIVE url, resolved against the
- * document origin. On DSH's own page that is the runtime origin and it works;
- * this renderer's document lives on the dev server (file:// when packaged),
- * so the channel structurally cannot reach the runtime: an endless 404 retry
- * loop in dev, a thrown constructor under file://. A plugin that can never
- * function here is dropped rather than loaded for its noise.
+ * `@deepseek-ai/dsh-client-hmr` replaces one Cordis fiber at a time. Desktop
+ * development consumes the same rebuild stream in its renderer transport and
+ * reloads the document instead: swapping the plugin that owns `root` leaves a
+ * brief empty slot that makes the official renderer throw. Packaged windows
+ * use file:// and open no rebuild stream. The fiber HMR row is therefore
+ * dropped from both compositions.
  *
  * Guarded: if some future entry injects it, dropping it would strand that
  * entry waiting on a service ("did not activate"), which is worse than 404

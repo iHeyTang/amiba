@@ -13,6 +13,7 @@ import { formatToolDuration } from "../internal/helpers";
  * indistinguishable from the built-in ones.
  */
 export interface ToolRowFrameProps {
+  presentation?: "row" | "summary";
   icon: LucideIcon;
   /** The semantic action label (调用工具 / 读取文件 / …). */
   action: string;
@@ -30,6 +31,9 @@ export interface ToolRowFrameProps {
    * fold indent; when absent the row is inert (unless `onOpen` is given).
    */
   detail?: ReactNode;
+  /** Optional controlled fold for plugins that load detail on demand. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   /** External open action (e.g. workspace pane); takes precedence over `detail`. */
   onOpen?: () => void;
   /** Row tooltip while `onOpen` is set (or for an inert row). */
@@ -39,6 +43,7 @@ export interface ToolRowFrameProps {
 }
 
 export function ToolRowFrame({
+  presentation = "row",
   icon: Icon,
   action,
   target,
@@ -51,8 +56,11 @@ export function ToolRowFrame({
   title,
   expandTitle,
   collapseTitle,
+  expanded: controlledExpanded,
+  onExpandedChange,
 }: ToolRowFrameProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const expanded = controlledExpanded ?? localExpanded;
   const hasDetail = detail != null;
   const opensExternally = Boolean(onOpen);
   const actionable = opensExternally || hasDetail;
@@ -61,6 +69,11 @@ export function ToolRowFrame({
       ? formatToolDuration(durationMs)
       : null;
 
+  if (presentation === "summary") return <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+    {action && <span className="shrink-0">{action}</span>}
+    {target && <span className="min-w-0 truncate font-mono opacity-75">{target}</span>}
+  </span>;
+
   return (
     <div className="min-w-0">
       <button
@@ -68,7 +81,10 @@ export function ToolRowFrame({
         disabled={!actionable}
         onClick={() => {
           if (onOpen) onOpen();
-          else if (hasDetail) setExpanded((v) => !v);
+          else if (hasDetail) {
+            setLocalExpanded(!expanded);
+            onExpandedChange?.(!expanded);
+          }
         }}
         aria-expanded={!opensExternally && hasDetail ? expanded : undefined}
         aria-label={ariaLabel}
@@ -100,14 +116,14 @@ export function ToolRowFrame({
             )}
           />
         </span>
-        <span
+        {action && <span
           className={cn(
             "shrink-0 text-foreground/75",
             running && "agent-thinking-text",
           )}
         >
           {action}
-        </span>
+        </span>}
         {typeof target === "string" ? (
           <span
             className={cn(

@@ -10,7 +10,7 @@ Lark/Feishu connector provider for the Amiba runtime. Translates `im.message.rec
 
 ## Client half (`src/client/index.tsx`)
 
-- Injects the `amibaConnectWizards` Cordis service that connector-core's client
+- Injects the `amibaConnectorUI` Cordis service that connector-core's client
   half provides, and registers the `"lark"` connect wizard on it.
 - `LarkWizard` is the wizard body the Connect settings modal mounts for this
   provider: a scan/manual toggle over the scan-to-connect flow (QR code plus a
@@ -19,3 +19,7 @@ Lark/Feishu connector provider for the Amiba runtime. Translates `im.message.rec
   works wherever the wizard chrome is mounted.
 - Copy lives in `src/client/i18n.ts` (zh-CN + en) and resolves through
   `usePluginT`, never through a host catalog.
+
+## MCP lifecycle
+
+Bot messaging does not enable MCP automatically. The connection declares `lark.mcp`; ordinary agents and consuming plugins each require explicit approval for their displayed capabilities. The common dependency manager starts MCP on demand after approval. Disabling the connection revokes its leases while retaining visible, revocable approvals; deleting it removes those approvals. Configuration and credentials stay in the connection owner. See [the dependency contract](../../docs/mcp-dependencies.md).

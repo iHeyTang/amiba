@@ -119,6 +119,8 @@ export interface TriggerEditorOps {
  * runtime.
  */
 export interface ComposerTriggerRuntime {
+  /** Official source objects projected onto an editor without a DSH session. */
+  draftSources?(): readonly import("@amiba/extension-sdk").InputTriggerSource[];
   /**
    * Resolve the official per-session controller. `undefined` when the
    * session has no live DSH scope yet (Amiba mints sessions locally; the DSH

@@ -20,6 +20,9 @@ type WorkspaceChange =
   | { kind: "unbound"; sessionId: string };
 
 interface AmibaBridgeApi {
+  embeddedPage: {
+    request(input: import("../shared/embedded-page").EmbeddedPageRequest): Promise<void>;
+  };
   windowChrome: {
     topBarHeightPx: number;
     leftInsetPx: number;
@@ -34,6 +37,7 @@ interface AmibaBridgeApi {
           url: string;
           rev: string;
           inject?: string[];
+          external?: string[];
           immediately?: boolean;
         }>;
       };

@@ -136,8 +136,9 @@ root 声明：
 - `settings.general.item`（官方名，list，root scope，空 owner）。General 分区
   （Amiba 的"外观"页）底部的偏好行，追加在产品自带的行之下。**这个席位上有一个
   真实占位者**：官方 `@deepseek-ai/dsh-client-locale` 在这里注册它自己的
-  `LanguageRow`（`id: "language"`, `order: 0`）—— 也就是产品里唯一那一行"语言"，
-  见 §4.4
+  `LanguageRow`（`id: "language"`, `order: 0`）；amiba-ui-shell 用相同 id 与
+  `priority: -1` 遮蔽它的像素，因此产品里唯一那一行"语言"使用 Amiba 标准
+  Select，但状态权威仍是官方 locale 服务，见 §4.4
 - `amiba.settings.content.overlay`
 - `amiba.agentPreset.section`
 - `shell.overlay`（官方名）
@@ -421,8 +422,11 @@ tab。新增 slot 的原则是语义稳定、归属清晰、具备实际扩展�
 `LanguageRow` 出现在"外观"页底部，而 Amiba 自己在同一页顶部还画着一行"语言"
 （写 `settings.ui.language`，`auto | en | zh-CN`，走 PlatformAdapter 持久化）。
 两行互不同步：官方那行只改官方/插件文案，Amiba 那行只改 Amiba 自己的 447 条
-文案。**Amiba 那行已经退役**，官方那行成为唯一入口 —— 官方服务是整个 DSH 插件
-生态的 `t` 席位读的那一个，第二个权威只能意味着"官方文案和 Amiba 文案不一致"。
+文案。**Amiba 那套独立偏好已经退役**。amiba-ui-shell 以同 `id: "language"`、
+`priority: -1` 遮蔽官方 `LanguageRow`，只替换 DSH `Menu` 像素为 `@amiba/ui`
+标准 Select；读写仍直连官方服务，因此它仍是唯一入口与唯一权威。官方服务是整个
+DSH 插件生态的 `t` 席位读的那一个，第二个权威只能意味着"官方文案和 Amiba 文案
+不一致"。
 显式的"自动（跟随系统）"选项随之取消：官方没有等价项，它在"从未选过"时本来就
 跟随浏览器语言。
 

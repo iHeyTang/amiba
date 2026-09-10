@@ -547,7 +547,7 @@ describe("conversation-scoped routing", () => {
     bindConversation.mockRestore();
   });
 
-  it("falls back to a presetless session when mounting the agent preset fails on session creation", async () => {
+  it("rejects creation instead of publishing a presetless session", async () => {
     const { center, followup, created, ctx, loggerCalls } = await harness();
     ctx.agentPresets.mount.mockRejectedValueOnce(
       new Error('agent-presets: unknown preset "restricted"'),
@@ -565,18 +565,14 @@ describe("conversation-scoped routing", () => {
         sender: "alice",
         conversation: { key: "chat-1", kind: "p2p" },
       }),
-    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    ).rejects.toThrow(/unknown preset/);
 
-    expect(created).toHaveLength(1);
-    expect(created[0]!.meta).toMatchObject({ agentPreset: "restricted" });
-    expect(followup).toHaveBeenCalledTimes(1);
-    expect(await center.listConversations(channel.id)).toHaveLength(1);
-    expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
-    const [warning] = loggerCalls.warn.mock.calls[0]!;
-    expect(String(warning)).toContain("restricted");
+    expect(created).toHaveLength(0);
+    expect(followup).not.toHaveBeenCalled();
+    expect(await center.listConversations(channel.id)).toHaveLength(0);
   });
 
-  it("falls back to a presetless session when mounting the agent preset fails on resume", async () => {
+  it("rejects resume instead of running without the chosen preset", async () => {
     const { center, followup, resume, ctx, loggerCalls } = await harness();
     const { channel, secret } = await center.createChannel({
       provider: "webhook",
@@ -592,13 +588,10 @@ describe("conversation-scoped routing", () => {
         id: "evt-cold",
         text: "wake up",
       }),
-    ).resolves.toMatchObject({ accepted: true, duplicate: false });
+    ).rejects.toThrow(/unknown preset/);
 
     expect(resume).toHaveBeenCalledTimes(1);
-    expect(followup).toHaveBeenCalledTimes(1);
-    expect(loggerCalls.warn).toHaveBeenCalledTimes(1);
-    const [warning] = loggerCalls.warn.mock.calls[0]!;
-    expect(String(warning)).toContain("standard");
+    expect(followup).not.toHaveBeenCalled();
   });
 });
 

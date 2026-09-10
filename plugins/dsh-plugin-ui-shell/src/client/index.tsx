@@ -1,10 +1,21 @@
+export * from "streamdown";
+import type { NoticeReference } from "@amiba/app-runtime/protocol";
+import { MARKDOWN_REMOTE } from "../markdown-remote.js";
+import { createMarkdownReporter } from "./markdown-reporter.js";
+import { MarkdownProvider, type MarkdownExtension, type MarkdownCapabilities } from "@amiba/markdown";
+import { useSyncExternalStore } from "react";
+import { createMarkdownSource } from "./markdown-source.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import {
   DshApiClient,
   createWebPlatformAdapter,
 } from "@amiba/app-runtime/dsh-client";
-import { hasPlatform, setPlatform } from "@amiba/app-runtime/platform";
+import { getPlatform, hasPlatform, setPlatform } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
+/** Read shell-owned geometry without embedding a second platform singleton in consumers. */
+export function settingsChromeHeightPx(): number | undefined {
+  return getPlatform().kind === "desktop" ? (getPlatform().windowChrome?.topBarHeightPx ?? 40) : undefined;
+}
 import {
   resolveSlotLabel,
   type PropsRenderSlots,
@@ -30,7 +41,7 @@ import {
 import {
   createSessionVisibility,
   type AmibaSessionVisibility,
-  type HiddenPresetsSource,
+  type HiddenSessionsSource,
 } from "./session-visibility.js";
 import {
   createSessionGroupsSource,
@@ -45,13 +56,11 @@ import {
 } from "./message-source.js";
 import {
   connectOfficialLocale,
-  LOCALE_SETTINGS_NAMESPACE,
 } from "./locale-bridge.js";
 import {
   installAmibaMessageCatalog,
   registerAmibaMessages,
 } from "./messages.js";
-import type { LocaleSettings } from "@deepseek-ai/dsh-client-locale/client";
 import {
   AmibaCommandPopupSeat,
   AmibaSlashMenuSeat,
@@ -59,6 +68,11 @@ import {
   SHADOW_PRIORITY,
   SLASH_MENU_ENTRY_ID,
 } from "./trigger-seats.js";
+import {
+  AmibaLanguageRow,
+  LANGUAGE_ROW_ENTRY_ID,
+  LANGUAGE_ROW_SHADOW_PRIORITY,
+} from "./language-seat.js";
 import {
   TRIGGER_SOURCE_LABELS,
   officialTriggerSources,
@@ -69,7 +83,7 @@ import { OFFICIAL_TOOLVIEWS } from "./official-toolviews.js";
 import shellCss from "./styles.css?inline";
 
 export const name = "amiba-ui-shell";
-export const inject = ["slots", "sessions"];
+export const inject = ["slots", "sessions", "remote"];
 
 const PACKAGE_ID = "@amiba/dsh-plugin-ui-shell";
 const STYLE_ID = `${PACKAGE_ID}/product-shell.css`;
@@ -106,7 +120,7 @@ export type {
   ConversationInputPlanOwnerProps,
   SettingsSectionOwnerProps,
 } from "@amiba/extension-sdk";
-export type { AmibaSessionVisibility, HiddenPresetsSource } from "./session-visibility.js";
+export type { AmibaSessionVisibility, HiddenSessionsSource } from "./session-visibility.js";
 export type { SessionListItemTarget } from "@amiba/ui";
 /**
  * The `inject` business face of one `amiba.sessions.list.group`
@@ -201,9 +215,18 @@ export interface SessionMenuContribution {
  */
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
+    "amiba.connection.access": {
+      kind: "list"; scope: "root";
+      owner: { configuration: { ownerId: string; recordId: string } };
+    };
     "amiba.sessions.list.group": { kind: "list"; scope: "root" };
     "amiba.sessions.item.menu": { kind: "list"; scope: "root" };
     "amiba.message.source": { kind: "list"; scope: "root" };
+    "amiba.conversation.notice": { kind: "keyed"; scope: "session"; owner: { source: string; summary: string; body: string; reference?: NoticeReference } };
+    "amiba.tool.execution": { kind: "single"; scope: "session"; owner: import("@amiba/extension-sdk").ToolCallOwnerProps & { fallback: import("react").ReactNode } };
+    "amiba.tool.activity": { kind: "list"; scope: "session"; owner: { callId: string } };
+    "amiba.conversation.progress": { kind: "list"; scope: "session" };
+    "amiba.workbench.panel": { kind: "list"; scope: "session"; owner: import("@amiba/extension-sdk").WorkbenchPanelOwner };
   }
 }
 
@@ -215,10 +238,12 @@ type AmibaRootProps = PropsRuntime<"root"> &
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
     triggerRuntime: AmibaInputTriggerBridge;
-    hiddenSessionPresets: HiddenPresetsSource;
+    hiddenSessionIds: HiddenSessionsSource;
     sessionListGroups: ContributionsSource<SessionGroupRow>;
     sessionItemMenuItems: ContributionsSource<SessionMenuItemRow>;
     messageSources: ContributionsSource<MessageSourceRow>;
+    markdownSource: ContributionsSource<MarkdownExtension>;
+    reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -240,13 +265,16 @@ function AmibaRoot({
   openSettingsSection,
   sessionsBridge,
   triggerRuntime,
-  hiddenSessionPresets,
+  hiddenSessionIds,
   sessionListGroups,
   sessionItemMenuItems,
   messageSources,
+  markdownSource,
+  reportMarkdown,
   useSessions,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
+  const markdown = useSyncExternalStore(markdownSource.subscribe, markdownSource.getSnapshot, markdownSource.getSnapshot);
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
     // [data-amiba-product-shell] node) before flushing queued deep links.
@@ -254,7 +282,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <AmibaProductShell
+    <MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
@@ -262,13 +290,13 @@ function AmibaRoot({
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
-      hiddenSessionPresets={hiddenSessionPresets}
+      hiddenSessionIds={hiddenSessionIds}
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    />
+    /></MarkdownProvider>
   );
 }
 
@@ -314,6 +342,7 @@ function resolveSectionNavIcon(
 declare module "@deepseek-ai/cordis" {
   interface Context {
     layout: AmibaLayoutService;
+    composerInputs: AmibaInputTriggerBridge;
     amibaSessionVisibility: AmibaSessionVisibility;
   }
 }
@@ -331,6 +360,9 @@ function dispatchLayoutAction(
 
 /** Register Amiba as the one DSH root owner and declare its child authority. */
 export async function apply(ctx: ClientContext): Promise<void> {
+  const disposeMarkdownRemote = await ctx.remote.$mount(MARKDOWN_REMOTE);
+  ctx.effect(() => disposeMarkdownRemote);
+  const reportMarkdown = await createMarkdownReporter(ctx);
   const baseUrl =
     window.location.protocol === "file:"
       ? "http://dsh.internal"
@@ -483,6 +515,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           Parameters<typeof createInputTriggerBridge>[0]["commandUi"]
         >,
     });
+    const disposeComposerInputs = ctx.reflect.provide("composerInputs", triggerRuntime);
     // Amiba's own `/` and `@` sources, published through the official
     // registry rather than a private one — so a plugin's `registerSource`
     // and Amiba's own land in the same menu, ranked by the same `order`.
@@ -497,21 +530,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
         "amiba-ui-shell: built-in trigger sources",
       );
     });
-    // THE language authority. `@amiba/i18n` follows the official locale
-    // service, and the retired `settings.ui.language` preference is carried
-    // over to it once. Guarded by `ctx.inject` rather than the plugin's own
-    // `inject` list for the same reason the trigger sources are: `apply` may
-    // run before `locale` / `settingsScope` are provided, and the product
-    // shell must mount either way (without them Amiba simply keeps the
-    // browser-derived fallback, exactly as Quick-Ask does).
-    //
-    // `connection` and `remote` are injected because `settingsScope.bind`
-    // binds the namespace to the settings transport and the forwarded
-    // settings invalidation on the CALLER's fiber.
-    // Amiba's copy as ONE official namespace. Deliberately a SEPARATE fiber
-    // from the authority/migration one below: registering the dictionary needs
-    // `locale` and nothing else, so a composition without `settingsScope`
-    // still gets real strings instead of raw keys.
+    // Both dictionary registration and the language mirror follow the
+    // official locale service. Keep the shell usable before it is available;
+    // standalone surfaces retain browser-derived language resolution.
     const messagesFiber = ctx.inject(["locale"], (scope) => {
       scope.effect(
         () => registerAmibaMessages(scope.locale),
@@ -519,22 +540,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
       );
     });
     const localeFiber = ctx.inject(
-      ["locale", "settingsScope", "connection", "remote"],
+      ["locale"],
       (scope) => {
         scope.effect(
           () =>
             connectOfficialLocale({
               locale: scope.locale,
-              localeSettings: scope.settingsScope.bind<LocaleSettings>({
-                namespace: LOCALE_SETTINGS_NAMESPACE,
-              }),
-              onError: (error) =>
-                console.error("[amiba-ui-shell] locale bridge:", error),
             }),
           "amiba-ui-shell: official locale authority",
         );
       },
     );
+    const markdownSource = createMarkdownSource(ctx.slots);
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -545,13 +562,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
         // nav's openSettings affordance rides this face too.
         inject: () => ({
           dshClient,
+          markdownSource,
+          reportMarkdown,
           settingsSections: sectionsSource,
           settingsOnboardingSteps: onboardingSource,
           openSettingsSection: (sectionId: string) =>
             layout.openSettings(sectionId),
           sessionsBridge,
           triggerRuntime,
-          hiddenSessionPresets: visibility.source,
+          hiddenSessionIds: visibility.source,
           sessionListGroups,
           sessionItemMenuItems,
           messageSources,
@@ -624,6 +643,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // nothing until a plugin takes it, which is exactly the contract
           // ("unoccupied, the seat renders nothing at all").
           "conversation.input.plan": { kind: "single", scope: "session" },
+          "amiba.conversation.notice": { kind: "keyed", scope: "session" },
+          "amiba.tool.execution": { kind: "single", scope: "session" },
+          "amiba.tool.activity": { kind: "list", scope: "session" },
+          "amiba.conversation.progress": { kind: "list", scope: "session" },
+          "amiba.workbench.panel": { kind: "list", scope: "session" },
           // Official vocabulary: the composer's floating overlay anchor,
           // from @deepseek-ai/dsh-client-ui-input-trigger (list, session
           // scope, NO owner share at all — every occupant reads its own
@@ -678,6 +702,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           //
           // The trigger content of the sidebar's settings row; owner
           // { wide } is the sidebar column state, which the chat view knows.
+          "amiba.markdown.extension": { kind: "list", scope: "root" },
           "settings.trigger": { kind: "single", scope: "root" },
           // The panel title text; the dialog is named after this node.
           "settings.header": { kind: "single", scope: "root" },
@@ -741,6 +766,28 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaCommandPopupSeat,
     );
+    // CELL SHADOW of the official locale plugin's LanguageRow. The service,
+    // persistence, dictionaries, and framework `t` seat remain official;
+    // only the DSH-Menu-based pixels are replaced with @amiba/ui's Select.
+    // Register lazily because `locale` may arrive after this shell, and keep
+    // the same official id so entriesOfSlot elects exactly one language row.
+    const languageRowFiber = ctx.inject(["locale"], (scope) => {
+      scope.effect(
+        () =>
+          scope.slots.register(
+            {
+              name: "settings.general.item",
+              id: LANGUAGE_ROW_ENTRY_ID,
+              priority: LANGUAGE_ROW_SHADOW_PRIORITY,
+              order: 0,
+              locale: "amiba",
+              inject: () => ({ locale: scope.locale }),
+            },
+            AmibaLanguageRow,
+          ),
+        "amiba-ui-shell: language row visual shadow",
+      );
+    });
     // The keyed per-tool row for the official ask_user_question interaction:
     // Amiba's first `tool.call.toolview` occupant, composed from @amiba/ui's
     // generic ToolRowFrame — the reference pattern for any plugin that wants
@@ -764,12 +811,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       for (const dispose of disposeOfficialToolviews) dispose();
       disposeAskToolview();
+      void languageRowFiber.dispose();
       disposeCommandPopup();
       disposeSlashMenu();
       void localeFiber.dispose();
       void messagesFiber.dispose();
       disposeMessageCatalog();
       void sourcesFiber.dispose();
+      void disposeComposerInputs();
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();

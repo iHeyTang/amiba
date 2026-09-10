@@ -12,6 +12,11 @@ describe("LarkMark", () => {
     expect(img).toHaveAttribute("width", "22");
     expect(img).toHaveAttribute("height", "22");
     expect(img).toHaveAttribute("alt", "");
+    expect(img).toHaveStyle({
+      clipPath: "inset(10.9375% round 22%)",
+      transform: "scale(1.24)",
+      transformOrigin: "center",
+    });
   });
 
   it("sizes to the given `size`, defaulting to 22", () => {

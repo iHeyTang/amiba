@@ -1,8 +1,9 @@
+import { registrationSource, shippedEntries } from "./registration-source.js";
 import type AgentPresets from "@deepseek-ai/dsh-agent-presets";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-tools";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { ToolProvenanceRegistry } from "./provenance.js";
+import type { ToolProvenanceRegistry, ToolSourceDescriptor } from "./provenance.js";
 
 const ROUTE = "/api/amiba/tools";
 
@@ -41,30 +42,34 @@ export async function toolInventory(
   provenance: ToolProvenanceRegistry,
 ) {
   const catalogCtx = ctx as CatalogContext;
-  const schemas = new Map(
-    ctx.tools.schemas().map((schema) => [schema.name, schema]),
-  );
-  const presets = (await catalogCtx.agentPresets.list())
-    .filter((preset) => !preset.broken)
-    .sort((left, right) => left.id.localeCompare(right.id));
-
-  for (const preset of presets) {
-    const scope = await catalogCtx.agentPresets.standingKeyFor(preset.id);
+  const shipped = shippedEntries(ctx, provenance.shippedBundles);
+  const tools: Array<{ id: string; name: string; description?: string; parameters: unknown; source: ToolSourceDescriptor }> = [];
+  const definitions = new Set<unknown>();
+  const builtinCapabilities = new Set<string>();
+  const append = (scope?: Parameters<Context["tools"]["get"]>[1], preset?: { id: string; name?: string; trust: "system" | "user" }) => {
     for (const schema of ctx.tools.schemas(scope)) {
-      if (!schemas.has(schema.name)) schemas.set(schema.name, schema);
+      const definition = ctx.tools.get(schema.name, scope);
+      if (definitions.has(definition)) continue;
+      const owner = ctx.tools.registrationContext(schema.name, scope);
+      if (!owner) throw new Error(`Tool registration is missing its owner: ${schema.name}`);
+      definitions.add(definition);
+      const globalDefinition = ctx.tools.get(schema.name);
+      const source = provenance.resolve(schema.name, registrationSource(owner, shipped, definition === globalDefinition ? undefined : preset));
+      // System presets can mount the same shipped capability independently.
+      // Collapse those copies, while preserving user overrides in their own scopes.
+      const builtinKey = JSON.stringify([source.packageName ?? source.id, schema.name, schema.description, schema.parameters]);
+      if (source.distribution === "builtin") {
+        if (builtinCapabilities.has(builtinKey)) continue;
+        builtinCapabilities.add(builtinKey);
+      }
+      tools.push({ ...schema, id: `${preset?.id ?? "global"}:${schema.name}`, source });
     }
-  }
-
-  return {
-    tools: [...schemas.values()]
-      .map((schema) => ({
-        name: schema.name,
-        description: schema.description,
-        parameters: schema.parameters,
-        source: provenance.resolve(schema.name),
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
   };
+  append();
+  const presets = (await catalogCtx.agentPresets.list()).filter(preset => !preset.broken).sort((a, b) => a.id.localeCompare(b.id));
+  for (const preset of presets) append(await catalogCtx.agentPresets.standingKeyFor(preset.id), preset);
+  return { tools: tools.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)) };
+
 }
 
 /**

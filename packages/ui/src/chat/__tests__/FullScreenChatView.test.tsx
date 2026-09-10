@@ -175,6 +175,7 @@ function makeSessions() {
     openTab: vi.fn(async () => {}),
     rename: vi.fn(async () => {}),
     markUnread: vi.fn(async () => {}),
+    markRead: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
   };
@@ -422,7 +423,7 @@ describe("FullScreenChatView new-chat home", () => {
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
-        hiddenSessionPresets={new Set(["steward"])}
+        hiddenSessionIds={new Set(["session-1"])}
       />,
     );
 

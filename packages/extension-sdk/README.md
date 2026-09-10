@@ -180,10 +180,19 @@ ctx.slots.inject("tool.call.toolview", () =>
   ctx.slots.register(
     { name: "tool.call.toolview", key: "bash" },
     // props: ToolCallOwnerProps + the session standard kit
-    ({ block, cwd, openFile }) => <MyTerminalCard block={block} cwd={cwd} onOpen={openFile} />,
+    ({ block, cwd, openFile, presentation }) => <MyTerminalCard block={block} cwd={cwd} onOpen={openFile} presentation={presentation} />,
   ),
 )
 ```
+
+Amiba supplies `presentation: "summary"` when the same keyed tool renderer is
+used inside the live execution disclosure, and `"row"` for its detail list.
+Summary renderers must return inline, non-interactive content: action + target,
+without buttons, evidence, side effects, or task controls. `SemanticToolRow`
+forwards this hint automatically; custom rows built with `ToolRowFrame` pass
+`presentation={props.presentation}`. Fully custom renderers must handle it
+explicitly. The summary and row must derive their action/target from the same
+plugin-owned definition; do not register a second tool-name map in core.
 
 How Amiba supplies that owner share: `callId` from the canonical call id,
 `toolName` derived from the block exactly as upstream's own `callName` does
@@ -269,3 +278,14 @@ ctx.slots.register(
 Client plugin can inject that child in the same way it injects an Amiba root
 slot. Nesting is owned and authorized by DSH's slot ledger—Electron does not
 need to know the child name.
+
+### 执行生命周期展示与调用定位
+
+UI Shell 提供单实例 `amiba.tool.execution` 槽，owner 为原 `ToolCallOwnerProps`
+加 `fallback: ReactNode`。它包围既有 `tool.call.toolview` 分发，允许执行生命周期
+插件依据精确调用身份提供持续状态；不接管的调用必须返回 fallback。
+`presentation: "summary"` 的内联、非交互要求仍然适用。
+
+工具 owner 的 `revealToolCall(callId)` 用于定位已载入的原调用，核心先展开所属执行组，
+再滚动至工具行。目标行收到 `revealVersion` 后可以打开自己的详情。工作台的
+`inspectToolCall` 同样定位原调用。此 API 不创建新的执行记录，也不根据工具参数猜测身份。

@@ -3,7 +3,7 @@
  *
  * This script black-box smoke-tests the shipped `dsh-bundle-amiba-core`
  * composition end-to-end. It therefore MAY reference plugin package names
- * and drive their public RPC surfaces (e.g. `amibaMemory/list`) — that is
+ * and drive their public RPC surfaces (e.g. `amibaMemory/status`) — that is
  * the point of the check, not a host→plugin coupling leak, which is why
  * `scripts/` directories are excluded from `verify-pluginization.mjs`.
  * The flip side: when a plugin is added to or pulled from the bundle,
@@ -22,6 +22,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createServer } from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -383,8 +384,13 @@ async function waitForMuxSubscription(baseUrl, sessionId) {
   });
 }
 
+const checkFilter = process.env.AMIBA_DSH_SMOKE_CHECK?.trim();
+let selectedChecks = 0;
 async function check(name, callback) {
+  // Profile composition is test setup, including for focused checks.
+  if (checkFilter && !name.includes(checkFilter) && name !== "official DSH profile plugin install and composition") return;
   await callback();
+  if (!checkFilter || name.includes(checkFilter)) selectedChecks += 1;
   process.stdout.write(`  ✓ ${name}\n`);
 }
 
@@ -480,7 +486,68 @@ try {
     ),
     writeFile(
       path.join(externalSource, "index.js"),
-      'export const name = "amiba-smoke-external";\nexport const inject = [];\nexport function apply() {}\n',
+      `export const name = "amiba-smoke-external";
+export const inject = ["jobs", "tools", "amibaBackgroundJobs", "amibaMedia"];
+export function apply(ctx) {
+  const pending = new Map();
+  const media = { prepare: async request => request, id: "smoke-media", describe: async () => ({ provider:"smoke-media",name:"Smoke", models:[{id:"fixture-image",name:"Fixture image",protocols:["fixture"],operations:["image.generate"]}],protocols:[{id:"fixture",operations:["image.generate"],documentation:[],instructions:"Local smoke fixture"}]}),
+    generate: async () => ({status:"succeeded",artifacts:[{kind:"image",bytes:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9WQAAAAASUVORK5CYII=","base64")}]}) };
+  ctx.effect(() => ctx.amibaMedia.registerProvider(media), "smoke-media");
+  ctx.on("agent/created", ({agent}) => {
+    void (async () => {
+      try {
+        const result = await ctx.tools.execute({name:"media_generate",arguments:{provider:"smoke-media",model:"fixture-image",protocol:"fixture",operation:"image.generate",parametersJson:JSON.stringify({exclusive:{keep:true}})},agent,signal:new AbortController().signal,callId:"smoke-media-"+agent.id});
+        if (result.isError) throw new Error(result.error.message);
+        const admitted = JSON.parse(result.value.json);
+        await ctx.jobs.wait(admitted.jobId, 10000, agent);
+        const record = await ctx.amibaMedia.inspect(agent.session.id, admitted.record.id);
+        agent.session.append("amiba/smoke/media", {record}, {ignorable:true});
+      } catch(error) { agent.session.append("amiba/smoke/media", {error:String(error)}, {ignorable:true}); }
+    })();
+  });
+  ctx.tools.register({
+    name: "amiba_smoke_download", description: "Isolated native asynchronous producer fixture",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    output: { schema: { type: "object", properties: {}, additionalProperties: true }, render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }] },
+    isConcurrencySafe: () => true,
+    execute: (_args, exec) => {
+      let finish;
+      let preview = "";
+      const done = new Promise(resolve => { finish = resolve; });
+      const jobId = ctx.jobs.start({kind:"external-smoke", label:"Smoke download", owner:exec.agent,
+        run:()=>({cancel(){finish({status:"killed"});}, done})});
+      pending.set(exec.agent.id, () => { preview = "fixture.txt: 3 bytes"; finish({status:"completed",output:preview}); });
+      ctx.amibaBackgroundJobs.present(exec.agent.id,jobId,{title:"Smoke download",peekOutput:()=>preview});
+      return {job_id:jobId};
+    },
+  });
+  ctx.on("agent/created", ({ agent }) => {
+    const id = ctx.jobs.start({
+      kind: "external-smoke", label: "PRIVATE_TOKEN=not-for-ui", owner: agent,
+      run: () => ({ cancel() {}, done: Promise.resolve({ status: "completed" }) }),
+    });
+    // Claim model reporting: the presentation event must still be delivered.
+    void ctx.jobs.wait(id, 1000, agent);
+    void (async () => {
+      const call = (name, args) => ctx.tools.execute({ name, arguments: args, agent, signal: new AbortController().signal, callId: "smoke-" + name + "-" + agent.id });
+      try {
+        const admission = await call("amiba_smoke_download", {});
+        if (admission.isError) throw new Error(admission.error.message);
+        const jobId = admission.value.job_id;
+        const running = ctx.jobs.get(jobId, agent).status;
+        const collected = ctx.jobs.wait(jobId, 5000, agent);
+        pending.get(agent.id)();
+        await collected;
+        const result = await call("job_output", { job_id: jobId });
+        if (result.isError) throw new Error(result.error.message);
+        agent.session.append("amiba/smoke/background", { running, status:ctx.jobs.get(jobId,agent).status, output:result.content.filter(p=>p.type==="text").map(p=>p.text).join("\\n") }, { ignorable: true });
+      } catch (error) {
+        agent.session.append("amiba/smoke/background", { error: String(error) }, { ignorable: true });
+      } finally { pending.delete(agent.id); }
+    })();
+  });
+}
+`,
     ),
     writeFile(
       path.join(externalSource, "cordis.patch.yml"),
@@ -529,7 +596,11 @@ try {
     },
   );
 
-  child = spawn(
+  const portProbe = createServer();
+  await new Promise((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
+  const memoryViewerPort = portProbe.address().port;
+  await new Promise((resolve) => portProbe.close(resolve));
+  const startServer = () => spawn(
     runtimeNode,
     [entrypoint, "--profile", profileName, "--host", "127.0.0.1", "--port", "0"],
     {
@@ -538,6 +609,9 @@ try {
         ...process.env,
         DSH_HOME: dshHome,
         DSH_AGENTS_HOME: agentsHome,
+        MEMOS_HOME: path.join(dshHome, "amiba-memos"),
+        MEMOS_CONFIG_FILE: path.join(dshHome, "amiba-memos", "config.yaml"),
+        AMIBA_MEMOS_VIEWER_PORT: String(memoryViewerPort),
         AMIBA_DSH_API_TOKEN: pluginToken,
         AMIBA_RUNTIME_GATEWAY_URL: "http://127.0.0.1:9",
         AMIBA_RUNTIME_GATEWAY_TOKEN: pluginToken,
@@ -546,14 +620,28 @@ try {
     },
   );
 
-  const baseUrl = await waitForReady();
+  child = startServer();
+  let baseUrl = await waitForReady();
   process.stdout.write(`[dsh:smoke] running isolated DSH at ${baseUrl}\n`);
+
+  await check("tool delivery origin", async () => {
+    const inventory = await pluginRequest(baseUrl, "/api/amiba/tools");
+    const tools = inventory.value.tools;
+    assert.ok(tools.length > 0);
+    assert.ok(tools.every(tool => ["builtin", "user"].includes(tool.source.distribution)));
+    const origin = name => tools.filter(tool => tool.name === name).map(tool => tool.source.distribution);
+    assert.deepEqual(origin("amiba_smoke_download"), ["user"]);
+    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", "bash"]) {
+      assert.ok(origin(name).length > 0, `missing ${name}`);
+      assert.ok(origin(name).every(value => value === "builtin"), `${name} is not builtin`);
+    }
+    process.stdout.write(`  Tool delivery: ${tools.filter(tool => tool.source.distribution === "builtin").length} builtin, ${tools.filter(tool => tool.source.distribution === "user").length} user\n`);
+  });
 
   let preset;
   let settings;
   let workspace;
   let sessionId;
-  let channel;
 
   await check(
     "DSH-composed Amiba Web Shell and native root plugin",
@@ -578,12 +666,12 @@ try {
         if (
           ids.has("@amiba/dsh-plugin-catalog") &&
           ids.has("@amiba/dsh-plugin-memory") &&
-          ids.has("@amiba/dsh-plugin-messaging-core") &&
+          ids.has("@amiba/dsh-plugin-connector-webhook") &&
           ids.has("@amiba/dsh-plugin-skills") &&
           ids.has("@amiba/dsh-plugin-mcp-manager") &&
           ids.has("@amiba/dsh-plugin-runtime-inventory") &&
           ids.has(externalPackageName) &&
-          ids.has("@amiba/dsh-plugin-schedule-adapter")
+          ids.has("@amiba/dsh-plugin-cron")
         )
           break;
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -601,8 +689,8 @@ try {
         `DSH client graph omitted Memory's Client contribution: ${[...ids].join(", ")}`,
       );
       assert.ok(
-        ids.has("@amiba/dsh-plugin-messaging-core"),
-        `DSH client graph omitted messaging-core's Client contribution: ${[...ids].join(", ")}`,
+        !ids.has("@amiba/dsh-plugin-messaging-core"),
+        "messaging-core must not contribute a Client plugin",
       );
       assert.ok(
         ids.has("@amiba/dsh-plugin-skills"),
@@ -613,8 +701,8 @@ try {
         `DSH client graph omitted MCP's Tools child contribution: ${[...ids].join(", ")}`,
       );
       assert.ok(
-        ids.has("@amiba/dsh-plugin-schedule-adapter"),
-        `DSH client graph omitted Schedule's workspace contribution: ${[...ids].join(", ")}`,
+        ids.has("@amiba/dsh-plugin-cron"),
+        `DSH client graph omitted Cron's workspace contribution: ${[...ids].join(", ")}`,
       );
       assert.ok(
         ids.has("@amiba/dsh-plugin-runtime-inventory"),
@@ -691,7 +779,7 @@ try {
       const uiShell = graph.entries.find(
         (entry) => entry.id === "@amiba/dsh-plugin-ui-shell",
       );
-      assert.deepEqual(uiShell.inject, ["@deepseek-ai/dsh-client-runtime"]);
+      assert.deepEqual(uiShell.inject, ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes"]);
       const bundle = await fetch(new URL(uiShell.url, baseUrl), {
         signal: AbortSignal.timeout(35_000),
       });
@@ -716,26 +804,31 @@ try {
         await memoryBundle.text(),
         /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-memory"/u,
       );
-      const messagingClient = graph.entries.find(
-        (entry) => entry.id === "@amiba/dsh-plugin-messaging-core",
+      const webhookClient = graph.entries.find(
+        (entry) => entry.id === "@amiba/dsh-plugin-connector-webhook",
       );
-      assert.deepEqual(messagingClient.inject, [
+      assert.deepEqual(webhookClient.inject, [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
         "@amiba/dsh-plugin-ui-shell",
+        "@amiba/dsh-plugin-connector-core",
       ]);
-      const messagingBundle = await fetch(
-        new URL(messagingClient.url, baseUrl),
+      const webhookBundle = await fetch(
+        new URL(webhookClient.url, baseUrl),
         {
           signal: AbortSignal.timeout(35_000),
         },
       );
-      assert.equal(messagingBundle.status, 200);
+      assert.equal(webhookBundle.status, 200);
       assert.match(
-        await messagingBundle.text(),
-        /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-messaging-core"/u,
+        await webhookBundle.text(),
+        /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-connector-webhook"/u,
       );
       for (const [id, inject] of [
+        [
+          "@amiba/dsh-plugin-background-jobs",
+          ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes", "@amiba/dsh-plugin-ui-shell"],
+        ],
         [
           "@amiba/dsh-plugin-catalog",
           [
@@ -762,7 +855,7 @@ try {
           ],
         ],
         [
-          "@amiba/dsh-plugin-schedule-adapter",
+          "@amiba/dsh-plugin-cron",
           [
             "@deepseek-ai/dsh-client-runtime",
             "@deepseek-ai/dsh-api-remotes",
@@ -785,6 +878,13 @@ try {
         });
         assert.equal(response.status, 200);
         const clientBundleSource = await response.text();
+        const factoryParameter = /factory:\s*(?:\(([$\w]+)\)|([$\w]+))\s*=>/u.exec(clientBundleSource);
+        assert.ok(factoryParameter, `${id} omitted its CJS factory parameter`);
+        const requireName = (factoryParameter[1] ?? factoryParameter[2]).replaceAll("$", "\\$");
+        const requests = new RegExp(`\\b${requireName}\\("(@amiba/[^"\\n]+)"\\)`, "gu");
+        for (const [, request] of clientBundleSource.matchAll(requests)) {
+          assert.ok(entry.external?.includes(request), `${id} requires ${request} without declaring its module arrival dependency`);
+        }
         assert.match(
           clientBundleSource,
           new RegExp(
@@ -940,6 +1040,26 @@ try {
       maxMessages: 20,
     });
     assert.ok(Array.isArray(history.events));
+    const completion = history.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/notice");
+    assert.ok(completion, "external job did not publish a durable presentation notice");
+    assert.equal(completion.data.version, 1);
+    assert.equal(completion.data.reference.kind, "background-job");
+    assert.equal(completion.data.reference.sessionId, sessionId);
+    assert.match(completion.data.reference.id, /^[a-f0-9-]{36}$/);
+    assert.match(completion.data.reference.instance, /^\d+$/);
+    let execution;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const snapshot = await rpc(baseUrl, "session.history", { sessionId, maxMessages: 50 });
+      execution = snapshot.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/smoke/background");
+      if (execution) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(execution, "native asynchronous producer did not finish the execution lifecycle");
+    assert.ok(!execution.data.error, execution.data.error);
+    assert.equal(execution.data.running, "running");
+    assert.equal(execution.data.status, "completed");
+    assert.match(execution.data.output, /fixture.txt/);
+    assert.ok(!JSON.stringify(completion.data).includes("PRIVATE_TOKEN"));
     assert.ok(
       history.projections?.values?.permissions,
       "permission projection is missing",
@@ -984,19 +1104,21 @@ try {
       assert.equal(unauthorized.error, "unauthorized");
 
       const globalTools = await pluginRequest(baseUrl, "/api/amiba/tools");
-      assert.equal(globalTools.value.scope, "global");
+      assert.ok(Array.isArray(globalTools.value.tools));
       const scopedTools = await pluginRequest(
         baseUrl,
         `/api/amiba/tools?sessionId=${encodeURIComponent(sessionId)}`,
       );
-      assert.equal(scopedTools.value.scope, "session");
-      assert.equal(scopedTools.value.exact, true);
-      assert.equal(scopedTools.value.tools.length, 41);
+      // The product catalog is the union of standing preset scopes and global
+      // contributions. It must not vary with the currently viewed session.
+      assert.deepEqual(scopedTools.value, globalTools.value);
+      assert.equal(new Set(globalTools.value.tools.map(tool => tool.id)).size, globalTools.value.tools.length);
       const sourceCounts = scopedTools.value.tools.reduce((counts, tool) => {
-        counts[tool.source.kind] = (counts[tool.source.kind] ?? 0) + 1;
+        counts[tool.source.distribution] = (counts[tool.source.distribution] ?? 0) + 1;
         return counts;
       }, {});
-      assert.deepEqual(sourceCounts, { "dsh-core": 28, "dsh-plugin": 13 });
+      assert.ok(sourceCounts.builtin > 0);
+      assert.ok(scopedTools.value.tools.every(tool => ["builtin", "user"].includes(tool.source.distribution)));
       const amibaToolPackages = [
         ...new Set(
           scopedTools.value.tools
@@ -1004,11 +1126,12 @@ try {
             .map((tool) => tool.source.packageName),
         ),
       ].sort();
-      assert.deepEqual(amibaToolPackages, [
+      for (const packageName of [
         "@amiba/dsh-plugin-attachments",
         "@amiba/dsh-plugin-browser-core",
         "@amiba/dsh-plugin-memory",
-      ]);
+        "@amiba/dsh-plugin-resources",
+      ]) assert.ok(amibaToolPackages.includes(packageName), `tool catalog omitted ${packageName}`);
       assert.ok(
         scopedTools.value.tools.every((tool) =>
           ["dsh-core", "dsh-plugin", "mcp-server"].includes(tool.source.kind),
@@ -1019,15 +1142,33 @@ try {
         scopedTools.value.tools.map((tool) => tool.name),
       );
       for (const required of [
-        "memory_list",
-        "memory_store",
-        "memory_forget",
-        "schedule_create",
-        "schedule_list",
-        "schedule_delete",
+        "memos_search",
+        "memos_get",
+        "memos_timeline",
+        "memos_environment",
+        "memos_skill_list",
+        "memos_skill_get",
+        "cron_create",
+        "cron_list",
+        "cron_delete",
+        "amiba_resource_search",
+        "amiba_resource_read",
       ]) {
-        assert.ok(toolNames.has(required), `live Agent is missing ${required}`);
+        assert.ok(toolNames.has(required), `runtime tool catalog is missing ${required}`);
       }
+      for (const retired of ["memory_list", "memory_store", "memory_forget"]) {
+        assert.ok(!toolNames.has(retired), `retired memory tool is still active: ${retired}`);
+      }
+      const memory = await rpc(baseUrl, "amibaMemory/status", { args: {} });
+      assert.equal(memory.state, "ready");
+      assert.equal(memory.mode, "full");
+      assert.equal(memory.engine, "memos");
+      assert.equal(memory.viewerUrl, `http://127.0.0.1:${memoryViewerPort}`);
+      const health = await (await fetch(`${memory.viewerUrl}/api/v1/health`, {
+        signal: AbortSignal.timeout(5000),
+      })).json();
+      assert.equal(health.ok, true);
+      assert.equal(await realpath(health.paths.home), await realpath(memory.home));
 
       const commands = await pluginRequest(
         baseUrl,
@@ -1059,33 +1200,39 @@ try {
     },
   );
 
-  await check("plugin-owned memory management bridge", async () => {
-    const listed = await pluginRequest(
-      baseUrl,
-      "/api/amiba/memory?preset=standard",
-    );
-    assert.equal(listed.value.preset, "standard");
-    assert.ok(Array.isArray(listed.value.targets));
-    const reset = await pluginRequest(baseUrl, "/api/amiba/memory", {
-      method: "DELETE",
-      body: { preset: "standard", target: "all" },
-    });
-    assert.ok(Array.isArray(reset.value.deletedIds));
+  await check("background jobs presentation plugin and session fence", async () => {
+    const inventory = await rpc(baseUrl, "pluginInventory/list", { args: {} });
+    const entry = inventory.entries.find(entry => entry.moduleName === "@amiba/dsh-plugin-background-jobs");
+    assert.ok(entry, "background jobs plugin missing from bundle");
+    assert.equal(entry.fiberPhase, "active");
+    await assert.rejects(() => rpc(baseUrl, "amibaJobs/inspect", {
+      args: { sessionId: "nonexistent-jobs-smoke-session", id: "bash-1" },
+    }), /not found|unknown|no such|does not exist/i);
   });
 
-  await check("DSH Typert Remote for Memory's Client plugin", async () => {
-    const snapshot = await rpc(baseUrl, "amibaMemory/list", {
-      args: { preset: "standard" },
-    });
-    assert.equal(snapshot.preset, "standard");
-    assert.deepEqual(
-      snapshot.targets.map((target) => target.target),
-      ["memory", "user"],
-    );
-    const reset = await rpc(baseUrl, "amibaMemory/reset", {
-      args: { preset: "standard", target: "all" },
-    });
-    assert.ok(Array.isArray(reset.deletedIds));
+  await check("MemOS-only memory status and removed archive surfaces", async () => {
+    const status = await rpc(baseUrl, "amibaMemory/status", { args: {} });
+    assert.equal(status.engine, "memos");
+    assert.equal(status.state, "ready");
+    assert.equal(status.mode, "full");
+    for (const method of ["list", "presets", "reset"]) {
+      await assert.rejects(
+        () => rpc(baseUrl, `amibaMemory/${method}`, { args: { preset: "standard", target: "all" } }),
+        /not.found|unknown|HTTP 404/iu,
+      );
+    }
+    for (const method of ["GET", "DELETE"]) {
+      const response = await fetch(`${baseUrl}/api/amiba/memory`, {
+        method,
+        headers: { "x-amiba-plugin-token": pluginToken, "content-type": "application/json" },
+        ...(method === "DELETE" ? { body: JSON.stringify({ preset: "standard", target: "all" }) } : {}),
+      });
+      assert.equal(response.status, 404, "retired memory HTTP API must not be mounted");
+    }
+    for (const file of ["memory-store.js", "memory-store.d.ts", "http.js", "http.d.ts", "client/toolviews.js", "client/toolviews.d.ts"]) {
+      assert.equal(existsSync(path.join(runtimeDir, "app/node_modules/@amiba/dsh-plugin-memory/lib", file)), false, `orphaned archive artifact: ${file}`);
+    }
+    assert.equal(existsSync(path.join(dshHome, "amiba-memory")), false);
   });
 
   await check(
@@ -1108,77 +1255,89 @@ try {
   await check(
     "Model Plane is shared by headless, Web, and Electron clients",
     async () => {
-      const plane = await rpc(baseUrl, "amibaModelPlane/snapshot", {
-        args: {},
+      const directory = await rpc(baseUrl, "llm.providers");
+      const catalog = await rpc(baseUrl, "llm.models");
+      const settings = await rpc(baseUrl, "settings.describe");
+      const tokenDance = directory.providers.find(p => p.provider === "tokendance");
+      assert.ok(tokenDance, "TokenDance must appear through the official directory");
+      assert.equal(tokenDance.settingsNs, "llm-tokendance");
+      assert.equal(directory.providers.filter(p => p.provider.startsWith("tokendance")).length, 1);
+      assert.equal(tokenDance.active, false);
+      assert.ok(!catalog.groups.some(g => g.id === "tokendance"));
+      const tokenSettings = settings.namespaces.find(n => n.ns === "llm-tokendance");
+      assert.deepEqual(tokenSettings.value.providers, {});
+      const configuredToken = await rpc(baseUrl, "settings.mutate", {
+        ns: tokenSettings.ns, expectedRevision: tokenSettings.revision,
+        ops: [{op: "set", path: ["providers", "tokendance"], value: {refreshCatalog: false}}],
       });
-      assert.equal(typeof plane.revision, "number");
-      assert.ok(Array.isArray(plane.providers));
-      assert.ok(Array.isArray(plane.groups));
-      assert.ok(
-        plane.providers.some(
-          (provider) => provider.id === "deepseek-official",
-        ),
-      );
+      const configuredDirectory = await rpc(baseUrl, "llm.providers");
+      assert.equal(configuredDirectory.providers.find(p => p.provider === "tokendance").active, true);
+      assert.ok(directory.providers.some(p => p.provider === "deepseek-official"));
+
+      const prefs = settings.namespaces.find(n => n.ns === "amiba-model-ui");
+      assert.ok(prefs, "optional UI preferences use the official settings seam");
+      const changed = await rpc(baseUrl, "settings.mutate", {
+        ns: prefs.ns, expectedRevision: prefs.revision,
+        ops: [{op: "set", path: ["hiddenProviders"], value: ["tokendance"]}],
+      });
+      const afterHide = await rpc(baseUrl, "llm.models");
+      assert.ok(afterHide.groups.some(g => g.id === "tokendance"), "UI preferences must not change official model capabilities");
+      await rpc(baseUrl, "settings.mutate", {ns: prefs.ns, expectedRevision: changed.revision, ops: [{op: "unset", path: ["hiddenProviders"]}]});
+      await rpc(baseUrl, "settings.mutate", {ns: tokenSettings.ns, expectedRevision: configuredToken.revision, ops: [{op: "unset", path: ["providers", "tokendance"]}]});
+      assert.equal((await rpc(baseUrl, "llm.providers")).providers.find(p => p.provider === "tokendance").active, false);
     },
   );
 
-  await check(
-    "messaging-core Typert Remote and channel lifecycle",
-    async () => {
-      const initial = await rpc(baseUrl, "amibaMessaging/list", { args: {} });
-      assert.ok(
-        initial.providers.some((provider) => provider.id === "webhook"),
-      );
-      assert.match(initial.inboundEndpoint, /\/api\/amiba\/message-inbound$/u);
-      const created = await rpc(baseUrl, "amibaMessaging/create", {
-        args: {
-          input: {
-            provider: "webhook",
-            name: "DSH smoke channel",
-            sessionId,
-            allowedSenders: ["smoke"],
-          },
-        },
+  await check("account-bound resource plugin and denied identity routing", async () => {
+    const inventory = await pluginRequest(baseUrl, "/api/amiba/tools");
+    for (const name of ["amiba_resource_search", "amiba_resource_read"]) assert.ok(inventory.value.tools.some((tool) => tool.name === name && tool.source.packageName === "@amiba/dsh-plugin-resources"), `${name} is missing or has the wrong owner`);
+    const result = await rpc(baseUrl, "amibaResources/search", { args: { input: { query: "smoke", source: "lark", connectionId: "nonexistent-smoke-account" } } });
+    assert.deepEqual(result.items, []);
+    assert.equal(result.unavailable[0]?.connectionId, "nonexistent-smoke-account");
+    await assert.rejects(() => rpc(baseUrl, "amibaResources/read", { args: { ref: { source: "lark", connectionId: "nonexistent-smoke-account", identity: "nobody", kind: "contact", id: "person" } } }));
+    await assert.rejects(() => rpc(baseUrl, "amibaLarkPersonal/manage", { args: { input: { action: "status", connectionId: "nonexistent-smoke-account" } } }), /connection_unavailable/);
+  });
+
+  await check("connector-owned Webhook lifecycle and private settings", async () => {
+    const availablePresets = await rpc(baseUrl, "agentPreset.list");
+    const connectionPreset = availablePresets.presets.find((item) => item.isDefault && !item.broken)
+      ?? availablePresets.presets.find((item) => !item.broken);
+    assert.ok(connectionPreset?.id, "A connection needs a usable agent preset");
+    const providers = await rpc(baseUrl, "amibaConnectors/listProviders", { args: {} });
+    assert.ok(providers.providers.some((provider) => provider.id === "webhook"));
+    const token = "smoke-test-credential-" + randomBytes(24).toString("hex");
+    const created = await rpc(baseUrl, "amibaConnectors/createConnect", { args: { input: {
+      provider: "webhook", name: "DSH smoke webhook", agentPreset: connectionPreset.id,
+      config: { token, allowedSenders: ["smoke"] },
+    } } });
+    try {
+      assert.equal(created.status.state, "ready");
+      assert.equal(created.channelId, undefined);
+      const endpoint = new URL("/api/amiba/connectors/webhook/" + created.id, baseUrl);
+      const send = (credential, sender) => fetch(endpoint, {
+        method: "POST",
+        headers: { authorization: "Bearer " + credential, "content-type": "application/json" },
+        body: JSON.stringify({ id: "smoke-rejected", text: "must not reach the Agent", sender }),
+        signal: AbortSignal.timeout(35_000),
       });
-      channel = created;
-      assert.match(channel.secret, /^amiba_/u);
-      assert.equal(channel.channel.sessionId, sessionId);
-      const rejected = await fetch(
-        new URL("/api/amiba/message-inbound", baseUrl),
-        {
-          method: "POST",
-          headers: {
-            authorization: "Bearer invalid",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            channelId: channel.channel.id,
-            id: "smoke-rejected",
-            text: "must not reach the Agent",
-            sender: "smoke",
-          }),
-          signal: AbortSignal.timeout(35_000),
-        },
-      );
-      assert.equal(rejected.status, 401);
-      const updated = await rpc(baseUrl, "amibaMessaging/update", {
-        args: {
-          id: channel.channel.id,
-          patch: { name: "DSH smoke channel updated", enabled: false },
-        },
-      });
-      assert.equal(updated.name, "DSH smoke channel updated");
-      assert.equal(updated.enabled, false);
-      const rotated = await rpc(baseUrl, "amibaMessaging/rotate", {
-        args: { id: channel.channel.id },
-      });
-      assert.match(rotated.secret, /^amiba_/u);
-      const removed = await rpc(baseUrl, "amibaMessaging/removeChannel", {
-        args: { id: channel.channel.id },
-      });
+      assert.equal((await send("invalid", "smoke")).status, 401);
+      assert.equal((await send(token, "stranger")).status, 403);
+      const updated = await rpc(baseUrl, "amibaConnectors/updateConnect", { args: {
+        id: created.id, input: { name: "DSH smoke updated", settings: { token: token + "-rotated" } },
+      } });
+      assert.equal(updated.name, "DSH smoke updated");
+      assert.equal((await send(token, "smoke")).status, 401);
+      const details = await rpc(baseUrl, "amibaConnectors/getConnectDetails", { args: { id: created.id } });
+      assert.deepEqual(details.settings.allowedSenders, ["smoke"]);
+      assert.ok(details.messaging);
+      assert.ok(!JSON.stringify(details).includes(token));
+      await rpc(baseUrl, "amibaConnectors/setEnabled", { args: { id: created.id, enabled: false } });
+      assert.equal((await send(token + "-rotated", "smoke")).status, 404);
+    } finally {
+      const removed = await rpc(baseUrl, "amibaConnectors/removeConnect", { args: { id: created.id } });
       assert.equal(removed.deleted, true);
-    },
-  );
+    }
+  });
 
   await check(
     "Skills Typert Remote owns user authoring over ctx.skills",
@@ -1231,7 +1390,9 @@ try {
     "MCP Typert Remote manages official DSH MCP child plugins",
     async () => {
       const initial = await rpc(baseUrl, "amibaMcp/list", { args: {} });
-      assert.deepEqual(initial, { servers: [], toolsOnly: true });
+      assert.deepEqual(initial, { servers: [], toolsOnly: true, dependencies: [] });
+      const access = await rpc(baseUrl, "amibaMcp/listAccess", { args: {} });
+      assert.deepEqual(access, []);
       const saved = await rpc(baseUrl, "amibaMcp/save", {
         args: {
           input: {
@@ -1268,6 +1429,91 @@ try {
     });
     assert.ok(Number.isInteger(reloaded.generation));
     assert.deepEqual(reloaded.configured, []);
+  });
+
+  await check("media generation tools and durable artifacts", async () => {
+    const html = await (await fetch(new URL("/", baseUrl))).text();
+    const boot = /<script>(?:window\.__DSH_BOOT__|globalThis\[\s*["']__DSH_BOOT__["']\s*\])\s*=\s*([\s\S]*?)<\/script>/u.exec(html);
+    assert.ok(boot?.[1]);
+    const graph = JSON.parse(boot[1]);
+    const client = graph.entries.find(entry => entry.id === "@amiba/dsh-plugin-media");
+    assert.ok(client, "Media client missing from packaged graph");
+    assert.deepEqual(client.inject, ["@deepseek-ai/dsh-client-runtime","@deepseek-ai/dsh-api-remotes","@amiba/dsh-plugin-ui-shell"]);
+    const bundle = await fetch(new URL(client.url,baseUrl));
+    assert.equal(bundle.status,200);
+    const source = await bundle.text();
+    assert.ok(source.includes("amiba.models.extension") && source.includes("media_generate") && source.includes("amibaMediaUi"), "Media client lacks settings, toolview or RPC contribution");
+
+    const created = await rpc(baseUrl, "workspace.create", { path: workspacePath });
+    const session = await rpc(baseUrl, "session.create", {workspaceId: created.workspace.workspaceId, agentPreset: "standard"});
+    let completed;
+    await waitFor("media fixture completion", async () => {
+      const history = await rpc(baseUrl, "session.history", {sessionId:session.sessionId,maxMessages:100});
+      completed = history.events.map(row => row.event ?? row).find(row => row.type === "amiba/smoke/media");
+      return !!completed;
+    }, 20000);
+    assert.ok(!completed.data.error, completed.data.error);
+    const record = completed.data.record;
+    assert.equal(record.status, "succeeded");
+    assert.equal(record.artifacts.length, 1);
+    const persisted = await rpc(baseUrl, "amibaMediaUi/inspect", {args:{sessionId:session.sessionId,recordId:record.id}});
+    assert.equal(persisted.status, "succeeded");
+    const chunk = await rpc(baseUrl, "amibaMediaUi/artifact", {args:{sessionId:session.sessionId,recordId:record.id,artifactId:record.artifacts[0].id,offset:0}});
+    assert.equal(chunk.mimeType, "image/png");
+    assert.equal(chunk.nextOffset, null);
+    assert.equal(Buffer.from(chunk.data,"base64").subarray(1,4).toString(), "PNG");
+    await assert.rejects(() => rpc(baseUrl, "amibaMediaUi/inspect", {args:{sessionId:"wrong-session",recordId:record.id}}));
+    for (const enabled of [false, true]) {
+      const catalog = JSON.parse(await rpc(baseUrl, "amibaMediaUi/catalog", {args:{}}));
+      await rpc(baseUrl, "amibaMediaUi/setModelEnabled", {args:{provider:record.provider,model:record.model,enabled,revision:catalog.revision}});
+      const next = await rpc(baseUrl, "session.create", {workspaceId:created.workspace.workspaceId,agentPreset:"standard"});
+      let result;
+      await waitFor("media model switch enforcement", async () => {
+        const history = await rpc(baseUrl, "session.history", {sessionId:next.sessionId,maxMessages:100});
+        result = history.events.map(row => row.event ?? row).find(row => row.type === "amiba/smoke/media");
+        return !!result;
+      }, 20000);
+      if (enabled) assert.equal(result.data.record?.status, "succeeded");
+      else assert.match(result.data.error ?? "", /disabled/i);
+    }
+    const holdMs = Math.min(120000, Math.max(0, Number(process.env.AMIBA_DSH_SMOKE_UI_HOLD_MS) || 0));
+    if (holdMs) { process.stdout.write(`[dsh:smoke] media UI inspection window ${holdMs}ms at ${baseUrl}\n`); await new Promise(resolve => setTimeout(resolve, holdMs)); }
+  });
+
+  await check("background jobs durable host restart", async () => {
+    const created = await rpc(baseUrl, "workspace.create", { path: workspacePath });
+    const session = await rpc(baseUrl, "session.create", {workspaceId: created.workspace.workspaceId, agentPreset: "standard"});
+    let record;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const rows = await rpc(baseUrl, "amibaJobs/relations", {args: {sessionId: session.sessionId}});
+      record = rows.find(row => row.title === "Smoke download" && row.status === "completed" && row.resultCallIds?.length);
+      if (record) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.ok(record, "background result record was not saved");
+    const history = await rpc(baseUrl, "session.history", {sessionId:session.sessionId,maxMessages:50});
+    const execution = history.events.map(entry=>entry.event ?? entry).find(event=>event.type === "amiba/smoke/background");
+    assert.ok(execution, "native async producer did not finish");
+    assert.ok(!execution.data.error, execution.data.error);
+    assert.equal(execution.data.running,"running");
+    assert.equal(execution.data.status,"completed");
+    assert.match(execution.data.output,/fixture.txt/);
+    const before = await rpc(baseUrl, "amibaJobs/inspect", {args: {sessionId: session.sessionId, id: record.recordId}});
+    assert.match(before.output, /fixture.txt/);
+    const persisted = (await rpc(baseUrl, "amibaJobs/relations", {args: {sessionId: session.sessionId}})).find(row => row.recordId === record.recordId);
+    await stopChild();
+    output = "";
+    child = startServer();
+    baseUrl = await waitForReady();
+    // Do not reopen/resume an Agent: cold history must be independently queryable.
+    const after = await rpc(baseUrl, "amibaJobs/inspect", {args: {sessionId: session.sessionId, id: record.recordId}});
+    assert.equal(after.output, before.output);
+    assert.equal(after.title, before.title);
+    assert.equal(after.callId, before.callId);
+    assert.equal(after.liveOutput, false);
+    const rows = await rpc(baseUrl, "amibaJobs/relations", {args: {sessionId: session.sessionId}});
+    assert.deepEqual(rows.find(row => row.recordId === record.recordId), persisted);
+    await rpc(baseUrl, "session.history", {sessionId: session.sessionId, maxMessages: 50});
   });
 
   await check("archive and workspace cleanup", async () => {
@@ -1325,9 +1571,10 @@ try {
     assert.ok(!manifest.dsh.profile.bundles.includes(externalPackageName));
   });
 
-  process.stdout.write(
-    "[dsh:smoke] all managed-runtime integration checks passed\n",
-  );
+  assert.ok(selectedChecks > 0, `No checks matched ${checkFilter}`);
+  process.stdout.write(checkFilter
+    ? `[dsh:smoke] ${selectedChecks} selected integration check(s) passed (${checkFilter})\n`
+    : "[dsh:smoke] all managed-runtime integration checks passed\n");
 } catch (error) {
   process.stderr.write(
     `[dsh:smoke] failed: ${error instanceof Error ? error.stack : String(error)}\n`,

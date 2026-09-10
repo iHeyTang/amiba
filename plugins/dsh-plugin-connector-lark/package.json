@@ -32,6 +32,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@amiba/dsh-plugin-resources": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@amiba/dsh-plugin-connector-core": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/ui": "workspace:*",

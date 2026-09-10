@@ -89,8 +89,8 @@ describe("sidebar session list visibility", () => {
     expect(screen.queryByRole("button", { name: "Archived" })).not.toBeInTheDocument();
   });
 
-  it("never renders hidden-preset rows once the host filters with visibleChatSessions", () => {
-    renderSidebar(visibleChatSessions(ALL_SESSIONS, new Set(["steward"])));
+  it("never renders plugin-owned session IDs once the host filters with visibleChatSessions", () => {
+    renderSidebar(visibleChatSessions(ALL_SESSIONS, new Set(["sh", "shx"])));
 
     expect(screen.getByText("Live chat")).toBeInTheDocument();
     expect(screen.queryByText("Steward chat")).not.toBeInTheDocument();

@@ -139,6 +139,14 @@ describe("the four scoped bail listeners", () => {
 });
 
 describe("service resolution", () => {
+  it("projects the same official source onto drafts and removes it on disposal", () => {
+    const off = vi.fn(), registerSource = vi.fn(() => off), listener = vi.fn();
+    const bridge = createInputTriggerBridge({ scopeOf: () => undefined, subscribeSessions: () => () => {}, inputTriggers: () => ({ registerSource, sessionOf: () => { throw new Error("must not invent a session"); } }), commandUi: () => undefined });
+    const source = { trigger: "@", name: "resources" } as never;
+    bridge.subscribe!(listener); const dispose = bridge.registerSources([source], true);
+    expect(registerSource).toHaveBeenCalledWith(source); expect(bridge.draftSources!()).toEqual([source]); expect(bridge.controllerFor("")).toBeUndefined();
+    dispose(); expect(bridge.draftSources!()).toEqual([]); expect(off).toHaveBeenCalledOnce(); expect(listener).toHaveBeenCalledTimes(2);
+  });
   it("reports no controller and no popup while the official rows are absent", () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => ({}) as never,

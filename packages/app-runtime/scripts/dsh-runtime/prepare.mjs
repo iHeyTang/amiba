@@ -1,3 +1,4 @@
+import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -5,6 +6,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { memoryPeerOverrides } from "./npm-overrides.mjs";
 
 const runtimePackageDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -212,6 +214,9 @@ async function computeAmibaSourceDigest() {
     const sourceDir = path.join(directory, "src");
     if (fs.existsSync(sourceDir)) files.push(...(await sourceFiles(sourceDir)));
   }
+  const patchesDir = path.join(workspaceDir, "patches");
+  if (fs.existsSync(patchesDir)) files.push(...(await sourceFiles(patchesDir)));
+  files.push(path.join(workspaceDir, "package.json"));
   const hash = createHash("sha256");
   for (const file of files.sort()) {
     hash.update(path.relative(workspaceDir, file));
@@ -240,6 +245,7 @@ const amibaSourceDigest = await computeAmibaSourceDigest();
 const appPackageJsonContent = `${JSON.stringify(
   {
     private: true,
+    overrides: memoryPeerOverrides(declaration.version),
     dependencies: {
       "@deepseek-ai/dsh": declaration.version,
       pnpm: managedPnpmVersion,
@@ -600,9 +606,11 @@ async function installNode(stage) {
  * managed Node itself is reusable.
  *
  * Conservative by design: a missing marker, a missing `app/node_modules`, a
- * hash/platform/arch/Node-version mismatch, an unreadable/corrupt marker, or
+ * Changed/removed dependency versions or a platform/arch/Node-version mismatch,
+ * an unreadable/corrupt marker, or
  * a failed copy all fall back to `false` (full install below) rather than
- * risking a stale or cross-platform reuse. An old marker without
+ * risking a stale or cross-platform reuse. Exact additions already present at
+ * the root of the verified tree may be promoted without reinstalling. An old marker without
  * `appTreeHash` compares as `undefined !== <hash>` and also falls back to a
  * full install.
  */
@@ -619,8 +627,14 @@ async function reuseAppDependencyTree(appDir) {
     const installedMarker = JSON.parse(
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
+    const sameDependencies = installedMarker.appTreeHash === appTreeHash;
+    const existingPromotions = !sameDependencies && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
+      JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
+      JSON.parse(appPackageJsonContent),
+      async name => JSON.parse(await fsp.readFile(path.join(installedNodeModules, name, "package.json"), "utf8")).version,
+    );
     const reusable =
-      installedMarker.appTreeHash === appTreeHash &&
+      (sameDependencies || existingPromotions) &&
       installedMarker.nodeVersion === declaration.nodeVersion &&
       installedMarker.platform === process.platform &&
       installedMarker.arch === process.arch;
@@ -629,7 +643,7 @@ async function reuseAppDependencyTree(appDir) {
       recursive: true,
     });
     console.log(
-      "[dsh:runtime] reused app dependency tree from the existing runtime (manifest unchanged)",
+      "[dsh:runtime] reused verified app dependency tree (unchanged versions; any new direct dependencies already installed)",
     );
     return true;
   } catch (error) {
@@ -683,6 +697,24 @@ try {
         },
       },
     );
+  }
+  // npm does not consume pnpm.patchedDependencies. Apply the same reviewed
+  // patches to the managed tree, including when dependencies were reused.
+  const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
+  for (const [specifier, patchPath] of Object.entries(workspaceManifest.pnpm?.patchedDependencies ?? {})) {
+    const split = specifier.lastIndexOf("@");
+    const name = specifier.slice(0, split);
+    const version = specifier.slice(split + 1);
+    const packageDir = path.join(appDir, "node_modules", name);
+    const installed = JSON.parse(await fsp.readFile(path.join(packageDir, "package.json"), "utf8"));
+    if (installed.version !== version) fail(`Patch version mismatch for ${specifier}`);
+    const args = ["--batch", "-p1", "-i", path.resolve(workspaceDir, patchPath)];
+    const check = spawnSync("patch", ["--dry-run", "--forward", ...args], { cwd: packageDir, encoding: "utf8" });
+    if (check.status === 0) run("patch", ["--forward", ...args], { cwd: packageDir });
+    else {
+      const applied = spawnSync("patch", ["--dry-run", "--reverse", ...args], { cwd: packageDir, encoding: "utf8" });
+      if (applied.status !== 0) fail(`Cannot apply or verify ${specifier}: ${check.stderr || check.stdout}`);
+    }
   }
   const amibaScope = path.join(appDir, "node_modules", "@amiba");
   await fsp.mkdir(amibaScope, { recursive: true });

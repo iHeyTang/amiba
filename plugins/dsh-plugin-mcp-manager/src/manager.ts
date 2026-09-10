@@ -1,3 +1,5 @@
+import { McpDependencies, type McpDependencyView } from "./dependencies.js";
+import { McpAccess } from "./access.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -5,14 +7,14 @@ import { dirname, join } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ToolProvenanceRegistry } from "@amiba/dsh-plugin-catalog";
 
-import {
-  DshMcpPluginSupervisor,
-  type McpReloadTarget,
-} from "./supervisor.js";
+import { DshMcpPluginSupervisor, type McpReloadTarget } from "./supervisor.js";
 
 export type ManagedMcpServer =
   | {
       serverName: string;
+      displayName?: string;
+      required?: boolean;
+      origin?: { serviceId: string; serviceName: string; declaredBy: string; distribution?: "builtin" | "user" };
       transport: "stdio";
       command: string;
       args: string[];
@@ -22,6 +24,9 @@ export type ManagedMcpServer =
     }
   | {
       serverName: string;
+      displayName?: string;
+      required?: boolean;
+      origin?: { serviceId: string; serviceName: string; declaredBy: string; distribution?: "builtin" | "user" };
       transport: "streamable-http";
       url: string;
       headers: Record<string, string>;
@@ -81,6 +86,11 @@ export function validateServer(input: ManagedMcpServer): ManagedMcpServer {
     if (!command) throw new Error("A stdio MCP server requires a command.");
     return {
       serverName,
+      required: input.required,
+      origin: input.origin,
+      ...(input.displayName?.trim()
+        ? { displayName: input.displayName.trim() }
+        : {}),
       transport: "stdio",
       command,
       args: input.args.map(String),
@@ -95,6 +105,11 @@ export function validateServer(input: ManagedMcpServer): ManagedMcpServer {
   }
   return {
     serverName,
+    required: input.required,
+    origin: input.origin,
+    ...(input.displayName?.trim()
+      ? { displayName: input.displayName.trim() }
+      : {}),
     transport: "streamable-http",
     url: url.href,
     headers: stringRecord(input.headers),
@@ -104,12 +119,16 @@ export function validateServer(input: ManagedMcpServer): ManagedMcpServer {
 
 async function readServers(root: string): Promise<ManagedMcpServer[]> {
   try {
-    const parsed = JSON.parse(await readFile(storePath(root), "utf8")) as StoreDocument;
+    const parsed = JSON.parse(
+      await readFile(storePath(root), "utf8"),
+    ) as StoreDocument;
     if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.servers)) {
       throw new Error("Unsupported DSH MCP store schema.");
     }
     const servers = parsed.servers.map(validateServer);
-    if (new Set(servers.map((item) => item.serverName)).size !== servers.length) {
+    if (
+      new Set(servers.map((item) => item.serverName)).size !== servers.length
+    ) {
       throw new Error("DSH MCP server names must be unique.");
     }
     return servers;
@@ -119,9 +138,15 @@ async function readServers(root: string): Promise<ManagedMcpServer[]> {
   }
 }
 
-async function writeServers(root: string, servers: ManagedMcpServer[]): Promise<void> {
+async function writeServers(
+  root: string,
+  servers: ManagedMcpServer[],
+): Promise<void> {
   const normalized = servers.map(validateServer);
-  if (new Set(normalized.map((item) => item.serverName)).size !== normalized.length) {
+  if (
+    new Set(normalized.map((item) => item.serverName)).size !==
+    normalized.length
+  ) {
     throw new Error("DSH MCP server names must be unique.");
   }
   const path = storePath(root);
@@ -157,7 +182,10 @@ function view(server: ManagedMcpServer): McpServerView {
       };
 }
 
-function replacement(input: McpSaveInput, existing?: ManagedMcpServer): ManagedMcpServer {
+function replacement(
+  input: McpSaveInput,
+  existing?: ManagedMcpServer,
+): ManagedMcpServer {
   if (input.transport === "stdio") {
     return validateServer({
       serverName: input.serverName,
@@ -182,18 +210,45 @@ function replacement(input: McpSaveInput, existing?: ManagedMcpServer): ManagedM
 
 /** Persistence and lifecycle owner for the dynamic official MCP child plugins. */
 export class DshMcpManager implements McpReloadTarget {
-  private readonly supervisor: Pick<DshMcpPluginSupervisor, "reload" | "dispose">;
+  readonly dependencies: McpDependencies;
+  readonly access: McpAccess;
+  private readonly supervisor: Pick<
+    DshMcpPluginSupervisor,
+    "reload" | "dispose"
+  >;
   private readonly ready: Promise<void>;
   private mutation: Promise<unknown> = Promise.resolve();
+  private disposing = false;
+  private disposal?: Promise<void>;
   private readonly programmatic = new Map<string, ManagedMcpServer>();
 
   constructor(
     ctx: Context,
     private readonly root: string,
     provenance?: ToolProvenanceRegistry,
-    supervisor?: Pick<DshMcpPluginSupervisor, "reload" | "dispose">,
+    supervisor?: Pick<DshMcpPluginSupervisor, "reload" | "dispose"> & Partial<Pick<DshMcpPluginSupervisor, "expose" | "rename" | "requireTools">>,
   ) {
     this.supervisor = supervisor ?? new DshMcpPluginSupervisor(ctx, provenance);
+    this.dependencies = new McpDependencies(
+      (server) => this.registerManagedServer(server),
+      (serverName, target, tools, signal) => {
+        const supervisor = this.supervisor as Pick<DshMcpPluginSupervisor, "reload" | "dispose"> & Partial<Pick<DshMcpPluginSupervisor, "expose">>;
+        if (!supervisor.expose) throw new Error("mcp_tool_surface_unavailable");
+        return supervisor.expose(serverName, target, tools, signal);
+      },
+      (serverName, name) => this.enqueue(async () => {
+        const server = this.programmatic.get(serverName);
+        if (!server) throw new Error("mcp_tool_surface_unavailable");
+        const supervisor = this.supervisor as Partial<Pick<DshMcpPluginSupervisor, "rename">>;
+        supervisor.rename?.(serverName, name);
+        server.displayName = name;
+      }),
+      (serverName, tools) => {
+        const supervisor = this.supervisor as Partial<Pick<DshMcpPluginSupervisor, "requireTools">>;
+        supervisor.requireTools?.(serverName, tools);
+      },
+    );
+    this.access = new McpAccess(this.dependencies, root);
     this.ready = readServers(root).then(async (servers) => {
       await this.supervisor.reload(this.merged(servers));
     });
@@ -203,17 +258,23 @@ export class DshMcpManager implements McpReloadTarget {
     return [...stored, ...this.programmatic.values()];
   }
 
-  async registerManagedServer(server: ManagedMcpServer): Promise<() => void> {
+  async registerManagedServer(
+    server: ManagedMcpServer,
+  ): Promise<() => Promise<void>> {
     const validated = validateServer(server);
-    if (this.programmatic.has(validated.serverName))
-      throw new Error(`duplicate managed MCP server ${validated.serverName}`);
-    this.programmatic.set(validated.serverName, validated);
+    if (this.disposing) throw new Error("mcp_manager_disposed");
     return this.enqueue(async () => {
+      if (this.disposing) throw new Error("mcp_manager_disposed");
+      if (this.programmatic.has(validated.serverName))
+        throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+      this.programmatic.set(validated.serverName, validated);
       try {
         const current = await readServers(this.root);
         if (current.some((item) => item.serverName === validated.serverName)) {
           this.programmatic.delete(validated.serverName);
-          throw new Error(`duplicate managed MCP server ${validated.serverName}`);
+          throw new Error(
+            `duplicate managed MCP server ${validated.serverName}`,
+          );
         }
         await this.supervisor.reload(this.merged(current));
       } catch (error) {
@@ -223,22 +284,41 @@ export class DshMcpManager implements McpReloadTarget {
         throw error;
       }
       let disposed = false;
-      return () => {
+      return async () => {
         if (disposed) return;
-        disposed = true;
-        if (this.programmatic.get(validated.serverName) !== validated) return;
-        this.programmatic.delete(validated.serverName);
-        void this.enqueue(async () => {
-          await this.supervisor.reload(this.merged(await readServers(this.root)));
+        await this.enqueue(async () => {
+          if (disposed) return;
+          if (this.programmatic.get(validated.serverName) !== validated) {
+            disposed = true;
+            return;
+          }
+          this.programmatic.delete(validated.serverName);
+          try {
+            await this.supervisor.reload(
+              this.merged(await readServers(this.root)),
+            );
+            disposed = true;
+          } catch (error) {
+            this.programmatic.set(validated.serverName, validated);
+            throw error;
+          }
         });
       };
     });
   }
 
-  async list(): Promise<{ servers: McpServerView[]; toolsOnly: true }> {
+  async list(): Promise<{
+    servers: McpServerView[];
+    toolsOnly: true;
+    dependencies: McpDependencyView[];
+  }> {
     await this.ready;
     await this.mutation;
-    return { servers: (await readServers(this.root)).map(view), toolsOnly: true };
+    return {
+      servers: (await readServers(this.root)).map(view),
+      toolsOnly: true,
+      dependencies: await this.dependencies.list(),
+    };
   }
 
   save(input: McpSaveInput): Promise<{ server: McpServerView }> {
@@ -258,10 +338,14 @@ export class DshMcpManager implements McpReloadTarget {
     });
   }
 
-  remove(serverName: string): Promise<{ serverName: string; deleted: boolean }> {
+  remove(
+    serverName: string,
+  ): Promise<{ serverName: string; deleted: boolean }> {
     return this.enqueue(async () => {
       const current = await readServers(this.root);
-      const updated = current.filter((server) => server.serverName !== serverName);
+      const updated = current.filter(
+        (server) => server.serverName !== serverName,
+      );
       if (updated.length === current.length) {
         return { serverName, deleted: false };
       }
@@ -270,25 +354,40 @@ export class DshMcpManager implements McpReloadTarget {
     });
   }
 
-  reload(values: unknown[]): Promise<{ generation: number; configured: string[] }> {
+  reload(
+    values: unknown[],
+  ): Promise<{ generation: number; configured: string[] }> {
     return this.enqueue(async () => {
       const current = await readServers(this.root);
-      const requested = values.map((value) => validateServer(value as ManagedMcpServer));
+      const requested = values.map((value) =>
+        validateServer(value as ManagedMcpServer),
+      );
       await writeServers(this.root, requested);
       try {
         return await this.supervisor.reload(this.merged(requested));
       } catch (error) {
         await writeServers(this.root, current);
-        await this.supervisor.reload(this.merged(current)).catch(() => undefined);
+        await this.supervisor
+          .reload(this.merged(current))
+          .catch(() => undefined);
         throw error;
       }
     });
   }
 
-  async dispose(): Promise<void> {
-    await this.ready.catch(() => undefined);
-    await this.mutation.catch(() => undefined);
-    await this.supervisor.dispose();
+  dispose(): Promise<void> {
+    this.disposing = true;
+    return (this.disposal ??= (async () => {
+      await this.ready.catch(() => undefined);
+      await this.mutation.catch(() => undefined);
+      try {
+        try { await this.access.dispose(); }
+        finally { await this.dependencies.dispose(); }
+      } finally {
+        await this.supervisor.dispose();
+        this.programmatic.clear();
+      }
+    })());
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -306,7 +405,9 @@ export class DshMcpManager implements McpReloadTarget {
       await this.supervisor.reload(this.merged(next));
     } catch (error) {
       await writeServers(this.root, previous);
-      await this.supervisor.reload(this.merged(previous)).catch(() => undefined);
+      await this.supervisor
+        .reload(this.merged(previous))
+        .catch(() => undefined);
       throw error;
     }
   }

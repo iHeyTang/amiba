@@ -1,15 +1,14 @@
-import type { ManagedMcpServer } from "@amiba/dsh-plugin-mcp-manager";
+import type { ManagedMcpServer, McpServiceDefinition, McpRequirement } from "@amiba/dsh-plugin-mcp-manager";
 import type {
   ApprovalOutcomeNotice,
   ApprovalPrompt,
   ApprovalReply,
   InboundConversationRef,
   InboundMessageEnvelope,
-  MessageChannelApproval,
+  MessageChannelCenter,
+  MessageChannelDeliveryStatus,
   OutboundMessageEnvelope,
 } from "@amiba/dsh-plugin-messaging-core";
-
-export type { MessageChannelApproval };
 
 export interface ConversationRef extends InboundConversationRef {}
 
@@ -29,13 +28,42 @@ export type ConnectorStatus =
 export interface ConnectorHandle {
   readonly connectId: string;
   readonly config: unknown;
-  onInbound(envelope: ConnectorInboundEnvelope): Promise<void>;
+  onInbound(
+    envelope: ConnectorInboundEnvelope,
+  ): Promise<ConnectorInboundResult | undefined>;
   setStatus(status: ConnectorStatus): void;
 }
 
+/** Server-only account context. Never expose this face through a Remote. */
+export interface ConnectorAccountContext {
+  connect: ConnectView;
+  config: unknown;
+  state: unknown;
+  signal: AbortSignal;
+  updateState(mutate: (current: unknown) => unknown): Promise<void>;
+}
+
+export interface ConnectorAccounts {
+  list(): Promise<ConnectView[]>;
+  run<T>(id: string, operation: (account: ConnectorAccountContext) => Promise<T>, signal?: AbortSignal): Promise<T>;
+  /** Cancel outstanding work after an identity/authorization change. */
+  invalidate(id: string): void;
+}
+
+export interface ConnectorAccessView {
+  identity: "application" | "user";
+  label?: string;
+  state: "unauthorized" | "authorized" | "expired";
+  capabilities: Array<{ id: string; available: boolean }>;
+}
+
+export type ConnectorInboundResult = Awaited<
+  ReturnType<MessageChannelCenter["acceptInbound"]>
+>;
+
 export interface ConnectorRuntime {
   stop(): Promise<void>;
-  deliver(
+  deliver?(
     conversation: ConversationRef,
     envelope: OutboundMessageEnvelope,
   ): Promise<void>;
@@ -83,7 +111,7 @@ export interface CliProvisionSpec {
 }
 
 export type CapabilityDecl =
-  | { kind: "mcp"; spec: ManagedMcpServer }
+  | { kind: "mcp"; service: McpServiceDefinition; identity: string; tools: McpRequirement["tools"]; spec: ManagedMcpServer }
   | { kind: "cli"; spec: CliProvisionSpec };
 
 /** Update pushed by a provider's `onboard()` while it runs, e.g. a scannable
@@ -110,11 +138,19 @@ export interface ConnectorProvider {
   readonly name: string;
   readonly description: string;
   readonly icon?: string;
+  /** Omit for tool-only connectors. Authentication remains provider-owned. */
+  readonly messaging?: { ownerPairing: boolean };
   /** Schema value driving the settings form; validated by the provider. */
   readonly configSchema: unknown;
   validate(config: unknown): Promise<void>;
   start(handle: ConnectorHandle): Promise<ConnectorRuntime>;
   capabilities(config: unknown): CapabilityDecl[];
+  /** Explicit public projection; never return credentials from this hook. */
+  settings?(config: unknown): Record<string, unknown>;
+  /** Merge a settings edit with the private config. The result is validated before saving. */
+  configure?(config: unknown, patch: Record<string, unknown>): unknown;
+  /** Public authorization projection of private account state. */
+  access?(state: unknown): ConnectorAccessView;
   /** Optional interactive onboarding flow (e.g. scan-a-QR-code login) that
    * produces the config a connect will be created from. Absent for
    * providers whose config is entered directly through the settings form. */
@@ -127,6 +163,29 @@ export interface ConnectorProviderView {
   description: string;
   icon?: string;
   supportsOnboarding: boolean;
+  messaging?: { ownerPairing: boolean };
+}
+
+export interface ConnectDetails {
+  connect: ConnectView;
+  settings: Record<string, unknown>;
+  access?: ConnectorAccessView;
+  capabilityUses?: Array<{ name: string; capabilities: string[] }>;
+  messaging?: {
+    delivery: MessageChannelDeliveryStatus;
+    conversations: Array<{
+      key: string;
+      kind: "p2p" | "group";
+      title?: string;
+      sessionId: string;
+    }>;
+  };
+}
+
+export interface UpdateConnectInput {
+  name?: string;
+  agentPreset?: string;
+  settings?: Record<string, unknown>;
 }
 
 export type OnboardingState = "pending" | "completed" | "error" | "cancelled";
@@ -151,10 +210,6 @@ export interface ConnectView {
   pairing: boolean;
   owners: string[];
   agentPreset?: string;
-  channelId?: string;
-  /** The connect's approval-wait setting, when one has been chosen. Absent
-   * means the bound channel's default applies (10-minute timeout). */
-  approval?: MessageChannelApproval;
   status: ConnectorStatus;
   createdAt: string;
   updatedAt: string;

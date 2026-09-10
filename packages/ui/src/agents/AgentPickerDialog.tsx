@@ -38,7 +38,7 @@ export function AgentPickerDialog({
     () =>
       normalized
         ? profiles.filter((profile) =>
-            [profile.name, profile.description, profile.model, profile.provider]
+            [profile.id, profile.name, profile.description, profile.model, profile.provider]
               .filter(Boolean)
               .join(" ")
               .toLocaleLowerCase()
@@ -96,10 +96,10 @@ export function AgentPickerDialog({
               </div>
             ) : null}
             {filtered.map((profile) => {
-              const selected = profile.name === selectedProfileId;
+              const selected = profile.id === selectedProfileId;
               return (
                 <Command.Item
-                  key={profile.name}
+                  key={profile.id}
                   onSelect={() => onSelect(profile)}
                   value={`${profile.name} ${profile.description}`}
                 >

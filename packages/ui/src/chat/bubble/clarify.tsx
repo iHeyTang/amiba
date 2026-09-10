@@ -11,7 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Streamdown } from "streamdown";
+import { ChatMarkdown as Streamdown } from "@amiba/markdown";
+
 
 import type {
   UserQuestionAnswerItem,

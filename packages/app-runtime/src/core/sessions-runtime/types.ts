@@ -121,10 +121,10 @@ export interface SessionsController {
   resolveUserMessageId: (id: string, userOrdinal: number) => Promise<number | null>;
 
   /** Mark a background session as having an update the user has not opened. */
-  markUnread: (id: string) => Promise<void>;
+  markUnread: (id: string, activityAt?: number) => Promise<void>;
 
   /** Clear the local unread marker. Opening a session calls this automatically. */
-  markRead: (id: string) => Promise<void>;
+  markRead: (id: string, activityAt?: number) => Promise<void>;
 
   clearActiveMessages: () => Promise<void>;
 

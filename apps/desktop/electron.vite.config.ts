@@ -16,6 +16,8 @@ const WORKSPACE_PKGS = [
   "@amiba/ui",
 ];
 
+const dshDevPort = process.env.AMIBA_DSH_DEV_PORT?.trim();
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PKGS })],
@@ -58,6 +60,20 @@ export default defineConfig({
         },
       },
     },
-    server: { port: 15173 },
+    server: {
+      port: 15173,
+      ...(dshDevPort
+        ? {
+            // Desktop development consumes DSH's rebuild stream through a
+            // same-origin EventSource. Proxy that route to the fixed loopback
+            // DSH dev port so the browser keeps its normal CORS boundary.
+            proxy: {
+              "/plugins/events": {
+                target: `http://127.0.0.1:${dshDevPort}`,
+              },
+            },
+          }
+        : {}),
+    },
   },
 });

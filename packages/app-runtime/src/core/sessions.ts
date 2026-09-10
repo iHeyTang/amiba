@@ -20,6 +20,8 @@ export interface SessionMeta {
    * has no unarchive RPC yet, so this only ever goes from unset to true.
    */
   archived?: boolean
+  /** Canonical DSH origin, projected from its session header, never local metadata. */
+  origin?: "subagent"
   /** Branch provenance retained when this task was forked from another task. */
   parentSessionId?: string
   branchMessageId?: number
@@ -27,6 +29,8 @@ export interface SessionMeta {
   searchSnippet?: string
   /** Local viewer state; never written into the DSH event log. */
   unread?: boolean
+  /** Latest activity acknowledged by this viewer, retained across restarts. */
+  readAt?: number
   /** Cached count so the sidebar doesn't have to load history just to count. */
   messageCount?: number
   /**
@@ -58,11 +62,11 @@ export type SessionMessage = ChatMessage
  *
  * `archived` is deliberately NOT here: archiving is host state owned by DSH's
  * workspace registry, so the sidecar must not carry a second, divergent copy.
- * Legacy values written before that move are drained by the one-time
- * migration in `sessions-runtime/store.ts`.
  */
 export interface SessionLocalMeta {
   unread?: boolean
+  /** Latest activity acknowledged by this viewer, retained across restarts. */
+  readAt?: number
   titleManual?: boolean
   agent?: AgentExecutionContext
   parentSessionId?: string

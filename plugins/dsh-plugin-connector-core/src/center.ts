@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { randomUUID } from "node:crypto";
 
 import type { Context } from "@deepseek-ai/cordis";
@@ -6,7 +7,6 @@ import type {
   ApprovalPrompt,
   ApprovalReply,
   InboundConversationRef,
-  MessageChannelApproval,
   MessageChannelCenter,
   MessageChannelProvider,
   OutboundMessageEnvelope,
@@ -18,30 +18,40 @@ import type {
   CapabilityDecl,
   ConnectorHandle,
   ConnectorInboundEnvelope,
+  ConnectorInboundResult,
   ConnectorProvider,
   ConnectorProviderView,
   ConnectorRuntime,
   ConnectorStatus,
   ConnectView,
+  ConnectDetails,
+  UpdateConnectInput,
   OnboardHandle,
   OnboardingState,
   OnboardingView,
   OnboardUpdate,
+  ConnectorAccounts,
 } from "./types.js";
 
-interface CapabilityApplier {
-  apply(connect: StoredConnect, decl: CapabilityDecl): Promise<() => void>;
+type CapabilityDisposer = (() => void | Promise<void>) & { updateMetadata?(connect: StoredConnect): Promise<void> };
+export interface CapabilityApplier {
+  apply(connect: StoredConnect, decl: CapabilityDecl): Promise<CapabilityDisposer>;
+  removeConnect?(connect: StoredConnect): Promise<void>;
+  describeConnect?(connect: StoredConnect): Promise<Array<{ name: string; capabilities: string[] }>>;
 }
 
 interface LiveConnect {
+  handle: ConnectorHandle;
+  retire(): void;
   runtime: ConnectorRuntime;
-  disposers: Array<() => void>;
-  channelSecret: string;
+  disposers: CapabilityDisposer[];
+  channelSecret?: string;
 }
 
 interface GrantPayload {
   config: unknown;
-  channelSecret: string;
+  channelSecret?: string;
+  accountState?: unknown;
 }
 
 interface OnboardingSession {
@@ -142,6 +152,78 @@ export class ConnectorCenter {
    */
   private readonly teardowns = new Map<string, Promise<void>>();
   private readonly onboardings = new Map<string, OnboardingSession>();
+  private readonly mutations = new Map<string, Promise<unknown>>();
+  private readonly accountRequests = new Map<string, Set<AbortController>>();
+
+  /** A provider-scoped service, not a renderer credential endpoint. */
+  accounts(providerId: string): ConnectorAccounts {
+    const center = this;
+    const owned = new Map<string, Set<AbortController>>();
+    const cancel = (id: string) => {
+      for (const controller of owned.get(id) ?? []) controller.abort();
+    };
+    return {
+      async list() {
+        return (await center.listConnects()).filter((row) => row.provider === providerId && row.enabled);
+      },
+      invalidate: cancel,
+      async run(id, operation, outerSignal) {
+        const provider = center.providers.get(providerId);
+        if (!provider) throw new Error("provider_not_found");
+        const controller = new AbortController();
+        const signal = outerSignal ? AbortSignal.any([outerSignal, controller.signal]) : controller.signal;
+        const pending = center.accountRequests.get(id) ?? new Set<AbortController>();
+        center.accountRequests.set(id, pending);
+        pending.add(controller);
+        const ownPending = owned.get(id) ?? new Set<AbortController>();
+        owned.set(id, ownPending); ownPending.add(controller);
+        const check = async () => {
+          signal.throwIfAborted();
+          const row = (await center.store.list()).find((item) => item.id === id);
+          if (!row || row.provider !== providerId || !row.enabled || center.providers.get(providerId) !== provider)
+            throw new Error("connection_unavailable");
+          signal.throwIfAborted();
+          return row;
+        };
+        try {
+          const row = await check();
+          const grant = await center.readGrant(id);
+          signal.throwIfAborted();
+          const value = await operation({
+            connect: center.toView(row), config: grant.config, state: grant.accountState, signal,
+            updateState: (mutate) => center.exclusive(id, async () => {
+              await check();
+              await center.credentials.modifyRecord(center.grantKey(id), async (record) => {
+                const current = (record as { kind?: string; payload?: GrantPayload } | undefined)?.payload;
+                if (!current || !("config" in current)) throw new Error("grant_not_found");
+                await check();
+                return { kind: "grant", payload: { ...current, accountState: mutate(current.accountState) } };
+              });
+            }),
+          });
+          await check();
+          return value;
+        } finally {
+          pending.delete(controller);
+          ownPending.delete(controller);
+          if (!ownPending.size) owned.delete(id);
+          if (!pending.size && center.accountRequests.get(id) === pending) center.accountRequests.delete(id);
+        }
+      },
+    };
+  }
+
+  private exclusive<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.mutations.get(id) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    this.mutations.set(id, current);
+    void current
+      .finally(() => {
+        if (this.mutations.get(id) === current) this.mutations.delete(id);
+      })
+      .catch(() => undefined);
+    return current;
+  }
 
   constructor(
     private readonly ctx: Context,
@@ -195,11 +277,13 @@ export class ConnectorCenter {
           // This registration was disposed before its predecessor's
           // teardown even finished — nothing to set up.
           if (disposed) return;
-          disposeBridge = this.messageCenter.registerProvider(bridge);
+          if (provider.messaging)
+            disposeBridge = this.messageCenter.registerProvider(bridge);
           void this.startProviderConnects(provider.id);
         })
       : (() => {
-          disposeBridge = this.messageCenter.registerProvider(bridge);
+          if (provider.messaging)
+            disposeBridge = this.messageCenter.registerProvider(bridge);
           // A provider can (re)register while some of its connects are
           // already enabled-but-stranded in the store — its previous
           // registration was disposed while connects stayed enabled, or the
@@ -257,10 +341,12 @@ export class ConnectorCenter {
   private async teardownIds(providerId?: string): Promise<string[]> {
     const rows = await this.store.list();
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const candidates = new Set([...this.live.keys(), ...this.starting.keys()]);
+    const candidates = new Set([...this.live.keys(), ...this.starting.keys(), ...this.accountRequests.keys()]);
     return [...candidates].filter((id) => {
       const row = byId.get(id);
-      return row ? providerId === undefined || row.provider === providerId : true;
+      return row
+        ? providerId === undefined || row.provider === providerId
+        : true;
     });
   }
 
@@ -275,7 +361,8 @@ export class ConnectorCenter {
    * `onboard()` sees its signal abort instead of dangling forever. */
   async stop(): Promise<void> {
     const ids = await this.teardownIds();
-    for (const session of this.onboardings.values()) this.cancelSession(session);
+    for (const session of this.onboardings.values())
+      this.cancelSession(session);
     await Promise.all(ids.map((id) => this.stopConnect(id)));
   }
 
@@ -304,12 +391,13 @@ export class ConnectorCenter {
 
   listProviders(): ConnectorProviderView[] {
     return [...this.providers.values()]
-      .map(({ id, name, description, icon, onboard }) => ({
+      .map(({ id, name, description, icon, onboard, messaging }) => ({
         id,
         name,
         description,
         ...(icon ? { icon } : {}),
         supportsOnboarding: typeof onboard === "function",
+        ...(messaging ? { messaging } : {}),
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -324,10 +412,10 @@ export class ConnectorCenter {
     name: string;
     config: unknown;
     agentPreset: string;
-    approval?: MessageChannelApproval;
   }): Promise<ConnectView> {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
+    if (!input.name.trim()) throw new Error("invalid_connect");
     const agentPreset = input.agentPreset.trim();
     // The real MessageChannelCenter.createChannel requires a non-empty
     // sessionId or agentPreset; connects always route through agentPreset
@@ -341,29 +429,32 @@ export class ConnectorCenter {
       provider: input.provider,
       name: input.name,
       agentPreset,
-      ...(input.approval ? { approval: input.approval } : {}),
     });
 
     let channelId: string | undefined;
     try {
-      const created = await this.messageCenter.createChannel({
-        provider: `connector-${provider.id}`,
-        name: input.name,
-        agentPreset,
-        ...(input.approval ? { approval: input.approval } : {}),
-      });
-      channelId = created.channel.id;
+      const created = provider.messaging
+        ? await this.messageCenter.createChannel({
+            provider: `connector-${provider.id}`,
+            name: input.name,
+            agentPreset,
+          })
+        : undefined;
+      channelId = created?.channel.id;
 
       const payload: GrantPayload = {
         config: input.config,
-        channelSecret: created.secret,
+        ...(created ? { channelSecret: created.secret } : {}),
       };
       await this.credentials.modifyRecord(this.grantKey(row.id), async () => ({
         kind: "grant",
         payload,
       }));
 
-      const updated = await this.store.update(row.id, { channelId });
+      const updated = await this.store.update(row.id, {
+        channelId,
+        pairing: provider.messaging?.ownerPairing ?? false,
+      });
       if (updated.enabled) {
         // A failure here is a runtime-start failure, not a provisioning
         // failure: it leaves the connect (channel + grant + row) in place,
@@ -373,8 +464,12 @@ export class ConnectorCenter {
       }
     } catch (error) {
       if (channelId)
-        await this.messageCenter.removeChannel(channelId).catch(() => undefined);
-      await this.credentials.deleteRecord(this.grantKey(row.id)).catch(() => undefined);
+        await this.messageCenter
+          .removeChannel(channelId)
+          .catch(() => undefined);
+      await this.credentials
+        .deleteRecord(this.grantKey(row.id))
+        .catch(() => undefined);
       await this.store.remove(row.id).catch(() => undefined);
       throw error;
     }
@@ -400,18 +495,14 @@ export class ConnectorCenter {
     provider: string;
     name: string;
     agentPreset: string;
-    /** Forwarded verbatim into `createConnect` when the flow completes, so a
-     * scan-to-connect wizard's approval-wait choice lands on the connect and
-     * its channel exactly as the manual form's does. Absent leaves
-     * messaging-core's own default (10-minute timeout) in force. */
-    approval?: MessageChannelApproval;
   }): OnboardingView {
     this.sweepOnboardings();
 
     const provider = this.providers.get(input.provider);
     if (!provider) throw new Error("provider_not_found");
     const onboard = provider.onboard;
-    if (typeof onboard !== "function") throw new Error("onboarding_unsupported");
+    if (typeof onboard !== "function")
+      throw new Error("onboarding_unsupported");
     const name = input.name.trim();
     if (!name) throw new Error("invalid_connect");
     const agentPreset = input.agentPreset.trim();
@@ -459,7 +550,11 @@ export class ConnectorCenter {
         // silently create and start a live connect nobody asked for
         // anymore.
         const pending = this.onboardings.get(id);
-        if (!pending || pending.state !== "pending" || controller.signal.aborted) {
+        if (
+          !pending ||
+          pending.state !== "pending" ||
+          controller.signal.aborted
+        ) {
           if (pending && pending.state === "pending") {
             pending.state = "cancelled";
             pending.terminalAt = this.now();
@@ -472,7 +567,6 @@ export class ConnectorCenter {
           name,
           config: result.config,
           agentPreset,
-          ...(input.approval ? { approval: input.approval } : {}),
         });
         const current = this.onboardings.get(id);
         if (!current) return;
@@ -563,14 +657,25 @@ export class ConnectorCenter {
       sessionId: session.id,
       state: session.state,
       ...(session.qrUrl !== undefined ? { qrUrl: session.qrUrl } : {}),
-      ...(session.qrExpireIn !== undefined ? { qrExpireIn: session.qrExpireIn } : {}),
-      ...(session.statusNote !== undefined ? { statusNote: session.statusNote } : {}),
+      ...(session.qrExpireIn !== undefined
+        ? { qrExpireIn: session.qrExpireIn }
+        : {}),
+      ...(session.statusNote !== undefined
+        ? { statusNote: session.statusNote }
+        : {}),
       ...(session.connect ? { connect: session.connect } : {}),
       ...(session.error !== undefined ? { error: session.error } : {}),
     };
   }
 
-  async setEnabled(id: string, enabled: boolean): Promise<ConnectView> {
+  setEnabled(id: string, enabled: boolean): Promise<ConnectView> {
+    return this.exclusive(id, () => this.performSetEnabled(id, enabled));
+  }
+
+  private async performSetEnabled(
+    id: string,
+    enabled: boolean,
+  ): Promise<ConnectView> {
     const rows = await this.store.list();
     const before = rows.find((item) => item.id === id);
     if (!before) throw new Error("connect_not_found");
@@ -585,7 +690,17 @@ export class ConnectorCenter {
     }
 
     const row =
-      before.enabled === enabled ? before : await this.store.update(id, { enabled });
+      before.enabled === enabled
+        ? before
+        : await this.store.update(id, { enabled });
+    if (row.channelId) {
+      try {
+        await this.messageCenter.updateChannel(row.channelId, { enabled });
+      } catch (error) {
+        await this.store.update(id, { enabled: before.enabled });
+        throw error;
+      }
+    }
     if (enabled) {
       await this.startConnect(row).catch(() => undefined);
     } else {
@@ -598,59 +713,143 @@ export class ConnectorCenter {
     return this.toView(finalRow);
   }
 
-  async setOwners(id: string, owners: string[]): Promise<ConnectView> {
-    // Manual owner configuration supersedes pairing: once an operator has
-    // set the owners list explicitly, pairing's own purpose (auto-admitting
-    // whoever messages first) no longer applies — leaving `pairing: true`
-    // here would let the very next inbound sender silently reclaim/replace
-    // what was just configured (see store.ts's `claimOwner`).
-    const updated = await this.store.update(id, { owners, pairing: false });
-    return this.toView(updated);
-  }
-
-  /**
-   * Updates the connect's approval-wait policy. The bound channel is the
-   * behavioral source of truth — `messageCenter.updateChannel` is where the
-   * mode enum and `MIN_APPROVAL_TIMEOUT_MS` floor are actually enforced
-   * (`assertApproval`), so it runs first and a rejected value never reaches
-   * this connect's own store mirror. A connect that has no bound channel yet
-   * (mid-creation, never reached by a caller in practice since
-   * `createConnect` rolls the whole connect back on any failure) just
-   * updates the mirror.
-   */
-  async setApproval(
-    id: string,
-    approval: MessageChannelApproval,
-  ): Promise<ConnectView> {
-    const rows = await this.store.list();
-    const row = rows.find((item) => item.id === id);
-    if (!row) throw new Error("connect_not_found");
-    if (row.channelId) {
-      await this.messageCenter.updateChannel(row.channelId, { approval });
-    }
-    try {
-      const updated = await this.store.update(id, { approval });
+  setOwners(id: string, owners: string[]): Promise<ConnectView> {
+    return this.exclusive(id, async () => {
+      const row = (await this.store.list()).find((item) => item.id === id);
+      if (!row) throw new Error("connect_not_found");
+      if (!this.providers.get(row.provider)?.messaging?.ownerPairing)
+        throw new Error("owner_pairing_unsupported");
+      // Manual owner configuration supersedes pairing: once an operator has
+      // set the owners list explicitly, pairing's own purpose (auto-admitting
+      // whoever messages first) no longer applies — leaving `pairing: true`
+      // here would let the very next inbound sender silently reclaim/replace
+      // what was just configured (see store.ts's `claimOwner`).
+      const updated = await this.store.update(id, { owners, pairing: false });
       return this.toView(updated);
-    } catch (error) {
-      // Same discipline as createConnect: a two-store write must not leave
-      // the channel on the new policy while the connect's mirror (what the
-      // settings UI shows) still carries the old one. `null` clears a mirror
-      // that had no policy of its own, matching messaging-core's rollback.
-      if (row.channelId) {
-        await this.messageCenter
-          .updateChannel(row.channelId, { approval: row.approval ?? null })
-          .catch(() => undefined);
-      }
-      throw error;
-    }
+    });
   }
 
-  async removeConnect(id: string): Promise<boolean> {
+  async getConnectDetails(id: string): Promise<ConnectDetails> {
+    const row = (await this.store.list()).find((item) => item.id === id);
+    if (!row) throw new Error("connect_not_found");
+    const capabilityUses = (await Promise.all([...this.appliers.values()].map(applier => applier.describeConnect?.(row) ?? []))).flat();
+    const provider = this.providers.get(row.provider);
+    const settings = provider?.settings
+      ? provider.settings((await this.readGrant(id)).config)
+      : {};
+    const access = provider?.access?.((await this.readGrant(id)).accountState);
+    const channel = row.channelId
+      ? (await this.messageCenter.listChannels()).find(
+          (item) => item.id === row.channelId,
+        )
+      : undefined;
+    const conversations = channel
+      ? (await this.messageCenter.listConversations(channel.id)).map(
+          (binding) => ({
+            key: binding.conversationKey,
+            kind: binding.kind,
+            ...(binding.title ? { title: binding.title } : {}),
+            sessionId: binding.sessionId,
+          }),
+        )
+      : [];
+    return {
+      connect: this.toView(row),
+      settings,
+      ...(capabilityUses.length ? { capabilityUses } : {}),
+      ...(access ? { access } : {}),
+      ...(channel
+        ? { messaging: { delivery: channel.delivery, conversations } }
+        : {}),
+    };
+  }
+
+  updateConnect(id: string, input: UpdateConnectInput): Promise<ConnectView> {
+    return this.exclusive(id, async () => {
+      const row = (await this.store.list()).find((item) => item.id === id);
+      if (!row) throw new Error("connect_not_found");
+      const provider = this.providers.get(row.provider);
+      if (!provider) throw new Error("provider_not_found");
+      const name = input.name === undefined ? row.name : input.name.trim();
+      const agentPreset =
+        input.agentPreset === undefined
+          ? row.agentPreset
+          : input.agentPreset.trim();
+      if (!name) throw new Error("invalid_connect");
+      if (!agentPreset) throw new Error("agent_preset_required");
+      const previous = await this.readGrant(id);
+      let config = previous.config;
+      if (input.settings !== undefined) {
+        if (!provider.configure) throw new Error("settings_unsupported");
+        config = provider.configure(config, input.settings);
+        await provider.validate(config);
+      }
+      if (isDeepStrictEqual(config, previous.config)) {
+        // Labels and default routing do not change account credentials or the
+        // SDK listener. Preserve every consumer's MCP lease during these edits.
+        const updateMetadata = async (updated: StoredConnect) => {
+          for (const dispose of this.live.get(id)?.disposers ?? []) await dispose.updateMetadata?.(updated);
+        };
+        try {
+          if (row.channelId) await this.messageCenter.updateChannel(row.channelId, { name, agentPreset });
+          const updated = await this.store.update(id, { name, agentPreset });
+          await updateMetadata(updated);
+          return this.toView(updated);
+        } catch (error) {
+          await this.store.update(id, { name: row.name, agentPreset: row.agentPreset });
+          if (row.channelId) await this.messageCenter.updateChannel(row.channelId, { name: row.name, agentPreset: row.agentPreset });
+          await updateMetadata(row);
+          throw error;
+        }
+      }
+      // Stop first: the old listener must not acknowledge messages while a
+      // credential or routing change is being committed. Other account edits
+      // are serialized on this same id, never across unrelated accounts.
+      await this.stopConnect(id);
+      const writeGrant = (payload: GrantPayload) =>
+        this.credentials.modifyRecord(this.grantKey(id), async () => ({
+          kind: "grant",
+          payload,
+        }));
+      try {
+        await writeGrant({ ...previous, config });
+        if (row.channelId)
+          await this.messageCenter.updateChannel(row.channelId, {
+            name,
+            agentPreset,
+          });
+        const updated = await this.store.update(id, { name, agentPreset });
+        if (updated.enabled) await this.startConnect(updated);
+        return this.toView(updated);
+      } catch (error) {
+        await this.stopConnect(id);
+        await writeGrant(previous);
+        if (row.channelId)
+          await this.messageCenter.updateChannel(row.channelId, {
+            name: row.name,
+            agentPreset: row.agentPreset,
+          });
+        await this.store.update(id, {
+          name: row.name,
+          agentPreset: row.agentPreset,
+        });
+        if (row.enabled) await this.startConnect(row).catch(() => undefined);
+        throw error;
+      }
+    });
+  }
+
+  removeConnect(id: string): Promise<boolean> {
+    return this.exclusive(id, () => this.performRemoveConnect(id));
+  }
+
+  private async performRemoveConnect(id: string): Promise<boolean> {
     const rows = await this.store.list();
     const row = rows.find((item) => item.id === id);
     if (!row) return false;
 
     await this.stopConnect(id);
+    for (const applier of this.appliers.values()) await applier.removeConnect?.(row);
     await this.credentials.deleteRecord(this.grantKey(id));
     if (row.channelId) await this.messageCenter.removeChannel(row.channelId);
     const removed = await this.store.remove(id);
@@ -682,8 +881,6 @@ export class ConnectorCenter {
       pairing: row.pairing,
       owners: row.owners,
       ...(row.agentPreset ? { agentPreset: row.agentPreset } : {}),
-      ...(row.channelId ? { channelId: row.channelId } : {}),
-      ...(row.approval ? { approval: row.approval } : {}),
       status: this.computeStatus(row),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -738,9 +935,11 @@ export class ConnectorCenter {
       record?.kind === "grant"
         ? (record.payload as Partial<GrantPayload> | undefined)
         : undefined;
-    if (!payload || typeof payload.channelSecret !== "string")
-      throw new Error("grant_not_found");
-    return { config: payload.config, channelSecret: payload.channelSecret };
+    if (!payload || !("config" in payload)) throw new Error("grant_not_found");
+    return { config: payload.config,
+      ...(payload.channelSecret === undefined ? {} : { channelSecret: payload.channelSecret }),
+      ...(payload.accountState === undefined ? {} : { accountState: payload.accountState }),
+    };
   }
 
   /**
@@ -770,18 +969,20 @@ export class ConnectorCenter {
     // stale provider write no longer applies to this attempt.
     this.statusLocked.delete(row.id);
     const provider = this.providers.get(row.provider);
-    const disposers: Array<() => void> = [];
+    const disposers: CapabilityDisposer[] = [];
     let runtime: ConnectorRuntime | undefined;
+    let active = true;
     try {
       if (!provider) throw new Error("provider_not_found");
-      if (!row.channelId) throw new Error("channel_missing");
       const grant = await this.readGrant(row.id);
+      if (provider.messaging && (!row.channelId || !grant.channelSecret))
+        throw new Error("channel_missing");
 
       const handle: ConnectorHandle = {
         connectId: row.id,
         config: grant.config,
-        onInbound: (envelope) => this.routeInbound(row.id, envelope),
-        setStatus: (status) => this.providerSetStatus(row.id, status),
+        onInbound: (envelope) => this.routeInbound(row.id, envelope, handle),
+        setStatus: (status) => { if (active) this.providerSetStatus(row.id, status); },
       };
       runtime = await provider.start(handle);
 
@@ -803,14 +1004,17 @@ export class ConnectorCenter {
       }
 
       this.live.set(row.id, {
+        handle,
+        retire: () => { active = false; },
         runtime,
         disposers,
         channelSecret: grant.channelSecret,
       });
     } catch (error) {
+      active = false;
       for (const dispose of [...disposers].reverse()) {
         try {
-          dispose();
+          await dispose();
         } catch {
           // Best-effort unwind; a broken disposer must not block teardown.
         }
@@ -822,6 +1026,7 @@ export class ConnectorCenter {
   }
 
   private async stopConnect(connectId: string): Promise<void> {
+    for (const controller of this.accountRequests.get(connectId) ?? []) controller.abort();
     // A connect mid-start (present in `this.starting`, not yet in `live`)
     // must be joined before inspecting/clearing `live`: otherwise a stop
     // racing an in-flight start sees nothing to stop, the start then
@@ -830,15 +1035,16 @@ export class ConnectorCenter {
     await this.starting.get(connectId)?.catch(() => undefined);
     const live = this.live.get(connectId);
     if (live) {
+      live.retire();
+      this.live.delete(connectId);
       for (const dispose of [...live.disposers].reverse()) {
         try {
-          dispose();
+          await dispose();
         } catch {
           // Best-effort unwind; a broken disposer must not block teardown.
         }
       }
       await live.runtime.stop().catch(() => undefined);
-      this.live.delete(connectId);
     }
     this.statuses.delete(connectId);
     this.statusLocked.delete(connectId);
@@ -854,13 +1060,15 @@ export class ConnectorCenter {
   private async routeInbound(
     connectId: string,
     envelope: ConnectorInboundEnvelope,
-  ): Promise<void> {
+    handle: ConnectorHandle,
+  ): Promise<ConnectorInboundResult | undefined> {
     const live = this.live.get(connectId);
-    if (!live) return;
+    if (!live || live.handle !== handle) return;
 
     const rows = await this.store.list();
+    if (this.live.get(connectId) !== live) return;
     const row = rows.find((item) => item.id === connectId);
-    if (!row || !row.channelId) return;
+    if (!row || !row.channelId || !live.channelSecret) return;
     if (!row.enabled) {
       // The connect was disabled (or is being disabled) but its runtime
       // hasn't finished tearing down yet — drop silently, same as the
@@ -870,29 +1078,34 @@ export class ConnectorCenter {
       return;
     }
 
-    const sender = envelope.sender;
-    if (!sender) {
-      this.recordDrop(connectId);
-      return;
-    }
-
-    if (row.pairing) {
-      // Compare-and-set inside the store's serialized mutation chain: two
-      // concurrent first messages can both observe `pairing: true` here, but
-      // only one `claimOwner` call wins — the loser sees `pairing: false`
-      // already and is dropped, instead of a plain read-then-write letting
-      // the second sender silently overwrite the first as owner.
-      const claim = await this.store.claimOwner(connectId, sender);
-      if (!claim.claimed) {
+    const messaging = this.providers.get(row.provider)?.messaging;
+    if (!messaging) return;
+    if (messaging.ownerPairing) {
+      const sender = envelope.sender;
+      if (!sender) {
         this.recordDrop(connectId);
         return;
       }
-    } else if (!row.owners.includes(sender)) {
-      this.recordDrop(connectId);
-      return;
+
+      if (row.pairing) {
+        // Compare-and-set inside the store's serialized mutation chain: two
+        // concurrent first messages can both observe `pairing: true` here, but
+        // only one `claimOwner` call wins — the loser sees `pairing: false`
+        // already and is dropped, instead of a plain read-then-write letting
+        // the second sender silently overwrite the first as owner.
+        const claim = await this.store.claimOwner(connectId, sender);
+        if (!claim.claimed) {
+          this.recordDrop(connectId);
+          return;
+        }
+      } else if (!row.owners.includes(sender)) {
+        this.recordDrop(connectId);
+        return;
+      }
     }
 
-    await this.messageCenter.acceptInbound(
+    if (this.live.get(connectId) !== live) return;
+    return this.messageCenter.acceptInbound(
       row.channelId,
       live.channelSecret,
       envelope,
@@ -916,6 +1129,7 @@ export class ConnectorCenter {
     );
     if (!binding) throw new Error("conversation_unknown");
 
+    if (!live.runtime.deliver) throw new Error("outbound_unsupported");
     await live.runtime.deliver(
       {
         key: binding.conversationKey,

@@ -2,7 +2,7 @@
   "name": "@amiba/dsh-plugin-memory",
   "version": "0.1.0",
   "private": true,
-  "description": "DSH plugin for Amiba durable agent memory.",
+  "description": "Amiba built-in MemOS memory integration.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -10,10 +10,6 @@
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
-    },
-    "./memory-store": {
-      "types": "./lib/memory-store.d.ts",
-      "default": "./lib/memory-store.js"
     },
     "./client": {
       "types": "./lib/client/index.d.ts",
@@ -46,7 +42,11 @@
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "lucide-react": "^0.460.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@memtensor/memos-local-plugin": "2.0.18",
+    "@deepseek-ai/dsh-llm": "catalog:",
+    "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-timeout": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -59,6 +59,8 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.0.1",
+    "jsdom": "^25.0.1",
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
     "@deepseek-ai/dsh-tools": "catalog:",

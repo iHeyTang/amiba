@@ -2,7 +2,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import type { ModelPlaneStore } from "./plane/index.js";
+export interface ModelPlaneStore {
+  get(key: string): Promise<Record<string, unknown>>;
+  set(patch: Record<string, unknown>): Promise<void>;
+}
 
 function documentOf(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

@@ -136,7 +136,7 @@ function AgentPresetList({
   onCreate: () => void;
   onOpen: (name: string) => void;
   onRefresh: () => void;
-  /** Independent (user-authored, non-default) presets below the pinned row. */
+  /** All non-default presets below the pinned row. */
   profiles: AgentPreset[];
 }) {
   const { t } = useT();
@@ -179,7 +179,7 @@ function AgentPresetList({
               {defaultProfile ? (
                 <ProfileListRow
                   isDefault
-                  onClick={() => onOpen(defaultProfile.name)}
+                  onClick={() => onOpen(defaultProfile.id)}
                   profile={defaultProfile}
                 />
               ) : null}
@@ -208,8 +208,8 @@ function AgentPresetList({
               ) : (
                 profiles.map((profile) => (
                   <ProfileListRow
-                    key={profile.name}
-                    onClick={() => onOpen(profile.name)}
+                    key={profile.id}
+                    onClick={() => onOpen(profile.id)}
                     profile={profile}
                   />
                 ))
@@ -250,7 +250,7 @@ function AgentPresetDetail({
   const { t } = useT();
   const [section, setSection] = useState<AgentWorkspaceSection>("behavior");
   const [editingName, setEditingName] = useState(false);
-  const [renameDraft, setRenameDraft] = useState(profile.name);
+  const [renameDraft, setRenameDraft] = useState(profile.id);
   // "behavior" is the native tab rendered by AgentPresetBehaviorEditor below
   // — it is not a ledger concept, so a plugin registering that id is ignored
   // rather than allowed to shadow or duplicate it.
@@ -265,13 +265,13 @@ function AgentPresetDetail({
 
   useEffect(() => {
     setEditingName(false);
-    setRenameDraft(profile.name);
-  }, [profile.name]);
+    setRenameDraft(profile.id);
+  }, [profile.id]);
 
   function submitRename() {
     setEditingName(false);
     const trimmed = renameDraft.trim();
-    if (!trimmed || trimmed === profile.name) return;
+    if (!trimmed || trimmed === profile.id) return;
     onRename(trimmed);
   }
 
@@ -350,7 +350,7 @@ function AgentPresetDetail({
                   event.currentTarget.blur();
                 }
                 if (event.key === "Escape") {
-                  setRenameDraft(profile.name);
+                  setRenameDraft(profile.id);
                   setEditingName(false);
                 }
               }}
@@ -361,7 +361,7 @@ function AgentPresetDetail({
               aria-label={t("options.agents.rename")}
               className="group/name -ml-1 flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted/55"
               onClick={() => {
-                setRenameDraft(profile.name);
+                setRenameDraft(profile.id);
                 setEditingName(true);
               }}
               type="button"
@@ -404,8 +404,8 @@ function AgentPresetDetail({
         <AgentPresetBehaviorEditor
           adapter={adapter}
           description={profile.description}
-          key={profile.name}
-          profileId={profile.name}
+          key={profile.id}
+          profileId={profile.id}
           sourceEditable={profile.trust !== "system" && !isActive}
         />
       ) : ledgerIds.has(section) ? (
@@ -413,7 +413,7 @@ function AgentPresetDetail({
            declares `amiba.agentPreset.section` as its child, so the owning
            plugin's contribution renders here in the same React tree, scoped
            to this preset via the owner props. */
-        renderPresetSection?.(section, { profileId: profile.name })
+        renderPresetSection?.(section, { profileId: profile.id })
       ) : null}
     </>
   );
@@ -458,23 +458,22 @@ export function DshAgentPresetsPage({
   // id) is the pinned first row — usually the shipped `standard` preset, but
   // honestly whichever entry the deployment reports as default.
   const defaultProfile = useMemo(
-    () => profiles.find((profile) => profile.name === active) ?? null,
+    () => profiles.find((profile) => profile.id === active) ?? null,
     [active, profiles],
   );
-  // Independent presets: user-authored copies, minus the one currently
-  // holding the default slot (it is already the pinned row above — one
-  // preset, one row).
+  // Every installed preset belongs in the management roster. Trust controls
+  // authoring, not visibility; the pinned default appears only once.
   const namedProfiles = useMemo(
     () =>
       profiles.filter(
-        (profile) => profile.trust === "user" && profile.name !== active,
+        (profile) => profile.id !== active,
       ),
     [active, profiles],
   );
   const selected = useMemo(
     () =>
       detail
-        ? (profiles.find((profile) => profile.name === detail) ?? null)
+        ? (profiles.find((profile) => profile.id === detail) ?? null)
         : null,
     [detail, profiles],
   );
@@ -515,7 +514,7 @@ export function DshAgentPresetsPage({
     if (!selected) return;
     setSaving(true);
     setError(null);
-    const result = await adapter.setDefaultAgentPreset(selected.name);
+    const result = await adapter.setDefaultAgentPreset(selected.id);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.activateFailed"));
@@ -551,7 +550,7 @@ export function DshAgentPresetsPage({
     if (!selected) return;
     setSaving(true);
     setError(null);
-    const result = await adapter.renameAgentPreset(selected.name, newName);
+    const result = await adapter.renameAgentPreset(selected.id, newName);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.renameFailed"));
@@ -569,7 +568,7 @@ export function DshAgentPresetsPage({
     }
     setSaving(true);
     setError(null);
-    const result = await adapter.deleteAgentPreset(selected.name);
+    const result = await adapter.deleteAgentPreset(selected.id);
     setSaving(false);
     if (!result.ok) {
       setError(result.error || t("options.agents.deleteFailed"));
@@ -584,7 +583,7 @@ export function DshAgentPresetsPage({
       <AgentPresetDetail
         adapter={adapter}
         error={error}
-        isActive={selected.name === active}
+        isActive={selected.id === active}
         onActivate={() => void activateProfile()}
         onBack={() => setDetail(null)}
         onDelete={() => void removeProfile()}
@@ -649,13 +648,13 @@ export function DshAgentPresetsPage({
                   {profiles
                     .filter(
                       (profile) =>
-                        !profile.is_default && profile.name !== "default",
+                        !profile.is_default && profile.id !== "default",
                     )
                     .map((profile) => (
-                      <SelectItem key={profile.name} value={profile.name}>
+                      <SelectItem key={profile.id} value={profile.id}>
                         <span className="inline-flex items-center gap-2">
                           <Copy className="h-3.5 w-3.5" />
-                          {profile.is_default || profile.name === "default"
+                          {profile.is_default || profile.id === "default"
                             ? t("options.agents.cloneDefault")
                             : profile.name}
                         </span>

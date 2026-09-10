@@ -1,5 +1,5 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
-import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type { PropsRuntime, PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { Cable } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,10 +10,10 @@ import { ConnectQuestionScreen } from "./ConnectQuestionScreen.js";
 import { DshSettingsConnect } from "./DshSettingsConnect.js";
 import { loadAgentPresets, type PresetConnection } from "./presets.js";
 import {
-  createConnectWizardRegistry,
-  type ConnectWizardRegistry,
+  createConnectorUIRegistry,
+  type ConnectorUIRegistry,
   type PresetOption,
-} from "./wizard-registry.js";
+} from "./connector-ui-registry.js";
 import {
   CONNECT_ADD_TOOL_NAME,
   CONNECT_WIZARD_QUESTION_ID,
@@ -27,15 +27,15 @@ const SECTION_ID = "connect";
 
 /**
  * Client-side registry of provider wizards, provided as the
- * `amibaConnectWizards` Cordis service — mirrors ui-shell's `layout` service
+ * `amibaConnectorUI` Cordis service — mirrors ui-shell's `layout` service
  * augmentation exactly (`plugins/dsh-plugin-ui-shell/src/client/index.tsx`),
  * including using `ctx.reflect.provide` so plugins declaring `inject:
- * ["amibaConnectWizards"]` can register a provider wizard from their own
+ * ["amibaConnectorUI"]` can register a provider wizard from their own
  * client half (Phase B).
  */
 declare module "@deepseek-ai/cordis" {
   interface Context {
-    amibaConnectWizards: ConnectWizardRegistry;
+    amibaConnectorUI: ConnectorUIRegistry;
   }
 }
 
@@ -48,12 +48,18 @@ declare module "@deepseek-ai/cordis" {
  * on no runtime value from this package — only on the `host` prop it is
  * handed.
  */
-export type { ConnectWizardHost, ConnectWizardEntry, ConnectWizardRegistry, PresetOption } from "./wizard-registry.js";
+export type {
+  ConnectWizardHost,
+  ConnectorUIContribution,
+  ConnectorUIRegistry,
+  ConnectSettingsHost,
+  PresetOption,
+} from "./connector-ui-registry.js";
 export type { ConnectWizardKit, BasicsFieldsProps } from "./wizard-kit.js";
 
-type ConnectSectionProps = PropsRuntime<"settings.section"> & {
+type ConnectSectionProps = PropsRuntime<"settings.section"> & PropsRenderSlots<"amiba.connection.access"> & {
   adapter: ConnectAdapter;
-  registry: ConnectWizardRegistry;
+  registry: ConnectorUIRegistry;
   loadPresets: () => Promise<PresetOption[]>;
 };
 
@@ -62,21 +68,21 @@ type ConnectSectionProps = PropsRuntime<"settings.section"> & {
  * framework-mandatory members (`close`, `useSessions`, `useWorkspaces`) that
  * only the real slot runtime supplies; Connect needs none of them, so this
  * wrapper exists only to satisfy `slots.register`'s prop contract and forward
- * the props `DshSettingsConnect` actually needs. Same split
- * `DshSettingsMessaging`/`MessagingSettings` uses in the messaging-core
- * sibling — `DshSettingsConnect` itself stays plainly typed so it can be
- * rendered directly in a unit test.
+ * the props `DshSettingsConnect` actually needs. The page stays plainly
+ * typed so it can be rendered directly in a unit test.
  */
 function ConnectSettingsSection({
   adapter,
   registry,
   loadPresets,
+  renderSlot,
 }: ConnectSectionProps): ReactNode {
   return (
     <DshSettingsConnect
       adapter={adapter}
       loadPresets={loadPresets}
       registry={registry}
+      renderAccess={recordId => renderSlot("amiba.connection.access", { configuration: { ownerId: "connector-core", recordId } })}
     />
   );
 }
@@ -85,11 +91,11 @@ function ConnectSettingsSection({
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(AMIBA_CONNECTORS_REMOTE);
   // Provided BEFORE the settings.section registration below so a provider
-  // plugin's own client half — which will inject `["amibaConnectWizards"]`
+  // plugin's own client half — which will inject `["amibaConnectorUI"]`
   // to register its wizard (Phase B) — can never race the section that
   // reads from this same registry.
-  const registry = createConnectWizardRegistry();
-  const disposeRegistry = ctx.reflect.provide("amibaConnectWizards", registry);
+  const registry = createConnectorUIRegistry();
+  const disposeRegistry = ctx.reflect.provide("amibaConnectorUI", registry);
   const sectionFiber = ctx.inject(
     ["slots", "remote.amibaConnectors"],
     (injectedCtx) => {
@@ -108,6 +114,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           {
             name: "settings.section",
             id: SECTION_ID,
+            children: { "amiba.connection.access": { kind: "list", scope: "root" } },
             order: 410,
             label: () =>
               document.documentElement.lang.toLowerCase().startsWith("zh")

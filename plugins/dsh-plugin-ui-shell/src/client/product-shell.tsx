@@ -1,3 +1,4 @@
+import { renderOfficialToolFallback } from "./official-toolviews.js";
 import {
   SessionsProvider,
   useSessions,
@@ -34,7 +35,7 @@ import {
   officialListFingerprint,
   useOfficialIndexRefresh,
 } from "./official-index-sync.js";
-import type { HiddenPresetsSource } from "./session-visibility.js";
+import type { HiddenSessionsSource } from "./session-visibility.js";
 import type {
   ContributionsSource,
   SessionGroupRow,
@@ -99,7 +100,7 @@ export interface SettingsSectionsSource {
 export type { OnboardingStepRow, SettingsOnboardingStepsSource };
 
 const EMPTY_SECTIONS: readonly SettingsSectionRow[] = [];
-const EMPTY_HIDDEN_PRESETS: ReadonlySet<string> = new Set();
+const EMPTY_HIDDEN_SESSIONS: ReadonlySet<string> = new Set();
 const EMPTY_SESSION_GROUPS: readonly SessionGroupRow[] = [];
 const EMPTY_SESSION_MENU_ITEMS: readonly SessionMenuItemRow[] = [];
 const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
@@ -139,6 +140,11 @@ export type AmibaShellSlot =
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
   | "conversation.input.model"
+  | "amiba.conversation.notice"
+  | "amiba.tool.execution"
+  | "amiba.tool.activity"
+  | "amiba.conversation.progress"
+  | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
   | "tool.call.toolview";
@@ -335,7 +341,7 @@ interface ProductShellProps {
   settingsSections?: SettingsSectionsSource;
   settingsOnboardingSteps?: SettingsOnboardingStepsSource;
   triggerRuntime?: ComposerTriggerRuntime;
-  hiddenSessionPresets?: HiddenPresetsSource;
+  hiddenSessionIds?: HiddenSessionsSource;
   /** `amiba.sessions.list.group` contributions, sorted by `order`. */
   sessionListGroups?: ContributionsSource<SessionGroupRow>;
   /** `amiba.sessions.item.menu` contributions, sorted by `order`. */
@@ -383,7 +389,7 @@ function ProductShellInner({
   settingsSections,
   settingsOnboardingSteps,
   triggerRuntime,
-  hiddenSessionPresets,
+  hiddenSessionIds,
   sessionListGroups,
   sessionItemMenuItems,
   messageSources,
@@ -399,9 +405,9 @@ function ProductShellInner({
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
   );
-  const hiddenPresets = useSyncExternalStore(
-    hiddenSessionPresets?.subscribe ?? (() => () => {}),
-    hiddenSessionPresets?.getSnapshot ?? (() => EMPTY_HIDDEN_PRESETS),
+  const hiddenSessions = useSyncExternalStore(
+    hiddenSessionIds?.subscribe ?? (() => () => {}),
+    hiddenSessionIds?.getSnapshot ?? (() => EMPTY_HIDDEN_SESSIONS),
   );
   // The two generic session-list extension points. Neither the shell nor
   // `<FullScreenChatView>`/`<Sidebar>`/`<SessionsListView>` know anything
@@ -567,18 +573,17 @@ function ProductShellInner({
   );
 
   // The official KEYED tool-call row. Dispatched once per tool row with the
-  // row's WIRE TOOL NAME as `entryKey`, and with Amiba's own `ToolSpec`-driven
-  // chip as `fallback` — so an unclaimed name renders exactly what it always
-  // did and a registered name takes over that one row only. Both options are
-  // load-bearing: without `entryKey` nothing keyed can ever match, without
-  // `fallback` an unclaimed tool would render nothing at all.
+  // row's WIRE TOOL NAME as `entryKey`. Intrinsic runtime tools reuse their
+  // semantic row as the fallback while a strict session slot is unavailable.
+  // Unknown tools retain the generic row; plugin registrations still win.
   const renderToolViewSeat = useCallback(
-    (request: ToolCallSeatRequest) =>
-      renderSlot("tool.call.toolview", request.owner, {
+    (request: ToolCallSeatRequest) => {
+      const fallback = renderSlot("tool.call.toolview", request.owner, {
         entryKey: request.owner.toolName,
-        fallback: request.fallback,
-      }),
-    [renderSlot],
+        fallback: renderOfficialToolFallback(request.owner, request.fallback),
+      });
+      return renderSlot("amiba.tool.execution", {...request.owner, fallback}, {fallback});
+    }, [renderSlot],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with
@@ -688,13 +693,14 @@ function ProductShellInner({
         topBarHeightPx={topBarHeightPx}
         topBarClassName={desktop ? "app-drag-region" : undefined}
         restoreSidebarViewOnMount={false}
-        hiddenSessionPresets={hiddenPresets}
+        hiddenSessionIds={hiddenSessions}
         groups={sessionGroupList}
         itemMenuItems={sessionMenuItemList}
         messageSourceLabel={messageSourceLabel}
         slots={{
           emptyState: (
             <HomeView
+              triggerRuntime={triggerRuntime}
               onOpenChat={() => {}}
               onOpenSettings={() => settings.openAt()}
               panelMode
@@ -704,6 +710,10 @@ function ProductShellInner({
           settingsTrigger: renderSettingsTrigger,
           modelPicker: renderModelPickerSeat,
           planSeat: renderPlanSeat,
+          notice: (owner, fallback) => renderSlot("amiba.conversation.notice", owner, { entryKey: owner.reference ? `reference:${owner.reference.kind}` : owner.source, fallback }),
+          toolAnnotation: (owner) => renderSlot("amiba.tool.activity", owner),
+          progress: () => renderSlot("amiba.conversation.progress", {}),
+          workbenchPanel: (owner) => renderSlot("amiba.workbench.panel", owner),
           // The official composer overlay anchor. The seat declares NO owner
           // share, so `{}` is the faithful dispatch — anything else would be
           // a fabricated owner. Session-scoped: the renderer resolves the
@@ -715,10 +725,17 @@ function ProductShellInner({
           questionSeat: renderQuestionSeat,
           navigationBefore: renderSlot("amiba.navigation.before", {}),
           workspaceNavigation: (activeView) =>
-            renderSlot("amiba.workspace.navigation", { activeView }),
+            renderSlot("amiba.workspace.navigation", { activeView, sessionActivity: {
+              sessions: sessions.sessions,
+              visibleSessionId: activeView === "chats" ? sessions.activeId : "",
+              markUnread: sessions.markUnread, markRead: sessions.markRead,
+            } }),
           navigationAfter: renderSlot("amiba.navigation.after", {}),
           workspaceView: (viewId, owner) =>
-            renderSlot("amiba.workspace.view", owner, { only: viewId }),
+            renderSlot("amiba.workspace.view", { ...owner, sessionActivity: {
+              sessions: sessions.sessions, visibleSessionId: "",
+              markUnread: sessions.markUnread, markRead: sessions.markRead,
+            } }, { only: viewId }),
           // Official session-scoped seat: the renderer resolves the session
           // from the official ctx.sessions current (kept in step by the R1
           // bridge) and renders null while none is current, so the strip is

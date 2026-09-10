@@ -3,6 +3,35 @@ interface DshTransportInstall {
   dispose(): void;
 }
 
+export interface DshClientRebuildFrame {
+  type: "rebuilt";
+  id: string;
+  rev: string;
+}
+
+export function parseDshClientRebuildFrame(
+  data: string,
+): DshClientRebuildFrame | null {
+  try {
+    const frame: unknown = JSON.parse(data);
+    if (
+      typeof frame === "object" &&
+      frame !== null &&
+      "type" in frame &&
+      frame.type === "rebuilt" &&
+      "id" in frame &&
+      typeof frame.id === "string" &&
+      "rev" in frame &&
+      typeof frame.rev === "string"
+    ) {
+      return { type: "rebuilt", id: frame.id, rev: frame.rev };
+    }
+  } catch {
+    // Ignore malformed and non-JSON development frames.
+  }
+  return null;
+}
+
 function isDshApiUrl(url: URL, pageOrigin: string, baseUrl: URL): boolean {
   if (!url.pathname.startsWith("/api")) return false;
   if (url.origin === baseUrl.origin) return true;
@@ -57,7 +86,9 @@ function rewriteEventSourceUrl(value: string | URL, baseUrl: URL): string {
  * unary API calls cross the preload boundary and WebSockets go directly to
  * the exact managed loopback authority.
  */
-export function installDshClientTransport(baseUrlValue: string): DshTransportInstall {
+export function installDshClientTransport(
+  baseUrlValue: string,
+): DshTransportInstall {
   const baseUrl = new URL(baseUrlValue);
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const NativeWebSocket = globalThis.WebSocket;
@@ -113,5 +144,30 @@ export function installDshClientTransport(baseUrlValue: string): DshTransportIns
       globalThis.WebSocket = NativeWebSocket;
       globalThis.EventSource = NativeEventSource;
     },
+  };
+}
+
+/**
+ * Reload the Electron development document after one managed client bundle
+ * changes. The build remains incremental (only affected workspace clients are
+ * emitted); a document reload is intentional because a fiber-level swap of
+ * the plugin that owns `root` briefly leaves the official renderer without a
+ * root registration. Packaged renderers use file: and never open this stream.
+ */
+export function installDshClientDevReload(): () => void {
+  if (!/^https?:$/u.test(window.location.protocol)) return () => undefined;
+
+  const source = new EventSource("/plugins/events");
+  let reloading = false;
+  const onMessage = (event: MessageEvent<string>): void => {
+    if (reloading || parseDshClientRebuildFrame(event.data) === null) return;
+    reloading = true;
+    source.close();
+    window.location.reload();
+  };
+  source.addEventListener("message", onMessage);
+  return () => {
+    source.removeEventListener("message", onMessage);
+    source.close();
   };
 }

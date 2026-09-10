@@ -32,7 +32,7 @@ function profile(
   isDefault = false,
   trust: "system" | "user" = "user",
 ): AgentPreset {
-  return { name, is_default: isDefault, description, trust };
+  return { id: name, name, is_default: isDefault, description, trust };
 }
 
 /**
@@ -118,6 +118,31 @@ describe("DshAgentPresetsPage", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("shows all four official presets regardless of trust", async () => {
+    adapter.getAgentPresets.mockResolvedValue({ ok: true, active: "standard", profiles: [
+      profile("standard", "Standard", true, "system"),
+      profile("code", "Code Mode", false, "system"),
+      profile("minimal", "Minimal", false, "system"),
+      profile("cordis", "Create", false, "system"),
+    ] });
+    renderPage();
+    for (const name of ["standard", "code", "minimal", "cordis"]) {
+      expect(await screen.findByRole("button", { name: new RegExp(name) })).toBeVisible();
+    }
+  });
+
+  it("displays the official name but opens the composition using its id", async () => {
+    adapter.getAgentPresets.mockResolvedValue({ ok: true, active: "standard", profiles: [
+      { ...profile("standard", "Standard", true, "system"), name: "标准模式" },
+    ] });
+    renderPage();
+    await drillIn("标准模式");
+    expect(await screen.findByTestId("behavior-editor")).toBeVisible();
+    expect(mocks.behaviorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ profileId: "standard" }),
+    );
   });
 
   it("pins the current default preset as the first row with the Default badge", async () => {
@@ -252,7 +277,7 @@ describe("DshAgentPresetsPage", () => {
     // The empty state refers only to the independent presets below the
     // pinned default row — the default preset is still present and shown.
     expect(await screen.findByRole("button", { name: /standard/ })).toBeVisible();
-    expect(screen.getByText("No independent agent presets")).toBeVisible();
+    expect(screen.getByText("No other agent presets")).toBeVisible();
     const [createButton] = screen.getAllByRole("button", {
       name: "New agent preset",
     });

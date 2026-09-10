@@ -71,7 +71,7 @@ export function ComposerAgentPicker({
 
   const selectedProfile = useMemo(
     () =>
-      profiles.find((profile) => profile.name === normalized.profileId) ?? {
+      profiles.find((profile) => profile.id === normalized.profileId) ?? {
         name: normalized.profileId,
         description: "",
       },
@@ -101,7 +101,7 @@ export function ComposerAgentPicker({
       setOpen(true);
       // Quick Ask may mount before managed DSH is ready; opening retries a
       // stale startup failure against the current runtime generation.
-      if (error || profiles.length === 0) void loadProfiles();
+      void loadProfiles();
       return;
     }
     setOpen(false);
@@ -174,9 +174,9 @@ export function ComposerAgentPicker({
               {profiles.map((profile) => (
                 <button
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent"
-                  disabled={profileLocked}
-                  key={profile.name}
-                  onClick={() => commitAndClose(profile.name)}
+                  disabled={profileLocked || !!profile.broken}
+                  key={profile.id}
+                  onClick={() => commitAndClose(profile.id)}
                   type="button"
                 >
                   <Fingerprint className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -190,7 +190,7 @@ export function ComposerAgentPicker({
                       </span>
                     ) : null}
                   </span>
-                  {dialogProfileId === profile.name ? (
+                  {dialogProfileId === profile.id ? (
                     <Check className="h-4 w-4 shrink-0 text-primary" />
                   ) : null}
                 </button>

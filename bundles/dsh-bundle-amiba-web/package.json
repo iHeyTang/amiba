@@ -14,8 +14,9 @@
   },
   "dependencies": {
     "@amiba/dsh-plugin-agent-preset": "workspace:*",
-    "@amiba/dsh-plugin-messaging-channel-webhook": "workspace:*",
+    "@amiba/dsh-plugin-connector-webhook": "workspace:*",
     "@amiba/dsh-plugin-runtime-inventory": "workspace:*",
-    "@amiba/dsh-plugin-ui-shell": "workspace:*"
+    "@amiba/dsh-plugin-ui-shell": "workspace:*",
+    "@amiba/dsh-plugin-markdown": "workspace:*"
   }
 }

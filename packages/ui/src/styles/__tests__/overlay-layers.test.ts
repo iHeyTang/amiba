@@ -23,7 +23,8 @@ function layer(name: string): number {
 const SURFACES: Array<[string, string, string]> = [
   ["../../primitives/dialog.tsx", "DialogOverlay", "modal"],
   ["../../primitives/dialog.tsx", "DialogContent", "modal"],
-  ["../../settings/SettingsDialog.tsx", "SettingsDialog", "modal"],
+  // SettingsDialog composes DialogContent directly, so it inherits this
+  // layer instead of selecting another z-index of its own.
   ["../../primitives/select.tsx", "SelectContent", "popover"],
   ["../../primitives/popover.tsx", "PopoverContent", "popover"],
   ["../../primitives/tooltip.tsx", "TooltipContent", "popover"],

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Context } from "@deepseek-ai/cordis";
+import { Context } from "@deepseek-ai/cordis";
 import type {
   ConnectorHandle,
   ConnectorInboundEnvelope,
@@ -190,6 +190,7 @@ function fakeHandle(config: unknown = validConfig): ConnectorHandle & {
     inbound,
     onInbound: vi.fn(async (envelope: ConnectorInboundEnvelope) => {
       inbound.push(envelope);
+      return undefined;
     }),
     setStatus: (status: ConnectorStatus) => statuses.push(status),
   };
@@ -326,7 +327,7 @@ describe("createLarkProvider", () => {
 
       // Stored reaction id is observable via deliver()'s removeReaction call.
       await flushMicrotasks();
-      await runtime.deliver(
+      await runtime.deliver!(
         { key: "oc_1", kind: "p2p" },
         {
           id: "out-typing-1",
@@ -458,7 +459,7 @@ describe("createLarkProvider", () => {
     });
   });
 
-  // --- Contract item 3: runtime.deliver() -----------------------------
+  // --- Contract item 3: runtime.deliver!() -----------------------------
 
   describe("runtime.deliver", () => {
     it("sends the reply as a markdown card via deps.sendCard using the conversation key", async () => {
@@ -468,7 +469,7 @@ describe("createLarkProvider", () => {
       const provider = createLarkProvider(deps);
       const runtime = await provider.start(handle);
 
-      await runtime.deliver(
+      await runtime.deliver!(
         { key: "oc_target", kind: "p2p" },
         {
           id: "out-1",
@@ -496,7 +497,7 @@ describe("createLarkProvider", () => {
       const runtime = await provider.start(handle);
 
       await expect(
-        runtime.deliver(
+        runtime.deliver!(
           { key: "oc_target", kind: "p2p" },
           {
             id: "out-1b",
@@ -531,7 +532,7 @@ describe("createLarkProvider", () => {
       const runtime = await provider.start(handle);
 
       await expect(
-        runtime.deliver(
+        runtime.deliver!(
           { key: "oc_target", kind: "p2p" },
           {
             id: "out-2",
@@ -571,7 +572,7 @@ describe("createLarkProvider", () => {
       const runtime = await provider.start(handle);
 
       await expect(
-        runtime.deliver(
+        runtime.deliver!(
           { key: "oc_target", kind: "p2p" },
           {
             id: "out-2b",
@@ -605,7 +606,7 @@ describe("createLarkProvider", () => {
       });
       await flushMicrotasks();
 
-      await runtime.deliver(
+      await runtime.deliver!(
         { key: "oc_1", kind: "p2p" },
         {
           id: "out-3",
@@ -650,7 +651,7 @@ describe("createLarkProvider", () => {
       await flushMicrotasks();
 
       await expect(
-        runtime.deliver(
+        runtime.deliver!(
           { key: "oc_1", kind: "p2p" },
           {
             id: "out-4",
@@ -676,7 +677,7 @@ describe("createLarkProvider", () => {
       const provider = createLarkProvider(deps);
       const runtime = await provider.start(handle);
 
-      await runtime.deliver(
+      await runtime.deliver!(
         { key: "oc_1", kind: "p2p" },
         {
           id: "out-5",
@@ -1261,7 +1262,7 @@ describe("createLarkProvider", () => {
 
       // ...and the map was actually cleared (not just left unread): a
       // later deliver() for the same inReplyTo finds nothing to remove.
-      await runtime.deliver(
+      await runtime.deliver!(
         { key: "oc_1", kind: "p2p" },
         {
           id: "out-stop-1",
@@ -1721,20 +1722,25 @@ describe("plugin entry (index.ts)", () => {
   it("registers createLarkProvider() via ctx.effect, wrapping the disposer", () => {
     const disposer = vi.fn();
     const registerProvider = vi.fn((_provider: unknown) => disposer);
-    const effectCalls: Array<{ execute: () => unknown; label?: string }> = [];
-    const ctx = {
-      effect: vi.fn((execute: () => unknown, label?: string) => {
-        effectCalls.push({ execute, label });
-        return execute();
-      }),
-      amibaConnectors: { registerProvider },
-    } as unknown as Context;
+    const ctx = new Context();
+    ctx.provide("amibaConnectors", { registerProvider, accounts: () => ({ list: async () => [], run: vi.fn(), invalidate: vi.fn() }) } as never);
 
     apply(ctx);
 
-    expect(ctx.effect).toHaveBeenCalledTimes(1);
-    expect(effectCalls[0]?.label).toBe("amiba-connector-lark.provider");
     expect(registerProvider).toHaveBeenCalledTimes(1);
     expect(registerProvider.mock.calls[0]?.[0]).toMatchObject({ id: "lark" });
+    expect(ctx.get("amibaLarkPersonalRemote")).toBeDefined();
   });
+});
+
+it("declares explicit tools and pins the account independently of credential rotation", () => {
+  const provider = createLarkProvider(fakeDeps());
+  const first = provider.capabilities(validConfig)[0];
+  const rotated = provider.capabilities({ ...validConfig, appSecret: "rotated" })[0];
+  const other = provider.capabilities({ ...validConfig, appId: "other" })[0];
+  if (first?.kind !== "mcp" || rotated?.kind !== "mcp" || other?.kind !== "mcp") throw new Error("Expected MCP");
+  expect(first.tools).toHaveLength(10);
+  expect(first.identity).toBe(rotated.identity);
+  expect(first.identity).not.toBe(other.identity);
+  expect(first).not.toHaveProperty("autoStart");
 });

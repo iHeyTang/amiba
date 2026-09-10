@@ -8,6 +8,7 @@ import {
   toolResultWireRecord,
 } from "../dsh-client/tool-wire";
 import {
+  presentationNotice,
   userMessageText,
   userMessageUiId,
   visibleUserMessage,
@@ -18,6 +19,8 @@ import type { SessionMessage } from "./sessions";
 import type { AttachmentBadge } from "./attachments/types";
 
 type RuntimeSessionMessage = SessionMessage & {
+  /** Wall-clock time of the durable event that produced this message. */
+  sentAt?: number;
   reasoning?: string;
   /** Rebuilt from the message's `<file-attachment>` envelope on reload. */
   attachmentBadges?: AttachmentBadge[];
@@ -28,6 +31,7 @@ type RuntimeSessionMessage = SessionMessage & {
   toolProgress?: ToolProgress[];
   assistantTimeline?: Array<
     | { kind: "text"; id: string; text: string }
+  | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
     | { kind: "tool"; id: string; toolCallId: string }
   >;
   runtimeSeq?: number;
@@ -242,6 +246,7 @@ export function projectRuntimeSessionHistory(
         content: `/${name}${args}`,
         uiId: `dsh:command:${commandId}:input`,
         runtimeSeq: event.seq,
+        sentAt: event.time,
       });
       continue;
     }
@@ -275,6 +280,11 @@ export function projectRuntimeSessionHistory(
       turn = beginTurn(event);
       continue;
     }
+    if (event.type === "amiba/notice") {
+      const notice = presentationNotice(event.data);
+      if (notice) output.push({ role: "user", ...notice, runtimeSeq: event.seq, sentAt: event.time });
+      continue;
+    }
     if (event.type === "user/message") {
       const message = messageFromEvent(event);
       // Which producers' user-role messages the conversation shows, and what
@@ -300,6 +310,7 @@ export function projectRuntimeSessionHistory(
         ...(badges.length ? { attachmentBadges: badges } : {}),
         uiId: userMessageUiId(message?.id, event.seq),
         runtimeSeq: event.seq,
+        sentAt: event.time,
       });
       continue;
     }
@@ -309,6 +320,9 @@ export function projectRuntimeSessionHistory(
       if (typeof chunk?.text !== "string") continue;
       if (chunk.type === "reasoning-delta") {
         turn.reasoning += chunk.text;
+        const last = turn.timeline?.at(-1);
+        if (last?.kind === "reasoning") { last.text += chunk.text; last.endedAt = event.time; }
+        else turn.timeline?.push({kind:"reasoning",id:`dsh:reasoning:${event.seq}`,text:chunk.text,startedAt:event.time,endedAt:event.time});
         if (turn.reasoningStartAt === null) turn.reasoningStartAt = event.time;
         turn.reasoningEndAt = event.time;
         markProcessActivity(turn, event.time);

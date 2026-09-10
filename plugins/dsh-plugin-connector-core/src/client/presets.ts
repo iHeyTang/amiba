@@ -1,4 +1,4 @@
-import type { PresetOption } from "./wizard-registry.js";
+import type { PresetOption } from "./connector-ui-registry.js";
 
 /**
  * Minimal shape of the engine-native connection face this reads — the same

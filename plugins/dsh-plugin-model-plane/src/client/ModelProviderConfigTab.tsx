@@ -1,3 +1,6 @@
+import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import { OfficialProviderEditor } from "./OfficialProviderEditor.js";
+import type { ConfigureProviderInput } from "./view-types.js";
 import {
   Check,
   ChevronDown,
@@ -11,7 +14,7 @@ import {
   Settings,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   Badge,
@@ -29,6 +32,7 @@ import {
   ModelIcon,
   ModelIdentityName,
   ModelInfoCard,
+  ModelDetailsDialog,
   ModelPickerDialog,
   ModelSettingsSectionHeader,
   ScrollArea,
@@ -49,18 +53,18 @@ import type {
   ModelDefinitionShape as ModelDefinition,
   ModelPlaneSnapshotShape as ModelPlaneSnapshot,
   ModelProviderProfileShape as ModelProviderProfile,
-} from "../remote.js";
+} from "./view-types.js";
 import { modelPlaneI18n } from "./i18n.js";
 
 type ModelProviderProtocol = ModelProviderProfile["protocol"];
 
-/**
- * The settings surface's view of the Model Plane. Local to the plugin — the
- * shape mirrors the plugin's own Remote face (`../remote.ts`), not the host
- * `PlatformAdapter` contract; `client/index.tsx` builds an instance directly
- * from `ctx.remote.amibaModelPlane`.
- */
-export interface ModelPlaneAdapter {
+/** Private UI actions over the official connection API, never a provider extension API. */
+export interface ProviderSettingsController {
+  subscribe?(listener: () => void): () => void;
+  configure?(
+    providerId: string,
+    input: ConfigureProviderInput,
+  ): Promise<ModelPlaneSnapshot>;
   snapshot(): Promise<ModelPlaneSnapshot>;
   setDefaultSelection(
     selection: AgentModelSelection,
@@ -97,11 +101,13 @@ function useT() {
 
 interface ProviderRow {
   provider: ModelProviderProfile;
+  sourceProvider?: ModelProviderProfile;
   credential?: ModelPlaneSnapshot["credentials"][string];
 }
 
 function modelMetadata(model: ModelDefinition): ModelMetadata {
   return {
+    ...(model.outputModalities?.length ? { output_modalities: model.outputModalities } : {}),
     ...(model.contextWindow ? { context_window: model.contextWindow } : {}),
     ...(model.maxTokens ? { max_output_tokens: model.maxTokens } : {}),
     ...(model.inputModalities?.length
@@ -148,10 +154,28 @@ function selectedModel(
   return provider && model ? { provider, model } : null;
 }
 
+function isProviderConfigured(row: ProviderRow): boolean {
+  if (row.credential?.configured) return true;
+  if (row.provider.credentialRef) return false;
+  return row.provider.availability === "ready" ||
+    (!row.provider.availability && row.provider.models.length > 0);
+}
+
 function providerStatus(
   row: ProviderRow,
   t: ReturnType<typeof useT>["t"],
 ): { label: string; variant: "success" | "warning" | "outline" } {
+  const availability = row.provider.availability;
+  if (availability && availability !== "ready") {
+    return {
+      label: t(`options.dshModels.availability.${availability}`),
+      variant:
+        availability === "missing-credential" ||
+        availability === "catalog-error"
+          ? "warning"
+          : "outline",
+    };
+  }
   if (!row.provider.credentialRef) {
     return {
       label: t("options.dshModels.auth.native"),
@@ -172,8 +196,12 @@ function providerStatus(
 
 export function ModelProviderConfigTab({
   adapter,
+  assignments,
+  inventory = [],
 }: {
-  adapter: ModelPlaneAdapter;
+  adapter: ProviderSettingsController;
+  assignments?: ReactNode;
+  inventory?: AmibaProviderInventory[];
 }) {
   const { t } = useT();
   const [snapshot, setSnapshot] = useState<ModelPlaneSnapshot | null>(null);
@@ -199,7 +227,10 @@ export function ModelProviderConfigTab({
 
   useEffect(() => {
     void load();
-  }, [load]);
+    return adapter.subscribe?.(() => {
+      void load();
+    });
+  }, [load, adapter]);
 
   const rows = useMemo<ProviderRow[]>(() => {
     if (!snapshot) return [];
@@ -210,6 +241,26 @@ export function ModelProviderConfigTab({
         : undefined,
     }));
   }, [snapshot]);
+
+  const inventoryRows: ProviderRow[] = [...rows];
+  for (const group of inventory) if (!inventoryRows.some(row => row.provider.id === group.id)) {
+    inventoryRows.push({provider: {id: group.id, displayName: group.name, protocol: "media", models: [],
+      availability: group.available ? "ready" : "missing-credential", enabled: group.available, editable: false, visibilityEditable: false, source: "imported"}});
+  }
+  const displayRows = inventoryRows.map(row => {
+    const extra = inventory.filter(group => group.id === row.provider.id);
+    const models = new Map(row.provider.models.map(model => [model.id, model]));
+    for (const group of extra) for (const model of group.models) {
+      const existing = models.get(model.id);
+      if (existing) {
+        models.set(model.id, {...existing, onEnabledChange: model.onEnabledChange, pending: model.pending, ...(model.onEnabledChange ? {enabled: model.enabled} : {}), outputModalities: model.outputModalities,
+          description: existing.description || model.description});
+      } else {
+        models.set(model.id, {...model, inventoryOnly: true});
+      }
+    }
+    return {...row, sourceProvider: row.provider, provider: {...row.provider, models: [...models.values()]}};
+  }).sort((a, b) => Number(isProviderConfigured(b)) - Number(isProviderConfigured(a)));
 
   const activeProvider = rows.find(
     (row) => row.provider.id === selectedProviderId,
@@ -259,6 +310,7 @@ export function ModelProviderConfigTab({
     <div className="space-y-8">
       {snapshot ? (
         <DefaultModelPanel
+          assignments={assignments}
           pending={pending === "default"}
           snapshot={snapshot}
           onSelect={(providerId, modelId) => {
@@ -286,7 +338,7 @@ export function ModelProviderConfigTab({
       <ProviderServicesPanel
         loading={loading}
         pending={pending}
-        rows={rows}
+        rows={displayRows}
         selection={snapshot?.defaultSelection}
         onConfigure={(providerId) => setSelectedProviderId(providerId)}
         onModelEnabledChange={(provider, modelId, enabled) =>
@@ -328,9 +380,7 @@ export function ModelProviderConfigTab({
 
       {snapshot?.failures.length ? (
         <section className={MODEL_SETTINGS_SECTION_CLASS}>
-          <ModelSettingsSectionHeader
-            title={t("options.dshModels.failures")}
-          />
+          <ModelSettingsSectionHeader title={t("options.dshModels.failures")} />
           <div className="space-y-2">
             {snapshot.failures.map((failure) => (
               <p
@@ -345,7 +395,18 @@ export function ModelProviderConfigTab({
         </section>
       ) : null}
 
-      {activeProvider && snapshot ? (
+      {activeProvider && snapshot && adapter.configure ? (
+        <OfficialProviderEditor
+          provider={activeProvider.provider}
+          snapshot={snapshot}
+          adapter={adapter}
+          onClose={() => setSelectedProviderId(null)}
+          onSaved={(next) => {
+            setSnapshot(next);
+            setSelectedProviderId(null);
+          }}
+        />
+      ) : activeProvider && snapshot ? (
         <ProviderEditor
           adapter={adapter}
           onClose={() => setSelectedProviderId(null)}
@@ -400,11 +461,13 @@ function ModelSettingsLoadingSkeleton() {
 }
 
 function DefaultModelPanel({
+  assignments,
   pending,
   snapshot,
   onSelect,
   onSelectEffort,
 }: {
+  assignments?: ReactNode;
   pending: boolean;
   snapshot: ModelPlaneSnapshot;
   onSelect: (provider: string, model: string) => void;
@@ -424,85 +487,56 @@ function DefaultModelPanel({
         title={t("options.models.config.defaultsTitle")}
       />
       <div className={MODEL_SETTINGS_SURFACE_CLASS} data-model-settings-surface>
-        <div className="bg-background px-4 py-4">
-          <button
-            className={cn(
-              "grid w-full items-center gap-3 text-left transition-opacity",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              "disabled:cursor-not-allowed disabled:opacity-50 sm:grid-cols-[8.5rem_minmax(0,1fr)_auto]",
-            )}
-            disabled={pending}
-            onClick={() => setOpen(true)}
-            type="button"
-          >
-            <span className="min-w-0">
-              <span className="block text-xs font-medium text-foreground">
-                {t("options.models.config.main")}
-              </span>
-            </span>
-            <span
-              className="flex min-w-0 items-center gap-2.5"
-              data-model-slot-identity
+        <div className="grid items-center gap-3 bg-background px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]" data-model-assignment="main">
+          <span className="text-xs font-medium text-foreground" id="main-model-label">
+            {t("options.models.config.main")}
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              aria-labelledby="main-model-label main-model-value"
+              className={cn(
+                "flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-md border border-input bg-background px-3 text-left hover:bg-accent/50",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+              disabled={pending}
+              onClick={() => setOpen(true)}
+              type="button"
             >
               {selected ? (
-                <ModelIcon
-                  className="h-5 w-5 shrink-0 text-muted-foreground"
-                  model={selected.model.id}
-                  provider={selected.provider.id}
-                />
+                <ModelIcon className="h-4 w-4 shrink-0 text-muted-foreground" model={selected.model.id} provider={selected.provider.id} />
               ) : (
-                <span className="h-5 w-5 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
+                <span className="h-4 w-4 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
               )}
-              <span className="min-w-0" data-model-slot-label>
-                {selected ? (
-                  <ModelIdentityName
-                    className="flex"
-                    displayName={selected.model.name}
-                    model={selected.model.id}
-                    variant="standard"
-                  />
-                ) : (
-                  <span className="block truncate text-[10px] leading-none text-muted-foreground">
-                    {t("options.models.config.mainUnset")}
-                  </span>
-                )}
+              <span className="min-w-0 flex-1" id="main-model-value" data-model-slot-identity>
+                <span className="block min-w-0" data-model-slot-label>
+                  {selected ? (
+                    <ModelIdentityName className="flex" displayName={selected.model.name} model={selected.model.id} variant="standard" />
+                  ) : (
+                    <span className="block truncate text-xs text-muted-foreground">{t("options.models.config.mainUnset")}</span>
+                  )}
+                </span>
               </span>
-            </span>
-            <span className="flex items-center justify-end gap-1.5">
-              {pending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              ) : null}
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
-            </span>
-          </button>
-        </div>
-
-        {efforts.length > 1 ? (
-          <div className="grid items-center gap-3 border-t border-border/60 bg-muted/[0.035] px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
-            <span className="text-xs font-medium text-foreground">
-              {t("sidepanel.modelPicker.reasoningEffort")}
-            </span>
-            <Select
-              disabled={pending}
-              onValueChange={onSelectEffort}
-              value={effectiveEffort}
-            >
-              <SelectTrigger
-                aria-label={t("sidepanel.modelPicker.reasoningEffort")}
-                className="h-8 w-full max-w-56 justify-between text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {efforts.map((effort) => (
-                  <SelectItem key={effort.id} value={effort.id}>
-                    {effort.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {pending && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />}
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            </button>
+            {efforts.length > 1 && (
+              <Select disabled={pending} onValueChange={onSelectEffort} value={effectiveEffort}>
+                <SelectTrigger
+                  aria-label={t("sidepanel.modelPicker.reasoningEffort")}
+                  className="h-9 w-auto shrink-0 gap-2 text-xs"
+                >
+                  <span className="text-muted-foreground">{t("sidepanel.modelPicker.reasoningEffort")}</span>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {efforts.map((effort) => <SelectItem key={effort.id} value={effort.id}>{effort.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
-        ) : null}
+        </div>
+        {assignments}
       </div>
 
       <ModelPickerDialog
@@ -665,10 +699,17 @@ function ProviderServicesPanel({
                           ) : null}
                         </div>
                         <p className="mt-0.5 font-mono text-[9px] text-muted-foreground/75">
-                          {provider.id} ·{" "}
-                          {t("options.models.display.availableModels", {
-                            count: provider.models.length,
-                          })}
+                          {provider.id}
+                          {provider.availability === undefined ||
+                          provider.availability === "ready" ||
+                          provider.availability === "no-models" ? (
+                            <>
+                              {" · "}
+                              {t("options.models.display.availableModels", {
+                                count: provider.models.length,
+                              })}
+                            </>
+                          ) : null}
                         </p>
                       </div>
                     </button>
@@ -679,6 +720,7 @@ function ProviderServicesPanel({
                           { name: provider.displayName },
                         )}
                         className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+                        disabled={provider.protocol === "media"}
                         onClick={() => onConfigure(provider.id)}
                         size="icon"
                         type="button"
@@ -692,10 +734,14 @@ function ProviderServicesPanel({
                         })}
                         checked={provider.enabled}
                         disabled={
-                          providerPending || isCurrent || !provider.editable
+                          providerPending ||
+                          isCurrent ||
+                          (provider.availability !== undefined &&
+                            provider.availability !== "ready") ||
+                          !(provider.visibilityEditable ?? provider.editable)
                         }
                         onCheckedChange={(enabled) =>
-                          onProviderEnabledChange(provider, enabled)
+                          onProviderEnabledChange(row.sourceProvider ?? provider, enabled)
                         }
                       />
                     </div>
@@ -715,7 +761,10 @@ function ProviderServicesPanel({
                             >
                               <ModelDefinitionCard
                                 action={
-                                  <Switch
+                                  model.onEnabledChange ? <Switch
+                                    aria-label={t("options.models.display.mediaToggle", {name: model.name})}
+                                    checked={model.enabled !== false} disabled={model.pending}
+                                    onCheckedChange={model.onEnabledChange} /> : model.inventoryOnly ? <span className="text-[10px] text-muted-foreground">{model.supported ? "" : t("options.models.display.unsupported")}</span> : <Switch
                                     aria-label={t(
                                       "options.models.display.modelToggle",
                                       { name: model.name },
@@ -727,13 +776,16 @@ function ProviderServicesPanel({
                                     disabled={
                                       current ||
                                       !provider.enabled ||
-                                      !provider.editable ||
+                                      !(
+                                        provider.visibilityEditable ??
+                                        provider.editable
+                                      ) ||
                                       pending ===
                                         `model:${provider.id}:${model.id}`
                                     }
                                     onCheckedChange={(enabled) =>
                                       onModelEnabledChange(
-                                        provider,
+                                        row.sourceProvider ?? provider,
                                         model.id,
                                         enabled,
                                       )
@@ -745,7 +797,7 @@ function ProviderServicesPanel({
                                 model={model}
                                 provider={provider.id}
                                 visible={
-                                  provider.enabled && model.enabled !== false
+                                  (model.onEnabledChange ? true : provider.enabled) && model.enabled !== false
                                 }
                               />
                             </li>
@@ -814,53 +866,9 @@ function ModelDefinitionCard({
         provider={provider}
         visible={visible}
       />
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent
-          className="flex max-h-[82vh] flex-col gap-0 overflow-hidden p-0"
-          size="lg"
-        >
-          <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/45">
-                <ModelIcon
-                  className="h-5 w-5"
-                  model={model.id}
-                  provider={provider}
-                />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-                  <DialogTitle className="truncate text-sm">
-                    {model.name}
-                  </DialogTitle>
-                  {model.name !== model.id ? (
-                    <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">
-                      {model.id}
-                    </span>
-                  ) : null}
-                </div>
-                {model.description ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {model.description}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <DialogDescription className="sr-only">
-              {t("options.models.details.dialogDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 overflow-y-auto p-5">
-            <ModelInfoCard
-              className="border-0 bg-transparent p-0"
-              metadata={metadata}
-              model={model.id}
-              provider={provider}
-              showIdentity={false}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ModelDetailsDialog open={detailsOpen} onOpenChange={setDetailsOpen}
+        model={model.id} name={model.name} provider={provider}
+        description={model.description} metadata={metadata} />
     </>
   );
 }
@@ -872,7 +880,7 @@ function ProviderEditor({
   onClose,
   onSaved,
 }: {
-  adapter: ModelPlaneAdapter;
+  adapter: ProviderSettingsController;
   row: ProviderRow;
   snapshot: ModelPlaneSnapshot;
   onClose: () => void;
@@ -1175,31 +1183,34 @@ function ProviderEditor({
 }
 
 function ProviderProtocolSelect({
-  disabled,
   onChange,
   value,
+  disabled,
+  protocols,
 }: {
-  disabled?: boolean;
   onChange: (value: ModelProviderProtocol) => void;
   value: ModelProviderProtocol;
+  disabled?: boolean;
+  protocols?: string[];
 }) {
+  const options = protocols ?? [
+    "deepseek-chat-completions",
+    "openai-completions",
+    "openai-responses",
+    "anthropic-messages",
+    "provider-native",
+  ];
   return (
-    <Select
-      disabled={disabled}
-      onValueChange={(next) => onChange(next as ModelProviderProtocol)}
-      value={value}
-    >
+    <Select disabled={disabled} onValueChange={onChange} value={value}>
       <SelectTrigger>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="deepseek-chat-completions">
-          DeepSeek Chat Completions
-        </SelectItem>
-        <SelectItem value="openai-completions">OpenAI Completions</SelectItem>
-        <SelectItem value="openai-responses">OpenAI Responses</SelectItem>
-        <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
-        <SelectItem value="provider-native">Provider Native</SelectItem>
+        {options.map((protocol) => (
+          <SelectItem key={protocol} value={protocol}>
+            {protocol}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
@@ -1211,7 +1222,7 @@ function CreateProviderDialog({
   onClose,
   onSaved,
 }: {
-  adapter: ModelPlaneAdapter;
+  adapter: ProviderSettingsController;
   snapshot: ModelPlaneSnapshot;
   onClose: () => void;
   onSaved: (snapshot: ModelPlaneSnapshot) => void;
@@ -1220,8 +1231,9 @@ function CreateProviderDialog({
   const [provider, setProvider] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [baseURL, setBaseURL] = useState("");
-  const [protocol, setProtocol] =
-    useState<ModelProviderProtocol>("openai-completions");
+  const [protocol, setProtocol] = useState<ModelProviderProtocol>(
+    snapshot.protocols?.[0] ?? "openai-completions",
+  );
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1306,7 +1318,11 @@ function CreateProviderDialog({
           </div>
           <div className="space-y-1.5">
             <Label>{t("options.dshModels.protocol")}</Label>
-            <ProviderProtocolSelect onChange={setProtocol} value={protocol} />
+            <ProviderProtocolSelect
+              onChange={setProtocol}
+              value={protocol}
+              protocols={snapshot.protocols}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="model-new-model">
@@ -1358,3 +1374,5 @@ function CreateProviderDialog({
     </Dialog>
   );
 }
+
+type AmibaProviderInventory = Parameters<NonNullable<PropsRuntime<"amiba.models.extension">["onModelsChange"]>>[1][number];

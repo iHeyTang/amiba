@@ -3,10 +3,13 @@ import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { NavigationRow, usePluginT } from "@amiba/ui/plugin";
 import { CalendarClock } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { reconcileRuns, runUnread, taskRuns } from "./activity.js";
+import { useCronTasks } from "./use-cron-tasks.js";
 
 import { AMIBA_CRON_REMOTE } from "../remote.js";
 import { DshCronPage, type CronAdapter } from "./DshCronPage.js";
+import { createCronSessionGroup } from "./session-group.js";
 import { cronI18n } from "./i18n.js";
 import { CRON_TOOLVIEW_KEYS, CronToolview } from "./toolviews.js";
 
@@ -38,12 +41,30 @@ async function valueOf<T>(
   return result.value;
 }
 
-function CronNavigation({
+export function CronNavigation({
   activeView,
   openWorkspace,
-}: PropsRuntime<"amiba.workspace.navigation">): ReactNode {
+  sessionActivity,
+  adapter,
+}: Pick<
+  PropsRuntime<"amiba.workspace.navigation">,
+  "activeView" | "openWorkspace" | "sessionActivity"
+> & {
+  adapter: CronAdapter;
+}): ReactNode {
   const { t } = usePluginT(cronI18n);
   const label = t("cron.nav");
+  const { tasks } = useCronTasks(
+    adapter,
+    sessionActivity?.sessions.map((session) => session.id),
+  );
+  const unread = tasks.some((task) =>
+    taskRuns(task).some((run) => runUnread(run, sessionActivity)),
+  );
+  useEffect(() => {
+    if (sessionActivity)
+      void reconcileRuns(tasks, sessionActivity).catch(console.error);
+  }, [tasks, sessionActivity]);
   return (
     <NavigationRow
       active={activeView === VIEW_ID}
@@ -51,6 +72,15 @@ function CronNavigation({
       data-testid="sidebar-item-cron"
       icon={<CalendarClock />}
       label={label}
+      trailing={
+        unread ? (
+          <span
+            role="status"
+            aria-label={t("cron.unread")}
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--status-session))]"
+          />
+        ) : undefined
+      }
       onClick={() => openWorkspace(VIEW_ID)}
       title={label}
     />
@@ -70,11 +100,13 @@ function CronView({
   showSidebarExpandControl = false,
   sidebarCollapsed = false,
   startChat,
+  sessionActivity,
   topBarLeftInset,
 }: CronViewProps): ReactNode {
   return (
     <DshCronPage
       adapter={adapter}
+      sessionActivity={sessionActivity}
       topBarHeightPx={chromeHeightPx}
       topBarLeftInset={topBarLeftInset}
       sidebarCollapsed={sidebarCollapsed}
@@ -98,8 +130,25 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaCron", "layout"],
     (injectedCtx) => {
       const remote: CronRemote = injectedCtx.remote.amibaCron;
+      const group = createCronSessionGroup((ids) =>
+        valueOf(remote.sessionIds(ids)),
+      );
+      const disposeGroup = injectedCtx.slots.inject(
+        "amiba.sessions.list.group",
+        () =>
+          injectedCtx.slots.register(
+            {
+              name: "amiba.sessions.list.group",
+              id: VIEW_ID,
+              order: 100,
+              label: copy,
+              inject: () => group.face,
+            },
+            () => null,
+          ),
+      );
       const adapter: CronAdapter = {
-        list: () => valueOf(remote.list()),
+        list: (ids) => valueOf(remote.list(ids)),
         create: (input) => valueOf(remote.createTask(input)),
         update: (id, patch) => valueOf(remote.updateTask(id, patch)),
         removeTask: async (id) => {
@@ -116,6 +165,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               id: VIEW_ID,
               order: 100,
               label: copy,
+              inject: () => ({ adapter }),
             },
             CronNavigation,
           ),
@@ -150,6 +200,8 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       );
       return () => {
         for (const dispose of disposeToolviews) dispose();
+        disposeGroup();
+        group.dispose();
         disposeView();
         disposeNavigation();
       };

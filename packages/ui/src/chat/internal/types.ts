@@ -23,6 +23,8 @@ import type {
 
 export interface UiMessage extends ChatMessage {
   uiId: string
+  /** Wall-clock time when this message entered the session. */
+  sentAt?: number
   /** DSH append-only event sequence used for fork-at-message operations. */
   runtimeSeq?: number
   streaming?: boolean
@@ -78,6 +80,7 @@ export interface UiMessage extends ChatMessage {
  */
 export type AssistantTimelineItem =
   | { kind: "text"; id: string; text: string }
+  | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }
 

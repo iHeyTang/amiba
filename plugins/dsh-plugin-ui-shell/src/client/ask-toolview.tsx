@@ -122,7 +122,7 @@ function AskAnswersReview({
   );
 }
 
-export function AskUserQuestionToolview({ block }: ToolCallOwnerProps) {
+export function AskUserQuestionToolview({ block, presentation }: ToolCallOwnerProps) {
   const { t } = useT();
   // RunningToolCall carries no `kind`; the settled node is 'tool-result'.
   const settled = "kind" in block ? block : null;
@@ -191,6 +191,7 @@ export function AskUserQuestionToolview({ block }: ToolCallOwnerProps) {
 
   return (
     <ToolRowFrame
+      presentation={presentation}
       icon={MessageCircleQuestion}
       action={t("shell.ask.action")}
       target={target || undefined}

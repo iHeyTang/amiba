@@ -1,11 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": false,
-    "isolatedModules": false,
-    "declaration": true,
     "rootDir": "src",
-    "outDir": "lib"
+    "outDir": "lib",
+    "declaration": true,
+    "sourceMap": true,
+    "noEmit": false
   },
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }

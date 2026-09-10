@@ -1,3 +1,4 @@
+import { featureSeed } from "@amiba/dsh-plugin-session-features";
 import { randomUUID } from "node:crypto";
 
 import type { Context } from "@deepseek-ai/cordis";
@@ -59,7 +60,7 @@ const ASK_NOTICE_DELAY_MS = 1_500;
 export interface StewardServiceOptions {
   defaultCwd: string;
   taskPreset?: string;
-  presetId: string;
+  basePreset?: string;
   onStewardSetup?: (agentCtx: Context) => void;
   now?: () => number;
   /** @see ASK_NOTICE_DELAY_MS */
@@ -131,6 +132,7 @@ export class StewardService {
   /** Serializes reconcile/report work so two events for one task never interleave. */
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
+  private readonly askGuards = new Map<Context, () => void>();
 
   constructor(
     ctx: Context,
@@ -162,6 +164,8 @@ export class StewardService {
     this.disposed = true;
     for (const timer of this.askTimers.values()) clearTimeout(timer);
     this.askTimers.clear();
+    for (const dispose of this.askGuards.values()) dispose();
+    this.askGuards.clear();
     const handle = this.stewardHandle;
     this.stewardHandle = null;
     try {
@@ -223,8 +227,10 @@ export class StewardService {
     if (this.stewardPending) return this.stewardPending;
     this.stewardPending = (async () => {
       const state = await this.store.read();
+      if (state.extensionVersion !== undefined && state.extensionVersion !== 1) throw new Error(`Unsupported steward extension version ${state.extensionVersion}`);
+      let basePreset = state.basePreset ?? this.options.basePreset ?? this.ctx.agentPresets.defaultId;
       const setup = async (agentCtx: Context) => {
-        await this.ctx.agentPresets.mount(agentCtx, this.options.presetId);
+        await this.ctx.agentPresets.mount(agentCtx, basePreset);
         this.options.onStewardSetup?.(agentCtx);
       };
       if (state.stewardSessionId) {
@@ -234,12 +240,7 @@ export class StewardService {
           // Someone else (the UI, a resume elsewhere) already owns this agent,
           // so we hold no handle for it — but its scope still needs the
           // steward_* tools or the steward would sit there tool-less.
-          try {
-            this.options.onStewardSetup?.(live.ctx);
-            this.log.warn("steward: reusing an already-live steward agent; the steward tools were registered onto it");
-          } catch (error) {
-            this.log.warn(`steward: could not register the steward tools onto the already-live steward agent: ${String(error)}`);
-          }
+          this.options.onStewardSetup?.(live.ctx);
           this.stewardHandle = { agent: live, dispose: async () => undefined };
           await this.pinStewardTitle(live);
           return live;
@@ -250,10 +251,16 @@ export class StewardService {
         // user's steward history — so it propagates instead.
         let loadable = true;
         try {
-          await this.ctx.sessionPersistence.inspect(id);
+          const inspected = await this.ctx.sessionPersistence.inspect(id);
+          const persistedPreset = resolveSessionPreset({ header: inspected.meta, events: inspected.events } as never);
+          if (persistedPreset) {
+            basePreset = persistedPreset;
+          }
         } catch (error) {
+          const missing = (error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found");
+          if (!missing) throw error;
           loadable = false;
-          this.log.warn(`steward: session ${id} is not loadable (${String(error)}); creating a new one`);
+          this.log.warn(`steward: session ${id} is missing; creating a new one`);
         }
         if (loadable) {
           try {
@@ -270,11 +277,17 @@ export class StewardService {
       const sessionId = `session-${randomUUID()}`;
       const handle = await this.ctx.agents.create({
         sessionId: sessionId as never,
-        meta: { cwd: this.options.defaultCwd, agentPreset: this.options.presetId },
+        meta: { cwd: this.options.defaultCwd, agentPreset: basePreset },
+        seed: featureSeed(sessionId, STEWARD_SOURCE, 1),
         ...this.agentOptionsSpread(),
         setup,
       });
-      await this.store.mutate((current) => ({ ...current, stewardSessionId: sessionId }));
+      try {
+        await this.store.mutate((current) => ({ ...current, stewardSessionId: sessionId, basePreset, extensionVersion: 1 }));
+      } catch (error) {
+        await handle.dispose();
+        throw error;
+      }
       this.stewardHandle = handle;
       await this.pinStewardTitle(handle.agent);
       return handle.agent;
@@ -444,25 +457,20 @@ export class StewardService {
   }
 
   private guardAskUser(agentCtx: Context): void {
-    try {
-      agentCtx.tools.guard((execution) => (execution.name === ASK_USER_TOOL ? ASK_USER_DENIED : undefined));
-    } catch (error) {
-      this.log.warn(`steward: could not guard ${ASK_USER_TOOL}: ${String(error)}`);
-    }
+    if (this.askGuards.has(agentCtx)) return;
+    const dispose = agentCtx.tools.guard((execution) => execution.name === ASK_USER_TOOL ? ASK_USER_DENIED : undefined);
+    this.askGuards.set(agentCtx, dispose);
+    agentCtx.effect(() => () => { this.askGuards.delete(agentCtx); }, "amiba-steward.ask-guard");
   }
 
   private async createTaskAgent(task: StewardTask): Promise<Agent> {
-    const preset = this.options.taskPreset;
+    const preset = this.options.taskPreset ?? this.ctx.agentPresets.defaultId;
     const handle = await this.ctx.agents.create({
       sessionId: task.sessionId as never,
       meta: { cwd: task.cwd, ...(preset ? { agentPreset: preset } : {}) },
       ...this.agentOptionsSpread(),
       setup: async (agentCtx: Context) => {
-        try {
-          await this.ctx.agentPresets.mount(agentCtx, preset);
-        } catch (error) {
-          this.log.warn(`steward: could not mount preset "${String(preset)}" for ${task.sessionId}: ${String(error)}`);
-        }
+        await this.ctx.agentPresets.mount(agentCtx, preset);
         this.guardAskUser(agentCtx);
       },
     });
@@ -471,7 +479,7 @@ export class StewardService {
 
   private ensureTaskAgent(task: StewardTask): Promise<Agent> {
     const live = this.ctx.agents.get(task.sessionId as never) as Agent | undefined;
-    if (live) return Promise.resolve(live);
+    if (live) { this.guardAskUser(live.ctx); return Promise.resolve(live); }
     const existing = this.taskAgents.get(task.sessionId);
     if (existing) return existing;
     const resume = (async () => {
@@ -481,11 +489,7 @@ export class StewardService {
         resumeSessionId: task.sessionId as never,
         ...this.agentOptionsSpread(),
         setup: async (agentCtx: Context) => {
-          try {
-            await this.ctx.agentPresets.mount(agentCtx, preset);
-          } catch (error) {
-            this.log.warn(`steward: could not mount preset "${String(preset)}" while resuming ${task.sessionId}: ${String(error)}`);
-          }
+          await this.ctx.agentPresets.mount(agentCtx, preset);
           this.guardAskUser(agentCtx);
         },
       });
@@ -538,6 +542,8 @@ export class StewardService {
       origin: "adopted",
       lastReportedSeq,
     });
+    const live = this.ctx.agents.get(sessionId as never) as Agent | undefined;
+    if (live) this.guardAskUser(live.ctx);
     await this.store.mutate((current) => ({ ...current, tasks: [...current.tasks, task] }));
     return { kind: "adopted", task, existing: false };
   }

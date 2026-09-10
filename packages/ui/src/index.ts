@@ -22,13 +22,17 @@
  * union, so ``t("…")`` stays typo-checked wherever ``@amiba/ui`` is on the
  * program. It is erased before any bundler sees it.
  */
-import type {} from "./locales/keys"
+import type {} from "./locales/keys";
 
-export * from "./primitives"
-export * from "./theme"
-export * from "./models"
-export * from "./chat"
-export * from "./home"
-export * from "./settings"
-export * from "./viz"
-export { PaneHeaderBar, type PaneHeaderBarProps } from "./navigation/PaneHeaderBar";
+export * from "./primitives";
+export * from "./theme";
+export * from "./time-format";
+export * from "./models";
+export * from "./chat";
+export * from "./home";
+export * from "./settings";
+export * from "./viz";
+export {
+  PaneHeaderBar,
+  type PaneHeaderBarProps,
+} from "./navigation/PaneHeaderBar";

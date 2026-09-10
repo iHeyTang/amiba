@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 
 import { SettingsPageActions } from "../page-chrome";
+import { TIME_FORMAT_PREF_STORAGE_KEY } from "../../time-format";
 
 import { SettingsView } from "../SettingsView";
 
@@ -68,9 +69,8 @@ describe("SettingsView DSH navigation", () => {
     expect(
       screen
         .getByTestId("dsh-memory-navigation")
-        .compareDocumentPosition(
-          screen.getByTestId("dsh-example-navigation"),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(screen.getByTestId("dsh-example-navigation")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Voice" }),
@@ -205,6 +205,36 @@ describe("SettingsView DSH navigation", () => {
     expect(
       await screen.findByRole("heading", { name: "Appearance" }),
     ).toBeVisible();
+  });
+
+  it("persists the selected 12-hour or 24-hour time format from Appearance", async () => {
+    const user = userEvent.setup();
+    const set = vi.fn().mockResolvedValue(undefined);
+    setPlatform({
+      kind: "desktop",
+      storage: {
+        get: vi.fn().mockResolvedValue({
+          [TIME_FORMAT_PREF_STORAGE_KEY]: "12h",
+        }),
+        set,
+        remove: vi.fn(),
+        watch: vi.fn(() => () => {}),
+      },
+    } as unknown as PlatformAdapter);
+
+    render(<SettingsView />);
+
+    const group = screen.getByRole("radiogroup", { name: "Time format" });
+    await waitFor(() =>
+      expect(
+        within(group).getByRole("radio", { name: "12-hour" }),
+      ).toHaveAttribute("aria-checked", "true"),
+    );
+
+    await user.click(within(group).getByRole("radio", { name: "24-hour" }));
+    expect(set).toHaveBeenCalledWith({
+      [TIME_FORMAT_PREF_STORAGE_KEY]: "24h",
+    });
   });
 
   it("routes the retired #behavior id through the generic ledger fallback, which no section claims anymore", () => {

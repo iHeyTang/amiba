@@ -63,7 +63,7 @@ function decode(type: string, body: string): MentionData | null {
   const payload: Record<string, string> = {}
   fields.forEach((f, i) => { payload[f] = unesc(parts[i] ?? "") })
   const display =
-    payload.title || payload.name || payload.key || payload.path || payload.id || type
+    payload.label || payload.title || payload.name || payload.key || payload.path || payload.id || type
   return { type, payload, display }
 }
 

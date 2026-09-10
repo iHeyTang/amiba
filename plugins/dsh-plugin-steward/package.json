@@ -2,16 +2,24 @@
   "name": "@amiba/dsh-plugin-steward",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba steward (大管家): one hidden, always-live conversation that routes each user request to an existing or fresh task session and reports the reply back.",
+  "description": "Amiba steward (\u5927\u7ba1\u5bb6): one hidden, always-live conversation that routes each user request to an existing or fresh task session and reports the reply back.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
-    "./client": { "types": "./lib/client/index.d.ts", "default": "./lib/client.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -28,12 +36,14 @@
     }
   },
   "dependencies": {
+    "@amiba/extension-sdk": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "lucide-react": "^0.460.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@amiba/dsh-plugin-session-features": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -48,7 +58,8 @@
     "@deepseek-ai/dsh-session-query": "catalog:",
     "@deepseek-ai/dsh-tools": "catalog:",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@deepseek-ai/dsh-system-prompt": "catalog:"
   },
   "devDependencies": {
     "@amiba/app-runtime": "workspace:*",
@@ -74,6 +85,8 @@
     "react-dom": "18.3.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-scope": "0.1.1-rc.2"
   }
 }

@@ -45,6 +45,7 @@ export interface MenuItem {
  * providers (host-supplied `mentionProviders`) keep compiling untouched.
  */
 export interface TriggerHitContext {
+  signal?: AbortSignal
   /** leading = the trimmed draft starts with the token; else inline. */
   position: "leading" | "inline"
   /** Trigger-draft range of the token, and the revision it was read at. */

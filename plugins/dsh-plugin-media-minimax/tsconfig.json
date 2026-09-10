@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.dsh-plugin.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "resolveJsonModule": true
+  },
+  "include": ["src", "vite.config.ts"]
+}

@@ -11,7 +11,7 @@ const DSH_CLIENT_EXTERNALS = [
   "@deepseek-ai/dsh-client-runtime/client",
   "@deepseek-ai/dsh-client-ui-slots",
   "@amiba/dsh-plugin-ui-shell/client",
-  // Type-only today (`ConnectWizardHost` and the `amibaConnectWizards`
+  // Type-only today (`ConnectWizardHost` and the `amibaConnectorUI`
   // Cordis augmentation), so nothing of it survives into the bundle — listed
   // anyway so a future value import resolves through the host's already-loaded
   // connector-core client bundle instead of being inlined a second time here.

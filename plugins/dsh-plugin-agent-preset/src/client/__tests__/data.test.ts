@@ -66,12 +66,14 @@ describe("createAgentPresetsAdapter", () => {
     expect(result.active).toBe("researcher");
     expect(result.profiles).toEqual([
       {
-        name: "default",
+        id: "default",
+        name: "Amiba",
         is_default: false,
         description: "Amiba",
         trust: "system",
       },
       {
+        id: "researcher",
         name: "researcher",
         is_default: true,
         description: "Verifies product claims",

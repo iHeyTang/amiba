@@ -14,6 +14,8 @@
  * `./locales/index.ts`.
  */
 import type {} from "./locales/keys";
+export { EmbeddedPage } from "./primitives/embedded-page";
+export { REFERENCE_EVENT, referenceHref, type ReferenceRequest } from "./reference-request";
 
 export {
   usePluginT,
@@ -32,6 +34,7 @@ export {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DIALOG_MOTION_MS,
   DialogTitle,
 } from "./primitives/dialog";
 export { WizardFrame, type WizardFrameProps, type WizardTab } from "./primitives/wizard-frame";
@@ -155,3 +158,8 @@ export {
   PopoverTrigger,
   type DialogOverlayVariant,
 } from "./primitives";
+
+export { SemanticToolRow, type SemanticToolSpec, type SemanticEvidenceContext } from "./chat/bubble/semantic-tool-row";
+export { MarkdownCodeView, MarkdownTableView } from "./primitives/markdown-blocks";
+
+export { ModelDetailsDialog } from "./models/ModelDetailsDialog";

@@ -8,9 +8,12 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@amiba/dsh-plugin-notification-hub";
 
+import { cronSessionOrigin } from "./session-origin.js";
+
 import { assertValidRule, missedRunAt, nextRunAt } from "./rules.js";
 import type { DshCronStore } from "./store.js";
 import type {
+  CronRun,
   CronTask,
   CronTaskCreateInput,
   CronTaskPatch,
@@ -57,6 +60,39 @@ export class CronService {
     private readonly now: () => number = Date.now,
   ) {}
 
+  private readonly sessionOrigins = new Map<string, boolean>();
+
+  /** Read-only classification: survives rule deletion and needs no migration. */
+  async sessionIds(ids: string[]): Promise<string[]> {
+    const persistence = (
+      this.ctx as unknown as {
+        sessionPersistence: {
+          inspect(
+            id: string,
+          ): Promise<{ events: readonly { type: string; data?: unknown }[] }>;
+        };
+      }
+    ).sessionPersistence;
+    const result: string[] = [];
+    for (const id of new Set(ids)) {
+      let origin = this.sessionOrigins.get(id);
+      if (origin === undefined) {
+        try {
+          origin = cronSessionOrigin((await persistence.inspect(id)).events);
+          // Blank sessions and failed reads are retried when their history arrives.
+          if (origin !== undefined) {
+            if (this.sessionOrigins.size >= 10000) this.sessionOrigins.clear();
+            this.sessionOrigins.set(id, origin);
+          }
+        } catch {
+          continue;
+        }
+      }
+      if (origin) result.push(id);
+    }
+    return result;
+  }
+
   async start(): Promise<void> {
     const tasks = await this.store.list();
     const startedAt = this.now();
@@ -74,12 +110,113 @@ export class CronService {
     this.timer = null;
   }
 
-  async list(): Promise<CronTaskView[]> {
+  private readonly recoveredSessions = new Set<string>();
+
+  /** Recover pre-history runs from their persisted first-message provenance. */
+  async list(sessionIds: string[] = []): Promise<CronTaskView[]> {
+    let tasks = await this.store.list();
+    const persistence = (
+      this.ctx as unknown as {
+        sessionPersistence?: {
+          inspect(id: string): Promise<{
+            events: readonly { type: string; time?: number; data?: unknown }[];
+          }>;
+        };
+      }
+    ).sessionPersistence;
+    const recovered = new Map<string, CronRun[]>();
+    const settled = new Set<string>();
+    const recorded = new Map(
+      tasks.flatMap((task) =>
+        this.taskRuns(task).map((run) => [run.sessionId, run] as const),
+      ),
+    );
+    if (persistence)
+      for (const id of new Set(sessionIds)) {
+        if (
+          this.recoveredSessions.has(id) ||
+          recorded.get(id)?.finishedAt !== undefined
+        )
+          continue;
+        try {
+          const { events } = await persistence.inspect(id);
+          if (cronSessionOrigin(events) === undefined) continue;
+          if (!cronSessionOrigin(events)) {
+            this.recoveredSessions.add(id);
+            continue;
+          }
+          const first = events.find((event) => event.type === "user/message")!;
+          const rpcId = (first.data as { source: { rpcId: string } }).source
+            .rpcId;
+          const taskId = rpcId.split(":")[1]!;
+          const task = tasks.find((entry) => entry.id === taskId);
+          if (!task || typeof first.time !== "number") continue;
+          const terminal = [...events]
+            .reverse()
+            .find((event) => event.type === "turn/end");
+          const run: CronRun = {
+            sessionId: id,
+            startedAt: first.time,
+            ...(typeof terminal?.time === "number"
+              ? { finishedAt: terminal.time }
+              : {}),
+          };
+          recovered.set(taskId, [...(recovered.get(taskId) ?? []), run]);
+          if (run.finishedAt !== undefined) settled.add(id);
+        } catch {
+          /* Retry unavailable transcripts on the next refresh. */
+        }
+      }
+    if (recovered.size)
+      tasks = await this.store.mutate((current) =>
+        current.map((task) => {
+          const additions = recovered.get(task.id);
+          if (!additions) return task;
+          const runs = new Map(
+            this.taskRuns(task).map((run) => [run.sessionId, run]),
+          );
+          for (const run of additions) {
+            const existing = runs.get(run.sessionId);
+            runs.set(
+              run.sessionId,
+              existing
+                ? {
+                    ...run,
+                    ...existing,
+                    finishedAt: existing.finishedAt ?? run.finishedAt,
+                  }
+                : run,
+            );
+          }
+          return {
+            ...task,
+            runs: [...runs.values()].sort((a, b) => b.startedAt - a.startedAt),
+          };
+        }),
+      );
+    for (const id of settled) this.recoveredSessions.add(id);
     const now = this.now();
-    return (await this.store.list()).map((task) => ({
+    return tasks.map((task) => ({
       ...task,
+      runs: this.taskRuns(task),
       nextRunAt: nextRunAt(task, now),
     }));
+  }
+
+  private taskRuns(task: CronTask): CronRun[] {
+    const runs = task.runs ?? [];
+    if (
+      !task.lastSessionId ||
+      runs.some((run) => run.sessionId === task.lastSessionId)
+    )
+      return runs;
+    return [
+      {
+        sessionId: task.lastSessionId,
+        startedAt: task.lastRunAt ?? task.createdAt,
+      },
+      ...runs,
+    ];
   }
 
   async create(input: CronTaskCreateInput): Promise<CronTaskView> {
@@ -114,7 +251,9 @@ export class CronService {
         updated = {
           ...task,
           ...(patch.name === undefined ? {} : { name: patch.name.trim() }),
-          ...(patch.prompt === undefined ? {} : { prompt: patch.prompt.trim() }),
+          ...(patch.prompt === undefined
+            ? {}
+            : { prompt: patch.prompt.trim() }),
           ...(patch.rule === undefined ? {} : { rule: patch.rule }),
           ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
           ...(patch.catchUp === undefined ? {} : { catchUp: patch.catchUp }),
@@ -155,9 +294,12 @@ export class CronService {
       upcoming.length === 0
         ? REARM_CEILING_MS
         : Math.min(Math.max(0, Math.min(...upcoming) - now), REARM_CEILING_MS);
-    this.timer = setTimeout(() => {
-      void this.wake();
-    }, Math.min(wait, MAX_WAIT_MS));
+    this.timer = setTimeout(
+      () => {
+        void this.wake();
+      },
+      Math.min(wait, MAX_WAIT_MS),
+    );
     // A stray timer must never hold the process open.
     this.timer.unref?.();
   }
@@ -204,7 +346,9 @@ export class CronService {
    * never in `inject` (no optional flag in this cordis), so a point-in-time
    * `reflect.get` — absent means "let the kernel pick".
    */
-  private defaultAgentOptions(): { provider: string; model: string } | undefined {
+  private defaultAgentOptions():
+    | { provider: string; model: string }
+    | undefined {
     const service = (
       this.ctx as {
         reflect?: { get?(name: string): unknown };
@@ -219,7 +363,12 @@ export class CronService {
   }
 
   /** Spawn one fresh session seeded with a user message; retire it on idle. */
-  private async spawnSession(prompt: string, rpcTag: string): Promise<string> {
+  private async spawnSession(
+    prompt: string,
+    rpcTag: string,
+    record: (id: string) => Promise<void>,
+    finish: (id: string) => Promise<void>,
+  ): Promise<string> {
     const sessionId = `session-${randomUUID()}`;
     const agentOptions = this.defaultAgentOptions();
     const handle = await this.ctx.agents.create({
@@ -231,19 +380,41 @@ export class CronService {
       meta: { cwd: homedir() },
       ...(agentOptions ? { agentOptions } : {}),
     });
-    handle.agent.followup(
-      createUserMessage({
-        content: [{ type: "text", text: prompt }],
-        source: { kind: "user", rpcId: `${rpcTag}:${randomUUID()}` },
-      } as never) as never,
-    );
+    try {
+      // Persist the session link before dispatch: even a very fast run is discoverable.
+      await record(sessionId);
+    } catch (error) {
+      await handle.dispose();
+      throw error;
+    }
+    try {
+      handle.agent.followup(
+        createUserMessage({
+          content: [{ type: "text", text: prompt }],
+          source: { kind: "user", rpcId: `${rpcTag}:${randomUUID()}` },
+        } as never) as never,
+      );
+    } catch (error) {
+      try {
+        await finish(sessionId);
+      } finally {
+        await handle.dispose();
+      }
+      throw error;
+    }
     // Let the run finish, then retire the session normally. Never keep the
     // handle around indefinitely — a leaked live agent was exactly the
     // defect the schedule adapter's resume cache had.
     void handle.agent
       .whenIdle()
-      .then(() => handle.dispose())
-      .catch(() => handle.dispose().catch(() => undefined));
+      .then(
+        () => finish(sessionId),
+        () => finish(sessionId),
+      )
+      .catch((error) =>
+        this.warn(`cron: could not record completion: ${String(error)}`),
+      )
+      .finally(() => handle.dispose().catch(() => undefined));
     return sessionId;
   }
 
@@ -254,18 +425,43 @@ export class CronService {
     if (this.running.has(id)) return task;
     this.running.add(id);
     try {
+      let recorded: CronTask = task;
       const sessionId = await this.spawnSession(
         task.prompt,
         `cron:${task.id}`,
-      );
-      const ranAt = this.now();
-      let recorded: CronTask = task;
-      await this.store.mutate((tasks) =>
-        tasks.map((entry) => {
-          if (entry.id !== id) return entry;
-          recorded = { ...entry, lastRunAt: ranAt, lastSessionId: sessionId };
-          return recorded;
-        }),
+        async (id) => {
+          const ranAt = this.now();
+          await this.store.mutate((tasks) =>
+            tasks.map((entry) => {
+              if (entry.id !== task.id) return entry;
+              recorded = {
+                ...entry,
+                lastRunAt: ranAt,
+                lastSessionId: id,
+                runs: [
+                  { sessionId: id, startedAt: ranAt },
+                  ...this.taskRuns(entry),
+                ],
+              };
+              return recorded;
+            }),
+          );
+        },
+        async (id) => {
+          const finishedAt = this.now();
+          await this.store.mutate((tasks) =>
+            tasks.map((entry) =>
+              entry.id !== task.id
+                ? entry
+                : {
+                    ...entry,
+                    runs: this.taskRuns(entry).map((run) =>
+                      run.sessionId === id ? { ...run, finishedAt } : run,
+                    ),
+                  },
+            ),
+          );
+        },
       );
       this.notify(recorded, sessionId);
       return recorded;
@@ -279,7 +475,11 @@ export class CronService {
     const hub = (
       this.ctx as Context & {
         amibaNotifications?: {
-          post(input: { title: string; body?: string; sessionId?: string }): void;
+          post(input: {
+            title: string;
+            body?: string;
+            sessionId?: string;
+          }): void;
         };
       }
     ).amibaNotifications;

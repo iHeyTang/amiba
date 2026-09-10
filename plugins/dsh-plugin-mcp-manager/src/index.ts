@@ -19,6 +19,11 @@ export const Config: z<Config> = z.object({
 });
 
 export type { ManagedMcpServer };
+export * from "./dependencies.js";
+export * from "./dependency-binding.js";
+export * from "./plugin-dependency.js";
+export * from "./access.js";
+export * from "./provider-connection.js";
 
 declare module "@deepseek-ai/cordis" {
   interface Context {

@@ -30,6 +30,15 @@ const viewSchema = z.object({
   updatedAt: z.number(),
   lastRunAt: z.number().optional(),
   lastSessionId: z.string().optional(),
+  runs: z
+    .array(
+      z.object({
+        sessionId: z.string(),
+        startedAt: z.number(),
+        finishedAt: z.number().optional(),
+      }),
+    )
+    .optional(),
   nextRunAt: z.number().nullable(),
 });
 const createInputSchema = z.object({
@@ -54,7 +63,8 @@ const stringCodec = {
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaCron: {
-      list(): Promise<RemoteResult<CronTaskView[]>>;
+      sessionIds(ids: string[]): Promise<RemoteResult<string[]>>;
+      list(sessionIds?: string[]): Promise<RemoteResult<CronTaskView[]>>;
       createTask(
         input: CronTaskCreateInput,
       ): Promise<RemoteResult<CronTaskView>>;
@@ -68,7 +78,10 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 
   interface TypertRemoteMap {
-    "amibaCron/list": () => Promise<RemoteResult<CronTaskView[]>>;
+    "amibaCron/sessionIds": (ids: string[]) => Promise<RemoteResult<string[]>>;
+    "amibaCron/list": (
+      sessionIds?: string[],
+    ) => Promise<RemoteResult<CronTaskView[]>>;
     "amibaCron/createTask": (
       input: CronTaskCreateInput,
     ) => Promise<RemoteResult<CronTaskView>>;
@@ -109,11 +122,46 @@ const viewResult = {
 export const AMIBA_CRON_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-cron",
   descriptors: [
-    descriptor("list", [], {
-      mode: "strict",
-      typeSymbol: "@amiba/cron#list",
-      schema: z.array(viewSchema),
-    }),
+    descriptor(
+      "sessionIds",
+      [
+        {
+          name: "ids",
+          wire: "ids",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "@amiba/cron#session-ids-input",
+            schema: z.array(z.string()).max(100),
+          },
+        },
+      ],
+      {
+        mode: "strict",
+        typeSymbol: "@amiba/cron#session-ids",
+        schema: z.array(z.string()),
+      },
+    ),
+    descriptor(
+      "list",
+      [
+        {
+          name: "sessionIds",
+          wire: "sessionIds",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "@amiba/cron#history-candidates",
+            schema: z.array(z.string()).max(10000).optional(),
+          },
+        },
+      ],
+      {
+        mode: "strict",
+        typeSymbol: "@amiba/cron#list",
+        schema: z.array(viewSchema),
+      },
+    ),
     descriptor(
       "createTask",
       [

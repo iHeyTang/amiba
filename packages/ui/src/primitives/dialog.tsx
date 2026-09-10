@@ -29,6 +29,18 @@ const DIALOG_SIZE_CLASS: Record<DialogContentSize, string> = {
   full: "max-w-5xl",
 };
 
+/** One motion contract for every modal-sized surface in the product. */
+export const DIALOG_MOTION_MS = 200;
+
+export const DIALOG_OVERLAY_MOTION_CLASS =
+  "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none";
+
+const DIALOG_CENTERED_POSITION_CLASS =
+  "fixed left-[50%] top-[50%] z-[var(--z-modal)] w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] text-popover-foreground outline-none";
+
+export const DIALOG_CONTENT_MOTION_CLASS =
+  "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:animate-none";
+
 interface DialogOverlayProps
   extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> {
   variant?: DialogOverlayVariant;
@@ -43,7 +55,8 @@ const DialogOverlay = React.forwardRef<
     data-dialog-overlay={variant}
     data-ui-overlay="dialog-overlay"
     className={cn(
-      "fixed inset-0 z-[var(--z-modal)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
+      "fixed inset-0 z-[var(--z-modal)]",
+      DIALOG_OVERLAY_MOTION_CLASS,
       variant === "transparent" ? "bg-transparent" : "bg-black/80",
       className,
     )}
@@ -99,8 +112,8 @@ const DialogContent = React.forwardRef<
         ref={ref}
         data-ui-overlay="dialog"
         className={cn(
-          "fixed left-[50%] top-[50%] z-[var(--z-modal)] w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] text-popover-foreground outline-none",
-          "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fill-mode-forwards data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:animate-none",
+          DIALOG_CENTERED_POSITION_CLASS,
+          DIALOG_CONTENT_MOTION_CLASS,
           appearance === "surface"
             ? "grid gap-4 rounded-2xl border border-border/60 bg-popover p-6 shadow-overlay"
             : "border-0 bg-transparent p-0 shadow-none",

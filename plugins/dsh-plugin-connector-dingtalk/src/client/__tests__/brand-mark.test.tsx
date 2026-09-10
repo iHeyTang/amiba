@@ -4,20 +4,25 @@ import { describe, expect, it } from "vitest";
 import { DingtalkMark } from "../brand-mark";
 
 describe("DingtalkMark", () => {
-  it("renders the official DingTalk app icon as an embedded, decorative image", () => {
+  it("renders a flat, decorative DingTalk vector without app-icon chrome", () => {
     const { container } = render(<DingtalkMark size={22} />);
-    const img = container.querySelector("img");
-    expect(img).not.toBeNull();
-    expect(img).toHaveAttribute("src", expect.stringMatching(/^data:image\/png;base64,/));
-    expect(img).toHaveAttribute("width", "22");
-    expect(img).toHaveAttribute("height", "22");
-    expect(img).toHaveAttribute("alt", "");
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg).toHaveAttribute("viewBox", "0 0 1024 1024");
+    expect(svg).toHaveAttribute("width", "22");
+    expect(svg).toHaveAttribute("height", "22");
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(svg).toHaveStyle({ color: "#1677ff" });
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(
+      container.querySelector("filter, linearGradient"),
+    ).not.toBeInTheDocument();
   });
 
   it("sizes to the given `size`, defaulting to 22", () => {
     const { container } = render(<DingtalkMark />);
-    const img = container.querySelector("img");
-    expect(img).toHaveAttribute("width", "22");
-    expect(img).toHaveAttribute("height", "22");
+    const svg = container.querySelector("svg");
+    expect(svg).toHaveAttribute("width", "22");
+    expect(svg).toHaveAttribute("height", "22");
   });
 });

@@ -9,7 +9,7 @@ import type {
   MessageChannelProvider,
 } from "@amiba/dsh-plugin-messaging-core";
 
-import { CapabilityUnavailableError, ConnectorCenter } from "./center.js";
+import { CapabilityUnavailableError, ConnectorCenter, type CapabilityApplier } from "./center.js";
 import { ConnectorStore, type StoredConnect } from "./store.js";
 import type {
   CapabilityDecl,
@@ -47,7 +47,11 @@ function fakeMessageCenter() {
       if (!input.agentPreset?.trim() && !input.sessionId?.trim())
         throw new Error("invalid_channel");
       return {
-        channel: { id: "channel-1", provider: input.provider, name: input.name },
+        channel: {
+          id: "channel-1",
+          provider: input.provider,
+          name: input.name,
+        },
         secret: "s3cret",
       };
     },
@@ -100,6 +104,7 @@ function fakeMessageCenter() {
     updateChannel,
     registerProvider,
     listConversations: vi.fn(async () => []),
+    listChannels: vi.fn(async () => []),
     unbindConversation: vi.fn(async () => true),
   };
 }
@@ -146,6 +151,8 @@ function fakeMcpManager() {
 const DEFAULT_CAPABILITIES: CapabilityDecl[] = [
   {
     kind: "mcp",
+      service: { id: "test.mcp", name: "Test MCP", version: "1", shareable: true },
+      identity: "fixture-account", tools: [{ name: "read", title: "Read" }],
     spec: {
       serverName: "conn-fake",
       transport: "stdio",
@@ -177,6 +184,7 @@ function fakeProvider(
     return runtime;
   });
   const provider: ConnectorProvider = {
+    messaging: { ownerPairing: true },
     id,
     name: "Fake Connector",
     description: "Fake connector for tests",
@@ -214,12 +222,16 @@ function fakeOnboardingProvider(id = "fake-onboard") {
  * the capability at all (e.g. a provider mid-migration, or one that will
  * never present natively).
  */
-function fakeApprovalProvider(options?: { withApproval?: boolean; id?: string }) {
+function fakeApprovalProvider(options?: {
+  withApproval?: boolean;
+  id?: string;
+}) {
   const withApproval = options?.withApproval !== false;
   const starts: ConnectorHandle[] = [];
-  const requestApproval = vi.fn(
-    async () => ({ outcome: "allowed-once" as const, by: "u1" }),
-  );
+  const requestApproval = vi.fn(async () => ({
+    outcome: "allowed-once" as const,
+    by: "u1",
+  }));
   const announceApprovalOutcome = vi.fn(async () => undefined);
   const runtimes: ConnectorRuntime[] = [];
   const validate = vi.fn(async () => undefined);
@@ -234,6 +246,7 @@ function fakeApprovalProvider(options?: { withApproval?: boolean; id?: string })
     return runtime;
   });
   const provider: ConnectorProvider = {
+    messaging: { ownerPairing: true },
     id: options?.id ?? "fake-approval",
     name: "Fake Approval Connector",
     description: "Fake connector for approval-bridge tests",
@@ -252,7 +265,9 @@ function fakeApprovalProvider(options?: { withApproval?: boolean; id?: string })
   };
 }
 
-function fakeApprovalPrompt(overrides?: Partial<ApprovalPrompt>): ApprovalPrompt {
+function fakeApprovalPrompt(
+  overrides?: Partial<ApprovalPrompt>,
+): ApprovalPrompt {
   return {
     approvalId: "approval-1",
     seq: 1,
@@ -299,10 +314,7 @@ function fakeAppliers(
   mcp: ReturnType<typeof fakeMcpManager>,
   withMcpManager: boolean,
 ) {
-  const appliers = new Map<
-    string,
-    { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
-  >();
+  const appliers = new Map<string, CapabilityApplier>();
   appliers.set("mcp", {
     apply: async (_connect, decl) => {
       if (decl.kind !== "mcp") throw new Error("unexpected_kind");
@@ -347,7 +359,16 @@ async function harness(options?: {
     appliers,
     options?.now,
   );
-  return { root, store, messageCenter, credentials, mcp, appliers, ctx, center };
+  return {
+    root,
+    store,
+    messageCenter,
+    credentials,
+    mcp,
+    appliers,
+    ctx,
+    center,
+  };
 }
 
 describe("fakeCredentials seam parity", () => {
@@ -387,6 +408,44 @@ describe("fakeCredentials seam parity", () => {
   });
 });
 
+describe("provider-scoped private account access", () => {
+  async function accountHarness() {
+    const h = await harness();
+    const off = h.center.registerProvider(fakeProvider([], "fake").provider);
+    h.center.registerProvider(fakeProvider([], "other").provider);
+    const a = await h.center.createConnect({ provider: "fake", name: "A", config: { token: "private-app" }, agentPreset: "default" });
+    const b = await h.center.createConnect({ provider: "other", name: "B", config: {}, agentPreset: "default" });
+    return { ...h, a, b, off, accounts: h.center.accounts("fake") };
+  }
+  it("enforces provider scope and excludes private state from public projections", async () => {
+    const h = await accountHarness();
+    await h.accounts.run(h.a.id, async (account) => account.updateState(() => ({ token: "personal-secret" })));
+    expect((await h.accounts.list()).map((row) => row.id)).toEqual([h.a.id]);
+    await expect(h.accounts.run(h.b.id, async () => "forbidden")).rejects.toThrow("connection_unavailable");
+    expect(JSON.stringify(await h.center.getConnectDetails(h.a.id))).not.toContain("personal-secret");
+    expect(JSON.stringify(await h.center.listConnects())).not.toContain("private-app");
+    await h.accounts.run(h.a.id, async ({ config, state }) => { expect(config).toEqual({ token: "private-app" }); expect(state).toEqual({ token: "personal-secret" }); });
+  });
+  it("serializes private state updates without losing the app grant", async () => {
+    const h = await accountHarness();
+    await Promise.all([1, 2, 3].map(() => h.accounts.run(h.a.id, async (account) => account.updateState((current) => ({ n: ((current as { n: number } | undefined)?.n ?? 0) + 1 })))));
+    await h.accounts.run(h.a.id, async ({ state, config }) => { expect(state).toEqual({ n: 3 }); expect(config).toEqual({ token: "private-app" }); });
+  });
+  it("disabling an account aborts requests and rejects stale results", async () => {
+    const h = await accountHarness(), gate = deferred<string>(); let signal: AbortSignal | undefined;
+    const result = h.accounts.run(h.a.id, async (account) => { signal = account.signal; return gate.promise; });
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    await h.center.setEnabled(h.a.id, false); expect(signal?.aborted).toBe(true); gate.resolve("stale"); await expect(result).rejects.toThrow();
+    await expect(h.accounts.run(h.a.id, async () => "no")).rejects.toThrow("connection_unavailable");
+  });
+  it("unloading a provider cancels resource operations", async () => {
+    const h = await accountHarness(), gate = deferred<string>(); let signal: AbortSignal | undefined;
+    const result = h.accounts.run(h.a.id, async (account) => { signal = account.signal; return gate.promise; });
+    await vi.waitFor(() => expect(signal).toBeDefined()); h.off();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true)); gate.resolve("stale"); await expect(result).rejects.toThrow();
+  });
+});
+
 describe("ConnectorCenter", () => {
   it("registers a provider and exposes a messaging bridge provider", async () => {
     const { center, messageCenter } = await harness();
@@ -408,6 +467,7 @@ describe("ConnectorCenter", () => {
         name: "Fake Connector",
         description: "Fake connector for tests",
         supportsOnboarding: false,
+        messaging: { ownerPairing: true },
       },
     ]);
 
@@ -436,7 +496,8 @@ describe("ConnectorCenter", () => {
     });
 
     expect(provider.validate).toHaveBeenCalledWith(config);
-    expect(view.channelId).toBe("channel-1");
+    expect(view).not.toHaveProperty("channelId");
+    expect((await store.list())[0]?.channelId).toBe("channel-1");
     expect(view.status).toEqual({ state: "connecting" });
 
     const grant = credentials.store.get(`amiba-connector-core/${view.id}`);
@@ -668,7 +729,9 @@ describe("ConnectorCenter", () => {
     expect(removed).toBe(true);
     expect(runtimes[1]!.stop).toHaveBeenCalledTimes(1);
     expect(mcp.disposers[1]).toHaveBeenCalledTimes(1);
-    expect(credentials.store.has(`amiba-connector-core/${view.id}`)).toBe(false);
+    expect(credentials.store.has(`amiba-connector-core/${view.id}`)).toBe(
+      false,
+    );
     expect(messageCenter.removeChannelCalls).toContain("channel-1");
     expect(await center.listConnects()).toHaveLength(0);
   });
@@ -1412,12 +1475,18 @@ describe("ConnectorCenter status lattice (off/degraded)", () => {
     let available = false;
     const appliers = new Map<
       string,
-      { apply: (connect: StoredConnect, decl: CapabilityDecl) => Promise<() => void> }
+      {
+        apply: (
+          connect: StoredConnect,
+          decl: CapabilityDecl,
+        ) => Promise<() => void>;
+      }
     >();
     appliers.set("mcp", {
       apply: async (_connect, decl) => {
         if (decl.kind !== "mcp") throw new Error("unexpected_kind");
-        if (!available) throw new CapabilityUnavailableError("mcp_manager_unavailable");
+        if (!available)
+          throw new CapabilityUnavailableError("mcp_manager_unavailable");
         return mcp.registerManagedServer(decl.spec);
       },
     });
@@ -1774,13 +1843,13 @@ describe("approval bridge", () => {
     expect(reply).toEqual({ outcome: "allowed-once", by: "u1" });
     // Everything but `canAnswer` travels through untouched; `canAnswer` is
     // deliberately replaced with the owners-narrowed wrapper below.
-    expect(runtimes[0]!.requestApproval).toHaveBeenCalledWith(
-      conversation,
-      { ...request, canAnswer: expect.any(Function) },
-    );
-    expect(wrappedPrompt(runtimes[0]!.requestApproval as never).canAnswer).not.toBe(
-      request.canAnswer,
-    );
+    expect(runtimes[0]!.requestApproval).toHaveBeenCalledWith(conversation, {
+      ...request,
+      canAnswer: expect.any(Function),
+    });
+    expect(
+      wrappedPrompt(runtimes[0]!.requestApproval as never).canAnswer,
+    ).not.toBe(request.canAnswer);
   });
 
   it("bridge requestApproval resolves null when the runtime never implemented the capability", async () => {
@@ -1957,146 +2026,6 @@ describe("approval bridge", () => {
   });
 });
 
-describe("approval config plumbing", () => {
-  it("createConnect forwards approval into messageCenter.createChannel and the stored/view record", async () => {
-    const { center, messageCenter, store } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-    const approval = { mode: "wait" as const, timeoutMs: 600_000 };
-
-    const view = await center.createConnect({
-      provider: "fake",
-      name: "Waits forever",
-      config: {},
-      agentPreset: "restricted",
-      approval,
-    });
-
-    expect(messageCenter.createChannel).toHaveBeenCalledWith(
-      expect.objectContaining({ approval }),
-    );
-    expect(view.approval).toEqual(approval);
-    const row = (await store.list()).find((item) => item.id === view.id);
-    expect(row?.approval).toEqual(approval);
-  });
-
-  it("createConnect omits approval from messageCenter.createChannel and the view when none is given", async () => {
-    const { center, messageCenter } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-
-    const view = await center.createConnect({
-      provider: "fake",
-      name: "Default policy",
-      config: {},
-      agentPreset: "restricted",
-    });
-
-    const call = messageCenter.createChannel.mock.calls[0]?.[0] as
-      | Record<string, unknown>
-      | undefined;
-    expect(call?.approval).toBeUndefined();
-    expect(view.approval).toBeUndefined();
-  });
-
-  it("setApproval updates both the bound channel and the connect's own record", async () => {
-    const { center, messageCenter, store } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-    const view = await center.createConnect({
-      provider: "fake",
-      name: "Adjustable",
-      config: {},
-      agentPreset: "restricted",
-    });
-    const approval = { mode: "timeout" as const, timeoutMs: 120_000 };
-
-    const updated = await center.setApproval(view.id, approval);
-
-    expect(messageCenter.updateChannel).toHaveBeenCalledWith("channel-1", {
-      approval,
-    });
-    expect(updated.approval).toEqual(approval);
-    const row = (await store.list()).find((item) => item.id === view.id);
-    expect(row?.approval).toEqual(approval);
-  });
-
-  it("setApproval rolls the channel back to its previous policy when the connect store write fails", async () => {
-    const { center, messageCenter, store } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-    const original = { mode: "wait" as const, timeoutMs: 600_000 };
-    const view = await center.createConnect({
-      provider: "fake",
-      name: "Rollback",
-      config: {},
-      agentPreset: "restricted",
-      approval: original,
-    });
-    messageCenter.updateChannel.mockClear();
-    const update = vi
-      .spyOn(store, "update")
-      .mockRejectedValueOnce(new Error("disk_full"));
-
-    await expect(
-      center.setApproval(view.id, { mode: "timeout", timeoutMs: 120_000 }),
-    ).rejects.toThrow("disk_full");
-
-    expect(messageCenter.updateChannel).toHaveBeenNthCalledWith(1, "channel-1", {
-      approval: { mode: "timeout", timeoutMs: 120_000 },
-    });
-    expect(messageCenter.updateChannel).toHaveBeenNthCalledWith(2, "channel-1", {
-      approval: original,
-    });
-    update.mockRestore();
-    const row = (await store.list()).find((item) => item.id === view.id);
-    expect(row?.approval).toEqual(original);
-  });
-
-  it("setApproval clears the channel policy on rollback when the connect had none", async () => {
-    const { center, messageCenter, store } = await harness();
-    const { provider } = fakeProvider();
-    center.registerProvider(provider);
-    const view = await center.createConnect({
-      provider: "fake",
-      name: "Rollback default",
-      config: {},
-      agentPreset: "restricted",
-    });
-    messageCenter.updateChannel.mockClear();
-    const update = vi
-      .spyOn(store, "update")
-      .mockRejectedValueOnce(new Error("disk_full"));
-
-    await expect(
-      center.setApproval(view.id, { mode: "timeout", timeoutMs: 120_000 }),
-    ).rejects.toThrow("disk_full");
-
-    expect(messageCenter.updateChannel).toHaveBeenLastCalledWith("channel-1", {
-      approval: null,
-    });
-    update.mockRestore();
-  });
-
-  it("setApproval throws connect_not_found for an unknown id", async () => {
-    const { center } = await harness();
-
-    await expect(
-      center.setApproval("no-such-connect", {
-        mode: "timeout",
-        timeoutMs: 60_000,
-      }),
-    ).rejects.toThrow("connect_not_found");
-  });
-});
-
-/**
- * plan.md §2: a native approval card is answerable by exactly the people who
- * may drive the connect through text — messaging-core's channel rule
- * (`allowedSenders`, carried on the prompt's own `canAnswer`) AND this
- * layer's `routeInbound` rule (`owners` / `pairing`), both re-read at click
- * time rather than snapshotted when the card was sent.
- */
 describe("approval bridge sender gate", () => {
   async function liveConnect(options?: { owners?: string[] }) {
     const { center, messageCenter } = await harness();
@@ -2201,54 +2130,292 @@ describe("approval bridge sender gate", () => {
   });
 });
 
-describe("onboarding approval-wait setting", () => {
-  it("forwards the scan flow's approval choice onto the connect and its channel", async () => {
-    const { center, messageCenter } = await harness();
-    const { provider, gate } = fakeOnboardingProvider();
-    center.registerProvider(provider);
-    const approval = { mode: "wait" as const, timeoutMs: 600_000 };
-
-    const view = center.beginOnboarding({
-      provider: "fake-onboard",
-      name: "Scanned",
+describe("connection ownership and optional messaging", () => {
+  it("runs a tool-only provider without creating a message bridge or channel", async () => {
+    const { center, messageCenter, store, credentials } = await harness();
+    const fake = fakeProvider([]);
+    fake.start.mockResolvedValueOnce({ stop: vi.fn(async () => undefined) });
+    center.registerProvider({ ...fake.provider, messaging: undefined });
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Tools",
       agentPreset: "restricted",
-      approval,
+      config: { token: "private" },
     });
-
-    gate.resolve({ config: { token: "xyz" } });
-    await vi.waitFor(() => {
-      expect(center.pollOnboarding(view.sessionId).state).toBe("completed");
+    expect(messageCenter.registerProvider).not.toHaveBeenCalled();
+    expect(messageCenter.createChannel).not.toHaveBeenCalled();
+    expect((await store.list())[0]).toMatchObject({ pairing: false });
+    expect((await store.list())[0]).not.toHaveProperty("channelId");
+    expect(credentials.store.get(`amiba-connector-core/${connect.id}`)).toEqual(
+      { kind: "grant", payload: { config: { token: "private" } } },
+    );
+    expect(await center.getConnectDetails(connect.id)).toEqual({
+      connect,
+      settings: {},
     });
-
-    // Both halves of a connect carry it: the connect row (read back through
-    // the view) and the messaging channel the connect is bound to.
-    expect(center.pollOnboarding(view.sessionId).connect?.approval).toEqual(
-      approval,
-    );
-    expect(messageCenter.createChannel).toHaveBeenCalledWith(
-      expect.objectContaining({ approval }),
-    );
+    await center.setEnabled(connect.id, false);
+    await center.removeConnect(connect.id);
+    expect(messageCenter.removeChannel).not.toHaveBeenCalled();
   });
 
-  it("leaves the default in force when the scan flow chooses no approval policy", async () => {
+  it("lets authenticated providers opt out of first-sender ownership without bypassing lifecycle gates", async () => {
     const { center, messageCenter } = await harness();
-    const { provider, gate } = fakeOnboardingProvider();
-    center.registerProvider(provider);
+    const fake = fakeProvider([]);
+    const dispose = center.registerProvider({
+      ...fake.provider,
+      messaging: { ownerPairing: false },
+    });
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Custom",
+      agentPreset: "restricted",
+      config: {},
+    });
+    const handle = fake.starts[0]!;
+    const envelope = {
+      id: "1",
+      text: "hello",
+      conversation: { key: "thread", kind: "p2p" as const },
+    };
+    await expect(handle.onInbound(envelope)).resolves.toMatchObject({
+      accepted: true,
+    });
+    expect(connect.pairing).toBe(false);
+    await expect(center.setOwners(connect.id, ["alice"])).rejects.toThrow(
+      "owner_pairing_unsupported",
+    );
+    dispose();
+    await handle.onInbound({ ...envelope, id: "2" });
+    expect(messageCenter.acceptInbound).toHaveBeenCalledTimes(1);
+  });
 
-    const view = center.beginOnboarding({
-      provider: "fake-onboard",
-      name: "Scanned",
+  it("inherits approval policy and does not expose the internal channel id or a second policy mirror", async () => {
+    const { center, messageCenter, store } = await harness();
+    center.registerProvider(fakeProvider([]).provider);
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Bot",
+      agentPreset: "restricted",
+      config: {},
+    });
+    expect(connect).not.toHaveProperty("channelId");
+    expect(connect).not.toHaveProperty("approval");
+    expect((await store.list())[0]).not.toHaveProperty("approval");
+    expect(messageCenter.createChannel).toHaveBeenCalledWith({
+      provider: "connector-fake",
+      name: "Bot",
       agentPreset: "restricted",
     });
+  });
 
-    gate.resolve({ config: { token: "xyz" } });
-    await vi.waitFor(() => {
-      expect(center.pollOnboarding(view.sessionId).state).toBe("completed");
+  it("pauses and resumes the bound delivery queue together with the connection", async () => {
+    const { center, messageCenter } = await harness();
+    center.registerProvider(fakeProvider([]).provider);
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Bot",
+      agentPreset: "restricted",
+      config: {},
     });
-
-    expect(center.pollOnboarding(view.sessionId).connect?.approval).toBeUndefined();
-    expect(messageCenter.createChannel).toHaveBeenCalledWith(
-      expect.not.objectContaining({ approval: expect.anything() }),
+    await center.setEnabled(connect.id, false);
+    expect(messageCenter.updateChannel).toHaveBeenLastCalledWith("channel-1", {
+      enabled: false,
+    });
+    await center.setEnabled(connect.id, true);
+    expect(messageCenter.updateChannel).toHaveBeenLastCalledWith("channel-1", {
+      enabled: true,
+    });
+    messageCenter.updateChannel.mockRejectedValueOnce(new Error("disk_full"));
+    await expect(center.setEnabled(connect.id, false)).rejects.toThrow(
+      "disk_full",
     );
+    expect((await center.listConnects())[0]?.enabled).toBe(true);
+  });
+
+  it("updates private configuration without synthesizing undefined credential fields", async () => {
+    const { center, credentials } = await harness();
+    const fake = fakeProvider([]);
+    fake.provider.configure = (config, patch) => ({ ...(config as object), ...(patch as object) });
+    center.registerProvider(fake.provider);
+    const connect = await center.createConnect({ provider: "fake", name: "Work", agentPreset: "standard", config: { token: "before" } });
+    const modify = credentials.modifyRecord.getMockImplementation()!;
+    credentials.modifyRecord.mockImplementation(async (key, mutate) => modify(key, async current => {
+      const next = await mutate(current);
+      JSON.stringify(next, (_key, value) => {
+        if (value === undefined) throw new Error("non_json_credential_value");
+        return value;
+      });
+      return next;
+    }));
+    await expect(center.updateConnect(connect.id, { settings: { token: "after" } })).resolves.toMatchObject({ id: connect.id });
+    expect(credentials.store.get(`amiba-connector-core/${connect.id}`)?.payload).toEqual({ config: { token: "after" }, channelSecret: "s3cret" });
+    await center.stop();
+  });
+
+  it("shows capability usage while disabled and cleans approvals only when deleting the connection", async () => {
+    const { center, appliers, store, credentials } = await harness();
+    const removeConnect = vi.fn(async () => {});
+    const describeConnect = vi.fn(async () => [{ name: "Knowledge", capabilities: ["Search documents"] }]);
+    appliers.set("mcp", { apply: vi.fn(async () => () => {}), removeConnect, describeConnect });
+    center.registerProvider(fakeProvider().provider);
+    const connect = await center.createConnect({ provider: "fake", name: "Work", agentPreset: "standard", config: {} });
+    await center.setEnabled(connect.id, false);
+    expect(removeConnect).not.toHaveBeenCalled();
+    expect(await center.getConnectDetails(connect.id)).toMatchObject({ capabilityUses: [{ name: "Knowledge", capabilities: ["Search documents"] }] });
+    removeConnect.mockRejectedValueOnce(new Error("approval_store_unavailable"));
+    await expect(center.removeConnect(connect.id)).rejects.toThrow("approval_store_unavailable");
+    expect((await store.list()).map(row => row.id)).toContain(connect.id);
+    expect(credentials.deleteRecord).not.toHaveBeenCalled();
+    await expect(center.removeConnect(connect.id)).resolves.toBe(true);
+    expect(removeConnect).toHaveBeenLastCalledWith(expect.objectContaining({ id: connect.id }));
+    expect(await store.list()).toEqual([]);
+    await center.stop();
+  });
+
+  it("renames and changes the default preset without restarting listeners or capability consumers", async () => {
+    const { center, appliers, store } = await harness();
+    const updateMetadata = vi.fn(async () => {});
+    const dispose = vi.fn(async () => {});
+    appliers.set("mcp", { apply: vi.fn(async () => Object.assign(dispose, { updateMetadata })) });
+    const fake = fakeProvider();
+    center.registerProvider(fake.provider);
+    const connect = await center.createConnect({ provider: "fake", name: "Before", agentPreset: "standard", config: {} });
+    await center.updateConnect(connect.id, { name: "After", agentPreset: "code" });
+    expect(fake.starts).toHaveLength(1);
+    expect(fake.runtimes[0]!.stop).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(updateMetadata).toHaveBeenCalledWith(expect.objectContaining({ name: "After", agentPreset: "code" }));
+    updateMetadata.mockRejectedValueOnce(new Error("rename_failed"));
+    await expect(center.updateConnect(connect.id, { name: "Failed" })).rejects.toThrow("rename_failed");
+    expect((await store.list())[0]?.name).toBe("After");
+    expect(fake.starts).toHaveLength(1);
+    expect(dispose).not.toHaveBeenCalled();
+    await center.stop();
+  });
+
+  it("projects only provider-selected settings and commits validated edits", async () => {
+    const { center, messageCenter, credentials } = await harness();
+    const fake = fakeProvider([]);
+    fake.provider.settings = (config) => ({
+      label: (config as { label: string }).label,
+    });
+    fake.provider.configure = (config, patch) => ({
+      ...(config as object),
+      ...patch,
+    });
+    center.registerProvider(fake.provider);
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Bot",
+      agentPreset: "restricted",
+      config: { label: "before", token: "private" },
+    });
+    const listChannels = vi.fn(async () => [
+      {
+        id: "channel-1",
+        delivery: { pendingInbound: 1, queuedOutbound: 2, failedOutbound: 0 },
+      },
+    ]);
+    Object.assign(messageCenter, { listChannels });
+    const details = await center.getConnectDetails(connect.id);
+    expect(details.settings).toEqual({ label: "before" });
+    expect(JSON.stringify(details)).not.toContain("private");
+    expect(details.messaging?.delivery.queuedOutbound).toBe(2);
+    const updated = await center.updateConnect(connect.id, {
+      name: "Renamed",
+      agentPreset: "full",
+      settings: { label: "after" },
+    });
+    expect(updated).toMatchObject({ name: "Renamed", agentPreset: "full" });
+    expect(fake.validate).toHaveBeenLastCalledWith({
+      label: "after",
+      token: "private",
+    });
+    expect(fake.starts.at(-1)?.config).toEqual({
+      label: "after",
+      token: "private",
+    });
+    expect(credentials.store.size).toBe(1);
+    expect(messageCenter.updateChannel).toHaveBeenLastCalledWith("channel-1", {
+      name: "Renamed",
+      agentPreset: "full",
+    });
+  });
+
+  it("rejects invalid settings before stopping and rolls a failed restart back", async () => {
+    const { center, store } = await harness();
+    const fake = fakeProvider([]);
+    fake.provider.configure = (config, patch) => ({
+      ...(config as object),
+      ...patch,
+    });
+    center.registerProvider(fake.provider);
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Bot",
+      agentPreset: "restricted",
+      config: { token: "old" },
+    });
+    fake.validate.mockRejectedValueOnce(new Error("invalid_config"));
+    await expect(
+      center.updateConnect(connect.id, { settings: { token: "bad" } }),
+    ).rejects.toThrow("invalid_config");
+    expect(fake.runtimes[0]!.stop).not.toHaveBeenCalled();
+    fake.start.mockRejectedValueOnce(new Error("start_failed"));
+    await expect(
+      center.updateConnect(connect.id, {
+        name: "Rejected",
+        settings: { token: "new" },
+      }),
+    ).rejects.toThrow("start_failed");
+    expect((await store.list())[0]?.name).toBe("Bot");
+    expect(fake.starts.at(-1)?.config).toEqual({ token: "old" });
+    expect((await center.listConnects())[0]?.status.state).not.toBe("error");
+  });
+
+  it("retires old inbound and status callbacks when an account restarts", async () => {
+    const { center, messageCenter } = await harness();
+    const fake = fakeProvider([]);
+    fake.provider.configure = (_config, patch) => patch;
+    center.registerProvider({ ...fake.provider, messaging: { ownerPairing: false } });
+    const connect = await center.createConnect({ provider: "fake", name: "Bot", agentPreset: "restricted", config: {} });
+    const oldHandle = fake.starts[0]!;
+    await center.updateConnect(connect.id, { settings: { token: "new-credential" } });
+    const envelope = { id: "late", text: "hello", conversation: { key: "thread", kind: "p2p" as const } };
+    await oldHandle.onInbound(envelope);
+    oldHandle.setStatus({ state: "error", detail: "stale" });
+    expect(messageCenter.acceptInbound).not.toHaveBeenCalled();
+    expect((await center.listConnects())[0]?.status.state).toBe("connecting");
+    await fake.starts.at(-1)!.onInbound(envelope);
+    expect(messageCenter.acceptInbound).toHaveBeenCalledOnce();
+  });
+
+  it("serializes edits with removal instead of resurrecting a removed account", async () => {
+    const { center, store, credentials } = await harness();
+    const fake = fakeProvider([]);
+    fake.provider.configure = (config, patch) => ({
+      ...(config as object),
+      ...patch,
+    });
+    center.registerProvider(fake.provider);
+    const connect = await center.createConnect({
+      provider: "fake",
+      name: "Bot",
+      agentPreset: "restricted",
+      config: {},
+    });
+    const gate = deferred<void>();
+    fake.validate.mockImplementationOnce(() =>
+      gate.promise.then(() => undefined),
+    );
+    const update = center.updateConnect(connect.id, {
+      settings: { label: "new" },
+    });
+    const remove = center.removeConnect(connect.id);
+    gate.resolve();
+    await Promise.all([update, remove]);
+    expect(await store.list()).toEqual([]);
+    expect(credentials.store.size).toBe(0);
+    expect(fake.runtimes.at(-1)!.stop).toHaveBeenCalledOnce();
   });
 });

@@ -1,3 +1,5 @@
+import { ChatMarkdown } from "@amiba/markdown";
+import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import { defaultKeymap } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
@@ -197,7 +199,7 @@ interface WorkspacePaneTab {
   pinned: boolean;
 }
 
-type WorkbenchMode = "files" | "checkpoints" | "preview";
+type WorkbenchMode = "files" | "checkpoints" | "preview" | `extension:${string}`;
 
 /**
  * Everything the workbench remembers is owned by ONE session: its tabs, whether
@@ -4282,7 +4284,11 @@ function WorkspaceRecoveryPointsView() {
   );
 }
 
-export function WorkspacePane({ visible = true }: { visible?: boolean }) {
+export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = () => false }: {
+  visible?: boolean;
+  renderPanel?: (owner: WorkbenchPanelOwner) => React.ReactNode;
+  inspectToolCall?: (callId: string) => boolean;
+}) {
   const pane = useWorkspacePane();
   const { t } = useT();
   // The view mode and the file-tree fold are part of the session's workbench
@@ -4291,6 +4297,11 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
   // to show a PREVIEW (a browser tab, a diff, a file the agent touched), and a
   // directory tree unfolding beside it on every open reads as clutter.
   const { mode, setMode, fileTreeOpen, setFileTreeOpen } = pane;
+  const openPanel = useCallback((id: string) => {
+    pane.setMode(`extension:${id}`);
+    pane.setOpen(true);
+  }, [pane.setMode, pane.setOpen]);
+  const panelOwner = { activePanel: mode.startsWith("extension:") ? mode.slice(10) : null, openPanel, inspectToolCall, renderMarkdown: (text: string) => <ChatMarkdown>{text}</ChatMarkdown> };
   const active = pane.activeTab;
   const browserTabs = pane.tabs
     .map((tab) => tab.resource)
@@ -4443,6 +4454,7 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
               // as content to centre around.
               className="amiba-tab-rail flex min-w-0 flex-1 self-stretch items-center gap-1.5 overflow-x-auto"
             >
+              {renderPanel?.({ ...panelOwner, placement: "tab" })}
               {pane.sessionId
                 ? [
                     {
@@ -4507,7 +4519,7 @@ export function WorkspacePane({ visible = true }: { visible?: boolean }) {
           <div
             className={cn("h-full min-h-0", activeBrowserTabId && "invisible")}
           >
-            {mode === "files" && pane.files ? (
+            {mode.startsWith("extension:") ? renderPanel?.({ ...panelOwner, placement: "content" }) : mode === "files" && pane.files ? (
               <WorkspaceFileWorkspace
                 resource={null}
                 sessionId={pane.sessionId}

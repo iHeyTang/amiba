@@ -1,0 +1,26 @@
+export const copy = {
+  "zh-CN": {
+    "browser.image.loading": "正在加载截图…",
+    "browser.image.error": "无法加载截图",
+    "amiba_browser_open": "打开网页",
+    "amiba_browser_snapshot": "读取页面",
+    "amiba_browser_click": "点击元素",
+    "amiba_browser_type": "输入文本",
+    "amiba_browser_press": "按下按键",
+    "amiba_browser_scroll": "滚动页面",
+    "amiba_browser_screenshot": "截取页面",
+    "amiba_browser_console": "查看控制台",
+  },
+  en: {
+    "browser.image.loading": "Loading screenshot…",
+    "browser.image.error": "Could not load screenshot",
+    "amiba_browser_open": "Open page",
+    "amiba_browser_snapshot": "Read page",
+    "amiba_browser_click": "Click element",
+    "amiba_browser_type": "Enter text",
+    "amiba_browser_press": "Press key",
+    "amiba_browser_scroll": "Scroll page",
+    "amiba_browser_screenshot": "Capture page",
+    "amiba_browser_console": "Read console",
+  },
+};

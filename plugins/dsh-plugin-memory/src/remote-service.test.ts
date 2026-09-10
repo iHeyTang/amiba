@@ -1,60 +1,25 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import { describe, expect, it, vi } from "vitest";
+import { applyMemoryRemote } from "./remote-service.js";
+import { AMIBA_MEMORY_REMOTE } from "./remote.js";
+import { initialMemosStatus, type MemosStatus } from "./memos-status.js";
 
-import { AmibaMemoryStore } from "./memory-store.js";
-import { resolveMemoryPresets } from "./remote-service.js";
-
-async function store() {
-  const root = await mkdtemp(path.join(tmpdir(), "amiba-memory-"));
-  return new AmibaMemoryStore(root);
-}
-
-describe("resolveMemoryPresets", () => {
-  it("prefers the live engine roster, filtering broken presets", async () => {
-    const list = vi.fn().mockResolvedValue([
-      { id: "standard" },
-      { id: "researcher" },
-      { id: "ghost", broken: "invalid composition" },
-    ]);
-    const ctx = { agentPresets: { list } } as unknown as Context;
-    expect(await resolveMemoryPresets(ctx, await store())).toEqual([
-      "standard",
-      "researcher",
-    ]);
-  });
-
-  it("falls back to stored preset ids plus 'standard' when no engine roster is composed", async () => {
-    const ctx = {} as Context;
-    const memoryStore = await store();
-    await memoryStore.store({
-      preset: "researcher",
-      target: "memory",
-      text: "Use primary sources.",
-    });
-    expect(await resolveMemoryPresets(ctx, memoryStore)).toEqual([
-      "researcher",
-      "standard",
-    ]);
-  });
-
-  it("falls back when the engine roster read throws", async () => {
-    const list = vi.fn().mockRejectedValue(new Error("unreachable"));
-    const ctx = { agentPresets: { list } } as unknown as Context;
-    expect(await resolveMemoryPresets(ctx, await store())).toEqual([
-      "standard",
-    ]);
-  });
-
-  it("falls back when the engine roster reports no healthy presets", async () => {
-    const list = vi
-      .fn()
-      .mockResolvedValue([{ id: "ghost", broken: "invalid composition" }]);
-    const ctx = { agentPresets: { list } } as unknown as Context;
-    expect(await resolveMemoryPresets(ctx, await store())).toEqual([
-      "standard",
+describe("MemOS status remote", () => {
+  it("publishes only the current engine status and no archive methods", () => {
+    const provide = vi.fn();
+    const ctx = { reflect: { provide } } as unknown as Context;
+    const status = initialMemosStatus("/memory-test/memos");
+    applyMemoryRemote(ctx, () => ({ ...status }));
+    expect(provide).toHaveBeenCalledOnce();
+    expect(provide.mock.calls[0]?.[0]).toBe("amibaMemory");
+    const service = provide.mock.calls[0]?.[1] as { status(): MemosStatus };
+    expect(service.status()).toEqual(status);
+    status.state = "ready";
+    expect(service.status().state).toBe("ready");
+    for (const retired of ["list", "reset", "presets"])
+      expect(retired in service).toBe(false);
+    expect(AMIBA_MEMORY_REMOTE.descriptors.map((item) => item.method)).toEqual([
+      "status",
     ]);
   });
 });

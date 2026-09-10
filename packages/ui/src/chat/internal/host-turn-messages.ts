@@ -71,6 +71,7 @@ export function withHostUserMessage(
   message: {
     uiId: string;
     content: string;
+    sentAt?: number;
     origin?: ChatMessage["origin"];
     notice?: ChatMessage["notice"];
   },
@@ -84,6 +85,7 @@ export function withHostUserMessage(
       uiId: message.uiId,
       role: "user",
       content: message.content,
+      ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
       ...(message.origin ? { origin: message.origin } : {}),
       ...(message.notice ? { notice: message.notice } : {}),
     },

@@ -27,7 +27,7 @@ export const agentPresetI18n: PluginCatalogOverlay = {
     "options.agents.displayName": "Display name",
     "options.agents.displayNamePlaceholder": "For example: Researcher",
     "options.agents.noDescription": "No description",
-    "options.agents.customEmptyTitle": "No independent agent presets",
+    "options.agents.customEmptyTitle": "No other agent presets",
     "options.agents.customEmptyDescription":
       "The default preset above carries the standard configuration. Create an agent here when it needs its own behavior, skills, tools, or memory.",
     "options.agents.cloneDefault": "Amiba",
@@ -62,7 +62,7 @@ export const agentPresetI18n: PluginCatalogOverlay = {
     "options.agents.displayName": "显示名称",
     "options.agents.displayNamePlaceholder": "例如：资料研究员",
     "options.agents.noDescription": "未添加描述",
-    "options.agents.customEmptyTitle": "还没有独立智能体预设",
+    "options.agents.customEmptyTitle": "暂无其他智能体预设",
     "options.agents.customEmptyDescription":
       "上方的默认预设承载默认配置；在这里新建需要独立行为、技能、工具或记忆的智能体。",
     "options.agents.cloneDefault": "Amiba",

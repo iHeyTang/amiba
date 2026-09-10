@@ -16,20 +16,20 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   };
 }
 
-if (!HTMLElement.prototype.scrollIntoView) {
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = function () {};
 }
 
 // Radix Select/Dialog use pointer-capture APIs that jsdom does not implement.
-if (!HTMLElement.prototype.hasPointerCapture) {
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.hasPointerCapture) {
   HTMLElement.prototype.hasPointerCapture = function () {
     return false;
   };
 }
-if (!HTMLElement.prototype.setPointerCapture) {
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.setPointerCapture) {
   HTMLElement.prototype.setPointerCapture = function () {};
 }
-if (!HTMLElement.prototype.releasePointerCapture) {
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.releasePointerCapture) {
   HTMLElement.prototype.releasePointerCapture = function () {};
 }
 

@@ -1,0 +1,87 @@
+.amiba-jobs { height: 100%; overflow: auto; color: hsl(var(--foreground)); font-size: 12px; }
+.amiba-jobs button, .amiba-jobs-tab { font: inherit; color: inherit; cursor: pointer; }
+.amiba-jobs button:focus-visible, .amiba-jobs-tab:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }
+.amiba-jobs button:disabled { opacity: .5; cursor: default; }
+.amiba-jobs-tab { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.amiba-jobs-tab:hover, .amiba-jobs-tab[aria-selected="true"] { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.amiba-jobs-tab span { min-width: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.amiba-jobs-panel { padding: 10px 12px; }
+.amiba-jobs-group + .amiba-jobs-group { margin-top: 12px; }
+.amiba-jobs-group h3 { margin:0 0 2px; padding:0; font-size:12px; line-height:20px; font-weight:500; }
+.amiba-jobs-count { color:hsl(var(--muted-foreground)); font-size:11px; font-weight:400; font-variant-numeric:tabular-nums; }
+.amiba-jobs-empty-state { min-height: 260px; padding: 52px 24px 32px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.amiba-jobs-empty-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; background: hsl(var(--muted) / .65); color: hsl(var(--muted-foreground)); margin-bottom: 18px; }
+.amiba-jobs-empty-state h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.amiba-jobs-empty-state p { margin: 10px 0 0; font-size: 12px; line-height: 1.8; color: hsl(var(--muted-foreground)); }
+.amiba-jobs-empty-hint { max-width: 260px; margin-top: 24px; padding-top: 16px; border-top: 1px solid hsl(var(--border) / .6); font-size: 11px; line-height: 1.7; color: hsl(var(--muted-foreground)); }
+.amiba-jobs-list { list-style:none; margin:0 0 0 16px; padding:0; }
+.amiba-jobs-item { min-width: 0; border:0; border-radius:4px; overflow: hidden; }
+
+.amiba-jobs-item + .amiba-jobs-item { margin-top: 0; }
+.amiba-jobs-row { display: flex; align-items: center; gap: 0; }
+.amiba-jobs-item[data-expanded="true"] > .amiba-jobs-row, .amiba-jobs-row:hover { background: hsl(var(--muted) / .6); }
+.amiba-jobs-row button { border: 0; background: transparent; border-radius: 4px; }
+.amiba-jobs-toggle { display: grid; grid-template-columns:16px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 30px; padding: 5px 6px; flex: 1; min-width: 0; text-align: left; }
+.amiba-jobs-chevron { width:16px; height:16px; flex-shrink:0; margin-top: 0; color: hsl(var(--muted-foreground)); transition: transform .15s; }
+.amiba-jobs-chevron[data-open="true"] { transform: rotate(90deg); }
+.amiba-jobs-summary { min-width: 0; white-space: nowrap; }
+.amiba-jobs-summary strong { display: block; font-weight:400; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.5; }
+.amiba-jobs-meta { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 11px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.amiba-jobs-meta > span { display: flex; align-items: center; gap: 5px; }
+.amiba-jobs-meta i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.amiba-jobs-item[data-state="running"] .amiba-jobs-meta i { background: hsl(var(--primary)); }
+.amiba-jobs-item[data-state="failed"] .amiba-jobs-meta i { background: hsl(var(--destructive)); }
+.amiba-jobs-stop { margin-right: 4px; padding: 3px 6px; color: hsl(var(--muted-foreground)) !important; font-size: 11px !important; flex-shrink: 0; }
+.amiba-jobs-stop:hover { background: hsl(var(--muted)); }
+.amiba-jobs-detail { margin:2px 6px 6px 14px; padding:6px 0 6px 16px; border-left:1px solid hsl(var(--border) / .5); background:transparent; }
+.amiba-jobs-output-footer { display: flex; justify-content:flex-start; margin-top:6px; }
+.amiba-jobs-output-footer button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; border: 0; background: transparent; color: hsl(var(--muted-foreground)); font-size: 11px; line-height: 18px; }
+.amiba-jobs-output-footer button:hover { color: hsl(var(--foreground)); }
+.amiba-jobs-terminal { margin: 0; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.7; }
+.amiba-jobs-detail > pre, .amiba-jobs-result > pre { margin: 10px 0 0; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; }
+.amiba-jobs-row-error { margin: 0 12px 10px; }
+.amiba-jobs [role="alert"] { color: hsl(var(--destructive)); font-size: 11px; }
+.amiba-jobs-live { animation: amiba-jobs-pulse 1.5s infinite; }
+@keyframes amiba-jobs-pulse { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .amiba-jobs-live { animation: none; } .amiba-jobs-chevron { transition: none; } }
+
+.amiba-jobs-tool { display: flex; gap: 8px; padding: 0 8px 4px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+
+.amiba-jobs-notice { display: block; width: fit-content; max-width: 100%; margin: 0; text-align: left; overflow-wrap: anywhere; padding: 4px 8px; font-size: 11px; color: hsl(var(--muted-foreground)); background: transparent; border: 0; cursor: pointer; }
+.amiba-jobs-notice pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+.amiba-jobs-result, .amiba-jobs-prose { margin-top: 0; min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+.amiba-jobs-prose { max-height: 360px; overflow: auto; }
+.amiba-jobs-prose h1, .amiba-jobs-prose h2, .amiba-jobs-prose h3 { font-size: 13px; margin: 12px 0 8px; font-weight: 600; }
+.amiba-jobs-prose p { margin: 8px 0; }
+.amiba-jobs-prose ul, .amiba-jobs-prose ol { padding-left: 20px; }
+.amiba-jobs-file { font-size: 11px; font-weight: 500; padding-bottom: 8px; border-bottom: 1px solid hsl(var(--border) / .6); overflow-wrap: anywhere; }
+.amiba-jobs-result-empty { margin: 0; line-height: 20px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.amiba-jobs-progress { min-width: 0; padding: 2px 4px; }
+.amiba-jobs-progress button { display: flex; align-items: center; gap: 8px; max-width: 100%; min-height: 24px; padding: 2px 6px; border: 0; border-radius: 6px; background: transparent; color: hsl(var(--muted-foreground)); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.amiba-jobs-progress button:hover { background: hsl(var(--muted) / .6); color: hsl(var(--foreground)); }
+.amiba-jobs-progress button:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.amiba-jobs-progress button > span { flex-shrink: 0; white-space: nowrap; }
+.amiba-jobs-progress button > .amiba-jobs-progress-title { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.amiba-jobs-progress-time { font-size: 10px; font-variant-numeric: tabular-nums; }
+.amiba-jobs-progress-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: amiba-jobs-pulse 1.5s infinite; }
+@media (prefers-reduced-motion: reduce) { .amiba-jobs-progress-dot { animation: none; } }
+
+.amiba-jobs-group-toggle { display:flex; align-items:center; gap:8px; width:100%; min-height:30px; padding:5px 6px; border:0; border-radius:4px; background:transparent; text-align:left; line-height:20px; }
+.amiba-jobs-group-toggle:hover { background:hsl(var(--muted) / .45); }
+
+.amiba-command { min-width:0; color:hsl(var(--muted-foreground)); font-size:11px; }
+.amiba-command [role="alert"] { color:hsl(var(--destructive)); font-size:11px; }
+.amiba-command-stop { padding:0 4px; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.amiba-command-stop:hover { color:hsl(var(--foreground)); }
+.amiba-command-stop:disabled { opacity:.5; cursor:default; }
+.amiba-command-stop:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:2px; }
+.amiba-command-output { margin:4px 0 0; padding:4px 6px; min-width:0; font-size:11px; }
+.amiba-command-output pre { margin:0; padding:0; max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.7; }
+.amiba-command-output .amiba-command-source { margin-bottom:6px; color:hsl(var(--muted-foreground)); }
+.amiba-command-output .amiba-command-text,.amiba-command-output .amiba-command-empty { color:hsl(var(--foreground) / .85); }
+.amiba-command-output p { margin:0; }
+.amiba-command-output .amiba-command-exit { margin:0; padding:0 0 6px; color:hsl(var(--destructive)); }
+
+.amiba-command-output .amiba-command-runtime { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:6px; color:hsl(var(--muted-foreground)); font-size:10px; font-variant-numeric:tabular-nums; }
+.amiba-command-runtime > span { display:inline-flex; align-items:center; gap:5px; }
+.amiba-command-runtime i { width:4px; height:4px; border-radius:50%; background:currentColor; }

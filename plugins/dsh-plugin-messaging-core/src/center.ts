@@ -458,15 +458,16 @@ export class MessageChannelCenter {
     const previous = (await this.store.list()).find((item) => item.id === id);
     if (!previous) throw new Error("channel_not_found");
     assertApproval(patch.approval);
+    const provider = this.providers.get(previous.provider);
+    if (!provider && patch.enabled !== false) throw new Error("provider_not_found");
     const channel = await this.store.update(id, patch);
-    const provider = this.providers.get(channel.provider);
-    if (!provider) throw new Error("provider_not_found");
     try {
-      await provider.validate?.(channel);
+      await provider?.validate?.(channel);
     } catch (error) {
       await this.store.update(id, {
         name: previous.name,
         sessionId: previous.sessionId,
+        agentPreset: previous.agentPreset ?? "",
         enabled: previous.enabled,
         outboundUrl: previous.outboundUrl ?? "",
         allowedSenders: previous.allowedSenders,
@@ -589,15 +590,7 @@ export class MessageChannelCenter {
       },
       ...(agentOptions ? { agentOptions } : {}),
       setup: async (agentCtx: Context) => {
-        try {
-          await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
-        } catch (error) {
-          this.ctx
-            .logger("amiba-messaging-core")
-            .warn(
-              `Could not mount agent preset "${String(channel.agentPreset)}" for channel ${channel.id} (session ${sessionId}); continuing without it: ${String(error)}`,
-            );
-        }
+        await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
       },
     });
     return { sessionId, dispose: () => handle.dispose().catch(() => undefined) };
@@ -802,15 +795,7 @@ export class MessageChannelCenter {
         resumeSessionId: sessionId as never,
         ...(agentOptions ? { agentOptions } : {}),
         setup: async (agentCtx) => {
-          try {
-            await runtime.agentPresets.mount(agentCtx, preset);
-          } catch (error) {
-            this.ctx
-              .logger("amiba-messaging-core")
-              .warn(
-                `Could not mount agent preset "${String(preset)}" while resuming session ${sessionId}; continuing without it: ${String(error)}`,
-              );
-          }
+          await runtime.agentPresets.mount(agentCtx, preset);
         },
       });
       return handle.agent;

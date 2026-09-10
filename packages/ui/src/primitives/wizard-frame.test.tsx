@@ -26,9 +26,14 @@ describe("WizardFrame", () => {
         <p>body</p>
       </WizardFrame>,
     );
-    expect(screen.getByRole("heading", { name: "接入飞书" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "接入飞书" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("用飞书 App 扫码授权")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "扫码接入" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "扫码接入" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await userEvent.click(screen.getByRole("tab", { name: "手动填写凭证" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(screen.getByText("body")).toBeInTheDocument();
@@ -39,9 +44,51 @@ describe("WizardFrame", () => {
   });
 
   it("omits the tab row and footer when not given", () => {
-    render(<WizardFrame title="T"><p>x</p></WizardFrame>);
+    render(
+      <WizardFrame title="T">
+        <p>x</p>
+      </WizardFrame>,
+    );
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
+  });
+
+  it("lets branded icons use their own surface", () => {
+    render(
+      <WizardFrame
+        icon={<img alt="" data-testid="brand-icon" />}
+        iconAppearance="bare"
+        title="T"
+      >
+        <p>x</p>
+      </WizardFrame>,
+    );
+    const iconSlot = screen.getByTestId("brand-icon").parentElement;
+    expect(iconSlot).toHaveAttribute("data-wizard-icon", "bare");
+    expect(iconSlot).toHaveClass("[&>img]:h-full", "[&>img]:w-full");
+    expect(iconSlot).not.toHaveClass("border", "bg-background", "shadow-sm");
+  });
+
+  it("keeps back navigation in the header and avoids divider-based sections", async () => {
+    const onBack = vi.fn();
+    const { container } = render(
+      <WizardFrame
+        actions={<button type="button">继续</button>}
+        backLabel="返回连接器"
+        onBack={onBack}
+        tabs={[{ id: "scan", label: "扫码", active: true, onSelect: vi.fn() }]}
+        title="接入飞书"
+      >
+        <p>body</p>
+      </WizardFrame>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "返回连接器" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("[role='tablist']")).not.toHaveClass(
+      "border-b",
+    );
+    expect(container.querySelector("footer")).not.toHaveClass("border-t");
+    expect(container.innerHTML).not.toContain("text-[11px]");
   });
 
   // Docked above the composer the frame sits inside ComposerDockSheet, whose
@@ -55,7 +102,11 @@ describe("WizardFrame", () => {
         <p>x</p>
       </WizardFrame>,
     );
-    expect(container.querySelector("header")).toHaveClass("[.amiba-dock-sheet_&]:pt-3");
-    expect(container.querySelector("footer")).toHaveClass("[.amiba-dock-sheet_&]:pb-0");
+    expect(container.querySelector("header")).toHaveClass(
+      "[.amiba-dock-sheet_&]:pt-3",
+    );
+    expect(container.querySelector("footer")).toHaveClass(
+      "[.amiba-dock-sheet_&]:pb-0",
+    );
   });
 });

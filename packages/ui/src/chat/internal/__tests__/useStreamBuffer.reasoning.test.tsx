@@ -54,3 +54,26 @@ describe("useStreamBuffer reasoning accumulation", () => {
     expect(current()[0].reasoning).toBe("long thought");
   });
 });
+
+it("starts a new reasoning segment after a tool even while streaming",()=>{
+ const {stub,current}=makeSessionsStub();const {result}=renderHook(()=>useStreamBuffer({sessions:stub}));
+ act(()=>{
+  result.current.prime("a1");
+  result.current.onReasoning("before ");result.current.onReasoning("tool");
+  result.current.onToolProgress({tool:"bash",toolCallId:"c",status:"running"});
+  result.current.onReasoning("after tool");result.current.applyVerboseToAssistant();
+ });
+ const timeline=current()[0].assistantTimeline!;
+ expect(timeline.map(item=>item.kind)).toEqual(["reasoning","tool","reasoning"]);
+ expect(timeline.filter(item=>item.kind==="reasoning").map(item=>item.text)).toEqual(["before tool","after tool"]);
+});
+
+it("does not mutate a published reasoning segment before the next flush",()=>{
+ const {stub,current}=makeSessionsStub();const {result}=renderHook(()=>useStreamBuffer({sessions:stub}));
+ act(()=>{result.current.prime("a1");result.current.onReasoning("first");result.current.applyVerboseToAssistant();});
+ const published=current()[0].assistantTimeline![0];
+ act(()=>result.current.onReasoning(" second"));
+ expect(published).toMatchObject({kind:"reasoning",text:"first"});
+ act(()=>result.current.applyVerboseToAssistant());
+ expect(current()[0].assistantTimeline![0]).toMatchObject({kind:"reasoning",text:"first second"});
+});

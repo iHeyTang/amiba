@@ -17,6 +17,8 @@ function normalize(parsed: unknown): StewardState | null {
   return {
     version: 1,
     ...(typeof row.stewardSessionId === "string" ? { stewardSessionId: row.stewardSessionId } : {}),
+    ...(typeof row.basePreset === "string" ? { basePreset: row.basePreset } : {}),
+    ...(typeof row.extensionVersion === "number" ? { extensionVersion: row.extensionVersion } : {}),
     tasks: row.tasks.filter(isTask),
   };
 }

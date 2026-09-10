@@ -242,6 +242,26 @@
     -webkit-user-select: text;
     user-select: text;
   }
+
+  /*
+   * Focus chrome
+   * ------------
+   * Amiba uses surface and text changes for interaction feedback. Browser
+   * outlines and Tailwind ring halos add a second rounded border around the
+   * focused control, which is especially noisy in the compact desktop shell.
+   * Keep this policy in the shared token sheet so every renderer and plugin
+   * surface gets the same quiet focus treatment.
+   *
+   * The two Tailwind variables are neutralised instead of clearing
+   * `box-shadow`; controls can therefore keep any intentional elevation they
+   * already have while focus-only rings disappear.
+   */
+  :where(*):focus,
+  :where(*):focus-visible {
+    outline: none !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+  }
 }
 
 /*

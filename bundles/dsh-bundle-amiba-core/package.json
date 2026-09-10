@@ -28,9 +28,16 @@
     "@amiba/dsh-plugin-model-plane": "workspace:*",
     "@amiba/dsh-plugin-notification-hub": "workspace:*",
     "@amiba/dsh-plugin-pin": "workspace:*",
+    "@amiba/dsh-plugin-resources": "workspace:*",
     "@amiba/dsh-plugin-schedule-adapter": "workspace:*",
     "@amiba/dsh-plugin-skills": "workspace:*",
     "@amiba/dsh-plugin-steward": "workspace:*",
-    "@amiba/dsh-plugin-usage": "workspace:*"
+    "@amiba/dsh-plugin-usage": "workspace:*",
+    "@amiba/dsh-plugin-session-features": "workspace:*",
+    "@amiba/dsh-plugin-background-jobs": "workspace:*",
+    "@amiba/dsh-plugin-session-storage": "workspace:*",
+    "@amiba/dsh-plugin-provider-tokendance": "workspace:*",
+    "@amiba/dsh-plugin-media": "workspace:*",
+    "@amiba/dsh-plugin-media-minimax": "workspace:*"
   }
 }

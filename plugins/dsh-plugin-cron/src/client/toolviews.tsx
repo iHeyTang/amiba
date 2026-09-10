@@ -130,7 +130,7 @@ function TaskViewsEvidence({
   );
 }
 
-function CronToolRow({ block }: { block: CronBlock }): ReactNode {
+function CronToolRow({ block, presentation }: { block: CronBlock; presentation?: "row" | "summary" }): ReactNode {
   const { t } = usePluginT(cronI18n);
   const args = toolCallArgs(block);
   const failed = toolCallFailed(block);
@@ -152,6 +152,7 @@ function CronToolRow({ block }: { block: CronBlock }): ReactNode {
 
   return (
     <ToolRowFrame
+      presentation={presentation}
       icon={CalendarClock}
       action={t("cron.tool.action")}
       target={target || undefined}
@@ -171,6 +172,6 @@ export const CRON_TOOLVIEW_KEYS = [
   "cron_delete",
 ] as const;
 
-export function CronToolview(props: { block: CronBlock }): ReactNode {
-  return <CronToolRow block={props.block} />;
+export function CronToolview(props: { block: CronBlock; presentation?: "row" | "summary" }): ReactNode {
+  return <CronToolRow {...props} />;
 }

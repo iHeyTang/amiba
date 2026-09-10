@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   storage: {} as Record<string, unknown>,
+  listGate: undefined as Promise<void> | undefined,
+  extra: [] as Array<{ sessionId: string; updatedAt: number; running: boolean; blank: boolean; title: string }>,
   rename: vi.fn(),
   fork: vi.fn(),
   history: vi.fn(),
   archived: [] as string[],
   archiveSession: vi.fn(),
+  watch: vi.fn((_keys: unknown, _listener: (changes: unknown) => void) => () => {}),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -26,15 +29,17 @@ vi.mock("@amiba/app-runtime/platform", () => ({
           delete mocks.storage[key];
         }
       },
-      watch: () => () => {},
+      watch: mocks.watch,
     },
     agentWorkspaces: {
       list: async () => ({ items: [], archivedSessionIds: mocks.archived }),
       archiveSession: mocks.archiveSession,
     },
     agentSessions: {
-      list: async () => [
-        {
+      list: async () => {
+        await mocks.listGate;
+        return [
+        ...mocks.extra,        {
           sessionId: "dsh-1",
           updatedAt: 20,
           running: false,
@@ -51,7 +56,8 @@ vi.mock("@amiba/app-runtime/platform", () => ({
           blank: true,
           agentPreset: "amiba-steward",
         },
-      ],
+      ];
+      },
       search: async () => [{ sessionId: "dsh-1", snippet: "match" }],
       create: async () => ({ sessionId: "dsh-new" }),
       history: mocks.history,
@@ -64,8 +70,77 @@ vi.mock("@amiba/app-runtime/platform", () => ({
 import { SessionsStore } from "./sessions-store";
 
 describe("SessionsStore with DSH sessions", () => {
+
+  it("retains a completion that beats the host session index", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.markUnread("cron-fast", 100);
+    mocks.extra = [{ sessionId: "cron-fast", updatedAt: 100, running: false, blank: false, title: "Fast cron" }];
+    await store.refresh();
+    expect(store.getSnapshot().sessions.find((row) => row.id === "cron-fast")?.unread).toBe(true);
+    store.teardown();
+  });
+
+  it("keeps a read acknowledgement made during a slow index refresh", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.markUnread("dsh-1", 50);
+    let release!: () => void;
+    mocks.listGate = new Promise<void>((resolve) => { release = resolve; });
+    const refresh = store.refresh();
+    // loadIndex reads the old sidecar before waiting for the host list.
+    await Promise.resolve();
+    await Promise.resolve();
+    await store.markRead("dsh-1", 100);
+    release();
+    await refresh;
+    expect(store.getSnapshot().sessions[0]?.unread).toBeUndefined();
+    expect(store.getSnapshot().sessions[0]?.readAt).toBe(100);
+    store.teardown();
+  });
+
+  it("persists acknowledgements across restart and only marks newer activity unread", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.markUnread("dsh-1", 50);
+    await store.markRead("dsh-1", 100);
+    store.teardown();
+    const restarted = new SessionsStore();
+    await restarted.initialize();
+    await restarted.markUnread("dsh-1", 50);
+    expect(restarted.getSnapshot().sessions[0]).toMatchObject({ readAt: 100 });
+    expect(restarted.getSnapshot().sessions[0]?.unread).toBeUndefined();
+    await restarted.markUnread("dsh-1", 101);
+    expect(restarted.getSnapshot().sessions[0]?.unread).toBe(true);
+    restarted.teardown();
+  });
+
+  it("marks an active tab unread when its caller reports activity behind another view", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    await store.markUnread("dsh-1", Date.now() + 100);
+    expect(store.getSnapshot().sessions[0]?.unread).toBe(true);
+    await store.openTab("dsh-1");
+    expect(store.getSnapshot().sessions[0]?.unread).toBeUndefined();
+    store.teardown();
+  });
+
+  it("does not acknowledge a conversation whose history failed to open", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.markUnread("dsh-1", 100);
+    mocks.history.mockRejectedValueOnce(new Error("offline"));
+    await expect(store.openTab("dsh-1")).rejects.toThrow("offline");
+    expect(store.getSnapshot().sessions[0]?.unread).toBe(true);
+    store.teardown();
+  });
+
   beforeEach(() => {
+    mocks.watch.mockClear();
     mocks.storage = {};
+    mocks.extra = [];
+    mocks.listGate = undefined;
     mocks.archived = [];
     mocks.archiveSession.mockReset();
     mocks.archiveSession.mockImplementation(async (id: string) => {
@@ -140,6 +215,60 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
+  it("keeps a newly submitted local session selected across host refreshes", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    const id = await store.createNew({ profileId: "standard" });
+    const messages = [{ role: "user" as const, content: "first prompt" }];
+    store.setActiveMessages(messages);
+
+    // The host publishes its list before the first turn materializes.
+    await store.refresh();
+    await store.refresh();
+
+    expect(store.getSnapshot()).toMatchObject({
+      activeId: id,
+      openTabIds: [id],
+      activeMessages: messages,
+    });
+    expect(store.getSnapshot().sessions).toContainEqual(
+      expect.objectContaining({ id, agent: { profileId: "standard" } }),
+    );
+    store.teardown();
+  });
+
+  it("keeps an explicitly opened blank host session through a refresh", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-blank");
+    await store.refresh();
+    expect(store.getSnapshot().activeId).toBe("dsh-blank");
+    expect(store.getSnapshot().openTabIds).toEqual(["dsh-blank"]);
+    expect(store.getSnapshot().sessions).toContainEqual(
+      expect.objectContaining({
+        id: "dsh-blank",
+        agent: { profileId: "amiba-steward" },
+      }),
+    );
+    store.teardown();
+  });
+
+  it("preserves open drafts on broadcasts and replaces them with host metadata", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    const id = await store.createNew();
+    const notify = mocks.watch.mock.calls[0]![1] as (changes: unknown) => void;
+    notify({ "sessions.index": { newValue: [] } });
+    expect(store.getSnapshot().activeId).toBe(id);
+    expect(store.getSnapshot().sessions.map((session) => session.id)).toEqual([id]);
+
+    const materialized = { id, title: "Host title", createdAt: 10, updatedAt: 20 };
+    notify({ "sessions.index": { newValue: [materialized] } });
+    expect(store.getSnapshot().sessions).toEqual([materialized]);
+    expect(store.getSnapshot().activeId).toBe(id);
+    store.teardown();
+  });
+
   it("archives through the host, projects the set, and closes the tab", async () => {
     const store = new SessionsStore();
     await store.initialize();
@@ -155,7 +284,7 @@ describe("SessionsStore with DSH sessions", () => {
     // Archiving an open task takes it out of the tab strip.
     expect(store.getSnapshot().openTabIds).toEqual([]);
     // Nothing about the archive is written locally — DSH owns the set.
-    expect(mocks.storage["sessions.local-meta"]).toEqual({});
+    expect((mocks.storage["sessions.local-meta"] as Record<string, unknown>)?.["dsh-1"]).not.toHaveProperty("archived");
     store.teardown();
   });
 

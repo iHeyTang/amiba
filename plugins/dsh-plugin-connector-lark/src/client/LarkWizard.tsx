@@ -1,4 +1,4 @@
-import { ChevronLeft, Loader2, Lock, Plus, QrCode } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Plus, QrCode } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import qrcode from "qrcode-generator";
@@ -29,17 +29,6 @@ import { larkI18n } from "./i18n.js";
  */
 type OnboardingView = Awaited<
   ReturnType<ConnectWizardHost["adapter"]["pollOnboarding"]>
->;
-
-/**
- * The connect's approval-wait setting (`MessageChannelApproval` in
- * connector-core, not imported by name here — this wizard depends on
- * nothing from connector-core but the `host` prop, per the file doc comment
- * below, so the type is derived structurally from the one place the host
- * already carries it: the `approval` field `host.adapter.create` accepts).
- */
-type Approval = NonNullable<
-  Parameters<ConnectWizardHost["adapter"]["create"]>[0]["approval"]
 >;
 
 /** Poll cadence for `adapter.pollOnboarding` while a scan session is pending. */
@@ -103,7 +92,7 @@ function describeStatusNote(t: PluginTranslateFn, note: string): string {
 /**
  * The Lark/Feishu connect screen, registered for the `"lark"` provider and
  * mounted whole into whatever seat the host gives it (the settings dialog
- * today, the composer next). It draws its OWN header, tabs, form — connect
+ * today, the composer next). It draws its OWN header and form — connect
  * name and agent preset included, via `host.kit.BasicsFields` — and footer
  * buttons; nothing wraps it. Two ways in:
  *
@@ -138,12 +127,6 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState("feishu");
-  // Seeded from the kit (`host.kit.defaultApproval`), the same place
-  // `ApprovalField` itself comes from — so the `timeout`/10-minute literal
-  // lives in connector-core alone and this wizard carries no copy of it.
-  const [approval, setApproval] = useState<Approval>(() =>
-    host.kit.defaultApproval(),
-  );
 
   const appIdId = useId();
   const appSecretId = useId();
@@ -209,7 +192,10 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
         .then(() => hostRef.current.adapter.cancelOnboarding(sessionId))
         .catch(() => {});
     }
-    if (mountedRef.current) setOnboarding(null);
+    if (mountedRef.current) {
+      setOnboarding(null);
+      setBeginning(false);
+    }
   }, [clearPollInterval]);
 
   // Unmount teardown. `cancelCurrentSession` is dependency-stable, so this
@@ -232,13 +218,11 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
    * starts fresh: nothing here re-adopts the session just cancelled or begins
    * a new one — the user has to click "Start scanning" again.
    *
-   * Both tabs are always clickable, so the FIRST thing this does is bail on a
-   * no-op re-selection: clicking the tab you are already on is not a mode
-   * change, and cancelling there would kill the very QR the user is scanning.
    */
   function handleModeChange(next: "scan" | "manual") {
     if (next === mode) return;
     setMode(next);
+    setError(null);
     cancelCurrentSession();
   }
 
@@ -311,11 +295,6 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
         provider: current.providerId,
         name: trimmedName,
         agentPreset: preset,
-        // The scan path creates its connect on the host side once the QR is
-        // approved, so the approval-wait choice has to travel WITH the
-        // onboarding request — there is no later `adapter.create` call to
-        // carry it the way the manual tab's `submit()` does.
-        approval,
       });
       // Same stale-response concern as `poll`, extended: the wizard may have
       // unmounted while `beginOnboarding` was in flight (`mountedRef`), or it
@@ -369,10 +348,18 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
       // "cancelled" as an initial state is not expected from a fresh begin
       // call; nothing further to render if the center ever returns it.
     } catch (cause) {
-      if (!mountedRef.current) return;
+      if (
+        !mountedRef.current ||
+        sessionContextRef.current !== sessionContextAtStart
+      )
+        return;
       setError(describeError(t, cause));
     } finally {
-      if (mountedRef.current) setBeginning(false);
+      if (
+        mountedRef.current &&
+        sessionContextRef.current === sessionContextAtStart
+      )
+        setBeginning(false);
     }
   }
 
@@ -398,9 +385,8 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
           appSecret: trimmedAppSecret,
           domain,
         },
-        approval,
       });
-      current.done(connect);
+      if (mountedRef.current) current.done(connect);
     } catch (cause) {
       if (mountedRef.current) setError(describeError(t, cause));
     } finally {
@@ -419,55 +405,24 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   // Handed over on the host rather than imported: each plugin client is its
   // own bundle, so the shared parts travel with the seat.
-  const { BasicsFields, ApprovalField } = host.kit;
+  const { BasicsFields } = host.kit;
 
   return (
     <WizardFrame
       actions={
-        <>
+        mode === "manual" ? (
           <Button
-            onClick={() => host.back()}
-            size="sm"
+            disabled={saving || !canSubmit}
+            onClick={() => void submit()}
             type="button"
-            variant="ghost"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            {t("options.connect.dsh.wizard.changePlatform")}
+            {saving ? <Loader2 className="animate-spin" /> : <Plus />}
+            {t("options.connect.dsh.submit")}
           </Button>
-          <Button
-            onClick={() => host.cancel()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("options.connect.dsh.cancel")}
-          </Button>
-          {mode === "scan" ? (
-            !onboarding ? (
-              <Button
-                disabled={beginning || !canBeginScan}
-                onClick={() => void beginScan()}
-                size="sm"
-                type="button"
-              >
-                {beginning ? <Loader2 className="animate-spin" /> : <QrCode />}
-                {t("options.connect.dsh.onboard.begin")}
-              </Button>
-            ) : null
-          ) : (
-            <Button
-              disabled={saving || !canSubmit}
-              onClick={() => void submit()}
-              size="sm"
-              type="button"
-            >
-              {saving ? <Loader2 className="animate-spin" /> : <Plus />}
-              {t("options.connect.dsh.submit")}
-            </Button>
-          )}
-        </>
+        ) : null
       }
-      closeLabel={t("options.connect.dsh.cancel")}
+      backLabel={t("options.connect.dsh.wizard.changePlatform")}
+      closeLabel={t("options.connect.dsh.close")}
       hint={
         <>
           <Lock className="h-3 w-3" />
@@ -475,102 +430,129 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
         </>
       }
       icon={<LarkMark size={20} />}
+      iconAppearance="bare"
+      onBack={host.back}
       onClose={() => host.cancel()}
       subtitle={
         mode === "scan"
           ? t("options.connect.dsh.lark.subtitleScan")
           : t("options.connect.dsh.lark.subtitleManual")
       }
-      tabs={[
-        {
-          id: "scan",
-          label: t("options.connect.dsh.onboard.modeScan"),
-          active: mode === "scan",
-          onSelect: () => handleModeChange("scan"),
-        },
-        {
-          id: "manual",
-          label: t("options.connect.dsh.onboard.modeManual"),
-          active: mode === "manual",
-          onSelect: () => handleModeChange("manual"),
-        },
-      ]}
       title={t("options.connect.dsh.lark.title")}
     >
-      {mode === "scan" ? (
-        <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-5">
-          <div className="flex flex-col items-center gap-2.5 rounded-xl border border-border/90 bg-background p-3.5">
-            {onboarding ? (
-              <OnboardingScanPane onboarding={onboarding} t={t} />
-            ) : (
-              <p className="text-center text-xs text-muted-foreground">
-                {t("options.connect.dsh.onboard.intro")}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-4">
-            <BasicsFields
-              className="grid-cols-1"
-              name={name}
-              onNameChange={setName}
-              onPresetChange={setPreset}
-              preset={preset}
-              presets={host.presets}
-            />
-            <ApprovalField approval={approval} onApprovalChange={setApproval} />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <BasicsFields
-            name={name}
-            onNameChange={setName}
-            onPresetChange={setPreset}
-            preset={preset}
-            presets={host.presets}
-          />
-          <ApprovalField approval={approval} onApprovalChange={setApproval} />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor={appIdId}>
-                {t("options.connect.dsh.lark.appId")}
-              </Label>
-              <Input
-                id={appIdId}
-                onChange={(event) => setAppId(event.target.value)}
-                value={appId}
-              />
+      <div className="space-y-6">
+        <BasicsFields
+          name={name}
+          onNameChange={setName}
+          onPresetChange={setPreset}
+          preset={preset}
+          presets={host.presets}
+        />
+        {mode === "scan" ? (
+          <section
+            className="space-y-2"
+            aria-label={t("options.connect.dsh.lark.scan.title")}
+          >
+            <div className="flex min-h-44 items-center justify-center rounded-xl bg-muted/20 px-5 py-5">
+              {onboarding ? (
+                <OnboardingScanPane onboarding={onboarding} t={t} />
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <QrCode
+                    className="h-9 w-9 text-muted-foreground/60"
+                    aria-hidden="true"
+                  />
+                  <Button
+                    disabled={beginning || !canBeginScan}
+                    onClick={() => void beginScan()}
+                    type="button"
+                  >
+                    {beginning ? <Loader2 className="animate-spin" /> : null}
+                    {t("options.connect.dsh.onboard.begin")}
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={appSecretId}>
-                {t("options.connect.dsh.lark.appSecret")}
-              </Label>
-              <Input
-                id={appSecretId}
-                onChange={(event) => setAppSecret(event.target.value)}
-                type="password"
-                value={appSecret}
-              />
+            <div className="text-center">
+              <Button
+                className="text-muted-foreground"
+                onClick={() => handleModeChange("manual")}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("options.connect.dsh.onboard.modeManual")}
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={domainId}>
-                {t("options.connect.dsh.lark.domain")}
-              </Label>
-              <Select onValueChange={setDomain} value={domain}>
-                <SelectTrigger id={domainId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="feishu">Feishu</SelectItem>
-                  <SelectItem value="lark">Lark</SelectItem>
-                </SelectContent>
-              </Select>
+          </section>
+        ) : (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">
+                {t("options.connect.dsh.lark.credentials.title")}
+              </h3>
+              <Button
+                className="text-muted-foreground"
+                disabled={saving}
+                onClick={() => handleModeChange("scan")}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <ArrowLeft />
+                {t("options.connect.dsh.onboard.modeScan")}
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+            <div className="grid gap-4 sm:grid-cols-[0.75fr_1.25fr_1.25fr]">
+              <div className="space-y-1.5">
+                <Label htmlFor={domainId}>
+                  {t("options.connect.dsh.lark.domain")}
+                </Label>
+                <Select onValueChange={setDomain} value={domain}>
+                  <SelectTrigger id={domainId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="feishu">
+                      {t("options.connect.dsh.lark.domain.feishu")}
+                    </SelectItem>
+                    <SelectItem value="lark">
+                      {t("options.connect.dsh.lark.domain.lark")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={appIdId}>
+                  {t("options.connect.dsh.lark.appId")}
+                </Label>
+                <Input
+                  id={appIdId}
+                  onChange={(event) => setAppId(event.target.value)}
+                  value={appId}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={appSecretId}>
+                  {t("options.connect.dsh.lark.appSecret")}
+                </Label>
+                <Input
+                  id={appSecretId}
+                  onChange={(event) => setAppSecret(event.target.value)}
+                  type="password"
+                  value={appSecret}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
 
-      {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="mt-4 rounded-lg bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
+          {error}
+        </p>
+      ) : null}
     </WizardFrame>
   );
 }
@@ -607,7 +589,7 @@ function OnboardingScanPane({
           src={dataUrl}
         />
         {onboarding.statusNote ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             {describeStatusNote(t, onboarding.statusNote)}
           </p>
         ) : null}
@@ -619,7 +601,7 @@ function OnboardingScanPane({
   // provider sent one, otherwise a generic waiting line. Never an empty/broken
   // pane, and never a crash on an absent optional field.
   return (
-    <div className="flex items-center justify-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground">
+    <div className="flex items-center justify-center gap-2 px-2 py-6 text-center text-[13px] text-muted-foreground">
       <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
       <span>
         {onboarding.statusNote

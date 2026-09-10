@@ -14,6 +14,7 @@ import {
   resolveManagedDshPaths,
   resolvePackagedManagedDshRuntimeDir,
 } from "@amiba/app-runtime/dsh-runtime"
+import { resolveDshListenPort } from "../shared/dsh-dev-port"
 
 const READY_TIMEOUT_MS = 90_000
 const MAX_RUNTIME_LOG_ENTRIES = 5_000
@@ -177,6 +178,7 @@ export class DshRuntimeController {
     }
     await this.ensureManagedProfile()
     const launch = { node: managed.node, entrypoint: managed.entrypoint }
+    const listenPort = resolveDshListenPort(app.isPackaged)
 
     const child = spawn(
       launch.node,
@@ -187,7 +189,7 @@ export class DshRuntimeController {
         "--host",
         "127.0.0.1",
         "--port",
-        "0",
+        listenPort,
         // DSH 0.1.1 opens the user's default browser when it starts serving.
         // The desktop app IS the client; a second, unauthenticated tab is not
         // wanted and startled the user on first launch.

@@ -1,4 +1,4 @@
-import type { AgentModelSelection } from "@amiba/app-runtime/platform";
+import type { ModelSelection as AgentModelSelection, ModelProviderGroup, ModelReasoningEffort } from "@deepseek-ai/dsh-api-remotes/client";
 import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
 import {
   ModelIcon,
@@ -17,38 +17,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { pickerI18n } from "./i18n-picker.js";
 
-// ---------------------------------------------------------------------------
-// Plugin-local model-plane shapes. These mirror the plugin's own Remote wire
-// contract (`../remote.js` zod schemas) — the plane vocabulary lives with the
-// plugin now, NOT in `@amiba/app-runtime/platform`. The single allowed
-// platform import above is `AgentModelSelection`: the engine-native selection
-// shape. Engine DATA comes over the OFFICIAL wire faces (`session.models` /
-// `session.selectModel` via `ctx.get("connection").api.sessions` — the same
-// calls the official ui-model-selection plugin makes), never through owner
-// props: the former host-wired engine pass-through is retired.
-// ---------------------------------------------------------------------------
-
-export interface ComposerPickerEffort {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-export interface ComposerPickerModel {
-  id: string;
-  name: string;
-  description?: string;
-  reasoning?: {
-    efforts: ComposerPickerEffort[];
-    defaultEffort?: string;
-  };
-}
-
-export interface ComposerPickerModelGroup {
-  id: string;
-  name: string;
-  models: ComposerPickerModel[];
-}
+// Reuse the official model catalog types; the remaining interfaces are private
+// React data loading helpers, not plugin registration or transport contracts.
+export type ComposerPickerEffort = ModelReasoningEffort;
+export type ComposerPickerModel = ModelProviderGroup["models"][number];
+export type ComposerPickerModelGroup = ModelProviderGroup;
 
 export interface ComposerPickerCatalogSnapshot {
   groups: ComposerPickerModelGroup[];
@@ -56,8 +29,9 @@ export interface ComposerPickerCatalogSnapshot {
   defaultSelection?: AgentModelSelection;
 }
 
-/** The picker's catalog source: the plugin's own typed Model Plane Remote. */
+/** The picker's loader over the official llm.models and settings APIs. */
 export interface ComposerPickerCatalog {
+  subscribe?(listener: () => void): () => void;
   snapshot(): Promise<ComposerPickerCatalogSnapshot>;
 }
 
@@ -216,7 +190,8 @@ export function DshComposerModelPicker({
     return () => {
       generationRef.current += 1;
     };
-  }, [load, refreshKey]);
+    return catalog.subscribe?.(() => { void load(); });
+  }, [load, refreshKey, catalog]);
 
   const displayGroups = useMemo(() => pickerGroups(groups), [groups]);
   const currentGroup = groups.find((group) => group.id === current?.provider);

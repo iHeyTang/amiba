@@ -28,8 +28,8 @@ describe("ComposerAgentPicker", () => {
       active: "default",
       current: "default",
       profiles: [
-        { name: "default", description: "General work" },
-        { name: "researcher", description: "Investigates sources" },
+        { id: "default", name: "Amiba", description: "General work" },
+        { id: "researcher", name: "资料研究员", description: "Investigates sources" },
       ],
     });
   });
@@ -52,7 +52,7 @@ describe("ComposerAgentPicker", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "sidepanel.agentPicker.executionIdentity",
     });
-    await user.click(within(dialog).getByRole("button", { name: /researcher/ }));
+    await user.click(within(dialog).getByRole("button", { name: /资料研究员/ }));
 
     expect(onChange).toHaveBeenCalledWith({ profileId: "researcher" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("ComposerAgentPicker", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "sidepanel.agentPicker.executionIdentity",
     });
-    expect(within(dialog).getByRole("button", { name: /researcher/ })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /资料研究员/ })).toBeDisabled();
     expect(within(dialog).getByText("sidepanel.agentPicker.profileLocked")).toBeVisible();
   });
 
@@ -109,7 +109,7 @@ describe("ComposerAgentPicker", () => {
       ok: true,
       active: "standard",
       current: "standard",
-      profiles: [{ name: "standard", description: "Default DSH preset" }],
+      profiles: [{ id: "standard", name: "标准模式", description: "Default DSH preset" }],
     });
     render(
       <ComposerAgentPicker

@@ -1,0 +1,40 @@
+{
+  "name": "@amiba/dsh-plugin-session-features",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-session": "catalog:",
+    "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-session": "catalog:",
+    "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:",
+    "@types/node": "22.9.0",
+    "typescript": "5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

@@ -2,9 +2,14 @@ import { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { setPlatform } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
 
-import { installDshClientTransport } from "./dsh-client-transport";
+import {
+  installDshClientDevReload,
+  installDshClientTransport,
+} from "./dsh-client-transport";
 import { createElectronAdapter } from "./platform/electron";
+import { installEmbeddedPageHost } from "./embedded-page-host";
 import "./styles/globals.css";
+installEmbeddedPageHost();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("root element missing");
@@ -56,10 +61,6 @@ window.amiba.onOpenSettings(() => {
 });
 
 function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
-  if (document.querySelector("[data-amiba-product-shell]")) {
-    shellReady = true;
-    return Promise.resolve();
-  }
   return new Promise((resolve, reject) => {
     const finish = (): void => {
       shellReady = true;
@@ -90,6 +91,9 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
         new Error("DSH UI Shell did not publish the Amiba product shell."),
       );
     }, timeoutMs);
+    // A fast shell can mount before this waiter is installed. Run the same
+    // cleanup and pending-navigation drain for both arrival orders.
+    if (document.querySelector("[data-amiba-product-shell]")) finish();
   });
 }
 
@@ -97,6 +101,7 @@ void (async () => {
   try {
     const boot = await window.amiba.dshClient.boot();
     installDshClientTransport(boot.baseUrl);
+    installDshClientDevReload();
     // DSH Client plugins run under the app origin here, so `location.origin`
     // never reaches the managed runtime authority. Publish it as a DOM
     // attribute contract (read by dsh-plugin-messaging-core). This is the

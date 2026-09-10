@@ -8,15 +8,7 @@ vi.mock("@amiba/i18n", () => ({
 import { AwaitingUserInputContext, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 
-/**
- * The stateful process/result exception, driven by the WAIT ITSELF rather
- * than a tool-name registry: while the host reports an open interaction
- * wait (pending question or approval), the narration the agent wrote just
- * before pausing is the user's basis for responding and stays visible;
- * once the wait resolves it is ordinary process content and folds away.
- * Any tool pausing through the official interaction seams gets this with
- * no registration.
- */
+/** Interaction context must remain readable throughout waiting and resumed work. */
 
 const NARRATION = "回答前请先看这段说明";
 
@@ -69,7 +61,17 @@ describe("await-user process fold", () => {
     expect(screen.getByText(NARRATION)).toBeInTheDocument();
   });
 
-  it("folds the same narration once the wait resolves", () => {
+  it("keeps narration visible when the wait resolves and execution continues", () => {
+    renderTurn(false, {
+      streaming: true,
+      toolProgress: [
+        { tool: "ask_user_question", toolCallId: "ask-1", status: "completed" },
+      ],
+    });
+    expect(screen.getByText(NARRATION)).toBeVisible();
+  });
+
+  it("folds the same narration once the turn finishes", () => {
     renderTurn(false, {
       toolProgress: [
         { tool: "ask_user_question", toolCallId: "ask-1", status: "completed" },

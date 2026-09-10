@@ -8,11 +8,12 @@ export interface ProcessResultSplit {
 }
 
 /**
- * Split a turn's timeline into process and result.
+ * Split a settled turn's timeline into process and result.
  *
  * The agent loop ends when the model emits text without calling another
  * tool, so the consecutive text items at the TAIL of the timeline are the
- * result — structurally, not heuristically. Everything before them
+ * result once the turn settles. While streaming this is only a candidate;
+ * render the timeline in place until completion. Everything before them
  * (earlier narration, tool calls, approvals) is process.
  *
  * The same shape is produced by the live engine and the history

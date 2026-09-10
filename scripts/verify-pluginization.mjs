@@ -29,7 +29,7 @@
  *   - any `scripts/` directory - dev/ops tooling such as
  *     `packages/app-runtime/scripts/dsh-runtime/smoke.mjs`, which
  *     deliberately calls a plugin's public RPC surface end-to-end (e.g.
- *     `"amibaMemory/list"`) to black-box-smoke-test that the bundled
+ *     `"amibaMemory/status"`) to black-box-smoke-test that the bundled
  *     plugin responds. That validates the plugin *mechanism*, not host/UI
  *     code coupling to a specific plugin's shape, so it is not the kind of
  *     leak this harness looks for. Plugin implementations themselves

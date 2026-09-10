@@ -35,7 +35,7 @@ function parseResult(
  * Reads nothing but the tool's own public result envelope; credentials never
  * touch this row because they never leave the wizard.
  */
-export function ConnectAddToolview({ block }: ToolCallOwnerProps) {
+export function ConnectAddToolview({ block, presentation }: ToolCallOwnerProps) {
   const { t } = usePluginT(connectI18n);
   const settled = toolCallSettled(block);
   const failed = toolCallFailed(block);
@@ -53,6 +53,7 @@ export function ConnectAddToolview({ block }: ToolCallOwnerProps) {
   const durationMs = toolCallDurationMs(block);
   return (
     <ToolRowFrame
+      presentation={presentation}
       action={t("options.connect.dsh.tool.action")}
       ariaLabel={`${t("options.connect.dsh.tool.action")} ${target}`}
       {...(durationMs === undefined ? {} : { durationMs })}

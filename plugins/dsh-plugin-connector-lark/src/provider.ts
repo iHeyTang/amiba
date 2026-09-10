@@ -1,3 +1,4 @@
+import { larkMcpTools } from "./mcp-tools.js";
 import {
   Client,
   Domain,
@@ -173,6 +174,9 @@ function buildCapabilities(config: LarkConnectorConfig): CapabilityDecl[] {
   return [
     {
       kind: "mcp",
+      service: { id: "lark.mcp", name: "飞书", version: LARK_MCP_PINNED_VERSION, shareable: true },
+      identity: JSON.stringify(["lark", config.domain, config.appId]),
+      tools: larkMcpTools,
       spec: {
         serverName: "lark",
         transport: "stdio",
@@ -230,6 +234,7 @@ function toEnvelope(
 export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProvider {
   return {
     id: "lark",
+    messaging: { ownerPairing: true },
     name: "飞书 / Lark",
     description: "Lark/Feishu bot over the official WebSocket long connection.",
     configSchema: larkConfigSchema,

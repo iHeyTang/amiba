@@ -42,58 +42,6 @@ describe("connector store", () => {
     expect(await store.list()).toHaveLength(0);
   });
 
-  it("round-trips an approval policy through create, update, and a fresh reload", async () => {
-    const root = await mkdtemp(join(tmpdir(), "amiba-connector-store-"));
-    roots.push(root);
-    const store = new ConnectorStore(root);
-    const connect = await store.create({
-      provider: "fake",
-      name: "Approval-aware",
-      agentPreset: "restricted",
-      approval: { mode: "wait", timeoutMs: 600_000 },
-    });
-    expect(connect.approval).toEqual({ mode: "wait", timeoutMs: 600_000 });
-
-    await store.update(connect.id, {
-      approval: { mode: "timeout", timeoutMs: 120_000 },
-    });
-    const reloaded = new ConnectorStore(root);
-    expect((await reloaded.list())[0]).toMatchObject({
-      approval: { mode: "timeout", timeoutMs: 120_000 },
-    });
-  });
-
-  it("leaves approval absent by default, and drops a malformed value found on disk instead of surfacing garbage", async () => {
-    const root = await mkdtemp(join(tmpdir(), "amiba-connector-store-"));
-    roots.push(root);
-    const store = new ConnectorStore(root);
-    const connect = await store.create({
-      provider: "fake",
-      name: "Untouched by default",
-      agentPreset: "restricted",
-    });
-    expect(connect.approval).toBeUndefined();
-
-    // A hand-edited or pre-migration file could carry a bogus mode or a
-    // non-numeric timeoutMs; normalizeConnect must drop it rather than hand
-    // back a shape the rest of the system doesn't expect.
-    await writeFile(
-      join(root, "connects.json"),
-      JSON.stringify({
-        version: 1,
-        connects: [
-          {
-            ...connect,
-            approval: { mode: "bogus", timeoutMs: "not-a-number" },
-          },
-        ],
-      }),
-      "utf8",
-    );
-    const reloaded = new ConnectorStore(root);
-    expect((await reloaded.list())[0]?.approval).toBeUndefined();
-  });
-
   it("claimOwner appends the new sender to owners already present instead of replacing them", async () => {
     const root = await mkdtemp(join(tmpdir(), "amiba-connector-store-"));
     roots.push(root);

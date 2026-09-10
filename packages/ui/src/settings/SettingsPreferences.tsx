@@ -16,6 +16,10 @@ import {
 } from "../theme";
 import { cn } from "../primitives";
 import type { MessagesMaxWidth } from "../chat/internal/types";
+import {
+  type TimeFormatPreference,
+  useStoredTimeFormatPreference,
+} from "../time-format";
 import { SettingsPageDescription } from "./page-chrome";
 
 const ACCENT_LABEL_I18N: Record<AccentPreference, MessageKey> = {
@@ -73,11 +77,12 @@ export interface SettingsAppearanceProps {
    * rows the product owns itself (theme, accent, wallpaper, message width)
    * and this seat appends the contributed ones underneath.
    *
-   * 语言 is NOT one of Amiba's own rows any more. The official locale plugin
-   * registers its `LanguageRow` into this very seat, and Amiba's competing
-   * control — a second `settings.ui.language` preference the official service
-   * could not see — has been retired: one row, one authority. See
-   * `plugins/dsh-plugin-ui-shell/src/client/locale-bridge.ts`.
+   * 语言 is NOT a core-owned preference. The official locale plugin registers
+   * the `language` cell into this seat and remains the one state authority;
+   * UI Shell shadows only that cell's DSH-Menu-based presentation with an
+   * Amiba Select. The retired `settings.ui.language` preference never returns:
+   * one row, one authority. See `plugins/dsh-plugin-ui-shell/src/client/`'s
+   * `locale-bridge.ts` and `language-seat.tsx`.
    *
    * The owner share is empty by contract — "the section column only stacks
    * rows, so a row draws its own internals, including its label" — so the
@@ -91,13 +96,16 @@ export interface SettingsAppearanceProps {
 /**
  * Appearance settings — a top-level tab. Merges what used to be the
  * "Appearance" + "Chat" preference sub-tabs into one page (theme, accent,
- * wallpaper, message width). 语言 lives in the official locale plugin's row,
- * dispatched through `generalItems`.
+ * wallpaper, time format, message width). 语言 is dispatched through
+ * `generalItems`: official locale state behind an Amiba UI Shell visual.
  */
-export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {}) {
-  const { t } = useT();
+export function SettingsAppearance({
+  generalItems,
+}: SettingsAppearanceProps = {}) {
+  const { t, language } = useT();
   const [themePref, setThemePref] = useStoredThemePreference();
   const [accentPref, setAccentPref] = useStoredAccentPreference();
+  const [timeFormat, setTimeFormat] = useStoredTimeFormatPreference(language);
   // Default `true` matches the new-tab page's runtime default (see
   // `useWallpaper`).
   const [wallpaperEnabled, setWallpaperEnabled] = useState(true);
@@ -116,6 +124,14 @@ export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {
     { value: "narrow", label: t("chat.width.narrow") },
     { value: "comfortable", label: t("chat.width.medium") },
     { value: "full", label: t("chat.width.full") },
+  ];
+
+  const timeFormatOptions: {
+    value: TimeFormatPreference;
+    label: string;
+  }[] = [
+    { value: "12h", label: t("options.preference.timeFormat.12h") },
+    { value: "24h", label: t("options.preference.timeFormat.24h") },
   ];
 
   useEffect(() => {
@@ -169,6 +185,9 @@ export function SettingsAppearance({ generalItems }: SettingsAppearanceProps = {
       />
       <ChatSection
         t={t}
+        timeFormat={timeFormat}
+        timeFormatOptions={timeFormatOptions}
+        onTimeFormatChange={(v) => void setTimeFormat(v)}
         messagesWidth={messagesWidth}
         widthOptions={widthOptions}
         onWidthChange={(v) => {
@@ -277,23 +296,38 @@ function AppearanceSection({
 
 function ChatSection({
   t,
+  timeFormat,
+  timeFormatOptions,
+  onTimeFormatChange,
   messagesWidth,
   widthOptions,
   onWidthChange,
 }: {
   t: TranslateFn;
+  timeFormat: TimeFormatPreference;
+  timeFormatOptions: { value: TimeFormatPreference; label: string }[];
+  onTimeFormatChange: (v: TimeFormatPreference) => void;
   messagesWidth: MessagesMaxWidth;
   widthOptions: { value: MessagesMaxWidth; label: string }[];
   onWidthChange: (v: MessagesMaxWidth) => void;
 }) {
   return (
-    <SegmentedRow
-      label={t("chat.width.label")}
-      ariaLabel={t("chat.width.label")}
-      value={messagesWidth}
-      options={widthOptions}
-      onChange={onWidthChange}
-    />
+    <div className="space-y-3">
+      <SegmentedRow
+        label={t("options.preference.timeFormat")}
+        ariaLabel={t("options.preference.timeFormat")}
+        value={timeFormat}
+        options={timeFormatOptions}
+        onChange={onTimeFormatChange}
+      />
+      <SegmentedRow
+        label={t("chat.width.label")}
+        ariaLabel={t("chat.width.label")}
+        value={messagesWidth}
+        options={widthOptions}
+        onChange={onWidthChange}
+      />
+    </div>
   );
 }
 

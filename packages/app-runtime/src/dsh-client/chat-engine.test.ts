@@ -381,3 +381,17 @@ describe("DshChatEngineClient host-started turns", () => {
     engine.dispose();
   });
 });
+
+it("retains separate reasoning segments in a live snapshot around a tool call",async()=>{
+ const engine=new DshChatEngineClient({client:scriptedClient([TURN_START,
+ sessionFrame("assistant/chunk",{chunk:{type:"reasoning-delta",index:0,text:"before"}},3),
+ sessionFrame("tool/call",{callId:"c",name:"bash",arguments:"{}"},4),
+ sessionFrame("assistant/chunk",{chunk:{type:"reasoning-delta",index:0,text:"after"}},5)])});
+ const events:StreamEvent[]=[];const snapshots:SnapshotFrame[]=[];
+ engine.onStreamEvent((_,event)=>events.push(event));engine.onSnapshot(frame=>snapshots.push(frame));engine.subscribe("session-1");
+ await eventually(()=>expect(events.filter(event=>event.kind==="reasoning")).toHaveLength(2));
+ engine.requestSnapshot("session-1");
+ const live=snapshots.at(-1) as Extract<SnapshotFrame,{kind:"live"}>;
+ expect(live.state.timeline.map(item=>item.kind)).toEqual(["reasoning","tool","reasoning"]);
+ engine.dispose();
+});

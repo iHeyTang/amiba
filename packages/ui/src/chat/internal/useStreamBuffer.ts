@@ -229,7 +229,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     // item when its content grows (text items are mutated in place
     // during the run).
     const timelineSnapshot = v.timeline.map((it) =>
-      it.kind === "text" ? { ...it } : it,
+      it.kind === "text" || it.kind === "reasoning" ? { ...it } : it,
     );
     const assistantUiId = v.assistantUiId;
     const reasoningMs =
@@ -370,6 +370,9 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       // collapses to the final (often whitespace-only) delta.
       if (v) {
         v.reasoning += text;
+        const last = v.timeline.at(-1);
+        if (last?.kind === "reasoning") { last.text += text; last.endedAt = Date.now(); }
+        else v.timeline.push({kind:"reasoning",id:shortId("tl"),text,startedAt:Date.now(),endedAt:Date.now()});
         const now = Date.now();
         if (v.reasoningStartAt === null) v.reasoningStartAt = now;
         v.reasoningEndAt = now;

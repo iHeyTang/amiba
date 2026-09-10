@@ -8,8 +8,8 @@ describe("StewardService — steward session", () => {
     const { service, store, created, ctx, onStewardSetup, setupCtxs } = harness();
     const id = await service.ensureStewardSessionId();
     expect(id).toMatch(/^session-/u);
-    expect(created).toEqual([{ sessionId: id, meta: { cwd: "/default", agentPreset: "amiba-steward" } }]);
-    expect(ctx.agentPresets.mount).toHaveBeenCalledWith(setupCtxs.get(id), "amiba-steward");
+    expect(created).toEqual([{ sessionId: id, meta: { cwd: "/default", agentPreset: "standard" } }]);
+    expect(ctx.agentPresets.mount).toHaveBeenCalledWith(setupCtxs.get(id), "standard");
     expect(onStewardSetup).toHaveBeenCalledWith(setupCtxs.get(id));
     expect((await store.read()).stewardSessionId).toBe(id);
     expect(await service.ensureStewardSessionId()).toBe(id);
@@ -23,7 +23,7 @@ describe("StewardService — steward session", () => {
 
     const second = harness();
     await second.store.mutate((s) => ({ ...s, stewardSessionId: id }));
-    second.persist(id, [], { agentPreset: "amiba-steward" });
+    second.persist(id, [], { agentPreset: "standard" });
     await second.service.start();
     expect(second.resumed).toEqual([id]);
     expect(await second.service.ensureStewardSessionId()).toBe(id);
@@ -51,7 +51,7 @@ describe("StewardService — steward session", () => {
     const { service, store, ctx, created, persist } = harness();
     const id = "session-x";
     await store.mutate((s) => ({ ...s, stewardSessionId: id }));
-    persist(id, [], { agentPreset: "amiba-steward" });
+    persist(id, [], { agentPreset: "standard" });
     ctx.agents.resume.mockRejectedValueOnce(new Error("setup exploded"));
     await expect(service.ensureStewardSessionId()).rejects.toThrow(/setup exploded/u);
     expect(created).toHaveLength(0);
@@ -70,7 +70,7 @@ describe("StewardService — title pin", () => {
     const { service, ctx, store, persist, live } = harness();
     const id = "session-resumed";
     await store.mutate((s) => ({ ...s, stewardSessionId: id }));
-    persist(id, [], { agentPreset: "amiba-steward" });
+    persist(id, [], { agentPreset: "standard" });
     await service.start();
     expect(ctx.sessionTitle.rename).toHaveBeenCalledWith(live.get(id)!.session, STEWARD_TITLE);
   });
@@ -89,7 +89,7 @@ describe("StewardService — title pin", () => {
     const id = "session-titled";
     await store.mutate((s) => ({ ...s, stewardSessionId: id }));
     persist(id, [{ type: "session/title", seq: 0, time: 1, data: { title: STEWARD_TITLE, messageSeqs: [], source: { kind: "user" } } }], {
-      agentPreset: "amiba-steward",
+      agentPreset: "standard",
     });
     await service.start();
     expect(ctx.sessionTitle.rename).not.toHaveBeenCalled();
@@ -111,8 +111,8 @@ describe("StewardService — dispatch", () => {
     expect(result.created).toBe(true);
     const task = (await service.listTasks())[0]!;
     expect(task).toMatchObject({ id: result.taskId, title: "写周报", sessionId: result.sessionId, cwd: "/default", origin: "created", status: "running", lastReportedSeq: -1 });
-    expect(created.find((c) => c.sessionId === result.sessionId)?.meta).toEqual({ cwd: "/default" });
-    expect(ctx.agentPresets.mount).toHaveBeenCalledWith(setupCtxs.get(result.sessionId), undefined);
+    expect(created.find((c) => c.sessionId === result.sessionId)?.meta).toEqual({ cwd: "/default", agentPreset: "standard" });
+    expect(ctx.agentPresets.mount).toHaveBeenCalledWith(setupCtxs.get(result.sessionId), "standard");
     expect(setupCtxs.get(result.sessionId)!.tools.guard).toHaveBeenCalledTimes(1);
     const guard = setupCtxs.get(result.sessionId)!.tools.guard.mock.calls[0]![0] as (e: { name: string }) => string | undefined;
     expect(guard({ name: "ask_user_question" })).toMatch(/steward/u);
@@ -461,7 +461,7 @@ describe("StewardService — reporting", () => {
       stewardSessionId: stewardId,
       tasks: [{ id: taskId, title: "E", sessionId, cwd: "/default", origin: "created", status: "running", lastReportedSeq: -1, createdAt: 1, updatedAt: 1 }],
     }));
-    second.persist(stewardId, [], { agentPreset: "amiba-steward" });
+    second.persist(stewardId, [], { agentPreset: "standard" });
     second.persist(sessionId, [...turnEvents(0, "done while down"), ...turnEvents(1, "and again")]);
     await second.service.start();
     await vi.waitFor(() => expect(second.live.get(stewardId)!.followup).toHaveBeenCalledTimes(2));
@@ -607,7 +607,7 @@ describe("StewardService — archived sessions", () => {
       stewardSessionId: stewardId,
       tasks: [{ id: taskId, title: "G", sessionId, cwd: "/default", origin: "created", status: "running", lastReportedSeq: -1, createdAt: 1, updatedAt: 1 }],
     }));
-    second.persist(stewardId, [], { agentPreset: "amiba-steward" });
+    second.persist(stewardId, [], { agentPreset: "standard" });
     second.persist(sessionId, turnEvents(0, "done while down"));
     await second.service.start();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -615,4 +615,28 @@ describe("StewardService — archived sessions", () => {
     const stored = (await second.service.snapshot()).tasks.find((t) => t.id === taskId)!;
     expect(stored.status).toBe("done");
   });
+});
+
+describe("base preset restoration", () => {
+  it("restores the recorded base even after the default changes", async () => {
+    const { service, store, ctx, persist, setupCtxs } = harness();
+    await store.mutate((state) => ({ ...state, stewardSessionId: "existing" }));
+    persist("existing", [], { agentPreset: "code" });
+    ctx.agentPresets.defaultId = "minimal";
+    await service.ensureStewardSessionId();
+    expect(ctx.agentPresets.mount).toHaveBeenCalledWith(setupCtxs.get("existing"), "code");
+  });
+  it("does not publish a steward when base composition fails", async () => {
+    const { service, created, store } = harness({ presetAvailable: false });
+    await expect(service.ensureStewardSessionId()).rejects.toThrow(/unknown preset/);
+    expect(created).toEqual([]);
+    expect((await store.read()).stewardSessionId).toBeUndefined();
+  });
+});
+
+it("disposes a newly created steward if ownership persistence fails", async () => {
+  const { service, store, disposed, created } = harness();
+  vi.spyOn(store, "mutate").mockRejectedValueOnce(new Error("disk full"));
+  await expect(service.ensureStewardSessionId()).rejects.toThrow("disk full");
+  expect(disposed).toEqual([created[0]!.sessionId]);
 });

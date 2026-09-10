@@ -52,6 +52,7 @@ export interface ModelSummaryProps {
   className?: string;
   current?: boolean;
   displayName?: string;
+  description?: string;
   icon?: ReactNode;
   metadata?: ModelMetadata;
   model: string;
@@ -370,6 +371,7 @@ export function ModelSummaryView({
   className,
   current = false,
   displayName,
+  description,
   icon,
   limits,
   model,
@@ -415,6 +417,11 @@ export function ModelSummaryView({
             </span>
           ) : null}
         </span>
+        {description?.trim() ? (
+          <span className="mt-1 block whitespace-normal break-words text-xs font-normal leading-relaxed text-muted-foreground">
+            {description.trim()}
+          </span>
+        ) : null}
         {capabilities.length > 0 ? (
           <ModelMetadataPills
             className={picker ? "mt-1" : "mt-2"}

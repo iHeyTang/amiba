@@ -2,6 +2,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import * as mcpClient from "@deepseek-ai/dsh-mcp-client";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ToolProvenanceRegistry } from "@amiba/dsh-plugin-catalog";
+import { McpToolSurface } from "./tool-surface.js";
 
 const ROUTE = "/api/amiba/mcp/reload";
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -37,15 +38,21 @@ interface WebServerFace {
   }): () => void;
 }
 
+type Origin = { serviceId: string; serviceName: string; declaredBy: string; distribution?: "builtin" | "user" };
+
 interface MountedServer {
   signature: string;
+  displayName?: string;
+  origin?: Origin;
   config: mcpClient.Config;
   dispose(): Promise<void>;
   disposeProvenance(): void;
 }
 
 export interface McpReloadTarget {
-  reload(values: unknown[]): Promise<{ generation: number; configured: string[] }>;
+  reload(
+    values: unknown[],
+  ): Promise<{ generation: number; configured: string[] }>;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -108,7 +115,7 @@ function normalizeServer(
         env: stringRecord(source.env, "env"),
         cwd,
         toolCallTimeoutMs: 60_000,
-        failOnStartupError: false,
+        failOnStartupError: source.required === true,
       },
     };
   }
@@ -127,7 +134,7 @@ function normalizeServer(
       url: url.href,
       headers: stringRecord(source.headers, "headers"),
       toolCallTimeoutMs: 60_000,
-      failOnStartupError: false,
+      failOnStartupError: source.required === true,
     },
   };
 }
@@ -167,6 +174,7 @@ async function readBody(
 
 /** Owns dynamic instances of DSH's official one-server MCP client plugin. */
 export class DshMcpPluginSupervisor {
+  private surfaces = new Map<string, McpToolSurface>();
   private mounted = new Map<string, MountedServer>();
   private generation = 0;
   private queue: Promise<unknown> = Promise.resolve();
@@ -176,21 +184,60 @@ export class DshMcpPluginSupervisor {
     private readonly provenance?: ToolProvenanceRegistry,
   ) {}
 
+  expose(serverName: string, ctx: Context, tools: readonly string[], signal: AbortSignal): () => void {
+    const surface = this.surfaces.get(serverName);
+    if (!surface) throw new Error("mcp_tool_surface_unavailable");
+    return surface.attach(ctx, tools, signal);
+  }
+
+  rename(serverName: string, displayName: string): void {
+    const mounted = this.mounted.get(serverName);
+    if (!mounted) throw new Error("mcp_tool_surface_unavailable");
+    mounted.disposeProvenance();
+    mounted.disposeProvenance = this.provenance?.registerMcpServer(serverName, displayName, mounted.origin) ?? (() => {});
+    mounted.displayName = displayName;
+    mounted.signature = JSON.stringify([mounted.config, displayName, mounted.origin]);
+  }
+
+  requireTools(serverName: string, tools: readonly string[]): void {
+    const surface = this.surfaces.get(serverName);
+    if (!surface) throw new Error("mcp_tool_surface_unavailable");
+    surface.requireTools(tools);
+  }
+
   private async mount(
     name: string,
     config: mcpClient.Config,
+    displayName?: string,
+    origin?: Origin,
   ): Promise<MountedServer> {
     const disposeProvenance =
-      this.provenance?.registerMcpServer(name) ?? (() => undefined);
+      this.provenance?.registerMcpServer(name, displayName, origin) ??
+      (() => undefined);
+    const surface = origin ? new McpToolSurface(name) : undefined;
+    const clientCtx = surface ? this.ctx.isolate("tools") : this.ctx;
+    const disposeTools = surface
+      ? clientCtx.provide("tools", { register: surface.register } as never)
+      : () => {};
     try {
-      const fiber = await this.ctx.plugin(mcpClient, config);
+      const fiber = await clientCtx.plugin(mcpClient, config);
+      if (surface) this.surfaces.set(name, surface);
       return {
-        signature: JSON.stringify(config),
+        signature: JSON.stringify([config, displayName, origin]),
+        displayName,
+        origin,
         config,
-        dispose: () => fiber.dispose(),
+        dispose: async () => {
+          await fiber.dispose();
+          surface?.dispose();
+          await disposeTools();
+          if (this.surfaces.get(name) === surface) this.surfaces.delete(name);
+        },
         disposeProvenance,
       };
     } catch (error) {
+      surface?.dispose();
+      await disposeTools();
       disposeProvenance();
       throw error;
     }
@@ -206,21 +253,45 @@ export class DshMcpPluginSupervisor {
 
   private async applyGeneration(values: unknown[]) {
     const requested = new Map<string, mcpClient.Config>();
+    const labels = new Map<string, string | undefined>();
+    const origins = new Map<string, Origin | undefined>();
     for (const value of values) {
       const server = normalizeServer(value);
       if (!server) continue;
       if (requested.has(server.name))
         throw new Error(`Duplicate MCP serverName ${server.name}`);
       requested.set(server.name, server.config);
+      const label = record(value)?.displayName;
+      const origin = record(record(value)?.origin);
+      origins.set(
+        server.name,
+        origin &&
+          typeof origin.serviceId === "string" &&
+          typeof origin.serviceName === "string" &&
+          typeof origin.declaredBy === "string"
+          ? {
+              serviceId: origin.serviceId,
+              serviceName: origin.serviceName,
+              declaredBy: origin.declaredBy,
+            }
+          : undefined,
+      );
+      labels.set(
+        server.name,
+        typeof label === "string" ? label.trim() || undefined : undefined,
+      );
     }
 
     const signatures = new Map(
-      [...requested].map(([name, config]) => [name, JSON.stringify(config)]),
+      [...requested].map(([name, config]) => [
+        name,
+        JSON.stringify([config, labels.get(name), origins.get(name)]),
+      ]),
     );
-    const replaced = new Map<string, mcpClient.Config>();
+    const replaced = new Map<string, MountedServer>();
     for (const [name, mounted] of this.mounted) {
       if (signatures.get(name) === mounted.signature) continue;
-      replaced.set(name, mounted.config);
+      replaced.set(name, mounted);
       await mounted.dispose();
       mounted.disposeProvenance();
       this.mounted.delete(name);
@@ -230,7 +301,12 @@ export class DshMcpPluginSupervisor {
     try {
       for (const [name, config] of requested) {
         if (this.mounted.has(name)) continue;
-        const mounted = await this.mount(name, config);
+        const mounted = await this.mount(
+          name,
+          config,
+          labels.get(name),
+          origins.get(name),
+        );
         mounted.signature = signatures.get(name)!;
         this.mounted.set(name, mounted);
         added.push(name);
@@ -246,8 +322,16 @@ export class DshMcpPluginSupervisor {
       }
       // Best-effort rollback of replaced live clients. A failed rollback is
       // logged by Cordis and remains visible as a failed management request.
-      for (const [name, config] of replaced) {
-        this.mounted.set(name, await this.mount(name, config));
+      for (const [name, previous] of replaced) {
+        this.mounted.set(
+          name,
+          await this.mount(
+            name,
+            previous.config,
+            previous.displayName,
+            previous.origin,
+          ),
+        );
       }
       throw error;
     }

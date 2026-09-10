@@ -75,7 +75,7 @@ export type OfficialPopupController = CommandPopupController & {
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   /** Publish Amiba's own sources; returns the aggregate disposer. */
-  registerSources(sources: readonly InputTriggerSource[]): () => void;
+  registerSources(sources: readonly InputTriggerSource[], drafts?: boolean): () => void;
   /** Resolve the official controller for a session (seat + composer share it). */
   controllerFor(sessionId: string): ComposerTriggerController | undefined;
   /** Resolve the official popupSelect controller for a session. */
@@ -85,13 +85,23 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
+  let draftSources: readonly InputTriggerSource[] = [];
+  const listeners = new Set<() => void>();
+  const notify = () => { for (const listener of listeners) listener(); };
   return {
-    registerSources(sources) {
+    draftSources: () => draftSources,
+    registerSources(sources, drafts = false) {
       const service = deps.inputTriggers();
       if (service === undefined) return () => {};
-      const offs = sources.map((source) => service.registerSource(source));
+      const offs: Array<() => void> = [];
+      try { for (const source of sources) offs.push(service.registerSource(source)); }
+      catch (error) { for (const off of offs.reverse()) off(); throw error; }
+      // The SAME official source objects, projected onto session-less editors.
+      // Built-ins already have their own local projection and opt out.
+      if (drafts) { draftSources = [...draftSources, ...sources]; notify(); }
       return () => {
         for (const off of offs) off();
+        if (drafts) { draftSources = draftSources.filter((source) => !sources.includes(source)); notify(); }
       };
     },
 
@@ -111,7 +121,9 @@ export function createInputTriggerBridge(
     },
 
     subscribe(listener) {
-      return deps.subscribeSessions(listener);
+      listeners.add(listener);
+      const off = deps.subscribeSessions(listener);
+      return () => { listeners.delete(listener); off(); };
     },
 
     popupFor(sessionId) {

@@ -1,16 +1,12 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
-import type {
-  PropsRenderSlots,
-  PropsRuntime,
-} from "@deepseek-ai/dsh-client-ui-slots";
-import type {} from "@amiba/dsh-plugin-ui-shell/client";
+import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import { settingsChromeHeightPx } from "@amiba/dsh-plugin-ui-shell/client";
 import { Wrench } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { AMIBA_TOOLS_REMOTE } from "../remote.js";
 import {
   DshAgentCapabilitiesPage,
-  settingsChromeHeightPx,
   type ToolsDirectoryAdapter,
 } from "./DshAgentCapabilitiesPage.js";
 
@@ -23,21 +19,6 @@ const SECTION_ID = "tools";
 const PRESET_SECTION_ID = "capabilities";
 type ToolsRemote = ClientContext["remote"]["amibaTools"];
 
-export interface AmibaToolsPanelOwner {
-  chromeHeightPx?: number;
-}
-
-declare module "@deepseek-ai/dsh-client-ui-slots" {
-  interface SlotMap {
-    /** Feature-owned children rendered inside the Tools settings section. */
-    "amiba.tools.panel": {
-      kind: "list";
-      scope: "root";
-      owner: AmibaToolsPanelOwner;
-    };
-  }
-}
-
 function sectionLabel(): string {
   return document.documentElement.lang.toLowerCase().startsWith("zh")
     ? "工具"
@@ -46,23 +27,14 @@ function sectionLabel(): string {
 
 type ToolsSectionProps = PropsRuntime<"settings.section"> & {
   adapter: ToolsDirectoryAdapter;
-} & PropsRenderSlots<"amiba.tools.panel">;
+};
 
-function ToolsSettings({ adapter, renderSlot }: ToolsSectionProps): ReactNode {
-  // The official settings.section owner is `{ close }` only; the drill-in
-  // header's chrome metric comes from the platform's window-chrome facts
-  // instead (see settingsChromeHeightPx). The vendor amiba.tools.panel
-  // owner keeps carrying it unchanged.
-  const chromeHeightPx = settingsChromeHeightPx();
+function ToolsSettings({ adapter }: ToolsSectionProps): ReactNode {
   return (
     <DshAgentCapabilitiesPage
       adapter={adapter}
-      chromeHeightPx={chromeHeightPx}
-    >
-      {renderSlot("amiba.tools.panel", {
-        chromeHeightPx,
-      })}
-    </DshAgentCapabilitiesPage>
+      chromeHeightPx={settingsChromeHeightPx()}
+    />
   );
 }
 
@@ -81,9 +53,8 @@ type ToolsPresetSectionProps = PropsRuntime<"amiba.agentPreset.section"> & {
  * registrant receives one, per the M1 contract) but is intentionally not
  * used to scope the query — this preserves the pre-migration host tab's own
  * behavior, where `AgentCapabilitiesPage`'s `profileId` prop was accepted
- * and never forwarded to the DSH adapter either. No `amiba.tools.panel`
- * children are rendered here: that slot is scoped to the single top-level
- * Tools settings section, not per-preset.
+ * and never forwarded to the DSH adapter either. Both entry points display
+ * only the tool inventory.
  */
 function ToolsPresetSection({ adapter }: ToolsPresetSectionProps): ReactNode {
   return <DshAgentCapabilitiesPage adapter={adapter} embedded />;
@@ -118,9 +89,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
               name: "settings.section",
               id: SECTION_ID,
               order: 100,
-              children: {
-                "amiba.tools.panel": { kind: "list", scope: "root" },
-              },
               label: sectionLabel,
               inject: () => ({ adapter, navIcon: () => <Wrench /> }),
             },

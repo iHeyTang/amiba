@@ -174,3 +174,26 @@ export function userMessageText(content: unknown): UserMessageText {
 export function userMessageUiId(id: unknown, seq: number): string {
   return typeof id === "string" && id ? `dsh:${id}` : `dsh:user:${seq}`
 }
+
+/** Shared projection for live and durable `amiba/notice` events. Unknown
+ * versions/malformed references fail closed instead of navigating by text. */
+export function presentationNotice(value: unknown) {
+  const data = record(value)
+  if (data?.version !== 1 || ![data.id, data.source, data.summary].every(v => typeof v === "string" && v.trim()) || typeof data.body !== "string") return null
+  const ref = record(data.reference)
+  if (data.reference !== undefined && (!ref || ![ref.kind, ref.sessionId, ref.id].every(v => typeof v === "string" && v.trim()))) return null
+  if (ref?.instance !== undefined && (typeof ref.instance !== "string" || !ref.instance)) return null
+  const placement = record(data.placement)
+  if (data.placement !== undefined && (!placement ||
+    (placement.kind !== "standalone" && placement.kind !== "execution") ||
+    (placement.kind === "execution" && ![placement.sessionId, placement.callId].every(v => typeof v === "string" && v.trim())))) return null
+  const display = placement?.kind === "execution"
+    ? { kind: "execution" as const, sessionId: placement.sessionId as string, callId: placement.callId as string }
+    : placement ? {kind: "standalone" as const} : undefined
+  return {
+    uiId: `dsh:notice:${data.id}`,
+    content: data.body,
+    origin: { kind: "plugin" as const, plugin: data.source as string },
+    notice: { summary: data.summary as string, ...(display ? {placement: display} : {}), ...(ref ? { reference: { kind: ref.kind as string, sessionId: ref.sessionId as string, id: ref.id as string, ...(typeof ref.instance === "string" ? { instance: ref.instance } : {}) } } : {}) },
+  }
+}

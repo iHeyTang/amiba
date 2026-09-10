@@ -1,12 +1,12 @@
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
-import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type { PropsRuntime, PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { PageContent, ScrollArea } from "@amiba/ui/plugin";
 import { Bot } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, useCallback, type ReactNode } from "react";
 
-import { AMIBA_MODEL_PLANE_REMOTE } from "../remote.js";
+import { NativeProviderSettings } from "./native-settings.js";
 import {
   DshComposerModelPicker,
   makeSessionModelEngine,
@@ -15,7 +15,7 @@ import {
 } from "./DshComposerModelPicker.js";
 import {
   ModelProviderConfigTab,
-  type ModelPlaneAdapter,
+  type ProviderSettingsController,
 } from "./ModelProviderConfigTab.js";
 
 export const name = "amiba-model-plane-client";
@@ -23,10 +23,9 @@ export const inject = ["slots", "remote", "connection"];
 
 const SECTION_ID = "models";
 
-type ModelPlaneRemote = ClientContext["remote"]["amibaModelPlane"];
 
-type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & {
-  adapter: ModelPlaneAdapter;
+type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & PropsRenderSlots<"amiba.models.extension"> & {
+  adapter: ProviderSettingsController;
 };
 
 /** The session-less hero seat: draft plumbing rides the owner share. */
@@ -40,30 +39,22 @@ type SessionPickerSlotProps = PropsRuntime<"conversation.input.model"> & {
   wire: SessionModelWire;
 };
 
-function remoteError(value: unknown): Error {
-  if (value && typeof value === "object") {
-    const message = (value as { message?: unknown }).message;
-    if (typeof message === "string") return new Error(message);
-  }
-  return new Error(String(value));
-}
-
-async function valueOf<T>(
-  result: Promise<{ ok: true; value: T } | { ok: false; error: unknown }>,
-): Promise<T> {
-  const settled = await result;
-  if (!settled.ok) throw remoteError(settled.error);
-  return settled.value;
-}
-
 /** Top-level Settings section: providers, models, credentials, defaults.
  *  No header actions — the host `SETTINGS_PAGES` entry had none either; the
  *  wrapper reproduces the scaffold's former `scroll="page"` layout. */
-function ModelPlaneSettings({ adapter }: ModelPlaneSectionProps): ReactNode {
+function ModelPlaneSettings({ adapter, renderSlot }: ModelPlaneSectionProps): ReactNode {
+  const [inventories, setInventories] = useState<Record<string, AmibaProviderInventory[]>>({});
+  const onModelsChange = useCallback((source: string, providers: AmibaProviderInventory[]) => {
+    setInventories(current => ({...current, [source]: providers}));
+  }, []);
   return (
     <ScrollArea className="min-h-0 flex-1">
       <PageContent size="md">
-        <ModelProviderConfigTab adapter={adapter} />
+        <ModelProviderConfigTab
+          adapter={adapter}
+          inventory={Object.values(inventories).flat()}
+          assignments={renderSlot("amiba.models.extension", {onModelsChange})}
+        />
       </PageContent>
     </ScrollArea>
   );
@@ -71,13 +62,10 @@ function ModelPlaneSettings({ adapter }: ModelPlaneSectionProps): ReactNode {
 
 /**
  * `amiba.composer.modelPicker` contribution: the session-less hero model
- * chip (home/draft composer). The catalog comes from the plugin's own typed
- * Remote; the surface-held draft selection and picker chrome ride the owner
+ * chip (home/draft composer). The catalog comes directly from the official llm.models API; the surface-held draft selection and picker chrome ride the owner
  * share. No engine — there is no session to talk to yet.
  */
-function DraftModelPickerContribution(
-  props: DraftPickerSlotProps,
-): ReactNode {
+function DraftModelPickerContribution(props: DraftPickerSlotProps): ReactNode {
   return (
     <DshComposerModelPicker
       catalog={props.catalog}
@@ -117,35 +105,35 @@ function SessionModelPickerContribution(
   );
 }
 
-/** Publish the typed Model Plane Remote, the 模型与服务 ("Models & services")
+/** Publish the 模型与服务 ("Models & services")
  *  Settings section, and the two composer picker contributions (official
  *  session seat + vendor hero seat). */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
-  const disposeRemote = await ctx.remote.$mount(AMIBA_MODEL_PLANE_REMOTE);
-  // The official session wire faces, captured once from the connection
+  const api = (ctx.get("connection") as ConnectionHandle).api;
+  // Official wire faces, captured once from the connection
   // service (the agent-preset plugin's ctx.get("connection").api precedent).
-  const wire: SessionModelWire = (ctx.get("connection") as ConnectionHandle)
-    .api.sessions;
+  const wire: SessionModelWire = (ctx.get("connection") as ConnectionHandle).api
+    .sessions;
+  const subscribe = (listener: () => void) => {
+    const disposers = [
+      ctx.remote.$on("llm/adapters-updated", listener),
+      ctx.remote.$on("settings/document-updated", listener),
+      ctx.remote.$on("credentials/reference-updated", listener),
+      ctx.on("connection/reset", listener),
+    ];
+    return () => disposers.forEach((dispose) => dispose());
+  };
+  const controller = new NativeProviderSettings(api, subscribe);
   const sectionFiber = ctx.inject(
-    ["slots", "remote.amibaModelPlane"],
+    ["slots", "connection"],
     (injectedCtx) => {
-      const remote: ModelPlaneRemote = injectedCtx.remote.amibaModelPlane;
-      const adapter: ModelPlaneAdapter = {
-        snapshot: () => valueOf(remote.snapshot()),
-        setDefaultSelection: (selection, expectedRevision) =>
-          valueOf(remote.setDefaultSelection(selection, expectedRevision)),
-        upsert: (input) => valueOf(remote.upsert(input)),
-        remove: (providerId, expectedRevision) =>
-          valueOf(remote.removeProvider(providerId, expectedRevision)),
-        discover: (input) => valueOf(remote.discover(input)),
-        unsetCredential: (providerId, expectedRevision) =>
-          valueOf(remote.unsetCredential(providerId, expectedRevision)),
-      };
+      const adapter = controller;
       return injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {
             name: "settings.section",
             id: SECTION_ID,
+            children: { "amiba.models.extension": { kind: "list", scope: "root" } },
             // Below every other plugin section (catalog/mcp start at 100)
             // so 模型与服务 stays directly after the agent-preset plugin's
             // 智能体预设 entry (5), keeping its old registry position.
@@ -162,12 +150,9 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     },
   );
   const pickerFiber = ctx.inject(
-    ["slots", "remote.amibaModelPlane"],
+    ["slots", "connection"],
     (injectedCtx) => {
-      const remote: ModelPlaneRemote = injectedCtx.remote.amibaModelPlane;
-      const catalog: ComposerPickerCatalog = {
-        snapshot: () => valueOf(remote.snapshot()),
-      };
+      const catalog: ComposerPickerCatalog = controller;
       const disposeDraftSeat = injectedCtx.slots.inject(
         "amiba.composer.modelPicker",
         () =>
@@ -203,6 +188,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   return async () => {
     await pickerFiber.dispose();
     await sectionFiber.dispose();
-    await disposeRemote();
   };
 }
+
+type AmibaProviderInventory = Parameters<NonNullable<PropsRuntime<"amiba.models.extension">["onModelsChange"]>>[1][number];

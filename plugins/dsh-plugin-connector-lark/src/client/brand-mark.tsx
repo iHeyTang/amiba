@@ -10,7 +10,13 @@ export interface LarkMarkProps {
   className?: string;
 }
 
-/** The official Feishu app icon (128 px source, rendered at `size`); decorative — the surrounding UI carries the provider name. */
+/**
+ * The official Feishu app icon (128 px source, rendered at `size`); decorative
+ * — the surrounding UI carries the provider name. The source PNG includes a
+ * heavy macOS app-icon shadow, so clip to the actual tile and scale that tile
+ * back into the requested box. This keeps elevation under the host UI's
+ * control instead of baking a second depth layer into every connector row.
+ */
 export function LarkMark({ size = 22, className }: LarkMarkProps) {
   return (
     <img
@@ -20,7 +26,12 @@ export function LarkMark({ size = 22, className }: LarkMarkProps) {
       draggable={false}
       height={size}
       src={FEISHU_APP_ICON}
-      style={{ display: "block" }}
+      style={{
+        clipPath: "inset(10.9375% round 22%)",
+        display: "block",
+        transform: "scale(1.24)",
+        transformOrigin: "center",
+      }}
       width={size}
     />
   );

@@ -325,91 +325,136 @@
   background: hsl(var(--primary) / 0.08);
 }
 
-/* Code block — flatten Streamdown's default two-box layout into a single
- * box, with copy/download buttons absolutely anchored to the inner body's
- * top-right corner.
- *
- * Streamdown ships:
- *   <div data-streamdown="code-block">                 ← outer: bg-sidebar p-2 border rounded-xl
- *     <div data-streamdown="code-block-header"/>       ← always present, h-8, empty when no language
- *     <div class="sticky -mt-10 …">                    ← actions cluster, overlapping the header
- *       <div data-streamdown="code-block-actions"/>
- *     </div>
- *     <div data-streamdown="code-block-body"/>         ← inner: bg-background p-4 border rounded-md
- *   </div>
- *
- * With no language label the header is just an empty 32px band, and the
- * outer wrapper duplicates the inner box's frame. Strip the outer chrome,
- * hide the empty header, and absolute-position the actions onto the body.
- */
-.chat-md.chat-md [data-streamdown="code-block"] {
+/* Shared single-outline Markdown frame; inner content owns scrolling. */
+.chat-md.chat-md [data-streamdown="code-block"],
+.chat-md.chat-md [data-streamdown="table-wrapper"] {
   position: relative;
   margin: 0.85rem 0;
   padding: 0;
-  border: 0;
-  background: transparent;
-  border-radius: 0;
   gap: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--background));
+  overflow: visible;
 }
-
+/* Give the code toolbar a readable identity, including unlabeled fences.
+ * The language span is supplied by Streamdown; :lang follows the app locale. */
 .chat-md.chat-md [data-streamdown="code-block-header"] {
-  display: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 76px 0 16px;
+  background: hsl(var(--muted) / 0.35);
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 7px 7px 0 0;
+  line-height: 16px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
+.chat-md.chat-md [data-streamdown="code-block-header"]::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M8%208%204%2012l4%204m8-8%204%204-4%204m-3-11-2%2014%22%2F%3E%3C%2Fsvg%3E")
+    center / contain no-repeat;
+}
+.chat-md.chat-md [data-streamdown="code-block-header"] > span {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  text-transform: none;
+}
+.chat-md.chat-md [data-streamdown="code-block-header"] > span:empty::after {
+  content: "Plain text";
+}
+.chat-md.chat-md
+  [data-streamdown="code-block-header"]:lang(zh)
+  > span:empty::after {
+  content: "纯文本";
 }
 
-/* The sticky `-mt-10` wrapper around the action cluster — repurpose as an
- * absolute top-right anchor inside the (now positioning-only) outer wrapper.
- * Targets the parent of `code-block-actions` since Streamdown doesn't put a
- * data attribute on that intermediate div. */
+/* Anchor actions in the header's reserved right-hand space. */
 .chat-md.chat-md
   [data-streamdown="code-block"]
   > div:has(> [data-streamdown="code-block-actions"]) {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 5px;
+  right: 10px;
   margin: 0;
   height: auto;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   z-index: 10;
 }
 
-/* Action cluster — strip Streamdown's default pill (border + sidebar bg +
- * backdrop blur). We want the icons to read as faint affordances, not a
- * floating toolbar. */
 .chat-md.chat-md [data-streamdown="code-block-actions"] {
   background: transparent !important;
   border: 0 !important;
   padding: 0;
-  gap: 0.125rem;
+  gap: 2px;
   backdrop-filter: none !important;
 }
 
-/* Individual icon buttons — fade at rest, lift on code-block hover, full
- * opacity on button hover. Keeps copy/download discoverable without
- * shouting over the code itself. Also shrunk down from Streamdown's
- * default (14px icon + p-1 padding ≈ 24px) to a tighter ~16px hit-area. */
-.chat-md.chat-md [data-streamdown="code-block-copy-button"],
-.chat-md.chat-md [data-streamdown="code-block-download-button"] {
-  opacity: 0.3;
-  padding: 2px;
-  transition: opacity 120ms ease;
-}
-.chat-md.chat-md [data-streamdown="code-block-copy-button"] svg,
-.chat-md.chat-md [data-streamdown="code-block-download-button"] svg {
-  width: 12px;
-  height: 12px;
-}
-.chat-md.chat-md
-  [data-streamdown="code-block"]:hover
-  [data-streamdown="code-block-copy-button"],
-.chat-md.chat-md
-  [data-streamdown="code-block"]:hover
-  [data-streamdown="code-block-download-button"] {
+/* Code actions share one compact hover/focus treatment. */
+.chat-md.chat-md [data-streamdown="code-block-actions"] > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground));
   opacity: 0.7;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
 }
-.chat-md.chat-md [data-streamdown="code-block-copy-button"]:hover,
-.chat-md.chat-md [data-streamdown="code-block-download-button"]:hover,
-.chat-md.chat-md [data-streamdown="code-block-copy-button"]:focus-visible,
-.chat-md.chat-md [data-streamdown="code-block-download-button"]:focus-visible {
+.chat-md.chat-md [data-streamdown="code-block-actions"] > button svg {
+  width: 14px;
+  height: 14px;
+}
+.chat-md.chat-md
+  [data-streamdown="code-block"]:is(:hover, :focus-within)
+  button:not(:disabled) {
   opacity: 1;
+}
+.chat-md.chat-md
+  [data-streamdown="code-block-actions"]
+  > button:is(:hover, :focus-visible):not(:disabled) {
+  background: hsl(var(--muted));
+}
+
+.chat-md.chat-md
+  [data-streamdown="code-block-actions"]
+  > button[aria-pressed="true"] {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  opacity: 1;
+}
+
+/* Only the outer frame draws an outline. Inner content clips the corners. */
+.chat-md.chat-md [data-streamdown="code-block-body"] {
+  border: 0;
+  border-radius: 0 0 7px 7px;
+  padding: 12px 16px;
+}
+.chat-md.chat-md
+  [data-streamdown="table-wrapper"]
+  > div:has(> [data-streamdown="table"]) {
+  border: 0;
+  border-radius: 7px;
 }
 
 /* Strong / bold */
@@ -502,15 +547,9 @@
 }
 
 /* Tables — tighter padding, subtle header band, sane row dividers. */
-.chat-md.chat-md [data-streamdown="table-wrapper"] {
-  margin: 0.85rem 0;
-  padding: 0;
-  gap: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: transparent;
-}
 .chat-md.chat-md [data-streamdown="table"] {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 0.88rem;
   border: 0;
 }
@@ -736,3 +775,20 @@
 .amiba-terminal .xterm-helper-textarea:focus {
   outline: none;
 }
+
+/* The default pre wrapper decorates only native code blocks; special renderers
+ * retain their own presentation. No code-dispatch override is involved. */
+.amiba-markdown-code { position: relative; }
+.amiba-markdown-code-actions { display: none; }
+.amiba-markdown-code:has(> [data-streamdown="code-block"]) { margin: 0.85rem 0; }
+.chat-md.chat-md .amiba-markdown-code > [data-streamdown="code-block"] { margin: 0; }
+.amiba-markdown-code:has(> [data-streamdown="code-block"]) > .amiba-markdown-code-actions {
+  display: flex; position: absolute; top: 5px; right: 10px; z-index: 10;
+}
+.chat-md.chat-md .amiba-markdown-code > [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) { display: none; }
+.chat-md.chat-md .amiba-markdown-code[data-wrap="true"] [data-streamdown="code-block-body"] :is(pre, pre code, pre code > span) {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code > span { display: block; }
+.chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span { position: relative; padding-left: 2.5rem; }
+.chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span::before { position: absolute; left: 0; margin-right: 0; }

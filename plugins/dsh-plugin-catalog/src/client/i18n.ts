@@ -20,25 +20,44 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  * missing or extra zh-CN keys a compile error.
  */
 const en = {
+  "agentCapabilities.group.label": "Delivery",
+  "agentCapabilities.group.builtin": "Built-in",
+  "agentCapabilities.group.builtin.description": "Tools shipped with the application, regardless of provider.",
+  "agentCapabilities.group.user": "User extensions",
+  "agentCapabilities.group.user.description": "Tools added through user presets, plugins or MCP connections.",
+
+  "agentCapabilities.mcp.lark": "Feishu / Lark",
+  "agentCapabilities.mcp.service": "MCP service",
+  "agentCapabilities.mcp.sendMessage": "Send message",
+  "agentCapabilities.mcp.searchChat": "Search chats",
+  "agentCapabilities.mcp.readDoc": "Read document",
+  "agentCapabilities.mcp.searchDoc": "Search documents",
+  "agentCapabilities.mcp.importDoc": "Import document",
+  "agentCapabilities.mcp.userIds": "Look up users",
+  "agentCapabilities.mcp.searchRecords": "Search records",
+  "agentCapabilities.mcp.batchCreate": "Create records",
+  "agentCapabilities.mcp.callId": "Call ID",
+  "agentCapabilities.mcp.tools": "tools",
+  "agentCapabilities.mcp.servers": "servers",
   "agentCapabilities.back": "Back to tools",
   "agentCapabilities.dsh.description":
-    "Every tool registered in the DSH runtime, with its actual source.",
+    "Browse built-in tools and user extensions.",
   "agentCapabilities.dsh.empty": "No tools are registered in this runtime.",
   "agentCapabilities.dsh.noDescription": "No tool description provided.",
   "agentCapabilities.dsh.ready": "Registered",
   "agentCapabilities.dsh.schema": "Input schema",
   "agentCapabilities.dsh.schema.description":
     "The JSON Schema DSH sends to the selected model for this tool.",
-  "agentCapabilities.dsh.source.filter": "Filter by tool source",
+  "agentCapabilities.dsh.source.filter": "Filter by delivery",
   "agentCapabilities.dsh.source.all": "All",
   "agentCapabilities.dsh.source.empty": "This source has no available tools.",
   "agentCapabilities.dsh.source.dshCore": "Official DSH capabilities",
   "agentCapabilities.dsh.source.dshCore.description":
     "Registered by official plugins across the installed DSH presets.",
-  "agentCapabilities.dsh.source.dshPlugin": "Amiba DSH Plugins",
+  "agentCapabilities.dsh.source.dshPlugin": "Plugin tools",
   "agentCapabilities.dsh.source.dshPlugin.description":
-    "Registered by independent dsh-plugin-* projects assembled by the Amiba bundle.",
-  "agentCapabilities.dsh.source.mcpServer": "MCP Server",
+    "Registered through a plugin.",
+  "agentCapabilities.dsh.source.mcpServer": "MCP tools",
   "agentCapabilities.dsh.source.mcpServer.description":
     "Provided by external services connected through the DSH MCP Client plugin.",
   "agentCapabilities.dsh.source.detail": "Tool source",
@@ -66,25 +85,44 @@ const en = {
 export type CatalogMessageKey = keyof typeof en;
 
 const zhCN: Record<CatalogMessageKey, string> = {
+  "agentCapabilities.group.label": "工具类型",
+  "agentCapabilities.group.builtin": "内置",
+  "agentCapabilities.group.builtin.description": "随应用提供的工具，不区分 DSH 或 Amiba。",
+  "agentCapabilities.group.user": "用户扩展",
+  "agentCapabilities.group.user.description": "通过用户预设、插件或 MCP 连接添加的工具。",
+
+  "agentCapabilities.mcp.lark": "飞书",
+  "agentCapabilities.mcp.service": "MCP 服务",
+  "agentCapabilities.mcp.sendMessage": "发送消息",
+  "agentCapabilities.mcp.searchChat": "搜索群聊",
+  "agentCapabilities.mcp.readDoc": "读取文档",
+  "agentCapabilities.mcp.searchDoc": "搜索文档",
+  "agentCapabilities.mcp.importDoc": "导入文档",
+  "agentCapabilities.mcp.userIds": "查询用户",
+  "agentCapabilities.mcp.searchRecords": "搜索多维表记录",
+  "agentCapabilities.mcp.batchCreate": "创建多维表记录",
+  "agentCapabilities.mcp.callId": "调用 ID",
+  "agentCapabilities.mcp.tools": "个工具",
+  "agentCapabilities.mcp.servers": "个服务",
   "agentCapabilities.back": "返回工具",
   "agentCapabilities.dsh.description":
-    "展示 DSH Runtime 中已注册的全部工具，并标明真实来源。",
+    "查看内置工具和用户扩展的工具。",
   "agentCapabilities.dsh.empty": "当前运行时没有注册任何工具。",
   "agentCapabilities.dsh.noDescription": "这个工具没有提供说明。",
   "agentCapabilities.dsh.ready": "已注册",
   "agentCapabilities.dsh.schema": "输入 Schema",
   "agentCapabilities.dsh.schema.description":
     "DSH 针对此工具发送给所选模型的 JSON Schema。",
-  "agentCapabilities.dsh.source.filter": "按工具来源筛选",
+  "agentCapabilities.dsh.source.filter": "按内置或用户扩展筛选",
   "agentCapabilities.dsh.source.all": "全部",
   "agentCapabilities.dsh.source.empty": "这个来源当前没有可用工具。",
   "agentCapabilities.dsh.source.dshCore": "DSH 官方能力",
   "agentCapabilities.dsh.source.dshCore.description":
     "由已安装 DSH presets 中的官方插件注册。",
-  "agentCapabilities.dsh.source.dshPlugin": "Amiba DSH Plugins",
+  "agentCapabilities.dsh.source.dshPlugin": "插件工具",
   "agentCapabilities.dsh.source.dshPlugin.description":
-    "由独立的 dsh-plugin-* 项目注册，并通过 Amiba bundle 组装。",
-  "agentCapabilities.dsh.source.mcpServer": "MCP Server",
+    "由插件注册的工具。",
+  "agentCapabilities.dsh.source.mcpServer": "MCP 工具",
   "agentCapabilities.dsh.source.mcpServer.description":
     "由 DSH MCP Client 插件连接的外部服务提供。",
   "agentCapabilities.dsh.source.detail": "工具来源",

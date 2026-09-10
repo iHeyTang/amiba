@@ -7,7 +7,8 @@ import { z } from "zod";
 import type {
   ConnectorProviderView,
   ConnectView,
-  MessageChannelApproval,
+  ConnectDetails,
+  UpdateConnectInput,
   OnboardingView,
 } from "./types.js";
 
@@ -16,16 +17,12 @@ export interface CreateConnectInput {
   name: string;
   agentPreset: string;
   config: Record<string, unknown>;
-  /** Absent uses the bound channel's default (10-minute timeout). */
-  approval?: MessageChannelApproval;
 }
 
 export interface BeginOnboardingInput {
   provider: string;
   name: string;
   agentPreset: string;
-  /** Absent uses the bound channel's default (10-minute timeout). */
-  approval?: MessageChannelApproval;
 }
 
 export interface AmibaConnectorsProvidersSnapshot {
@@ -56,18 +53,11 @@ const providerViewSchema = z.object({
   description: z.string(),
   icon: z.string().optional(),
   supportsOnboarding: z.boolean(),
+  messaging: z.object({ ownerPairing: z.boolean() }).optional(),
 });
 
 // No secret or config field: ConnectView never carries credential material,
 // and this schema must never grow one either.
-// Mirrors messaging-core's own MessageChannelApproval shape; timeoutMs is
-// validated more strictly (>= MIN_APPROVAL_TIMEOUT_MS in `timeout` mode) by
-// messageCenter.createChannel/updateChannel itself, not on the wire here.
-const approvalSchema = z.object({
-  mode: z.enum(["timeout", "wait"]),
-  timeoutMs: z.number().int().positive(),
-});
-
 const connectViewSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -76,27 +66,64 @@ const connectViewSchema = z.object({
   pairing: z.boolean(),
   owners: z.array(z.string()),
   agentPreset: z.string().optional(),
-  channelId: z.string().optional(),
-  approval: approvalSchema.optional(),
   status: connectorStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
-const createConnectInputSchema = z.object({
-  provider: z.string().min(1),
-  name: z.string().min(1),
-  agentPreset: z.string().min(1),
-  config: z.record(z.string(), z.unknown()),
-  approval: approvalSchema.optional(),
+const createConnectInputSchema = z
+  .object({
+    provider: z.string().min(1),
+    name: z.string().min(1),
+    agentPreset: z.string().min(1),
+    config: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+const updateConnectInputSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    agentPreset: z.string().trim().min(1).optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+const connectDetailsSchema = z.object({
+  capabilityUses: z.array(z.object({ name: z.string(), capabilities: z.array(z.string()) })).optional(),
+  connect: connectViewSchema,
+  settings: z.record(z.string(), z.unknown()),
+  access: z.object({
+    identity: z.enum(["application", "user"]), label: z.string().optional(),
+    state: z.enum(["unauthorized", "authorized", "expired"]),
+    capabilities: z.array(z.object({ id: z.string(), available: z.boolean() })),
+  }).optional(),
+  messaging: z
+    .object({
+      delivery: z.object({
+        pendingInbound: z.number(),
+        queuedOutbound: z.number(),
+        failedOutbound: z.number(),
+        lastDeliveryError: z.string().optional(),
+      }),
+      conversations: z.array(
+        z.object({
+          key: z.string(),
+          kind: z.enum(["p2p", "group"]),
+          title: z.string().optional(),
+          sessionId: z.string(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
-const beginOnboardingInputSchema = z.object({
-  provider: z.string().min(1),
-  name: z.string().min(1),
-  agentPreset: z.string().min(1),
-  approval: approvalSchema.optional(),
-});
+const beginOnboardingInputSchema = z
+  .object({
+    provider: z.string().min(1),
+    name: z.string().min(1),
+    agentPreset: z.string().min(1),
+  })
+  .strict();
 
 const onboardingStateSchema = z.enum([
   "pending",
@@ -134,11 +161,15 @@ function codec<T>(schema: z.ZodType<T>, typeSymbol: string) {
 const stringCodec = codec(z.string(), "typescript#string");
 const booleanCodec = codec(z.boolean(), "typescript#boolean");
 const ownersCodec = codec(z.array(z.string()), "@amiba/connectors#owners");
-const approvalCodec = codec(approvalSchema, "@amiba/connectors#approval");
 
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaConnectors: {
+      getConnectDetails(id: string): Promise<RemoteResult<ConnectDetails>>;
+      updateConnect(
+        id: string,
+        input: UpdateConnectInput,
+      ): Promise<RemoteResult<ConnectView>>;
       listProviders(): Promise<RemoteResult<AmibaConnectorsProvidersSnapshot>>;
       listConnects(): Promise<RemoteResult<AmibaConnectorsConnectsSnapshot>>;
       createConnect(
@@ -155,10 +186,6 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
         id: string,
         owners: string[],
       ): Promise<RemoteResult<ConnectView>>;
-      setApproval(
-        id: string,
-        approval: MessageChannelApproval,
-      ): Promise<RemoteResult<ConnectView>>;
       beginOnboarding(
         input: BeginOnboardingInput,
       ): Promise<RemoteResult<OnboardingView>>;
@@ -170,6 +197,13 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 
   interface TypertRemoteMap {
+    "amibaConnectors/getConnectDetails": (
+      id: string,
+    ) => Promise<RemoteResult<ConnectDetails>>;
+    "amibaConnectors/updateConnect": (
+      id: string,
+      input: UpdateConnectInput,
+    ) => Promise<RemoteResult<ConnectView>>;
     "amibaConnectors/listProviders": () => Promise<
       RemoteResult<AmibaConnectorsProvidersSnapshot>
     >;
@@ -189,10 +223,6 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaConnectors/setOwners": (
       id: string,
       owners: string[],
-    ) => Promise<RemoteResult<ConnectView>>;
-    "amibaConnectors/setApproval": (
-      id: string,
-      approval: MessageChannelApproval,
     ) => Promise<RemoteResult<ConnectView>>;
     "amibaConnectors/beginOnboarding": (
       input: BeginOnboardingInput,
@@ -234,6 +264,27 @@ const descriptor = (
 export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-connector-core",
   descriptors: [
+    descriptor(
+      "getConnectDetails",
+      [{ name: "id", wire: "id", source: "json", codec: stringCodec }],
+      codec(connectDetailsSchema, "@amiba/connectors#details"),
+    ),
+    descriptor(
+      "updateConnect",
+      [
+        { name: "id", wire: "id", source: "json", codec: stringCodec },
+        {
+          name: "input",
+          wire: "input",
+          source: "json",
+          codec: codec(
+            updateConnectInputSchema,
+            "@amiba/connectors#update-input",
+          ),
+        },
+      ],
+      codec(connectViewSchema, "@amiba/connectors#connect"),
+    ),
     descriptor(
       "listProviders",
       [],
@@ -286,19 +337,6 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
           wire: "owners",
           source: "json",
           codec: ownersCodec,
-        },
-      ],
-      codec(connectViewSchema, "@amiba/connectors#connect"),
-    ),
-    descriptor(
-      "setApproval",
-      [
-        { name: "id", wire: "id", source: "json", codec: stringCodec },
-        {
-          name: "approval",
-          wire: "approval",
-          source: "json",
-          codec: approvalCodec,
         },
       ],
       codec(connectViewSchema, "@amiba/connectors#connect"),

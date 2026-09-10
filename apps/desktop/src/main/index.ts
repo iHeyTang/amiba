@@ -54,6 +54,7 @@ import {
 } from "./external-inbox";
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { registerIpcHandlers } from "./ipc";
+import { registerEmbeddedPageHandlers } from "./embedded-page";
 import { embeddedBrowserController } from "./embedded-browser";
 import { createMainPlatformAdapter } from "./platform";
 import { cleanupOldSnips } from "./screen-capture";
@@ -599,6 +600,7 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    registerEmbeddedPageHandlers();
     // Replace Electron's implicit default menu (which has no Preferences
     // entry) before any window exists so ⌘, / Ctrl+, is live from the first
     // frame. Every standard role is re-declared in the template.

@@ -2,56 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { MessageChannelApproval } from "@amiba/dsh-plugin-connector-core";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkWizard } from "../DingtalkWizard";
-
-/**
- * Stand-in for the real `host.kit.ApprovalField` (connector-core owns that
- * component and its own tests, see `wizard-kit.test.tsx`): a minute input
- * plus a checkbox for "wait forever", enough to drive the wizard's own
- * `approval` state through its full range without depending on the real
- * radio-group markup.
- */
-function FakeApprovalField({
-  approval,
-  onApprovalChange,
-}: {
-  approval: MessageChannelApproval;
-  onApprovalChange(value: MessageChannelApproval): void;
-}) {
-  const minutes = Math.round(approval.timeoutMs / 60_000);
-  return (
-    <div>
-      <label>
-        超时分钟数
-        <input
-          disabled={approval.mode !== "timeout"}
-          onChange={(e) =>
-            onApprovalChange({ mode: "timeout", timeoutMs: Number(e.target.value) * 60_000 })
-          }
-          type="number"
-          value={minutes}
-        />
-      </label>
-      <label>
-        一直等
-        <input
-          checked={approval.mode === "wait"}
-          onChange={(e) =>
-            onApprovalChange(
-              e.target.checked
-                ? { mode: "wait", timeoutMs: approval.timeoutMs }
-                : { mode: "timeout", timeoutMs: approval.timeoutMs },
-            )
-          }
-          type="checkbox"
-        />
-      </label>
-    </div>
-  );
-}
 
 /**
  * Stand-in for the real `host.kit.BasicsFields` (connector-core owns that
@@ -102,7 +55,9 @@ function FakeBasicsFields({
 
 const presets = [{ id: "restricted", label: "Restricted", isDefault: true }];
 
-function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost {
+function hostWith(
+  overrides: Partial<ConnectWizardHost> = {},
+): ConnectWizardHost {
   return {
     providerId: "dingtalk",
     presets,
@@ -114,9 +69,7 @@ function hostWith(overrides: Partial<ConnectWizardHost> = {}): ConnectWizardHost
     } as never,
     kit: {
       BasicsFields: FakeBasicsFields as never,
-      ApprovalField: FakeApprovalField as never,
-      // The wizard seeds its own approval state from the kit rather than
-      // carrying a copy of connector-core's literal.
+      ApprovalField: () => null,
       defaultApproval: () => ({ mode: "timeout", timeoutMs: 600_000 }),
     },
     back: vi.fn(),
@@ -135,14 +88,7 @@ function typeName(value = "Bot") {
   fireEvent.change(screen.getByLabelText("连接名称"), { target: { value } });
 }
 
-/** The header's icon-only close (aria-labelled) vs the footer's own cancel button. */
-function cancelControls() {
-  const all = screen.getAllByRole("button", { name: /取消|Cancel/ });
-  return {
-    headerClose: all.filter((b) => !b.textContent?.trim())[0] as HTMLElement,
-    footerCancel: all.filter((b) => Boolean(b.textContent?.trim()))[0] as HTMLElement,
-  };
-}
+const closeButton = () => screen.getByRole("button", { name: /关闭|Close/ });
 
 function fillIds({ clientId = "cid", clientSecret = "sec" } = {}) {
   fireEvent.change(screen.getByLabelText("Client ID"), {
@@ -164,7 +110,9 @@ describe("DingtalkWizard", () => {
   });
 
   it("seeds the name from the host prefill", () => {
-    render(<DingtalkWizard host={hostWith({ prefill: { name: "钉钉助手" } })} />);
+    render(
+      <DingtalkWizard host={hostWith({ prefill: { name: "钉钉助手" } })} />,
+    );
     expect(screen.getByLabelText("连接名称")).toHaveValue("钉钉助手");
   });
 
@@ -180,26 +128,32 @@ describe("DingtalkWizard", () => {
     );
   });
 
-  it("goes back to the platform picker and closes through the host", async () => {
+  it("returns to the connector directory and closes through the host", async () => {
     const host = hostWith();
     render(<DingtalkWizard host={host} />);
     await userEvent.click(
-      screen.getByRole("button", { name: /换个平台|Change platform/ }),
+      screen.getByRole("button", { name: /返回连接器|Back to connectors/ }),
     );
     expect(host.back).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(cancelControls().headerClose);
+    await userEvent.click(closeButton());
     expect(host.cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels the wizard through the host", async () => {
-    const host = hostWith();
+  it("closes from settings without a redundant back or cancel action", async () => {
+    const host = hostWith({ back: undefined });
     render(<DingtalkWizard host={host} />);
-    await userEvent.click(cancelControls().footerCancel);
+    expect(
+      screen.queryByRole("button", { name: /返回连接器|Back to connectors/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /取消|Cancel/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(closeButton());
     expect(host.cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("creates with trimmed ids and enableTools:false by default", async () => {
+  it("creates with trimmed ids, tools disabled and the inherited approval policy", async () => {
     const host = hostWith();
     render(<DingtalkWizard host={host} />);
     typeName("Bot");
@@ -214,24 +168,9 @@ describe("DingtalkWizard", () => {
       provider: "dingtalk",
       name: "Bot",
       agentPreset: "restricted",
-      config: { clientId: "cid", clientSecret: "sec", enableTools: false },
-      approval: { mode: "timeout", timeoutMs: 600_000 },
+      config: { clientId: "cid", clientSecret: "sec" },
     });
     expect(host.done).toHaveBeenCalledWith({ id: "c1" });
-  });
-
-  it("includes enableTools:true once the switch is on", async () => {
-    const host = hostWith();
-    render(<DingtalkWizard host={host} />);
-    typeName("Bot");
-    fillIds();
-    await userEvent.click(screen.getByRole("switch"));
-    await userEvent.click(submitButton());
-    expect(host.adapter.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: expect.objectContaining({ enableTools: true }),
-      }),
-    );
   });
 
   it("blocks submit until both ids are present", () => {
@@ -255,32 +194,6 @@ describe("DingtalkWizard", () => {
     expect(host.adapter.create).not.toHaveBeenCalled();
   });
 
-  it("passes a changed approval-wait setting through to create", async () => {
-    const host = hostWith();
-    render(<DingtalkWizard host={host} />);
-    typeName("Bot");
-    fillIds();
-    fireEvent.change(screen.getByLabelText("超时分钟数"), { target: { value: "5" } });
-    await userEvent.click(submitButton());
-
-    expect(host.adapter.create).toHaveBeenCalledWith(
-      expect.objectContaining({ approval: { mode: "timeout", timeoutMs: 5 * 60_000 } }),
-    );
-  });
-
-  it("passes a wait-forever approval setting through to create", async () => {
-    const host = hostWith();
-    render(<DingtalkWizard host={host} />);
-    typeName("Bot");
-    fillIds();
-    await userEvent.click(screen.getByLabelText("一直等"));
-    await userEvent.click(submitButton());
-
-    expect(host.adapter.create).toHaveBeenCalledWith(
-      expect.objectContaining({ approval: expect.objectContaining({ mode: "wait" }) }),
-    );
-  });
-
   it("translates a create failure code instead of rendering the raw code", async () => {
     const host = hostWith({
       adapter: {
@@ -297,10 +210,12 @@ describe("DingtalkWizard", () => {
     fillIds();
     await userEvent.click(submitButton());
 
-    expect(screen.getByText(/[Aa]gent [Pp]reset/)).toBeInTheDocument();
     expect(
-      screen.queryByText("agent_preset_required"),
-    ).not.toBeInTheDocument();
+      screen.getByText(
+        /创建连接前请先选择智能体预设。|Choose an agent preset before creating this connect\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("agent_preset_required")).not.toBeInTheDocument();
     expect(host.done).not.toHaveBeenCalled();
   });
 });

@@ -31,6 +31,7 @@ describe("withHostUserMessage", () => {
     const next = withHostUserMessage([], {
       uiId: "dsh:m1",
       content: "去查一下",
+      sentAt: 1_725_000_000_000,
       origin: { kind: "plugin", plugin: "amiba-steward" },
     });
     expect(next).toEqual([
@@ -38,6 +39,7 @@ describe("withHostUserMessage", () => {
         uiId: "dsh:m1",
         role: "user",
         content: "去查一下",
+        sentAt: 1_725_000_000_000,
         origin: { kind: "plugin", plugin: "amiba-steward" },
       },
     ]);

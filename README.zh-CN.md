@@ -10,6 +10,8 @@ Amiba 是一个以 DSH（DeepSeek Harness）为唯一智能体内核的桌面工
 
 ## 架构
 
+Core 与插件统一数据升级约定：[data-upgrades.md](docs/data-upgrades.md)（设计阶段，未发版数据不做历史迁移）。
+
 ```text
 React UI
    │ 类型化 PlatformAdapter / ChatEngineClient
@@ -20,7 +22,7 @@ Electron main
    │           ├─ @amiba/dsh-plugin-model-plane（独立真源 + DSH 投影）
    │           ├─ @amiba/dsh-plugin-memory
    │           ├─ @amiba/dsh-plugin-messaging-core
-   │           ├─ @amiba/dsh-plugin-messaging-channel-webhook
+   │           ├─ @amiba/dsh-plugin-connector-webhook
    │           ├─ @amiba/dsh-plugin-attachments
    │           ├─ @amiba/dsh-plugin-mcp-manager
    │           ├─ @amiba/dsh-plugin-runtime-inventory
@@ -82,6 +84,11 @@ pnpm install
 pnpm runtime:prepare
 pnpm dev:desktop
 ```
+
+`pnpm dev:desktop` 会持续监听工作区内所有带 Client 入口的 Amiba 插件。
+保存 UI/插件源码后，仅增量重建受影响的 Client bundle，并通过 DSH 重建通道自动
+刷新当前窗口；通常不需要重新执行 `runtime:rebuild` 或重启桌面应用。
+Host 插件、依赖清单和 Cordis patch 等运行时结构变更仍需要重启开发进程。
 
 CLI/Web 需要浏览器执行时，为一个已启用 remote debugging 的 Chrome/Chromium 设置
 `AMIBA_BROWSER_CDP_URL=http://127.0.0.1:9222`。未配置 endpoint 时，CDP provider 不注册，

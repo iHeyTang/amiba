@@ -1,11 +1,24 @@
+import { ToolRowFrame } from "./tool-row-frame";
+import { useToolCallSeat } from "./tool-call-seat";
+import type { NoticeReference } from "@amiba/app-runtime/protocol";
 import type { ApprovalRecord, ToolProgress } from "@amiba/app-runtime/core";
-import { cn } from "../../primitives";
+import { ReferenceText } from "../../reference-request";
 import {
+  cn,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../primitives";
+import {
+  Brain,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Copy,
   FileDiff,
-  GitBranch,
+  GitFork,
   Undo2,
 } from "lucide-react";
 import {
@@ -15,11 +28,17 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { Streamdown } from "streamdown";
+import { ChatMarkdown as Streamdown } from "@amiba/markdown";
 import { useT } from "@amiba/i18n";
 
+import {
+  formatMessageTime,
+  type TimeFormatPreference,
+  useStoredTimeFormatPreference,
+} from "../../time-format";
 import {
   bubbleTextContent,
   stripManagedResourceContext,
@@ -35,7 +54,7 @@ import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
 import { ToolChip } from "./tool-chip";
-import { describeToolCall, hasToolDetail } from "./tool-presentation";
+import { hasToolDetail } from "./tool-presentation";
 import { CodeEvidence } from "./tool-evidence";
 import {
   compactWorkspacePath,
@@ -61,6 +80,10 @@ import {
 export type MessageSourceLabelResolver = (
   pluginId: string,
 ) => string | undefined;
+
+export interface MessageNoticeOwner { source: string; summary: string; body: string; reference?: NoticeReference }
+export type MessageNoticeRenderer = (owner: MessageNoticeOwner, fallback: ReactNode) => ReactNode;
+export const MessageNoticeRendererContext = createContext<MessageNoticeRenderer | undefined>(undefined);
 
 export const MessageSourceLabelContext = createContext<
   MessageSourceLabelResolver | undefined
@@ -195,6 +218,8 @@ export interface BubbleProps {
 function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
   const timeline = message.assistantTimeline ?? [];
   return (
+    (timeline.length > 0 && !!message.streaming) ||
+    timeline.some(item => item.kind === "reasoning") ||
     timeline.some(
       (item) => item.kind === "text" && item.text.trim().length > 0,
     ) && timeline.some((item) => item.kind !== "text")
@@ -220,6 +245,7 @@ export function Bubble({
 }: BubbleProps) {
   const { t } = useT();
   const resolveMessageSourceLabel = useContext(MessageSourceLabelContext);
+  const renderNotice = useContext(MessageNoticeRendererContext);
   const awaitingUserInput = useContext(AwaitingUserInputContext);
 
   if (m.role === "user") {
@@ -229,17 +255,17 @@ export function Bubble({
     // to anybody — so it gets the quiet collapsed row, not the user card.
     if (m.notice) {
       const producer = m.origin?.kind === "plugin" ? m.origin.plugin : "";
-      return (
+      const fallback = (
         <MessageNoticeRow
           summary={m.notice.summary}
           label={
-            producer
-              ? (resolveMessageSourceLabel?.(producer) ?? producer)
-              : ""
+            producer ? (resolveMessageSourceLabel?.(producer) ?? producer) : ""
           }
           body={stripManagedResourceContext(bubbleTextContent(m.content))}
         />
       );
+      return renderNotice ? renderNotice({ source: producer, summary: m.notice.summary, reference: m.notice.reference,
+        body: stripManagedResourceContext(bubbleTextContent(m.content)) }, fallback) : fallback;
     }
     const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
     const fileBadges = m.attachmentBadges ?? [];
@@ -279,7 +305,7 @@ export function Bubble({
           </div>
         )}
         {hasContent && (
-          <div className="whitespace-pre-wrap break-words">{bodyText}</div>
+          <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
         )}
       </div>
     );
@@ -698,7 +724,10 @@ function TraceDisclosure({
   );
 }
 
+const ExecutionNoticesContext = createContext<ReadonlyMap<string, UiMessage[]>>(new Map());
+
 type TurnTraceDetail =
+  | { kind: "notice"; id: string; message: UiMessage }
   | {
       kind: "fallback";
       id: string;
@@ -774,6 +803,9 @@ function LiveReasoningPane({ text }: { text: string }) {
   );
 }
 
+const noNavigationSubscribe = () => () => {};
+const idleNavigation = {callId:"",version:0};
+const noNavigationRequest = () => idleNavigation;
 function ExecutionDisclosure({
   details,
   tools,
@@ -793,6 +825,11 @@ function ExecutionDisclosure({
   const { t } = useT();
   const [expanded, setExpanded] = useState(false);
 
+  const navigation = useToolCallSeat()?.navigation;
+  const navigationRequest = useSyncExternalStore(navigation?.subscribe ?? noNavigationSubscribe, navigation?.getSnapshot ?? noNavigationRequest);
+  const handledNavigation = useRef(0);
+  useEffect(()=>{if(navigationRequest.version !== handledNavigation.current && tools.some(tool=>tool.toolCallId === navigationRequest.callId)){handledNavigation.current=navigationRequest.version;setExpanded(true);}},[navigationRequest, tools]);
+
   if (details.length === 0 && !latestProgress) return null;
 
   const runningTool = [...tools]
@@ -804,9 +841,6 @@ function ExecutionDisclosure({
   // "generating" label between consecutive tool calls.
   const summaryTool =
     runningTool ?? (streaming ? tools[tools.length - 1] : undefined);
-  const summaryPresentation = summaryTool
-    ? describeToolCall(summaryTool, t)
-    : null;
   const hasDetails = details.length > 0;
   const thought = details.find(
     (detail): detail is Extract<TurnTraceDetail, { kind: "reasoning" }> =>
@@ -824,9 +858,7 @@ function ExecutionDisclosure({
           : latestProgress || t("sidepanel.trace.executionDetails");
   const showLiveReasoning = streaming && !expanded && liveReasoning.length > 0;
   const summaryLabel = summaryTool
-    ? [summaryPresentation?.action, summaryPresentation?.target]
-        .filter(Boolean)
-        .join(" · ")
+    ? <ToolChip event={summaryTool} mode="summary" />
     : streaming
       ? // With the live pane open the full text is already on screen; a
         // one-line ticker above it would just repeat its last fragment.
@@ -860,7 +892,7 @@ function ExecutionDisclosure({
           className={cn(
             "min-w-0 truncate",
             streaming && "agent-thinking-text",
-            summaryTool && "font-mono",
+
           )}
         >
           {summaryLabel}
@@ -879,6 +911,7 @@ function ExecutionDisclosure({
       {expanded && hasDetails && (
         <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
           {details.map((detail) => {
+            if (detail.kind === "notice") return <div key={detail.id} className="min-w-0 self-stretch text-left [&>*]:justify-start"><Bubble m={detail.message} /></div>;
             if (detail.kind === "fallback") {
               return (
                 <TraceDisclosure
@@ -903,20 +936,21 @@ function ExecutionDisclosure({
                     key={detail.id}
                     mode="static"
                     parseIncompleteMarkdown
-                    className="chat-md chat-md--reasoning break-words px-1.5 py-1 text-xs text-muted-foreground/85"
+                    className="chat-md chat-md--reasoning max-h-80 overflow-y-auto overscroll-contain break-words px-1.5 py-1 text-xs text-muted-foreground/85"
                   >
                     {detail.text}
                   </Streamdown>
                 );
               }
-              return (
-                <TraceDisclosure
-                  key={detail.id}
-                  label={thoughtLabel(t, detail.reasoningMs)}
-                  text={detail.text}
-                  streaming={false}
-                />
-              );
+              return <ToolRowFrame
+                key={detail.id}
+                icon={Brain}
+                action=""
+                ariaLabel={t("sidepanel.trace.thoughtProcess")}
+                target={<span className="min-w-0 max-w-80 truncate text-foreground/65">{detail.text.replace(/\s+/g," ").trim()}</span>}
+                durationMs={detail.reasoningMs}
+                detail={<Streamdown components={chatMarkdownComponents} mode="static" parseIncompleteMarkdown className="chat-md chat-md--reasoning max-h-80 overflow-y-auto overscroll-contain break-words py-1 text-xs text-muted-foreground/85">{detail.text}</Streamdown>}
+              />;
             }
             if (detail.kind === "narration") {
               return (
@@ -946,6 +980,7 @@ function ExecutionDisclosure({
 
 /** Collapses adjacent execution-only messages that lack per-tool details. */
 function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
+  const notices = useContext(ExecutionNoticesContext);
   const details: TurnTraceDetail[] = [];
   const tools: ToolProgress[] = [];
   const seenToolIds = new Set<string>();
@@ -954,6 +989,7 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
   let liveReasoning = "";
 
   for (const message of messages) {
+    for (const notice of notices.get(message.uiId) ?? []) details.push({ kind: "notice", id: notice.uiId, message: notice });
     const trace = resolveAssistantTrace(message);
     if (message.streaming && trace.reasoningText) {
       latestProgress = compactProgressNote(trace.reasoningText);
@@ -1205,6 +1241,8 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   for (const item of timeline) {
     if (item.kind === "text") {
       appendText(item.id, item.text);
+    } else if (item.kind === "reasoning") {
+      pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
     } else {
@@ -1255,6 +1293,7 @@ function InterleavedAssistantFlow({
   suppressRunBoundary?: boolean;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
 }) {
+  const executionNotices = useContext(ExecutionNoticesContext);
   const awaitingUserInput = useContext(AwaitingUserInputContext);
   const flow = buildAssistantFlow(message);
   const trace = resolveAssistantTrace(message);
@@ -1262,41 +1301,22 @@ function InterleavedAssistantFlow({
   const hasFinalDestination =
     !message.streaming &&
     Boolean(message.agentFinalUrl && onOpenAgentDestination);
-  // Two-part turn presentation: everything before the trailing text run is
-  // process (narration folded with the tools it accompanied); the trailing
-  // run is the result. While streaming, the current text streams in the
-  // result slot and is demoted into the fold as soon as another tool call
-  // proves it was narration.
-  //
-  // ONE stateful exception: an open wait on the user. When the session is
-  // blocked on user interaction, the text the agent wrote just before
-  // pausing is the user's BASIS for responding to the dock sheet below;
-  // folding it away hides exactly what the response needs. That text
-  // stays in the result slot while the wait is open; the pausing call's
-  // own tool row still folds with the process like any other. Once the
-  // wait resolves and the turn moves on, the same text is ordinary
-  // narration again and demotes as usual — both natures honored,
-  // switched by state.
-  //
-  // The signal is the WAIT ITSELF (AwaitingUserInputContext, fed by the
-  // host's pending questions/approvals), not a tool-name registry: any
-  // tool — first- or third-party — that pauses through the official
-  // interaction seams (ctx.userQuestions, approvals) has thereby
-  // "declared" itself, and gets this treatment with no registration.
-  const lastSegment = flow.at(-1);
-  const awaitingUser =
-    awaitingUserInput &&
-    !!message.streaming &&
-    lastSegment?.kind === "execution";
-  const { head: processSegments, tail: resultSegments } = splitTrailingTextRun(
-    awaitingUser ? flow.slice(0, -1) : flow,
-  );
-  if (awaitingUser && lastSegment) processSegments.push(lastSegment);
+  // Only a settled turn has a result. During execution, render the stable
+  // timeline below without reclassifying text when another tool arrives.
+  const { head: processSegments, tail: resultSegments } =
+    splitTrailingTextRun(flow);
   const processDetails: TurnTraceDetail[] = processSegments.flatMap(
     (segment) =>
       segment.kind === "execution"
         ? segment.details
         : [{ kind: "narration" as const, id: segment.id, text: segment.text }],
+  );
+  processDetails.push(
+    ...(executionNotices.get(message.uiId) ?? []).map((notice) => ({
+      kind: "notice" as const,
+      id: notice.uiId,
+      message: notice,
+    })),
   );
   const processTools: ToolProgress[] = processSegments.flatMap((segment) =>
     segment.kind === "execution" ? segment.tools : [],
@@ -1307,19 +1327,70 @@ function InterleavedAssistantFlow({
     .trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
-  // With result text on screen the process row shows its completed label
-  // and the only animation is the text caret, which stops with the prose;
-  // the turn itself may still be running (its next tool call is being
-  // generated). Keep a pulsing tail until the stream ends — unless the
-  // session is paused on the user, where "working" would be a lie.
-  const showRunning =
-    resultStreaming && resultText.length > 0 && !awaitingUserInput;
+  const showRunning = resultStreaming && !awaitingUserInput;
+
+  const flowRef = useRef<HTMLDivElement>(null);
+  const liveHeight = useRef(0);
+  const liveResultTop = useRef<number | null>(null);
+  const wasStreaming = useRef(resultStreaming);
+  useLayoutEffect(() => {
+    const node = flowRef.current;
+    if (!node) return;
+    const completing = wasStreaming.current && !resultStreaming;
+    wasStreaming.current = resultStreaming;
+    if (resultStreaming) {
+      const measure = () => {
+        const bounds = node.getBoundingClientRect();
+        liveHeight.current = bounds.height;
+        const text = node.querySelector<HTMLElement>("[data-live-tail]");
+        liveResultTop.current = text
+          ? text.getBoundingClientRect().top - bounds.top
+          : null;
+      };
+      measure();
+      const observer = new ResizeObserver(measure);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+    const height = node.getBoundingClientRect().height;
+    if (
+      !completing ||
+      liveHeight.current <= height ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+      !node.animate
+    )
+      return;
+    // Animate actual layout height so native scroll anchoring can follow the
+    // shrink. Never force-scroll: someone may be reading an earlier turn.
+    const animation = node.animate(
+      [{ height: `${liveHeight.current}px` }, { height: `${height}px` }],
+      { duration: 180, easing: "ease-out" },
+    );
+    const result = node.querySelector<HTMLElement>("[data-turn-result]");
+    const resultAnimation =
+      result && liveResultTop.current !== null
+        ? result.animate(
+            [
+              {
+                transform: `translateY(${liveResultTop.current - (result.getBoundingClientRect().top - node.getBoundingClientRect().top)}px)`,
+              },
+              { transform: "translateY(0)" },
+            ],
+            { duration: 180, easing: "ease-out" },
+          )
+        : undefined;
+    return () => {
+      animation.cancel();
+      resultAnimation?.cancel();
+    };
+  }, [resultStreaming]);
 
   // The thought stream joins the same aggregate as the tools: one collapsed
   // process row whose summary reads "思考了 X 秒 · N 次工具调用", with the
   // full thought text as the first nested detail.
   const clusterDetails: TurnTraceDetail[] =
-    trace.reasoningText.length > 0
+    trace.reasoningText.length > 0 &&
+    !message.assistantTimeline?.some((item) => item.kind === "reasoning")
       ? [
           {
             kind: "reasoning" as const,
@@ -1337,27 +1408,80 @@ function InterleavedAssistantFlow({
 
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
-      <div className="flex min-w-0 flex-col gap-2">
-        {clusterDetails.length > 0 && (
-          <ExecutionDisclosure
-            details={clusterDetails}
-            tools={processTools}
-            streaming={processStreaming}
-            latestProgress={clusterProgress}
-            processMs={message.processMs}
-          />
-        )}
-        {resultText.length > 0 && (
-          <Streamdown
-            components={chatMarkdownComponents}
-            mode={resultStreaming ? "streaming" : "static"}
-            parseIncompleteMarkdown
-            caret="circle"
-            isAnimating={resultStreaming}
-            className="chat-md break-words"
-          >
-            {resultText}
-          </Streamdown>
+      <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
+        {resultStreaming ? (
+          <>
+            {trace.reasoningText.length > 0 &&
+              !message.assistantTimeline?.some(
+                (item) => item.kind === "reasoning",
+              ) && (
+                <ExecutionDisclosure
+                  details={clusterDetails.filter(
+                    (detail) => detail.kind === "reasoning",
+                  )}
+                  tools={[]}
+                  streaming={!awaitingUserInput}
+                  latestProgress={clusterProgress}
+                />
+              )}
+            {flow.map((segment, index) =>
+              segment.kind === "text" ? (
+                <div
+                  key={segment.id}
+                  data-live-tail={index === flow.length - 1 ? "" : undefined}
+                >
+                  <Streamdown
+                    components={chatMarkdownComponents}
+                    mode="streaming"
+                    parseIncompleteMarkdown
+                    caret="circle"
+                    isAnimating={
+                      index === flow.length - 1 && !awaitingUserInput
+                    }
+                    className="chat-md break-words"
+                  >
+                    {segment.text}
+                  </Streamdown>
+                </div>
+              ) : (
+                <ExecutionDisclosure
+                  key={segment.id}
+                  details={segment.details}
+                  tools={segment.tools}
+                  streaming={index === flow.length - 1 && !awaitingUserInput}
+                />
+              ),
+            )}
+            {(executionNotices.get(message.uiId) ?? []).map((notice) => (
+              <Bubble key={notice.uiId} m={notice} />
+            ))}
+          </>
+        ) : (
+          <>
+            {clusterDetails.length > 0 && (
+              <ExecutionDisclosure
+                details={clusterDetails}
+                tools={processTools}
+                streaming={processStreaming}
+                latestProgress={clusterProgress}
+                processMs={message.processMs}
+              />
+            )}
+            {resultText.length > 0 && (
+              <div data-turn-result>
+                <Streamdown
+                  components={chatMarkdownComponents}
+                  mode={resultStreaming ? "streaming" : "static"}
+                  parseIncompleteMarkdown
+                  caret="circle"
+                  isAnimating={resultStreaming}
+                  className="chat-md break-words"
+                >
+                  {resultText}
+                </Streamdown>
+              </div>
+            )}
+          </>
         )}
         {showRunning && <TurnRunningIndicator />}
       </div>
@@ -1393,17 +1517,22 @@ export function UserStickyBubble({
   userOrdinal,
   onBranch,
   onRestore,
+  timeFormat,
+  timeLocale,
 }: {
   m: UiMessage;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
   onRestore?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
+  timeFormat: TimeFormatPreference;
+  timeLocale?: string;
 }) {
   const { t } = useT();
   const innerRef = useRef<HTMLDivElement>(null);
   const [overflowed, setOverflowed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useLayoutEffect(() => {
     const inner = innerRef.current;
@@ -1421,72 +1550,117 @@ export function UserStickyBubble({
     if (!overflowed && expanded) setExpanded(false);
   }, [overflowed, expanded]);
 
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(false), 1_500);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
   const isClipping = overflowed && !expanded;
+  const messageTime = formatMessageTime(m.sentAt, timeFormat, timeLocale);
+  const copyMessage = () => {
+    const clipboard = navigator.clipboard;
+    if (!clipboard) return;
+    void clipboard
+      .writeText(stripManagedResourceContext(bubbleTextContent(m.content)))
+      .then(() => setCopied(true))
+      .catch(() => undefined);
+  };
 
   return (
-    <div className="sticky top-0 z-20 -mx-3 bg-background px-3 pb-1">
-      <div className="group relative">
-        <div
-          className={cn(
-            "rounded-xl",
-            expanded
-              ? `${EXPANDED_MAX_HEIGHT_CLASS} overflow-y-auto`
-              : `${CAPPED_HEIGHT_CLASS} overflow-hidden`,
-          )}
-        >
-          <div ref={innerRef}>
-            <Bubble m={m} onOpenAgentDestination={onOpenAgentDestination} />
+    <div className="sticky top-0 z-20 -mx-3 bg-background px-3">
+      <TooltipProvider delayDuration={180} skipDelayDuration={80}>
+        <div className="group">
+          <div className="relative">
+            <div
+              className={cn(
+                "rounded-xl",
+                expanded
+                  ? `${EXPANDED_MAX_HEIGHT_CLASS} overflow-y-auto`
+                  : `${CAPPED_HEIGHT_CLASS} overflow-hidden`,
+              )}
+            >
+              <div ref={innerRef}>
+                <Bubble m={m} onOpenAgentDestination={onOpenAgentDestination} />
+              </div>
+            </div>
+            {isClipping && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-xl bg-gradient-to-t from-secondary to-transparent"
+              />
+            )}
+            {overflowed && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    aria-label={t(
+                      expanded
+                        ? "sidepanel.message.collapse"
+                        : "sidepanel.message.expand",
+                    )}
+                    className={cn(
+                      "absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center",
+                      "rounded-md text-muted-foreground/60 transition-colors",
+                      "hover:bg-accent/70 hover:text-foreground",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    )}
+                  >
+                    {expanded ? (
+                      <ChevronUp className="h-3 w-3" aria-hidden />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" aria-hidden />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[11px]">
+                  {t(
+                    expanded
+                      ? "sidepanel.message.collapse"
+                      : "sidepanel.message.expand",
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
+          {!m.streaming ? (
+            <div
+              data-testid="user-message-actions"
+              className="pointer-events-none flex h-7 items-center justify-end gap-0.5 px-1.5 pt-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+            >
+              {messageTime ? (
+                <time
+                  dateTime={messageTime.dateTime}
+                  className="mr-1 shrink-0 whitespace-nowrap text-[10px] tabular-nums leading-none text-muted-foreground/55"
+                >
+                  {messageTime.label}
+                </time>
+              ) : null}
+              <UserActionButton
+                label={t(copied ? "common.copied" : "common.copy")}
+                icon={copied ? <Check /> : <Copy />}
+                onClick={copyMessage}
+              />
+              {onRestore ? (
+                <UserActionButton
+                  label={t("sidepanel.message.restoreWorkspace")}
+                  icon={<Undo2 />}
+                  onClick={() => void onRestore(m, userOrdinal)}
+                />
+              ) : null}
+              {onBranch ? (
+                <UserActionButton
+                  label={t("sidepanel.message.branch")}
+                  icon={<GitFork />}
+                  onClick={() => void onBranch(m, userOrdinal)}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        {isClipping && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-xl bg-gradient-to-t from-secondary to-transparent"
-          />
-        )}
-        {overflowed && (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            title={expanded ? "Collapse" : "Show full message"}
-            aria-label={
-              expanded ? "Collapse user message" : "Show full user message"
-            }
-            className={cn(
-              "absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center",
-              "rounded-full border border-border/60 bg-background/80 text-muted-foreground",
-              "opacity-30 transition-opacity",
-              "group-hover:opacity-100 focus-visible:opacity-100",
-              "hover:bg-background hover:text-foreground",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            )}
-          >
-            {expanded ? (
-              <ChevronUp className="h-3 w-3" aria-hidden />
-            ) : (
-              <ChevronDown className="h-3 w-3" aria-hidden />
-            )}
-          </button>
-        )}
-        {(onBranch || onRestore) && !m.streaming ? (
-          <div className="absolute bottom-1.5 right-2 flex items-center gap-0.5 rounded-lg border border-border/50 bg-background/90 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            {onRestore ? (
-              <UserActionButton
-                label={t("sidepanel.message.restoreWorkspace")}
-                icon={<Undo2 />}
-                onClick={() => void onRestore(m, userOrdinal)}
-              />
-            ) : null}
-            {onBranch ? (
-              <UserActionButton
-                label={t("sidepanel.message.branch")}
-                icon={<GitBranch />}
-                onClick={() => void onBranch(m, userOrdinal)}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      </TooltipProvider>
     </div>
   );
 }
@@ -1500,6 +1674,7 @@ export function UserStickyBubble({
  */
 export function MessageTurns({
   messages,
+  sessionId,
   onOpenAgentDestination,
   onReviewWorkspaceChanges,
   onBranchUserMessage,
@@ -1507,6 +1682,7 @@ export function MessageTurns({
   restorableTurnOrdinals,
 }: {
   messages: UiMessage[];
+  sessionId?: string;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   onReviewWorkspaceChanges?: (
     resource: WorkspaceReviewResource,
@@ -1521,6 +1697,8 @@ export function MessageTurns({
   ) => void | Promise<void>;
   restorableTurnOrdinals?: ReadonlySet<number>;
 }) {
+  const { language } = useT();
+  const [timeFormat] = useStoredTimeFormatPreference(language);
   type Turn = {
     user: UiMessage | null;
     replies: UiMessage[];
@@ -1529,8 +1707,23 @@ export function MessageTurns({
   const turns: Turn[] = [];
   let cur: Turn | null = null;
   let userOrdinal = 0;
-  for (const m of messages) {
-    if (m.role === "user") {
+  const executionNotices = new Map<string, UiMessage[]>();
+  const callOwners = new Map<string, UiMessage>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const event of message.toolProgress ?? []) callOwners.set(event.toolCallId, message);
+  }
+  const visibleMessages = messages.filter(message => {
+    const placement = message.notice?.placement;
+    if (placement?.kind !== "execution" || !sessionId || placement.sessionId !== sessionId) return true;
+    const target = callOwners.get(placement.callId);
+    if (!target) return true; // Missing history remains visible; never guess a nearby run.
+    executionNotices.set(target.uiId, [...(executionNotices.get(target.uiId) ?? []), message]);
+    return false;
+  });
+  for (const m of visibleMessages) {
+    // Plugin notices use the wire's user role, but do not start a user turn.
+    if (m.role === "user" && !m.notice) {
       cur = { user: m, replies: [], userOrdinal };
       userOrdinal += 1;
       turns.push(cur);
@@ -1556,7 +1749,8 @@ export function MessageTurns({
           <div
             key={turn.user?.uiId ?? `turn-${i}`}
             data-conversation-user-turn={turn.user?.uiId}
-            className="space-y-2"
+            // The user action row already separates the prompt from the first reply.
+            className={turn.user ? "[&>:nth-child(n+3)]:mt-2" : "space-y-2"}
           >
             {turn.user && (
               <UserStickyBubble
@@ -1569,8 +1763,11 @@ export function MessageTurns({
                     ? onRestoreBeforeTurn
                     : undefined
                 }
+                timeFormat={timeFormat}
+                timeLocale={language}
               />
             )}
+            <ExecutionNoticesContext.Provider value={executionNotices}>
             {replyItems.map((item) => {
               if (item.kind === "execution") {
                 return (
@@ -1594,6 +1791,7 @@ export function MessageTurns({
                 />
               );
             })}
+            </ExecutionNoticesContext.Provider>
             {reviewResource && onReviewWorkspaceChanges ? (
               <WorkspaceChangesCard
                 resource={reviewResource}
@@ -1732,14 +1930,20 @@ function UserActionButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:h-3 [&_svg]:w-3"
-    >
-      {icon}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:h-3.5 [&_svg]:w-3.5"
+        >
+          {icon}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-[11px]">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
