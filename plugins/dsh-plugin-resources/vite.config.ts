@@ -23,6 +23,8 @@ export default defineConfig({
         "@amiba/dsh-plugin-ui-shell/client",
       ],
       output: {
+        // DSH registers one factory per entry; relative CJS chunks are not loadable.
+        inlineDynamicImports: true,
         exports: "named",
         banner:
           'window.__ModuleLoader__.load({ id: "@amiba/dsh-plugin-resources", factory: (require) => {',

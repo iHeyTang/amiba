@@ -339,9 +339,9 @@ importers:
       '@amiba/dsh-plugin-media-minimax':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-media-minimax
-      '@amiba/dsh-plugin-memory':
+      '@amiba/dsh-plugin-memory-memos':
         specifier: workspace:*
-        version: link:../../plugins/dsh-plugin-memory
+        version: link:../../plugins/dsh-plugin-memory-memos
       '@amiba/dsh-plugin-messaging-core':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-messaging-core
@@ -396,6 +396,9 @@ importers:
       '@amiba/dsh-plugin-connector-webhook':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-connector-webhook
+      '@amiba/dsh-plugin-file-preview':
+        specifier: workspace:*
+        version: link:../../plugins/dsh-plugin-file-preview
       '@amiba/dsh-plugin-markdown':
         specifier: workspace:*
         version: link:../../plugins/dsh-plugin-markdown
@@ -461,6 +464,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-tool':
         specifier: 'catalog:'
         version: 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee))(@deepseek-ai/dsh-client-connection@0.1.1-rc.2)(@deepseek-ai/dsh-client-locale@0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4))(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry))(@deepseek-ai/dsh-client-ui-conversation@0.1.1-rc.2(4qa4lls4tvnurzcyp72egc673a))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
       typescript:
         specifier: 5.6.3
         version: 5.6.3
@@ -1525,6 +1534,76 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)
 
+  plugins/dsh-plugin-file-preview:
+    dependencies:
+      '@amiba/app-runtime':
+        specifier: workspace:*
+        version: link:../../packages/app-runtime
+      '@amiba/dsh-plugin-ui-shell':
+        specifier: workspace:*
+        version: link:../dsh-plugin-ui-shell
+      '@amiba/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/extension-sdk
+      '@amiba/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@amiba/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@18.3.1)
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 'catalog:'
+        version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: 'catalog:'
+        version: 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: 'catalog:'
+        version: 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 'catalog:'
+        version: 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.0.1
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@testing-library/user-event':
+        specifier: ^14.5.2
+        version: 14.6.1(@testing-library/dom@10.4.1)
+      '@types/node':
+        specifier: 22.9.0
+        version: 22.9.0
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: 18.3.1
+        version: 18.3.1
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vite:
+        specifier: ^5.4.11
+        version: 5.4.21(@types/node@22.9.0)
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)
+
   plugins/dsh-plugin-markdown:
     dependencies:
       '@amiba/dsh-plugin-ui-shell':
@@ -1802,7 +1881,7 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)
 
-  plugins/dsh-plugin-memory:
+  plugins/dsh-plugin-memory-memos:
     dependencies:
       '@amiba/dsh-plugin-catalog':
         specifier: workspace:*

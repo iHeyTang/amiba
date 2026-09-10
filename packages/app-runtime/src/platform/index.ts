@@ -514,6 +514,16 @@ export interface WorkspaceFileDocument {
   revision: string;
   truncated: boolean;
   binary: boolean;
+  mimeType?: string;
+}
+
+/** Complete bounded bytes, read with the same session path validation as text. */
+export interface WorkspaceFileBytes {
+  path: string;
+  size: number;
+  revision: string;
+  mimeType?: string;
+  base64: string;
 }
 
 export interface WorkspaceFileChange {
@@ -613,6 +623,7 @@ export interface WorkspaceFilesAdapter {
   list(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
   search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
   read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
+  readBytes?(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
   reveal(sessionId: string, path: string): Promise<void>;
   openExternal(sessionId: string, path: string): Promise<void>;
   watch(

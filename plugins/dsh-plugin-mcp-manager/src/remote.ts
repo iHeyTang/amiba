@@ -46,6 +46,7 @@ const snapshotSchema = z.object({
   toolsOnly: z.literal(true),
   dependencies: z.array(
     z.object({
+      serviceId: z.string(),
       connectionId: z.string(),
       name: z.string(),
       service: z.string(),

@@ -1,5 +1,5 @@
-import { open, stat } from "node:fs/promises";
-import { basename, resolve as resolvePath } from "node:path";
+import { readPreviewFile } from "./file-preview";
+import { resolve as resolvePath } from "node:path";
 
 import {
   BrowserWindow,
@@ -50,7 +50,6 @@ import {
   writeWorkspaceTerminal,
 } from "./workspace-development";
 
-const MAX_FILE_VIEW_BYTES = 2 * 1024 * 1024;
 
 interface FileWatchSubscription {
   webContentsId: number;
@@ -61,46 +60,9 @@ interface FileWatchSubscription {
 const fileWatchSubscriptions = new Map<string, FileWatchSubscription>();
 const observedFileWatchSenders = new Set<number>();
 
-async function readWorkspaceFile(sessionId: string, candidate: string) {
-  const resolved = await workspaceManager.resolveFileForSession(
-    sessionId,
-    candidate,
-  );
-  const fileStat = await stat(resolved.path);
-  if (!fileStat.isFile()) {
-    throw new Error("The selected workspace resource is not a file.");
-  }
-
-  const bytesToRead = Math.min(fileStat.size, MAX_FILE_VIEW_BYTES);
-  const buffer = Buffer.alloc(bytesToRead);
-  const handle = await open(resolved.path, "r");
-  let bytesRead = 0;
-  try {
-    if (bytesToRead > 0) {
-      const result = await handle.read(buffer, 0, bytesToRead, 0);
-      bytesRead = result.bytesRead;
-    }
-  } finally {
-    await handle.close();
-  }
-
-  const contentBuffer = buffer.subarray(0, bytesRead);
-  const binaryProbe = contentBuffer.subarray(
-    0,
-    Math.min(contentBuffer.length, 8_192),
-  );
-  const binary = binaryProbe.includes(0);
-  return {
-    path: resolved.path,
-    relativePath: resolved.relativePath,
-    name: basename(resolved.path),
-    content: binary ? "" : contentBuffer.toString("utf8"),
-    size: fileStat.size,
-    modifiedAt: fileStat.mtimeMs,
-    revision: `${fileStat.mtimeMs}:${fileStat.size}`,
-    truncated: fileStat.size > MAX_FILE_VIEW_BYTES,
-    binary,
-  };
+async function readWorkspaceFile(sessionId: string, candidate: string, raw = false) {
+  const resolved = await workspaceManager.resolveFileForSession(sessionId, candidate);
+  return readPreviewFile(resolved, raw);
 }
 
 function broadcastChange(changes: StorageChangeMap) {
@@ -395,6 +357,8 @@ export function registerIpcHandlers() {
     (_e, args: { sessionId: string; path: string }) =>
       readWorkspaceFile(args.sessionId, args.path),
   );
+
+  ipcMain.handle("files:read-bytes", (_e, args: { sessionId: string; path: string }) => readWorkspaceFile(args.sessionId, args.path, true));
 
   ipcMain.handle(
     "files:reveal",

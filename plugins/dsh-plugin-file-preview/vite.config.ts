@@ -1,7 +1,11 @@
 import { defineConfig } from "vite";
 
-const PLUGIN_ID = "@amiba/dsh-plugin-memory";
+const PLUGIN_ID = "@amiba/dsh-plugin-file-preview";
+
+// DSH's Web Shell owns these singleton identities. The emitted client bundle
+// resolves them through window.__ModuleLoader__ instead of bundling copies.
 const DSH_CLIENT_EXTERNALS = [
+  "streamdown",
   "react",
   "react/jsx-runtime",
   "react-dom",
@@ -30,7 +34,10 @@ export default defineConfig({
     rollupOptions: {
       external: DSH_CLIENT_EXTERNALS,
       output: {
+        // DSH registers one factory per entry; relative CJS chunks are not loadable.
+        inlineDynamicImports: true,
         exports: "named",
+        paths: { streamdown: "@amiba/dsh-plugin-ui-shell/client" },
         banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
         intro: "var module = { exports: {} }; var exports = module.exports;",
         footer: "return module.exports; } });",
@@ -38,4 +45,3 @@ export default defineConfig({
     },
   },
 });
-

@@ -5,7 +5,7 @@ import { applyMemoryRemote } from "./remote-service.js";
 import { initialMemosStatus } from "./memos-status.js";
 import { mountMemos } from "./memos.js";
 
-export const name = "amiba-memory";
+export const name = "amiba-memory-memos";
 export const inject = ["tools", "systemPrompt", "amibaToolCatalog"];
 
 export interface Config {
@@ -36,7 +36,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       distribution: "builtin",
       id: "amiba-memory",
       name: "MemOS Memory",
-      packageName: "@amiba/dsh-plugin-memory",
+      packageName: "@amiba/dsh-plugin-memory-memos",
       loadMode: "plugin",
       executionTarget: "dsh-runtime",
       dynamic: false,

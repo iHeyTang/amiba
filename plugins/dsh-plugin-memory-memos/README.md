@@ -1,4 +1,4 @@
-# @amiba/dsh-plugin-memory
+# @amiba/dsh-plugin-memory-memos
 
 Amiba's built-in local memory, composed from the official
 `@memtensor/memos-local-plugin@2.0.18` DeepSeek Harness adapter.
@@ -9,7 +9,7 @@ The core bundle loads this Amiba plugin, which mounts the official adapter as a
 Cordis child plugin. MemOS owns its Core, SQLite database, retrieval, lifecycle
 hooks and Viewer in the DSH process. No MemOS cloud account, separate daemon or
 global npm installation is required. The Amiba layer owns default configuration,
-status RPC, settings/preset UI and tool provenance. It does not fork the algorithms
+management RPC, workspace and settings/preset UI and tool provenance. It does not fork the algorithms
 or change the DSH plugin loader.
 
 - On the first agent step of each turn, MemOS searches and injects bounded recall.
@@ -41,19 +41,25 @@ link to the official local Viewer (`http://127.0.0.1:18801`). Set
 conflict is surfaced as an error. Restart Amiba after changing configuration.
 Model-specific MemOS configuration can override the default host model route.
 
-Amiba shows engine status and an **Open in browser** button. The plugin supplies
-a validated loopback HTTP link with `target="_blank"`; the desktop's existing
-window-open handler delegates it to the system default browser. Memory management
-is not embedded in Amiba and does not create a workbench tab. Nothing opens until
-the user clicks, and the entry is disabled until the engine is ready.
+The plugin registers a **Memory** workspace at the top of the workspace navigation.
+Its native Amiba page provides overview counts, category browsing (memories,
+experiences, environment knowledge and skills), text search, pagination and
+source/content details. It reuses Amiba's theme, controls and desktop chrome.
+The existing settings and preset pages retain engine status and the original
+Viewer link for advanced configuration and editing.
 
-The initial local password setup remains MemOS's own page; no cloud account is
-required. Login state belongs to the user's browser. Closing that page does not
-stop the in-process memory engine.
+`amibaMemory/status`, `amibaMemory/overview` and `amibaMemory/browse` expose a
+strict typed, read-only projection. The host requests fixed local Viewer routes
+with a timeout, validates responses, and never follows redirects. No browser
+CORS dependency or secondary store is introduced. Password-protected Viewers show a native password form. `amibaMemory/login`
+forwards login to MemOS; its signed session is kept only in the client runtime
+and supplied on subsequent reads. Passwords are cleared after submission and
+are never persisted. Each client authenticates independently. Browser login
+and native dashboard login are separate.
 
-`amibaMemory/status` exposes the engine version, state, mode, resolved home,
-Viewer URL and startup error. All memory reads, writes and management belong to
-MemOS. There is no secondary store, archive UI, migration or compatibility API.
+The package is named `@amiba/dsh-plugin-memory-memos`. The existing Cordis entry
+ID `amiba-memory`, RPC namespace `amibaMemory`, and data directory `amiba-memos`
+remain stable so the rename does not reset configuration or stored memories.
 
 ## Packaging and verification
 
@@ -69,7 +75,7 @@ run the deterministic Core smoke with its Node and dependency tree:
 ```sh
 AMIBA_MEMORY_TEST_APP="$PWD/packages/app-runtime/resources/dsh-runtime/app/package.json" \
   packages/app-runtime/resources/dsh-runtime/node/bin/node \
-  plugins/dsh-plugin-memory/scripts/smoke.mjs
+  plugins/dsh-plugin-memory-memos/scripts/smoke.mjs
 ```
 
 This smoke uses temporary SQLite storage, a loopback embedding fixture and

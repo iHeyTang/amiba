@@ -37,7 +37,7 @@ describe("DshAgentCapabilitiesPage DSH inventory", () => {
             distribution: "builtin",
             id: "amiba-memory",
             name: "Amiba Memory",
-            packageName: "@amiba/dsh-plugin-memory",
+            packageName: "@amiba/dsh-plugin-memory-memos",
             loadMode: "plugin",
             executionTarget: "dsh-runtime",
             dynamic: false,

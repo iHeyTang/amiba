@@ -61,6 +61,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         openConnections: () => injectedCtx.layout.openSettings("connect"),
       };
       const adapter: McpToolsAdapter = {
+        startChat: (seedPrompt) => injectedCtx.layout.openNewChat(seedPrompt),
         list: () => valueOf(remote.list()),
         save: (input) => valueOf(remote.save(input)),
         remove: async (serverName) => {

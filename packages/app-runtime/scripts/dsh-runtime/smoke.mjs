@@ -665,7 +665,7 @@ export function apply(ctx) {
         ids = new Set(graph.entries.map((entry) => entry.id));
         if (
           ids.has("@amiba/dsh-plugin-catalog") &&
-          ids.has("@amiba/dsh-plugin-memory") &&
+          ids.has("@amiba/dsh-plugin-memory-memos") &&
           ids.has("@amiba/dsh-plugin-connector-webhook") &&
           ids.has("@amiba/dsh-plugin-skills") &&
           ids.has("@amiba/dsh-plugin-mcp-manager") &&
@@ -685,7 +685,7 @@ export function apply(ctx) {
         `DSH client graph omitted Tools catalog's Client contribution: ${[...ids].join(", ")}`,
       );
       assert.ok(
-        ids.has("@amiba/dsh-plugin-memory"),
+        ids.has("@amiba/dsh-plugin-memory-memos"),
         `DSH client graph omitted Memory's Client contribution: ${[...ids].join(", ")}`,
       );
       assert.ok(
@@ -789,7 +789,7 @@ export function apply(ctx) {
         /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-ui-shell"/u,
       );
       const memoryClient = graph.entries.find(
-        (entry) => entry.id === "@amiba/dsh-plugin-memory",
+        (entry) => entry.id === "@amiba/dsh-plugin-memory-memos",
       );
       assert.deepEqual(memoryClient.inject, [
         "@deepseek-ai/dsh-client-runtime",
@@ -802,7 +802,7 @@ export function apply(ctx) {
       assert.equal(memoryBundle.status, 200);
       assert.match(
         await memoryBundle.text(),
-        /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-memory"/u,
+        /window\.__ModuleLoader__\.load\(\{id:"@amiba\/dsh-plugin-memory-memos"/u,
       );
       const webhookClient = graph.entries.find(
         (entry) => entry.id === "@amiba/dsh-plugin-connector-webhook",
@@ -1129,7 +1129,7 @@ export function apply(ctx) {
       for (const packageName of [
         "@amiba/dsh-plugin-attachments",
         "@amiba/dsh-plugin-browser-core",
-        "@amiba/dsh-plugin-memory",
+        "@amiba/dsh-plugin-memory-memos",
         "@amiba/dsh-plugin-resources",
       ]) assert.ok(amibaToolPackages.includes(packageName), `tool catalog omitted ${packageName}`);
       assert.ok(
@@ -1230,7 +1230,7 @@ export function apply(ctx) {
       assert.equal(response.status, 404, "retired memory HTTP API must not be mounted");
     }
     for (const file of ["memory-store.js", "memory-store.d.ts", "http.js", "http.d.ts", "client/toolviews.js", "client/toolviews.d.ts"]) {
-      assert.equal(existsSync(path.join(runtimeDir, "app/node_modules/@amiba/dsh-plugin-memory/lib", file)), false, `orphaned archive artifact: ${file}`);
+      assert.equal(existsSync(path.join(runtimeDir, "app/node_modules/@amiba/dsh-plugin-memory-memos/lib", file)), false, `orphaned archive artifact: ${file}`);
     }
     assert.equal(existsSync(path.join(dshHome, "amiba-memory")), false);
   });

@@ -1,4 +1,10 @@
 export * from "streamdown";
+export { WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, WorkbenchViewBoundary } from "@amiba/ui/plugin";
+export { getPlatform } from "@amiba/app-runtime/platform";
+export { createSlotContributionsSource } from "./session-list-sources.js";
+import { WorkbenchExtensionsProvider, builtinWorkbenchViews } from "@amiba/ui/plugin";
+import type { WorkbenchViewExtension } from "@amiba/extension-sdk";
+import { createWorkbenchSource } from "./workbench-source.js";
 import type { NoticeReference } from "@amiba/app-runtime/protocol";
 import { MARKDOWN_REMOTE } from "../markdown-remote.js";
 import { createMarkdownReporter } from "./markdown-reporter.js";
@@ -243,6 +249,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     sessionItemMenuItems: ContributionsSource<SessionMenuItemRow>;
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
+    workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
   };
 
@@ -270,10 +277,12 @@ function AmibaRoot({
   sessionItemMenuItems,
   messageSources,
   markdownSource,
+  workbenchSource,
   reportMarkdown,
   useSessions,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
+  const workbench = useSyncExternalStore(workbenchSource.subscribe, workbenchSource.getSnapshot, workbenchSource.getSnapshot);
   const markdown = useSyncExternalStore(markdownSource.subscribe, markdownSource.getSnapshot, markdownSource.getSnapshot);
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -282,7 +291,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+    <WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
@@ -296,7 +305,7 @@ function AmibaRoot({
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></MarkdownProvider>
+    /></MarkdownProvider></WorkbenchExtensionsProvider>
   );
 }
 
@@ -552,6 +561,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
     );
     const markdownSource = createMarkdownSource(ctx.slots);
+    const workbenchSource = createWorkbenchSource(ctx.slots);
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -563,6 +573,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         inject: () => ({
           dshClient,
           markdownSource,
+          workbenchSource,
           reportMarkdown,
           settingsSections: sectionsSource,
           settingsOnboardingSteps: onboardingSource,
@@ -648,6 +659,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.tool.activity": { kind: "list", scope: "session" },
           "amiba.conversation.progress": { kind: "list", scope: "session" },
           "amiba.workbench.panel": { kind: "list", scope: "session" },
+          "amiba.workbench.view": { kind: "list", scope: "root" },
           // Official vocabulary: the composer's floating overlay anchor,
           // from @deepseek-ai/dsh-client-ui-input-trigger (list, session
           // scope, NO owner share at all — every occupant reads its own
@@ -731,6 +743,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaRoot,
     );
+    const disposeWorkbench = builtinWorkbenchViews.map(extension => ctx.slots.register({
+      name: "amiba.workbench.view", id: extension.id, order: extension.order,
+      inject: () => ({ extension }),
+    }, () => null));
     // CELL SHADOWS of the two official `conversation.input.overlay` entries.
     // Same ids, `priority: -1` against their implicit `0`, so the ledger
     // elects Amiba's component per cell while the official SERVICES stay
@@ -819,6 +835,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeMessageCatalog();
       void sourcesFiber.dispose();
       void disposeComposerInputs();
+      for (const dispose of disposeWorkbench) dispose();
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();

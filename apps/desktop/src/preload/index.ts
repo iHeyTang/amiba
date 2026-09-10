@@ -209,6 +209,8 @@ const api = {
       ipcRenderer.invoke("files:search", { sessionId, query }),
     read: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read", { sessionId, path }),
+    readBytes: (sessionId: string, path: string) =>
+      ipcRenderer.invoke("files:read-bytes", { sessionId, path }),
     reveal: (sessionId: string, path: string): Promise<void> =>
       ipcRenderer.invoke("files:reveal", { sessionId, path }),
     openExternal: (sessionId: string, path: string): Promise<void> =>

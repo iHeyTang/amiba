@@ -9,8 +9,8 @@ const runtimePackageDir = path.resolve(desktopDir, "../../packages/app-runtime")
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 const infoOnly = process.argv.includes("--runtime-info")
 
-function fail(message) {
-  console.error(`[desktop:dev] ${message}\n[desktop:dev] Run: pnpm runtime:prepare`)
+function fail(message, hint = "Run: pnpm runtime:prepare") {
+  console.error(`[desktop:dev] ${message}${hint ? `\n[desktop:dev] ${hint}` : ""}`)
   process.exit(1)
 }
 
@@ -55,7 +55,12 @@ if (!desktopEnv.AMIBA_DSH_DEV_PORT) desktopEnv.AMIBA_DSH_DEV_PORT = "15174"
 
 const clientWatcher = spawn(
   process.execPath,
-  [path.join(desktopDir, "scripts/watch-dsh-clients.mjs")],
+  // All plugin watchers retain Rollup caches in this one process. Give it
+  // room beyond Node's default 4 GiB without increasing the desktop heap.
+  [
+    "--max-old-space-size=8192",
+    path.join(desktopDir, "scripts/watch-dsh-clients.mjs"),
+  ],
   {
     cwd: workspaceDir,
     env: desktopEnv,
@@ -85,6 +90,7 @@ try {
     `could not initialize client watcher: ${
       error instanceof Error ? error.message : String(error)
     }`,
+    "See the client build error above.",
   )
 }
 

@@ -1,3 +1,8 @@
+import type { ComponentProps } from "react";
+import type { WorkbenchViewProps } from "@amiba/extension-sdk";
+import { WorkbenchExtensionsProvider } from "../workbench-extensions";
+import { WorkspaceFileView } from "../../../../../plugins/dsh-plugin-file-preview/src/client/FileView";
+import { defaultFileRenderers } from "../../../../../plugins/dsh-plugin-file-preview/src/client/defaults";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +13,9 @@ vi.mock("@amiba/i18n", () => ({
 
 import {
   WorkspacePane,
-  WorkspacePaneProvider,
+  WorkspacePaneProvider as HostProvider,
+  WorkspaceFileWorkspace,
+  builtinWorkbenchViews,
   WorkspacePaneToggle,
   useWorkspacePane,
 } from "../WorkspacePane";
@@ -21,6 +28,56 @@ function pointerEvent(type: string, clientX: number): Event {
     pointerId: { value: 1 },
   });
   return event;
+}
+
+function FileContribution({
+  resource,
+  sessionId,
+  openFile,
+}: WorkbenchViewProps) {
+  const pane = useWorkspacePane();
+  if (!pane.files) return null;
+  const file =
+    resource.type === "file"
+      ? (resource.data as { kind: "file"; path: string; line?: number })
+      : null;
+  return (
+    <WorkspaceFileWorkspace
+      resource={file}
+      sessionId={sessionId}
+      files={pane.files}
+      development={pane.development}
+      workspaces={pane.workspaces}
+      openFile={openFile}
+      treeOpen={pane.fileTreeOpen}
+      onTreeOpenChange={pane.setFileTreeOpen}
+      renderPreview={(target) => (
+        <WorkspaceFileView
+          resource={target}
+          sessionId={sessionId}
+          files={pane.files!}
+          renderers={defaultFileRenderers}
+          showHeader={false}
+        />
+      )}
+    />
+  );
+}
+const testViews = [
+  ...builtinWorkbenchViews,
+  ...["file", "files"].map((resourceType) => ({
+    id: resourceType,
+    resourceType,
+    order: 100,
+    component: FileContribution,
+  })),
+];
+function WorkspacePaneProvider(props: ComponentProps<typeof HostProvider>) {
+  return (
+    <WorkbenchExtensionsProvider extensions={testViews}>
+      <HostProvider {...props} />
+    </WorkbenchExtensionsProvider>
+  );
 }
 
 function Probe() {
@@ -126,20 +183,36 @@ describe("WorkspacePane responsive behavior", () => {
   it("opens plugin panels in the workbench and restores each session's selection", async () => {
     const capability = { files: {} } as WorkspaceInspectorCapability;
     function TestPane({ sessionId }: { sessionId: string }) {
-      return <WorkspacePaneProvider sessionId={sessionId} capability={capability}>
-        <Probe />
-        <WorkspacePane renderPanel={owner => owner.placement === "tab"
-          ? <button role="tab" aria-selected={owner.activePanel === "example"} onClick={() => owner.openPanel("example")}>Plugin panel</button>
-          : <div>Plugin content: {owner.activePanel}</div>}/>
-      </WorkspacePaneProvider>;
+      return (
+        <WorkspacePaneProvider sessionId={sessionId} capability={capability}>
+          <Probe />
+          <WorkspacePane
+            renderPanel={(owner) =>
+              owner.placement === "tab" ? (
+                <button
+                  role="tab"
+                  aria-selected={owner.activePanel === "example"}
+                  onClick={() => owner.openPanel("example")}
+                >
+                  Plugin panel
+                </button>
+              ) : (
+                <div>Plugin content: {owner.activePanel}</div>
+              )
+            }
+          />
+        </WorkspacePaneProvider>
+      );
     }
-    const view = render(<TestPane sessionId="plugin-session-one"/>);
+    const view = render(<TestPane sessionId="plugin-session-one" />);
     fireEvent.click(screen.getByText("Plugin panel"));
     expect(screen.getByText("Plugin content: example")).toBeInTheDocument();
-    expect(screen.getByRole("button", {name:"toggle workspace"})).toHaveAttribute("aria-pressed", "true");
-    view.rerender(<TestPane sessionId="plugin-session-two"/>);
+    expect(
+      screen.getByRole("button", { name: "toggle workspace" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    view.rerender(<TestPane sessionId="plugin-session-two" />);
     expect(screen.queryByText("Plugin content: example")).toBeNull();
-    view.rerender(<TestPane sessionId="plugin-session-one"/>);
+    view.rerender(<TestPane sessionId="plugin-session-one" />);
     expect(screen.getByText("Plugin content: example")).toBeInTheDocument();
   });
 

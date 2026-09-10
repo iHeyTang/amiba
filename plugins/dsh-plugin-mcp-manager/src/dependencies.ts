@@ -60,6 +60,7 @@ export interface McpLease {
   release(): Promise<void>;
 }
 export interface McpDependencyView {
+  serviceId: string;
   connectionId: string;
   name: string;
   service: string;
@@ -395,6 +396,7 @@ export class McpDependencies {
         (item) => item.connection === connection,
       );
       return {
+        serviceId: connection.definition.serviceId,
         connectionId: connection.definition.id,
         name: connection.definition.name,
         service: this.services.get(connection.definition.serviceId)!.definition

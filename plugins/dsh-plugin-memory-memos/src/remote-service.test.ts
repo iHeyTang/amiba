@@ -5,7 +5,7 @@ import { AMIBA_MEMORY_REMOTE } from "./remote.js";
 import { initialMemosStatus, type MemosStatus } from "./memos-status.js";
 
 describe("MemOS status remote", () => {
-  it("publishes only the current engine status and no archive methods", () => {
+  it("publishes engine status and read-only dashboard methods", () => {
     const provide = vi.fn();
     const ctx = { reflect: { provide } } as unknown as Context;
     const status = initialMemosStatus("/memory-test/memos");
@@ -19,6 +19,9 @@ describe("MemOS status remote", () => {
     for (const retired of ["list", "reset", "presets"])
       expect(retired in service).toBe(false);
     expect(AMIBA_MEMORY_REMOTE.descriptors.map((item) => item.method)).toEqual([
+      "login",
+      "overview",
+      "browse",
       "status",
     ]);
   });

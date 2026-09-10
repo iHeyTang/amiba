@@ -1,5 +1,15 @@
+import {
+  WorkbenchResourceView,
+  useWorkbenchExtensions,
+  selectWorkbenchView,
+} from "./workbench-extensions";
 import { ChatMarkdown } from "@amiba/markdown";
-import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
+import type {
+  WorkbenchResource,
+  WorkbenchViewExtension,
+  WorkbenchViewProps,
+  WorkbenchPanelOwner,
+} from "@amiba/extension-sdk";
 import { defaultKeymap } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
@@ -23,7 +33,6 @@ import {
   type WorkspaceAdapter,
   type WorkspaceCheckpoint,
   type WorkspaceDevelopmentAdapter,
-  type WorkspaceFileDocument,
   type WorkspaceFilesAdapter,
   type WorkspaceGitState,
   type WorkspaceProject,
@@ -165,7 +174,7 @@ const WORKSPACE_CODE_HIGHLIGHT = HighlightStyle.define([
   { tag: tags.operator, class: "cm-syntax-operator" },
 ]);
 
-type FileResource = {
+export type FileResource = {
   kind: "file";
   path: string;
   line?: number;
@@ -191,7 +200,8 @@ export type WorkspacePaneResource =
   | FileResource
   | DiffResource
   | CodeExecutionResource
-  | EmbeddedBrowserResource;
+  | EmbeddedBrowserResource
+  | { kind: "extension"; resource: WorkbenchResource };
 
 interface WorkspacePaneTab {
   id: string;
@@ -199,7 +209,12 @@ interface WorkspacePaneTab {
   pinned: boolean;
 }
 
-type WorkbenchMode = "files" | "checkpoints" | "preview" | `extension:${string}`;
+type WorkbenchMode =
+  | "files"
+  | "checkpoints"
+  | "preview"
+  | `extension:${string}`
+  | `view:${string}`;
 
 /**
  * Everything the workbench remembers is owned by ONE session: its tabs, whether
@@ -268,6 +283,7 @@ interface WorkspacePaneContextValue {
     browserTabId: string,
     patch: Partial<EmbeddedBrowserResource>,
   ): void;
+  openResource(resource: WorkbenchResource): void;
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
   beginTurn(turnIndex: number): Promise<void>;
@@ -309,6 +325,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   browserTabs: [],
   visibleBrowserTabId: null,
   updateBrowserTabIn: () => {},
+  openResource: () => {},
   openFile: () => {},
   openReview: () => {},
   beginTurn: async () => {},
@@ -473,6 +490,7 @@ export function canMutateWorkspaceTool(event: ToolProgress): boolean {
 }
 
 function resourceTitle(resource: WorkspacePaneResource): string {
+  if (resource.kind === "extension") return resource.resource.title;
   if (resource.kind === "file") return workspaceTabLabel(resource.path);
   if (resource.kind === "code") return languageLabel(resource.language);
   if (resource.kind === "browser") return resource.title || "New tab";
@@ -531,6 +549,8 @@ function WorkspaceTabIcon({
     );
   }
 
+  if (resource.kind === "extension")
+    return <File className={className} aria-hidden />;
   const path = resource.path.toLowerCase();
   let Icon: LucideIcon = FileCode2;
   let tone = "text-sky-600/75 dark:text-sky-300/75";
@@ -635,6 +655,8 @@ function WorkspaceTabButton({
 }
 
 function resourceKey(resource: WorkspacePaneResource): string {
+  if (resource.kind === "extension")
+    return `extension:${JSON.stringify([resource.resource.type, resource.resource.id])}`;
   if (resource.kind === "file") return `file:${resource.path}`;
   if (resource.kind === "code") return `code:${resource.toolCallId}`;
   if (resource.kind === "browser") {
@@ -729,7 +751,10 @@ export function WorkspacePaneProvider({
   const activeTurnCheckpointIds = useRef(new Map<string, string>());
   const markedCheckpointIds = useRef(new Set<string>());
   const browserAdapter = getPlatform().embeddedBrowser;
-  const enabled = Boolean((capability && sessionId) || browserAdapter);
+  const extensions = useWorkbenchExtensions();
+  const enabled = Boolean(
+    (sessionId && (capability || extensions.length)) || browserAdapter,
+  );
   const stateKey = sessionId || EMPTY_SESSION_KEY;
   const activeState = sessionStates[stateKey] ?? emptySessionState();
   const open = activeState.open;
@@ -921,7 +946,7 @@ export function WorkspacePaneProvider({
 
   const openResource = useCallback(
     (resource: WorkspacePaneResource, source: "automatic" | "user") => {
-      if (!capability || !sessionId) return;
+      if (!sessionId) return;
       updateActiveSession((state) => {
         const nextResourceKey = resourceKey(resource);
         const existing = state.tabs.find(
@@ -1343,6 +1368,8 @@ export function WorkspacePaneProvider({
       browserTabs,
       visibleBrowserTabId,
       updateBrowserTabIn,
+      openResource: (resource) =>
+        openResource({ kind: "extension", resource }, "user"),
       openFile,
       openReview,
       beginTurn,
@@ -1355,6 +1382,7 @@ export function WorkspacePaneProvider({
       observeToolEvent,
     }),
     [
+      openResource,
       activeState.tabs,
       activeState.mode,
       activeState.fileTreeOpen,
@@ -1515,7 +1543,7 @@ function PreviewMoreMenu({ items }: { items: PreviewMenuItem[] }) {
   );
 }
 
-function PreviewHeader({
+export function PreviewHeader({
   icon: Icon,
   title,
   meta,
@@ -1609,7 +1637,7 @@ function codeLanguageExtension(
   return null;
 }
 
-function CodeEditor({
+export function CodeEditor({
   content,
   sourcePath,
   language,
@@ -1737,149 +1765,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function WorkspaceFileView({
-  resource,
-  sessionId,
-  files,
-  showHeader = true,
-}: {
-  resource: FileResource;
-  sessionId: string;
-  files: WorkspaceFilesAdapter;
-  showHeader?: boolean;
-}) {
-  const { t } = useT();
-  const [document, setDocument] = useState<WorkspaceFileDocument | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const requestRef = useRef(0);
-
-  const load = useCallback(async () => {
-    const request = ++requestRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await files.read(sessionId, resource.path);
-      if (request !== requestRef.current) return;
-      setDocument(next);
-    } catch (cause) {
-      if (request !== requestRef.current) return;
-      setDocument(null);
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (request === requestRef.current) setLoading(false);
-    }
-  }, [files, resource.path, sessionId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const path = document?.path ?? resource.path;
-    return files.watch(sessionId, [path], (change) => {
-      if (change.event === "unlink") {
-        setDocument(null);
-        setError(t("workspacePane.fileDeleted"));
-        setLoading(false);
-        return;
-      }
-      void load();
-    });
-  }, [document?.path, files, load, resource.path, sessionId, t]);
-
-  const targetPath = document?.path ?? resource.path;
-  const displayPath = document?.relativePath ?? resource.path;
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      {showHeader && (
-        <PreviewHeader
-          icon={FileCode2}
-          title={
-            <span className="font-mono" title={targetPath}>
-              {displayPath}
-            </span>
-          }
-          status={
-            document ? (
-              <span className="font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground/70">
-                {formatBytes(document.size)}
-              </span>
-            ) : null
-          }
-          primaryAction={{
-            icon: Copy,
-            label: t("workspacePane.copyPath"),
-            onSelect: () => void navigator.clipboard.writeText(targetPath),
-          }}
-          moreActions={[
-            {
-              icon: FolderOpen,
-              label: t("workspacePane.revealFile"),
-              onSelect: () =>
-                void files.reveal(sessionId, targetPath).catch(() => {}),
-            },
-            {
-              icon: ExternalLink,
-              label: t("workspacePane.openExternal"),
-              onSelect: () =>
-                void files.openExternal(sessionId, targetPath).catch(() => {}),
-            },
-          ]}
-        />
-      )}
-      {loading && !document ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">
-          {t("workspacePane.loadingFile")}
-        </div>
-      ) : error || !document ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-          <FileCode2 className="h-5 w-5 text-muted-foreground/50" />
-          <div className="max-w-sm text-xs text-muted-foreground">
-            {error || t("workspacePane.fileUnavailable")}
-          </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 px-2.5 text-[11px] text-foreground transition-colors hover:bg-muted/50"
-          >
-            <RotateCw className="h-3 w-3" />
-            {t("common.retry")}
-          </button>
-        </div>
-      ) : document.binary ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
-          <FileCode2 className="h-5 w-5 text-muted-foreground/50" />
-          <div className="text-xs font-medium">{document.name}</div>
-          <div className="text-[11px] text-muted-foreground">
-            {t("workspacePane.binaryFile")} · {formatBytes(document.size)}
-          </div>
-        </div>
-      ) : (
-        <>
-          {(document.truncated || loading) && (
-            <div className="flex h-7 shrink-0 items-center border-b border-border/25 bg-muted/20 px-3 text-[10px] text-muted-foreground">
-              {loading
-                ? t("workspacePane.refreshing")
-                : t("workspacePane.truncated", {
-                    size: formatBytes(document.size),
-                  })}
-            </div>
-          )}
-          <div className="min-h-0 flex-1">
-            <CodeEditor
-              content={document.content}
-              sourcePath={document.path}
-              line={resource.line}
-            />
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 function CodeExecutionView({ resource }: { resource: CodeExecutionResource }) {
@@ -3198,7 +3083,7 @@ function WorkspaceFilesBrowser({
   );
 }
 
-function WorkspaceFileWorkspace({
+export function WorkspaceFileWorkspace({
   resource,
   sessionId,
   files,
@@ -3207,7 +3092,9 @@ function WorkspaceFileWorkspace({
   openFile,
   treeOpen,
   onTreeOpenChange,
+  renderPreview,
 }: {
+  renderPreview(resource: FileResource): ReactNode;
   resource: FileResource | null;
   sessionId: string;
   files: WorkspaceFilesAdapter;
@@ -3285,12 +3172,7 @@ function WorkspaceFileWorkspace({
           className="min-h-0 min-w-0 flex-1 overflow-hidden"
         >
           {resource ? (
-            <WorkspaceFileView
-              resource={resource}
-              sessionId={sessionId}
-              files={files}
-              showHeader={false}
-            />
+            renderPreview(resource)
           ) : (
             <div className="flex h-full min-h-0 flex-col items-center justify-center px-8 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/45 text-muted-foreground/65">
@@ -4284,12 +4166,22 @@ function WorkspaceRecoveryPointsView() {
   );
 }
 
-export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = () => false }: {
+export function WorkspacePane({
+  visible = true,
+  renderPanel,
+  inspectToolCall = () => false,
+}: {
   visible?: boolean;
   renderPanel?: (owner: WorkbenchPanelOwner) => React.ReactNode;
   inspectToolCall?: (callId: string) => boolean;
 }) {
   const pane = useWorkspacePane();
+  const extensions = useWorkbenchExtensions();
+  const launchers = extensions.filter(
+    (entry) =>
+      entry.launcher &&
+      selectWorkbenchView(extensions, entry.resourceType) === entry,
+  );
   const { t } = useT();
   // The view mode and the file-tree fold are part of the session's workbench
   // record (see `SessionPaneState`), so leaving a task and coming back finds
@@ -4297,11 +4189,20 @@ export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = (
   // to show a PREVIEW (a browser tab, a diff, a file the agent touched), and a
   // directory tree unfolding beside it on every open reads as clutter.
   const { mode, setMode, fileTreeOpen, setFileTreeOpen } = pane;
-  const openPanel = useCallback((id: string) => {
-    pane.setMode(`extension:${id}`);
-    pane.setOpen(true);
-  }, [pane.setMode, pane.setOpen]);
-  const panelOwner = { activePanel: mode.startsWith("extension:") ? mode.slice(10) : null, openPanel, inspectToolCall, renderMarkdown: (text: string) => <ChatMarkdown>{text}</ChatMarkdown> };
+  const openPanel = useCallback(
+    (id: string) => {
+      pane.setMode(`extension:${id}`);
+      pane.setOpen(true);
+    },
+    [pane.setMode, pane.setOpen],
+  );
+  const panelOwner = {
+    openResource: pane.openResource,
+    activePanel: mode.startsWith("extension:") ? mode.slice(10) : null,
+    openPanel,
+    inspectToolCall,
+    renderMarkdown: (text: string) => <ChatMarkdown>{text}</ChatMarkdown>,
+  };
   const active = pane.activeTab;
   const browserTabs = pane.tabs
     .map((tab) => tab.resource)
@@ -4455,32 +4356,29 @@ export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = (
               className="amiba-tab-rail flex min-w-0 flex-1 self-stretch items-center gap-1.5 overflow-x-auto"
             >
               {renderPanel?.({ ...panelOwner, placement: "tab" })}
-              {pane.sessionId
-                ? [
-                    {
-                      id: "files" as const,
-                      icon: FolderTree,
-                      label: t("workspacePane.openFile"),
-                    },
-                  ].map(({ id, icon: Icon, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={mode === id}
-                      onClick={() => setMode(id)}
-                      className={cn(
-                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10.5px] transition-colors",
-                        mode === id
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                    </button>
-                  ))
-                : null}
+              {launchers.map((entry) => {
+                const id = `view:${entry.resourceType}` as const;
+                const selected = mode === id || mode === entry.resourceType;
+                const Icon = entry.launcher!.icon;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setMode(id)}
+                    className={cn(
+                      "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10.5px] transition-colors",
+                      selected
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    )}
+                  >
+                    {Icon && <Icon className="h-3.5 w-3.5" />}
+                    {entry.launcher!.label()}
+                  </button>
+                );
+              })}
               {pane.tabs.map((tab) => {
                 const selected = mode === "preview" && tab.id === active?.id;
                 const labels =
@@ -4519,58 +4417,31 @@ export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = (
           <div
             className={cn("h-full min-h-0", activeBrowserTabId && "invisible")}
           >
-            {mode.startsWith("extension:") ? renderPanel?.({ ...panelOwner, placement: "content" }) : mode === "files" && pane.files ? (
-              <WorkspaceFileWorkspace
-                resource={null}
+            {mode.startsWith("extension:") ? (
+              renderPanel?.({ ...panelOwner, placement: "content" })
+            ) : (
+              <WorkbenchResourceView
+                resource={
+                  mode.startsWith("view:")
+                    ? { type: mode.slice(5), id: mode.slice(5), title: "" }
+                    : mode === "checkpoints"
+                      ? {
+                          type: "checkpoints",
+                          id: "checkpoints",
+                          title: t("workspacePane.recoveryPoints"),
+                        }
+                      : mode === "files" || !active
+                        ? {
+                            type: "files",
+                            id: "files",
+                            title: t("workspacePane.files"),
+                          }
+                        : toWorkbenchResource(active.resource)
+                }
                 sessionId={pane.sessionId}
-                files={pane.files}
-                development={pane.development}
-                workspaces={pane.workspaces}
+                openResource={pane.openResource}
                 openFile={pane.openFile}
-                treeOpen={fileTreeOpen}
-                onTreeOpenChange={setFileTreeOpen}
               />
-            ) : mode === "checkpoints" ? (
-              <WorkspaceRecoveryPointsView />
-            ) : !active ? (
-              pane.files ? (
-                <WorkspaceFileWorkspace
-                  resource={null}
-                  sessionId={pane.sessionId}
-                  files={pane.files}
-                  development={pane.development}
-                  workspaces={pane.workspaces}
-                  openFile={pane.openFile}
-                  treeOpen={fileTreeOpen}
-                  onTreeOpenChange={setFileTreeOpen}
-                />
-              ) : (
-                <WorkspaceEmptyState />
-              )
-            ) : active.resource.kind === "file" && pane.files ? (
-              <WorkspaceFileWorkspace
-                resource={active.resource}
-                sessionId={pane.sessionId}
-                files={pane.files}
-                development={pane.development}
-                workspaces={pane.workspaces}
-                openFile={pane.openFile}
-                treeOpen={fileTreeOpen}
-                onTreeOpenChange={setFileTreeOpen}
-              />
-            ) : active.resource.kind === "code" ? (
-              <CodeExecutionView resource={active.resource} />
-            ) : active.resource.kind === "diff" ? (
-              <DiffView
-                resource={active.resource}
-                onOpenFile={pane.openFile}
-                sessionId={pane.sessionId}
-                files={pane.files}
-              />
-            ) : active.resource.kind === "browser" ? null : (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                {t("workspacePane.fileUnavailable")}
-              </div>
             )}
           </div>
           {browserTabs.length > 0 ? (
@@ -4592,3 +4463,64 @@ export function WorkspacePane({ visible = true, renderPanel, inspectToolCall = (
     </div>
   );
 }
+
+/** Adapt legacy tool/browser events at the host boundary; views use the open protocol. */
+export function toWorkbenchResource(
+  resource: WorkspacePaneResource,
+): WorkbenchResource {
+  if (resource.kind === "extension") return resource.resource;
+  return {
+    type: resource.kind,
+    id: resourceKey(resource),
+    title: resourceTitle(resource),
+    data: resource,
+  };
+}
+function BuiltinCodeView({ resource }: WorkbenchViewProps) {
+  return (
+    <CodeExecutionView resource={resource.data as CodeExecutionResource} />
+  );
+}
+function BuiltinDiffView({
+  resource,
+  sessionId,
+  openFile,
+}: WorkbenchViewProps) {
+  const pane = useWorkspacePane();
+  return (
+    <DiffView
+      resource={resource.data as DiffResource}
+      onOpenFile={openFile}
+      sessionId={sessionId}
+      files={pane.files}
+    />
+  );
+}
+/** Built-ins participate in the same contribution ledger as third-party views. */
+export const builtinWorkbenchViews: readonly WorkbenchViewExtension[] = [
+  {
+    id: "amiba.code",
+    resourceType: "code",
+    order: 100,
+    component: BuiltinCodeView,
+  },
+  {
+    id: "amiba.diff",
+    resourceType: "diff",
+    order: 100,
+    component: BuiltinDiffView,
+  },
+  {
+    id: "amiba.checkpoints",
+    resourceType: "checkpoints",
+    order: 100,
+    component: WorkspaceRecoveryPointsView,
+  },
+  // Electron owns browser surface lifetime across sessions; its tab view is a seat.
+  {
+    id: "amiba.browser",
+    resourceType: "browser",
+    order: 100,
+    component: () => null,
+  },
+];

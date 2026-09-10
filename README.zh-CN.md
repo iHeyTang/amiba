@@ -20,7 +20,7 @@ Electron main
    │     ├─ 原生会话、工具、模型、Preset、Skills、MCP、调度
    │     └─ @amiba/dsh-bundle-amiba（只负责装配）
    │           ├─ @amiba/dsh-plugin-model-plane（独立真源 + DSH 投影）
-   │           ├─ @amiba/dsh-plugin-memory
+   │           ├─ @amiba/dsh-plugin-memory-memos
    │           ├─ @amiba/dsh-plugin-messaging-core
    │           ├─ @amiba/dsh-plugin-connector-webhook
    │           ├─ @amiba/dsh-plugin-attachments

@@ -737,6 +737,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 }
 /** A plugin-owned tab and panel in the session workbench. */
 export interface WorkbenchPanelOwner {
+  openResource(resource: import("./workbench.js").WorkbenchResource): void;
   placement: "tab" | "content";
   activePanel: string | null;
   openPanel(id: string): void;

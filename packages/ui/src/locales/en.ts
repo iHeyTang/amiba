@@ -88,6 +88,7 @@ export const en = {
   "workspacePane.refreshing": "Refreshing from disk…",
   "workspacePane.fileUnavailable": "This file could not be opened.",
   "workspacePane.fileDeleted": "This file was removed from the workspace.",
+  "workspacePane.viewUnavailable": "This view is unavailable. Its extension may be disabled or failed.",
   "workspacePane.binaryFile": "Binary preview is not available yet",
   "workspacePane.truncated": "Previewing the first 2 MB of a {size} file",
   "workspacePane.filesChanged": "{count} files changed",

@@ -30,6 +30,8 @@ export default defineConfig({
         "@amiba/dsh-plugin-catalog/client",
       ],
       output: {
+        // DSH registers one factory per entry; relative CJS chunks are not loadable.
+        inlineDynamicImports: true,
         exports: "named",
         banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
         intro: "var module = { exports: {} }; var exports = module.exports;",

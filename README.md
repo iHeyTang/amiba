@@ -22,7 +22,7 @@ Electron main
    │     ├─ native sessions, tools, models, presets, skills, MCP, schedules
    │     └─ @amiba/dsh-bundle-amiba (composition only)
    │           ├─ @amiba/dsh-plugin-model-plane (canonical plane + DSH projection)
-   │           ├─ @amiba/dsh-plugin-memory
+   │           ├─ @amiba/dsh-plugin-memory-memos
    │           ├─ @amiba/dsh-plugin-messaging-core
    │           ├─ @amiba/dsh-plugin-connector-webhook
    │           ├─ @amiba/dsh-plugin-attachments

@@ -56,7 +56,7 @@
         root: !!js dshHomePath('amiba-model-plane')
 
     - id: amiba-memory
-      name: "@amiba/dsh-plugin-memory"
+      name: "@amiba/dsh-plugin-memory-memos"
       config:
         memosRoot: !!js dshHomePath('amiba-memos')
         viewerPort: !!js Number(process.env.AMIBA_MEMOS_VIEWER_PORT || 18801)

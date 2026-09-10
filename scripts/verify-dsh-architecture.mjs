@@ -88,7 +88,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-mcp-manager",
       "@amiba/dsh-plugin-media",
       "@amiba/dsh-plugin-media-minimax",
-      "@amiba/dsh-plugin-memory",
+      "@amiba/dsh-plugin-memory-memos",
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",
       "@amiba/dsh-plugin-notification-hub",
@@ -111,6 +111,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-agent-preset",
       "@amiba/dsh-plugin-connector-webhook",
       "@amiba/dsh-plugin-markdown",
+      "@amiba/dsh-plugin-file-preview",
       "@amiba/dsh-plugin-runtime-inventory",
       "@amiba/dsh-plugin-ui-shell",
     ],
@@ -280,7 +281,7 @@ function before(left, right) {
     fail(`${left} must be composed before dependent plugin ${right}`);
   }
 }
-before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-memory");
+before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-memory-memos");
 before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-attachments");
 before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-mcp-manager");
 before(
@@ -1453,7 +1454,7 @@ if (
   );
 }
 
-const memoryManifest = await json("plugins/dsh-plugin-memory/package.json");
+const memoryManifest = await json("plugins/dsh-plugin-memory-memos/package.json");
 if (memoryManifest.exports?.["./package.json"] !== "./package.json") {
   fail("dual-face Memory plugin must export package.json for DSH discovery");
 }
@@ -1468,7 +1469,7 @@ if (
   fail("memory Client plugin must depend on DSH Remote and Amiba's slot owner");
 }
 const memoryClient = await text(
-  "plugins/dsh-plugin-memory/src/client/index.tsx",
+  "plugins/dsh-plugin-memory-memos/src/client/index.tsx",
 );
 for (const required of [
   "ctx.remote.$mount(AMIBA_MEMORY_REMOTE)",
@@ -1477,6 +1478,9 @@ for (const required of [
   "label: () => labels().nav",
   "inject: () => ({ navIcon:",
   "MemosPanel getStatus={getStatus}",
+  '"amiba.workspace.navigation"',
+  '"amiba.workspace.view"',
+  "MemoryPage",
 ]) {
   if (!memoryClient.includes(required)) {
     fail(`memory Client plugin is missing ${required}`);
@@ -1488,12 +1492,12 @@ if (memoryClient.includes("settings.navigation")) {
   );
 }
 const memoryHost = await text(
-  "plugins/dsh-plugin-memory/src/remote-service.ts",
+  "plugins/dsh-plugin-memory-memos/src/remote-service.ts",
 );
 if (memoryManifest.exports?.["./memory-store"]) {
   fail("memory must not export the retired memory store");
 }
-for (const file of await sourceFiles("plugins/dsh-plugin-memory/src")) {
+for (const file of await sourceFiles("plugins/dsh-plugin-memory-memos/src")) {
   if (/\.test\.tsx?$/u.test(file)) continue;
   const body = await readFile(file, "utf8");
   if (/AmibaMemoryStore|memory-store|Legacy memory|旧版记忆|旧版归档|api\/amiba\/memory/u.test(body)) {
@@ -1985,6 +1989,15 @@ for (const workspaceRoot of ["apps", "packages", "plugins", "bundles"]) {
     const manifestPath = `${workspaceRoot}/${entry.name}/package.json`;
     if (!(await exists(manifestPath))) continue;
     const manifest = await json(manifestPath);
+    if (workspaceRoot === "plugins" && manifest.dsh?.client) {
+      const configPath = `${workspaceRoot}/${entry.name}/vite.config.ts`;
+      const config = code(await text(configPath));
+      if (!/\binlineDynamicImports\s*:\s*true\b/u.test(config)) {
+        fail(
+          `${configPath} must inline dynamic imports: DSH cannot load relative CJS chunks`,
+        );
+      }
+    }
     const dependencyNames = Object.keys({
       ...manifest.dependencies,
       ...manifest.devDependencies,
@@ -2034,6 +2047,12 @@ const extensionTemplatePackage = await json(
 const extensionTemplateClient = await text(
   "apps/cli/src/template/src/client/index.tsx.tpl",
 );
+const extensionTemplateVite = code(await text(
+  "apps/cli/src/template/vite.config.ts.tpl",
+));
+if (!/\binlineDynamicImports\s*:\s*true\b/u.test(extensionTemplateVite)) {
+  fail("Plugin scaffold must inline dynamic imports for the DSH module table");
+}
 if (
   !extensionTemplatePackage.devDependencies?.["@amiba/extension-sdk"] ||
   !extensionTemplatePackage.dsh?.client?.inject?.includes(

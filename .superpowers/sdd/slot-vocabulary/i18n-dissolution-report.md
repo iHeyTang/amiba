@@ -107,7 +107,7 @@ It is **no longer the cross-bundle channel for `useT`.** It is still needed for:
    `dsh-plugin-agent-preset/src/client/index.tsx:33`,
    `dsh-plugin-schedule-adapter/src/client/index.tsx:20`,
    `dsh-plugin-model-plane/src/client/index.tsx:154`,
-   `dsh-plugin-memory/src/client/index.tsx:95`,
+   `dsh-plugin-memory-memos/src/client/index.tsx:95`,
    `dsh-plugin-usage/src/client/TokensTab.tsx:123`,
    `dsh-plugin-runtime-inventory/src/client/index.tsx:94`,
    `dsh-plugin-messaging-core/src/client/index.tsx:104`. These are plain
@@ -290,7 +290,7 @@ Every emitted client bundle carries the complete host dictionary today:
 | `dsh-plugin-runtime-inventory` | 267 KB | 751 / 751 | ~41 KB |
 | `dsh-plugin-agent-preset` | 278 KB | 751 | ~41 KB |
 | `dsh-plugin-mcp-manager` | 332 KB | 751 | ~41 KB |
-| `dsh-plugin-memory` | 332 KB | 751 | ~41 KB |
+| `dsh-plugin-memory-memos` | 332 KB | 751 | ~41 KB |
 | `dsh-plugin-catalog` | 333 KB | 751 | ~41 KB |
 | `dsh-plugin-schedule-adapter` | 346 KB | 751 | ~41 KB |
 | `dsh-plugin-usage` | 352 KB | 751 | ~41 KB |

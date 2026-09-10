@@ -68,62 +68,6 @@ function attachBuildLog(watcher, name) {
 async function main() {
   const plugins = await discoverClientPlugins()
   const watchers = []
-  const initialBuilds = []
-  for (const plugin of plugins) {
-    const result = await build({
-      root: plugin.directory,
-      configFile: path.join(plugin.directory, "vite.config.ts"),
-      mode: "development",
-      clearScreen: false,
-      // Third-party "use client" directives are harmless in these CJS
-      // bundles and otherwise repeat once per watcher, drowning the useful
-      // ready/updated lines during development. Watch errors are reported by
-      // the Rollup event handler below.
-      logLevel: "silent",
-      ...(fs.existsSync(path.join(plugin.directory, "postcss.config.cjs"))
-        ? {
-            css: {
-              // Programmatic Vite builds do not change process.cwd for each
-              // watcher. Construct this plugin's PostCSS chain explicitly so
-              // Tailwind resolves the same config as its package-local build.
-              postcss: {
-                plugins: [
-                  tailwindcss({
-                    config: path.join(plugin.directory, "tailwind.config.cjs"),
-                  }),
-                  autoprefixer(),
-                ],
-              },
-            },
-          }
-        : {}),
-      build: {
-        // Keep the immutable install/build path for production, but write dev
-        // client bundles directly into the running managed runtime. DSH's own
-        // client-HMR service watches these exact files and publishes revisions.
-        outDir: plugin.installedLib,
-        emptyOutDir: false,
-        watch: {
-          exclude: ["**/node_modules/**", "**/lib/**"],
-        },
-        rollupOptions: {
-          onwarn(warning, warn) {
-            if (warning.code === "MODULE_LEVEL_DIRECTIVE") return
-            warn(warning)
-          },
-        },
-      },
-    })
-    if (!result || Array.isArray(result) || typeof result.on !== "function") {
-      throw new Error(`Vite did not create a watcher for ${plugin.name}`)
-    }
-    initialBuilds.push(attachBuildLog(result, plugin.name))
-    watchers.push(result)
-  }
-
-  await Promise.all(initialBuilds)
-  console.log(`[desktop:hmr] watching ${watchers.length} workspace client plugins`)
-
   let closing = false
   const close = async () => {
     if (closing) return
@@ -134,6 +78,67 @@ async function main() {
     process.once(signal, () => {
       void close().finally(() => process.exit(0))
     })
+  }
+
+  try {
+    for (const plugin of plugins) {
+      const result = await build({
+        root: plugin.directory,
+        configFile: path.join(plugin.directory, "vite.config.ts"),
+        mode: "development",
+        clearScreen: false,
+        // Third-party "use client" directives are harmless in these CJS
+        // bundles and otherwise repeat once per watcher, drowning the useful
+        // ready/updated lines during development. Watch errors are reported by
+        // the Rollup event handler below.
+        logLevel: "silent",
+        ...(fs.existsSync(path.join(plugin.directory, "postcss.config.cjs"))
+          ? {
+              css: {
+                // Programmatic Vite builds do not change process.cwd for each
+                // watcher. Construct this plugin's PostCSS chain explicitly so
+                // Tailwind resolves the same config as its package-local build.
+                postcss: {
+                  plugins: [
+                    tailwindcss({
+                      config: path.join(plugin.directory, "tailwind.config.cjs"),
+                    }),
+                    autoprefixer(),
+                  ],
+                },
+              },
+            }
+          : {}),
+        build: {
+          // Keep the immutable install/build path for production, but write dev
+          // client bundles directly into the running managed runtime. DSH's own
+          // client-HMR service watches these exact files and publishes revisions.
+          outDir: plugin.installedLib,
+          emptyOutDir: false,
+          watch: {
+            exclude: ["**/node_modules/**", "**/lib/**"],
+          },
+          rollupOptions: {
+            onwarn(warning, warn) {
+              if (warning.code === "MODULE_LEVEL_DIRECTIVE") return
+              warn(warning)
+            },
+          },
+        },
+      })
+      if (!result || Array.isArray(result) || typeof result.on !== "function") {
+        throw new Error(`Vite did not create a watcher for ${plugin.name}`)
+      }
+      watchers.push(result)
+      // Vite resolves as soon as the watcher is created, before its first build.
+      // Wait here so plugin builds do not exhaust the shared Node heap at startup.
+      await attachBuildLog(result, plugin.name)
+    }
+
+    console.log(`[desktop:hmr] watching ${watchers.length} workspace client plugins`)
+  } catch (error) {
+    await close()
+    throw error
   }
 }
 

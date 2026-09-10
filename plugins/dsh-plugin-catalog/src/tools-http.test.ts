@@ -66,7 +66,7 @@ function harness() {
     kind: "dsh-plugin",
     id: "amiba-memory",
     name: "Amiba Memory",
-    packageName: "@amiba/dsh-plugin-memory",
+    packageName: "@amiba/dsh-plugin-memory-memos",
     loadMode: "plugin",
     executionTarget: "dsh-runtime",
     dynamic: false,

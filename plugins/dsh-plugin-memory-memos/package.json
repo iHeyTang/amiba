@@ -1,5 +1,5 @@
 {
-  "name": "@amiba/dsh-plugin-memory",
+  "name": "@amiba/dsh-plugin-memory-memos",
   "version": "0.1.0",
   "private": true,
   "description": "Amiba built-in MemOS memory integration.",
@@ -31,7 +31,7 @@
     "lib"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && vite build",
+    "build": "tsc -p tsconfig.build.json && vite build --config vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

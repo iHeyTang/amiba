@@ -151,6 +151,9 @@
     - id: amiba-ui-shell
       name: "@amiba/dsh-plugin-ui-shell"
 
+    - id: amiba-file-preview
+      name: "@amiba/dsh-plugin-file-preview"
+
     - id: amiba-markdown
       name: "@amiba/dsh-plugin-markdown"
 

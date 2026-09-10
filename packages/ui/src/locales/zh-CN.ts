@@ -64,6 +64,7 @@ export const zhCN: UiMessages = {
   "workspacePane.refreshing": "正在从磁盘刷新…",
   "workspacePane.fileUnavailable": "无法打开这个文件。",
   "workspacePane.fileDeleted": "这个文件已从工作区中删除。",
+  "workspacePane.viewUnavailable": "此视图暂不可用，扩展可能已停用或运行失败。",
   "workspacePane.binaryFile": "暂不支持预览二进制文件",
   "workspacePane.truncated": "文件大小为 {size}，当前预览前 2 MB",
   "workspacePane.filesChanged": "修改了 {count} 个文件",

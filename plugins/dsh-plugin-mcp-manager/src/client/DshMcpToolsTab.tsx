@@ -6,15 +6,22 @@ import {
   Plus,
   Server,
   Trash2,
-  X,
+  ChevronDown,
+  MessageSquarePlus,
+  SquarePen,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   Button,
   Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   MODEL_SETTINGS_SECTION_CLASS,
   MODEL_SETTINGS_SURFACE_CLASS,
-  ModelSettingsSectionHeader,
+  SettingsPageActions,
+  SettingsPageActionButton,
+  SettingsPageDescription,
   Switch,
   cn,
   usePluginT,
@@ -72,6 +79,7 @@ export interface McpSaveInput {
 }
 
 export interface McpToolsAdapter {
+  startChat(seedPrompt: string): void;
   list(): Promise<{
     servers: McpServerView[];
     toolsOnly: true;
@@ -259,6 +267,7 @@ function DshMcpEditor({
 export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
   const { t } = useT();
   const [items, setItems] = useState<McpServerView[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<McpServerView | "new" | null>(null);
@@ -324,26 +333,73 @@ export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
 
   return (
     <section className={MODEL_SETTINGS_SECTION_CLASS}>
-      <ModelSettingsSectionHeader
-        title={t("externalTools.mcp.title")}
-        description={t("externalTools.mcp.dsh.subtitle")}
-        accessory={
-          <Button
+      <SettingsPageActions>
+        <div className="flex items-center">
+          <SettingsPageActionButton
             type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-lg px-2.5 shadow-none"
-            onClick={() => setEditing((current) => (current ? null : "new"))}
+            className="rounded-r-none"
+            onClick={() =>
+              adapter.startChat(t("externalTools.mcp.creationSeed"))
+            }
           >
-            {editing ? (
-              <X className="h-3.5 w-3.5" />
-            ) : (
-              <Plus className="h-3.5 w-3.5" />
-            )}
+            <Plus className="h-3.5 w-3.5" />
             {t("externalTools.mcp.add")}
-          </Button>
-        }
-      />
+          </SettingsPageActionButton>
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                aria-label={t("externalTools.mcp.addOptions")}
+                className="h-7 rounded-l-none rounded-r-lg shadow-none border-l border-primary-foreground/20 px-1.5"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-1.5">
+              <button
+                type="button"
+                className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  setMenuOpen(false);
+                  adapter.startChat(t("externalTools.mcp.creationSeed"));
+                }}
+              >
+                <MessageSquarePlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  <span className="block text-sm">
+                    {t("externalTools.mcp.addChat")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t("externalTools.mcp.addChatHint")}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setEditing("new");
+                }}
+              >
+                <SquarePen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  <span className="block text-sm">
+                    {t("externalTools.mcp.addManual")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t("externalTools.mcp.addManualHint")}
+                  </span>
+                </span>
+              </button>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </SettingsPageActions>
+      <SettingsPageDescription>
+        {t("externalTools.mcp.dsh.subtitle")}
+      </SettingsPageDescription>
 
       {editing ? (
         <DshMcpEditor
@@ -372,140 +428,194 @@ export function DshMcpToolsTab({ adapter }: { adapter: McpToolsAdapter }) {
         </div>
       ) : null}
 
-      {dependencies.length > 0 ? (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">
-            {t("externalTools.mcp.dependencies")}
+      <section className="space-y-3" aria-label={t("externalTools.mcp.manual")}>
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            {t("externalTools.mcp.manual")}
+            {!loading ? (
+              <span className="rounded-md bg-muted/60 px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                {items.length}
+              </span>
+            ) : null}
           </h3>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("externalTools.mcp.manual.description")}
+          </p>
+        </div>
+        {loading && items.length === 0 ? (
+          <div className={MODEL_SETTINGS_SURFACE_CLASS}>
+            <div className="h-14 animate-pulse bg-muted/20" />
+          </div>
+        ) : error && items.length === 0 ? null : items.length === 0 ? (
+          <div className={MODEL_SETTINGS_SURFACE_CLASS}>
+            <div className="flex flex-wrap items-center gap-3 px-4 py-5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/55 text-muted-foreground">
+                <Server className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {t("externalTools.mcp.emptyTitle")}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("externalTools.mcp.dsh.emptyDescription")}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <ul className={MODEL_SETTINGS_SURFACE_CLASS} data-mcp-tools-surface>
+            {items.map((item) => (
+              <li
+                key={item.serverName}
+                className="border-b border-border/40 last:border-b-0"
+              >
+                <div className="group flex w-full items-center gap-3 px-4 py-3 text-left">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/55 text-muted-foreground">
+                    <Server className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-sm font-medium">
+                        {item.serverName}
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/75">
+                        MCP ·{" "}
+                        {item.transport === "streamable-http"
+                          ? "HTTP"
+                          : "STDIO"}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {item.url ||
+                        [item.command, ...(item.args ?? [])]
+                          .filter(Boolean)
+                          .join(" ")}
+                    </span>
+                  </span>
+                  <span
+                    className={
+                      item.enabled
+                        ? "flex shrink-0 items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-300"
+                        : "flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+                    }
+                  >
+                    <span
+                      className={
+                        item.enabled
+                          ? "h-1.5 w-1.5 rounded-full bg-emerald-500"
+                          : "h-1.5 w-1.5 rounded-full border border-muted-foreground/50"
+                      }
+                    />
+                    {t(
+                      item.enabled
+                        ? "externalTools.status.enabled"
+                        : "externalTools.status.disabled",
+                    )}
+                  </span>
+                  <Button
+                    disabled={busy === item.serverName}
+                    onClick={() => setEditing(item)}
+                    size="icon"
+                    title={t("common.edit")}
+                    variant="ghost"
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    className="text-destructive hover:text-destructive"
+                    disabled={busy === item.serverName}
+                    onClick={() => void remove(item)}
+                    size="icon"
+                    title={t("common.delete")}
+                    variant="ghost"
+                  >
+                    <Trash2 />
+                  </Button>
+                  <Switch
+                    checked={item.enabled}
+                    disabled={busy === item.serverName}
+                    onCheckedChange={(enabled) => void toggle(item, enabled)}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {dependencies.length > 0 ? (
+        <section
+          className="space-y-2"
+          aria-label={t("externalTools.mcp.dependencies")}
+        >
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            {t("externalTools.mcp.dependencies")}
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {dependencies.length}
+            </span>
+          </h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {t("externalTools.mcp.dependencies.config")}
           </p>
           <ul className={MODEL_SETTINGS_SURFACE_CLASS}>
             {dependencies.map((item) => (
               <li
                 key={item.connectionId}
-                className="space-y-1 border-b border-border/40 p-4 last:border-b-0"
+                className="flex items-start gap-3 border-b border-border/40 px-4 py-3 last:border-b-0"
               >
-                <div className="text-sm font-medium">
-                  {item.service} · {item.name}
+                <Server className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-sm font-medium">{item.service}</span>
+                    <code className="break-all text-[11px] text-muted-foreground">
+                      {item.serviceId}
+                    </code>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-muted-foreground">
+                    <span>
+                      {t("externalTools.mcp.dependencies.provider")}:{" "}
+                      {item.provider}
+                    </span>
+                    <span>
+                      {t("externalTools.mcp.dependencies.connection")}:{" "}
+                      {item.name}
+                    </span>
+                    {item.consumers.length > 0 ? (
+                      <span>
+                        {t("externalTools.mcp.dependencies.consumers")}:{" "}
+                        {item.consumers.join("、")}
+                      </span>
+                    ) : null}
+                    {item.instances > 0 ? (
+                      <span>
+                        {item.instances}{" "}
+                        {t("externalTools.mcp.dependencies.instances")}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("externalTools.mcp.dependencies.provider")}:{" "}
-                  {item.provider}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("externalTools.mcp.dependencies.consumers")}:{" "}
-                  {item.consumers.join("、") ||
-                    t("externalTools.mcp.dependencies.none")}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t(`externalTools.mcp.dependencies.${item.state}`)} ·{" "}
-                  {item.instances}{" "}
-                  {t("externalTools.mcp.dependencies.instances")}
-                </div>
+                <span
+                  title={
+                    item.state === "available"
+                      ? t("externalTools.mcp.dependencies.onDemand")
+                      : undefined
+                  }
+                  className={cn(
+                    "mt-0.5 inline-flex shrink-0 items-center gap-1.5 text-xs",
+                    item.state === "error"
+                      ? "text-destructive"
+                      : item.state === "in-use"
+                        ? "text-emerald-700 dark:text-emerald-300"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {t(`externalTools.mcp.dependencies.${item.state}`)}
+                </span>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
-
-      {loading && items.length === 0 ? (
-        <div className={MODEL_SETTINGS_SURFACE_CLASS}>
-          <div className="h-14 animate-pulse bg-muted/20" />
-        </div>
-      ) : items.length === 0 ? (
-        <div className={MODEL_SETTINGS_SURFACE_CLASS}>
-          <div className="flex items-center gap-3 px-4 py-4">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted/55 text-muted-foreground">
-              <Server className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {t("externalTools.mcp.emptyTitle")}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {t("externalTools.mcp.dsh.emptyDescription")}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <ul className={MODEL_SETTINGS_SURFACE_CLASS} data-mcp-tools-surface>
-          {items.map((item) => (
-            <li
-              key={item.serverName}
-              className="border-b border-border/40 last:border-b-0"
-            >
-              <div className="group flex w-full items-center gap-3 px-4 py-3 text-left">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/55 text-muted-foreground">
-                  <Server className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-sm font-medium">
-                      {item.serverName}
-                    </span>
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/75">
-                      MCP ·{" "}
-                      {item.transport === "streamable-http" ? "HTTP" : "STDIO"}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {item.url ||
-                      [item.command, ...(item.args ?? [])]
-                        .filter(Boolean)
-                        .join(" ")}
-                  </span>
-                </span>
-                <span
-                  className={
-                    item.enabled
-                      ? "flex shrink-0 items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-300"
-                      : "flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
-                  }
-                >
-                  <span
-                    className={
-                      item.enabled
-                        ? "h-1.5 w-1.5 rounded-full bg-emerald-500"
-                        : "h-1.5 w-1.5 rounded-full border border-muted-foreground/50"
-                    }
-                  />
-                  {t(
-                    item.enabled
-                      ? "externalTools.status.enabled"
-                      : "externalTools.status.disabled",
-                  )}
-                </span>
-                <Button
-                  disabled={busy === item.serverName}
-                  onClick={() => setEditing(item)}
-                  size="icon"
-                  title={t("common.edit")}
-                  variant="ghost"
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  className="text-destructive hover:text-destructive"
-                  disabled={busy === item.serverName}
-                  onClick={() => void remove(item)}
-                  size="icon"
-                  title={t("common.delete")}
-                  variant="ghost"
-                >
-                  <Trash2 />
-                </Button>
-                <Switch
-                  checked={item.enabled}
-                  disabled={busy === item.serverName}
-                  onCheckedChange={(enabled) => void toggle(item, enabled)}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }

@@ -614,7 +614,7 @@ gateway 增加对应窄 operation；不能把 schema 或生命周期移回 Elect
 | --- | --- |
 | Agent/Session/Event/Tools/Skills/MCP/Schedule | DSH 官方运行时 |
 | Provider/Model/Credential | Amiba Model Plane；DSH adapter 只投影 |
-| 长期跨 Session 记忆 | `dsh-plugin-memory` |
+| 长期跨 Session 记忆 | `dsh-plugin-memory-memos` |
 | 消息路由与耐久性 | `dsh-plugin-messaging-core` |
 | 具体消息渠道 | 独立 `dsh-plugin-messaging-channel-*` |
 | 工具目录与 provenance | DSH ToolRuntime + `dsh-plugin-catalog` |

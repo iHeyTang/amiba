@@ -23,7 +23,7 @@
     "@amiba/dsh-plugin-connector-lark": "workspace:*",
     "@amiba/dsh-plugin-cron": "workspace:*",
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
-    "@amiba/dsh-plugin-memory": "workspace:*",
+    "@amiba/dsh-plugin-memory-memos": "workspace:*",
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
     "@amiba/dsh-plugin-model-plane": "workspace:*",
     "@amiba/dsh-plugin-notification-hub": "workspace:*",

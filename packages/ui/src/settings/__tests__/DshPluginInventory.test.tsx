@@ -33,7 +33,7 @@ describe("DshPluginInventoryView", () => {
       entries: [
         {
           entryId: "amiba-memory",
-          moduleName: "@amiba/dsh-plugin-memory",
+          moduleName: "@amiba/dsh-plugin-memory-memos",
           enabled: true,
           fiberPhase: "active",
         },
@@ -52,11 +52,11 @@ describe("DshPluginInventoryView", () => {
       </Chrome>,
     );
 
-    expect(await screen.findByText("dsh-plugin-memory")).toBeInTheDocument();
+    expect(await screen.findByText("dsh-plugin-memory-memos")).toBeInTheDocument();
     expect(screen.getByText("dsh-schedule")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Amiba/ }));
-    expect(screen.getByText("dsh-plugin-memory")).toBeInTheDocument();
+    expect(screen.getByText("dsh-plugin-memory-memos")).toBeInTheDocument();
     expect(screen.queryByText("dsh-schedule")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "刷新插件清单" }));
