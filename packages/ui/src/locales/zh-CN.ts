@@ -174,6 +174,20 @@ export const zhCN: UiMessages = {
   "options.nav.section.advanced": "高级",
 
   // Task agent picker
+  "sidepanel.triggerMenu.add": "添加",
+  "sidepanel.triggerMenu.files": "本地文件",
+  "sidepanel.triggerMenu.group.reference": "引用",
+  "sidepanel.triggerMenu.group.sessions": "对话",
+  "sidepanel.triggerMenu.group.skills": "技能",
+  "sidepanel.triggerMenu.group.commands": "命令",
+  "sidepanel.triggerMenu.loadFailed": "加载失败",
+  "sidepanel.triggerMenu.empty": "无匹配结果",
+  "sidepanel.triggerMenu.loading": "加载中…",
+  "sidepanel.triggerMenu.select": "选择",
+  "sidepanel.triggerMenu.switchGroup": "切换分组",
+  "sidepanel.triggerMenu.insert": "引用",
+  "sidepanel.triggerMenu.close": "关闭",
+
   "sidepanel.agentPicker.label": "选择智能体",
   "sidepanel.agentPicker.description": "选择负责这个任务的助手。",
   "sidepanel.agentPicker.search": "搜索智能体…",

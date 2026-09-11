@@ -1,3 +1,4 @@
+import { EmptyStateVisualProvider } from "../../primitives/empty-state-visual";
 import { render } from "@testing-library/react";
 import { forwardRef, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -84,4 +85,16 @@ describe("Composer conversation.input.overlay seat", () => {
     const { container } = renderComposer();
     expect(container.querySelector("[data-composer-card]")).not.toBeNull();
   });
+});
+
+it("keeps persistent accessory content outside and below the menu anchor", () => {
+  const { container } = render(<EmptyStateVisualProvider render={({defaultVisual}) => defaultVisual} accessory={() => <span data-test-accessory="" />}>
+    <Composer value="" onChange={() => {}} onSubmit={() => {}} inputOverlay={<div data-input-overlay="" />} />
+  </EmptyStateVisualProvider>);
+  const frame = card(container);
+  const accessory = container.querySelector('[data-composer-accessory]')!;
+  expect(frame.contains(accessory)).toBe(false);
+  expect(accessory.parentElement).toBe(frame.parentElement);
+  expect(frame.compareDocumentPosition(accessory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(container.querySelector('[data-input-overlay]')!.parentElement).toBe(frame);
 });

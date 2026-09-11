@@ -266,6 +266,8 @@ export interface FullScreenChatViewProps {
    * 0; desktop passes ~96 on mac.
    */
   topBarLeftInset?: number;
+  /** Height occupied by a host title bar above this workspace. */
+  viewportTopInsetPx?: number;
   /**
    * Pane header row height in pixels. Defaults to 40 for web layouts.
    * Desktop overrides to 48 so the traffic lights and header actions have
@@ -369,6 +371,7 @@ function FullScreenChatViewInner({
   openAgentDestination,
   onGoHome,
   topBarLeftInset,
+  viewportTopInsetPx = 0,
   topBarHeightPx,
   topBarClassName,
   mentionProviders,
@@ -827,7 +830,7 @@ function FullScreenChatViewInner({
   // region keeps chat and workbench in one row, with the terminal drawer as a
   // separate bottom row so it can span the active workspace like an IDE pane.
   return (
-    <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
+    <div className="flex h-screen min-h-0 w-full bg-background text-foreground" style={viewportTopInsetPx ? { height: `calc(100dvh - ${viewportTopInsetPx}px)` } : undefined}>
       <aside
         data-testid="main-sidebar"
         aria-hidden={sidebarCollapsed}

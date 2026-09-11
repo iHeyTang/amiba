@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { randomUUID } from "node:crypto";
-import {
-  MAC_TRAFFIC_LIGHT_RESERVE,
-  WINDOW_TITLE_BAR_HEIGHT,
-} from "../shared/window-chrome";
+import { getWindowChrome } from "../shared/window-chrome";
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Amiba window
 // stacks more than that on a few high-fan-out IPC channels (storage,
@@ -63,10 +60,7 @@ const api = {
     request: (input: import("../shared/embedded-page").EmbeddedPageRequest) =>
       ipcRenderer.invoke("embedded-page:request", input) as Promise<void>,
   },
-  windowChrome: {
-    topBarHeightPx: WINDOW_TITLE_BAR_HEIGHT,
-    leftInsetPx: process.platform === "darwin" ? MAC_TRAFFIC_LIGHT_RESERVE : 0,
-  },
+  windowChrome: getWindowChrome(process.platform),
 
   dshClient: {
     boot: () => ipcRenderer.invoke("dsh-client:boot"),

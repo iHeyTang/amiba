@@ -20,7 +20,9 @@
     "pretest": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "test": "node --experimental-strip-types --test src/main/__tests__/*.test.mjs",
     "pretypecheck": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test:surfaces": "node scripts/smoke-surfaces.mjs",
+    "test:pets": "pnpm --dir ../../plugins/dsh-plugin-pets build && node scripts/smoke-pets.mjs"
   },
   "build": {
     "appId": "com.iheytang.amiba",

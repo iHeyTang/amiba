@@ -717,6 +717,8 @@ export interface PlatformAdapter {
   windowChrome?: {
     topBarHeightPx: number;
     leftInsetPx: number;
+    rightInsetPx?: number;
+    standaloneTitleBar?: boolean;
   };
   storage: StorageAdapter;
   shell: ShellAdapter;

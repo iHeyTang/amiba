@@ -15,7 +15,7 @@ export const memoryKindSchema = z.enum([
 export type MemoryKind = z.infer<typeof memoryKindSchema>;
 export const memoryQuerySchema = z.object({
   session: memorySessionSchema.optional(),
-  kind: memoryKindSchema,
+  kind: z.enum(["remembered", "traces", "policies", "worldModels", "skills"]),
   query: z.string().max(512),
   offset: z.number().int().min(0).max(1_000_000),
 });
@@ -23,6 +23,11 @@ export type MemoryQuery = z.infer<typeof memoryQuerySchema>;
 export const memoryEntrySchema = z.object({
   id: z.string(),
   title: z.string(),
+  kind: memoryKindSchema.optional(),
+  category: z.string().optional(),
+  episodeId: z.string().optional(),
+  turnId: z.union([z.string(), z.number()]).optional(),
+  stepCount: z.number().optional(),
   sections: z.array(z.object({ label: z.string(), text: z.string() })),
   sessionId: z.string().nullable(),
   profile: z.string().nullable(),
@@ -45,3 +50,79 @@ export const memoryOverviewSchema = z.object({
   skills: z.number(),
 });
 export type MemoryOverview = z.infer<typeof memoryOverviewSchema>;
+
+export const memoryDetailQuerySchema = z.object({
+  kind: z.enum(["traces", "policies", "worldModels", "skills", "episodes"]),
+  episodeId: z
+    .string()
+    .min(1)
+    .max(512)
+    .refine((id) => id !== "." && id !== "..")
+    .optional(),
+  turnId: z.union([z.string(), z.number()]).optional(),
+  id: z
+    .string()
+    .min(1)
+    .max(512)
+    .refine((id) => id !== "." && id !== "..", "Invalid record ID"),
+  session: memorySessionSchema.optional(),
+});
+export type MemoryDetailQuery = z.infer<typeof memoryDetailQuerySchema>;
+export const memoryRelationSchema = z.object({
+  episodeId: z.string().optional(),
+  turnId: z.union([z.string(), z.number()]).optional(),
+  kind: memoryDetailQuerySchema.shape.kind,
+  id: z.string(),
+  title: z.string(),
+});
+export const memoryDetailSchema = z.object({
+  entry: memoryEntrySchema,
+  steps: z.array(memoryEntrySchema).optional(),
+  relations: z.array(memoryRelationSchema),
+  relationsUnavailable: z.boolean().optional(),
+  facts: z.array(z.object({ label: z.string(), value: z.string() })),
+});
+export type MemoryDetail = z.infer<typeof memoryDetailSchema>;
+
+export const memoryUpdateSchema = z
+  .object({
+    kind: z.enum(["policies", "worldModels", "skills"]),
+    id: memoryDetailQuerySchema.shape.id,
+    session: memorySessionSchema.optional(),
+    action: z.enum(["correct", "archive", "restore"]),
+    title: z.string().trim().min(1).max(2000).optional(),
+    sections: z
+      .array(
+        z.object({
+          label: z.enum([
+            "trigger",
+            "procedure",
+            "verification",
+            "boundary",
+            "body",
+            "invocationGuide",
+          ]),
+          text: z.string().max(50000),
+        }),
+      )
+      .max(6)
+      .optional(),
+  })
+  .refine(
+    (value) =>
+      value.action !== "correct" ||
+      value.title !== undefined ||
+      !!value.sections?.length,
+    "Empty correction",
+  );
+export type MemoryUpdate = z.infer<typeof memoryUpdateSchema>;
+
+export const memoryCorrectionRequestSchema = z.object({
+  kind: z.enum(["policies", "worldModels", "skills"]),
+  id: memoryDetailQuerySchema.shape.id,
+  session: memorySessionSchema.optional(),
+  language: z.enum(["zh", "en"]),
+});
+export type MemoryCorrectionRequest = z.infer<
+  typeof memoryCorrectionRequestSchema
+>;

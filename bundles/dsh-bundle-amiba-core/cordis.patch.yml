@@ -98,6 +98,11 @@
       config:
         apiToken: !!js process.env.AMIBA_DSH_API_TOKEN ?? ''
 
+    - id: amiba-pets
+      name: "@amiba/dsh-plugin-pets"
+      config:
+        root: !!js dshHomePath('amiba-pets')
+
     - id: amiba-cron
       name: "@amiba/dsh-plugin-cron"
       config:

@@ -46,7 +46,8 @@
     "@memtensor/memos-local-plugin": "2.0.18",
     "@deepseek-ai/dsh-llm": "catalog:",
     "@deepseek-ai/dsh-system-prompt": "catalog:",
-    "@deepseek-ai/dsh-timeout": "catalog:"
+    "@deepseek-ai/dsh-timeout": "catalog:",
+    "@amiba/markdown": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

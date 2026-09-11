@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import { MessageDecoration } from "../../primitives/empty-state-visual";
 import { ToolRowFrame } from "./tool-row-frame";
 import { useToolCallSeat } from "./tool-call-seat";
 import type { NoticeReference } from "@amiba/app-runtime/protocol";
@@ -1782,13 +1784,14 @@ export function MessageTurns({
               }
 
               return (
-                <Bubble
-                  key={item.id}
+                <Fragment key={item.id}><Bubble
                   m={item.message}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />
+                {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}
+                </Fragment>
               );
             })}
             </ExecutionNoticesContext.Provider>

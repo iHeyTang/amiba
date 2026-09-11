@@ -27,6 +27,8 @@ interface AmibaBridgeApi {
   windowChrome: {
     topBarHeightPx: number;
     leftInsetPx: number;
+    rightInsetPx?: number;
+    standaloneTitleBar?: boolean;
   };
   dshClient: {
     boot(): Promise<{

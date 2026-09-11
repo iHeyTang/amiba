@@ -29,6 +29,10 @@ vi.mock("@amiba/i18n", () => {
   return { useT: () => ({ t }) };
 });
 
+import userEvent from "@testing-library/user-event";
+import { useComposerAttachments } from "../../useComposerAttachments";
+import { detectTrigger } from "../triggers/detect";
+
 import { Composer } from "../../Composer";
 import { OfficialTriggerMenu } from "../triggers/OfficialTriggerMenu";
 import { sourceToProvider } from "../providers/source-adapter";
@@ -105,6 +109,7 @@ function controllerDouble(source: InputTriggerSource) {
   let ops: TriggerEditorOps | null = null;
   const tracked: { draft: string; caret: number; draftRev: number }[] = [];
   const controller: ComposerTriggerController & {
+    menu: typeof menu;
     open(query: string, names: string[]): void;
     lastSpan: { start: number; end: number; draftRev: number };
     tracked: typeof tracked;
@@ -194,11 +199,14 @@ function ControlledComposer(props: {
   initial?: string;
   mentionProviders?: React.ComponentProps<typeof Composer>["mentionProviders"];
   valueRef?: { current: string };
+  filePicker?: () => Promise<void>;
 }) {
   const [value, setValue] = React.useState(props.initial ?? "");
+  const attachments = useComposerAttachments({ getSessionId: () => props.sessionId ?? "draft" });
   if (props.valueRef) props.valueRef.current = value;
   return (
     <Composer
+      attachments={props.filePicker ? { ...attachments, openFilePicker: props.filePicker } : undefined}
       inputOverlay={
         props.seat && props.controller ? props.seat(props.controller) : undefined
       }
@@ -353,6 +361,45 @@ describe("exactly one menu per composer", () => {
     });
     expect(items.map((item) => item.label)).toEqual(["alpha"]);
     expect(provider.group).toBe("Fixture");
+  });
+});
+
+describe("unified add and mention menu", () => {
+  it.each([false, true])("opens from plus and uploads from the same menu (official=%s)", async (official) => {
+    const user = userEvent.setup();
+    const source = fixtureSource();
+    const controller = controllerDouble(source);
+    // Keep the controller double's normal behavior, but drive its observable
+    // menu from detected @ tokens so plus exercises the real editor updates.
+    const track = controller.track.bind(controller);
+    controller.track = (draft, caret, guard, revision) => {
+      track(draft, caret, guard, revision);
+      const hit = detectTrigger(draft, caret, guard, revision);
+      if (!hit) { controller.dismiss(); return; }
+      controller.menu.set({ open: true, hit: { ...hit, quoted: false }, generation: revision, highlight: null,
+        groups: [{ source: "fixture", status: "ready", items: [{ name: "alpha" }] }] });
+    };
+    const sources = [source];
+    const runtime: ComposerTriggerRuntime = official ? runtimeFor(controller) : {
+      controllerFor: () => undefined, bindEditor: () => () => {}, draftSources: () => sources,
+    };
+    const picker = vi.fn(async () => {});
+    const valueRef = { current: "" };
+    render(<ControlledComposer initial="Keep my draft" runtime={runtime}
+      sessionId={official ? "s1" : undefined} controller={controller}
+      seat={official ? c => <OfficialTriggerMenu controller={c} /> : undefined}
+      filePicker={picker} valueRef={valueRef} onSubmit={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveTextContent("Keep my draft"));
+    await user.click(screen.getByRole("button", { name: "sidepanel.triggerMenu.add" }));
+    expect(picker).not.toHaveBeenCalled();
+    const file = await screen.findByRole("button", { name: "sidepanel.triggerMenu.files" });
+    expect(await screen.findByText("alpha")).toBeVisible();
+    expect(document.querySelectorAll("[data-composer-overlay]")).toHaveLength(1);
+    expect(valueRef.current).toContain("Keep my draft");
+    await user.click(file);
+    expect(picker).toHaveBeenCalledOnce();
+    await waitFor(() => expect(valueRef.current.trim()).toBe("Keep my draft"));
+    expect(document.querySelector("[data-composer-overlay]")).toBeNull();
   });
 });
 

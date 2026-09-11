@@ -3,12 +3,9 @@ import type { MenuItemConstructorOptions } from "electron";
 /**
  * Application menu template.
  *
- * Amiba ran on Electron's implicit default menu until this module existed.
- * That default has no Preferences entry, so the platform-standard ⌘, (Ctrl+,
- * elsewhere) was dead. Building the menu ourselves means we also have to
- * re-declare every role the default provided (Edit's clipboard commands,
- * View's zoom/devtools, Window's minimize/zoom/front) — dropping any of them
- * silently loses the keyboard shortcut that role carries.
+ * Keep native editing, accessibility zoom and window commands available.
+ * Debugging commands are development-only on macOS and grouped separately
+ * from everyday actions so the shipping menu contains no browser machinery.
  *
  * Kept free of runtime `electron` imports so the template is unit-testable
  * under plain Node; `index.ts` does the `Menu.setApplicationMenu` call.
@@ -27,12 +24,14 @@ export interface AppMenuOptions {
   /** Shown as the macOS application-menu title (`app.name`). */
   appName: string;
   onOpenSettings: () => void;
+  development?: boolean;
 }
 
 export function buildAppMenuTemplate({
   platform,
   appName,
   onOpenSettings,
+  development = false,
 }: AppMenuOptions): MenuItemConstructorOptions[] {
   const isMac = platform === "darwin";
 
@@ -90,15 +89,32 @@ export function buildAppMenuTemplate({
   const viewMenu: MenuItemConstructorOptions = {
     label: "View",
     submenu: [
-      { role: "reload" },
-      { role: "forceReload" },
-      { role: "toggleDevTools" },
-      { type: "separator" },
+      ...(!isMac
+        ? [
+            { role: "reload" } as const,
+            { role: "forceReload" } as const,
+            { role: "toggleDevTools" } as const,
+            { type: "separator" } as const,
+          ]
+        : []),
       { role: "resetZoom" },
       { role: "zoomIn" },
       { role: "zoomOut" },
       { type: "separator" },
       { role: "togglefullscreen" },
+      ...(isMac && development
+        ? [
+            { type: "separator" } as const,
+            {
+              label: "Developer",
+              submenu: [
+                { role: "reload" } as const,
+                { role: "forceReload" } as const,
+                { role: "toggleDevTools" } as const,
+              ],
+            },
+          ]
+        : []),
     ],
   };
 

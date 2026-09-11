@@ -112,6 +112,7 @@ export {
   NavigationGroupLabel,
   NavigationRow,
 } from "./navigation/NavigationRow";
+export { WorkspaceNavigationRow, type WorkspaceNavigationRowProps, type WorkspaceNavigationTarget } from "./navigation/WorkspaceNavigationRow";
 export { SidebarExpandControl } from "./navigation/SidebarExpandControl";
 // SettingsPageChromeProvider/useSettingsPageChrome are the scaffold-side
 // half of the actions contract. Plugins normally render only
@@ -166,3 +167,7 @@ export { WorkbenchExtensionsProvider, WorkbenchViewBoundary } from "./chat/workb
 export { builtinWorkbenchViews, WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, type FileResource } from "./chat/WorkspacePane";
 
 export { ModelDetailsDialog } from "./models/ModelDetailsDialog";
+
+export { EmptyStateVisualProvider, type EmptyStateVisualRenderer } from "./primitives/empty-state-visual";
+
+export { PresentationRoot, usePresentationCoordinator, useSurfaceActivity, useSurfaceInteraction } from "./primitives/interaction-region";

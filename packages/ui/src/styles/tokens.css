@@ -264,6 +264,136 @@
   }
 }
 
+/* Shared scroll chrome for native overflow, editors, menus and Radix panes.
+ * Keep a 10px drag lane while painting only a 4px capsule. The transparent
+ * gutter belongs to the content surface; it never becomes a separate track.
+ * Resolve colours at each theme boundary, including nested light/dark panes.
+ */
+:root,
+.light,
+.dark {
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: hsl(var(--foreground) / 0.18);
+  --scrollbar-thumb-hover: hsl(var(--foreground) / 0.28);
+  --scrollbar-thumb-drag: hsl(var(--foreground) / 0.44);
+}
+
+/* Do not set scrollbar-width/color in Chromium: non-auto values override
+ * its pseudo-elements and bring the platform's heavier scroll chrome back.
+ * Low specificity preserves deliberately hidden scrollbars and tab rails. */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  min-width: 28px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+*:hover::-webkit-scrollbar-thumb,
+*:focus-visible::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--scrollbar-thumb-drag);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--scrollbar-thumb-hover) transparent;
+  }
+}
+
+[data-amiba-scrollbar] {
+  padding: 2px;
+  background: transparent;
+}
+
+[data-amiba-scrollbar][data-orientation="vertical"] {
+  width: var(--scrollbar-size);
+}
+
+[data-amiba-scrollbar][data-orientation="horizontal"] {
+  height: var(--scrollbar-size);
+}
+
+[data-amiba-scrollbar-thumb]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  transition: background-color 140ms ease, inset 140ms ease;
+}
+
+[data-orientation="vertical"] > [data-amiba-scrollbar-thumb]::before {
+  inset-inline: 1px;
+}
+
+[data-orientation="horizontal"] > [data-amiba-scrollbar-thumb]::before {
+  inset-block: 1px;
+}
+
+[data-amiba-scroll-area]:hover [data-amiba-scrollbar-thumb]::before,
+[data-amiba-scroll-area]:focus-within [data-amiba-scrollbar-thumb]::before {
+  background: var(--scrollbar-thumb-hover);
+}
+
+[data-amiba-scrollbar]:hover > [data-amiba-scrollbar-thumb]::before {
+  inset: 0;
+  background: var(--scrollbar-thumb-hover);
+}
+
+[data-amiba-scrollbar]:active > [data-amiba-scrollbar-thumb]::before {
+  inset: 0;
+  background: var(--scrollbar-thumb-drag);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-amiba-scrollbar-thumb]::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :root, .light, .dark {
+    --scrollbar-thumb: CanvasText;
+    --scrollbar-thumb-hover: Highlight;
+    --scrollbar-thumb-drag: Highlight;
+  }
+  *::-webkit-scrollbar-thumb,
+  [data-amiba-scrollbar-thumb]::before {
+    forced-color-adjust: none;
+  }
+}
+
 /*
  * Radix ScrollArea fixes — included here so extensions that use a ScrollArea
  * primitive get correct behaviour without extra CSS (no-ops otherwise).

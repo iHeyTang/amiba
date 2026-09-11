@@ -1,10 +1,11 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
-import { NavigationRow, usePluginT } from "@amiba/ui/plugin";
-import { MemoryPage, type MemoryAdapter } from "./MemoryPage.js";
+import { WorkspaceNavigationRow, usePluginT } from "@amiba/ui/plugin";
+import { MemoryPage } from "./MemoryPage.js";
 import { Brain } from "lucide-react";
 import { AMIBA_MEMORY_REMOTE } from "../remote.js";
+import { createMemoryAdapter } from "./memory-adapter.js";
 import { MemosPanel } from "./MemosPanel.js";
 
 export const name = "amiba-memory-memos-ui";
@@ -13,7 +14,9 @@ const SECTION_ID = "memory";
 
 function labels() {
   return {
-    nav: document.documentElement.lang.startsWith("zh") ? "记忆" : "Memory",
+    nav: document.documentElement.lang.startsWith("zh")
+      ? "助手记忆"
+      : "Assistant memory",
   };
 }
 
@@ -22,10 +25,11 @@ function MemoryNavigation({
   openWorkspace,
 }: PropsRuntime<"amiba.workspace.navigation">) {
   const { language } = usePluginT();
-  const label = language.startsWith("zh") ? "记忆" : "Memory";
+  const label = language.startsWith("zh") ? "助手记忆" : "Assistant memory";
   return (
-    <NavigationRow
-      active={activeView === SECTION_ID}
+    <WorkspaceNavigationRow
+      navigation={{ activeView }}
+      target={{ kind: "workspace", viewId: SECTION_ID }}
       icon={<Brain />}
       label={label}
       title={label}
@@ -41,25 +45,13 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaMemory", "layout"],
     (ready) => {
       const remote = ready.remote.amibaMemory;
-      // Keep the Viewer session in this client runtime only, never in host-global state or storage.
-      let session: string | undefined;
-      const adapter: MemoryAdapter = {
-        async login(password) {
-          const result = await remote.login(password);
-          if (!result.ok) throw new Error(result.error.message);
-          session = result.value;
-        },
-        async overview() {
-          const result = await remote.overview(session);
-          if (!result.ok) throw new Error(result.error.message);
-          return result.value;
-        },
-        async browse(input) {
-          const result = await remote.browse({ ...input, session });
-          if (!result.ok) throw new Error(result.error.message);
-          return result.value;
-        },
-      };
+      let storage: Storage | undefined;
+      try {
+        storage = window.localStorage;
+      } catch {
+        /* Use an in-memory session if storage is unavailable. */
+      }
+      const adapter = createMemoryAdapter(remote, storage);
       const disposeNavigation = ready.slots.inject(
         "amiba.workspace.navigation",
         () =>
@@ -67,7 +59,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             {
               name: "amiba.workspace.navigation",
               id: SECTION_ID,
-              order: -100,
+              order: 110,
               label: () => labels().nav,
             },
             MemoryNavigation,
@@ -81,6 +73,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             label: () => labels().nav,
             inject: () => ({
               adapter,
+              startChat: (prompt: string) => ready.layout.openNewChat(prompt),
               expandSidebar: () => ready.layout.toggleSidebar(),
               openSettings: () => ready.layout.openSettings(SECTION_ID),
             }),

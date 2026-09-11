@@ -1,3 +1,4 @@
+import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import { describe, expect, it } from "vitest";
 
 import { AMIBA_ROOT_SLOTS } from "@amiba/extension-sdk";
@@ -38,4 +39,20 @@ describe("Amiba root slot contract", () => {
       expect(slot).toMatch(/^amiba\./u);
     }
   });
+});
+
+it("empty-state visual lists candidates and supports unloading", async () => {
+  const { SlotCore } = await import("@deepseek-ai/dsh-client-ui-slots");
+  const core = new SlotCore();
+  const root = core.register({ name: "root", children: {
+    "amiba.emptyState.visual": { kind: "list", scope: "root" },
+  } }, ({ renderSlot }: PropsRenderSlots<"amiba.emptyState.visual">) => { void renderSlot; return null; });
+  const dispose = core.register({ name: "amiba.emptyState.visual", id: "one" }, ({ defaultVisual }) => defaultVisual);
+  expect(core.entriesOfSlot("amiba.emptyState.visual")).toHaveLength(1);
+  const second = core.register({ name: "amiba.emptyState.visual", id: "two" }, () => null);
+  expect(core.entriesOfSlot("amiba.emptyState.visual")).toHaveLength(2);
+  second();
+  dispose();
+  expect(core.entriesOfSlot("amiba.emptyState.visual")).toHaveLength(0);
+  root();
 });

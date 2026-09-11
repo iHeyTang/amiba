@@ -3,14 +3,27 @@ import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 import type { MemosStatus } from "./memos-status.js";
 
 import { MemosDashboardService } from "./dashboard-service.js";
-import type { MemoryQuery } from "./dashboard.js";
+import type {
+  MemoryCorrectionRequest,
+  MemoryQuery,
+  MemoryDetailQuery,
+  MemoryUpdate,
+} from "./dashboard.js";
+
+import { MemoryCorrections } from "./correction.js";
 
 class AmibaMemoryRemoteService extends TypertRemoteService {
   constructor(
     ctx: Context,
     private readonly getStatus: () => MemosStatus,
+    private readonly corrections: MemoryCorrections,
   ) {
     super(ctx, "amibaMemory");
+  }
+
+  @Remote
+  beginCorrection(input: MemoryCorrectionRequest) {
+    return this.corrections.begin(input);
   }
 
   @Remote
@@ -29,6 +42,16 @@ class AmibaMemoryRemoteService extends TypertRemoteService {
   }
 
   @Remote
+  detail(input: MemoryDetailQuery) {
+    return new MemosDashboardService(this.getStatus).detail(input);
+  }
+
+  @Remote
+  update(input: MemoryUpdate) {
+    return new MemosDashboardService(this.getStatus).update(input);
+  }
+
+  @Remote
   status(): MemosStatus {
     return this.getStatus();
   }
@@ -38,6 +61,7 @@ class AmibaMemoryRemoteService extends TypertRemoteService {
 export function applyMemoryRemote(
   ctx: Context,
   getStatus: () => MemosStatus,
+  corrections = new MemoryCorrections(new MemosDashboardService(getStatus)),
 ): void {
-  new AmibaMemoryRemoteService(ctx, getStatus);
+  new AmibaMemoryRemoteService(ctx, getStatus, corrections);
 }

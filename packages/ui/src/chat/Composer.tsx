@@ -1,3 +1,8 @@
+import { ComposerAccessory } from "../primitives/empty-state-visual";
+import { useT } from "@amiba/i18n";
+import { Paperclip } from "lucide-react";
+import { ComposerAddMenuContext } from "./composer/ComposerAddMenuContext";
+import type { MenuItem } from "./composer/providers/types";
 import {
   Button,
   Tooltip,
@@ -463,6 +468,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     },
     ref,
   ) {
+    const { t } = useT();
     const innerRef = useRef<RichComposerHandle>(null);
 
     const effectiveMentionProviders = useMemo(
@@ -780,7 +786,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         </div>
       ) : null;
 
+    const addMenuItems = useMemo<MenuItem[]>(() => {
+      if (!attachments || disabled || attachments.attachmentBusy || attachments.attachmentUploading) return [];
+      return [{
+        id: "composer.attach-files",
+        label: t("sidepanel.triggerMenu.files"),
+        icon: <Paperclip className="h-4 w-4" strokeWidth={1.75} />,
+        action: () => {
+          innerRef.current?.consumeMentionTrigger();
+          void attachments.openFilePicker();
+        },
+      }];
+    }, [attachments?.openFilePicker, attachments?.attachmentBusy, attachments?.attachmentUploading, disabled, t]);
+
     return (
+      <ComposerAddMenuContext.Provider value={addMenuItems}>
       <div
         {...wrapperProps}
         // Drop handlers from the attachment hook are merged with any
@@ -862,34 +882,39 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {dropOverlay}
             </div>
           ) : null}
+          <ComposerAccessory />
           {topAffordance}
           {renderedChipRow}
-          <RichComposerEditor
-            ref={innerRef}
-            value={value}
-            onChange={onChange}
-            placeholder={resolvedPlaceholder}
-            disabled={disabled}
-            maxHeightPx={maxTextareaPx}
-            style={textareaStyle}
-            onSubmitChord={() => {
-              if (disabled) return;
-              if (!effectiveCanSubmit) return;
-              handleSend();
-            }}
-            mentionProviders={effectiveMentionProviders}
-            sessionId={permissionSessionId}
-            trigger={trigger}
-            onKeyDownExtra={onKeyDownExtra}
-            onPaste={handlePaste}
-            className={cn(
-              frameVariant === "hero"
-                ? "min-h-[3.75rem] px-5 pb-1.5 pt-4"
-                : density === "compact"
-                  ? "min-h-12 px-3 pb-1 pt-2"
-                  : "min-h-[3.75rem] px-3 py-2.5",
-            )}
-          />
+          <div className="flex items-start">
+            <div className="min-w-0 flex-1">
+              <RichComposerEditor
+                ref={innerRef}
+                value={value}
+                onChange={onChange}
+                placeholder={resolvedPlaceholder}
+                disabled={disabled}
+                maxHeightPx={maxTextareaPx}
+                style={textareaStyle}
+                onSubmitChord={() => {
+                  if (disabled) return;
+                  if (!effectiveCanSubmit) return;
+                  handleSend();
+                }}
+                mentionProviders={effectiveMentionProviders}
+                sessionId={permissionSessionId}
+                trigger={trigger}
+                onKeyDownExtra={onKeyDownExtra}
+                onPaste={handlePaste}
+                className={cn(
+                  frameVariant === "hero"
+                    ? "min-h-[3.75rem] px-5 pb-1.5 pt-4"
+                    : density === "compact"
+                      ? "min-h-12 px-3 pb-1 pt-2"
+                      : "min-h-[3.75rem] px-3 py-2.5",
+                )}
+              />
+            </div>
+          </div>
           <div
             className={cn(
               "flex items-center justify-between gap-2",
@@ -911,21 +936,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {/*
                 Order of items in the bottom action row — same on EVERY
                 surface that uses Composer:
-                  1. attachment add button (auto-rendered when attachments prop set)
+                  1. unified add / mention menu
                   2. DSH agent preset (when enabled)
                   3. DSH approval policy (when enabled)
                   4. official conversation.input.plan seat (empty today)
                   5. surface-specific extras (actionsLeft slot)
               */}
-              {attachments ? (
-                <AttachmentButton
-                  onClick={() => void attachments.openFilePicker()}
-                  disabled={
-                    attachments.attachmentBusy ||
-                    attachments.attachmentUploading
-                  }
-                />
-              ) : null}
+              <AttachmentButton
+                title={t("sidepanel.triggerMenu.add")}
+                onClick={() => { if (trigger.guard().tier !== "frozen") innerRef.current?.openMention(); }}
+                disabled={disabled}
+              />
               {agentPicker ? (
                 <ComposerAgentPicker
                   dialogSize={pickerDialogSize}
@@ -1012,6 +1033,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           </div>
         ) : null}
       </div>
+      </ComposerAddMenuContext.Provider>
     );
   },
 );

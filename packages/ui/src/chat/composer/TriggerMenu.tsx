@@ -1,25 +1,16 @@
+import { useT, type MessageKey } from "@amiba/i18n"
 import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../../primitives"
+import { ComposerAddMenuContext } from "./ComposerAddMenuContext"
 import type { MenuGroup, MenuItem } from "./providers/types"
 
 export interface TriggerMenuProps {
-  /**
-   * Pre-clustered categories (the plugin builds these). Preferred over
-   * `items`/`groupLabels`. A group with no `items` but a `hint` renders its
-   * hint as the category's empty state (e.g. "type to search Feishu docs").
-   */
   groups?: MenuGroup[]
   items?: MenuItem[]
-  /**
-   * Parallel to `items`: the group label for each item. When provided (and no
-   * `groups`), the menu clusters items into a two-pane layout. Omit (e.g. in
-   * tests) to render a flat list.
-   * Keyboard nav: ↑/↓ move within the current group, Tab/Shift+Tab switch
-   * groups (←/→ are left alone so they keep moving the text caret), Enter
-   * selects, Esc closes.
-   */
   groupLabels?: string[]
+  /** Present only for @ menus; allows the composer's own add actions. */
+  mentionQuery?: string
   loading: boolean
   error: string | null
   onSelect: (item: MenuItem) => void
@@ -27,273 +18,175 @@ export interface TriggerMenuProps {
   anchorClassName?: string
 }
 
-interface Group {
-  label: string
-  items: MenuItem[]
-  hint?: string
+const GROUP_KEYS: Record<string, MessageKey> = {
+  reference: "sidepanel.triggerMenu.group.reference",
+  session: "sidepanel.triggerMenu.group.sessions",
+  Sessions: "sidepanel.triggerMenu.group.sessions",
+  skill: "sidepanel.triggerMenu.group.skills",
+  Skills: "sidepanel.triggerMenu.group.skills",
+  command: "sidepanel.triggerMenu.group.commands",
+  Commands: "sidepanel.triggerMenu.group.commands",
 }
 
-const KBD =
-  "rounded border border-border bg-muted/60 px-1 text-[9px] leading-[1.5] text-muted-foreground"
 
-export function TriggerMenu({
-  groups,
-  items = [],
-  groupLabels,
-  loading,
-  error,
-  onSelect,
-  onClose,
-  anchorClassName,
-}: TriggerMenuProps) {
-  // Resolve the categories to render. Three callers:
-  //  - `groups` given → use directly (the composer plugin).
-  //  - `groupLabels` given → cluster `items` by label into contiguous groups.
-  //  - neither → a single flat group of `items` (tests).
-  const resolved = useMemo<Group[]>(() => {
-    if (groups) return groups
-    if (groupLabels) {
-      const out: Group[] = []
+const EMPTY_ITEMS: MenuItem[] = []
+
+export function TriggerMenu({ groups, items = EMPTY_ITEMS, groupLabels, mentionQuery,
+  loading, error, onSelect, onClose, anchorClassName }: TriggerMenuProps) {
+  const { t } = useT()
+  const availableActions = useContext(ComposerAddMenuContext)
+  const groupLabel = (label: string) => Object.hasOwn(GROUP_KEYS, label) ? t(GROUP_KEYS[label]) : label
+  const addActions = useMemo(() => mentionQuery === undefined ? [] : availableActions.filter(item =>
+    !mentionQuery || item.label.toLocaleLowerCase().includes(mentionQuery.toLocaleLowerCase())), [availableActions, mentionQuery])
+  const resolved = useMemo<MenuGroup[]>(() => {
+    let result: MenuGroup[]
+    if (groups) result = groups
+    else if (groupLabels) {
+      result = []
       items.forEach((item, i) => {
         const label = groupLabels[i] ?? ""
-        const last = out[out.length - 1]
-        if (last && last.label === label) last.items.push(item)
-        else out.push({ label, items: [item] })
+        const last = result[result.length - 1]
+        if (last?.label === label) last.items.push(item)
+        else result.push({ label, items: [item] })
       })
-      return out
-    }
-    return items.length ? [{ label: "", items }] : []
-  }, [groups, items, groupLabels])
-
-  // Two-pane (sidebar + content) whenever categories are explicit (`groups` or
-  // `groupLabels`); the flat path is only for callers passing bare `items`.
-  const twoPane = (groups != null || groupLabels != null) && resolved.length >= 1
-  const totalItems = useMemo(() => resolved.reduce((n, g) => n + g.items.length, 0), [resolved])
-  // Flat (groupIndex, itemIndex) sequence over the categories that have items,
-  // so ↑/↓ flow into the adjacent category at a boundary (Tab still switches
-  // whole categories, including hint-only ones).
-  const positions = useMemo(() => {
-    const out: { gi: number; ii: number }[] = []
-    resolved.forEach((g, gi) => g.items.forEach((_, ii) => out.push({ gi, ii })))
-    return out
-  }, [resolved])
-
-  const [activeGroup, setActiveGroup] = useState(0)
-  const [activeItem, setActiveItem] = useState(0)
-  // Reset the selection whenever the result set changes (new query).
-  useEffect(() => {
-    setActiveGroup(0)
-    setActiveItem(0)
-  }, [resolved])
-
-  const currentGroup = resolved[Math.min(activeGroup, resolved.length - 1)]
-
-  // Keep the active item / group scrolled into view during keyboard nav.
+    } else result = items.length ? [{ label: "", items }] : []
+    return addActions.length ? [{ label: t("sidepanel.triggerMenu.add"), items: addActions }, ...result] : result
+  }, [groups, items, groupLabels, addActions, t])
+  const positions = useMemo(() => resolved.flatMap((group, gi) => group.items.map((item, ii) => ({ gi, ii, item }))), [resolved])
+  const [active, setActive] = useState(0)
+  const current = positions[active] ?? positions[0]
   const activeItemRef = useRef<HTMLButtonElement | null>(null)
-  const activeGroupRef = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => {
-    // `?.scrollIntoView?.` — optional on the method too, so it's a no-op in
-    // non-browser environments (jsdom/SSR) that don't implement it.
-    activeItemRef.current?.scrollIntoView?.({ block: "nearest" })
-  }, [activeItem, activeGroup])
-  useEffect(() => {
-    activeGroupRef.current?.scrollIntoView?.({ block: "nearest" })
-  }, [activeGroup])
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const [availableHeight, setAvailableHeight] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    // bottom-full is anchored to the nearest positioned ancestor. Measure
+    // that anchor, not the animated popup (scale/translate distort its rect).
+    const anchor = (root.offsetParent ?? root.parentElement) as HTMLElement | null
+    if (!anchor) return
+    const ancestors: HTMLElement[] = []
+    for (let node: HTMLElement | null = anchor; node; node = node.parentElement) ancestors.push(node)
+    const viewport = window.visualViewport
+    let frame = 0
+    const measure = () => {
+      const viewportTop = viewport?.offsetTop ?? 0
+      const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight)
+      let top = viewportTop
+      for (const node of ancestors) {
+        if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(node).overflowY)) {
+          top = Math.max(top, node.getBoundingClientRect().top + node.clientTop)
+        }
+      }
+      const gap = parseFloat(getComputedStyle(root).marginBottom) || 4
+      const bottom = Math.min(anchor.getBoundingClientRect().top - gap, viewportBottom - 12)
+      setAvailableHeight(Math.max(0, Math.min(384, bottom - top - 12)))
+    }
+    const schedule = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    const observer = new ResizeObserver(schedule)
+    ancestors.forEach(node => observer.observe(node))
+    window.addEventListener("resize", schedule)
+    window.addEventListener("scroll", schedule, true)
+    viewport?.addEventListener("resize", schedule)
+    viewport?.addEventListener("scroll", schedule)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+      window.removeEventListener("resize", schedule)
+      window.removeEventListener("scroll", schedule, true)
+      viewport?.removeEventListener("resize", schedule)
+      viewport?.removeEventListener("scroll", schedule)
+    }
+  }, [])
+  useEffect(() => { setActive(0) }, [resolved])
+  useLayoutEffect(() => {
+    // Scroll only the menu, never the window or the conversation behind it.
+    const list = listRef.current
+    const item = activeItemRef.current
+    if (!list || !item) return
+    const bounds = list.getBoundingClientRect()
+    const row = item.getBoundingClientRect()
+    if (row.top < bounds.top) list.scrollTop -= bounds.top - row.top
+    else if (row.bottom > bounds.bottom) list.scrollTop += row.bottom - bounds.bottom
+  }, [active, availableHeight])
+
+  function select(item: MenuItem) {
+    if (addActions.includes(item)) {
+      onClose()
+      item.action?.()
+    } else onSelect(item)
+  }
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      // We listen on `window` in the CAPTURE phase, so stopping propagation
-      // here prevents the event from ever reaching the Lexical editor below
-      // — that's what keeps Enter from inserting a newline / submitting, and
-      // ↑/↓/Tab from doing anything in the composer while the menu is open.
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault()
-        e.stopPropagation()
-        if (positions.length === 0) return
-        const dir = e.key === "ArrowDown" ? 1 : -1
-        let idx = positions.findIndex((p) => p.gi === activeGroup && p.ii === activeItem)
-        if (idx === -1) {
-          // Active category has no items (a hint category reached via Tab) —
-          // step into the nearest item category in the direction of travel.
-          let seed = -1
-          for (let k = 0; k < positions.length; k++) {
-            if (dir > 0) {
-              if (positions[k].gi >= activeGroup) { seed = k; break }
-            } else if (positions[k].gi <= activeGroup) {
-              seed = k
-            }
-          }
-          idx = seed === -1 ? (dir > 0 ? 0 : positions.length - 1) : seed
-        } else {
-          // Wrap around: ↓ past the last item loops to the first, and ↑ before
-          // the first loops to the last (consistent with Tab's group cycling).
-          idx = (idx + dir + positions.length) % positions.length
-        }
-        const pos = positions[idx]
-        setActiveGroup(pos.gi)
-        setActiveItem(pos.ii)
-      } else if (twoPane && resolved.length > 1 && e.key === "Tab") {
-        // Switch group. We deliberately do NOT use ←/→ — those must keep
-        // moving the text caret in the composer while the menu is open.
-        e.preventDefault()
-        e.stopPropagation()
-        const dir = e.shiftKey ? -1 : 1
-        setActiveGroup((g) => (g + dir + resolved.length) % resolved.length)
-        setActiveItem(0)
-      } else if (e.key === "Enter") {
-        const item = currentGroup?.items[activeItem]
-        if (item) {
-          e.preventDefault()
-          e.stopPropagation()
-          onSelect(item)
-        }
-      } else if (e.key === "Escape") {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
+    function onKey(event: KeyboardEvent) {
+      if (event.isComposing) return
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation(); onClose(); return
+      }
+      if (["ArrowDown", "ArrowUp", "Enter", "Tab"].includes(event.key)) {
+        event.preventDefault(); event.stopPropagation()
+        if (!positions.length) return
+        if (event.key === "Enter") { if (current) select(current.item); return }
+        if (event.key === "Tab") {
+          const groupIds = [...new Set(positions.map(position => position.gi))]
+          const groupIndex = groupIds.indexOf(current?.gi ?? 0)
+          const target = groupIds[(groupIndex + (event.shiftKey ? -1 : 1) + groupIds.length) % groupIds.length]
+          setActive(positions.findIndex(position => position.gi === target))
+        } else setActive(index => (index + (event.key === "ArrowDown" ? 1 : -1) + positions.length) % positions.length)
       }
     }
     window.addEventListener("keydown", onKey, true)
     return () => window.removeEventListener("keydown", onKey, true)
-  }, [twoPane, resolved, positions, currentGroup, activeGroup, activeItem, onSelect, onClose])
+  }, [positions, current, addActions, onClose, onSelect])
 
-  // Two-line item: title on top, description/intro below (both truncate).
-  // The icon sits to the left, vertically centred against the block.
-  const renderItem = (item: MenuItem, ii: number) => (
-    <button
-      key={item.id}
-      ref={ii === activeItem ? activeItemRef : null}
-      type="button"
-      onMouseEnter={() => setActiveItem(ii)}
-      onClick={() => onSelect(item)}
-      className={cn(
-        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left",
-        ii === activeItem
-          ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50",
-      )}
-    >
-      {item.icon && <span className="shrink-0">{item.icon}</span>}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{item.label}</span>
-        {item.description && (
-          <span
-            className={cn(
-              "block truncate text-xs",
-              ii === activeItem
-                ? "text-accent-foreground/75"
-                : "text-muted-foreground",
-            )}
-          >
-            {item.description}
-          </span>
-        )}
-      </span>
-    </button>
-  )
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      const root = rootRef.current
+      if (target && root && !root.contains(target) && !root.closest("[data-composer-card]")?.contains(target)) onClose()
+    }
+    document.addEventListener("pointerdown", outside)
+    return () => document.removeEventListener("pointerdown", outside)
+  }, [onClose])
 
+  const status = error ? t("sidepanel.triggerMenu.loadFailed") : loading ? t("sidepanel.triggerMenu.loading") : t("sidepanel.triggerMenu.empty")
   return (
-    <div
-      data-composer-overlay=""
-      data-ui-overlay="popover"
-      className={cn(
-        // The editor supplies a virtual text trigger and must retain focus, so
-        // this cannot use Radix Popover's trigger/focus lifecycle. It still
-        // follows the shared Popover frame and enter motion contract.
-        "absolute bottom-full left-0 right-0 z-50 mb-1 overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-popover",
-        "origin-bottom duration-150 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 motion-reduce:animate-none",
-        anchorClassName,
-      )}
-    >
-      {resolved.length === 0 ? (
-        // Same fixed height as the populated menu, so the loading / empty /
-        // error states don't resize the popup.
-        <div className="flex h-64 items-center justify-center px-4 text-center text-xs">
-          {error ? (
-            <span className="text-destructive">加载失败</span>
-          ) : loading ? (
-            <span className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              加载中…
-            </span>
-          ) : (
-            <span className="text-muted-foreground">无匹配结果</span>
-          )}
-        </div>
-      ) : twoPane ? (
-          // Fixed height so the popup doesn't jump as the active category's
-          // content changes (50 items vs. a one-line hint) — it scrolls instead.
-          <div className="flex h-64">
-            {/* Left: group sidebar. Hover or click switches the group;
-                mousedown is prevented so the click doesn't steal focus from
-                the editor and close the menu. */}
-            <div className="w-32 shrink-0 overflow-y-auto border-r border-border p-1">
-              {resolved.map((g, gi) => (
-                <button
-                  key={g.label || gi}
-                  ref={gi === activeGroup ? activeGroupRef : null}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => {
-                    setActiveGroup(gi)
-                    setActiveItem(0)
-                  }}
-                  onClick={() => {
-                    setActiveGroup(gi)
-                    setActiveItem(0)
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-1 rounded px-2 py-1.5 text-left text-xs",
-                    gi === activeGroup
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50",
-                  )}
-                >
-                  <span className="truncate">{g.label}</span>
-                  {g.items.length > 0 && (
-                    <span className="shrink-0 tabular-nums opacity-60">
-                      {g.items.length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-            {/* Right: the active group's items, or its empty-state hint. */}
-            <div className="min-w-0 flex-1 overflow-y-auto p-1">
-              {currentGroup && currentGroup.items.length > 0
-                ? currentGroup.items.map(renderItem)
-                : currentGroup?.hint && (
-                    <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
-                      {currentGroup.hint}
-                    </div>
-                  )}
-            </div>
-          </div>
-        ) : (
-          <div className="max-h-64 overflow-y-auto p-1">
-            {currentGroup?.items.map(renderItem)}
-          </div>
-        )}
+    <div ref={rootRef} data-composer-overlay="" data-ui-overlay="popover"
+      style={{ maxHeight: availableHeight ?? 0, visibility: availableHeight === null ? "hidden" : undefined }}
+      onMouseDown={event => event.preventDefault()}
+      className={cn("absolute bottom-full left-0 right-0 z-50 mb-1 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-popover text-popover-foreground shadow-popover",
+        "origin-bottom duration-150 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 motion-reduce:animate-none", anchorClassName)}>
+      <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain p-1.5" data-trigger-group-list="">
+        {resolved.map((group, gi) => (
+          <section key={`${gi}:${group.label}`} className="mb-1 last:mb-0">
+            {group.label && <h3 className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/75">{groupLabel(group.label)}</h3>}
+            {group.items.map((item, ii) => {
+              const selected = current?.gi === gi && current?.ii === ii
+              return <button key={item.id} ref={selected ? activeItemRef : null} type="button"
+                onMouseEnter={() => setActive(positions.findIndex(position => position.gi === gi && position.ii === ii))}
+                onClick={() => select(item)}
+                className={cn("flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left",
+                  selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50")}>
+                {item.icon && <span className="flex h-4 w-4 shrink-0 items-center justify-center">{item.icon}</span>}
+                <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                  <span className="max-w-full shrink-0 truncate text-sm">{item.label}</span>
+                  {item.description && <span className="min-w-0 truncate text-xs text-muted-foreground/75">{item.description}</span>}
+                </span>
+              </button>
+            })}
+            {!group.items.length && group.hint && <p className="px-2.5 py-2 text-xs text-muted-foreground">{group.hint}</p>}
+          </section>
+        ))}
+        {(!resolved.length || loading || error) && <div className={cn("flex items-center justify-center gap-2 px-3 py-6 text-xs", error ? "text-destructive" : "text-muted-foreground")}>
+          {loading && !error && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{status}
+        </div>}
+      </div>
 
-      {/* Footer: keyboard hints. */}
-      {totalItems > 0 && (
-        <div className="flex items-center gap-3 border-t border-border px-2.5 py-1.5 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <kbd className={KBD}>↑↓</kbd>选择
-          </span>
-          {resolved.length > 1 && (
-            <span className="flex items-center gap-1">
-              <kbd className={KBD}>Tab</kbd>切换分组
-            </span>
-          )}
-          <span className="flex items-center gap-1">
-            <kbd className={KBD}>↵</kbd>引用
-          </span>
-          <span className="ml-auto flex items-center gap-1">
-            <kbd className={KBD}>esc</kbd>关闭
-          </span>
-        </div>
-      )}
     </div>
   )
 }

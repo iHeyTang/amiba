@@ -1,7 +1,7 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { NavigationRow, usePluginT } from "@amiba/ui/plugin";
+import { WorkspaceNavigationRow, usePluginT } from "@amiba/ui/plugin";
 import { CalendarClock } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { reconcileRuns, runUnread, taskRuns } from "./activity.js";
@@ -66,8 +66,9 @@ export function CronNavigation({
       void reconcileRuns(tasks, sessionActivity).catch(console.error);
   }, [tasks, sessionActivity]);
   return (
-    <NavigationRow
-      active={activeView === VIEW_ID}
+    <WorkspaceNavigationRow
+      navigation={{ activeView }}
+      target={{ kind: "workspace", viewId: VIEW_ID }}
       aria-label={label}
       data-testid="sidebar-item-cron"
       icon={<CalendarClock />}

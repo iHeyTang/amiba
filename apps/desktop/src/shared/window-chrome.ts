@@ -8,3 +8,13 @@ export const MAC_TRAFFIC_LIGHT_TOP =
   (WINDOW_TITLE_BAR_HEIGHT - MAC_TRAFFIC_LIGHT_SIZE) / 2 +
   MAC_TRAFFIC_LIGHT_OPTICAL_OFFSET;
 export const MAC_TRAFFIC_LIGHT_RESERVE = 96;
+
+// Windows keeps its native caption buttons in a dedicated strip above panes.
+export function getWindowChrome(platform: string) {
+  return {
+    topBarHeightPx: WINDOW_TITLE_BAR_HEIGHT,
+    leftInsetPx: platform === "darwin" ? MAC_TRAFFIC_LIGHT_RESERVE : 0,
+    rightInsetPx: platform === "win32" ? 138 : 0,
+    standaloneTitleBar: platform === "win32",
+  };
+}

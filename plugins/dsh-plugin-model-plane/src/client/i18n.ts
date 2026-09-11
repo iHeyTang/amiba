@@ -1,3 +1,4 @@
+import { reasoningLabels } from "./reasoning-labels.js";
 import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 
 /**
@@ -18,6 +19,7 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  */
 export const modelPlaneI18n: PluginCatalogOverlay = {
   en: {
+    ...reasoningLabels.en,
     "options.dshModels.availability.unconfigured": "Not configured",
     "options.dshModels.availability.missing-credential": "Key required",
     "options.dshModels.availability.no-models": "No models loaded",
@@ -82,6 +84,7 @@ export const modelPlaneI18n: PluginCatalogOverlay = {
     "sidepanel.modelPicker.reasoningEffort": "Reasoning effort",
   },
   "zh-CN": {
+    ...reasoningLabels["zh-CN"],
     "options.dshModels.availability.unconfigured": "未配置",
     "options.dshModels.availability.missing-credential": "需要密钥",
     "options.dshModels.availability.no-models": "尚无模型",

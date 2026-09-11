@@ -6,7 +6,17 @@ import { z } from "zod";
 import type { MemosStatus } from "./memos-status.js";
 
 import {
+  memoryCorrectionRequestSchema,
+  type MemoryCorrectionRequest,
   memoryQuerySchema,
+  memoryUpdateSchema,
+  memoryEntrySchema,
+  type MemoryUpdate,
+  type MemoryEntry,
+  memoryDetailQuerySchema,
+  memoryDetailSchema,
+  type MemoryDetailQuery,
+  type MemoryDetail,
   memorySessionSchema,
   memoryPasswordSchema,
   memoryPageSchema,
@@ -19,6 +29,11 @@ import {
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaMemory: {
+      beginCorrection(
+        input: MemoryCorrectionRequest,
+      ): Promise<RemoteResult<string>>;
+      update(input: MemoryUpdate): Promise<RemoteResult<MemoryEntry>>;
+      detail(input: MemoryDetailQuery): Promise<RemoteResult<MemoryDetail>>;
       status(): Promise<RemoteResult<MemosStatus>>;
       login(password: string): Promise<RemoteResult<string>>;
       overview(session?: string): Promise<RemoteResult<MemoryOverview>>;
@@ -26,6 +41,9 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     };
   }
   interface TypertRemoteMap {
+    "amibaMemory/beginCorrection": (
+      input: MemoryCorrectionRequest,
+    ) => Promise<RemoteResult<string>>;
     "amibaMemory/login": (password: string) => Promise<RemoteResult<string>>;
     "amibaMemory/overview": (
       session?: string,
@@ -33,6 +51,12 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaMemory/browse": (
       input: MemoryQuery,
     ) => Promise<RemoteResult<MemoryPage>>;
+    "amibaMemory/detail": (
+      input: MemoryDetailQuery,
+    ) => Promise<RemoteResult<MemoryDetail>>;
+    "amibaMemory/update": (
+      input: MemoryUpdate,
+    ) => Promise<RemoteResult<MemoryEntry>>;
     "amibaMemory/status": () => Promise<RemoteResult<MemosStatus>>;
   }
 }
@@ -40,6 +64,30 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
 export const AMIBA_MEMORY_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-memory-memos",
   descriptors: [
+    {
+      id: "@amiba/dsh-plugin-memory-memos#amibaMemory/beginCorrection",
+      service: "amibaMemory",
+      namespace: "amibaMemory",
+      method: "beginCorrection",
+      invocation: { kind: "direct" },
+      parameters: [
+        {
+          name: "input",
+          wire: "input",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "@amiba/memos#correction-request",
+            schema: memoryCorrectionRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: "strict",
+        typeSymbol: "@amiba/memos#correction-prompt",
+        schema: z.string(),
+      },
+    },
     {
       id: "@amiba/dsh-plugin-memory-memos#amibaMemory/login",
       service: "amibaMemory",
@@ -110,6 +158,54 @@ export const AMIBA_MEMORY_REMOTE: TypertRemoteContribution = {
         mode: "strict",
         typeSymbol: "@amiba/memos#page",
         schema: memoryPageSchema,
+      },
+    },
+    {
+      id: "@amiba/dsh-plugin-memory-memos#amibaMemory/detail",
+      service: "amibaMemory",
+      namespace: "amibaMemory",
+      method: "detail",
+      invocation: { kind: "direct" },
+      parameters: [
+        {
+          name: "input",
+          wire: "input",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "@amiba/memos#detail-query",
+            schema: memoryDetailQuerySchema,
+          },
+        },
+      ],
+      result: {
+        mode: "strict",
+        typeSymbol: "@amiba/memos#detail",
+        schema: memoryDetailSchema,
+      },
+    },
+    {
+      id: "@amiba/dsh-plugin-memory-memos#amibaMemory/update",
+      service: "amibaMemory",
+      namespace: "amibaMemory",
+      method: "update",
+      invocation: { kind: "direct" },
+      parameters: [
+        {
+          name: "input",
+          wire: "input",
+          source: "json",
+          codec: {
+            mode: "strict",
+            typeSymbol: "@amiba/memos#update",
+            schema: memoryUpdateSchema,
+          },
+        },
+      ],
+      result: {
+        mode: "strict",
+        typeSymbol: "@amiba/memos#entry",
+        schema: memoryEntrySchema,
       },
     },
     {

@@ -31,7 +31,8 @@
     "runtime:prepare": "pnpm build:dsh-runtime && node scripts/dsh-runtime/prepare.mjs",
     "runtime:rebuild": "pnpm build:dsh-runtime && node scripts/dsh-runtime/prepare.mjs --force",
     "runtime:verify": "pnpm build:dsh-runtime && node scripts/dsh-runtime/prepare.mjs --verify",
-    "runtime:smoke": "pnpm build:dsh-runtime && node scripts/dsh-runtime/smoke.mjs"
+    "runtime:smoke": "pnpm build:dsh-runtime && node scripts/dsh-runtime/smoke.mjs",
+    "runtime:lock": "node scripts/dsh-runtime/prepare.mjs --update-lock"
   },
   "dependencies": {},
   "peerDependencies": {

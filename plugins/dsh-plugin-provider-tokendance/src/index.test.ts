@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { PiAiAdapter } from "@deepseek-ai/dsh-llm-pi-ai";
 import { TokenDanceAdapter } from "./adapter.js";
-import { MessageId } from "@deepseek-ai/dsh-llm";
+import { MessageId, ReasoningEffortId } from "@deepseek-ai/dsh-llm";
 import {
   InMemoryCredentialStore,
   defaultProviderAuthContext,
@@ -39,6 +39,8 @@ const catalog = parseCatalog({
     },
     { id: "response-model", supported_protocols: ["openai:responses"] },
     { id: "claude-model", supported_protocols: ["anthropic:messages"] },
+    { id: "kimi-k3", supported_protocols: ["openai:chat-completions", "openai:responses"] },
+    { id: "deepseek-v4-flash-0731", supported_protocols: ["openai:chat-completions", "openai:responses"] },
     { id: "video-model", supported_protocols: ["minimax:video_generation_v2"] },
   ],
 });
@@ -48,6 +50,8 @@ describe("official TokenDance provider", () => {
       "openai-completions",
       "openai-responses",
       "anthropic-messages",
+      "openai-completions",
+      "openai-completions",
     ]);
     expect(catalog[0]?.contextWindow).toBe(4000);
     expect(catalog[0]?.description).toBe("A model for careful code review.");
@@ -89,7 +93,7 @@ describe("official TokenDance provider", () => {
       },
     }, (_, id) => catalog.find(row => row.id === id)?.description);
     expect((await adapter.listModels(PROVIDER)).map((m) => m.provider)).toEqual(
-      ["tokendance", "tokendance", "tokendance"],
+      ["tokendance", "tokendance", "tokendance", "tokendance", "tokendance"],
     );
     expect(await adapter.resolveModel(PROVIDER, "chat-model")).toMatchObject({
       context: { contextWindow: 4000 },
@@ -98,9 +102,39 @@ describe("official TokenDance provider", () => {
     expect((await adapter.listModels(PROVIDER))[0]?.description).toBe(catalog[0]!.description);
     expect((await adapter.prepareCall(PROVIDER, "chat-model")).model.description).toBe(catalog[0]!.description);
   });
-  it.each(["chat-model", "response-model", "claude-model", "tool-call"])(
+  it("publishes exact supported efforts and respects model/protocol overrides", async () => {
+    async function models(overrides: Partial<Config> = {}) {
+      const profile = resolveProfile(config(overrides), catalog);
+      const adapter = new TokenDanceAdapter({
+        profiles: () => new Map([[PROVIDER, profile]]),
+        resolveApiKey: async () => "test-key",
+        auth: { credentials: new InMemoryCredentialStore(), authContext: defaultProviderAuthContext() },
+      }, () => undefined);
+      return Promise.all((await adapter.listModels(PROVIDER)).map(m => adapter.resolveModel(PROVIDER, m.id)));
+    }
+    const defaults = await models();
+    expect(defaults.find(m => m.id === "kimi-k3")?.reasoning?.efforts.map(e => e.id))
+      .toEqual(["low", "high", "max"]);
+    expect(defaults.find(m => m.id === "deepseek-v4-flash-0731")?.reasoning?.efforts.map(e => e.id))
+      .toEqual(["off", "high"]);
+    expect(defaults.find(m => m.id === "chat-model")?.reasoning).toBeUndefined();
+    expect((await models({ models: [{ id: "kimi-k3", reasoningEfforts: false }] }))[0]?.reasoning)
+      .toBeUndefined();
+    expect((await models({ models: [{ id: "kimi-k3", api: "openai-responses" }] }))[0]?.reasoning)
+      .toBeUndefined();
+    expect((await models({ models: [{ id: "kimi-k3", reasoningEfforts: { high: "high" } }] }))[0]?.reasoning?.efforts.map(e => e.id))
+      .toEqual(["high"]);
+    expect((await models({ models: [{ id: "kimi-k3" }] }))[0]?.reasoning?.efforts.map(e => e.id))
+      .toEqual(["low", "high", "max"]);
+  });
+  it.each([
+    ["chat-model", undefined], ["response-model", undefined],
+    ["claude-model", undefined], ["tool-call", undefined],
+    ["kimi-k3", "low"], ["kimi-k3", "high"], ["kimi-k3", "max"],
+    ["deepseek-v4-flash-0731", "off"], ["deepseek-v4-flash-0731", "high"],
+  ])(
     "dispatches %s through official streaming adapters with authentication",
-    async (scenario) => {
+    async (scenario, effort) => {
       const model = scenario === "tool-call" ? "chat-model" : scenario;
       const requests: Array<{ path: string; body: any; headers: any }> = [];
       const server = createServer(async (req, res) => {
@@ -237,6 +271,7 @@ describe("official TokenDance provider", () => {
       for await (const chunk of adapter.stream({
         provider: PROVIDER,
         model,
+        ...(effort ? { reasoningEffort: ReasoningEffortId(effort) } : {}),
         tools: [
           {
             name: "lookup",
@@ -261,13 +296,20 @@ describe("official TokenDance provider", () => {
         chunks.push(chunk);
       expect(requests).toHaveLength(1);
       expect(requests[0]?.path).toBe(
-        model === "chat-model"
+        (model === "chat-model" || model === "kimi-k3")
           ? "/gateway/v1/chat/completions"
-          : model === "response-model"
+          : (model === "response-model" || model === "deepseek-v4-flash-0731")
             ? "/gateway/v1/responses"
             : "/gateway/v1/messages",
       );
       expect(requests[0]?.body.model).toBe(model);
+      if (model === "kimi-k3") {
+        expect(requests[0]?.body.reasoning_effort).toBe(effort);
+        expect(requests[0]?.body.thinking).toBeUndefined();
+      }
+      if (model === "deepseek-v4-flash-0731") {
+        expect(requests[0]?.body.reasoning.effort).toBe(effort === "off" ? "none" : "high");
+      }
       expect(
         requests[0]?.headers.authorization ?? requests[0]?.headers["x-api-key"],
       ).toMatch(/test-key/);

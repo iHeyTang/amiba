@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { act, waitFor, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { TriggerMenu } from "../TriggerMenu"
@@ -10,27 +10,67 @@ const items: MenuItem[] = [
 ]
 
 describe("TriggerMenu", () => {
+  it("fits above the composer and recomputes when the window changes", async () => {
+    let anchorTop = 190
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, this.hasAttribute("data-composer-card") ? anchorTop : 0, 600, 100)
+    })
+    try {
+      const view = render(<div data-composer-card=""><TriggerMenu items={items} loading={false} error={null} onSelect={() => {}} onClose={() => {}} /></div>)
+      const menu = view.container.querySelector<HTMLElement>("[data-composer-overlay]")!
+      expect(menu.style.maxHeight).toBe("174px")
+      anchorTop = 80
+      act(() => { window.dispatchEvent(new Event("resize")) })
+      await waitFor(() => expect(menu.style.maxHeight).toBe("64px"))
+      anchorTop = 800
+      act(() => { window.dispatchEvent(new Event("resize")) })
+      await waitFor(() => expect(menu.style.maxHeight).toBe("384px"))
+      view.unmount()
+    } finally { rect.mockRestore() }
+  })
+  it("updates built-in group labels and hints with the interface language", async () => {
+    const previous = document.documentElement.lang
+    const groups = [
+      { label: "reference", items: [items[0]] },
+      { label: "Sessions", items: [items[1]] },
+      { label: "My plugin", items: [items[0]] },
+    ]
+    const view = render(<TriggerMenu groups={groups} loading={false} error={null} onSelect={() => {}} onClose={() => {}} />)
+    try {
+      await act(async () => { document.documentElement.lang = "zh-CN" })
+      await waitFor(() => expect(screen.getByRole("heading", { name: "对话" })).toBeVisible())
+      expect(screen.getByRole("heading", { name: "引用" })).toBeVisible()
+      expect(screen.getByRole("heading", { name: "My plugin" })).toBeVisible()
+      await act(async () => { document.documentElement.lang = "en" })
+      await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions" })).toBeVisible())
+      expect(screen.getByRole("heading", { name: "References" })).toBeVisible()
+    } finally {
+      view.unmount()
+      await act(async () => { document.documentElement.lang = previous })
+    }
+  })
   it("renders items and selects on Enter", async () => {
     const onSelect = vi.fn()
     render(<TriggerMenu items={items} loading={false} error={null} onSelect={onSelect} onClose={() => {}} />)
     expect(screen.getByText("translate")).toBeInTheDocument()
+    expect(document.querySelector("kbd")).toBeNull()
     await userEvent.keyboard("{Enter}")
     expect(onSelect).toHaveBeenCalledWith(items[0])
   })
 
   it("shows empty state", () => {
     render(<TriggerMenu items={[]} loading={false} error={null} onSelect={() => {}} onClose={() => {}} />)
-    expect(screen.getByText("无匹配结果")).toBeInTheDocument()
+    expect(screen.getByText("No matches")).toBeInTheDocument()
   })
 
   it("shows error state", () => {
     render(<TriggerMenu items={[]} loading={false} error="boom" onSelect={() => {}} onClose={() => {}} />)
-    expect(screen.getByText("加载失败")).toBeInTheDocument()
+    expect(screen.getByText("Couldn’t load results")).toBeInTheDocument()
   })
 
   it("shows a loading spinner", () => {
     render(<TriggerMenu items={[]} loading={true} error={null} onSelect={() => {}} onClose={() => {}} />)
-    expect(screen.getByText("加载中…")).toBeInTheDocument()
+    expect(screen.getByText("Loading…")).toBeInTheDocument()
   })
 
   it("renders a category's empty-state hint when it has no items", () => {

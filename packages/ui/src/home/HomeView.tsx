@@ -1,3 +1,5 @@
+import { InteractionRegion } from "../primitives/interaction-region";
+import { EmptyStateVisual } from "../primitives/empty-state-visual";
 /**
  * Amiba Home page — recent tasks + composer hand-off.
  *
@@ -327,7 +329,7 @@ function Home({
     sessions.ready;
 
   return (
-    <div
+    <InteractionRegion
       className={cn(
         // `isolate` confines the wallpaper's negative-z stacking to this
         // subtree; without it `-z-10` would escape behind <html> and the
@@ -388,7 +390,7 @@ function Home({
             // render, so the home composer reads as "Amiba here, type
             // below" instead of an out-of-context wordmark + tagline.
             <div className="flex flex-col items-center gap-2 text-center">
-              <AmibaLogo size={56} />
+              <EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual>
               <p className="max-w-[40ch] text-xs text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
@@ -412,6 +414,7 @@ function Home({
               );
               return (
                 <div className={className}>
+                  <EmptyStateVisual scene="home" />
                   <p className="text-sm font-semibold">
                     {t("newtab.greeting")}
                   </p>
@@ -483,7 +486,7 @@ function Home({
           />
         </section>
       </main>
-    </div>
+    </InteractionRegion>
   );
 }
 

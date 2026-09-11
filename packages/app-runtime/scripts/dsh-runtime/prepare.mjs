@@ -1,4 +1,5 @@
 import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
+import { validateDependencyLock } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -232,13 +233,12 @@ const amibaSourceDigest = await computeAmibaSourceDigest();
 /**
  * The exact content of the generated `app/package.json`.
  *
- * This is the complete input to `npm install` (there is no lockfile): it
- * fully encodes the DSH version, the pinned pnpm version, and every
+ * Together with runtime-deps/package-lock.json this encodes the DSH
+ * version, the pinned pnpm version, and every
  * third-party dependency name + specifier after `resolveCatalogSpecifier`
  * (a `catalog:` entry resolves to a concrete pinned version; anything else
  * passes through as whatever specifier the plugin declared, semver range
- * included — `npm install` still has to consult the registry to resolve
- * those, same as it always did).
+ * included). Only runtime:lock resolves ranges; normal builds use npm ci.
  * Computed once here so the string that gets hashed (`appTreeHash`, below)
  * is byte-identical to the string that later gets written to disk.
  */
@@ -269,8 +269,29 @@ const appPackageJsonContent = `${JSON.stringify(
   null,
   2,
 )}\n`;
+const dependencyDir = path.join(runtimePackageDir, "runtime-deps");
+const dependencyManifest = path.join(dependencyDir, "package.json");
+const dependencyLock = path.join(dependencyDir, "package-lock.json");
+if (args.has("--update-lock")) {
+  await fsp.mkdir(dependencyDir, { recursive: true });
+  await fsp.writeFile(dependencyManifest, appPackageJsonContent);
+  // Resolve from the committed lock instead of starting over with DSH's large peer graph.
+  const npmArgs = ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-online"];
+  if (fs.existsSync(npmCli(outputDir))) {
+    run(nodeBinary(outputDir), [npmCli(outputDir), ...npmArgs], { cwd: dependencyDir });
+  } else {
+    run(process.platform === "win32" ? "npm.cmd" : "npm", npmArgs, { cwd: dependencyDir });
+  }
+  validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(await fsp.readFile(dependencyLock, "utf8")));
+  console.log("[dsh:runtime] updated distributable npm lock; commit both runtime-deps files");
+  process.exit(0);
+}
+const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
+validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
+const dependencyLockHash = createHash("sha256").update(dependencyLockContent).digest("hex");
 const appTreeHash = createHash("sha256")
   .update(appPackageJsonContent)
+  .update(dependencyLockContent)
   .digest("hex");
 
 function fail(message) {
@@ -285,6 +306,7 @@ function expectedMarker() {
     amibaPluginRevision: declaration.amibaPluginRevision,
     amibaSourceDigest,
     appTreeHash,
+    dependencyLockHash,
     platform: process.platform,
     arch: process.arch,
   };
@@ -590,12 +612,12 @@ async function installNode(stage) {
 /**
  * Reuse the app dependency tree (`app/node_modules`) from the existing
  * runtime at `outputDir` when its marker declares the same `appTreeHash` —
- * i.e. the generated `app/package.json` (the complete `npm install` input,
- * since there is no lockfile) is byte-identical to the previous build's.
+ * i.e. the generated manifest and committed npm lock are byte-identical
+ * to the previous build's.
  *
- * `appTreeHash` alone only covers dependency name + specifier; it says
+ * `appTreeHash` covers the resolved dependency tree; it says
  * nothing about the platform/arch/Node version the tree was actually
- * resolved and built under. `npm install` runs with `--ignore-scripts=false`,
+ * resolved and built under. `npm ci` runs with `--ignore-scripts=false`,
  * so some of these packages compile native addons at install time — a tree
  * built on one platform/arch (or against a different managed Node) is not
  * safe to copy into a build for another. `outputDir` can also be a shared or
@@ -610,7 +632,7 @@ async function installNode(stage) {
  * an unreadable/corrupt marker, or
  * a failed copy all fall back to `false` (full install below) rather than
  * risking a stale or cross-platform reuse. Exact additions already present at
- * the root of the verified tree may be promoted without reinstalling. An old marker without
+ * the root of the verified tree may be promoted only with an unchanged lock. An old marker without
  * `appTreeHash` compares as `undefined !== <hash>` and also falls back to a
  * full install.
  */
@@ -628,7 +650,7 @@ async function reuseAppDependencyTree(appDir) {
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
-    const existingPromotions = !sameDependencies && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
+    const existingPromotions = !sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
       JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
       JSON.parse(appPackageJsonContent),
       async name => JSON.parse(await fsp.readFile(path.join(installedNodeModules, name, "package.json"), "utf8")).version,
@@ -669,19 +691,21 @@ try {
   const appDir = path.join(stage, "app");
   await fsp.mkdir(appDir, { recursive: true });
   await fsp.writeFile(path.join(appDir, "package.json"), appPackageJsonContent);
+  await fsp.writeFile(path.join(appDir, "package-lock.json"), dependencyLockContent);
   const reusedAppTree = await reuseAppDependencyTree(appDir);
   if (!reusedAppTree) {
+    console.log("[dsh:runtime] installing locked npm dependencies (npm ci)");
     run(
       nodeBinary(stage),
       [
         npmCli(stage),
-        "install",
+        "ci",
         "--omit=dev",
         "--no-audit",
         "--no-fund",
-        "--package-lock=false",
         "--ignore-scripts=false",
         "--prefer-offline",
+        "--loglevel=info",
       ],
       {
         cwd: appDir,

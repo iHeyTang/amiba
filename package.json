@@ -25,7 +25,8 @@
     "clean": "pnpm -r exec rm -rf node_modules dist build .turbo .vite",
     "lint:no-extension-leak": "bash scripts/check-no-knowledge-in-core.sh",
     "sdk:pack": "bash scripts/sdk-pack.sh",
-    "sdk:verify-scaffold": "bash scripts/verify-scaffold.sh"
+    "sdk:verify-scaffold": "bash scripts/verify-scaffold.sh",
+    "runtime:lock": "pnpm --dir packages/app-runtime runtime:lock"
   },
   "devDependencies": {
     "prettier": "3.3.3",

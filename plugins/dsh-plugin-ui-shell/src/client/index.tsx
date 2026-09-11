@@ -1,3 +1,6 @@
+import { createSurfaceSelections, type SurfaceSelections } from "./surface-selections.js";
+import { SurfaceSettings } from "./surface-settings.js";
+export { usePresentationCoordinator, useSurfaceActivity, useSurfaceInteraction } from "@amiba/ui/plugin";
 export * from "streamdown";
 export { WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, WorkbenchViewBoundary } from "@amiba/ui/plugin";
 export { getPlatform } from "@amiba/app-runtime/platform";
@@ -249,6 +252,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     sessionItemMenuItems: ContributionsSource<SessionMenuItemRow>;
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
+    surfaces: SurfaceSelections;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
   };
@@ -278,6 +282,7 @@ function AmibaRoot({
   messageSources,
   markdownSource,
   workbenchSource,
+  surfaces,
   reportMarkdown,
   useSessions,
   useWorkspaces,
@@ -302,6 +307,7 @@ function AmibaRoot({
       hiddenSessionIds={hiddenSessionIds}
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
+      surfaces={surfaces}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
@@ -562,6 +568,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     const markdownSource = createMarkdownSource(ctx.slots);
     const workbenchSource = createWorkbenchSource(ctx.slots);
+    const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -574,6 +581,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           dshClient,
           markdownSource,
           workbenchSource,
+          surfaces,
           reportMarkdown,
           settingsSections: sectionsSource,
           settingsOnboardingSteps: onboardingSource,
@@ -587,6 +595,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
           messageSources,
         }),
         children: {
+          "amiba.message.decoration": { kind: "list", scope: "root" },
+          "amiba.composer.accessory": { kind: "list", scope: "root" },
+          "amiba.emptyState.visual": { kind: "list", scope: "root" },
           "amiba.navigation.before": { kind: "list", scope: "root" },
           "amiba.navigation.after": { kind: "list", scope: "root" },
           // The two generic session-list extension points (a "group" that
@@ -752,6 +763,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // elects Amiba's component per cell while the official SERVICES stay
     // live. Registered after the root because the root's children table is
     // what declares the seat.
+    const disposeSurfaceSettings = ctx.slots.register({ name: "settings.general.item", id: "surface-providers", order: 30, inject: () => ({ surfaces }) }, SurfaceSettings);
     const disposeSlashMenu = ctx.slots.register(
       {
         name: "conversation.input.overlay",
@@ -829,6 +841,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeAskToolview();
       void languageRowFiber.dispose();
       disposeCommandPopup();
+      disposeSurfaceSettings();
       disposeSlashMenu();
       void localeFiber.dispose();
       void messagesFiber.dispose();

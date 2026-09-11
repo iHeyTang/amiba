@@ -1,3 +1,4 @@
+import { EmptyStateVisual } from "../primitives/empty-state-visual";
 import {
   WorkbenchResourceView,
   useWorkbenchExtensions,
@@ -2656,6 +2657,7 @@ function WorkspaceEmptyState() {
   return (
     <div className="flex h-full items-center justify-center px-10 pb-[9vh]">
       <div className="w-full max-w-[292px] text-left">
+        <EmptyStateVisual scene="workspace">
         <div className="mb-4 flex items-start gap-1.5" aria-hidden>
           {kinds.map(({ icon: Icon, label, className }) => (
             <div
@@ -2669,6 +2671,7 @@ function WorkspaceEmptyState() {
             </div>
           ))}
         </div>
+        </EmptyStateVisual>
         <div className="text-[12px] font-normal tracking-[-0.005em] text-muted-foreground/78">
           {t("workspacePane.emptyTitle")}
         </div>

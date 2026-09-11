@@ -79,3 +79,46 @@ test("the standard Edit roles survive so copy/paste keep working", () => {
     }
   }
 });
+
+function allRoles(items) {
+  return items.flatMap((item) => [item.role, ...allRoles(item.submenu ?? [])]);
+}
+
+test("shipping macOS menu excludes debugging while retaining native controls", () => {
+  const menu = buildAppMenuTemplate({
+    platform: "darwin",
+    appName: "Amiba",
+    onOpenSettings() {},
+  });
+  const roles = allRoles(menu);
+  for (const role of ["reload", "forceReload", "toggleDevTools"]) {
+    assert.ok(!roles.includes(role));
+  }
+  for (const role of [
+    "quit",
+    "hide",
+    "minimize",
+    "zoomIn",
+    "zoomOut",
+    "resetZoom",
+    "togglefullscreen",
+  ]) {
+    assert.ok(roles.includes(role));
+  }
+});
+
+test("macOS development groups debugging under Developer", () => {
+  const menu = buildAppMenuTemplate({
+    platform: "darwin",
+    appName: "Amiba",
+    development: true,
+    onOpenSettings() {},
+  });
+  const developer = findByLabel(menu, "Developer");
+  assert.ok(developer);
+  assert.deepEqual(allRoles(developer.submenu), [
+    "reload",
+    "forceReload",
+    "toggleDevTools",
+  ]);
+});

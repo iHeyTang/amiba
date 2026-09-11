@@ -83,25 +83,25 @@ describe("ComposerAgentPicker", () => {
     ).toHaveClass("bg-transparent");
   });
 
-  it("locks preset changes after a task has started", async () => {
+  it("keeps a locked identity readable and explains the lock without opening the picker", async () => {
     const user = userEvent.setup();
+    const onChange = vi.fn();
     render(
       <ComposerAgentPicker
         profileLocked
-        onChange={vi.fn()}
+        onChange={onChange}
         value={{ profileId: "default" }}
       />,
     );
-    await user.click(
-      await screen.findByRole("button", {
-        name: "sidepanel.agentPicker.executionIdentity: Amiba",
-      }),
-    );
-    const dialog = await screen.findByRole("dialog", {
-      name: "sidepanel.agentPicker.executionIdentity",
+    const trigger = await screen.findByRole("button", {
+      name: "sidepanel.agentPicker.executionIdentity: Amiba",
     });
-    expect(within(dialog).getByRole("button", { name: /资料研究员/ })).toBeDisabled();
-    expect(within(dialog).getByText("sidepanel.agentPicker.profileLocked")).toBeVisible();
+    expect(trigger).toBeEnabled();
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    await user.click(trigger);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("sidepanel.agentPicker.profileLocked");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("hides the selector when DSH exposes no alternative preset", async () => {

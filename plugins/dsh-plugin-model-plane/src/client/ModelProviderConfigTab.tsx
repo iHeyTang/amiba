@@ -1,3 +1,4 @@
+import { reasoningLabel } from "./reasoning-labels.js";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import { OfficialProviderEditor } from "./OfficialProviderEditor.js";
 import type { ConfigureProviderInput } from "./view-types.js";
@@ -530,7 +531,7 @@ function DefaultModelPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {efforts.map((effort) => <SelectItem key={effort.id} value={effort.id}>{effort.name}</SelectItem>)}
+                  {efforts.map((effort) => <SelectItem key={effort.id} value={effort.id}>{reasoningLabel(effort, t)}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}

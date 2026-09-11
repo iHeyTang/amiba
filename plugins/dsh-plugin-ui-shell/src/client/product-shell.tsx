@@ -1,3 +1,5 @@
+import { SurfaceProvider } from "./surface-provider.js";
+import type { SurfaceSelections } from "./surface-selections.js";
 import { renderOfficialToolFallback } from "./official-toolviews.js";
 import {
   SessionsProvider,
@@ -64,7 +66,7 @@ import {
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
-import { NavigationRow } from "@amiba/ui/plugin";
+import { PresentationRoot, NavigationRow } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
 import {
   useCallback,
@@ -334,6 +336,7 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 }
 
 interface ProductShellProps {
+  surfaces: SurfaceSelections;
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
   renderSlot: AmibaShellRenderSlot;
@@ -393,6 +396,7 @@ function ProductShellInner({
   sessionListGroups,
   sessionItemMenuItems,
   messageSources,
+  surfaces,
   useOfficialSessions,
   useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
@@ -401,6 +405,7 @@ function ProductShellInner({
   const desktop = platform.kind === "desktop";
   const topBarHeightPx = platform.windowChrome?.topBarHeightPx ?? 40;
   const topBarLeftInset = platform.windowChrome?.leftInsetPx ?? 0;
+  const standaloneTitleBar = platform.windowChrome?.standaloneTitleBar === true;
   const sections = useSyncExternalStore(
     settingsSections?.subscribe ?? (() => () => {}),
     settingsSections?.getSnapshot ?? (() => EMPTY_SECTIONS),
@@ -670,11 +675,25 @@ function ProductShellInner({
   }, [sessionsBridge, sessions.activeId]);
 
   return (
-    <div
+    <PresentationRoot><SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}><div
       data-amiba-product-shell
       className="relative h-screen w-full overflow-hidden bg-background text-foreground"
     >
+      {standaloneTitleBar && (
+        <div
+          data-testid="native-window-titlebar"
+          className="app-drag-region flex shrink-0 items-center border-b border-border/40 bg-background pl-4 text-xs text-muted-foreground"
+          style={{
+            height: topBarHeightPx,
+            paddingRight: `max(${platform.windowChrome?.rightInsetPx ?? 138}px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))`,
+          }}
+        >
+          <span className="select-none">Amiba</span>
+        </div>
+      )}
+      <div className="relative" style={standaloneTitleBar ? { height: `calc(100% - ${topBarHeightPx}px)` } : undefined}>
       <FullScreenChatView
+        viewportTopInsetPx={standaloneTitleBar ? topBarHeightPx : 0}
         client={client}
         capabilities={capabilities}
         mentionProviders={mentionProviders}
@@ -750,6 +769,7 @@ function ProductShellInner({
           contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
         }}
       />
+      </div>
       {/*
         Settings, as a modal dialog layered over the chat surface above.
         The structure is the official shell's (mask + `role="dialog"
@@ -855,6 +875,6 @@ function ProductShellInner({
       <span className="sr-only" aria-live="polite">
         {t("app.initializing")}
       </span>
-    </div>
+    </div></SurfaceProvider></PresentationRoot>
   );
 }

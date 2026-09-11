@@ -289,3 +289,143 @@ UI Shell 提供单实例 `amiba.tool.execution` 槽，owner 为原 `ToolCallOwne
 工具 owner 的 `revealToolCall(callId)` 用于定位已载入的原调用，核心先展开所属执行组，
 再滚动至工具行。目标行收到 `revealVersion` 后可以打开自己的详情。工作台的
 `inspectToolCall` 同样定位原调用。此 API 不创建新的执行记录，也不根据工具参数猜测身份。
+
+### Empty-state visual replacement
+
+`amiba.emptyState.visual` is a root-scoped **list** slot. It replaces only
+an empty state's visual; the host retains its text, composer, buttons and
+navigation. It is available in the shell's HomeView, the ChatSurface hero
+fallback, and the workspace empty state. Compact composer-only Quick Ask
+has no hero and does not dispatch this slot.
+
+The owner is `EmptyStateVisualOwner`:
+
+- `scene`: `home`, `conversation`, or `workspace`. This identifies the render
+  site, not a session id. The main window uses HomeView (`home`) when no
+  conversation is selected.
+- `defaultVisual`: the host's original visual. Return it for unsupported
+  scenes. Returning `null` intentionally leaves the visual empty.
+
+```tsx
+ctx.slots.inject("amiba.emptyState.visual", () =>
+  ctx.slots.register(
+    { name: "amiba.emptyState.visual", id: "my-welcome", label: "My welcome" },
+    ({ scene, defaultVisual }) =>
+      scene === "home" ? <MyWelcomeIllustration /> : defaultVisual,
+  ),
+);
+```
+
+Declare `@amiba/dsh-plugin-ui-shell` in the plugin's client dependencies,
+import the SDK SlotMap types, and release registration on unload through
+DSH's scoped injection lifecycle. The host default is a dispatch fallback,
+not a registered occupant. Plugins register uniquely identified candidates. Users
+choose one provider per surface in Settings → General; installing a plugin does
+not replace the default automatically. Choices persist in platform storage.
+An unavailable selected provider falls back to the host default (or an empty
+accessory/message region), without silently choosing another plugin.
+
+This interface has no Mofli dependency and does not constrain the visual to a
+pet. Its optional `interaction` is a read-only subscription to its nearest
+host region (see below). A root-scoped registration does not authorize access
+to any conversation's data.
+
+### Composer accessory and regional activity
+
+`amiba.composer.accessory` is a root-scoped **list** slot for persistent
+compact content perched on the composer’s upper-right edge, with a small visual gap.
+The host reserves an 80px-wide region, clips overflow at 80px high, moves it away from visible menus and popovers, and hides it if no clear on-screen position exists. An empty slot takes no space. Content
+must fit this region; do not use portals or fixed positioning to escape it.
+The official `conversation.input.overlay` still belongs to menus positioned
+against the composer card, independently of this accessory region.
+
+All three visual slots receive an optional `SurfaceInteraction`:
+
+```tsx
+const snapshot = useSyncExternalStore(
+  interaction.subscribe,
+  interaction.getSnapshot,
+  interaction.getSnapshot,
+);
+```
+
+Only call this hook in a child rendered when `interaction` is defined.
+`snapshot.pointer` is null outside the region, otherwise `{ x, y }` in [-1, 1]
+relative to the **whole host region**, not the plugin component. Y increases
+downwards. `snapshot.input` contains `focused`, `active`, and `composing`.
+Input activity is driven by actual editor DOM beforeinput/input events (including paste
+and IME), stops after 650ms of quiet, and resets on editor blur. Composition
+stays active until composition ends or focus leaves. No key values or input
+text are exposed; handlers neither prevent default behavior nor move focus.
+
+HomeView and ChatSurface own independent region stores with cleanup on
+unmount. Plugins must unsubscribe on unmount and should update animation
+controllers directly rather than rerendering a large tree on each pointer
+move. Standalone hosts without these providers have no subscription.
+This is regional input observation, not a global keyboard hook.
+
+### Session activity and coordinated presentation
+
+All three visual owners also expose optional `activity` and `presentation`.
+`activity` is available inside ChatSurface and follows the existing engine
+snapshot/event handlers. It is not a second execution controller and adds no
+engine subscription. Its read-only snapshot contains `sessionId`, `phase`,
+`restored`, and `revision`; subscribe using the same external-store pattern
+as regional input. HomeView currently has no session activity feed.
+
+Phases are `idle`, `thinking`, `responding`, `tooling`, `waiting`, `completed`,
+`failed`, and `interrupted`. Pending questions/approvals take precedence;
+parallel running tools stay `tooling` until all finish. A failed individual
+tool does not mean the entire turn failed. Terminal phases use actual engine
+events, never “streaming stopped” inference. Snapshots have `restored: true`:
+render the recovered state without treating it as a new celebration. Text,
+reasoning contents, arguments, and results are not included. Background jobs
+are not part of this session-turn projection.
+
+`presentation.claim(group, priority)` is cooperative arbitration across the current
+product window, including `shell.overlay`. Use a stable plugin-owned group (e.g. `my-plugin.companion`)
+for components that must not react simultaneously. Higher priority wins;
+equal priorities retain registration order. Different groups are independent.
+The returned lease provides `getSnapshot(): boolean`, `subscribe`, and
+`release`. Claim in an effect, subscribe to changes, and release on cleanup:
+
+```tsx
+useEffect(() => {
+  if (!presentation) return;
+  const lease = presentation.claim("my-plugin.companion", 10);
+  const update = () => controller.setEnabled(lease.getSnapshot());
+  const unsubscribe = lease.subscribe(update);
+  update();
+  return () => { unsubscribe(); lease.release(); controller.setEnabled(false); };
+}, [presentation, controller]);
+```
+
+The host disables all leases when its region leaves the viewport (via
+IntersectionObserver) or the document is hidden, and re-elects on return.
+Plugins must honor the lease to pause their animations/reactions; the host
+cannot stop an arbitrary component's private timer. The lease is separate from provider selection, and is not an exactly-once event
+queue or a cross-window election. Global overlay components can obtain the same
+coordinator through `usePresentationCoordinator` from
+`@amiba/dsh-plugin-ui-shell/client`. Use the owner's coordinator for regional
+components: it additionally tracks that individual presentation's visibility.
+
+### Message decorations
+
+`amiba.message.decoration` is a root-scoped list slot with one user-selected
+provider. It renders after normal assistant reply bubbles, outside the bubble;
+it does not replace message text, execution folds or tool output. Its
+`MessageDecorationOwner` includes `messageId` (Amiba UI identity), `sessionId`,
+`streaming`, and the optional interaction/activity/presentation subscriptions.
+Each decoration has its own visibility boundary. Content occupies at most
+96px, with clipped overflow. No provider means no extra space.
+
+### Integration verification
+
+Run `pnpm --dir apps/desktop test:surfaces` from the repository root. This opens
+an isolated Electron fixture with the real DSH slot renderer, Composer,
+MessageTurns and provider settings. A development-only probe plugin exercises
+selection, persistence, unload fallback, regional pointer/input/composition,
+keyboard activation, session recovery and presentation arbitration. Engine
+events and composition events are injected test data; this does not exercise a
+live agent or the operating system's IME candidate window. The probe is excluded
+from the production build and requires no Mofli package.

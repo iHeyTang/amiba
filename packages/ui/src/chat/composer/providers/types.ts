@@ -82,7 +82,7 @@ export interface TriggerProvider {
 
 /**
  * One @/slash menu category. The plugin builds these (clustered by provider
- * `group`); `TriggerMenu` renders the sidebar from them. A group with no
+ * `group`); `TriggerMenu` renders them as stacked sections. A group with no
  * `items` but a `hint` is a "needs a query" category — its right pane shows the
  * hint instead of results.
  */

@@ -200,6 +200,20 @@ export const en = {
   "options.nav.section.advanced": "Advanced",
 
   // Task agent picker
+  "sidepanel.triggerMenu.add": "Add",
+  "sidepanel.triggerMenu.files": "Local files",
+  "sidepanel.triggerMenu.group.reference": "References",
+  "sidepanel.triggerMenu.group.sessions": "Sessions",
+  "sidepanel.triggerMenu.group.skills": "Skills",
+  "sidepanel.triggerMenu.group.commands": "Commands",
+  "sidepanel.triggerMenu.loadFailed": "Couldn’t load results",
+  "sidepanel.triggerMenu.empty": "No matches",
+  "sidepanel.triggerMenu.loading": "Loading…",
+  "sidepanel.triggerMenu.select": "Select",
+  "sidepanel.triggerMenu.switchGroup": "Switch group",
+  "sidepanel.triggerMenu.insert": "Insert",
+  "sidepanel.triggerMenu.close": "Close",
+
   "sidepanel.agentPicker.label": "Choose agent",
   "sidepanel.agentPicker.description":
     "Choose the assistant responsible for this task.",

@@ -1,3 +1,4 @@
+import { reasoningLabel } from "./reasoning-labels.js";
 import type { ModelSelection as AgentModelSelection, ModelProviderGroup, ModelReasoningEffort } from "@deepseek-ai/dsh-api-remotes/client";
 import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
 import {
@@ -12,10 +13,11 @@ import {
   type ModelPickerGroup,
   type ModelPickerStatus,
 } from "@amiba/ui/plugin";
-import { BrainCircuit, Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { pickerI18n } from "./i18n-picker.js";
+import { ReasoningIcon } from "./ReasoningIcon.js";
 
 // Reuse the official model catalog types; the remaining interfaces are private
 // React data loading helpers, not plugin registration or transport contracts.
@@ -204,6 +206,9 @@ export function DshComposerModelPicker({
   const currentEffort = efforts.find(
     (effort) => effort.id === effectiveEffortId,
   );
+  const currentEffortLabel = reasoningLabel(
+    currentEffort ?? { id: effectiveEffortId ?? "" }, t,
+  );
   const label = currentModel?.name ?? t("sidepanel.modelPicker.label");
 
   async function commitSelection(
@@ -343,7 +348,7 @@ export function DshComposerModelPicker({
               aria-expanded={effortOpen}
               aria-haspopup="menu"
               aria-label={`${t("sidepanel.modelPicker.reasoningEffort")}: ${
-                currentEffort?.name ?? effectiveEffortId ?? ""
+                currentEffortLabel
               }`}
               className={cn(
                 "inline-flex h-7 min-w-0 max-w-[7rem] items-center gap-1.5 rounded-full px-2",
@@ -355,9 +360,9 @@ export function DshComposerModelPicker({
               title={t("sidepanel.modelPicker.reasoningEffort")}
               type="button"
             >
-              <BrainCircuit aria-hidden className="h-3.5 w-3.5 shrink-0" />
+              <ReasoningIcon className="h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 truncate">
-                {currentEffort?.name ?? effectiveEffortId}
+                {currentEffortLabel}
               </span>
             </button>
           </PopoverTrigger>
@@ -388,7 +393,7 @@ export function DshComposerModelPicker({
                   type="button"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{effort.name}</span>
+                    <span className="block truncate">{reasoningLabel(effort, t)}</span>
                     {effort.description ? (
                       <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
                         {effort.description}

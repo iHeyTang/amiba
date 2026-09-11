@@ -671,7 +671,7 @@ export function apply(ctx) {
           ids.has("@amiba/dsh-plugin-mcp-manager") &&
           ids.has("@amiba/dsh-plugin-runtime-inventory") &&
           ids.has(externalPackageName) &&
-          ids.has("@amiba/dsh-plugin-cron")
+          ids.has("@amiba/dsh-plugin-cron") && ids.has("@amiba/dsh-plugin-pets")
         )
           break;
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -851,7 +851,14 @@ export function apply(ctx) {
             "@deepseek-ai/dsh-client-runtime",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
-            "@amiba/dsh-plugin-catalog",
+          ],
+        ],
+        [
+          "@amiba/dsh-plugin-pets",
+          [
+            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-api-remotes",
+            "@amiba/dsh-plugin-ui-shell",
           ],
         ],
         [
@@ -1040,21 +1047,21 @@ export function apply(ctx) {
       maxMessages: 20,
     });
     assert.ok(Array.isArray(history.events));
-    const completion = history.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/notice");
+    let execution, completion;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const snapshot = await rpc(baseUrl, "session.history", { sessionId, maxMessages: 50 });
+      execution = snapshot.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/smoke/background");
+      completion = snapshot.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/notice");
+      if (execution && completion) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(execution, "native asynchronous producer did not finish the execution lifecycle");
     assert.ok(completion, "external job did not publish a durable presentation notice");
     assert.equal(completion.data.version, 1);
     assert.equal(completion.data.reference.kind, "background-job");
     assert.equal(completion.data.reference.sessionId, sessionId);
     assert.match(completion.data.reference.id, /^[a-f0-9-]{36}$/);
     assert.match(completion.data.reference.instance, /^\d+$/);
-    let execution;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const snapshot = await rpc(baseUrl, "session.history", { sessionId, maxMessages: 50 });
-      execution = snapshot.events.map(entry => entry.event ?? entry).find(event => event.type === "amiba/smoke/background");
-      if (execution) break;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    assert.ok(execution, "native asynchronous producer did not finish the execution lifecycle");
     assert.ok(!execution.data.error, execution.data.error);
     assert.equal(execution.data.running, "running");
     assert.equal(execution.data.status, "completed");
@@ -1131,6 +1138,7 @@ export function apply(ctx) {
         "@amiba/dsh-plugin-browser-core",
         "@amiba/dsh-plugin-memory-memos",
         "@amiba/dsh-plugin-resources",
+        "@amiba/dsh-plugin-pets",
       ]) assert.ok(amibaToolPackages.includes(packageName), `tool catalog omitted ${packageName}`);
       assert.ok(
         scopedTools.value.tools.every((tool) =>
@@ -1138,6 +1146,17 @@ export function apply(ctx) {
         ),
         "tool inventory contains a non-DSH ownership category",
       );
+      const petLibrary = await rpc(baseUrl, "amibaPets/list", { args: {} });
+      assert.equal(petLibrary.version, 1);
+      assert.ok(Array.isArray(petLibrary.pets));
+      const savedPets = await rpc(baseUrl, "amibaPets/save", {
+        args: { input: { name: "Remote lifecycle pet", skinId: "mofli-dough" } },
+      });
+      const savedPet = savedPets.pets.find(pet => pet.name === "Remote lifecycle pet");
+      assert.ok(savedPet, "pet save Remote did not persist its record");
+      const remainingPets = await rpc(baseUrl, "amibaPets/deletePet", { args: { id: savedPet.id } });
+      assert.equal(remainingPets.pets.length, petLibrary.pets.length);
+      assert.ok(!remainingPets.pets.some(pet => pet.id === savedPet.id));
       const toolNames = new Set(
         scopedTools.value.tools.map((tool) => tool.name),
       );
@@ -1151,6 +1170,7 @@ export function apply(ctx) {
         "cron_create",
         "cron_list",
         "cron_delete",
+        "pets_catalog", "pets_list", "pets_save", "pets_activate", "pets_delete",
         "amiba_resource_search",
         "amiba_resource_read",
       ]) {

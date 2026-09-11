@@ -3,6 +3,11 @@ import z from "@deepseek-ai/schemastery";
 import { registerToolSource } from "@amiba/dsh-plugin-catalog";
 import { applyMemoryRemote } from "./remote-service.js";
 import { initialMemosStatus } from "./memos-status.js";
+import {
+  MemoryCorrections,
+  registerMemoryCorrectionTool,
+} from "./correction.js";
+import { MemosDashboardService } from "./dashboard-service.js";
 import { mountMemos } from "./memos.js";
 
 export const name = "amiba-memory-memos";
@@ -19,6 +24,7 @@ export const Config = z.object({
 });
 
 export const MEMOS_TOOLS = [
+  "amiba_memory_correct",
   "memos_search",
   "memos_get",
   "memos_timeline",
@@ -29,7 +35,11 @@ export const MEMOS_TOOLS = [
 
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const status = initialMemosStatus(config.memosRoot);
-  applyMemoryRemote(ctx, () => ({ ...status }));
+  const corrections = new MemoryCorrections(
+    new MemosDashboardService(() => ({ ...status })),
+  );
+  applyMemoryRemote(ctx, () => ({ ...status }), corrections);
+  registerMemoryCorrectionTool(ctx, corrections);
   for (const tool of MEMOS_TOOLS) {
     registerToolSource(ctx, tool, {
       kind: "dsh-plugin",

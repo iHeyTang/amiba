@@ -17,18 +17,6 @@ export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVis
 const NAV_ID = "steward";
 type StewardRemote = ClientContext["remote"]["amibaSteward"];
 
-/**
- * Narrow structural view of `ISessions.list` (session id + subscribe), used
- * to cross the `ctx.sessions` ambient-type seam described at its one call
- * site below.
- */
-interface StewardSessionsFace {
-  list: {
-    getSnapshot(): { current?: string };
-    subscribe(listener: () => void): () => void;
-  };
-}
-
 function errorOf(value: unknown): Error {
   if (value && typeof value === "object") {
     const message = (value as { message?: unknown }).message;
@@ -129,20 +117,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       // host's truth without a push channel.
       const refreshIntervalId = setInterval(() => void refreshAdopted(), REFRESH_INTERVAL_MS);
 
-      // `ctx.sessions` resolves inconsistently in this package's TS program:
-      // the plugin's server half pulls in `@deepseek-ai/dsh-session`'s
-      // `SessionStore` (`list(): Session[]`) and the client half pulls in
-      // `@deepseek-ai/dsh-client-runtime`'s `ISessions` (`list:
-      // ObservableSnapshot<SessionListState>`) — both augment the SAME
-      // `@deepseek-ai/cordis` Context.sessions in one whole-program
-      // compile, and `skipLibCheck` lets the conflicting merge through
-      // silently instead of failing loud. At runtime this file only ever
-      // runs in the client plugin realm, so the object is unambiguously
-      // `ISessions`; the cast below crosses that TS-only seam.
-      const sessions = injectedCtx.sessions as unknown as StewardSessionsFace;
-      const currentSessionId = () => sessions.list.getSnapshot().current;
-      const subscribeCurrent = (listener: () => void) => sessions.list.subscribe(listener);
-
       const disposeNavigation = injectedCtx.slots.inject("amiba.workspace.navigation", () =>
         injectedCtx.slots.register(
           {
@@ -152,8 +126,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
             label: copy,
             inject: () => ({
               state,
-              currentSessionId,
-              subscribeCurrent,
               open: () => {
                 void ensureStewardSession()
                   .then((id) => {

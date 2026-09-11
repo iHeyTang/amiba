@@ -88,6 +88,7 @@ export function OfficialTriggerMenu({
   return (
     <TriggerMenu
       groups={groups}
+      mentionQuery={state.hit?.trigger === "@" ? state.hit.query : undefined}
       loading={state.groups.every((group) => group.status === "pending")}
       error={null}
       onSelect={onSelect}

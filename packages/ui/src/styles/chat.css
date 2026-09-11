@@ -741,12 +741,18 @@
 }
 
 .amiba-tab-rail::-webkit-scrollbar-thumb {
-  background: hsl(var(--foreground) / 0.14);
+  border: 0;
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
 }
 
 .amiba-tab-rail:hover::-webkit-scrollbar-thumb {
-  background: hsl(var(--foreground) / 0.22);
+  border: 0;
+  background: var(--scrollbar-thumb-hover);
+}
+
+.amiba-tab-rail::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-drag);
 }
 
 /* The workspace terminal is a native pane surface, not an embedded black
@@ -754,22 +760,6 @@
  * align its viewport and scrollbar with Amiba's surrounding workbench. */
 .amiba-terminal .xterm {
   height: 100%;
-}
-
-.amiba-terminal .xterm-viewport {
-  scrollbar-color: hsl(var(--foreground) / 0.2) transparent;
-  scrollbar-width: thin;
-}
-
-.amiba-terminal .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
-}
-
-.amiba-terminal .xterm-viewport::-webkit-scrollbar-thumb {
-  background: hsl(var(--foreground) / 0.16);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
 }
 
 .amiba-terminal .xterm-helper-textarea:focus {

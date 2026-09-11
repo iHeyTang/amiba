@@ -448,6 +448,7 @@ function createWindow() {
     // AppKit paints the visible dots one pixel below that frame, so this
     // optical correction aligns them with the web title-bar content.
     // Both values come from the shared window-chrome geometry module.
+    autoHideMenuBar: process.platform === "win32",
     titleBarStyle: "hidden",
     trafficLightPosition: IS_MAC
       ? { x: 20, y: MAC_TRAFFIC_LIGHT_TOP }
@@ -510,7 +511,8 @@ function createWindow() {
           minHeight: 620,
           title: "Amiba",
           backgroundColor: startupPalette.background,
-          titleBarStyle: "hidden",
+          titleBarStyle: IS_MAC ? "hidden" : "default",
+          autoHideMenuBar: process.platform === "win32",
           webPreferences: {
             preload: path.join(__dirname, "../preload/index.js"),
             contextIsolation: true,
@@ -603,12 +605,13 @@ if (!gotSingleInstanceLock) {
     registerEmbeddedPageHandlers();
     // Replace Electron's implicit default menu (which has no Preferences
     // entry) before any window exists so ⌘, / Ctrl+, is live from the first
-    // frame. Every standard role is re-declared in the template.
+    // frame. Debugging commands are kept out of the packaged macOS menu.
     Menu.setApplicationMenu(
       Menu.buildFromTemplate(
         buildAppMenuTemplate({
           platform: process.platform,
           appName: app.name,
+          development: isDev,
           onOpenSettings: () => openSettingsInMainWindow(summonWindow),
         }),
       ),

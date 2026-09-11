@@ -493,7 +493,62 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     and a single action row; any one id would be arbitrary. Adoption waits
 //     on a per-message bubble, not on the protocol.
 
+export interface SurfaceActivitySnapshot {
+  sessionId: string;
+  phase: "idle" | "thinking" | "responding" | "tooling" | "waiting" | "completed" | "failed" | "interrupted";
+  /** Snapshot recovery is not a newly completed action. */
+  restored: boolean;
+  revision: number;
+}
+export interface SurfaceActivity {
+  getSnapshot(): SurfaceActivitySnapshot;
+  subscribe(listener: () => void): () => void;
+}
+export interface PresentationCoordinator {
+  /** Higher priority wins within one product window/group; release on unmount. */
+  claim(group: string, priority?: number): {
+    getSnapshot(): boolean;
+    subscribe(listener: () => void): () => void;
+    release(): void;
+  };
+}
+
+/** Coordinates are normalized to the host region, not the illustration bounds. */
+export interface SurfaceInteractionSnapshot {
+  pointer: { x: number; y: number } | null;
+  input: { focused: boolean; active: boolean; composing: boolean };
+}
+export interface SurfaceInteraction {
+  getSnapshot(): SurfaceInteractionSnapshot;
+  subscribe(listener: () => void): () => void;
+}
+export interface ComposerAccessoryOwner {
+  activity?: SurfaceActivity;
+  presentation?: PresentationCoordinator;
+  /** Undefined in hosts which have not installed a region provider. */
+  interaction?: SurfaceInteraction;
+}
+
+/** Visual replacement only: host keeps text, composer and actions. */
+export interface MessageDecorationOwner extends ComposerAccessoryOwner {
+  sessionId?: string;
+  /** Amiba rendered-message id, not a DSH turn id. */
+  messageId: string;
+  streaming: boolean;
+}
+export interface EmptyStateVisualOwner {
+  activity?: SurfaceActivity;
+  presentation?: PresentationCoordinator;
+  interaction?: SurfaceInteraction;
+  scene: "home" | "conversation" | "workspace";
+  /** Return this when the provider does not support the current scene. */
+  defaultVisual: import("react").ReactNode;
+}
+
 export const AMIBA_ROOT_SLOTS = [
+  "amiba.message.decoration",
+  "amiba.composer.accessory",
+  "amiba.emptyState.visual",
   "amiba.navigation.before",
   "amiba.navigation.after",
   "amiba.workspace.navigation",
@@ -676,6 +731,9 @@ export interface AmibaConversationQuestionOwner {
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
+    "amiba.message.decoration": { kind: "list"; scope: "root"; owner: MessageDecorationOwner };
+    "amiba.composer.accessory": { kind: "list"; scope: "root"; owner: ComposerAccessoryOwner };
+    "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };
     "amiba.navigation.before": { kind: "list"; scope: "root" };
     "amiba.navigation.after": { kind: "list"; scope: "root" };
     "amiba.workspace.navigation": {

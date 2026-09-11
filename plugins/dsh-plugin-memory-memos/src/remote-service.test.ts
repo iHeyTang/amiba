@@ -19,9 +19,12 @@ describe("MemOS status remote", () => {
     for (const retired of ["list", "reset", "presets"])
       expect(retired in service).toBe(false);
     expect(AMIBA_MEMORY_REMOTE.descriptors.map((item) => item.method)).toEqual([
+      "beginCorrection",
       "login",
       "overview",
       "browse",
+      "detail",
+      "update",
       "status",
     ]);
   });

@@ -166,6 +166,7 @@ export function TriggerMenuPlugin({
       {state && (
         <TriggerMenu
           groups={groups}
+          mentionQuery={state.trigger === "@" ? state.query : undefined}
           loading={loading}
           error={error}
           onSelect={handleSelect}

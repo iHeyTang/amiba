@@ -35,7 +35,9 @@ on failure. Unsupported image/video/audio-only models are omitted.
 
 When multiple supported protocols are advertised, the default preference is Chat
 Completions, Responses, then Messages. An explicit model override can select another
-advertised protocol. An unknown manual model must name its protocol.
+advertised protocol. Verified reasoning contracts can prefer a protocol (currently
+Flash 0731 prefers Responses); explicit protocol overrides always win. An unknown
+manual model must name its protocol.
 
 ```yaml
 llm-tokendance:
@@ -66,7 +68,26 @@ receives `/gateway` and appends `/v1/messages`. Per-model `baseURL` is an exact 
 The directory does not generally expose image/reasoning/output-cap details. The plugin
 does not infer these from model names: text-only/no selectable reasoning is the fallback;
 unknown capacities use the same 262144/32768 defaults as DSH pi-ai. Configure verified
-capabilities when needed. Google-native and non-chat protocols are not implemented.
+capabilities when needed.
+
+Verified reasoning contracts (2026-09-10), applied to both live and offline catalogs:
+
+| Exact model ID | Protocol | Selectable effort → wire value |
+| --- | --- | --- |
+| `kimi-k3` | Chat Completions | `low`, `high`, `max` → same top-level `reasoning_effort` |
+| `deepseek-v4-flash-0731` | Responses | `off` → `reasoning.effort: none`; `high` → `reasoning.effort: high` |
+
+Sources: [TokenDance Kimi guide](https://tokendance.space/docs/kimi-thinking-models.md),
+[Kimi effort contract](https://platform.kimi.com/docs/guide/use-reasoning-effort), and
+[TokenDance's official Responses catalog](https://au-tokendance.tos-cn-shanghai.volces.com/public/models.json)
+linked by its [Codex guide](https://tokendance.space/docs/codex).
+No prefix matching or inference across protocols is used. An explicit
+`reasoningEfforts` mapping replaces the built-in mapping; `false` disables it.
+Unknown models and alternate protocols retain provider-default behavior unless
+explicitly configured. Kimi K3 does not offer Off. These mappings have local HTTP
+request/streaming regression coverage, not authenticated gateway verification.
+
+Google-native and non-chat protocols are not implemented.
 API-key authentication is supported; TokenDance's optional OAuth key-creation flow is
 not part of this plugin.
 

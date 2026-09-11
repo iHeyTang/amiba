@@ -4,12 +4,13 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
+  $isTextNode,
   KEY_ENTER_COMMAND,
   type LexicalEditor,
 } from "lexical"
-import { useEffect } from "react"
+import { useEffect, createRef, act } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { RichComposerEditor } from "../RichComposerEditor"
+import { RichComposerEditor, type RichComposerHandle } from "../RichComposerEditor"
 
 /**
  * Test-only plugin: hands the live LexicalEditor instance back to the test so
@@ -31,6 +32,39 @@ function EditorRefCapture({ onReady }: { onReady: (e: LexicalEditor) => void }) 
 }
 
 describe("RichComposerEditor", () => {
+  it("opens mentions at the caret without replacing selected text or duplicating an active @", async () => {
+    Range.prototype.getBoundingClientRect ??= () => new DOMRect()
+    const ref = createRef<RichComposerHandle>()
+    const editorRef: { current: LexicalEditor | null } = { current: null }
+    const onChange = vi.fn()
+    render(<RichComposerEditor ref={ref} value="" onChange={onChange}>
+      <EditorRefCapture onReady={editor => { editorRef.current = editor }} />
+    </RichComposerEditor>)
+    await act(async () => {
+      editorRef.current!.update(() => {
+        const root = $getRoot()
+        root.clear()
+        const text = $createTextNode("hello world")
+        root.append($createParagraphNode().append(text))
+        text.select(0, 5)
+      })
+    })
+    await act(async () => { ref.current!.openMention() })
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith("hello @ world"))
+    await act(async () => { ref.current!.openMention() })
+    expect(screen.getByRole("textbox").textContent).toBe("hello @ world")
+    // jsdom's DOM selectionchange may reset a no-text-change selection.
+    // Supply the caret exactly as the browser does before consuming the token.
+    await act(async () => {
+      editorRef.current!.update(() => {
+        const text = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(text)) text.select(7, 7)
+      }, { discrete: true })
+      ref.current!.consumeMentionTrigger()
+    })
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveTextContent("hello world"))
+  })
+
   it("emits typed text via onChange", async () => {
     const onChange = vi.fn()
     const editorRef: { current: LexicalEditor | null } = { current: null }

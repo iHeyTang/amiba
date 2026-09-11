@@ -28,6 +28,7 @@ import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.l
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { parseCatalog, type CatalogModel, type Protocol } from "./catalog.js";
 import seed from "./catalog-seed.json";
+import { reasoningContract } from "./reasoning.js";
 
 export const name = "llm-tokendance";
 export const inject = ["llm", "credentials"];
@@ -181,7 +182,10 @@ export function resolveProfile(
       throw new Error(`Invalid or duplicate TokenDance model: ${row.id}`);
     ids.add(row.id);
     const base = known.get(row.id);
-    const api = row.api ?? base?.api;
+    const contract = reasoningContract(row.id);
+    const preferredApi = contract && base?.supportedApis.includes(contract.api)
+      ? contract.api : base?.api;
+    const api = config.models.length ? row.api ?? preferredApi : preferredApi ?? row.api;
     if (!api || !(api in apis))
       throw new Error(`Choose a protocol for TokenDance model ${row.id}`);
     if (base && !base.supportedApis.includes(api))
@@ -192,7 +196,7 @@ export function resolveProfile(
       provider: PROVIDER,
       api,
       baseUrl: row.baseURL || endpoint(config.baseURL, api),
-      ...thinking(row.reasoningEfforts),
+      ...thinking(row.reasoningEfforts ?? (api === contract?.api ? contract.efforts : undefined)),
       input: row.input?.length ? row.input : (base?.input ?? ["text"]),
       contextWindow: row.contextWindow ?? base?.contextWindow ?? 262144,
       maxTokens: row.maxTokens ?? base?.maxTokens ?? 32768,

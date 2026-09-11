@@ -1,3 +1,4 @@
+import { reasoningLabels } from "./reasoning-labels.js";
 import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 
 /**
@@ -18,12 +19,14 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
  */
 export const pickerI18n: PluginCatalogOverlay = {
   en: {
+    ...reasoningLabels.en,
     "sidepanel.modelPicker.label": "Choose model",
     "sidepanel.modelPicker.loadFailed":
       "Couldn’t load models. Reopen to retry.",
     "sidepanel.modelPicker.reasoningEffort": "Reasoning effort",
   },
   "zh-CN": {
+    ...reasoningLabels["zh-CN"],
     "sidepanel.modelPicker.label": "选择模型",
     "sidepanel.modelPicker.loadFailed": "模型加载失败，重新打开即可重试。",
     "sidepanel.modelPicker.reasoningEffort": "推理强度",

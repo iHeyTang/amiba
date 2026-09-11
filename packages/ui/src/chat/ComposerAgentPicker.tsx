@@ -13,6 +13,10 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   cn,
   type DialogOverlayVariant,
 } from "../primitives";
@@ -41,6 +45,7 @@ export function ComposerAgentPicker({
   const [profiles, setProfiles] = useState<AgentPreset[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [open, setOpen] = useState(false);
+  const [lockedHintOpen, setLockedHintOpen] = useState(false);
   const [dialogProfileId, setDialogProfileId] = useState(normalized.profileId);
   const [error, setError] = useState<string | null>(null);
   const currentValueRef = useRef(normalized);
@@ -78,7 +83,12 @@ export function ComposerAgentPicker({
     [normalized.profileId, profiles],
   );
 
-  const blocked = disabled || loadingProfiles;
+  const blocked = disabled || loadingProfiles || profileLocked;
+
+  useEffect(() => {
+    if (profileLocked) setOpen(false);
+    setLockedHintOpen(false);
+  }, [profileLocked]);
   const profileDisplayName = (name: string) =>
     name === "default" ? t("sidepanel.agentPicker.defaultProfile") : name;
   const selectedProfileName = profileDisplayName(selectedProfile.name);
@@ -97,6 +107,7 @@ export function ComposerAgentPicker({
 
   function changeOpen(next: boolean) {
     if (next) {
+      if (blocked) return;
       setDialogProfileId(currentValueRef.current.profileId);
       setOpen(true);
       // Quick Ask may mount before managed DSH is ready; opening retries a
@@ -107,20 +118,20 @@ export function ComposerAgentPicker({
     setOpen(false);
   }
 
-  return (
-    <>
+  const trigger = (
       <button
         aria-label={`${t("sidepanel.agentPicker.executionIdentity")}: ${selectedProfileName}`}
-        aria-haspopup="dialog"
+        aria-haspopup={profileLocked ? undefined : "dialog"}
+        aria-disabled={profileLocked || undefined}
         className={cn(
           "inline-flex h-7 min-w-0 max-w-[11rem] items-center gap-1.5 rounded-full px-2",
           "text-[11px] font-medium text-muted-foreground transition-colors",
-          "hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:bg-muted/60",
+          "enabled:hover:bg-muted/60 enabled:hover:text-foreground focus:outline-none focus-visible:bg-muted/60",
           "disabled:cursor-not-allowed disabled:opacity-55",
         )}
-        disabled={blocked}
-        onClick={() => changeOpen(true)}
-        title={t("sidepanel.agentPicker.executionIdentity")}
+        disabled={disabled || loadingProfiles}
+        onClick={() => profileLocked ? setLockedHintOpen(true) : changeOpen(true)}
+        title={profileLocked ? undefined : t("sidepanel.agentPicker.executionIdentity")}
         type="button"
       >
         {loadingProfiles && profiles.length === 0 ? (
@@ -130,6 +141,20 @@ export function ComposerAgentPicker({
         )}
         <span className="truncate">{selectedProfileName}</span>
       </button>
+  );
+
+  return (
+    <>
+      {profileLocked ? (
+        <TooltipProvider delayDuration={250}>
+          <Tooltip open={lockedHintOpen} onOpenChange={setLockedHintOpen}>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent side="top">
+              {t("sidepanel.agentPicker.profileLocked")}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : trigger}
 
       <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent

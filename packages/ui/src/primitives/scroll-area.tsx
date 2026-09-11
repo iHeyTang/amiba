@@ -21,6 +21,7 @@ const ScrollArea = React.forwardRef<
   ) => (
     <ScrollAreaPrimitive.Root
       ref={ref}
+      data-amiba-scroll-area=""
       className={cn("relative overflow-hidden", className)}
       {...props}
     >
@@ -70,18 +71,19 @@ const ScrollBar = React.forwardRef<
 >(({ className, orientation = "vertical", ...props }, ref) => (
   <ScrollAreaPrimitive.ScrollAreaScrollbar
     ref={ref}
+    data-amiba-scrollbar=""
     orientation={orientation}
     className={cn(
-      "z-30 flex touch-none select-none transition-colors",
+      "z-30 flex touch-none select-none",
       orientation === "vertical" &&
-        "h-full w-2.5 border-l border-l-transparent p-[1px]",
+        "h-full w-2.5 p-0.5",
       orientation === "horizontal" &&
-        "h-2.5 flex-col border-t border-t-transparent p-[1px]",
+        "h-2.5 flex-col p-0.5",
       className,
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-border" />
+    <ScrollAreaPrimitive.ScrollAreaThumb data-amiba-scrollbar-thumb="" className="relative flex-1 rounded-full" />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ));
 ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName;

@@ -1,0 +1,35 @@
+@import "../../../../packages/ui/src/styles/tokens.css";
+@import "../../../../packages/ui/src/styles/chat.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body {
+  margin: 0;
+  padding: 24px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.surface {
+  padding: 32px;
+  margin-top: 24px;
+  min-height: 480px;
+  border: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  padding: 16px;
+  z-index: 50;
+}

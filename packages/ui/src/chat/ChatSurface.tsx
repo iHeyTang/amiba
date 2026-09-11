@@ -1,3 +1,6 @@
+import { createSurfaceActivity } from "../primitives/surface-activity";
+import { InteractionRegion } from "../primitives/interaction-region";
+import { EmptyStateVisual } from "../primitives/empty-state-visual";
 import type { ToolNavigation } from "./bubble/tool-navigation";
 import { usePrepareMarkdownTurn } from "@amiba/markdown";
 import { MessageNoticeRendererContext, type MessageNoticeRenderer } from "./bubble/Bubble";
@@ -444,6 +447,7 @@ export default function ChatSurface({
   const { t } = useT();
 
   const sessions = useSessions();
+  const surfaceActivity = useMemo(() => createSurfaceActivity(sessions.activeId), [sessions.activeId]);
   const hasActive =
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
@@ -942,6 +946,7 @@ export default function ChatSurface({
   // -------------------------------------------------------------------------
 
   function handleSnapshot(frame: SnapshotFrame): void {
+    surfaceActivity.snapshot(frame);
     const { sessionId, kind } = frame;
     if (sessionId !== sessions.activeId) return;
 
@@ -1289,6 +1294,7 @@ export default function ChatSurface({
   }
 
   function handleStreamEvent(sessionId: string, event: StreamEvent): void {
+    surfaceActivity.event(sessionId, event);
     if (event.kind === "toolProgress") {
       workspacePane.observeToolEvent(event.event, sessionId);
     }
@@ -2050,7 +2056,7 @@ export default function ChatSurface({
   );
 
   return (
-    <div
+    <InteractionRegion activity={surfaceActivity.activity}
       className={cn(
         "relative flex flex-col bg-background text-foreground",
         // The surface is mounted inside a flex column and consumes the remaining
@@ -2139,7 +2145,7 @@ export default function ChatSurface({
               // the conversation continues seamlessly.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
                 <div className="space-y-1 text-center">
-                  <AmibaLogo size={56} />
+                  <EmptyStateVisual scene="conversation"><AmibaLogo size={56} /></EmptyStateVisual>
                   <p className="pt-2 text-sm font-semibold">
                     {t("newtab.greeting")}
                   </p>
@@ -2247,6 +2253,8 @@ export default function ChatSurface({
       {showComposerDock && (
         <footer
           ref={composerDockRef}
+          data-composer-dock=""
+          style={{ paddingTop: "calc(8px + var(--amiba-companion-clearance, 0px))" }}
           className={cn(
             // The sticky user-question strip inside the scroll viewport is
             // z-20. Composer popovers live inside the composer's own z-10
@@ -2344,6 +2352,6 @@ export default function ChatSurface({
         onRename={(id, title) => void sessions.rename(id, title)}
         onRefresh={() => void sessions.refresh()}
       />
-    </div>
+    </InteractionRegion>
   );
 }

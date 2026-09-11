@@ -85,6 +85,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-connector-dingtalk",
       "@amiba/dsh-plugin-connector-lark",
       "@amiba/dsh-plugin-cron",
+      "@amiba/dsh-plugin-pets",
       "@amiba/dsh-plugin-mcp-manager",
       "@amiba/dsh-plugin-media",
       "@amiba/dsh-plugin-media-minimax",

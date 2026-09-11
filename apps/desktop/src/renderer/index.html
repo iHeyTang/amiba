@@ -37,31 +37,23 @@
         color-scheme: light;
         --amiba-boot-canvas: #ffffff;
         --amiba-boot-ink: #18191b;
-        --amiba-boot-signal: rgb(24 25 27 / 0.11);
-        --amiba-boot-nucleus: #8de6d0;
       }
       @media (prefers-color-scheme: dark) {
         :root:not(.light) {
           color-scheme: dark;
           --amiba-boot-canvas: #09090b;
           --amiba-boot-ink: #f4f4f3;
-          --amiba-boot-signal: rgb(244 244 243 / 0.12);
-          --amiba-boot-nucleus: #7edbc5;
         }
       }
       :root.dark {
         color-scheme: dark;
         --amiba-boot-canvas: #09090b;
         --amiba-boot-ink: #f4f4f3;
-        --amiba-boot-signal: rgb(244 244 243 / 0.12);
-        --amiba-boot-nucleus: #7edbc5;
       }
       :root.light {
         color-scheme: light;
         --amiba-boot-canvas: #ffffff;
         --amiba-boot-ink: #18191b;
-        --amiba-boot-signal: rgb(24 25 27 / 0.11);
-        --amiba-boot-nucleus: #8de6d0;
       }
       html,
       body,
@@ -80,6 +72,7 @@
       }
       .amiba-startup-screen {
         position: fixed;
+        z-index: 2147483000;
         inset: 0;
         display: grid;
         place-items: center;
@@ -87,114 +80,11 @@
         background: var(--amiba-boot-canvas);
         color: var(--amiba-boot-ink);
       }
-      .amiba-startup-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-      }
-      .amiba-startup-mark {
-        position: relative;
-        width: 88px;
-        height: 88px;
-      }
-      .amiba-startup-membrane,
-      .amiba-startup-nucleus,
-      .amiba-startup-signal {
-        position: absolute;
-        display: block;
-      }
-      .amiba-startup-membrane {
-        inset: 12px;
-        border-radius: 43% 57% 59% 41% / 48% 43% 57% 52%;
-        background: var(--amiba-boot-ink);
-        animation: amiba-membrane-flow 3.8s
-          cubic-bezier(0.45, 0, 0.55, 1) infinite;
-      }
-      .amiba-startup-nucleus {
-        top: 50%;
-        left: 50%;
-        width: 25px;
-        height: 25px;
-        border-radius: 52% 48% 45% 55% / 48% 54% 46% 52%;
-        background: var(--amiba-boot-nucleus);
-        transform: translate(-50%, -50%);
-        animation: amiba-nucleus-breathe 1.8s
-          cubic-bezier(0.45, 0, 0.55, 1) infinite;
-      }
-      .amiba-startup-signal {
-        inset: 7px;
-        border: 1px solid var(--amiba-boot-signal);
-        border-radius: 44% 56% 54% 46% / 52% 44% 56% 48%;
-        opacity: 0;
-        animation: amiba-signal-travel 2.8s
-          cubic-bezier(0.25, 1, 0.5, 1) infinite;
-      }
-      .amiba-startup-signal-two {
-        animation-delay: 1.4s;
-      }
-      .amiba-startup-copy {
-        display: flex;
-        min-height: 42px;
-        flex-direction: column;
-        align-items: center;
-        gap: 7px;
-      }
-      .amiba-startup-wordmark {
-        font-size: 15px;
-        font-weight: 600;
-        line-height: 18px;
-        letter-spacing: -0.02em;
-      }
-      @keyframes amiba-membrane-flow {
-        0%,
-        100% {
-          border-radius: 43% 57% 59% 41% / 48% 43% 57% 52%;
-          transform: rotate(-7deg) scale(1);
-        }
-        34% {
-          border-radius: 55% 45% 44% 56% / 42% 56% 44% 58%;
-          transform: rotate(1deg) scale(1.035, 0.98);
-        }
-        68% {
-          border-radius: 47% 53% 57% 43% / 57% 45% 55% 43%;
-          transform: rotate(7deg) scale(0.985, 1.025);
-        }
-      }
-      @keyframes amiba-nucleus-breathe {
-        0%,
-        100% {
-          box-shadow: 0 0 0 0 rgb(141 230 208 / 0);
-          transform: translate(-50%, -50%) scale(0.92);
-        }
-        50% {
-          box-shadow: 0 0 0 7px rgb(141 230 208 / 0.11);
-          transform: translate(-50%, -50%) scale(1.07);
-        }
-      }
-      @keyframes amiba-signal-travel {
-        0% {
-          opacity: 0;
-          transform: scale(0.78) rotate(-6deg);
-        }
-        24% {
-          opacity: 0.7;
-        }
-        100% {
-          opacity: 0;
-          transform: scale(1.22) rotate(8deg);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .amiba-startup-membrane,
-        .amiba-startup-nucleus,
-        .amiba-startup-signal {
-          animation: none;
-        }
-        .amiba-startup-signal {
-          opacity: 0.35;
-          transform: scale(1.08);
-        }
+      .amiba-startup-content { width: 160px; height: 160px; }
+      .amiba-startup-mark { display: block; width: 160px; height: 160px; }
+      :root.dark .amiba-startup-mark { filter: invert(1); }
+      @media (prefers-color-scheme: dark) {
+        :root:not(.light) .amiba-startup-mark { filter: invert(1); }
       }
     </style>
     <title>Amiba</title>
@@ -210,19 +100,10 @@
     <div id="amiba-startup">
       <div class="amiba-startup-screen" aria-hidden="true">
         <div class="amiba-startup-content">
-          <div class="amiba-startup-mark">
-            <span
-              class="amiba-startup-signal amiba-startup-signal-one"
-            ></span>
-            <span
-              class="amiba-startup-signal amiba-startup-signal-two"
-            ></span>
-            <span class="amiba-startup-membrane"></span>
-            <span class="amiba-startup-nucleus"></span>
-          </div>
-          <div class="amiba-startup-copy">
-            <span class="amiba-startup-wordmark">Amiba</span>
-          </div>
+          <picture>
+            <source media="(prefers-reduced-motion: reduce)" srcset="./assets/startup-pet-still.svg" />
+            <img class="amiba-startup-mark" src="./assets/startup-pet.svg" alt="" width="160" height="160" />
+          </picture>
         </div>
       </div>
     </div>

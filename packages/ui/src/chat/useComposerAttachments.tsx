@@ -352,6 +352,7 @@ export function AttachmentButton({
   return (
     <Button
       type="button"
+      onMouseDown={(event) => event.preventDefault()}
       onClick={() => void onClick()}
       disabled={disabled}
       title={label}
