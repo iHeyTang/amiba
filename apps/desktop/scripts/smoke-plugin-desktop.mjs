@@ -780,9 +780,12 @@ try {
             await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'})")).entries.length>abortedBefore);
             await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
             assert.equal(await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length"),1);
+            const modelStartsBefore=await evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_WAIT_FOR_STOP'});return log.entries.length})()");
             assert.equal(await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP')"),true);
             assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
             await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_WAIT_FOR_STOP'})")).entries.length>modelStartsBefore);
+            await wait(()=>evaluate("window.__probeCtx.sessions.binding('compat-continuable-child').session.getSnapshot().running && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
             console.log("Restored native Stop interrupted the actual Host turn, preserved the pending queue and allowed a new turn through the same composer");
           }
 
@@ -791,7 +794,13 @@ try {
         await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));
         assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"),1);
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' edited');void 0");
-        if(process.argv.includes("--queue-reload")) console.log("Restored queue before Send now",await evaluate("({stopVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'),codecCalls:window.__queueCodecCalls,queueRows:document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length})"));
+        if(process.argv.includes("--queue-reload")) {
+          const restoredState=await evaluate("({running:window.__probeCtx.sessions.binding('compat-continuable-child').session.getSnapshot().running,stopVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'),queueVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Queue: send after the current turn finishes\"]'),codecCalls:window.__queueCodecCalls,queueRows:document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length})");
+          console.log("Restored queue before Send now",restoredState);
+          assert.equal(restoredState.running,true);
+          assert.equal(restoredState.stopVisible,false);
+          assert.equal(restoredState.queueVisible,true);
+        }
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
         const reference=queuedDraft.occurrences[0];
         const expected=(queuedDraft.draft.slice(0,reference.offset)+'<queue:id>'+queuedDraft.draft.slice(reference.offset+reference.length)+' edited').trim();

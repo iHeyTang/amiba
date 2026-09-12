@@ -1238,3 +1238,11 @@ pipelines retain mounted component state.
 - 最终组合桌面回归 /tmp/amiba-running-baseline-smoke.log 退出 0。整页刷新时真实子会话仍在生成，恢复原 Stop 控件、空输入框和唯一队列项；点击原 Stop 后真实 Host 记录中断，队列保留；同一输入框可继续启动任务，排队草稿编辑和重新解析发送通过。动态 Cordis、轨迹配置、命令、图片、输入状态、子会话及嵌套 Host 冷重启、插件开发生命周期同时通过，未修改 JSX 结构或 CSS。
 - 仍有需追查的观测：恢复后的 Stop / 新一轮提交已分别满足按钮出现条件，但之后编辑队列前的诊断仍记录 stopVisible:false。当前测试未在该点同步读取官方 running 与本地事件序列，不能据此确定具体竞态原因，也不能据整体退出 0 宣称所有再启动状态已完善。下一步须对照新一轮 Host 真实开始、官方 running 和原生终止事件，排除旧事件覆盖新一轮状态。
 - 本桥接面向拥有官方 SessionFace 的 ProductShell；无该来源的独立客户端仍维持既有快照行为。中途刷新后的全部流内容恢复、完整官方 useInput/队列/图片状态继续单独核对。
+
+
+### 再启动后的按钮模式核对（2026-09-13）
+
+- 对上一轮 stopVisible:false 的观测增加同步证据：重启前记录真实模型开始次数；提交后等待 Host 中出现新的 COMPAT_WAIT_FOR_STOP 执行，再同时等待官方 SessionFace.running=true 和原 Stop 控件。
+- 编辑队列项后同时读取官方 running、Stop 控件和原 Queue 控件。实际记录为 running:true、stopVisible:false、queueVisible:true。源码明确规定 busy + 空输入显示 Stop，busy + 可提交输入显示 Queue；因此该观测是保留的原有交互，不是旧终止事件覆盖新运行状态的证据。
+- 新增严格断言已通过最终组合桌面回归 /tmp/amiba-running-mode-smoke.log（退出 0），包括真实停止、重启、排队草稿、再次解析、Host 冷重启、插件及既有兼容检查。未修改任何生产代码、UI 或样式，复用 f9a8c9a 的已验证构建。
+- 撤销上一轮待查的这条疑似竞态；不将此结果扩展为所有断线/流内容恢复已经验证。后续继续核对完整输入、离屏操作、图片与官方队列生命周期。
