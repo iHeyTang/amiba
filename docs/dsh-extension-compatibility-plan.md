@@ -29,11 +29,11 @@ are required in addition to new-plugin tests.
 | Scope | Status | Acceptance |
 | --- | --- | --- |
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
-| Plugin config cards/forms | keyed cards implemented/tested; generic form work open | Host config read/write, actual schema, existing settings preserved |
+| Plugin config cards/forms | keyed cards implemented/tested; three official built-in forms still open | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
 | Workspace/directory selection | open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
-| Official session navigation from no-selection | open | Distinguish explicit plugin open from boot restore without overriding Amiba selection |
+| Official session open from no-selection | implemented; 17 focused tests + real Desktop plugin open passed | Explicit opens follow the existing Amiba path; startup restore stays suppressed. Clear and direct-child navigation need separate audit |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
 | Official component styles | open | Scoped compatibility assets; no changes to Amiba tokens or global defaults |
 | Message actions | open | Exact MessageId, no arbitrary turn-to-message mapping, existing bubbles preserved |
@@ -107,8 +107,7 @@ The first Desktop probe created and exported a session but opened it only throug
 `ctx.sessions.open`. Amiba deliberately clears official selection while its own
 selection is empty, so no active conversation was displayed and the view tab did
 not appear. The view probe now uses the existing `amiba:open-session` navigation
-path to establish the product session. This does not validate generic official
-`ctx.sessions.open` from the home screen; that compatibility gap remains open.
+path to establish the product session. The follow-up below replaces this fixture workaround with the official API.
 
 - Conversation views: 2 UI tests and 1 metadata-source test passed; shell and SDK
   typechecks passed. Full Desktop production build passed. Real installed-plugin
@@ -116,3 +115,31 @@ path to establish the product session. This does not validate generic official
   fallback. Screenshots reviewed after dismissing the export dialog; the native
   composer returns without residual tabs. Existing plugin HMR/detach checks and
   actual ZIP download also passed in the same run.
+
+### Settings form scope correction
+
+The actual installed rc.2 `ui-settings-plugins` client does not generate an
+arbitrary form for every schema. It registers three explicit cards: `shell` (Bash),
+`agent-loop`, and `web-search-deepseek`, each with its own controller. Custom
+namespace cards are already supported; parity with the official package still
+requires those three built-in forms and their real staged-save/secret behavior.
+An invented universal schema editor is not required to reproduce this version.
+Newer version contracts remain a separate audit item.
+
+### Explicit session-open compatibility
+
+Pinned `dsh-client-runtime@0.1.1-rc.2` now publishes per-open provenance before
+its synchronous selection notification. Only the initial workspace policy labels
+its own request `initial`; ordinary public `open(id)` labels it `explicit`.
+The bridge can therefore follow a plugin request from Home without following
+restored/startup selection. Failed opens preserve their original exception and
+previous metadata. A newer explicit request invalidates older queued draft
+projections; existing active-session fallback behavior is preserved.
+
+- 14 bridge tests and 3 tests executing the actual patched runtime methods passed.
+- Shell typecheck and final full Desktop build/production verification passed.
+- The real Desktop fixture now uses `ctx.sessions.open(id)` directly from Home.
+  Session-scoped view props/injection, native chat preservation, unload, settings,
+  footer, actual ZIP save, plugin HMR and detach all passed in the same run.
+- This does not certify official `clear()` or catalog-addressed child rendering;
+  those navigation semantics remain to be audited separately.

@@ -198,7 +198,7 @@ try {
       const ctx = window.__probeCtx;
       const id = await ctx.sessions.create({cwd:${JSON.stringify(profile)}});
       ctx.layout.openChat();
-      window.dispatchEvent(new CustomEvent("amiba:open-session", {detail:{sessionId:id}}));
+      ctx.sessions.open(id);
       window.__compatSessionId = id;
       await ctx.sessionLogDownload.download(id);
       const state = ctx.sessionLogDownload.store.getSnapshot().bySession[id];

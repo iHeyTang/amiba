@@ -56,13 +56,18 @@ function officialSessionsDouble(initial?: {
       current = next;
       notify();
     },
+    requestOpen(id: string, source = "explicit") {
+      Object.assign(face, { lastOpenRequest: { sessionId: id, source } });
+      face.open(id);
+    },
     get current() {
       return current;
     },
   };
 }
 
-const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const flushMicrotasks = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
   it("opens listed ids directly and suppresses the echo", () => {
@@ -133,7 +138,10 @@ describe("sessions selection bridge", () => {
   });
 
   it("forwards an official-ecosystem open and settles without ping-pong", () => {
-    const official = officialSessionsDouble({ ids: ["s1", "s9"], current: "s1" });
+    const official = officialSessionsDouble({
+      ids: ["s1", "s9"],
+      current: "s1",
+    });
     const onExternalOpen = vi.fn();
     const bridge = createSessionsBridge(official.face, onExternalOpen);
     bridge.setActive("s1");
@@ -237,4 +245,63 @@ describe("sessions selection bridge", () => {
     expect(official.face.open).not.toHaveBeenCalled();
     expect(onExternalOpen).not.toHaveBeenCalled();
   });
+});
+
+describe("explicit navigation intent", () => {
+  it("follows a plugin open from home but suppresses initial workspace selection", () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    bridge.setActive("");
+    official.requestOpen("s1", "initial");
+    expect(opened).not.toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    official.requestOpen("s1");
+    expect(opened).toHaveBeenCalledWith("s1");
+    bridge.setActive("s1");
+    expect(official.current).toBe("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+    bridge.dispose();
+  });
+
+  it("does not let a queued draft projection override a newer plugin open", async () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    bridge.setActive("draft");
+    official.setIds(["s1", "draft"]);
+    official.requestOpen("s1");
+    await flushMicrotasks();
+    expect(opened).toHaveBeenCalledWith("s1");
+    expect(official.current).toBe("s1");
+    bridge.setActive("s1");
+    bridge.dispose();
+  });
+
+  it("consumes intent once and does not mistake a later restore for another open", () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    official.requestOpen("s1");
+    bridge.setActive("s1");
+    bridge.setActive("");
+    official.setCurrent("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+    official.requestOpen("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("preserves catalog-style navigation after an earlier marked open", () => {
+  const official = officialSessionsDouble({ ids: ["s1", "s2"] });
+  const opened = vi.fn();
+  const bridge = createSessionsBridge(official.face, opened);
+  official.requestOpen("s1");
+  bridge.setActive("s1");
+  opened.mockClear();
+  official.setCurrent("s2");
+  expect(opened).toHaveBeenCalledWith("s2");
+  bridge.dispose();
 });

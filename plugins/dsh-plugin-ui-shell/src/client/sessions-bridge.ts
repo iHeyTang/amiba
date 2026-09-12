@@ -14,8 +14,8 @@
  * of its own at boot (a persisted ``dsh.sessions.current`` restore, and
  * ``workspaces.startInitialSelection`` opening the recent workspace's
  * session), and Amiba windows deliberately start empty — so a non-empty
- * official current while Amiba holds NO selection is runtime policy, not a
- * user action, and is cleared rather than followed. Following it made cold
+ * official current without an explicit open request is runtime policy and
+ * is cleared rather than followed. Following it made cold
  * windows jump into a session instead of landing on the home view.
  *
  * amiba → official (``setActive``): the official ``open(id)`` FAILS LOUD on
@@ -30,7 +30,10 @@
  * from the list again, or whose open throws, returns to deferral instead of
  * being dropped silently.
  *
- * official → amiba (``onExternalOpen``): forwarded ONLY when Amiba already
+ * official → amiba (``onExternalOpen``): the pinned runtime marks public
+ * open requests separately from initial workspace selection. Explicit opens
+ * are forwarded even from Home; restored/startup selection is not. On older
+ * runtimes without intent metadata, forwarding happens only when Amiba already
  * holds a session and the official side moved to a DIFFERENT one — the one
  * shape the runtime's own boot policies cannot produce (they select into an
  * empty window). That is the deliberate ecosystem open (a plugin calling
@@ -54,6 +57,11 @@ export interface OfficialSessionListSnapshot {
  * subset of dsh-client-runtime's `ctx.sessions` (`ISessions`).
  */
 export interface OfficialSessionsFace {
+  /** Pinned runtime metadata; identity changes for each public open request. */
+  readonly lastOpenRequest?: {
+    readonly sessionId: string;
+    readonly source: string;
+  };
   list: {
     getSnapshot(): OfficialSessionListSnapshot;
     subscribe(listener: () => void): () => void;
@@ -76,7 +84,7 @@ export interface AmibaSessionsBridge {
 /**
  * @param sessions - the official sessions face (`ctx.sessions`).
  * @param onExternalOpen - called with a session id when the OFFICIAL side
- *   switched to a different session while Amiba already held one.
+ *   explicitly opens a session, including from the empty home screen.
  */
 export function createSessionsBridge(
   sessions: OfficialSessionsFace,
@@ -89,6 +97,8 @@ export function createSessionsBridge(
   /** The official current as this bridge last observed it ("" = none). */
   let lastSeenCurrent = sessions.list.getSnapshot().current ?? "";
   let disposed = false;
+  let lastSeenOpenRequest = sessions.lastOpenRequest;
+  let selectionRevision = 0;
 
   const tryOpen = (id: string): boolean => {
     try {
@@ -125,13 +135,26 @@ export function createSessionsBridge(
   const handleListChange = (): void => {
     if (disposed) return;
     const snapshot = sessions.list.getSnapshot();
+    const request = sessions.lastOpenRequest;
+    const newRequest = request !== lastSeenOpenRequest;
+    const explicitOpen =
+      newRequest &&
+      request?.source === "explicit" &&
+      request.sessionId === snapshot.current;
+    const initialOpen =
+      newRequest &&
+      request?.source === "initial" &&
+      request.sessionId === snapshot.current;
+    lastSeenOpenRequest = request;
     if (pending !== null && snapshot.ids.includes(pending)) {
       const target = pending;
+      const revision = selectionRevision;
       pending = null;
       // Escape the store-notification stack before mutating the selection.
       queueMicrotask(() => {
         // Superseded while queued (a newer setActive moved on) — drop it.
-        if (disposed || lastPushed !== target) return;
+        if (disposed || lastPushed !== target || revision !== selectionRevision)
+          return;
         const listed = sessions.list.getSnapshot().ids.includes(target);
         // The row can leave the list again inside the microtask; keep the
         // target deferred rather than dropping it into a silent desync.
@@ -142,10 +165,17 @@ export function createSessionsBridge(
     if (current === lastSeenCurrent) return;
     lastSeenCurrent = current;
     if (current === lastPushed) return; // echo of our own projection
-    if (lastPushed !== "" && current !== "") {
-      // Amiba holds a session and the official side moved to another one:
-      // a deliberate ecosystem open. Follow it (the forward comes back
+    if (
+      current !== "" &&
+      (explicitOpen || (lastPushed !== "" && !initialOpen))
+    ) {
+      // A public open request is distinct from restored/startup selection.
+      // Existing active-session navigation (including catalog children)
+      // retains the fallback for paths without a public-open marker.
+      // Follow the explicit request (the forward comes back
       // through setActive, which no-ops against the already-current id).
+      selectionRevision++;
+      pending = null;
       onExternalOpen(current);
       return;
     }
@@ -159,6 +189,7 @@ export function createSessionsBridge(
   return {
     setActive(id: string): void {
       if (disposed) return;
+      selectionRevision++;
       lastPushed = id;
       pending = null;
       project(id, sessions.list.getSnapshot());
