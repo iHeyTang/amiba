@@ -1,3 +1,4 @@
+import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
  * input-trigger pipeline (`ctx.inputTriggers`, `ctx.commandUi`) — the piece
@@ -182,7 +183,8 @@ export function createInputTriggerBridge(
     } };
   };
   const submitters = new Map<string, { submit: () => boolean }>();
-  const editors = new Map<string, { ops: TriggerEditorOps }>();
+  const editors = new Map<string, { ops: TriggerEditorOps; draft: ReturnType<typeof bindInputDraft> }>();
+  const draftCursors = new Map<string, InputDraftCursor>();
   const draftListeners = new Map<string, Set<() => void>>();
   const draftSourcesBySession = new Map<string, InputDraftSource>();
   const notifyDraft = (id: string) => { for (const listener of draftListeners.get(id) ?? []) listener(); };
@@ -190,7 +192,7 @@ export function createInputTriggerBridge(
     let source = draftSourcesBySession.get(id);
     if (!source) {
       source = {
-        getSnapshot: () => editors.get(id)?.ops.readInputDraft?.(),
+        getSnapshot: () => editors.get(id)?.draft.read(),
         subscribe(listener) {
           let subscribers = draftListeners.get(id);
           if (!subscribers) { subscribers = new Set(); draftListeners.set(id, subscribers); }
@@ -288,8 +290,8 @@ export function createInputTriggerBridge(
     submitInput: (sessionId) => submitters.get(sessionId)?.submit() ?? false,
     inputDraftSource,
     editInputDraft: (sessionId, text) => editors.get(sessionId)?.ops.editInputDraft?.(text) ?? false,
-    setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.ops.setInputDraft?.(text, expectedRevision) ?? false,
-    inputDraftFor: (sessionId) => editors.get(sessionId)?.ops.readInputDraft?.(),
+    setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.draft.write(text, expectedRevision) ?? false,
+    inputDraftFor: (sessionId) => editors.get(sessionId)?.draft.read(),
     draftSources: () => draftSources,
     registerSources(sources, drafts = false) {
       const service = deps.inputTriggers();
@@ -342,10 +344,15 @@ export function createInputTriggerBridge(
     bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) return () => {};
-      const binding = { ops };
+      let cursor = draftCursors.get(sessionId);
+      if (!cursor) { cursor = { revision: -1, occurrence: 0 }; draftCursors.set(sessionId, cursor); }
+      editors.get(sessionId)?.draft.read();
+      const binding = { ops, draft: bindInputDraft(ops, cursor) };
       editors.set(sessionId, binding);
       const current = () => editors.get(sessionId) === binding;
-      const offDraft = ops.subscribeInputDraft?.(() => { if (current()) notifyDraft(sessionId); });
+      const offDraft = ops.subscribeInputDraft?.(() => {
+        if (current()) { binding.draft.read(); notifyDraft(sessionId); }
+      });
       notifyDraft(sessionId);
       // Each listener answers `true` ONLY when its verb reports an observed
       // mutation; `undefined` is the bail protocol's "not handled here", so
@@ -366,7 +373,7 @@ export function createInputTriggerBridge(
       ];
       return () => {
         offDraft?.();
-        if (current()) { editors.delete(sessionId); notifyDraft(sessionId); }
+        if (current()) { binding.draft.read(); editors.delete(sessionId); notifyDraft(sessionId); }
         for (const off of offs) off();
       };
     },

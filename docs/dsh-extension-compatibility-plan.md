@@ -1146,3 +1146,13 @@ pipelines retain mounted component state.
 - 编码器新增 %5C，解码在 %25 之前执行，避免将原有字面 %5C 二次解码。旧合法原始反斜杠路径和已有百分号转义仍有回归覆盖。UI 展示与操作路径未改。
 - 相关序列化、驻留草稿、真实 Lexical 编辑操作与触发管线合计 88 项测试通过（/tmp/amiba-reference-backslash-tests.log），UI 类型检查通过（/tmp/amiba-reference-backslash-types.log）。桌面驻留草稿探针改为携带尾反斜杠的真实官方引用，并从同一个 expectedReference 对象生成浏览器注册及重载后的逐字段断言。
 - 完整 Desktop 构建通过（/tmp/amiba-reference-backslash-build.log），最终组合桌面回归退出 0（/tmp/amiba-reference-backslash-smoke.log）。真实引用的路径和 clipboardText 末尾均含反斜杠，会话切换及 renderer 重载后逐字段一致；命令、图片、轨迹正常配置启停、动态 Cordis、子会话和插件开发生命周期回归均通过。此结果证明编码及现有链路，不代表完整离屏输入服务已实现。
+
+
+### 输入公开修订号的跨绑定隔离（2026-09-13）
+
+- 原 InputDraftProjection 生命周期属于一次 Lexical 操作绑定；新绑定会重新从本地 draftRev 和 occurrenceId 起算。公开接口此前直接转发本地值，旧回调可能在返回同一会话后撞上相同修订号，误通过 setInputDraft 的条件写入。
+- Bridge 现在为每个会话保留公开修订号与引用编号游标。每次绑定都预留比上一绑定更高的公开修订号；编辑通知和解绑时读取最终本地修订号，即使没有外部订阅者也不丢失中间编辑。状态阶段变化不递增文本修订号，同一绑定中的引用编号保持稳定，新绑定重建的引用不复用旧编号。
+- 带 expectedRevision 的公开写入先核对当前公开修订号，再转换回当前编辑器本地修订号，由原编辑器继续执行条件及阶段检查。未提供 expectedRevision 的原写入路径保持；slash/input-* 使用的触发坐标与修订号不改。引用编号目前只保证当前 renderer 内不会因编辑器重建而混用，不宣称跨 renderer 重启保持 occurrenceId。
+- 36 项 Bridge、公开动作、输入状态和新绑定测试通过（/tmp/amiba-input-revision-tests2.log），包括无订阅者的最终编辑、旧清理回调、重复访问、引用编号不复用、状态阶段变化、编辑离开后返回相同文本、公开修订号转换及缺少可读状态时拒绝条件写入。Shell 类型检查通过（/tmp/amiba-input-revision-types.log）。
+- 桌面驻留草稿探针增加：返回原会话后修订号必须递增，使用离开前修订号的写入必须拒绝，原引用草稿保持。完整 useInput、离屏输入操作及驻留图片状态仍需继续接通。
+- 完整 Desktop 构建及最终组合桌面回归均退出 0（/tmp/amiba-input-revision-build.log、/tmp/amiba-input-revision-smoke.log）。真实会话返回后的过期写入被拒绝，既有 input-state 探针的最新修订号写入成功、旧修订号拒绝也通过；引用恢复、命令四阶段、图片、轨迹、动态 Cordis、子会话及插件开发生命周期保持通过。未修改 UI 结构或样式。

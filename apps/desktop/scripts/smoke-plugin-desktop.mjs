@@ -538,6 +538,10 @@ try {
       assert.ok((await evaluate("window.__otherDraftFrames")).filter(value=>value!==null).every(value=>value===''), "new session must never publish the previous session draft");
       await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'COMPAT_SECOND_DRAFT');window.__otherDraftOff();window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const reboundDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.ok(reboundDraft.draftRev > originalDraft.draftRev, "public draft revision must advance across a session revisit");
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(originalId)},'COMPAT_STALE_REVISION',${originalDraft.draftRev})`),false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
       await evaluate("window.__draftReferenceOff();window.__residentDraftBoot=true;void 0");
       await call("Page.reload",{});
       await wait(() => evaluate("!window.__residentDraftBoot && !!window.__probeCtx?.sessions"));

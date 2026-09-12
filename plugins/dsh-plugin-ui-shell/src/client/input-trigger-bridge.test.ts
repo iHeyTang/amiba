@@ -301,7 +301,7 @@ it("keeps a replacement binding even when it reuses the same editor operations",
   const oldDispose=bridge.bindEditor("s1",ops);
   const newDispose=bridge.bindEditor("s1",ops);
   oldDispose();
-  expect(bridge.inputDraftFor("s1")).toBe(snapshot);
+  expect(bridge.inputDraftFor("s1")).toEqual({ ...snapshot, draftRev: 1 });
   newDispose();
   expect(bridge.inputDraftFor("s1")).toBeUndefined();
 });
@@ -325,7 +325,7 @@ it("routes public draft writes to the current session editor and reports absence
   const bridge=bridgeOver(scopeDouble());
   expect(bridge.setInputDraft("s1","new")).toBe(false);
   const setInputDraft=vi.fn(()=>true);
-  const dispose=bridge.bindEditor("s1",{...opsDouble(true),setInputDraft});
+  const dispose=bridge.bindEditor("s1",{...opsDouble(true),setInputDraft,readInputDraft:()=>({draft:"old",draftRev:12,occurrences:[],phase:"plain"})});
   expect(bridge.setInputDraft("s2","wrong")).toBe(false);
   expect(bridge.setInputDraft("s1","new",12)).toBe(true);
   expect(setInputDraft).toHaveBeenCalledWith("new",12);
@@ -498,4 +498,30 @@ describe("observable image sources and pruning", () => {
     bridge.pruneInputImages("s1", []);
     expect(pruneImages).toHaveBeenCalledTimes(1);
   });
+});
+
+
+it("rejects a cached public revision after editor replacement and translates fresh revisions", () => {
+  const bridge = bridgeOver(scopeDouble());
+  const occurrence = { occurrenceId: 1, source: "files", ref: "one", label: "One", clipboardText: "@one", offset: 0, length: 4 };
+  let snapshot = { draft: "@One", draftRev: 0, occurrences: [occurrence], phase: "plain" as const };
+  const oldOff = bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => snapshot });
+  const old = bridge.inputDraftFor("s1")!;
+  snapshot = { ...snapshot, draft: "@One!", draftRev: 7 };
+  // Even with no public subscribers, replacement must account for final local edits.
+  const write = vi.fn(() => true);
+  const local = { draft: "@Other", draftRev: 0, occurrences: [{ ...occurrence, ref: "other", label: "Other", length: 6 }], phase: "plain" as const };
+  const off = bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => local, setInputDraft: write });
+  oldOff();
+  const current = bridge.inputDraftFor("s1")!;
+  expect(current.draftRev).toBe(8);
+  expect(current.occurrences[0].occurrenceId).not.toBe(old.occurrences[0].occurrenceId);
+  expect(bridge.inputDraftSource("s1").getSnapshot()).toBe(current);
+  expect(bridge.setInputDraft("s1", "stale", old.draftRev)).toBe(false);
+  expect(write).not.toHaveBeenCalled();
+  expect(bridge.setInputDraft("s1", "fresh", current.draftRev)).toBe(true);
+  expect(write).toHaveBeenCalledWith("fresh", 0);
+  off();
+  bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => local });
+  expect(bridge.inputDraftFor("s1")!.draftRev).toBe(9);
 });
