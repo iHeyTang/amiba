@@ -503,7 +503,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
 
       const bridge = new DshAmibaEventBridge();
-      // Header readiness establishes the mux before a cold child is attached by
+      // Socket readiness establishes the mux before a cold child is attached by
       // its continuation. Waiting for that child's frame first would deadlock.
       const iterator = address
         ? await client.openEvents(controller.signal)

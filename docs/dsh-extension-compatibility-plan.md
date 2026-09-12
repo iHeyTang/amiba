@@ -797,7 +797,7 @@ pipelines retain mounted component state.
   child attachment, and propagate unavailable-parent errors rather than waiting
   forever. Do not claim that current child prompt dispatch is complete.
 
-### Child send dispatch and header-established mux (2026-09-12)
+### Child send dispatch and header-established mux (2026-09-12; carrier superseded below)
 
 - Verified the pinned Host Fetch client's `readSse`/`onOpen` contract: headers and
   a readable response establish the mux before any attached-session frame exists.
@@ -814,3 +814,25 @@ pipelines retain mounted component state.
 - Desktop runtime endpoint availability, actual parent/child fixture continuation,
   read-only controls, explicit openSubagent-from-Home and full renderer verification
   remain open. This is not an end-to-end compatibility completion claim.
+
+### Correct browser carrier after Desktop verification (2026-09-12)
+
+- The first child build passed, but Desktop HTTP testing exposed two mismatches:
+  the existing unary fetch IPC buffers whole bodies, and a native HTTP mux request
+  received 403. The official Fetch carrier is not the browser connection carrier.
+- Rechecked installed WebApiClient.readWebSocket and Host WebSocketDownlinks:
+  the browser carrier uses socket `open` as its stream-established signal. Replaced
+  the temporary SSE implementation with this exact readiness boundary. All native
+  HTTP mux and CORS changes were removed; ordinary transport/security stays intact.
+- `openEvents` starts the existing WebSocket iterator, waits for socket readiness,
+  preserves its prefetched first frame, and closes even when a prompt fails before
+  consuming frames. Failure/cancellation before opening reject and release resources.
+- All 38 client/engine tests and shell typecheck passed. Production Desktop build
+  `/tmp/amiba-child-websocket-build.log` completed successfully. Full Desktop
+  `--compat --reopen-prose` smoke passed (`/tmp/amiba-child-websocket-smoke.log`),
+  including actual WebSocket readiness and existing settings, ZIP, view, file,
+  Markdown replacement, reload, directory, HMR and detach checks. Previous HTTP
+  smoke failed and is not counted as verification.
+- These results verify the corrected carrier and regressions. Actual durable
+  parent/child navigation and continuation fixtures, read-only UI controls and
+  public openSubagent-from-Home remain to be completed and tested.

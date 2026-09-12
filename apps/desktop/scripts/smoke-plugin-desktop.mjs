@@ -167,6 +167,19 @@ try {
     assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid);
   }
   if (process.argv.includes("--compat")) {
+    const muxTransport = await evaluate(`(async () => {
+      const socket = new WebSocket('ws://dsh.internal/api/events.mux');
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('mux open timeout')), 10000);
+          socket.addEventListener('open', () => { clearTimeout(timeout); resolve(); }, {once:true});
+          socket.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('mux open failed')); }, {once:true});
+        });
+        return socket.readyState;
+      } finally { socket.close(); }
+    })()`);
+    assert.equal(muxTransport, 1, "child mux must establish over the real Desktop WebSocket bridge");
+    console.log("compat child mux WebSocket readiness verified");
     const directorySessionsBefore = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");
     await evaluate(`(() => {
       window.__directoryOff = window.__probeCtx.slots.register({

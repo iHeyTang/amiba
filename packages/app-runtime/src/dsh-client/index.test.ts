@@ -9,32 +9,46 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe("DshApiClient", () => {
-  it("establishes an empty mux before any child subscription and closes an unread stream", async () => {
-    const cancel = vi.fn();
-    const fetch = vi.fn(async () => new Response(new ReadableStream({ cancel }), { headers: { "content-type": "text/event-stream" } }));
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
-    const controller = new AbortController();
-    const stream = await client.openEvents(controller.signal);
-    expect(fetch).toHaveBeenCalledWith("http://dsh.test/api/events.mux", { signal: controller.signal });
+  it("establishes an empty mux on socket open and closes an unread stream", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("open");
+    const stream = await opening;
     await stream.return!();
-    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(socket.closes).toHaveLength(1);
   });
 
-  it("reads split SSE frames after header readiness without losing child data", async () => {
-    const frame = { type: "server-request", method: "session/subscribed", rpcId: "child-frame", payload: { type: "session/subscribed", sessionId: "子会话", lastSeq: 0 } };
-    const bytes = new TextEncoder().encode(`: keepalive\n\ndata: ${JSON.stringify(frame)}\n\n`);
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch: (async () => new Response(new ReadableStream({ start(controller) {
-      for (let i = 0; i < bytes.length; i++) controller.enqueue(bytes.slice(i, i + 1));
-      controller.close();
-    } }))) as typeof fetch });
-    const stream = await client.openEvents();
+  it("retains the first frame received alongside socket readiness", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("open");
+    const frame = { type: "server-request", method: "session/subscribed", rpcId: "child-frame", payload: { type: "session/subscribed", sessionId: "child", lastSeq: 0 } };
+    socket.message(frame);
+    const stream = await opening;
     expect(await stream.next()).toEqual({ done: false, value: { rpcId: frame.rpcId, payload: frame.payload } });
-    expect((await stream.next()).done).toBe(true);
+    await stream.return!();
+    expect(socket.closes).toHaveLength(1);
   });
 
-  it("propagates mux HTTP failures before announcing readiness", async () => {
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch: (async () => new Response("Unavailable", { status: 503 })) as typeof fetch });
-    await expect(client.openEvents()).rejects.toThrow("HTTP 503");
+  it("rejects socket failure before readiness and releases the connection", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("error");
+    await expect(opening).rejects.toThrow("WebSocket failed");
+    expect(socket.closes).toHaveLength(1);
+  });
+
+  it("cancels while waiting for socket readiness", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const controller = new AbortController();
+    const opening = client.openEvents(controller.signal);
+    controller.abort();
+    await expect(opening).rejects.toThrow("closed before opening");
+    expect(socket.closes).toHaveLength(1);
   });
 
   it("routes child continuation and interruption through the exact direct-parent address", async () => {
@@ -426,6 +440,10 @@ class FakeWebSocket implements DshWebSocketLike {
   close(code?: number, reason?: string): void {
     this.readyState = 2
     this.closes.push({ code, reason })
+  }
+
+  emit(type: string): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(new Event(type))
   }
 
   message(value: unknown): void {
