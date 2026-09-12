@@ -211,6 +211,18 @@ export class DshAmibaEventBridge {
       const turn = typeof data.turn === "number" ? data.turn : source.seq
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}`, ...(Number.isSafeInteger(data.turn) && (data.turn as number) >= 0 ? { runtimeTurn: data.turn as number } : {}) } }]
     }
+    const runtimeStep = Number.isSafeInteger(data.step) && (data.step as number) >= 0 ? data.step as number : undefined
+    if (source.type === "llm/retry" && runtimeStep !== undefined) {
+      return [{sessionId,event:{kind:"assistantTextSource",phase:"reset",runtimeStep}}]
+    }
+    if (source.type === "assistant/message" && source.surfaceOp === "append" && runtimeStep !== undefined) {
+      const content = record(data.message)?.content
+      const text = Array.isArray(content) ? content.map(block => {
+        const value = record(block)
+        return value?.type === "text" && typeof value.text === "string" ? value.text : ""
+      }).join("") : ""
+      return [{sessionId,event:{kind:"assistantTextSource",phase:"final",runtimeStep,runtimeSeq:source.seq,text}}]
+    }
     if (source.type === "assistant/chunk") {
       const chunk = record(data.chunk)
       if (
@@ -223,7 +235,7 @@ export class DshAmibaEventBridge {
             sessionId,
             event:
               chunk.type === "text-delta"
-                ? { kind: "chunk", text: chunk.text }
+                ? { kind: "chunk", text: chunk.text, ...(runtimeStep === undefined ? {} : {runtimeStep}) }
                 : { kind: "reasoning", text: chunk.text },
           },
         ]

@@ -470,3 +470,29 @@ retries), propagation through the native condensed/interleaved Markdown views,
 and the actual official resolver's lifecycle, matching and file opening. Do not
 apply a closing resolver to an entire merged bubble or assume Markdown node
 positions remain global when Streamdown splits the source into blocks.
+
+
+### Live text provenance and completed-Markdown positions
+
+The DSH bridge now carries exact chunk step numbers and append-finalization
+sequence/text, plus retry resets. The chat engine and stream buffer share a
+source-range updater. Existing text and text-item grouping are unchanged;
+metadata covers only attributable substrings of merged items. Retry resets
+retire old attribution while leaving visible text alone. A finalization is
+accepted only when its canonical text exactly matches that step's streamed
+ranges; mismatches revoke any earlier finalization instead of guessing.
+History items extended by later chunks retain their earlier source as a range.
+
+Source-range arrays are replaced rather than mutated. Engine snapshots copy
+text timeline items, so finalizing a later event cannot change an already
+published snapshot. Runtime bridge/engine, retry/mismatch, snapshot and real
+stream-buffer tests passed, as did the shell typecheck and existing message
+chrome tests. This is provenance plumbing, not a completed prose-link claim.
+
+The actual installed Streamdown static path renders the complete source in one
+Markdown processor (its streaming path splits blocks). A real ChatMarkdown
+rendering test confirms that completed inline-code nodes preserve full-source
+offsets across multiple paragraphs, including repeated filenames. The next step
+can therefore gate the official resolver by exact finalized-source ranges in
+static native views, while preserving existing explicit-path links. Custom
+source-transforming Markdown extensions must not be assumed to preserve offsets.

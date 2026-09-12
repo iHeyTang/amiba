@@ -338,6 +338,13 @@ export interface CompactionProgress {
 
 export type CompactionUpdate = Pick<CompactionProgress, "compactionId"> & Partial<Omit<CompactionProgress, "compactionId">>;
 
+export interface AssistantTextSourceRange {
+  start: number;
+  end: number;
+  runtimeStep?: number;
+  runtimeSeq?: number;
+}
+
 export type AssistantTimelineItem =
   | {
       kind: "text";
@@ -345,6 +352,8 @@ export type AssistantTimelineItem =
       text: string;
       /** Exact finalized assistant/message event, absent for unattributed chunks. */
       runtimeSeq?: number;
+      /** Source ranges within unchanged, possibly merged streaming text. */
+      sourceRanges?: AssistantTextSourceRange[];
     }
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
@@ -445,7 +454,9 @@ export type EngineToClientMessage =
 export type StreamEvent =
   | { kind: "begin"; assistantUiId: string }
   | { kind: "assistantMessage"; messageId: string }
-  | { kind: "chunk"; text: string }
+  | { kind: "chunk"; text: string; runtimeStep?: number }
+  | { kind: "assistantTextSource"; phase: "reset"; runtimeStep: number }
+  | { kind: "assistantTextSource"; phase: "final"; runtimeStep: number; runtimeSeq: number; text: string }
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: ToolCall[] }
   | { kind: "toolProgress"; event: ToolProgress }

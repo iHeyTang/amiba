@@ -102,3 +102,18 @@ it("updates compaction in place without mutating published state and settles it 
     { kind: "text", text: "after" },
   ]);
 });
+
+
+it("flushes exact live text provenance and keeps previous published ranges unchanged", () => {
+  const {stub,current}=makeSessionsStub();
+  const {result}=renderHook(()=>useStreamBuffer({sessions:stub}));
+  act(()=>{result.current.prime("a1");result.current.onChunk("report.txt",2);result.current.applyVerboseToAssistant();});
+  const before=current()[0].assistantTimeline![0];
+  act(()=>{
+    result.current.onAssistantTextSource({kind:"assistantTextSource",phase:"final",runtimeStep:2,runtimeSeq:42,text:"report.txt"});
+    result.current.applyVerboseToAssistant();
+  });
+  expect(before).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2}]});
+  expect((before as any).sourceRanges[0]).not.toHaveProperty("runtimeSeq");
+  expect(current()[0].assistantTimeline![0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2,runtimeSeq:42}]});
+});

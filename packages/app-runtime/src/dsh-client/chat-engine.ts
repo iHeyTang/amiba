@@ -1,3 +1,4 @@
+import { appendAssistantText, applyAssistantTextSource } from "./assistant-text-source";
 import { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js";
 import type {
   ApprovalDecision,
@@ -93,7 +94,7 @@ function snapshotOf(
       ...(pendingApprovals.length ? { pendingApprovals } : {}),
     };
   }
-  const visible: ChatRuntimeState = { ...state };
+  const visible: ChatRuntimeState = { ...state, timeline: state.timeline.map(item => ({ ...item })) };
   delete (visible as Partial<SessionState>).controller;
   if (state.streaming) return { type: "snapshot", sessionId, kind: "live", state: visible };
   if (state.error) return { type: "snapshot", sessionId, kind: "interrupted", state: visible };
@@ -321,6 +322,7 @@ export class DshChatEngineClient implements ChatEngineClient {
         return;
       }
       case "assistantMessage":
+      case "assistantTextSource":
       case "chunk":
       case "reasoning":
       case "toolCalls":
@@ -351,11 +353,12 @@ export class DshChatEngineClient implements ChatEngineClient {
       case "assistantMessage":
         state.assistantMessageId = event.messageId;
         break;
+      case "assistantTextSource":
+        applyAssistantTextSource(state.timeline, event);
+        break;
       case "chunk": {
         state.assistantText += event.text;
-        const last = state.timeline.at(-1);
-        if (last?.kind === "text") last.text += event.text;
-        else state.timeline.push({ kind: "text", id: `t_${Date.now()}_${state.timeline.length}`, text: event.text });
+        appendAssistantText(state.timeline, event.text, () => `t_${Date.now()}_${state.timeline.length}`, event.runtimeStep);
         break;
       }
       case "reasoning": {

@@ -439,3 +439,24 @@ describe("compaction event delivery", () => {
     engine.dispose();
   });
 });
+
+
+it("keeps finalized text provenance in passive snapshots without mutating an earlier snapshot", async () => {
+  const final=sessionFrame("assistant/message",{turn:1,step:2,message:{content:[{type:"text",text:"report.txt"}]}},4);
+  (final.payload as any).event.surfaceOp="append";
+  const engine=new DshChatEngineClient({client:scriptedClient([
+    TURN_START,
+    sessionFrame("assistant/chunk",{turn:1,step:2,chunk:{type:"text-delta",index:0,text:"report.txt"}},3),
+    final,
+  ])});
+  const snapshots:SnapshotFrame[]=[];
+  engine.onSnapshot(frame=>snapshots.push(frame));
+  engine.onStreamEvent((id,event)=>{if(event.kind==="chunk"||event.kind==="assistantTextSource")engine.requestSnapshot(id);});
+  engine.subscribe("session-1");
+  await eventually(()=>expect(snapshots.filter(s=>s.kind==="live")).toHaveLength(2));
+  const live=snapshots.filter(s=>s.kind==="live") as Extract<SnapshotFrame,{kind:"live"}>[];
+  expect(live[0].state.timeline[0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2}]});
+  expect((live[0].state.timeline[0] as any).sourceRanges[0]).not.toHaveProperty("runtimeSeq");
+  expect(live[1].state.timeline[0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2,runtimeSeq:4}]});
+  engine.dispose();
+});

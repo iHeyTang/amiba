@@ -1366,8 +1366,11 @@ export default function ChatSurface({
         });
         break;
       }
+      case "assistantTextSource":
+        stream.onAssistantTextSource(event);
+        break;
       case "chunk":
-        stream.onChunk(event.text);
+        stream.onChunk(event.text, event.runtimeStep);
         break;
       case "reasoning":
         stream.onReasoning(event.text);
