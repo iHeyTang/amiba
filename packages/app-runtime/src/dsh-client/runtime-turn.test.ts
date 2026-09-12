@@ -26,3 +26,21 @@ it.each([undefined, -1, 1.5, "7"])("does not fabricate turn metadata from %s or 
   const history = projectRuntimeSessionHistory([start, event("assistant/message", 1001, turn, { message: { content: [{ type: "text", text: "answer" }] } })].map(event => ({ event })));
   expect(history.find(row => row.role === "assistant")).not.toHaveProperty("runtimeTurn");
 });
+
+
+it("retains each finalized text's exact sequence inside a merged history bubble", () => {
+  const source=[
+    event("turn/start",100,7),
+    event("assistant/message",104,7,{message:{id:"first",content:[{type:"text",text:"first `report.txt`"}]}}),
+    event("assistant/message",119,7,{step:2,message:{id:"closing",content:[{type:"text",text:"last `report.txt`"}]}}),
+    event("turn/end",125,7,{reason:{kind:"completed"}}),
+  ];
+  const history=projectRuntimeSessionHistory(source.map(event=>({event})));
+  const assistant=history.find(row=>row.role==="assistant")!;
+  expect(assistant.content).toBe("first `report.txt`last `report.txt`");
+  expect(assistant.assistantMessageId).toBe("closing");
+  expect(assistant.assistantTimeline?.filter(item=>item.kind==="text")).toEqual([
+    {kind:"text",id:"dsh:text:104",text:"first `report.txt`",runtimeSeq:104},
+    {kind:"text",id:"dsh:text:119",text:"last `report.txt`",runtimeSeq:119},
+  ]);
+});

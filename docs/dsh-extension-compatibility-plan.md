@@ -454,3 +454,19 @@ asynchronous outcomes cannot leak across turns or sessions.
   explicit paths, but not the official unique-basename resolver. It must apply
   to the exact closing assistant content, including merged multi-step bubbles.
   Standalone Web and remote-host behavior also remain unverified.
+
+
+### Closing-prose link provenance groundwork
+
+Historical text timeline items now retain the exact finalized assistant/message
+sequence as optional runtimeSeq metadata. A merged bubble can therefore distinguish
+an earlier step's text from the closing step, including repeated filenames,
+without changing its content, grouping or rendering. Unknown/live chunks remain
+unattributed; no sequence is inferred from presentation IDs or string matching.
+23 runtime/history tests and the shell typecheck passed.
+
+Still required for prose links: live chunk/finalization provenance (including
+retries), propagation through the native condensed/interleaved Markdown views,
+and the actual official resolver's lifecycle, matching and file opening. Do not
+apply a closing resolver to an entire merged bubble or assume Markdown node
+positions remain global when Streamdown splits the source into blocks.

@@ -339,7 +339,13 @@ export interface CompactionProgress {
 export type CompactionUpdate = Pick<CompactionProgress, "compactionId"> & Partial<Omit<CompactionProgress, "compactionId">>;
 
 export type AssistantTimelineItem =
-  | { kind: "text"; id: string; text: string }
+  | {
+      kind: "text";
+      id: string;
+      text: string;
+      /** Exact finalized assistant/message event, absent for unattributed chunks. */
+      runtimeSeq?: number;
+    }
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }

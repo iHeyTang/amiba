@@ -357,6 +357,7 @@ export function projectRuntimeSessionHistory(
           kind: "text",
           id: `dsh:text:${event.seq}`,
           text,
+          runtimeSeq: event.seq,
         });
       }
       turn.draftText = "";
