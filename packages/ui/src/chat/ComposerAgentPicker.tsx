@@ -5,7 +5,7 @@ import {
   type AgentPreset,
 } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
-import { Check, Fingerprint, Loader2 } from "lucide-react";
+import { Check, Fingerprint, Info, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -20,6 +20,8 @@ import {
   cn,
   type DialogOverlayVariant,
 } from "../primitives";
+
+import { AgentDetailsDialog } from "../agents/AgentDetailsDialog";
 
 export interface ComposerAgentPickerProps {
   dialogSize?: "default" | "tall";
@@ -196,30 +198,43 @@ export function ComposerAgentPicker({
                   </span>
                 ) : null}
               </div>
-              {profiles.map((profile) => (
-                <button
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent"
-                  disabled={profileLocked || !!profile.broken}
-                  key={profile.id}
-                  onClick={() => commitAndClose(profile.id)}
-                  type="button"
-                >
-                  <Fingerprint className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {profileDisplayName(profile.name)}
-                    </span>
-                    {profile.description ? (
-                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                        {profile.description}
+              {profiles.map((profile) => {
+                const isCurrent = dialogProfileId === profile.id;
+                const name = profileDisplayName(profile.name);
+                return (
+                  <div key={profile.id} className="group/identity relative rounded-xl hover:bg-secondary focus-within:bg-secondary">
+                    <button
+                      className="flex w-full items-center gap-3 rounded-xl py-2.5 pl-3 pr-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55"
+                      aria-current={isCurrent ? "true" : undefined}
+                      disabled={profileLocked || !!profile.broken}
+                      onClick={() => commitAndClose(profile.id)}
+                      type="button"
+                    >
+                      <Fingerprint className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{name}</span>
+                        {profile.description && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{profile.description}</span>}
                       </span>
-                    ) : null}
-                  </span>
-                  {dialogProfileId === profile.id ? (
-                    <Check className="h-4 w-4 shrink-0 text-primary" />
-                  ) : null}
-                </button>
-              ))}
+                    </button>
+                    <AgentDetailsDialog
+                      profile={profile}
+                      name={name}
+                      overlayVariant={overlayVariant}
+                      trigger={
+                        <button
+                          type="button"
+                          aria-label={t("sidepanel.agentPicker.details.openFor", { name })}
+                          title={t("sidepanel.agentPicker.details.openFor", { name })}
+                          className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {isCurrent && <Check aria-hidden className="absolute h-4 w-4 text-primary transition-opacity group-hover/identity:opacity-0 group-focus-within/identity:opacity-0 [@media(hover:none)]:opacity-0" />}
+                          <Info aria-hidden className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/identity:opacity-100 group-focus-within/identity:opacity-100 [@media(hover:none)]:opacity-100" />
+                        </button>
+                      }
+                    />
+                  </div>
+                );
+              })}
             </section>
           </div>
         </DialogContent>

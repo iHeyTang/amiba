@@ -38,6 +38,7 @@ export const zhCN: UiMessages = {
   "conversationRail.messageFallback": "用户消息",
 
   // 插件代为投递的用户消息（转发的任务简报、IM 入站消息）的来源标记。
+  "sidepanel.message.otherApp": "其他应用",
   "sidepanel.message.from": "来自 {source}",
 
   // 助手运行边界
@@ -153,6 +154,32 @@ export const zhCN: UiMessages = {
   "app.title": "Amiba",
 
   // Options nav
+  "options.nav.personal": "个人",
+  "options.personal.menu": "个人菜单",
+  "options.personal.editProfile": "编辑个人资料",
+  "options.personal.checkUpdates": "检查更新",
+  "options.personal.currentVersion": "当前版本",
+  "options.personal.updatesComingSoon": "暂未开放更新检测，后续版本将支持。",
+  "options.personal.githubError": "无法打开 GitHub，请稍后重试。",
+  "options.personal.description": "设置你的头像和昵称，让工作空间更有自己的风格。",
+  "options.personal.avatar": "头像",
+  "options.personal.defaultName": "我的空间",
+  "options.personal.preview": "在侧边栏中展示",
+  "options.personal.nickname": "昵称",
+  "options.personal.nicknameHint": "最多 32 个字符，留空则使用默认昵称。",
+  "options.personal.browse": "浏览更多",
+  "options.personal.shuffle": "再来一批",
+  "options.personal.source": "头像来自 IP as Logo",
+  "options.personal.upload": "上传头像",
+  "options.personal.uploadRequirements": "头像上传要求",
+  "options.personal.uploadHint": "支持 JPG、PNG、WebP，最大 5 MB。图片将居中裁成方形。",
+  "options.personal.save": "保存更改",
+  "options.personal.saving": "处理中…",
+  "options.personal.saved": "已保存",
+  "options.personal.saveError": "保存失败，请重试。",
+  "options.personal.loadError": "个人资料加载失败，请关闭并重新打开设置。",
+  "options.personal.uploadError": "无法读取图片，请上传 5 MB 以内的 JPG、PNG 或 WebP 图片。",
+  "options.personal.browseError": "无法打开头像网站，请稍后重试。",
   "options.nav.appearance": "外观",
   "options.nav.shortcuts": "快捷键",
   "options.nav.status": "运行状态",
@@ -186,6 +213,10 @@ export const zhCN: UiMessages = {
   "sidepanel.agentPicker.executionIdentityDescription":
     "为当前任务选择 DSH 智能体预设。",
   "sidepanel.agentPicker.defaultProfile": "Amiba",
+  "sidepanel.agentPicker.details.openFor": "查看{name}详情",
+  "sidepanel.agentPicker.details.description": "查看此执行身份的完整说明。",
+  "sidepanel.agentPicker.details.id": "智能体 ID",
+  "sidepanel.agentPicker.details.noDescription": "暂无描述。",
   "sidepanel.agentPicker.agent": "智能体",
 
   // DSH 权限预设

@@ -152,6 +152,7 @@ export type { SessionListItemTarget } from "@amiba/ui";
  */
 export interface SessionGroupContribution {
   claim(session: SessionListItemTarget): boolean;
+  title?(session: SessionListItemTarget): string | undefined;
   /**
    * Optional: call the listener when `claim` results may have changed. The
    * list re-renders. See `SessionMenuContribution.subscribe`.
@@ -180,19 +181,16 @@ export interface SessionMenuContribution {
   subscribe?(listener: () => void): () => void;
 }
 
+/** Optional business face for sources whose ids depend on connected accounts. */
+export interface MessageSourceContribution {
+  resolve(pluginId: string): string | undefined;
+  subscribe?(listener: () => void): () => void;
+}
+
 /**
- * The third Amiba-owned declarative slot, and the only one with NO business
- * face: `amiba.message.source`. A plugin registers
- * `ctx.slots.register({ name: "amiba.message.source", id: <its own DSH plugin
- * name>, order, label }, NoopComponent)` and every user-role message the
- * runtime tagged with that plugin as its `source` renders "From <label>" on
- * the bubble. `id` is not a slot-local identifier the shell invents meaning
- * for: it must equal the plugin name that appears in the `user/message`
- * frame's `source.plugin`, since that is the only thing core carries through
- * to `ChatMessage.origin`. Nothing is asked of the plugin per message — a
- * name is the whole contribution — so there is no `inject` face type to
- * export beside `SessionGroupContribution` and friends; an unregistered id
- * still renders, as itself.
+ * `amiba.message.source` maps an exact source id to a label. Plugins may also
+ * supply a MessageSourceContribution to resolve dynamic ids and notify the
+ * shell when account names change. Unknown sources get a readable UI fallback.
  *
  * Static slot typing for the three registrations above. The runtime
  * declaration lives in `apply()` below, on `root`'s `children` table

@@ -1,3 +1,4 @@
+import type { ExternalSessionInfo } from "./session-origin.js";
 import type {
   RemoteResult,
   TypertRemoteContribution,
@@ -23,6 +24,13 @@ import type {
   UpdateConnectInput,
   OnboardingView,
 } from "./types.js";
+
+export interface ConnectorMessageSource {
+  id: string;
+  provider: string;
+  providerName: string;
+  accountName: string;
+}
 
 export interface CreateConnectInput {
   provider: string;
@@ -177,6 +185,8 @@ const ownersCodec = codec(z.array(z.string()), "@amiba/connectors#owners");
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaConnectors: {
+      messageSources(): Promise<RemoteResult<ConnectorMessageSource[]>>;
+      externalSessions(ids: string[]): Promise<RemoteResult<ExternalSessionInfo[]>>;
       searchConversationResources(id: string, key: string, query: string): Promise<RemoteResult<SharedResourceSearch>>;
       shareConversationResources(id: string, key: string, references: string[]): Promise<RemoteResult<MessageConversationView>>;
       retryFailedReplies(id: string): Promise<RemoteResult<{ retried: number }>>;
@@ -213,6 +223,8 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 
   interface TypertRemoteMap {
+    "amibaConnectors/messageSources": () => Promise<RemoteResult<ConnectorMessageSource[]>>;
+    "amibaConnectors/externalSessions": (ids: string[]) => Promise<RemoteResult<ExternalSessionInfo[]>>;
     "amibaConnectors/searchConversationResources": (id: string, key: string, query: string) => Promise<RemoteResult<SharedResourceSearch>>;
     "amibaConnectors/shareConversationResources": (id: string, key: string, references: string[]) => Promise<RemoteResult<MessageConversationView>>;
     "amibaConnectors/retryFailedReplies": (id: string) => Promise<RemoteResult<{ retried: number }>>;
@@ -284,6 +296,10 @@ const descriptor = (
 export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-connector-core",
   descriptors: [
+    descriptor("messageSources", [], codec(z.array(z.object({ id: z.string(), provider: z.string(), providerName: z.string(), accountName: z.string() })), "@amiba/connectors#message-sources")),
+    descriptor("externalSessions", [
+      { name: "ids", wire: "ids", source: "json", codec: codec(z.array(z.string()).max(100), "@amiba/connectors#session-candidates") },
+    ], codec(z.array(z.object({ id: z.string(), connectorName: z.string(), createdAt: z.number() })), "@amiba/connectors#external-sessions")),
     descriptor("searchConversationResources", [
       { name: "id", wire: "id", source: "json", codec: stringCodec },
       { name: "key", wire: "key", source: "json", codec: stringCodec },

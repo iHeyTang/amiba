@@ -903,7 +903,7 @@ function FullScreenChatViewInner({
             onRefreshSessions={() => void sessions.refresh()}
             historyLayout={historyLayout}
             onHistoryLayoutChange={onHistoryLayoutChange}
-            onOpenSettings={() => openSettings()}
+            onOpenSettings={(tab) => openSettings(tab)}
             settingsTrigger={slots?.settingsTrigger}
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}

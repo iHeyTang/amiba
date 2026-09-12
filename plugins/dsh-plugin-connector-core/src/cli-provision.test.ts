@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { parse } from "yaml";
 
 import { provisionCli, type CliProvisionDeps, type CliProvisionInstance } from "./cli-provision.js";
 import type { CliProvisionSpec } from "./types.js";
@@ -21,6 +22,19 @@ function fakeSpec(overrides: Partial<CliProvisionSpec> = {}): CliProvisionSpec {
     ...overrides,
   };
 }
+
+it("generates parseable skill metadata for account names with YAML punctuation and newlines", async () => {
+  const { deps, calls } = fakeDeps({
+    resolveExisting: vi.fn(async () => ({ path: "/usr/local/bin/acme", version: "1.2.3" })),
+  });
+  const instance = fakeInstance({ connectName: '飞书: "Work" #1\nsecond line', provider: "lark" });
+  const handle = await provisionCli(fakeSpec(), instance, deps);
+  const content = calls.writeFile.find(call => call.path === handle.skillPath)!.content;
+  const fields = parse(content.slice(4, content.indexOf("\n---", 4)));
+  expect(fields.name).toBe(instance.id);
+  expect(fields.description).toContain(instance.connectName);
+  expect(fields.description).toContain("provider: lark");
+});
 
 // `id` ("acme-instance-a1b2c3d4") is deliberately NOT equal to `fakeSpec()`'s
 // `id` ("acme-cli") — this is what the real "cli" applier produces (see

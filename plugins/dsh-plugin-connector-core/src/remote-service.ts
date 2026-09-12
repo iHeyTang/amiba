@@ -34,6 +34,16 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
   }
 
   @Remote
+  messageSources() {
+    return this.center.messageSources();
+  }
+
+  @Remote
+  externalSessions(ids: string[]) {
+    return this.center.externalSessions(ids);
+  }
+
+  @Remote
   conversationSettings(id: string, conversationKey: string, input: MessageConversationSettingsInput) {
     return this.center.conversationSettings(id, conversationKey, input);
   }

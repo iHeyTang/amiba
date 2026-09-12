@@ -4,7 +4,7 @@
  *   • top (fixed):   new-chat, then DSH workspace slot contributions.
  *   • middle (flex): chat history, switchable between a time-ordered stream
  *                    and workspace-directory groups.
- *   • bottom (fixed): the settings row.
+ *   • bottom (fixed): the personal menu.
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
 import {
@@ -19,15 +19,14 @@ import {
   MessageSquare,
   MoreHorizontal,
   Plus,
-  Settings,
   X,
 } from "lucide-react";
+import { ProfileMenu } from "../profile/ProfileMenu";
 import { useMemo, useState, type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
-import { SettingsTriggerContent } from "../settings/SettingsTriggerContent";
 import { SidebarItem } from "./SidebarItem";
 import { SessionRowsList, SessionsListView } from "./SessionsListView";
 import {
@@ -87,16 +86,13 @@ export interface SidebarProps {
   onRefreshSessions: () => void | Promise<void>;
   historyLayout: HistoryLayout;
   onHistoryLayoutChange: (layout: HistoryLayout) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: string) => void;
   /**
-   * Content of the settings row — the host's dispatch of the official
-   * `settings.trigger` seat, whose owner share is exactly `{ wide }`: the
-   * sidebar column state, false while the rail is collapsed. Amiba's own
-   * icon + label render when the host supplies no renderer (Quick-Ask, the
-   * browser extension, any surface outside a DSH plugin runtime).
+   * Host dispatch of the official `settings.trigger` seat, displayed as
+   * the icon and label of the profile menu settings item (`wide: true`).
    */
   settingsTrigger?: (owner: { wide: boolean }) => ReactNode;
-  /** Sidebar column state, forwarded to the trigger seat as `wide`. */
+  /** Sidebar column state, controlling visibility of the profile nickname. */
   wide?: boolean;
   /** Whether the settings dialog this row opens is currently open. */
   settingsOpen?: boolean;
@@ -405,28 +401,12 @@ export function Sidebar({
         ))}
       </div>
 
-      {/*
-        Bottom (fixed): the settings row. It is the official
-        `settings.trigger` seat's render site AND the dialog's trigger
-        button — `aria-haspopup="dialog"` plus a live `aria-expanded`, the
-        same pair the official shell puts on its own trigger.
-      */}
-      <div className="mt-1 border-t border-border/30 p-2 pt-1.5">
-        <SidebarItem
-          aria-expanded={settingsOpen}
-          aria-haspopup="dialog"
-          id="settings"
-          icon={<Settings className="h-4 w-4" />}
-          label={t("chat.settings")}
-          title={t("chat.openOptions")}
-          onClick={onOpenSettings}
-          body={
-            settingsTrigger ? (
-              settingsTrigger({ wide })
-            ) : (
-              <SettingsTriggerContent wide={wide} />
-            )
-          }
+      <div className="mt-1 border-t border-border/30 p-2">
+        <ProfileMenu
+          wide={wide}
+          settingsOpen={settingsOpen}
+          settingsTrigger={settingsTrigger}
+          onOpenSettings={onOpenSettings}
         />
       </div>
     </nav>

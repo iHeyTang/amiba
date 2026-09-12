@@ -1,3 +1,4 @@
+import { externalSessionChannel, type ExternalSessionInfo } from "./session-origin.js";
 import { isDeepStrictEqual } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ResourceCenter } from "@amiba/dsh-plugin-resources";
@@ -414,6 +415,46 @@ export class ConnectorCenter {
         ...(messaging ? { messaging } : {}),
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async messageSources() {
+    const channels = await this.messageCenter.listChannels();
+    const providers = this.messageCenter.listProviders();
+    return channels.map(channel => ({
+      id: `amiba-message:${channel.id}`,
+      provider: channel.provider.replace(/^connector-/u, ""),
+      providerName: providers.find(provider => provider.id === channel.provider)?.name ?? "",
+      accountName: channel.name,
+    }));
+  }
+
+  private readonly externalOrigins = new Map<string, { channelId: string; createdAt: number } | null>();
+
+  async externalSessions(ids: string[]): Promise<ExternalSessionInfo[]> {
+    const persistence = this.ctx.reflect.get("sessionPersistence") as {
+      inspect(id: string): Promise<{ meta: { createdAt: number; parentSession?: string }; events: readonly { type: string; data?: unknown }[] }>;
+    } | undefined;
+    if (!persistence) throw new Error("session_persistence_unavailable");
+    const connects = await this.store.list();
+    const result: ExternalSessionInfo[] = [];
+    for (const id of new Set(ids)) {
+      let origin = this.externalOrigins.get(id);
+      if (origin === undefined) {
+        try {
+          const inspected = await persistence.inspect(id);
+          // A locally branched conversation does not inherit its parent's group.
+          const channelId = inspected.meta.parentSession ? null : externalSessionChannel(inspected.events);
+          if (channelId === undefined) continue;
+          origin = channelId ? { channelId, createdAt: inspected.meta.createdAt } : null;
+          if (this.externalOrigins.size >= 10000) this.externalOrigins.clear();
+          this.externalOrigins.set(id, origin);
+        } catch { continue; }
+      }
+      if (!origin) continue;
+      const connect = connects.find(row => row.channelId === origin.channelId);
+      result.push({ id, connectorName: connect?.name ?? "", createdAt: origin.createdAt });
+    }
+    return result;
   }
 
   async listConnects(): Promise<ConnectView[]> {

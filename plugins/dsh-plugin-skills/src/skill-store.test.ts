@@ -46,6 +46,13 @@ afterEach(async () => {
 });
 
 describe("AmibaSkillStore", () => {
+  it("rejects malformed YAML before publishing and accepts quoted and block descriptions", async () => {
+    const store = await createStore();
+    await expect(store.save("release-notes", '---\nname: release-notes\ndescription: Invoke CLI (provider: lark)\n---\n\nInstructions\n')).rejects.toThrow("Invalid YAML");
+    await expect(readFile(join(store.userRoot, "release-notes", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(store.save("release-notes", '---\nname: release-notes\ndescription: |\n  Invoke CLI (provider: lark)\n---\n\nInstructions\n')).resolves.toEqual({ name: "release-notes" });
+    await expect(store.save("release-notes", '---\nname: release-notes\ndescription: "provider: lark"\nuser-invocable: "false"\n---\n\nInstructions\n')).rejects.toThrow("must be a boolean");
+  });
   it("persists a normalized official DSH skill document atomically", async () => {
     const store = await createStore();
     const document = [

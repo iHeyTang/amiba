@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { parse } from "yaml";
 
 import type { CliProvisionSpec } from "./types.js";
 
@@ -229,7 +230,7 @@ function renderCarrierSkill(
   return [
     "---",
     `name: ${instance.id}`,
-    `description: Invoke the "${spec.binary}" CLI (package ${spec.package}) provisioned for the "${instance.connectName}" connect (provider: ${instance.provider}); credentials are pre-wired, never pass secrets on argv.`,
+    `description: ${JSON.stringify(`Use the ${spec.binary} CLI for the ${instance.connectName} connection (provider: ${instance.provider}) when its verified commands support the user's task. Credentials are preconfigured.`)}`,
     "---",
     "",
     `# ${spec.binary} — ${instance.connectName}`,
@@ -257,6 +258,18 @@ function renderCarrierSkill(
     "- 凭据已经预置在 wrapper 脚本内部；切勿在命令行参数（argv）中传递任何 token 或密钥。",
     "- Credentials are already pre-wired inside the wrapper script; never pass any token or secret on argv.",
     "",
+    "## 能力与故障判断 / Capability and failure handling",
+    "",
+    "- Use only this connection's wrapper. Check the installed CLI's help and relevant subcommand help before choosing commands; do not invent a search, document, table, or chat-history command.",
+    "- A configured connection does not prove that every resource or permission is available. Scope requests to the current account and the user's intended task; never substitute another account after an empty result.",
+    "- Distinguish an empty search result, an unsupported command, a resource permission denial, an expired login, and a transport failure. Suggest authorization only when the returned evidence identifies a missing or expired authorization; do not reconnect merely because nothing was found.",
+    "- Start with a relevant read-only check. The connection itself is not permission to send messages, edit documents, or run bulk writes; follow the user's requested scope.",
+    "- In a shared IM conversation, use only the resources and authority available to that audience. This wrapper is not a grant to expose its owner's private data to other participants.",
+    "",
+    "## 维护此技能 / Maintaining this skill",
+    "",
+    "This file is connection-managed and is replaced when the CLI is provisioned again. For creating or improving connector skills, load the built-in skill-creator and read its references/amiba-connectors.md. Put verified reusable workflows in the provider's maintained template or a separate user skill; do not patch this generated file as a permanent fix.",
+    "",
   ].join("\n");
 }
 
@@ -280,7 +293,11 @@ async function seedCarrierSkill(
   const skillDir = join(deps.skillsRoot, instance.id);
   await deps.mkdir(skillDir, { recursive: true });
   const skillPath = join(skillDir, "SKILL.md");
-  await deps.writeFile(skillPath, renderCarrierSkill(spec, instance, wrapperPath));
+  const document = renderCarrierSkill(spec, instance, wrapperPath);
+  const header = parse(document.slice(4, document.indexOf("\n---", 4)));
+  if (header.name !== instance.id || typeof header.description !== "string" || !header.description.trim())
+    throw new Error("Generated connector skill has invalid frontmatter.");
+  await deps.writeFile(skillPath, document);
   return skillPath;
 }
 

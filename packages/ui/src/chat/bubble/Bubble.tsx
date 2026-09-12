@@ -74,12 +74,11 @@ import {
 /**
  * Resolves the plugin id on a message's `origin` to a name to show the user.
  * Returning `undefined` (nothing registered that id) falls back to rendering
- * the raw id, so an unrecognised producer is still attributed rather than
- * silently anonymous.
+ * a localized generic name, keeping internal identifiers out of the conversation.
  *
  * Supplied by the shell from the `amiba.message.source` slot and provided
  * once around the conversation by `ChatSurface`; a bubble rendered without a
- * provider simply shows raw ids.
+ * provider uses the same readable fallback.
  */
 export type MessageSourceLabelResolver = (
   pluginId: string,
@@ -280,9 +279,11 @@ export function Bubble({
     // from the person at the composer — say so, in the same quiet chip the
     // session list uses for its own plugin badges.
     const sourcePlugin = m.origin?.kind === "plugin" ? m.origin.plugin : "";
-    const sourceLabel = sourcePlugin
-      ? (resolveMessageSourceLabel?.(sourcePlugin) ?? sourcePlugin)
+    const producerLabel = sourcePlugin
+      ? (resolveMessageSourceLabel?.(sourcePlugin) ?? t("sidepanel.message.otherApp"))
       : "";
+    const senderName = m.origin?.senderName?.trim();
+    const sourceLabel = producerLabel && senderName ? `${producerLabel} · ${senderName}` : producerLabel;
     return (
       <div
         data-selection="text"

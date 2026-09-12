@@ -7,7 +7,10 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
@@ -29,7 +32,10 @@
       "platform": "web"
     }
   },
-  "files": ["lib"],
+  "files": [
+    "lib",
+    "skills"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -43,7 +49,9 @@
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
     "lucide-react": "^0.460.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "yaml": "^2.9.0",
+    "@deepseek-ai/dsh-skill-filesystem": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

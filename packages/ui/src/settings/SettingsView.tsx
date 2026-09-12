@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getPlatform } from "@amiba/app-runtime/platform";
 
 import { useT } from "@amiba/i18n";
+import { APP_VERSION } from "../app-version";
 import { useResolvedTheme } from "../theme";
 import { AmibaLogo, ScrollArea } from "../primitives";
 
@@ -340,7 +341,7 @@ export function SettingsView({
           </nav>
         </ScrollArea>
         <div className="px-3 py-2">
-          <p className="text-[10px] text-muted-foreground/60">v0.3.0</p>
+          <p className="text-[10px] text-muted-foreground/60">v{APP_VERSION}</p>
         </div>
       </aside>
 

@@ -23,7 +23,7 @@ async function harness() {
   const live = new Map<string, Record<string, unknown>>();
   const makeAgent = (id: string) => ({
     followup,
-    session: { id, header: { id, agentPreset: "standard" }, events: [] },
+    session: { id, header: { id, agentPreset: "standard", createdAt: new Date(2026, 8, 12, 14, 30).getTime() }, events: [] },
     inbox: { nextTurn: [], nextStep: [] },
   });
   live.set("session-a", makeAgent("session-a"));
@@ -1288,4 +1288,26 @@ it("starts a fresh restricted segment when a legacy owner conversation becomes s
   await expect(center.shareConversationResources("different-channel", conversation.key, grants)).rejects.toThrow("conversation_not_found");
   await center.shareConversationResources(channel.id, conversation.key, []);
   expect(await lifecycle.sharedResources({ plugin: "shared", entry: channel.id, scope: sharedScope })).toEqual([]);
+});
+
+it("pins connector conversation titles once, using the session creation time", async () => {
+  const { center, reflectServices, live } = await harness();
+  const rename = vi.fn();
+  reflectServices.set("sessionTitle", { rename });
+  center.registerProvider({ id: "connector-lark", name: "飞书", description: "", supportsInbound: true, supportsOutbound: true });
+  const { channel, secret } = await center.createChannel({ provider: "connector-lark", name: "工作飞书", agentPreset: "standard" });
+  const first = await center.acceptInbound(channel.id, secret, { id: "title-1", text: "hi", conversation: { key: "chat", kind: "p2p" } });
+  expect(rename).toHaveBeenCalledWith(live.get(first.sessionId)!.session, "工作飞书 · 2026-09-12 14:30");
+  await center.acceptInbound(channel.id, secret, { id: "title-2", text: "again", conversation: { key: "chat", kind: "p2p" } });
+  expect(rename).toHaveBeenCalledOnce();
+});
+
+it("keeps each sender's nickname on the relayed message and the durable retry record", async () => {
+  const { center, followup } = await harness();
+  const { channel, secret } = await center.createChannel({ provider: "webhook", name: "工作账号", sessionId: "session-a" });
+  for (const [id, senderName] of [["nick-1", "张三"], ["nick-2", "李四"]]) {
+    await center.acceptInbound(channel.id, secret, { id: id!, text: "你好", sender: id, metadata: { senderName } });
+  }
+  expect(followup.mock.calls.map(call => call[0].source.senderName)).toEqual(["张三", "李四"]);
+  expect((await center.store.listPending("session-a")).map(row => row.metadata?.senderName)).toEqual(["张三", "李四"]);
 });

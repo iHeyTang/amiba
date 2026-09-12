@@ -209,3 +209,9 @@ describe("createSessionMenuItemsSource", () => {
     expect(source.getSnapshot()).toEqual([]);
   });
 });
+
+it("carries plugin-owned display titles through the generic group source", () => {
+  const title = () => "飞书 · 2026-09-12 14:30";
+  const { ctx } = fakeSlots([{ options: { id: "external-messages", label: "外部消息" }, inject: () => ({ claim: () => true, title }) }]);
+  expect(createSessionGroupsSource(ctx).getSnapshot()[0]!.title).toBe(title);
+});

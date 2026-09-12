@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../Sidebar";
 import type { SessionListGroup } from "../session-list-extensions";
 
+vi.mock("../../profile/profile", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../profile/profile")>();
+  return { ...actual, usePersonalProfile: () => ({ profile: actual.DEFAULT_PROFILE }) };
+});
+
 const workspaceBindings = vi.hoisted(() => ({
   current: {
     supported: false,
@@ -81,8 +86,18 @@ describe("Sidebar", () => {
     expect(props.onSelectView).toHaveBeenCalledWith("scheduled");
   });
 
+  it("opens personal settings from the profile menu header", async () => {
+    const props = setup();
+    await userEvent.click(screen.getByTestId("sidebar-item-personal"));
+    expect(props.onOpenSettings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("menuitem", { name: "Personal" }));
+    expect(props.onOpenSettings).toHaveBeenCalledWith("personal");
+  });
+
   it("opens settings from the footer row", async () => {
     const props = setup();
+    expect(screen.queryByTestId("sidebar-item-settings")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("sidebar-item-personal"));
     await userEvent.click(screen.getByTestId("sidebar-item-settings"));
     expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
   });

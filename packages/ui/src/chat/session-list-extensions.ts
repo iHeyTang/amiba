@@ -19,6 +19,7 @@
 export interface SessionListItemTarget {
   id: string;
   title: string;
+  titleManual?: boolean;
   agent?: { profileId?: string };
   source?: string;
   parentSessionId?: string;
@@ -52,6 +53,8 @@ export interface SessionListGroup {
   id: string;
   label: string;
   claim: (session: SessionListItemTarget) => boolean;
+  /** Optional display title; persisted history and manual renaming remain host-owned. */
+  title?: (session: SessionListItemTarget) => string | undefined;
 }
 
 /** One plugin group's section, in `groups` order, holding its claimed rows. */
@@ -87,8 +90,10 @@ export function partitionSessionGroups<
   const rest: T[] = [];
   for (const session of sessions) {
     const owner = groups.find((group) => group.claim(session));
-    if (owner) buckets.get(owner.id)!.push(session);
-    else rest.push(session);
+    if (owner) {
+      const title = owner.title?.(session);
+      buckets.get(owner.id)!.push(title === undefined ? session : { ...session, title });
+    } else rest.push(session);
   }
   const byUpdatedAtDesc = (a: T, b: T) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
   const result: SessionListGroupBucket<T>[] = [];

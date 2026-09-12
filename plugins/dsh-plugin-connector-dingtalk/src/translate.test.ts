@@ -371,3 +371,10 @@ describe("translateCardCallback", () => {
     expect(bare).not.toHaveProperty("conversationKey");
   });
 });
+
+it("preserves sender nicknames separately from access-control ids", () => {
+  const message = { msgId: "nickname-1", msgtype: "text", text: { content: "你好" }, conversationId: "group", conversationType: "2", senderStaffId: "staff-1", senderNick: " 张三 " };
+  expect(translateRobotMessage(message)?.envelope).toMatchObject({ sender: "staff-1", metadata: { senderName: "张三" } });
+  expect(translateRobotMessage({ ...message, senderNick: " " })?.envelope.metadata).toBeUndefined();
+  expect(translateRobotMessage({ ...message, senderNick: 123 })?.envelope.metadata).toBeUndefined();
+});

@@ -215,6 +215,7 @@ export function createSessionGroupsSource(
         order: entry.options.order ?? 0,
         label: resolveSlotLabel(entry.options.label) ?? id,
         claim,
+        ...(typeof face?.title === "function" ? { title: face.title as SessionListGroup["title"] } : {}),
       };
     },
   );

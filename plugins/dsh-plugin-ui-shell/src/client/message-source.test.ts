@@ -59,3 +59,14 @@ describe("messageSourceLabelResolver", () => {
     expect(resolve("dup")).toBe("first");
   });
 });
+it("projects dynamic resolvers and preserves exact source labels", () => {
+  const resolve = (id: string) => id.startsWith("relay:") ? "飞书" : undefined;
+  const source = createMessageSourcesSource(fakeSlots([
+    { options: { id: "external", label: "外部消息" }, inject: () => ({ resolve }) },
+    { options: { id: "relay:special", label: "专用账号" } },
+  ]));
+  const label = messageSourceLabelResolver(source.getSnapshot());
+  expect(label("relay:old-channel")).toBe("飞书");
+  expect(label("relay:special")).toBe("专用账号");
+  expect(label("unknown")).toBeUndefined();
+});

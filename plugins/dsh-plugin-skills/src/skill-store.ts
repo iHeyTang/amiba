@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { parse } from "yaml";
 import {
   lstat,
   mkdir,
@@ -138,12 +139,24 @@ function validateDocument(name: string, document: string): string {
     throw new Error("A DSH skill must contain YAML frontmatter.");
   }
   const frontmatter = normalized.slice(4, normalized.indexOf("\n---\n"));
-  const declared = /^name:\s*["']?([^"'\n]+)["']?\s*$/mu.exec(frontmatter)?.[1]?.trim();
+  let fields: Record<string, unknown>;
+  try {
+    const parsed: unknown = parse(frontmatter);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expected a mapping.");
+    fields = parsed as Record<string, unknown>;
+  } catch {
+    throw new Error("Invalid YAML frontmatter. Quote descriptions containing colon-space, or use a YAML block scalar.");
+  }
+  const declared = fields.name;
   if (declared !== name) {
     throw new Error(`Skill frontmatter name must be ${JSON.stringify(name)}.`);
   }
-  if (!/^description:\s*.+$/mu.test(frontmatter)) {
+  if (typeof fields.description !== "string" || !fields.description.trim()) {
     throw new Error("Skill frontmatter requires a description.");
+  }
+  for (const field of ["user-invocable", "disable-model-invocation"]) {
+    if (fields[field] !== undefined && typeof fields[field] !== "boolean")
+      throw new Error(`Skill frontmatter ${field} must be a boolean.`);
   }
   return `${normalized}\n`;
 }

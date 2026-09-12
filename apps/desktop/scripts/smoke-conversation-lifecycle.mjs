@@ -151,6 +151,14 @@ try {
     if (!response.ok || !envelope.result?.ok) throw new Error('Remote failed: '+endpoint+' '+JSON.stringify(envelope));
     return envelope.result.value;
   }
+  const skills = await remote('amibaSkills/list', {sessionId:null});
+  const creator = skills.skills.find(skill => skill.name === 'skill-creator');
+  if (!creator || creator.source !== 'bundled' || creator.editable || !creator.modelInvocable) throw new Error('Built-in skill-creator unavailable');
+  const creatorDoc = await remote('amibaSkills/read', {name:'skill-creator',sessionId:null});
+  if (!creatorDoc.document.includes('references/amiba-connectors.md')) throw new Error('Connector authoring guidance missing');
+  const creatorFile = await remote('amibaSkills/readFile', {name:'skill-creator',path:'references/amiba-connectors.md',sessionId:null});
+  if (!creatorFile.content) throw new Error('Built-in skill resources unreadable');
+  console.log('Built-in skill-creator: bundled discovery, body and connector reference — passed');
   const pets = await remote('amibaPets/list', {});
   if (!Array.isArray(pets.pets)) throw new Error('Pet library remote unavailable');
   const studio = await remote('amibaPets/studio', {});

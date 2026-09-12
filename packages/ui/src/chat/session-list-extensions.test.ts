@@ -185,3 +185,11 @@ describe("resolveMenuItems", () => {
     expect(resolveMenuItems(s("a"), [])).toEqual([]);
   });
 });
+
+it("projects a group title without mutating history or changing ownership", () => {
+  const session = { id: "external", title: "old", updatedAt: 1 };
+  const result = partitionSessionGroups([session], [{ id: "external", label: "外部消息", claim: () => true, title: () => "飞书 · 2026-09-12 14:30" }]);
+  expect(result.rest).toEqual([]);
+  expect(result.groups[0]!.items[0]!.title).toBe("飞书 · 2026-09-12 14:30");
+  expect(session.title).toBe("old");
+});

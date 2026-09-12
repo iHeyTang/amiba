@@ -29,26 +29,26 @@ function Companion({
   );
   if (loading)
     return defaultVisual ? (
-      <div className="h-40 w-40" aria-hidden="true" />
+      <div className="h-28 w-28" aria-hidden="true" />
     ) : null;
   const pet = state.pets.find((p) => p.id === state.activeId);
-  return pet ? (
+  if (!pet) return defaultVisual ?? null;
+  const view = (
     <PetView
       {...owner}
       priority={priority}
-      className={
-        priority === 30
-          ? "h-40 w-40"
-          : priority === 20
-            ? "h-20 w-20"
-            : "h-20 w-20"
-      }
+      className={priority === 30 ? "h-40 w-40 shrink-0" : "h-20 w-20"}
       config={pet.config}
       name={pet.name}
     />
-  ) : (
-    (defaultVisual ?? null)
   );
+  // Keep the character's rendering scale while removing 24px of transparent
+  // canvas margin on each edge from the home layout's reserved space.
+  return priority === 30 ? (
+    <div className="flex h-28 w-28 shrink-0 items-center justify-center">
+      {view}
+    </div>
+  ) : view;
 }
 export async function apply(ctx: ClientContext) {
   const unmount = await ctx.remote.$mount(PET_REMOTE);

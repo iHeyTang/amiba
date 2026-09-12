@@ -363,7 +363,7 @@ export interface ChatSurfaceProps {
    * it. Provided once around the conversation as
    * `MessageSourceLabelContext`, which the user bubble reads. Supplied by
    * ui-shell from the `amiba.message.source` slot; omitted (Quick-Ask, the
-   * browser extension) the bubble shows the raw plugin id.
+   * browser extension) the bubble uses a localized generic source name.
    */
   messageSourceLabel?: MessageSourceLabelResolver;
 }

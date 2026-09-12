@@ -226,6 +226,12 @@ function presetForSession(session: {
   return preset;
 }
 
+/** Display-only attribution; sender ids remain the authority for access checks. */
+function senderAttribution(metadata: Record<string, unknown> | undefined): { senderName?: string } {
+  const name = metadata?.senderName;
+  return typeof name === "string" && name.trim() ? { senderName: name.trim() } : {};
+}
+
 function restoredMessage(pending: StoredPendingInbound): UserMessage {
   return freezeMessage({
     id: pending.dshMessageId as UserMessage["id"],
@@ -234,6 +240,7 @@ function restoredMessage(pending: StoredPendingInbound): UserMessage {
     source: {
       kind: "plugin",
       plugin: `amiba-message:${pending.channelId}`,
+      ...senderAttribution(pending.metadata),
       form: "relay",
     },
   });
@@ -662,6 +669,21 @@ export class MessageChannelCenter {
         await runtime.agentPresets.mount(agentCtx, channel.agentPreset);
       },
     });
+    // Give connector-created conversations a stable title before the first relay.
+    // The host title service pins it so automatic summarization cannot replace it.
+    if (channel.provider.startsWith("connector-")) {
+      const titles = this.ctx.reflect?.get?.("sessionTitle") as { rename(session: Session, title: string): void } | undefined;
+      if (titles) {
+        try {
+          const date = new Date(handle.agent.session.header.createdAt);
+          const pad = (value: number) => String(value).padStart(2, "0");
+          const title = `${channel.name} · ${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+          titles.rename(handle.agent.session, title);
+        } catch (error) {
+          this.ctx.logger("amiba-messaging-core").warn(`Failed to name external session ${sessionId}: ${String(error)}`);
+        }
+      }
+    }
     return { sessionId, dispose: () => handle.dispose().catch(() => undefined) };
   }
 
@@ -876,6 +898,7 @@ export class MessageChannelCenter {
       source: {
         kind: "plugin",
         plugin: `amiba-message:${channel.id}`,
+        ...senderAttribution(envelope.metadata),
         form: "relay",
       },
     });

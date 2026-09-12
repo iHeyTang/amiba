@@ -1,3 +1,4 @@
+import { createSenderNameResolver } from "./sender-name.js";
 import { PERSONAL_SCOPES } from "./personal.js";
 import { larkMcpTools } from "./mcp-tools.js";
 import {
@@ -69,6 +70,7 @@ export interface ApiLike {
   /** Exchanges a tenant access token; rejects with the SDK's error message on auth failure. */
   tenantToken(): Promise<void>;
   botOpenId(): Promise<string>;
+  userDisplayName(openId: string): Promise<string | undefined>;
   /** Plain-text message. Kept as `runtime.deliver()`'s fallback when `sendCard` rejects. */
   sendText(chatId: string, text: string): Promise<void>;
   /** Interactive-card message rendering `markdown` — Feishu text messages don't render markdown. */
@@ -263,6 +265,7 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
       // must not resurrect a status, or deliver an inbound message, for a
       // connect that no longer exists.
       let stopped = false;
+      const senderName = createSenderNameResolver(openId => api.userDisplayName(openId));
       const safeSetStatus = (status: ConnectorStatus): void => {
         if (stopped) return;
         handle.setStatus(status);
@@ -328,6 +331,11 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
             });
 
           try {
+            if (envelope.sender) {
+              const name = await senderName(envelope.sender);
+              if (name) envelope.metadata = { ...envelope.metadata, senderName: name };
+            }
+            if (stopped) return;
             await handle.onInbound(envelope);
           } catch (error) {
             // Handler errors must never crash the ws loop — swallow and log.
@@ -582,13 +590,10 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
           name: "Amiba ({user})",
           desc: "Amiba desktop agent connect",
         },
-        // Minimal read+send set for im.message.receive_v1 + reply, verified
-        // against the SDK's own README examples: `im:message` ("发送和接收消息")
-        // covers receiving the event, `im:message:send_as_bot` covers the
-        // `client.im.message.create` call `runtime.deliver()` makes.
+        // Message receive/reply plus basic user profiles for readable sender names.
         addons: {
           scopes: {
-            tenant: ["im:message", "im:message:send_as_bot"],
+            tenant: ["im:message", "im:message:send_as_bot", "contact:user.base:readonly"],
             // Register every supported personal capability alongside the bot.
             // offline_access is an OAuth refresh scope, not an app permission.
             user: PERSONAL_SCOPES.filter(scope => scope !== "offline_access"),
@@ -808,6 +813,12 @@ export const realLarkDeps: LarkDeps = {
           throw new Error(res.msg ?? "lark_bot_info_missing_open_id");
         }
         return openId;
+      },
+      async userDisplayName(openId): Promise<string | undefined> {
+        const res = await client.contact.user.get({ path: { user_id: openId }, params: { user_id_type: "open_id" } });
+        if (res.code) throw new Error(res.msg ?? `lark_user_info_failed:${res.code}`);
+        const user = res.data?.user;
+        return user?.name?.trim() || user?.nickname?.trim() || user?.en_name?.trim() || undefined;
       },
       async sendText(chatId, text): Promise<void> {
         const res = (await client.im.message.create({

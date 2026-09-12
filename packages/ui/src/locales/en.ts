@@ -62,6 +62,7 @@ export const en = {
 
   // Attribution for a user message a plugin dispatched (a relayed task
   // brief, an inbound IM message) rather than the person at the composer.
+  "sidepanel.message.otherApp": "Another app",
   "sidepanel.message.from": "From {source}",
 
   // Assistant run boundaries
@@ -179,6 +180,32 @@ export const en = {
   "app.title": "Amiba",
 
   // Options nav
+  "options.nav.personal": "Personal",
+  "options.personal.menu": "Profile menu",
+  "options.personal.editProfile": "Edit profile",
+  "options.personal.checkUpdates": "Check for updates",
+  "options.personal.currentVersion": "Current version",
+  "options.personal.updatesComingSoon": "Update checking is not available yet.",
+  "options.personal.githubError": "Could not open GitHub. Please try again.",
+  "options.personal.description": "Make this workspace yours with a profile picture and nickname.",
+  "options.personal.avatar": "Avatar",
+  "options.personal.defaultName": "My workspace",
+  "options.personal.preview": "Shown in your sidebar",
+  "options.personal.nickname": "Nickname",
+  "options.personal.nicknameHint": "Up to 32 characters. Leave blank to use the default name.",
+  "options.personal.browse": "Browse more",
+  "options.personal.shuffle": "Another batch",
+  "options.personal.source": "Artwork from IP as Logo",
+  "options.personal.upload": "Upload avatar",
+  "options.personal.uploadRequirements": "Avatar upload requirements",
+  "options.personal.uploadHint": "JPG, PNG or WebP, up to 5 MB. Images are center-cropped to a square.",
+  "options.personal.save": "Save changes",
+  "options.personal.saving": "Processing…",
+  "options.personal.saved": "Saved",
+  "options.personal.saveError": "Could not save your profile. Please try again.",
+  "options.personal.loadError": "Could not load your profile. Close and reopen settings to retry.",
+  "options.personal.uploadError": "Choose a valid JPG, PNG or WebP image under 5 MB.",
+  "options.personal.browseError": "Could not open the avatar website. Please try again.",
   "options.nav.appearance": "Appearance",
   "options.nav.shortcuts": "Shortcuts",
   "options.nav.status": "Status",
@@ -213,6 +240,10 @@ export const en = {
   "sidepanel.agentPicker.executionIdentityDescription":
     "Choose the DSH Agent Preset for this task.",
   "sidepanel.agentPicker.defaultProfile": "Amiba",
+  "sidepanel.agentPicker.details.openFor": "View details for {name}",
+  "sidepanel.agentPicker.details.description": "Read the full description of this execution identity.",
+  "sidepanel.agentPicker.details.id": "Agent ID",
+  "sidepanel.agentPicker.details.noDescription": "No description available.",
   "sidepanel.agentPicker.agent": "Agent",
 
   // DSH permission presets

@@ -3,11 +3,13 @@ import {
   FileText,
   Keyboard,
   Palette,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "@amiba/i18n";
 
+import { SettingsPersonal } from "./SettingsPersonal";
 import { SettingsLogs } from "./SettingsLogs";
 import { SettingsAppearance, SettingsShortcuts } from "./SettingsPreferences";
 import { SettingsStatus } from "./SettingsStatus";
@@ -52,6 +54,13 @@ function page(Component: ComponentType): ComponentType<SettingsPageProps> {
  * Adding a page = adding one entry here; the scaffold provides its layout.
  */
 export const SETTINGS_PAGES: readonly SettingsPageDescriptor[] = [
+  {
+    id: "personal",
+    icon: UserRound,
+    titleKey: "options.nav.personal",
+    group: "general",
+    component: page(SettingsPersonal),
+  },
   {
     id: "appearance",
     icon: Palette,

@@ -110,7 +110,12 @@ export function visibleUserMessage(value: unknown): VisibleUserMessage | null {
   if (!plugin) return null
   const origin: PluginMessageOrigin = { kind: "plugin", plugin }
   const form = source?.form
-  if (form === RELAY_FORM) return { origin }
+  if (form === RELAY_FORM) {
+    if (typeof source?.senderName === "string" && source.senderName.trim()) {
+      origin.senderName = source.senderName.trim()
+    }
+    return { origin }
+  }
   if (form !== NOTICE_FORM) return null
   const summary = source?.summary
   return typeof summary === "string" && summary

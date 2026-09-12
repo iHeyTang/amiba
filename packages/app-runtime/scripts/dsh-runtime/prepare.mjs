@@ -170,6 +170,10 @@ async function sourceFiles(root) {
   return files;
 }
 
+const pluginSkillAssets = await Promise.all(pluginSourceDirs.map((directory, index) =>
+  pluginPackages[index].files?.includes("skills") ? sourceFiles(path.join(directory, "skills")) : [],
+));
+
 async function computeAmibaSourceDigest() {
   const sourceDirectories = [];
   const visited = new Set();
@@ -218,6 +222,8 @@ async function computeAmibaSourceDigest() {
     if (fs.existsSync(scriptsDir)) files.push(...(await sourceFiles(scriptsDir)));
     const sourceDir = path.join(directory, "src");
     if (fs.existsSync(sourceDir)) files.push(...(await sourceFiles(sourceDir)));
+    const skillsDir = path.join(directory, "skills");
+    if (fs.existsSync(skillsDir)) files.push(...(await sourceFiles(skillsDir)));
   }
   const patchesDir = path.join(workspaceDir, "patches");
   if (fs.existsSync(patchesDir)) files.push(...(await sourceFiles(patchesDir)));
@@ -435,6 +441,9 @@ function verify(root = outputDir) {
     entrypoint(root),
     pnpmBinary(root),
     ...pluginNames.map((name) => amibaPlugin(root, name)),
+    ...pluginSkillAssets.flatMap((files, index) => files.map(file =>
+      path.join(root, "app/node_modules/@amiba", pluginNames[index], path.relative(pluginSourceDirs[index], file)),
+    )),
     ...pluginPackages.flatMap((manifest, index) =>
       manifest.dsh?.client
         ? [amibaPluginClient(root, pluginNames[index])]
@@ -781,6 +790,13 @@ try {
         path.join(pluginDestination, "package.json"),
       ),
     ]);
+    // Packaged skill resources live next to lib, and must also be replaced on
+    // cache reuse so removed guides/scripts cannot remain in an installation.
+    const skillDestination = path.join(pluginDestination, "skills");
+    await fsp.rm(skillDestination, { recursive: true, force: true });
+    if (pluginPackages[index].files?.includes("skills")) {
+      await fsp.cp(path.join(pluginSourceDir, "skills"), skillDestination, { recursive: true });
+    }
     const patch = pluginPackages[index].dsh?.bundle?.patch;
     if (patch) {
       await fsp.copyFile(path.join(pluginSourceDir, patch), path.join(pluginDestination, patch));

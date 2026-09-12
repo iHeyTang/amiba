@@ -21,6 +21,8 @@ export type ChatRole = "system" | "user" | "assistant" | "tool";
 export interface PluginMessageOrigin {
   kind: "plugin";
   plugin: string;
+  /** Display name supplied by the message producer, never an authorization identity. */
+  senderName?: string;
 }
 
 /**

@@ -49,6 +49,7 @@ export interface DingtalkRobotMessage {
   conversationType?: string;
   senderStaffId?: string;
   senderId?: string;
+  senderNick?: string;
   sessionWebhook?: string;
   sessionWebhookExpiredTime?: number;
 }
@@ -165,6 +166,9 @@ export function translateRobotMessage(msg: unknown): DingtalkInboundTranslation 
       envelope.sender = sender;
     }
 
+    if (typeof record.senderNick === "string" && record.senderNick.trim()) {
+      envelope.metadata = { senderName: record.senderNick.trim() };
+    }
     const translation: DingtalkInboundTranslation = { envelope };
 
     // Rule 6: sessionWebhook/expiry ride alongside, omitted when absent.

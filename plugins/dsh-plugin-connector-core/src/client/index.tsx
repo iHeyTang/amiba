@@ -1,3 +1,5 @@
+import { createConnectorMessageSource } from "./message-source.js";
+import { createExternalSessionGroup } from "./session-group.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime, PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
@@ -99,6 +101,32 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const sectionFiber = ctx.inject(
     ["slots", "remote.amibaConnectors"],
     (injectedCtx) => {
+      const messageSource = createConnectorMessageSource(async () => {
+        const result = await injectedCtx.remote.amibaConnectors.messageSources();
+        if (!result.ok) throw new Error(result.error.message);
+        return result.value;
+      });
+      const disposeMessageSource = injectedCtx.slots.inject("amiba.message.source", () =>
+        injectedCtx.slots.register({
+          name: "amiba.message.source", id: "connector-messages", order: 150,
+          label: () => document.documentElement.lang.toLowerCase().startsWith("zh") ? "外部消息" : "External messages",
+          inject: () => messageSource.face,
+        }, () => null),
+      );
+      const group = createExternalSessionGroup(async ids => {
+        const result = await injectedCtx.remote.amibaConnectors.externalSessions(ids);
+        if (!result.ok) throw new Error(result.error.message);
+        return result.value;
+      });
+      const disposeGroup = injectedCtx.slots.inject("amiba.sessions.list.group", () =>
+        injectedCtx.slots.register({
+          name: "amiba.sessions.list.group",
+          id: "external-messages",
+          order: 150,
+          label: () => document.documentElement.lang.toLowerCase().startsWith("zh") ? "外部消息" : "External messages",
+          inject: () => group.face,
+        }, () => null),
+      );
       const adapter = buildConnectAdapter(injectedCtx.remote.amibaConnectors);
       // `connection` is a client-root service present regardless of this
       // plugin's own `inject` declaration above (mirrors how
@@ -157,6 +185,10 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           ),
       );
       return () => {
+        disposeMessageSource();
+        messageSource.dispose();
+        disposeGroup();
+        group.dispose();
         disposeToolview();
         disposeQuestionSeat();
         disposeSection();

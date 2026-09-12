@@ -46,6 +46,7 @@ function fakeApi(overrides: Partial<ApiLike> = {}): ApiLike {
   return {
     tenantToken: vi.fn(async () => undefined),
     botOpenId: vi.fn(async () => "ou_bot_123"),
+    userDisplayName: vi.fn(async () => undefined),
     sendText: vi.fn(async () => undefined),
     sendCard: vi.fn(async () => undefined),
     addReaction: vi.fn(async () => "reaction_1"),
@@ -1743,4 +1744,51 @@ it("declares explicit tools and pins the account independently of credential rot
   expect(first.identity).toBe(rotated.identity);
   expect(first.identity).not.toBe(other.identity);
   expect(first).not.toHaveProperty("autoStart");
+});
+
+describe("sender display names", () => {
+  const event = (id: string, sender = "ou_user_1") => ({ sender: { sender_id: { open_id: sender } }, message: { message_id: id, chat_id: "oc_1", chat_type: "p2p", message_type: "text", content: '{"text":"你好"}' } });
+  it("attaches and caches the sender name on each message without changing sender identity", async () => {
+    const lookup = vi.fn(async (id: string) => id === "ou_user_1" ? "张三" : "李四");
+    const deps = fakeDeps({ api: fakeApi({ userDisplayName: lookup }) });
+    const handle = fakeHandle();
+    const runtime = await createLarkProvider(deps).start(handle);
+    await deps.wsCallbacks!.onEvent!(event("one"));
+    await deps.wsCallbacks!.onEvent!(event("two"));
+    await deps.wsCallbacks!.onEvent!(event("three", "ou_user_2"));
+    expect(handle.inbound.map(item => item.metadata?.senderName)).toEqual(["张三", "张三", "李四"]);
+    expect(handle.inbound[0]!.sender).toBe("ou_user_1");
+    expect(lookup).toHaveBeenCalledTimes(2);
+    await runtime.stop();
+  });
+  it("still delivers messages when contact access is denied", async () => {
+    const deps = fakeDeps({ api: fakeApi({ userDisplayName: vi.fn(async () => { throw new Error("permission denied"); }) }) });
+    const handle = fakeHandle();
+    const runtime = await createLarkProvider(deps).start(handle);
+    await deps.wsCallbacks!.onEvent!(event("one"));
+    expect(handle.inbound).toHaveLength(1);
+    expect(handle.inbound[0]!.metadata?.senderName).toBeUndefined();
+    await runtime.stop();
+  });
+  it("does not deliver a late profile response after the connection stops", async () => {
+    let resolve!: (name: string) => void;
+    const deps = fakeDeps({ api: fakeApi({ userDisplayName: () => new Promise<string>(done => { resolve = done; }) }) });
+    const handle = fakeHandle();
+    const runtime = await createLarkProvider(deps).start(handle);
+    const incoming = deps.wsCallbacks!.onEvent!(event("late"));
+    await Promise.resolve();
+    await runtime.stop();
+    resolve("张三");
+    await incoming;
+    expect(handle.inbound).toHaveLength(0);
+  });
+  it("uses the real SDK open-id lookup and extracts only the display name", async () => {
+    const get = vi.fn().mockResolvedValue({ code: 0, data: { user: { name: " 张三 ", email: "private" } } });
+    (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({ contact: { user: { get } } }));
+    const api = realLarkDeps.createApiClient(validConfig);
+    expect(await api.userDisplayName("ou_1")).toBe("张三");
+    expect(get).toHaveBeenCalledWith({ path: { user_id: "ou_1" }, params: { user_id_type: "open_id" } });
+    get.mockResolvedValue({ code: 999, msg: "no permission" });
+    await expect(api.userDisplayName("ou_1")).rejects.toThrow("no permission");
+  });
 });

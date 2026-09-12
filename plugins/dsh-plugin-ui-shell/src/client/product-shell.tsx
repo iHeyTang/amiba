@@ -436,7 +436,7 @@ function ProductShellInner({
     messageSources?.getSnapshot ?? (() => EMPTY_MESSAGE_SOURCES),
   );
   const sessionGroupList = useMemo<readonly SessionListGroup[]>(
-    () => sessionGroups.map(({ id, label, claim }) => ({ id, label, claim })),
+    () => sessionGroups.map(({ id, label, claim, title }) => ({ id, label, claim, title })),
     [sessionGroups],
   );
   const messageSourceLabel = useMemo(

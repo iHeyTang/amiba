@@ -1,0 +1,5 @@
+Based on OpenAI Codex skill-creator.
+Source: https://github.com/openai/codex/tree/84aa75204ad604bcf498df180d128181c89b2f0b/codex-rs/skills/src/assets/samples/skill-creator
+License: Apache-2.0 (see license.txt).
+Amiba changes: DSH entrypoint, connector authoring guidance, and DSH validation.
+Upstream reference and Python helpers are preserved unmodified.

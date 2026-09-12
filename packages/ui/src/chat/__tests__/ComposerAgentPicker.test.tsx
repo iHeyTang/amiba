@@ -13,8 +13,8 @@ vi.mock("@amiba/app-runtime/core", () => ({
 
 vi.mock("@amiba/i18n", () => ({
   useT: () => ({
-    t: (key: string) =>
-      key === "sidepanel.agentPicker.defaultProfile" ? "Amiba" : key,
+    t: (key: string, values?: { name?: string }) =>
+      key === "sidepanel.agentPicker.defaultProfile" ? "Amiba" : values?.name ? `${key}: ${values.name}` : key,
   }),
 }));
 
@@ -52,10 +52,37 @@ describe("ComposerAgentPicker", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "sidepanel.agentPicker.executionIdentity",
     });
-    await user.click(within(dialog).getByRole("button", { name: /资料研究员/ }));
+    await user.click(within(dialog).getByRole("button", { name: "资料研究员 Investigates sources" }));
 
     expect(onChange).toHaveBeenCalledWith({ profileId: "researcher" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens current and alternative identity details without changing the selection", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ComposerAgentPicker onChange={onChange} value={{ profileId: "default" }} />);
+    await user.click(await screen.findByRole("button", { name: "sidepanel.agentPicker.executionIdentity: Amiba" }));
+    const picker = await screen.findByRole("dialog", { name: "sidepanel.agentPicker.executionIdentity" });
+    const selection = within(picker).getByRole("button", { name: "Amiba General work" });
+    expect(selection).toHaveAttribute("aria-current", "true");
+    const info = within(picker).getByRole("button", { name: "sidepanel.agentPicker.details.openFor: Amiba" });
+    expect(info.querySelector(".lucide-check")).toHaveClass("group-hover/identity:opacity-0");
+    expect(info.querySelector(".lucide-info")).toHaveClass("group-hover/identity:opacity-100");
+    await user.hover(selection);
+    await user.click(info);
+    const details = await screen.findByRole("dialog", { name: "Amiba" });
+    expect(details).toHaveAttribute("data-agent-details-modal");
+    expect(within(details).getByText("General work")).toBeVisible();
+    expect(within(details).getByText("default")).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Amiba" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "sidepanel.agentPicker.executionIdentity" })).toBeVisible();
+    expect(info).toHaveFocus();
+    await user.click(within(picker).getByRole("button", { name: "sidepanel.agentPicker.details.openFor: 资料研究员" }));
+    expect(await screen.findByRole("dialog", { name: "资料研究员" })).toHaveTextContent("Investigates sources");
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("keeps the existing modal style and supports a transparent overlay", async () => {
