@@ -4,13 +4,15 @@
 
 ## 本地构建
 
-使用 Node 22.19+ 和 pnpm 9.12；首次运行 `pnpm install`。运行时包含独立 Node 和原生模块，必须在目标操作系统和 Node 架构下准备依赖与构建。
+使用 Git、Node 22.19+ 和 pnpm 9.12；首次运行 `pnpm install`。运行时包含独立 Node 和原生模块，必须在目标操作系统和 Node 架构下准备依赖与构建。
 
 - Apple Silicon：`pnpm release:build darwin-arm64`
 - Intel Mac：`pnpm release:build darwin-x64`
 - Windows x64：`pnpm release:build win32-x64`
 
 Apple Silicon 上的 Intel 构建可在独立 checkout 中，通过 Rosetta 运行 x64 Node 和 pnpm；不要复用 ARM 的 node_modules、运行时目录或输出目录。Windows 请使用本地 Windows x64 机器或 VM；当前没有验证 Mac 上 Wine 交叉编译原生依赖。
+
+如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。正式发布模式要求代码签名成功。
 
 构建前设置环境变量（Windows 使用 PowerShell 的 `$env:NAME='value'`）：
 

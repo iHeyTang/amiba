@@ -27,7 +27,7 @@ export function validateMetadata(dir, target, version) {
   }
   return info;
 }
-export function recordArtifacts(dir, target, version) {
+export function recordArtifacts(dir, target, version, distributable = true) {
   validateMetadata(dir, target, version);
   const metadata = metadataName(target);
   const files = fs.readdirSync(dir).filter(name => name.startsWith(`Amiba-${version}-`) && /\.(dmg|zip|exe|blockmap)$/.test(name));
@@ -35,12 +35,13 @@ export function recordArtifacts(dir, target, version) {
     if (!files.some(name => name.endsWith(extension))) throw new Error(`Missing ${extension} installer`);
   }
   files.push(metadata);
-  const manifest = { target, version, files: files.map(name => ({ name, sha512: digest(path.join(dir, name)) })) };
+  const manifest = { target, version, distributable, files: files.map(name => ({ name, sha512: digest(path.join(dir, name)) })) };
   fs.writeFileSync(path.join(dir, 'release-manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
 export function verifiedArtifacts(dir, target, version) {
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json'), 'utf8'));
+  if (manifest.distributable !== true) throw new Error('Local test packages cannot be uploaded as releases');
   if (manifest.target !== target || manifest.version !== version) throw new Error('Rebuild: artifact manifest target/version mismatch');
   if (!Array.isArray(manifest.files) || !manifest.files.some(f => f.name === metadataName(target))) throw new Error('Update metadata missing');
   const files = manifest.files.map(({ name, sha512 }) => {
