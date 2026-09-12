@@ -374,3 +374,31 @@ verify that a passive run's stream event and recovered snapshot preserve the
 same exact number; the full engine test file passes. Shell typecheck passed.
 The footer renderer still needs to use this metadata to read the corresponding
 engine TurnLocation, handle missing history and avoid duplicate placement.
+
+### Turn-tail render adapter: visible reply integration verified
+
+Root now declares the official session/chain slot and forwards renderSlotChain.
+The adapter resolves the actual session face, subscribes with bound methods, reads
+the exact timeline TurnLocation by runtimeTurn, and uses official turn-tail data
+for the closing seq (or turn/end seq when no closing assistant exists). The file
+opener delegates to the existing workbench path behavior. No Cordis context is
+passed into UI components.
+
+Message rendering places the extension after the last visible assistant reply
+with that exact engine turn number, before its action contribution. The owner
+lookup does not require assistantMessageId; execution-only presentation anchors
+remain to be wired. It adds no wrapper; all-declined chains
+remain empty. Missing data and open turns render nothing. Three adapter tests and
+41 message chrome tests pass, including exact reference/opener forwarding,
+subscription disposal, duplicate prevention and unchanged empty-slot DOM. Shell
+typecheck and the full Desktop production build passed.
+
+The real installed Desktop fixture writes a deterministic turn through the Host
+session log, using only its temporary workspace. The contributed chain displays
+after the actual historical reply, receives the identical runtime TurnLocation
+and closing seq, and disappears cleanly on unregister. Existing settings,
+directory, ZIP, view, HMR and detach checks passed in that same run.
+
+Remaining: live turn/data updates, actual file opening through the contribution,
+execution-only presentation, and completed turns with no visible reply at all. Do not claim full turn-tail support
+until that placement and end-to-end validation are resolved.

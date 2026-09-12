@@ -1457,3 +1457,24 @@ it("adds actions only for the completed canonical assistant and preserves empty-
   rerender(<MessageTurns messages={[{...messages[0]!,assistantMessageId:undefined}]} assistantActions={action}/>);
   expect(screen.queryByRole("button",{name:"Action for canonical-id"})).not.toBeInTheDocument();
 });
+
+it("places one tail per exact engine turn and preserves empty-slot DOM", () => {
+  const messages: UiMessage[] = [
+    {uiId:"u1",role:"user",content:"first"},
+    {uiId:"a1",role:"assistant",content:"part one",runtimeTurn:7},
+    {uiId:"u2",role:"user",content:"follow up"},
+    {uiId:"a2",role:"assistant",content:"part two",runtimeTurn:7},
+  ];
+  const openFile = vi.fn();
+  const {container,rerender} = render(<MessageTurns messages={messages}/>);
+  const baseline = container.innerHTML;
+  rerender(<MessageTurns messages={messages} openTurnFile={openFile} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  const tail = vi.fn((turn:number,open:(path:string)=>void)=><button onClick={()=>open("report.html")}>Tail {turn}</button>);
+  rerender(<MessageTurns messages={messages} openTurnFile={openFile} turnTail={tail}/>);
+  expect(screen.getAllByRole("button",{name:"Tail 7"})).toHaveLength(1);
+  expect(tail).toHaveBeenCalledTimes(1);
+  expect(tail).toHaveBeenCalledWith(7,openFile);
+  rerender(<MessageTurns messages={[...messages.slice(0,-1),{...messages.at(-1)!,streaming:true}]} openTurnFile={openFile} turnTail={tail}/>);
+  expect(screen.queryByRole("button",{name:"Tail 7"})).toBeNull();
+});

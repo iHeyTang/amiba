@@ -229,6 +229,7 @@ export interface FullScreenChatViewProps {
      * runtime) and every row renders Amiba's own tool chip.
      */
     assistantActions?: (messageId: string) => ReactNode;
+    turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's keyed

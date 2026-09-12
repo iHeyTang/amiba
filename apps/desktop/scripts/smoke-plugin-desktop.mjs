@@ -132,7 +132,10 @@ try {
     await writeFile(path.join(project, "src/native.ts"), nativeSource(1));
     await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs','electron']}}}`);
   }
-  const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
+  // Write only to this smoke's temporary session, through the real Host log.
+  const fixtureCwd = await realpath(profile);
+  const turnFixture = process.argv.includes("--compat") ? `ctx.on('session/created',(s:any)=>{if(!${JSON.stringify([profile, fixtureCwd])}.includes(s.header.cwd)||s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===7))return;s.append('turn/start',{turn:7});s.append('user/message',{id:'compat-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_TURN_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:7,step:1});s.append('assistant/message',{turn:7,step:1,message:{id:'compat-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_TURN_REPLY'}]}},{surfaceOp:'append'});s.append('step/end',{turn:7,step:1});s.append('turn/end',{turn:7,reason:{kind:'completed'}});console.log('AMIBA_PROBE_TURN '+s.id);});` : "";
+  const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { ${turnFixture} let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
   await writeFile(path.join(project, "src/index.ts"), source(1));
   await writeFile(path.join(project, "src/client.ts"), clientSource(1));
   cli = spawn(process.execPath, [process.env.AMIBA_SMOKE_CLI || path.join(root, "apps/cli/dist/cli.js"), "--dsh-home", home, "plugin", "dev"], { cwd: project, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"] });
@@ -348,6 +351,13 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    await evaluate(`window.__turnTailOff=window.__probeCtx.slots.register({name:'conversation.chat.turnTail',select:owner=>owner.turn.turn===7?true:null},(owner)=>{window.__turnTailOwner=owner;return 'COMPAT_TURN_TAIL:'+owner.turn.turn+':'+owner.seq;});void 0`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && document.body.textContent.includes('COMPAT_TURN_TAIL:7:')"));
+    assert.ok(await evaluate("window.__turnTailOwner.turn===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(7)"), "turn-tail receives the exact engine timeline object");
+    assert.ok(await evaluate("window.__turnTailOwner.seq===window.__turnTailOwner.turn.data.get('turn-tail').closing.finalNode.seq && typeof window.__turnTailOwner.openFile==='function'"), "tail uses the closing assistant sequence and a file opener");
+    await evaluate("window.__turnTailOff();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TURN_TAIL:') && document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    console.log("Turn-tail passed actual Host history, exact engine turn/closing sequence, and dynamic mount/unmount.");
     let projectFolder = path.join(profile, "directory-project");
     let extraFolder = path.join(profile, "directory-extra");
     await mkdir(projectFolder, { recursive: true });

@@ -1686,6 +1686,8 @@ export function UserStickyBubble({
  * stays visible — Cursor-style.
  */
 export function MessageTurns({
+  turnTail,
+  openTurnFile,
   assistantActions,
   messages,
   sessionId,
@@ -1696,6 +1698,8 @@ export function MessageTurns({
   restorableTurnOrdinals,
 }: {
   assistantActions?: (messageId: string) => ReactNode;
+  turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+  openTurnFile?: (path: string) => void;
   messages: UiMessage[];
   sessionId?: string;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
@@ -1719,6 +1723,11 @@ export function MessageTurns({
     replies: UiMessage[];
     userOrdinal: number;
   };
+  const lastMessageForTurn = new Map<number, string>();
+  for (const message of messages) {
+    if (message.role === "assistant" && message.runtimeTurn !== undefined)
+      lastMessageForTurn.set(message.runtimeTurn, message.uiId);
+  }
   const turns: Turn[] = [];
   let cur: Turn | null = null;
   let userOrdinal = 0;
@@ -1803,6 +1812,8 @@ export function MessageTurns({
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />
+                {item.message.role === "assistant" && !item.message.streaming && item.message.runtimeTurn !== undefined && lastMessageForTurn.get(item.message.runtimeTurn) === item.message.uiId && openTurnFile
+                  ? turnTail?.(item.message.runtimeTurn, openTurnFile) : null}
                 {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
                   ? assistantActions?.(item.message.assistantMessageId) : null}
                 {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}

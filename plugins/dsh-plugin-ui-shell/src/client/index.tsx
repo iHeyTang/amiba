@@ -265,6 +265,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
+    conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
     prepareConversation: (sessionId: string) => Promise<string>;
   };
@@ -296,9 +297,11 @@ function AmibaRoot({
   workbenchSource,
   directoryFlows,
   conversationViews,
+  conversationSource,
   surfaces,
   reportMarkdown,
   prepareConversation,
+  renderSlotChain,
   useSessions,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
@@ -315,6 +318,8 @@ function AmibaRoot({
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
+      renderSlotChain={renderSlotChain}
+      conversationSource={conversationSource}
       sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
@@ -618,6 +623,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchSource,
           directoryFlows,
           conversationViews,
+          conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
           surfaces,
           reportMarkdown,
           prepareConversation,
@@ -633,6 +639,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           messageSources,
         }),
         children: {
+          "conversation.chat.turnTail": { kind: "chain", scope: "session" },
           "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
