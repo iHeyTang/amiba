@@ -349,3 +349,36 @@ it("routes submission only to the latest live binding for the addressed session"
   off();
   expect(bridge.submitInput("s1")).toBe(false);
 });
+
+describe("official browser draft image registrations", () => {
+  it("releases exactly once through the creating service even after service replacement", () => {
+    const file = { name: "original.png" } as File;
+    const image = { kind: "image", id: "browser-id", file, previewUrl: "blob:original" };
+    const first = { createDraftImages: vi.fn(() => [image]), releaseDraftImage: vi.fn() };
+    const second = { createDraftImages: vi.fn(), releaseDraftImage: vi.fn() };
+    let service: unknown = first;
+    const bridge = createInputTriggerBridge({
+      images: () => service,
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    const registration = bridge.registerDraftImage!(file)!;
+    expect(first.createDraftImages).toHaveBeenCalledWith([file]);
+    expect(registration.image).toBe(image);
+    service = second;
+    registration.release();
+    registration.release();
+    expect(first.releaseDraftImage).toHaveBeenCalledTimes(1);
+    expect(first.releaseDraftImage).toHaveBeenCalledWith("browser-id");
+    expect(second.releaseDraftImage).not.toHaveBeenCalled();
+  });
+
+  it("does not invent draft descriptors when the concrete registry is unavailable", () => {
+    const bridge = createInputTriggerBridge({
+      images: () => ({ send() {} }),
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    expect(bridge.registerDraftImage!({} as File)).toBeUndefined();
+  });
+});

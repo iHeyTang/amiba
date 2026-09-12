@@ -35,12 +35,15 @@ import type {
 } from "@amiba/ui";
 import type {
   CommandClaim,
+  ComposerAttachment,
   InputTriggerSource,
   SubmitOutcome,
 } from "@amiba/extension-sdk";
 
 /** Everything the bridge needs from the client root context. */
 export interface InputTriggerBridgeDeps {
+  /** Browser image registry implementing the pinned image operations. */
+  images?(): unknown;
   /** Resolve a session-scope ctx, or undefined for an unmaterialized session. */
   scopeOf(sessionId: string): ClientContext | undefined;
   /** The official `ctx.inputTriggers` face, absent when the row is disabled. */
@@ -127,6 +130,23 @@ export function createInputTriggerBridge(
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    registerDraftImage(file) {
+      const conversation = deps.images?.() as Partial<{
+        createDraftImages(files: readonly File[]): readonly ComposerAttachment[];
+        releaseDraftImage(id: ComposerAttachment["id"]): void;
+      }> | undefined;
+      if (typeof conversation?.createDraftImages !== "function" ||
+          typeof conversation.releaseDraftImage !== "function") return undefined;
+      const release = conversation.releaseDraftImage.bind(conversation);
+      const image = conversation.createDraftImages([file])[0];
+      if (!image) return undefined;
+      let live = true;
+      return { image, release() {
+        if (!live) return;
+        live = false;
+        release(image.id);
+      } };
+    },
     bindSubmit(sessionId, submit) {
       const binding = { submit };
       submitters.set(sessionId, binding);

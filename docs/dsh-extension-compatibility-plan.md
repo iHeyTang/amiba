@@ -987,3 +987,13 @@ pipelines retain mounted component state.
 - 命令夹具保持待完成 Promise，核对真实 submitting 阶段后才释放；成功后原编辑器清空并回到 plain。空草稿以及未绑定会话的提交均拒绝。夹具只注册测试命令，不调用外部模型。
 - `/tmp/amiba-input-submit-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-input-submit-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。新增入口用例、原图命令、全部四种输入阶段、真实子会话执行与取消、只读/重载、现有设置/目录/Markdown/插件生命周期回归同轮通过。
 - 覆盖前一步产品提交入口改动；本步没有改产品样式、布局或发送行为。官方唯一 input/inputActions 提供者、草稿附件映射和剩余全量兼容项仍待完成。
+
+### 原生附件进入官方草稿图片注册表（2026-09-13）
+
+- 原 ChatSurface 的附件入口现在将实际浏览器 File 交给 composerImages.createDraftImages，并在 hook 内以原 UI 芯片 ID 保存注册描述；官方 DraftAttachmentId 与 Host staging attachmentId 分开。原附件展示、上传、命令原图读取和普通发送仍走原路径。
+- 注册资源随芯片移除、直接清空附件状态、上传失败或输入器卸载释放；上传中移除仍删除晚到的 Host 暂存文件；等待会话 ID 时卸载不会事后注册浏览器资源。释放闭包绑定创建该图片的服务，服务替换后也不向新实例释放旧图片，重复释放无副作用。
+- 实际桌面未创建官方 ConversationController，仅注册官方无界面节点；首次桌面用例因等待不存在的 conversation 服务而失败。已改为独立 composerImages 注册表，按实际 rc.2 的图片方法契约提供创建、顺序读取、原图序列化及释放，不能据此宣称完整 conversation 服务已存在。官方不接受的原生图片格式保留原上传能力。注册描述仍持有原 File，绝不以缩略图代替。
+- 5 项附件生命周期、26 项原输入管线和 20 项 Shell 桥接测试通过（51 项），UI/Shell 类型检查通过。完整官方 input/imageIds 提供者、官方草稿向原输入器添加及队列恢复仍未由此完成。
+
+- 注册表新增整批 MIME 验证、URL 分配中途失败回滚、原始字节与顺序验证、已释放 ID 序列化拒绝和 dispose 后拒绝创建测试；3 项通过，合计相关测试 54 项。前述“官方唯一 input 提供者”是官方完整 ui-conversation 启动后的约束，不能误写成 Amiba 当前已存在该提供者；当前仅有原生 composerInputs 桥接，后续需建立真实 provider。
+- 修正后的 `/tmp/amiba-draft-image-registry-desktop-build.log` 完整构建退出 0，`/tmp/amiba-draft-image-registry-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实 PNG 经原文件输入上传，确认兼容注册表持有原 File、正确大小和 blob 预览，读取 File 全部字节与上传数据一致；原命令成功后注册项消失。既有图片命令、输入提交、子会话执行与停止、只读/重载及完整兼容回归同轮通过。

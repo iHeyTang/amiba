@@ -16,6 +16,7 @@
 
 import type {
   ClientSessionContext,
+  ComposerAttachment,
   CommandClaim,
   ConsumeTokenRequest,
   InputTriggerSource,
@@ -143,6 +144,8 @@ export interface TriggerEditorOps {
  * runtime.
  */
 export interface ComposerTriggerRuntime {
+  /** Register an original browser image in the official runtime registry. */
+  registerDraftImage?(file: File): { image: ComposerAttachment; release(): void } | undefined;
   bindSubmit?(sessionId: string, submit: () => boolean): () => void;
   /** Official source objects projected onto an editor without a DSH session. */
   draftSources?(): readonly import("@amiba/extension-sdk").InputTriggerSource[];

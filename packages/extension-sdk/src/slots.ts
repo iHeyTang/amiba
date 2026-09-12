@@ -190,7 +190,7 @@ export type SettingsOwnerDerivationsHold = AssertAllTrue<{
  * interfaces, so the anchor is the header entry's injected face and every
  * adopted owner contract is re-derived below via {@link OwnerOf}.
  */
-export type { ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
+export type { ComposerAttachment, ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 /**
  * Official owner contract of `conversation.session.header.utilities`

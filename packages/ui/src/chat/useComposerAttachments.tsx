@@ -29,6 +29,8 @@ import {
   readFileAsAttachment,
   type Attachment,
 } from "@amiba/app-runtime/core"
+import type { ComposerTriggerRuntime } from "./composer/triggers/contracts"
+import type { ComposerAttachment } from "@amiba/extension-sdk"
 import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
 import { cn } from "../primitives"
@@ -36,6 +38,7 @@ import { shortId } from "@amiba/app-runtime/utils"
 import { Plus } from "lucide-react"
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -56,6 +59,8 @@ export const ATTACHMENT_INPUT_ACCEPT =
   "image/*,application/pdf,text/*,.md,.csv,.json,.yaml,.yml,.toml,.xml,.html,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.swift,.kt,.scala,.sql,.sh,.zsh,.bash,.fish,.dockerfile,.env"
 
 export interface UseComposerAttachmentsOptions {
+  registerDraftImage?: ComposerTriggerRuntime["registerDraftImage"]
+
   /**
    * Resolve (or create) the session id the uploaded bytes should be
    * scoped under. Called once per `addFiles` invocation. Surfaces with
@@ -67,6 +72,8 @@ export interface UseComposerAttachmentsOptions {
 
 export interface UseComposerAttachmentsResult {
   attachments: Attachment[]
+  /** Browser-owned images only; never Host staging IDs. */
+  draftImages?: readonly ComposerAttachment[]
   setAttachments: Dispatch<SetStateAction<Attachment[]>>
   /** True while any chip is still uploading. */
   attachmentUploading: boolean
@@ -124,6 +131,25 @@ export function useComposerAttachments(
   opts: UseComposerAttachmentsOptions,
 ): UseComposerAttachmentsResult {
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const mounted = useRef(true)
+  const draftImages = useRef(new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["registerDraftImage"]>>>>())
+  useEffect(() => {
+    const retained = new Set(attachments.map(a => a.uiId))
+    for (const [uiId, registration] of draftImages.current) {
+      if (!retained.has(uiId)) {
+        draftImages.current.delete(uiId)
+        registration.release()
+      }
+    }
+  }, [attachments])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      for (const registration of draftImages.current.values()) registration.release()
+      draftImages.current.clear()
+    }
+  }, [])
   const [attachmentBusy, setAttachmentBusy] = useState(false)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -154,6 +180,17 @@ export function useComposerAttachments(
           uploading: true,
         }))
         pendingUiIds.push(...pending.map((p) => p.uiId))
+        for (let i = 0; i < pending.length; i += 1) {
+          if (!mounted.current || pending[i].kind !== "image" || !opts.registerDraftImage) continue
+          try {
+            const registration = opts.registerDraftImage(files[i])
+            if (registration) draftImages.current.set(pending[i].uiId, registration)
+          } catch (error) {
+            // Native attachment formats remain available even when the
+            // pinned official image registry cannot represent that MIME.
+            console.warn("[composer] official draft image registration unavailable", error)
+          }
+        }
         setAttachments((prev) => [...prev, ...pending])
         for (let i = 0; i < files.length; i += 1) {
           const f = files[i]
@@ -300,6 +337,10 @@ export function useComposerAttachments(
 
   return {
     attachments,
+    draftImages: attachments.flatMap(a => {
+      const registered = draftImages.current.get(a.uiId)
+      return registered ? [registered.image] : []
+    }),
     setAttachments,
     attachmentUploading,
     attachmentBusy,

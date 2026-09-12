@@ -554,6 +554,7 @@ export default function ChatSurface({
   // only `runChatTurn()` may mint the real conversation id.
   const draftUploadSessionRef = useRef(shortId("draft"));
   const att = useComposerAttachments({
+    registerDraftImage: triggerRuntime?.registerDraftImage,
     getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
   });
   const {

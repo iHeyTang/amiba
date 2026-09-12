@@ -1,3 +1,4 @@
+import { createDraftImageRegistry } from "./draft-image-registry.js";
 import { registerConversationNodes } from "@deepseek-ai/dsh-client-ui-conversation/headless";
 import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
@@ -382,6 +383,7 @@ function resolveSectionNavIcon(
 declare module "@deepseek-ai/cordis" {
   interface Context {
     layout: AmibaLayoutService;
+    composerImages: ReturnType<typeof createDraftImageRegistry>;
     composerInputs: AmibaInputTriggerBridge;
     amibaSessionVisibility: AmibaSessionVisibility;
   }
@@ -545,7 +547,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // The OFFICIAL input-trigger pipeline. Services are resolved lazily on
     // every call (`ctx.get`) so boot order stays free and a disabled row is
     // simply an absent service rather than a crash.
+    const composerImages = createDraftImageRegistry();
+    ctx.effect(() => {
+      const off = ctx.reflect.provide("composerImages", composerImages);
+      return () => { off(); composerImages.dispose(); };
+    }, "native composer draft images");
     const triggerRuntime = createInputTriggerBridge({
+      images: () => composerImages,
       scopeOf: (sessionId) =>
         ctx.sessions.scope(sessionId as never) as unknown as
           | ClientContext
