@@ -537,8 +537,13 @@ try {
       await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
       assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor(window.__compatSessionId).onSpace()"),true);
       await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.occurrences.length===1"));
-      const originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      let originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
       assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,originalDraft.occurrences[0][k]])),expectedReference);
+      const mixedDraft = originalDraft.draft + ' literal @[dsh.reference:missing-example|id|literal|clip]';
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.editInputDraft(window.__compatSessionId,${JSON.stringify(mixedDraft)})`),true);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(mixedDraft)}`));
+      originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.equal(originalDraft.occurrences.length,1);
       await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
       assert.ok((await evaluate("window.__otherDraftFrames")).filter(value=>value!==null).every(value=>value===''), "new session must never publish the previous session draft");
@@ -555,6 +560,7 @@ try {
       await evaluate(sourceCode);
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
       const restored = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.equal(restored.occurrences.length,1,"literal token text must not become an extra reference after renderer reload");
       assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,restored.occurrences[0][k]])),expectedReference);
       await writeFile(path.join(tmpdir(),"amiba-resident-reference-draft.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
       await evaluate(`window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);

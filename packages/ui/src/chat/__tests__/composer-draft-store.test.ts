@@ -30,7 +30,7 @@ it("restores lossless canonical tokens and keeps each session's setters addresse
   const off = restored.subscribe(()=>{});
   await tick();
   expect(restored.getSnapshot()).toBe(text + "!");
-  expect(values["amiba.composer.draft.one"]).toEqual({version:1,text:text+"!"});
+  expect(values["amiba.composer.draft.one"]).toEqual({version:2,...one.getDocument()});
   off(); offOne(); offTwo();
 });
 
@@ -59,7 +59,7 @@ it("serializes writes so an older completion cannot win over the new draft", asy
   await tick();
   expect(adapter.set).toHaveBeenCalledTimes(1);
   finish(); await tick();
-  expect(adapter.set).toHaveBeenLastCalledWith({"amiba.composer.draft.session":{version:1,text:"second"}});
+  expect(adapter.set).toHaveBeenLastCalledWith({"amiba.composer.draft.session":{version:2,text:"second",parts:[{kind:"text",text:"second"}]}});
   finish(); await tick();
   expect(adapter.remove).toHaveBeenCalledWith("amiba.composer.draft.session");
   expect(source.getSnapshot()).toBe(""); off();
@@ -104,4 +104,39 @@ it("does not start an obsolete disk restore when an offscreen edit is still savi
   expect(adapter.get).not.toHaveBeenCalled();
   await tick(); finish(); await tick();
   expect(source.getSnapshot()).toBe("offscreen edit"); off();
+});
+
+
+it("persists literal token text separately from real references and keeps editor echoes lossless", async () => {
+  const { adapter } = storage();
+  const source = createComposerDraftSource(adapter, "session");
+  const token = "@[dsh.reference:files|id|Label|clip]";
+  source.setParts([{ kind: "text", text: token }]);
+  const document = source.getDocument();
+  source.set(token); // onChange echoes the editor's canonical string.
+  expect(source.getDocument()).toBe(document);
+  source.set(previous => previous + "!");
+  expect(source.getDocument().parts).toEqual([{ kind: "text", text: token + "!" }]);
+  await tick();
+  const restored = createComposerDraftSource(adapter, "session");
+  const off = restored.subscribe(() => {});
+  await tick();
+  expect(restored.getDocument()).toEqual(source.getDocument());
+  expect(restored.getDocument().parts[0].kind).toBe("text");
+  off();
+});
+
+it("publishes a node-kind change even when the canonical text stays identical", () => {
+  const source = createComposerDraftSource();
+  const token = "@[dsh.reference:files|id|Label|clip]";
+  source.set(token);
+  const before = source.getDocument();
+  const changed = vi.fn();
+  source.subscribe(changed);
+  source.setParts([{ kind: "text", text: token }]);
+  expect(source.getSnapshot()).toBe(token);
+  expect(source.getDocument()).not.toBe(before);
+  expect(changed).toHaveBeenCalledTimes(1);
+  source.setParts([{ kind: "text", text: token }]);
+  expect(changed).toHaveBeenCalledTimes(1);
 });

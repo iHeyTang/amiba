@@ -1,3 +1,4 @@
+import type { ComposerDraftSource } from "../composer-draft-store"
 import { LexicalComposer } from "@lexical/react/LexicalComposer"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
@@ -32,6 +33,7 @@ function EditableStatePlugin({ disabled }: { disabled?: boolean }) {
 
 export interface RichComposerEditorProps {
   value: string
+  draftSource?: ComposerDraftSource
   onChange: (next: string) => void
   placeholder?: string
   disabled?: boolean
@@ -77,6 +79,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
   function RichComposerEditor(props, ref) {
     const {
       value,
+      draftSource,
       onChange,
       placeholder,
       disabled,
@@ -134,7 +137,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             maxHeightPx={maxHeightPx ?? 200}
             layoutKey={className}
           />
-          <MentionSerializePlugin value={value} onChange={onChange} />
+          <MentionSerializePlugin value={value} onChange={onChange} draftSource={draftSource} />
           {onSubmitChord && !disabled && (
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}

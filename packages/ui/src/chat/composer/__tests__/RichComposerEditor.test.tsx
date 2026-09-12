@@ -1,3 +1,4 @@
+import { createComposerDraftSource } from "../../composer-draft-store"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { render, screen, waitFor } from "@testing-library/react"
 import {
@@ -206,3 +207,21 @@ describe("RichComposerEditor", () => {
     expect(ref.current?.getTextarea()).toBeNull()
   })
 })
+
+
+it("switches identical canonical strings without confusing literal text with a reference", async () => {
+  const literal = createComposerDraftSource(), reference = createComposerDraftSource();
+  const token = "@[dsh.reference:files|id|Label|clip]";
+  literal.setParts([{ kind: "text", text: token }]);
+  reference.set(token);
+  const ref = createRef<RichComposerHandle>();
+  const { rerender } = render(<RichComposerEditor ref={ref} value={token} draftSource={literal} onChange={literal.set} />);
+  await waitFor(() => expect(ref.current?.getParts?.()).toEqual([{ kind: "text", text: token }]));
+  const editor = screen.getByRole("textbox");
+  rerender(<RichComposerEditor ref={ref} value={token} draftSource={reference} onChange={reference.set} />);
+  await waitFor(() => expect(ref.current?.getParts?.()[0].kind).toBe("mention"));
+  expect(screen.getByRole("textbox")).toBe(editor);
+  rerender(<RichComposerEditor ref={ref} value={token} draftSource={literal} onChange={literal.set} />);
+  await waitFor(() => expect(ref.current?.getParts?.()).toEqual([{ kind: "text", text: token }]));
+  expect(screen.getByRole("textbox")).toBe(editor);
+});

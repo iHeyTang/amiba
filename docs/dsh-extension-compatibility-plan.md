@@ -1194,3 +1194,14 @@ pipelines retain mounted component state.
 - 真实 Lexical 节点及完整 Composer 测试区分同样 token 文本的字面内容与真实引用，验证只有真实引用被解析、普通文本按原样提交。44 项编辑器、触发管线及解析测试通过（/tmp/amiba-structured-submit-tests.log），UI 类型检查通过（/tmp/amiba-structured-submit-types.log）。
 - 该分段快照目前接到发送路径，尚未替代 version:1 的字符串草稿保存；跨重载保留字面 token 文本与引用的区别，以及离屏编辑共享同一分段状态仍需继续实现，不能据此宣称完整驻留输入完成。
 - 完整 Desktop 构建通过（/tmp/amiba-structured-submit-build.log）。首轮桌面日志 /tmp/amiba-structured-submit-smoke.log 中，输入 token 文本打开了原 @ 候选菜单，Enter 被菜单处理，尚未触发发送；探针改用官方 composerInputs.submitInput 进入原普通发送路径，未改变键盘行为。最终 /tmp/amiba-structured-submit-smoke2.log 退出 0，真实模型适配器收到完全一致的 COMPAT_LITERAL_ 文本；同时通过所有既有兼容项、普通和嵌套子会话的真实 Host 冷重启验证。
+
+
+### 混合草稿的结构化持久化（2026-09-13）
+
+- 原 v1 只保存 token 字符串，无法区分用户输入的普通 token 文字和真正的引用节点。本轮改为 version:2 文档，分别保存 text / mention 片段及完整引用字段；读取 v1 时保留旧解释方式，读取 v2 时不从普通文字推断引用。格式错误或不支持的版本忽略，原串行保存、读取代次和异步编辑隔离继续保留。
+- 原 ChatSurface、Composer 和 RichComposerEditor 共享按会话驻留的不可变文档。编辑器直接读取实际节点，字符串 onChange 回写不重复解析；旧字符串 setter 只解释变更区，保留未编辑的普通文字及引用身份。初始化、切换或磁盘恢复使用带标记的原异步 Lexical 更新，避免恢复更新反向覆盖其他会话。
+- 相同 canonical 字符串也可能由不同节点组成。文档变化直接取消旧引用序列化，提交前再次检查实际节点；触发修订号也读取结构身份，使旧触发范围失效。新增测试覆盖引用变成同文普通文字、延迟 codec 完成后不发送旧结果，并确认随后能原样发送普通文字。
+- 草稿文档/存储、真实 RichComposerEditor、触发管线及节点读取合计 55 项测试通过（/tmp/amiba-document-draft-tests5.log）；UI 类型检查通过（/tmp/amiba-document-draft-types3.log），完整 Desktop 构建通过（/tmp/amiba-document-draft-build2.log）。
+- 真实 Desktop 探针使用官方触发源插入含中文、Emoji、分隔符和尾反斜杠的引用，再通过公开编辑接口追加形似引用的普通文字。切换会话和 renderer reload 后确认仅有一个真实 occurrence，原引用逐字段一致、普通文字保留，另一会话不出现上一会话草稿；旧修订号写入仍拒绝，显式清空仍有效。
+- 最终组合回归 /tmp/amiba-document-draft-smoke.log 退出 0，包含动态 Cordis、轨迹正常配置启停、命令、图片、输入状态、真实子会话及嵌套子会话 Host 冷重启，以及插件开发生命周期。已查看 amiba-resident-reference-draft.png，原输入框和引用样式保持；四个输入扩展区域卸载后的原编辑器、卡片尺寸及样式检查通过。
+- 本轮不等于完整 useInput 实现：未挂载输入器的公开 inputActions、图片驻留、队列编辑/恢复和完整 phase 状态仍需适配。v2 不持久化公开 occurrenceId；发送准备失败后的草稿恢复仍使用原字符串链路，需另行统一结构化恢复语义。

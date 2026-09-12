@@ -40,6 +40,7 @@ import { useComposerAttachments } from "../../useComposerAttachments";
 import { detectTrigger } from "../triggers/detect";
 
 import { Composer } from "../../Composer";
+import { createComposerDraftSource, type ComposerDraftSource } from "../../composer-draft-store";
 import { OfficialTriggerMenu } from "../triggers/OfficialTriggerMenu";
 import { sourceToProvider } from "../providers/source-adapter";
 import { CommandClaimStore } from "../triggers/claim";
@@ -197,6 +198,7 @@ function runtimeFor(controller: ReturnType<typeof controllerDouble>): ComposerTr
 
 /** Drive the composer as a controlled input, as every real surface does. */
 function ControlledComposer(props: {
+  draftSource?: ComposerDraftSource;
   runtime?: ComposerTriggerRuntime;
   sessionId?: string;
   onSubmit: (text: string) => void;
@@ -225,6 +227,7 @@ function ControlledComposer(props: {
         props.seat && props.controller ? props.seat(props.controller) : undefined
       }
       mentionProviders={props.mentionProviders}
+      draftSource={props.draftSource}
       onChange={setValue}
       onSubmit={props.onSubmit}
       permissionSessionId={props.sessionId}
@@ -757,4 +760,47 @@ it("submits token-shaped literal text without invoking an official reference cod
   });
   await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(text));
   expect(serialize).not.toHaveBeenCalled();
+});
+
+
+it("cancels reference serialization when identical token text becomes literal", async () => {
+  const text = "@[dsh.reference:fixture|alpha|alpha|%40alpha]";
+  const draftSource = createComposerDraftSource();
+  draftSource.set(text);
+  const source = fixtureSource();
+  let settle!: (text: string) => void;
+  let signal!: AbortSignal;
+  source.codec!.serialize = vi.fn((_ref, context) => {
+    signal = context;
+    return new Promise<string>(resolve => { settle = resolve; });
+  });
+  const sources = [source];
+  const runtime: ComposerTriggerRuntime = { controllerFor: () => undefined, bindEditor: () => () => {}, draftSources: () => sources, subscribe: () => () => {} };
+  const onSubmit = vi.fn();
+  render(<ControlledComposer initial={text} draftSource={draftSource} runtime={runtime} onSubmit={onSubmit}/>);
+  const send = await screen.findByRole("button", { name: /send/iu });
+  act(() => send.click());
+  await waitFor(() => expect(source.codec!.serialize).toHaveBeenCalledOnce());
+  act(() => draftSource.setParts([{kind:"text", text}]));
+  expect(draftSource.getSnapshot()).toBe(text);
+  expect(signal.aborted).toBe(true);
+  await act(async () => { settle("obsolete resolved reference"); });
+  expect(onSubmit).not.toHaveBeenCalled();
+  act(() => send.click());
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(text));
+  expect(source.codec!.serialize).toHaveBeenCalledOnce();
+});
+
+it("invalidates trigger spans when reference identity changes without a string edit", async () => {
+  const text = "@[dsh.reference:fixture|alpha|alpha|%40alpha]";
+  const draftSource = createComposerDraftSource();
+  draftSource.set(text);
+  const controller = controllerDouble(fixtureSource());
+  render(<ControlledComposer initial={text} draftSource={draftSource} sessionId="identity"
+    runtime={runtimeFor(controller)} controller={controller} onSubmit={() => {}}/>);
+  await waitFor(() => expect(controller.tracked.length).toBeGreaterThan(0));
+  const before = controller.tracked.at(-1)!;
+  act(() => draftSource.setParts([{kind:"text", text}]));
+  await waitFor(() => expect(controller.tracked.at(-1)!.draft).toBe(text));
+  expect(controller.tracked.at(-1)!.draftRev).toBeGreaterThan(before.draftRev);
 });

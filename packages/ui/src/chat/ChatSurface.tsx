@@ -465,7 +465,7 @@ export default function ChatSurface({
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
 
-  const [input, setInput, setSessionInput] = useSessionComposerDraft(sessions.activeId);
+  const [input, setInput, setSessionInput, composerDraftSource] = useSessionComposerDraft(sessions.activeId);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -2000,6 +2000,7 @@ export default function ChatSurface({
       ref={composerRef}
       disabled={readOnly}
       value={input}
+      draftSource={composerDraftSource}
       onChange={setInput}
       onSubmit={(text) => {
         void send(text);

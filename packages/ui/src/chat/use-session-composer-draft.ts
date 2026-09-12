@@ -11,5 +11,5 @@ export function useSessionComposerDraft(sessionId: string | null | undefined) {
   const setForSession = useCallback((id: string, text: string) => {
     sessionComposerDraft(storage, id).set(text);
   }, [storage]);
-  return [value, source.set, setForSession] as const;
+  return [value, source.set, setForSession, source] as const;
 }

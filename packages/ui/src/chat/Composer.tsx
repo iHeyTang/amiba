@@ -1,3 +1,5 @@
+import type { ComposerDraftDocument } from "./composer-draft-document";
+import type { ComposerDraftSource } from "./composer-draft-store";
 import { parseTokens } from "./composer/serialize";
 import { commandImages } from "./composer/command-attachments";
 import { ComposerAccessory } from "../primitives/empty-state-visual";
@@ -169,6 +171,8 @@ interface SendButtonRenderCtx {
 
 export interface ComposerProps {
   value: string;
+  /** Native session document, when this surface owns a resident draft. */
+  draftSource?: ComposerDraftSource;
   onChange: (next: string) => void;
   /**
    * Called when the user submits a turn. Composer expands mentions and
@@ -430,6 +434,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
     {
       value,
+      draftSource,
       onChange,
       onSubmit,
       busy = false,
@@ -526,18 +531,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   3. official Enter adjudication for a `/`-leading draft,
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
-    const resolvingMentionRef = useRef<(AbortController & { draft: string; sessionId?: string; attachments: UseComposerAttachmentsResult["attachments"] | undefined }) | null>(null);
+    const resolvingMentionRef = useRef<(AbortController & { draft: string; document?: ComposerDraftDocument; sessionId?: string; attachments: UseComposerAttachmentsResult["attachments"] | undefined }) | null>(null);
     const commandAttemptRef = useRef<object | null>(null);
     const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
     currentDraftRef.current = { value, sessionId: permissionSessionId };
     useEffect(() => {
-      const attempt = resolvingMentionRef.current;
-      if (!attempt || (attempt.draft === value && attempt.sessionId === permissionSessionId &&
-        attempt.attachments === attachments?.attachments && !disabled)) return;
-      attempt.abort();
-      resolvingMentionRef.current = null;
-      trigger.setAttemptInFlight(false);
-    }, [value, permissionSessionId, disabled, attachments?.attachments]);
+      const cancelStaleAttempt = () => {
+        const attempt = resolvingMentionRef.current;
+        if (!attempt || (attempt.draft === value && attempt.sessionId === permissionSessionId &&
+          attempt.document === draftSource?.getDocument() &&
+          attempt.attachments === attachments?.attachments && !disabled)) return;
+        attempt.abort();
+        resolvingMentionRef.current = null;
+        trigger.setAttemptInFlight(false);
+      };
+      cancelStaleAttempt();
+      // Reference -> literal edits may keep the canonical string unchanged.
+      // Observe the document directly, before a delayed codec can complete.
+      return draftSource?.subscribe(cancelStaleAttempt);
+    }, [value, draftSource, permissionSessionId, disabled, attachments?.attachments]);
     useEffect(() => () => {
       resolvingMentionRef.current?.abort();
       resolvingMentionRef.current = null;
@@ -601,9 +613,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       });
       if (handled) return; // command claim or UI action took it, don't send
       const editorParts = innerRef.current?.getParts?.();
-      const parts = editorParts && editorParts.map(part => part.kind === "text" ? part.text : part.raw).join("") === draft
-        ? editorParts : parseTokens(draft);
-      const attempt = Object.assign(new AbortController(), { draft, sessionId: permissionSessionId, attachments: attachments?.attachments });
+      const usesEditorParts = editorParts !== undefined && editorParts.map(part => part.kind === "text" ? part.text : part.raw).join("") === draft;
+      const parts = usesEditorParts ? editorParts : parseTokens(draft);
+      const editorIdentity = usesEditorParts ? JSON.stringify(parts) : undefined;
+      const attempt = Object.assign(new AbortController(), { draft, document: draftSource?.getDocument(), sessionId: permissionSessionId, attachments: attachments?.attachments });
+      const isCurrentAttempt = () => !attempt.signal.aborted &&
+        attempt.document === draftSource?.getDocument() &&
+        (editorIdentity === undefined || editorIdentity === JSON.stringify(innerRef.current?.getParts?.()));
       resolvingMentionRef.current = attempt;
       trigger.setAttemptInFlight(true);
       try {
@@ -626,7 +642,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             );
             return;
           }
-          if (attempt.signal.aborted) return;
+          if (!isCurrentAttempt()) return;
           if (outcome !== undefined) {
             if (outcome !== "handled" && "claim" in outcome) {
               trigger.claims.begin(outcome.claim);
@@ -649,7 +665,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           );
           return;
         }
-        if (attempt.signal.aborted) return;
+        if (!isCurrentAttempt()) return;
         setCommandNotice(null);
         onSubmit(finalText);
       } finally {
@@ -659,7 +675,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           trigger.setAttemptInFlight(false);
         }
       }
-    }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
+    }, [value, draftSource, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
 
     useImperativeHandle(
       ref,
@@ -1020,6 +1036,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               <RichComposerEditor
                 ref={innerRef}
                 value={value}
+                draftSource={draftSource}
                 onChange={onChange}
                 placeholder={resolvedPlaceholder}
                 disabled={disabled}

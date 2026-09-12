@@ -1,4 +1,4 @@
-import { $getRoot } from "lexical";
+import { $readComposerParts } from "../composer-parts";
 /**
  * THE DRIVER. Everything upstream's ui-conversation InputBar supplies to the
  * official trigger pipeline, supplied here from Amiba's Lexical composer.
@@ -76,7 +76,7 @@ export function OfficialTriggerPlugin({
         const caret = $caretOffset(scan);
         // Identity/label changes can leave the one-character trigger draft
         // unchanged, but still invalidate a public input/reference snapshot.
-        const persistedDraft = $getRoot().getTextContent();
+        const persistedDraft = JSON.stringify($readComposerParts());
         if (persistedDraft !== lastDraft) {
           lastDraft = persistedDraft;
           revision.bump();
