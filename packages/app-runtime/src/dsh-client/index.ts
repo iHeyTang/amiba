@@ -680,6 +680,44 @@ export class DshApiClient {
     )
   }
 
+  /** Resolves after the Host establishes its mux, even with no attached sessions. */
+  async openEvents(signal?: AbortSignal): Promise<AsyncIterableIterator<DshMuxEnvelope>> {
+    const response = await this.fetchImpl(`${this.baseUrl}/api/events.mux`, { signal })
+    if (!response.ok || !response.body) throw new Error(`DSH events.mux failed: HTTP ${response.status}`)
+    const reader = response.body.getReader()
+    let closing: Promise<void> | undefined
+    const close = () => closing ??= reader.cancel().catch(() => {}).finally(() => reader.releaseLock())
+    const frames = (async function* () {
+      const decoder = new TextDecoder()
+      let buffer = ""
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) return
+          buffer += decoder.decode(value, { stream: true })
+          let boundary: number
+          while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+            const chunk = buffer.slice(0, boundary)
+            buffer = buffer.slice(boundary + 2)
+            const data = chunk.split("\n").filter((line) => line.startsWith("data: ")).map((line) => line.slice(6)).join("")
+            if (!data) continue
+            const frame = parseDshWebSocketFrame(data)
+            if (frame.payload.type === "stream/error") throw new DshRpcError(frame.payload.error)
+            yield frame
+          }
+        }
+      } finally {
+        await close()
+      }
+    })()
+    const stream: AsyncIterableIterator<DshMuxEnvelope> = {
+      next: () => frames.next(),
+      return: async () => { await close(); return frames.return(undefined) },
+      [Symbol.asyncIterator]: () => stream,
+    }
+    return stream
+  }
+
   async *events(signal?: AbortSignal): AsyncGenerator<DshMuxEnvelope> {
     if (signal?.aborted) return
 

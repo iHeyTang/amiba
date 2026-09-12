@@ -468,38 +468,48 @@ export class DshChatEngineClient implements ChatEngineClient {
     const { client } = this.options;
     const sessionId = payload.sessionId;
     try {
-      const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
-      await client.createSession(
-        {
-          sessionId,
-          ...resolved,
-          ...(resolved.agentPreset
-            ? {}
-            : payload.agent?.profileId && payload.agent.profileId !== "default"
-              ? { agentPreset: payload.agent.profileId }
-              : {}),
-        },
-        controller.signal,
-      );
-      if (payload.modelSelection) {
-        if (this.options.selectModel) {
-          await this.options.selectModel(
+      const suppliedAddress = this.options.resolveSubagent?.(sessionId);
+      const address = suppliedAddress ? { ...suppliedAddress } : undefined;
+      if (address && address.childSessionId !== sessionId) throw new Error("Subagent address does not match the requested session");
+      if (address?.mode === "one-shot") throw new Error("One-shot subagent conversations are read-only");
+      if (!address) {
+        const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
+        await client.createSession(
+          {
             sessionId,
-            payload.modelSelection,
-            controller.signal,
-          );
-        } else {
-          await client.selectModel(
-            { sessionId, ...payload.modelSelection },
-            controller.signal,
-          );
+            ...resolved,
+            ...(resolved.agentPreset
+              ? {}
+              : payload.agent?.profileId && payload.agent.profileId !== "default"
+                ? { agentPreset: payload.agent.profileId }
+                : {}),
+          },
+          controller.signal,
+        );
+        if (payload.modelSelection) {
+          if (this.options.selectModel) {
+            await this.options.selectModel(
+              sessionId,
+              payload.modelSelection,
+              controller.signal,
+            );
+          } else {
+            await client.selectModel(
+              { sessionId, ...payload.modelSelection },
+              controller.signal,
+            );
+          }
         }
       }
 
       const bridge = new DshAmibaEventBridge();
-      const iterator = client.events(controller.signal)[Symbol.asyncIterator]();
+      // Header readiness establishes the mux before a cold child is attached by
+      // its continuation. Waiting for that child's frame first would deadlock.
+      const iterator = address
+        ? await client.openEvents(controller.signal)
+        : client.events(controller.signal)[Symbol.asyncIterator]();
       try {
-        await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
+        if (!address) await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
           this.emit(sessionId, event),
         );
         const imageParts = await promptAttachments(
@@ -515,7 +525,12 @@ export class DshChatEngineClient implements ChatEngineClient {
             : []),
           { type: "text" as const, text: lastUserText(payload) },
         ];
-        const response = await client.prompt(
+        const response = address
+          ? (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...imageParts], {
+              clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              signal: controller.signal,
+            }), { command: undefined })
+          : await client.prompt(
           sessionId,
           [...textParts, ...imageParts],
           {

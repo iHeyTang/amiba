@@ -9,6 +9,34 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe("DshApiClient", () => {
+  it("establishes an empty mux before any child subscription and closes an unread stream", async () => {
+    const cancel = vi.fn();
+    const fetch = vi.fn(async () => new Response(new ReadableStream({ cancel }), { headers: { "content-type": "text/event-stream" } }));
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
+    const controller = new AbortController();
+    const stream = await client.openEvents(controller.signal);
+    expect(fetch).toHaveBeenCalledWith("http://dsh.test/api/events.mux", { signal: controller.signal });
+    await stream.return!();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads split SSE frames after header readiness without losing child data", async () => {
+    const frame = { type: "server-request", method: "session/subscribed", rpcId: "child-frame", payload: { type: "session/subscribed", sessionId: "子会话", lastSeq: 0 } };
+    const bytes = new TextEncoder().encode(`: keepalive\n\ndata: ${JSON.stringify(frame)}\n\n`);
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch: (async () => new Response(new ReadableStream({ start(controller) {
+      for (let i = 0; i < bytes.length; i++) controller.enqueue(bytes.slice(i, i + 1));
+      controller.close();
+    } }))) as typeof fetch });
+    const stream = await client.openEvents();
+    expect(await stream.next()).toEqual({ done: false, value: { rpcId: frame.rpcId, payload: frame.payload } });
+    expect((await stream.next()).done).toBe(true);
+  });
+
+  it("propagates mux HTTP failures before announcing readiness", async () => {
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch: (async () => new Response("Unavailable", { status: 503 })) as typeof fetch });
+    await expect(client.openEvents()).rejects.toThrow("HTTP 503");
+  });
+
   it("routes child continuation and interruption through the exact direct-parent address", async () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
     const client = new DshApiClient({

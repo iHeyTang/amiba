@@ -30,6 +30,65 @@ function payload(overrides: Partial<SubmitPayload> = {}): SubmitPayload {
 }
 
 describe("DshChatEngineClient", () => {
+  it("sends a cold child prompt after mux readiness without waiting for a child subscription", async () => {
+    const order: string[] = [];
+    const address = { parentSessionId: "parent", childSessionId: "session-1", mode: "continuable" as const };
+    const subagentPrompt = vi.fn(async () => { order.push("prompt"); return { messageId: "child-message" }; });
+    const createSession = vi.fn();
+    const selectModel = vi.fn();
+    const resolveSession = vi.fn();
+    const prompt = vi.fn();
+    const client = { createSession, selectModel, prompt, subagentPrompt,
+      async openEvents() {
+        order.push("ready");
+        return (async function* () { order.push("read"); yield TURN_END; })();
+      },
+    } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSession, resolveSubagent: () => address });
+    const events: string[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event.kind));
+    engine.submit(payload({ modelSelection: { provider: "unused", model: "unused" } }));
+    await eventually(() => expect(events).toContain("done"));
+    expect(order).toEqual(["ready", "prompt", "read"]);
+    expect(subagentPrompt).toHaveBeenCalledWith(address, [{ type: "text", text: "/status" }], expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(createSession).not.toHaveBeenCalled();
+    expect(selectModel).not.toHaveBeenCalled();
+    expect(resolveSession).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("surfaces unavailable-parent errors and closes the mux without waiting for any child frame", async () => {
+    const next = vi.fn();
+    const close = vi.fn(async () => ({ done: true, value: undefined }));
+    const client = {
+      openEvents: async () => ({ next, return: close }),
+      subagentPrompt: async () => { throw new Error("parent unavailable"); },
+    } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => ({ parentSessionId: "parent", childSessionId: "session-1", mode: "continuable" }) });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.submit(payload());
+    await eventually(() => expect(events).toContainEqual(expect.objectContaining({ kind: "error", message: "parent unavailable" })));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects one-shot sending before workspace resolution or stream creation", async () => {
+    const resolveSession = vi.fn();
+    const openEvents = vi.fn();
+    const createSession = vi.fn();
+    const engine = new DshChatEngineClient({ client: { openEvents, createSession } as unknown as DshApiClient, resolveSession,
+      resolveSubagent: () => ({ parentSessionId: "parent", childSessionId: "session-1", mode: "one-shot" }),
+    });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.submit(payload());
+    await eventually(() => expect(events).toContainEqual(expect.objectContaining({ kind: "error", message: "One-shot subagent conversations are read-only" })));
+    expect(resolveSession).not.toHaveBeenCalled();
+    expect(openEvents).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
   it("stops a continuable child through its retained parent without resuming either Agent", () => {
     const cancel = vi.fn();
     const subagentInterrupt = vi.fn(async () => ({ accepted: true as const }));

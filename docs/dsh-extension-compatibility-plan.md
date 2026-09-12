@@ -796,3 +796,21 @@ pipelines retain mounted component state.
   The send integration must establish mux readiness without requiring preexisting
   child attachment, and propagate unavailable-parent errors rather than waiting
   forever. Do not claim that current child prompt dispatch is complete.
+
+### Child send dispatch and header-established mux (2026-09-12)
+
+- Verified the pinned Host Fetch client's `readSse`/`onOpen` contract: headers and
+  a readable response establish the mux before any attached-session frame exists.
+  Added `openEvents` using that HTTP stream, retaining existing WebSocket events
+  for ordinary sessions. Its iterator can close an unread stream after a rejected
+  prompt, handles split UTF-8/frame boundaries and propagates HTTP/stream errors.
+- Addressed sends now establish this mux then call subagent.prompt; they do not
+  run workspace resolution, session.create, model selection or ordinary prompt.
+  One-shot and mismatched addresses reject before opening a stream. Parent errors
+  propagate through the existing chat error event and close the stream immediately.
+- All 37 client/engine tests passed. Cases include an empty mux, unread cleanup,
+  split UTF-8 frames, HTTP failure, cold-child send ordering without a subscribed
+  frame, unavailable parent, and unchanged ordinary conversation behavior.
+- Desktop runtime endpoint availability, actual parent/child fixture continuation,
+  read-only controls, explicit openSubagent-from-Home and full renderer verification
+  remain open. This is not an end-to-end compatibility completion claim.
