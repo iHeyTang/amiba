@@ -320,6 +320,7 @@ export class DshChatEngineClient implements ChatEngineClient {
         this.emit(sessionId, event);
         return;
       }
+      case "assistantMessage":
       case "chunk":
       case "reasoning":
       case "toolCalls":
@@ -347,6 +348,9 @@ export class DshChatEngineClient implements ChatEngineClient {
 
   private applyEvent(state: SessionState, event: StreamEvent): void {
     switch (event.kind) {
+      case "assistantMessage":
+        state.assistantMessageId = event.messageId;
+        break;
       case "chunk": {
         state.assistantText += event.text;
         const last = state.timeline.at(-1);
@@ -393,6 +397,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
       case "turn":
         state.turnId = event.turnId;
+        delete state.assistantMessageId;
         break;
       case "approvalRequest":
         state.pendingApprovals = [

@@ -322,6 +322,7 @@ export interface ChatSurfaceProps {
      * Amiba's own `ToolSpec`-driven chip, which is also the `fallback` of
      * every unclaimed tool name.
      */
+    assistantActions?: (messageId: string) => ReactNode;
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's KEYED `amiba.conversation.question`
@@ -1052,6 +1053,7 @@ export default function ChatSurface({
       const arr = prev as UiMessage[];
       const merged: Partial<UiMessage> = {
         content: state.assistantText,
+        assistantMessageId: state.assistantMessageId,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
         // any panel that opens AFTER the stream finished. While the panel
@@ -1318,6 +1320,12 @@ export default function ChatSurface({
       return;
     }
     switch (event.kind) {
+      case "assistantMessage": {
+        const assistantUiId = stream.getCurrentAssistantUiId();
+        if (assistantUiId) sessions.setActiveMessages(prev => (prev as UiMessage[]).map(message =>
+          message.uiId === assistantUiId ? { ...message, assistantMessageId: event.messageId } : message));
+        break;
+      }
       case "begin":
         setBusy(true);
         stream.onBegin(event.assistantUiId);
@@ -2233,6 +2241,7 @@ export default function ChatSurface({
                         }
                       >
                         <MessageTurns
+                          assistantActions={slots?.assistantActions}
                           sessionId={sessions.activeId ?? undefined}
                           messages={messages}
                           onReviewWorkspaceChanges={

@@ -132,6 +132,7 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
+  | "sidebar.footer.action"
   | "settings.trigger"
   | "settings.header"
   | "settings.action"
@@ -149,6 +150,7 @@ export type AmibaShellSlot =
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
+  | "conversation.chat.assistant-actions"
   | "tool.call.toolview";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
@@ -751,6 +753,7 @@ function ProductShellInner({
                   />
                 ),
                 settingsTrigger: renderSettingsTrigger,
+                sidebarFooterActions: owner => renderSlot("sidebar.footer.action", owner),
                 modelPicker: renderModelPickerSeat,
                 planSeat: renderPlanSeat,
                 notice: (owner, fallback) =>
@@ -772,6 +775,7 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
+                assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@deepseek-ai/dsh-client-connection/client").MessageId }),
                 toolView: renderToolViewSeat,
                 questionSeat: renderQuestionSeat,
                 navigationBefore: renderSlot("amiba.navigation.before", {}),

@@ -61,6 +61,16 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
 }
 
 describe("Sidebar", () => {
+  it("supplies the actual rail state to additive footer controls without replacing settings", async () => {
+    const action = vi.fn();
+    const footer = vi.fn(({ wide }: { wide: boolean }) => <button onClick={action}>{wide ? "Plugin action" : "Plugin icon"}</button>);
+    const props = setup({ wide: false, sidebarFooterActions: footer });
+    expect(footer).toHaveBeenCalledWith({ wide: false });
+    await userEvent.click(screen.getByRole("button", { name: "Plugin icon" }));
+    expect(action).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByTestId("sidebar-item-settings"));
+    expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
+  });
   it("starts with task actions without a redundant workspace label", () => {
     setup();
     expect(screen.queryByText("Workspace")).not.toBeInTheDocument();

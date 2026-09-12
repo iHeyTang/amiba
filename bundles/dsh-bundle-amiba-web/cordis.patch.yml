@@ -23,8 +23,8 @@
 # (`-browse`, injected `locale`) from hanging the whole boot on hosts where
 # the native chooser is unavailable: non-loopback `--host`, SSH sessions, or
 # a Linux desktop without zenity/kdialog.
-- id: session-log-download
-  disabled: true
+# Keep the native /export command and ZIP download controller. UI Shell
+# shadows only its header capsule with an Amiba-styled, on-demand dialog.
 
 - id: ui-theme
   disabled: true

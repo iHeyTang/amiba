@@ -17,7 +17,7 @@ four packages, with their owner contracts re-derived here.
 
 ### The `settings.*` family
 
-Seven of the eight official settings seats are declared here. Every one of
+All eight official settings seats are now available in the Web composition. Every one of
 them is root-scoped, and the owner column is the whole contract — several are
 the empty marker interface, which means "self-sufficient", not "starved".
 
@@ -53,14 +53,22 @@ you register:
   rows, so a row draws its own internals including its label, and reads and
   writes its value through its own inject face.
 
-`settings.plugins.tab` is the one member of the family Amiba does NOT declare.
-Its type is exported (`SettingsPluginsTabOwnerProps`) so the name stays
-addressable, but the contract is a structure rather than a props shape — "the
-section owner renders localized entry labels as tabs and mounts each
-contribution inside its corresponding tab panel" — and Amiba's Plugins page is
-a single inventory list behind an `all / amiba / dsh / failed` filter, not a
-tab strip with panels. Registering there today would leave you with no render
-site; see the not-adopted record in `src/slots.ts`.
+`settings.plugins.tab` is owned by the runtime-inventory settings section.
+Contributed entries appear as localized tabs with matching panels. With no
+external tabs or served configuration cards, the existing inventory and its
+filters render unchanged. Switching tabs preserves the inventory filters;
+unloading the selected contribution returns to the inventory.
+
+`settings.plugin.item` follows the **installed 0.1.1-rc.2 package** contract:
+it is **keyed by Host settings namespace**, not a list. Register with
+`key: "your-namespace"`. A card is shown only while the Host describes that
+namespace. The configurable tab owns this slot and disappears when no served
+cards remain. Cards retain responsibility for their internals and use the
+existing `settingsScope` service for configuration, validation and writes.
+
+`sidebar.footer.action` is also available, with the official `{ wide }`
+owner share. An empty slot adds no wrapper or space; the existing settings
+button stays in place.
 
 ### The `conversation.*` and `tool.*` seats
 
@@ -201,9 +209,11 @@ How Amiba supplies that owner share: `callId` from the canonical call id,
 from the conversation's workspace binding, `openFile` from the workspace
 pane's file-open path. `inspect` is deliberately OMITTED (it is optional): it
 means "inspect this call in the trajectory view", and Amiba disables the
-official `ui-trajectory` plugin and ships no equivalent. `block.subCalls` is
-`[]`, which is upstream's own value for every ROOT call — children come only
-from Code Mode's dispatch events, and Amiba's bundles mount no code runtime.
+official `ui-trajectory` plugin and ships no equivalent. `block.subCalls` retains the nested
+Code Mode dispatch tree, including running children and completed/error results,
+in both live sessions and restored history. Calls without dispatch events keep
+an empty array. The existing Amiba tool rows remain unchanged; registered
+toolviews can consume those child blocks.
 Its runtime declaration sits on Amiba's root children table rather than
 upstream's `conversation.chat.node` `tool-call` entry, which Amiba has no
 equivalent of; only the declaration site differs.
@@ -214,11 +224,7 @@ vendor extensions with no official counterpart; only those appear in
 `SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
 conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
-with no render site. Four seats are NOT adopted, for three different
-reasons. Structure Amiba's page does not have: `settings.plugins.tab` (its
-contract is a tab strip with per-entry panels; Amiba's Plugins page is one
-inventory list behind a filter — see above). Contract Amiba genuinely cannot
-supply today:
+with no render site. Remaining examples include the following contracts:
 `conversation.chat.turnTail` (`TurnLocation` is an engine-owned boundary with
 a business-value reader over machinery Amiba does not run). Render site, not
 contract: `conversation.chat.assistant-actions`, whose `MessageId` is on the

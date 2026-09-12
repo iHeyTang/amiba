@@ -63,6 +63,7 @@
     "@deepseek-ai/dsh-skill": "catalog:"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-session-log-export": "catalog:",
     "@amiba/extension-sdk": "workspace:*",
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-client-locale": "catalog:",

@@ -45,6 +45,8 @@
  */
 
 import type { OwnerOf, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
+export type { SidebarFooterActionOwnerProps } from "@deepseek-ai/dsh-client-ui-sidebar/client";
+export type { SettingsPluginItemOwnerProps } from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
 
 // Type home for the official settings vocabulary: importing the
 // dsh-client-ui-settings client entry merges `settings.section` (and the
@@ -464,34 +466,19 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     resolved by the `conversation` service, which Amiba must not own (it
 //     bundles send/cancel/loadOlder/updateQueue/resolveImage, all of which
 //     Amiba implements through its own engine).
-//   - `settings.plugins.tab` (list, root, EMPTY owner). The owner share is
-//     trivially suppliable — that is exactly why the decision cannot rest on
-//     it. The contract is a STRUCTURE, not a props shape: "the section owner
-//     renders localized entry labels as TABS and mounts each contribution
-//     inside its CORRESPONDING TAB PANEL", with `id` the tab key, `order` the
-//     tab order and `label` the tab text. Amiba's Plugins page
-//     (`@amiba/ui`'s `DshPluginInventory`) has no tab panels to mount into:
-//     its `all / amiba / dsh / failed` control is a FILTER over one dataset —
-//     four `aria-pressed` buttons narrowing a single inventory list with a
-//     count badge each, sharing the page's one search box — so a registrant
-//     would get a tab strip whose "panel" is somebody else's filtered table.
-//     Adopting the name would hand entries written against the upstream
-//     contract a seat that behaves differently at runtime, which is the one
-//     thing this vocabulary policy forbids. The name stays type-visible
-//     (`SettingsPluginsTabOwnerProps` is re-exported above) so the day
-//     Amiba's Plugins section grows real tab panels, adoption is a
-//     declaration, not a rename.
+// `settings.plugins.tab` is now declared by runtime-inventory. Its real
+// panels preserve the existing inventory filters. `settings.plugin.item`
+// follows the installed package's keyed-by-namespace contract.
 //   - `conversation.chat.turnTail` takes `turn: TurnLocation`, an
 //     engine-owned boundary carrying the raw `turn/start` / `turn/end`
 //     events, a `StepLocation[]` ring, and the `data` business-value
 //     reader — none of which Amiba's projection retains.
-//   - `conversation.chat.assistant-actions` takes `messageId: MessageId`.
-//     The wire does carry it (Amiba's own user-message branch reads
-//     `message.id`), and only finalized messages reach this seat — the
-//     blocker is the RENDER SITE: Amiba folds every `assistant/message` of a
-//     turn into one bubble, so a turn with N model steps has N MessageIds
-//     and a single action row; any one id would be arbitrary. Adoption waits
-//     on a per-message bubble, not on the protocol.
+//   - `conversation.chat.assistant-actions` takes the closing Assistant's
+//     canonical MessageId. Installed rc.2 selects the last finalized step
+//     with nonblank prose, including interrupted synthetic steps (which have
+//     no message identity and therefore no actions). The merged Amiba bubble
+//     is not a blocker: adoption needs this exact closing-step projection,
+//     carried through live events and history, without changing the bubble.
 
 export interface SurfaceActivitySnapshot {
   sessionId: string;

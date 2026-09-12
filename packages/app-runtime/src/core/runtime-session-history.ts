@@ -1,3 +1,4 @@
+import { ClosingAssistant } from "../dsh-client/closing-assistant";
 import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
 import type { AssistantTimelineItem } from "../protocol";
 import type {
@@ -16,6 +17,7 @@ import {
   visibleUserMessage,
 } from "../dsh-client/user-message-source";
 import type { ToolProgress } from "./runtime-protocol";
+import { CodeDispatchTree } from "../dsh-client/code-dispatch-tree";
 import type { SessionMessage } from "./sessions";
 
 import type { AttachmentBadge } from "./attachments/types";
@@ -33,6 +35,7 @@ type RuntimeSessionMessage = SessionMessage & {
   toolProgress?: ToolProgress[];
   assistantTimeline?: AssistantTimelineItem[];
   runtimeSeq?: number;
+  assistantMessageId?: string;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -97,6 +100,8 @@ interface AssistantTurn {
   processFirstAt: number | null;
   processLastAt: number | null;
   tools: Map<string, ToolProgress>;
+  dispatches: CodeDispatchTree;
+  closing: ClosingAssistant;
   timeline: RuntimeSessionMessage["assistantTimeline"];
 }
 
@@ -113,6 +118,8 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
     processFirstAt: null,
     processLastAt: null,
     tools: new Map(),
+    dispatches: new CodeDispatchTree(),
+    closing: new ClosingAssistant(),
     timeline: [],
   };
 }
@@ -128,7 +135,7 @@ function finishTurn(
 ): void {
   if (!turn) return;
   const content = turn.text || turn.draftText;
-  const tools = [...turn.tools.values()];
+  const tools = [...turn.tools.values()].map(tool => turn.dispatches.project(tool));
   if (!content && !turn.reasoning && tools.length === 0 && !turn.timeline?.length) return;
   const reasoningMs =
     turn.reasoningStartAt !== null && turn.reasoningEndAt !== null
@@ -143,6 +150,7 @@ function finishTurn(
     content,
     uiId: `dsh:turn:${turn.firstSeq}`,
     runtimeSeq: turn.firstSeq,
+    ...(turn.closing.getMessageId() ? { assistantMessageId: turn.closing.getMessageId()! } : {}),
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
     ...(turn.reasoning && reasoningMs !== undefined ? { reasoningMs } : {}),
     ...(processMs !== undefined ? { processMs } : {}),
@@ -233,6 +241,7 @@ export function projectRuntimeSessionHistory(
     const compact = compactionUpdate(event);
     if (compact) {
       if (!turn) turn = beginTurn(event);
+    turn.closing.apply(event);
       upsertCompactionTimeline(turn.timeline!, compact);
       continue;
     }
@@ -282,6 +291,7 @@ export function projectRuntimeSessionHistory(
     if (event.type === "turn/start") {
       finishTurn(turn, output);
       turn = beginTurn(event);
+      turn.closing.apply(event);
       continue;
     }
     if (event.type === "amiba/notice") {
@@ -345,6 +355,10 @@ export function projectRuntimeSessionHistory(
         });
       }
       turn.draftText = "";
+      continue;
+    }
+    if (event.type === "tool/code-dispatch-start" || event.type === "tool/code-dispatch") {
+      turn.dispatches.apply(event);
       continue;
     }
     if (event.type === "tool/call") {

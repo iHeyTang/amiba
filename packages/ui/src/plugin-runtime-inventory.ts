@@ -6,3 +6,4 @@ export {
   type DshInstalledPluginPackage,
   type DshPluginManagementAdapter,
 } from "./settings/DshPluginInventory";
+export { PluginInventoryTabs, type PluginInventoryTab } from "./settings/PluginInventoryTabs";

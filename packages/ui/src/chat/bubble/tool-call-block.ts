@@ -38,17 +38,10 @@ function wireValue<T>(value: unknown): T {
  * material at all: the honest answer is "no faithful block", and the caller
  * renders its own row instead of dispatching a partly invented node.
  *
- * `subCalls` is `[]` because that is the runtime's value for every ROOT call.
- * Children come only from `tool/code-dispatch-start` / `tool/code-dispatch`,
- * which exist only under Code Mode's `run_code` transport, and no Amiba
- * bundle or plugin manifest composes a `ctx.codeRuntime` — so no session
- * Amiba itself assembles emits either event. The scope of that claim is
- * Amiba's own composition: the managed profile's `cordis.patch.yml` is
- * user-owned (seeded once, never overwritten), so an operator who mounts a
- * code runtime there and selects a code preset WOULD see those events flow.
- * Amiba's own tool row has never rendered sub-calls either, so that
- * configuration loses nothing relative to the pre-seat behaviour; it is
- * simply outside what this `[]` speaks for.
+ * `subCalls` retains the Code Mode dispatch tree assembled by both the live
+ * event bridge and durable history projection. Ordinary calls have no dispatch
+ * children and keep the official empty array. The projection does not introduce
+ * extra Amiba rows; an occupying toolview receives the nested official blocks.
  *
  * @param event - one Amiba tool row.
  * @returns the running-or-settled call node, or null when unavailable.
@@ -75,7 +68,7 @@ export function toolCallBlockFromProgress(
       // The settled node carries the CALL's render intent forward.
       callView: wireValue<ToolResultNode["callView"]>(call?.callView ?? null),
       resultView: wireValue<ToolResultNode["resultView"]>(result.resultView),
-      subCalls: [],
+      subCalls: wireValue<readonly ToolCallBlock[]>(event.wire?.subCalls ?? []),
     };
   }
   if (!call) return null;
@@ -87,7 +80,7 @@ export function toolCallBlockFromProgress(
     step: call.step,
     time: call.time,
     callView: wireValue<RunningToolCall["callView"]>(call.callView),
-    subCalls: [],
+    subCalls: wireValue<readonly ToolCallBlock[]>(event.wire?.subCalls ?? []),
   };
 }
 

@@ -96,6 +96,7 @@ export interface SidebarProps {
    * browser extension, any surface outside a DSH plugin runtime).
    */
   settingsTrigger?: (owner: { wide: boolean }) => ReactNode;
+  sidebarFooterActions?: (owner: { wide: boolean }) => ReactNode;
   /** Sidebar column state, forwarded to the trigger seat as `wide`. */
   wide?: boolean;
   /** Whether the settings dialog this row opens is currently open. */
@@ -140,6 +141,7 @@ export function Sidebar({
   onHistoryLayoutChange,
   onOpenSettings,
   settingsTrigger,
+  sidebarFooterActions,
   wide = true,
   settingsOpen = false,
   className,
@@ -428,6 +430,7 @@ export function Sidebar({
             )
           }
         />
+        {sidebarFooterActions?.({ wide })}
       </div>
     </nav>
   );

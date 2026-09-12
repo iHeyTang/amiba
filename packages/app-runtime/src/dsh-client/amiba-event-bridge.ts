@@ -1,4 +1,6 @@
 import { compactionUpdate } from "./compaction.js"
+import { ClosingAssistant } from "./closing-assistant"
+import { CodeDispatchTree } from "./code-dispatch-tree"
 import type {
   ApprovalOutcome,
   StreamEvent,
@@ -75,7 +77,9 @@ export interface BridgedDshEvent {
 
 /** Stateful projection from native DSH mux frames to Amiba's UI protocol. */
 export class DshAmibaEventBridge {
-  private readonly tools = new Map<string, ToolProgress>()
+  private readonly toolsBySession = new Map<string, Map<string, ToolProgress>>()
+  private readonly closingAssistants = new Map<string, ClosingAssistant>()
+  private readonly dispatches = new Map<string, CodeDispatchTree>()
 
   accept(envelope: DshMuxEnvelope): BridgedDshEvent[] {
     const frame = envelope.payload
@@ -154,11 +158,22 @@ export class DshAmibaEventBridge {
     }
   }
 
-  private sessionEvent(
+  private sessionEvent(sessionId: string, source: DshSessionEvent, view: unknown): BridgedDshEvent[] {
+    let closing = this.closingAssistants.get(sessionId)
+    if (!closing) { closing = new ClosingAssistant(); this.closingAssistants.set(sessionId, closing) }
+    closing.apply(source)
+    const frames = this.projectSessionEvent(sessionId, source, view)
+    const messageId = source.type === "turn/end" ? closing.getMessageId() : null
+    return messageId === null ? frames : [{ sessionId, event: { kind: "assistantMessage", messageId } }, ...frames]
+  }
+
+  private projectSessionEvent(
     sessionId: string,
     source: DshSessionEvent,
     view: unknown,
   ): BridgedDshEvent[] {
+    let tools = this.toolsBySession.get(sessionId)
+    if (!tools) { tools = new Map(); this.toolsBySession.set(sessionId, tools) }
     const compact = compactionUpdate(source)
     if (compact) return [{ sessionId, event: { kind: "compaction", event: compact } }]
     const data = source.data
@@ -192,6 +207,7 @@ export class DshAmibaEventBridge {
       ]
     }
     if (source.type === "turn/start") {
+      this.dispatches.set(sessionId, new CodeDispatchTree())
       const turn = typeof data.turn === "number" ? data.turn : source.seq
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}` } }]
     }
@@ -213,6 +229,16 @@ export class DshAmibaEventBridge {
         ]
       }
       return []
+    }
+    if (source.type === "tool/code-dispatch-start" || source.type === "tool/code-dispatch") {
+      let tree = this.dispatches.get(sessionId)
+      if (!tree) { tree = new CodeDispatchTree(); this.dispatches.set(sessionId, tree) }
+      const root = tree.apply(source)
+      const prior = root === null ? undefined : tools.get(root)
+      if (!prior) return []
+      const progress = tree.project(prior)
+      tools.set(progress.toolCallId, progress)
+      return [{ sessionId, event: { kind: "toolProgress", event: progress } }]
     }
     if (source.type === "tool/call") {
       const callId = typeof data.callId === "string" ? data.callId : ""
@@ -237,14 +263,15 @@ export class DshAmibaEventBridge {
         // `args` above is unchanged, the raw wire material rides beside it.
         wire: { call: toolCallWireRecord(data, source.time, view) },
       }
-      this.tools.set(callId, progress)
-      return [{ sessionId, event: { kind: "toolProgress", event: progress } }]
+      const projected = this.dispatches.get(sessionId)?.project(progress) ?? progress
+      tools.set(callId, projected)
+      return [{ sessionId, event: { kind: "toolProgress", event: projected } }]
     }
     if (source.type === "tool/result") {
       const message = record(data.message)
       const callId = toolResultCallId(message)
       if (!callId) return []
-      const prior = this.tools.get(callId)
+      const prior = tools.get(callId)
       const progress: ToolProgress = {
         tool: prior?.tool ?? "tool",
         toolCallId: callId,
@@ -270,8 +297,9 @@ export class DshAmibaEventBridge {
           result: toolResultWireRecord(data, source.seq, source.time, view),
         },
       }
-      this.tools.set(callId, progress)
-      return [{ sessionId, event: { kind: "toolProgress", event: progress } }]
+      const projected = this.dispatches.get(sessionId)?.project(progress) ?? progress
+      tools.set(callId, projected)
+      return [{ sessionId, event: { kind: "toolProgress", event: projected } }]
     }
     if (source.type === "turn/end") {
       const reason = record(data.reason)

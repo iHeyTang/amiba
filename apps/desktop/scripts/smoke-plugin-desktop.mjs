@@ -122,7 +122,7 @@ try {
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
   await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
-  const clientSource = version => `export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
   const nativeSource = version => `import {appendFileSync} from 'node:fs';export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
   if (native) {
@@ -155,6 +155,35 @@ try {
     await wait(async () => { try { return await evaluate("(async()=>window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'version'))()") === 'native-2'; } catch { return false; } });
     assert.match(await readFile(nativeEvents, 'utf8'), /native-stop-1/);
     assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid);
+  }
+  if (process.argv.includes("--compat")) {
+    // Real SlotCore + module-loader + renderer integration on the file: surface.
+    const namespace = await evaluate(`(async () => {
+      const ctx = window.__probeCtx;
+      const describe = ctx.settingsScope.describe();
+      await describe.ensure();
+      const snapshot = describe.getSnapshot();
+      if (!snapshot.view) throw new Error("Settings mirror unavailable: " + JSON.stringify(snapshot));
+      return snapshot.view.namespaces[0]?.ns;
+    })()`);
+    assert.ok(namespace, "managed Host must serve a real settings namespace");
+    await evaluate(`(() => {
+      const ctx = window.__probeCtx;
+      window.__compatDisposers = [
+        ctx.slots.register({name:'settings.plugins.tab',id:'compat-probe',label:'Compatibility probe'}, () => 'COMPAT_TAB_CONTENT'),
+        ctx.slots.register({name:'settings.plugin.item',id:'compat-card',key:${JSON.stringify(namespace)}}, () => 'COMPAT_CONFIG_CARD'),
+        ctx.slots.register({name:'sidebar.footer.action',id:'compat-footer'}, ({wide}) => wide ? 'COMPAT_FOOTER_WIDE' : 'COMPAT_FOOTER_NARROW'),
+      ];
+      ctx.layout.openSettings('plugins');
+    })()`);
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility probe')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility probe').click()");
+    await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_TAB_CONTENT')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configurable|可配置/.test(n.textContent)).click()");
+    await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_CONFIG_CARD')"));
+    await evaluate("window.__compatDisposers.forEach(dispose=>dispose());delete window.__compatDisposers");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && !document.querySelector('[role=tablist]')"));
+    console.log("Compatibility slots passed: real plugin tab selection, Host-keyed config card, removal and inventory fallback.");
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
   cli.kill("SIGINT");
