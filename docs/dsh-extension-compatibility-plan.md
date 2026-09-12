@@ -1108,3 +1108,13 @@ pipelines retain mounted component state.
 - 同一原编辑器 DOM 可继续写入并展示新草稿；原工具组仍连接。停止该实例后，官方错误记录和插件 style[data-dyn] 都已清理。
 - 官方 Host 会将渲染错误反馈给会话；截图同时显示测试环境缺少模型密钥时的原生凭据错误。这不是插件渲染边界失效，也不把它当作模型恢复生成成功的证据。
 - 组合桌面验证完成到最终卸载成功标记，日志 /tmp/amiba-cordis-crash-smoke.log，截图 amiba-cordis-render-failure.png 已查看。覆盖命令重载、图片、输入、子会话续聊/停止/导航/重载及此前兼容项。只增加测试及记录，生产代码无需新增异常边界。
+
+### 工具调用至官方轨迹的定位（2026-09-13）
+
+- 实际 npm rc.2 的 tool.call.toolview.inspect 负责设置 callId 并打开 trajectory；conversation.view 的 owner 携带 inspect / onInspectDone，官方轨迹表选中匹配记录、滚动定位并确认消费。它不是文件打开动作，也不要求启动另一套 ConversationController。
+- 原生视图区域增加可选受控选择。Shell 只在 trajectory 已注册且有当前会话时向工具扩展提供 inspect；沿用原工具行及资源打开控件。原 Chat 始终挂载，切回或卸载后保留同一编辑器及草稿。
+- 请求由会话访问周期隔离；切换会话、卸载并重装视图后的旧回调失效。旧确认不能清除新请求。消费请求后保持选中 trajectory，用户仍可切回原 Chat。
+- 官方组件首次渲染暴露缺少主题变量。新增局限于 data-conversation-view=trajectory 的颜色、字体和边框别名，没有启用全局 ui-theme。最终截图确认时间线、选中工具行、Payload/Result/Timing 正常，原侧栏保持。
+- 官方工具行 45 项、定位状态 2 项、视图区域及工具入口 10 项测试通过；Shell/UI 类型检查和完整 Desktop 构建通过。真实官方编译包经 ModuleLoader 与 Cordis 注册后，使用 Host 中真实工具结果验证选中 pkg-2 而非旧 pkg-1。卸载后原编辑器对象、草稿、卡片高度、字体及未泄漏的主题变量均已验证。
+- 日志：/tmp/amiba-trajectory-shell-tests.log（原工具行 45 项通过；新增 hook 测试缺少 jsdom 标记已修正）、/tmp/amiba-trajectory-shell-tests2.log（2 项）、/tmp/amiba-trajectory-ui-tests.log（10 项）、/tmp/amiba-trajectory-types2.log、/tmp/amiba-trajectory-ui-types.log、/tmp/amiba-trajectory-build2.log、/tmp/amiba-trajectory-smoke2.log。截图 amiba-trajectory-inspection.png 已查看。
+- 桌面测试由测试端加载官方原包，再通过 ctx.plugin 注册。它证明真实组件、数据、定位和清理，不等同于完整插件配置启用、安装依赖图或所有新版轨迹扩展已经验证。默认 bundle 中 ui-trajectory 仍禁用，避免自行增加默认视图。下一步须验证可选插件通过正常 Host 配置进入 Client 图的路径。
